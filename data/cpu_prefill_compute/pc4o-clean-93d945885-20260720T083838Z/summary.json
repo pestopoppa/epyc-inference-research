@@ -1,0 +1,161 @@
+{
+  "batched_rows_raw": {
+    "concat_dim0_rows": [
+      {
+        "flash_attn": 1,
+        "is_pp_shared": 0,
+        "n_batch": 2048,
+        "n_gpu_layers": 0,
+        "n_kv": 4098,
+        "n_kv_max": 262144,
+        "n_threads": 96,
+        "n_threads_batch": 96,
+        "n_ubatch": 512,
+        "pl": 2,
+        "pp": 2048,
+        "speed": 182.167526,
+        "speed_pp": 183.501282,
+        "speed_tg": 11.467363,
+        "t": 22.495777,
+        "t_pp": 22.321369,
+        "t_tg": 0.174408,
+        "tg": 1
+      }
+    ],
+    "default": [
+      {
+        "flash_attn": 1,
+        "is_pp_shared": 0,
+        "n_batch": 2048,
+        "n_gpu_layers": 0,
+        "n_kv": 4098,
+        "n_kv_max": 262144,
+        "n_threads": 96,
+        "n_threads_batch": 96,
+        "n_ubatch": 512,
+        "pl": 2,
+        "pp": 2048,
+        "speed": 149.462967,
+        "speed_pp": 150.372849,
+        "speed_tg": 11.160527,
+        "t": 27.418163,
+        "t_pp": 27.23896,
+        "t_tg": 0.179203,
+        "tg": 1
+      }
+    ]
+  },
+  "comparisons": {
+    "batched_pl2": {
+      "concat_dim0_rows": {
+        "flash_attn": 1,
+        "is_pp_shared": 0,
+        "n_batch": 2048,
+        "n_gpu_layers": 0,
+        "n_kv": 4098,
+        "n_kv_max": 262144,
+        "n_threads": 96,
+        "n_threads_batch": 96,
+        "n_ubatch": 512,
+        "pl": 2,
+        "pp": 2048,
+        "speed": 182.167526,
+        "speed_pp": 183.501282,
+        "speed_tg": 11.467363,
+        "t": 22.495777,
+        "t_pp": 22.321369,
+        "t_tg": 0.174408,
+        "tg": 1
+      },
+      "default": {
+        "flash_attn": 1,
+        "is_pp_shared": 0,
+        "n_batch": 2048,
+        "n_gpu_layers": 0,
+        "n_kv": 4098,
+        "n_kv_max": 262144,
+        "n_threads": 96,
+        "n_threads_batch": 96,
+        "n_ubatch": 512,
+        "pl": 2,
+        "pp": 2048,
+        "speed": 149.462967,
+        "speed_pp": 150.372849,
+        "speed_tg": 11.160527,
+        "t": 27.418163,
+        "t_pp": 27.23896,
+        "t_tg": 0.179203,
+        "tg": 1
+      },
+      "speed_delta_pct": 21.881379485795982,
+      "speed_pp_delta_pct": 22.03086077061691,
+      "speed_tg_delta_pct": 2.7492966953979847,
+      "t_pp_delta_pct": 22.030866475976453,
+      "t_tg_delta_pct": 2.749300490803175
+    },
+    "pg": [
+      {
+        "concat_dim0_rows_avg_ts": 9.162666,
+        "concat_dim0_rows_stddev_ts": 0.182564,
+        "default_avg_ts": 9.724244,
+        "default_stddev_ts": 0.00265,
+        "delta_pct": -5.775029914921925,
+        "n_gen": 128,
+        "n_prompt": 0
+      },
+      {
+        "concat_dim0_rows_avg_ts": 249.28228,
+        "concat_dim0_rows_stddev_ts": 0.51629,
+        "default_avg_ts": 155.346688,
+        "default_stddev_ts": 2.128189,
+        "delta_pct": 60.46835835985122,
+        "n_gen": 0,
+        "n_prompt": 512
+      },
+      {
+        "concat_dim0_rows_avg_ts": 171.573562,
+        "concat_dim0_rows_stddev_ts": 19.700432,
+        "default_avg_ts": 127.140591,
+        "default_stddev_ts": 6.715807,
+        "delta_pct": 34.94790345909278,
+        "n_gen": 16,
+        "n_prompt": 8192
+      }
+    ],
+    "repeat": [
+      {
+        "concat_dim0_rows_avg_ts": 9.66423,
+        "concat_dim0_rows_stddev_ts": 0.122958,
+        "default_avg_ts": 9.564737,
+        "default_stddev_ts": 0.085713,
+        "delta_pct": 1.0402063329080669,
+        "n_gen": 1,
+        "n_prompt": 0
+      },
+      {
+        "concat_dim0_rows_avg_ts": 154.873915,
+        "concat_dim0_rows_stddev_ts": 32.886923,
+        "default_avg_ts": 143.706482,
+        "default_stddev_ts": 3.40485,
+        "delta_pct": 7.771001589197635,
+        "n_gen": 0,
+        "n_prompt": 8192
+      }
+    ]
+  },
+  "correctness": {
+    "concat_off_passed": true,
+    "concat_on_passed": true
+  },
+  "llama_commit": "93d945885f9183ab8cf1f1bcd0a1c208d9379433",
+  "llama_worktree": "/mnt/raid0/llm/llama.cpp-pc4o-93d945885",
+  "notes": [
+    "CPU bench ran from clean detached worktree at 93d945885; parent experimental branch had unrelated dirty instrumentation but was not used.",
+    "K11 GPU Gemma stop-string runs overlapped during later PC-4o cells; classify as observation-grade, not canonical isolated bench.",
+    "First batched attempt failed because llama-batched-bench uses switch flags for no-op/no-kv offload; corrected batched rows reran only the missing tail."
+  ],
+  "post_process_check": "1849379 /usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh\n3174563 /usr/bin/bash -c set -euo pipefail run=$(cat /mnt/raid0/llm/tmp/pc4o_current_run.txt) wt=/mnt/raid0/llm/llama.cpp-pc4o-93d945885 build=\"$wt/build-pc4o-cpu\" model=/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf common_env=(env HIP_VISIBLE_DEVICES=-1 ROCR_VISIBLE_DEVICES=-1 LD_LIBRARY_PATH=\"$build/bin\" GGML_IQK=1) base=(taskset -c 0-95 numactl --interleave=all) batched_common=(\"$build/bin/llama-batched-bench\" -m \"$model\" -t 96 -dev none -ngl 0 --no-op-offload --no-kv-offload -fa on --output-format jsonl) /usr/bin/time -v \"${common_env[@]}\" \"${base[@]}\" \"${batched_common[@]}\" -npp 2048 -ntg 1 -npl 2 > \"$run/batched_pl2_default/bench.jsonl\" 2> \"$run/batched_pl2_default/stderr.txt\" /usr/bin/time -v \"${common_env[@]}\" GGML_CPU_CONCAT_DIM0_ROWS=1 \"${base[@]}\" \"${batched_common[@]}\" -npp 2048 -ntg 1 -npl 2 > \"$run/batched_pl2_concat_dim0_rows/bench.jsonl\" 2> \"$run/batched_pl2_concat_dim0_rows/stderr.txt\" pgrep -af 'llama-bench|llama-batched-bench|llama-server|test-backend-ops' > \"$run/post_process_check.txt\" || true rocm-smi --showuse --showmemuse --showpids > \"$run/post_rocm_smi.txt\" 2>&1 || true printf 'BATCHED_DONE %s\\n' \"$run\"\n",
+  "post_rocm_smi": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 1024074840\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 0\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2592592406\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n===================================== KFD Processes ======================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n",
+  "run_root": "/mnt/raid0/llm/epyc-inference-research/data/cpu_prefill_compute/pc4o-clean-93d945885-20260720T083838Z",
+  "status": "complete_observation_grade_concurrent_gpu_k11"
+}

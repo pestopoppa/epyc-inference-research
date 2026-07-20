@@ -8303,11 +8303,14 @@ roles:
       observed_date: 2026-07-18
       current_v7_mi210_observation: "Experimental v7 `d1e5a20eb` MI210 probe at `data/gemma4_iq4_residency/gemma4_26b_ud_iq4xs_mi210_v7_20260718T162446Z/summary.json`: llama-bench `pp2048 2449.01 t/s`, `tg256 81.91 t/s`; server/chat 8K coherence probe processed 6971 prompt tokens at 2257.80 t/s and generated 201 tokens at 76.02 t/s with exact repeated-token compliance. Cleanup verified no KFD PIDs. Speed/coherence only; quality retention and optimized native-MTP lane remain open."
       current_v7_mi210_mtp_observation: "Follow-up `data/gemma4_iq4_residency/mtp_ab_local_20260718T170739Z/summary.json`: no-spec q8-KV control measured `pp2048 2450.51 t/s`, `tg512 81.41 t/s`; external assistant-head MTP with `--spec-type draft-mtp --spec-draft-n-max 2` decoded 542 eval tokens at `117.01 t/s` and accepted `360/362` drafts (`0.99448`). Strict JSON content was not clean because the response included channel markers, so this is speed-positive but not role-ready."
+      current_v7_mi210_stop_string_observation: "2026-07-20 concurrent-with-PC-4o stop-string repeat passed `10/10` for UD-IQ4_XS at `data/k11_gemma4_determinism/k11_stop_end_ud_iq4xs_mtp_n10_concurrent_pc4o_20260720T084818Z/summary.json`: one output hash, exact 200 words, mean decode `113.738 t/s`, `1333/1340` drafts accepted (`99.48%`). Matched ORIG-Q4 comparison passed at `data/k11_gemma4_determinism/k11_stop_end_orig_q4_mtp_n10_concurrent_pc4o_20260720T085122Z/summary.json` but decoded faster (`141.788 t/s`), so UD remains compression/residency candidate rather than faster worker replacement. Observation-grade because CPU PC-4o overlapped."
       current_v7_cpu_observation: "Experimental v7 `d1e5a20eb` CPU-only control at `data/gemma4_iq4_residency/20260718T164058Z_cpu_only_v7_control`: llama-bench with `-dev none -ngl 0 -nkvo 1 -t 96`, q8 KV, measured `pp2048 261.26 t/s`, `tg512 11.15 t/s`; no KFD PIDs after cleanup."
       evidence:
       - /mnt/raid0/llm/epyc-inference-research/data/gemma4_iq4_residency/gemma4_26b_ud_iq4xs_mi210_v7_20260718T162446Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/gemma4_iq4_residency/mtp_ab_local_20260718T170739Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/gemma4_iq4_residency/20260718T164058Z_cpu_only_v7_control
+      - /mnt/raid0/llm/epyc-inference-research/data/k11_gemma4_determinism/k11_stop_end_ud_iq4xs_mtp_n10_concurrent_pc4o_20260720T084818Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/k11_gemma4_determinism/k11_stop_end_orig_q4_mtp_n10_concurrent_pc4o_20260720T085122Z/summary.json
     memory:
       residency: cold
       pinned: false

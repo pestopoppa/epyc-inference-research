@@ -1,0 +1,28 @@
+warning: no usable GPU found, --gpu-layers option will be ignored
+warning: one possible reason is that llama.cpp was compiled without GPU support
+warning: consult docs/build.md for compilation instructions
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 n_as=256)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 ne00=3072)
+	Command being timed: "env HIP_VISIBLE_DEVICES=-1 ROCR_VISIBLE_DEVICES=-1 LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-pc4o-93d945885/build-pc4o-cpu/bin GGML_IQK=1 taskset -c 0-95 numactl --interleave=all /mnt/raid0/llm/llama.cpp-pc4o-93d945885/build-pc4o-cpu/bin/llama-batched-bench -m /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf -t 96 -dev none -ngl 0 --no-op-offload --no-kv-offload -fa on --output-format jsonl -npp 2048 -ntg 1 -npl 2"
+	User time (seconds): 2112.66
+	System time (seconds): 11.16
+	Percent of CPU this job got: 6561%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:32.36
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 83420908
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 1226387
+	Voluntary context switches: 37783
+	Involuntary context switches: 2711
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 16
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

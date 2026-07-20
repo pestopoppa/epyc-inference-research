@@ -1,0 +1,36 @@
+0.00.064.887 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.066.120 W srv  llama_server: -----------------
+0.00.066.123 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.066.123 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.066.123 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.066.124 W srv  llama_server: -----------------
+0.00.067.597 I srv    load_model: loading model '/mnt/raid0/llm/models/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf'
+0.00.860.208 E llama_init_from_model: failed to initialize the context: Gemma4Assistant requires ctx_other to be set (this warning is normal during memory fitting)
+0.01.019.228 W srv    load_model: [spec] failed to measure draft model memory: failed to create llama_context from model
+0.02.873.557 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.02.874.015 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.02.883.462 W load: control-looking token:      1 '<eos>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.02.929.428 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list
+0.06.088.530 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.06.088.791 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.06.108.580 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list
+0.06.194.303 W llama_kv_cache: layer   3: sharing with layer 29. k = 0x744c9be00000, v = 0x744c9de00000
+0.06.194.342 W llama_kv_cache: layer   0: sharing with layer 28. k = 0x744c88c00000, v = 0x744c8a400000
+0.06.194.343 W llama_kv_cache: layer   1: sharing with layer 28. k = 0x744c88c00000, v = 0x744c8a400000
+0.06.194.344 W llama_kv_cache: layer   2: sharing with layer 28. k = 0x744c88c00000, v = 0x744c8a400000
+0.06.234.878 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 4096, kv_unified = 'false'
+0.06.235.568 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.06.235.574 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.06.235.577 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.06.235.579 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.06.252.833 I srv  llama_server: model loaded
+0.06.252.841 I srv  llama_server: listening on http://127.0.0.1:58715
+0.08.229.495 I slot get_availabl: id  3 | task -1 | selected slot by LRU, t_last = -1
+0.08.229.632 I slot launch_slot_: id  3 | task 0 | processing task, is_child = 0
+0.10.256.803 I slot print_timing: id  3 | task 0 | prompt eval time =     224.68 ms /    36 tokens (    6.24 ms per token,   160.23 tokens per second)
+0.10.256.810 I slot print_timing: id  3 | task 0 |        eval time =    1802.43 ms /   201 tokens (    8.97 ms per token,   111.52 tokens per second)
+0.10.256.811 I slot print_timing: id  3 | task 0 |       total time =    2027.10 ms /   237 tokens
+0.10.256.819 I slot print_timing: id  3 | task 0 |    graphs reused =         67
+0.10.256.825 I slot print_timing: id  3 | task 0 | draft acceptance = 0.99254 (  133 accepted /   134 generated), mean len =  2.99
+0.10.256.923 I slot      release: id  3 | task 0 | stop processing: n_tokens = 236, truncated = 0
+0.10.258.458 I srv    operator(): operator(): cleaning up before exit...
