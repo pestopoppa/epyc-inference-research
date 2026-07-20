@@ -57,8 +57,34 @@ pin the experimental library path.
 
 ## Decision
 
-PC-4m closes as source-hardened and correctness-expanded. The candidate remains
-default-off and experimental only. Next step is an operator-approved
-`llama.cpp-experimental` commit/package decision; do not commit or promote this
-kernel patch silently, and do not turn it default-on without a separate
-decision-grade promotion gate.
+PC-4m closed as source-hardened and correctness-expanded. At the PC-4m
+checkpoint, the candidate remained default-off and experimental only pending an
+operator-approved `llama.cpp-experimental` commit/package decision; it was not
+authorized for silent promotion or default-on behavior.
+
+## PC-4n Addendum
+
+PC-4n completed later on 2026-07-20 after explicit operator approval.
+
+- Commit: `/mnt/raid0/llm/llama.cpp-experimental` `93d945885`
+  (`Add default-off CPU CONCAT dim0 row partition`), pushed to
+  `fork/experimental-v7-refresh-20260716`.
+- Scope: only `ggml/src/ggml-cpu/ops.cpp` and
+  `tests/test-backend-ops.cpp`.
+- Guardrail: the path remains `GGML_CPU_CONCAT_DIM0_ROWS=1` default-off and
+  now requires exact matching tensor types before using the row-partition
+  kernel.
+- Frozen-v7 status: unchanged; `6ad45fa3ff` remains the promotion candidate.
+
+Post-commit validation repeated the focused PC-4m correctness gate with
+experimental shared libraries pinned through `LD_LIBRARY_PATH`:
+
+- `git diff --check -- ggml/src/ggml-cpu/ops.cpp tests/test-backend-ops.cpp`
+- `cmake --build build-k24-cpu --target test-backend-ops -j 16`
+- env-off CPU `CONCAT`: `210/210`
+- env-on CPU `CONCAT`: `210/210`
+- env-on `test-recurrent-state-rollback --model
+  build-k24-cpu/tests/test-models/qwen35moe-moe.gguf`: restored successfully
+
+PC-4o is the remaining admission/default-policy gate for the committed
+post-candidate path. Do not treat PC-4n as default-on or as part of frozen v7.
