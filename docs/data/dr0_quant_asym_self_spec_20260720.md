@@ -57,9 +57,38 @@ DR-0 is speed-promising but not decision-grade:
 
 - Best corrected combined arm: K4 at `12.298 t/s`, `1.785x` CPU baseline.
 - K2 is the cleaner middle point: `11.335 t/s`, `1.645x` baseline, alpha `0.928`.
-- Current llama-server telemetry still cannot separately observe `F(K)` and `H(K)`;
-  it only exposes draft/accepted tokens and aggregate timing.
 
-Next gate: add engine telemetry for verifier work and coordination overhead, then rerun
-with stricter prompt/schema controls and require target-output stability on every task
+## DR-0e Telemetry Follow-Up
+
+Reduced K2 live rerun:
+`data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/`.
+
+The experimental server now emits speculative timing fields under the existing
+`timings` object when `draft_n > 0`:
+
+- `spec_verify_steps`
+- `spec_draft_ms`
+- `spec_verify_ms`
+- `spec_process_ms`
+- `spec_sample_accept_ms`
+- `spec_accept_by_depth`
+
+The smoke surfaced an operational hazard: the ambient shell `LD_LIBRARY_PATH`
+places `/mnt/raid0/llm/llama.cpp/build/bin` ahead of the experimental RUNPATH.
+Manual experimental-server smokes must prepend
+`/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin`; the DR-0 runner already
+does this in its per-arm environment.
+
+K2 telemetry result:
+
+| Arm | Decode t/s | Alpha | F(K) verifier time | H(K) overhead |
+|---|---:|---:|---:|---:|
+| CPU Q4 verifier baseline | 7.333 | n/a | n/a | n/a |
+| MI210 IQ2 drafter alone, K2 | 59.566 | 0.893 | 6.477 s | 0.947 s |
+| CPU Q4 + MI210 IQ2 combined, K2 | 10.694 | 0.891 | 39.889 s | 0.740 s |
+
+The F/H accounting gap is closed for single-slot DR-0e-style runs, but the run is
+still not decision-grade: quality passed only `6/12`, and combined K2 still changed
+one CPU-baseline output hash (`exact_format_strict_instruction`). Next gate: repair
+the strict prompt/schema controls and require target-output stability on every task
 before considering any serving or routing integration.

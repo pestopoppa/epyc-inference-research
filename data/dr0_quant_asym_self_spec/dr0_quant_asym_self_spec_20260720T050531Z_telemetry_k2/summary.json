@@ -1,0 +1,706 @@
+{
+  "arms": {
+    "cpu_high_quant_verifier_baseline": {
+      "accepted_draft_tokens": 0,
+      "alpha": null,
+      "arm": "cpu_high_quant_verifier_baseline",
+      "artifacts": {
+        "cleanup": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/cpu_high_quant_verifier_baseline.cleanup.json",
+        "command": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/cpu_high_quant_verifier_baseline.command.json",
+        "metrics": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/cpu_high_quant_verifier_baseline.metrics.json",
+        "quality": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/cpu_high_quant_verifier_baseline.quality.json",
+        "responses": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/cpu_high_quant_verifier_baseline.responses.jsonl",
+        "server_log": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/cpu_high_quant_verifier_baseline.server.log"
+      },
+      "base_arm": "cpu_high_quant_verifier_baseline",
+      "cleanup": {
+        "pid": 557565,
+        "pid_alive_after": false,
+        "port_open_after": false,
+        "returncode": 0,
+        "sigkill_sent": false,
+        "sigterm_sent": true,
+        "status": "ok",
+        "terminated": true
+      },
+      "decode_time_s": 59.18749,
+      "decode_tps": 7.332630594742234,
+      "draft_tokens": 0,
+      "error_count": 0,
+      "fresh_server": true,
+      "generated_tokens": 434,
+      "k": null,
+      "load_wall_clock_s": 24.504251854959875,
+      "prompt_time_s": 6.529443,
+      "prompt_tokens": 199,
+      "prompt_tps": 30.477331680512414,
+      "quality_results": [
+        {
+          "checker": "strict repeated/structured output count",
+          "details": {
+            "all_status_ready": true,
+            "error_count": 0,
+            "errors": [],
+            "indexes_unique_0_to_63": false,
+            "json_object_count": 19,
+            "keys_exact": true,
+            "line_count": 19
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "repetitive_structured_generation"
+        },
+        {
+          "checker": "single valid JSON decision object with required keys",
+          "details": {
+            "confidence_ok": true,
+            "decision_ok": true,
+            "json_ok": true,
+            "keys": [
+              "confidence",
+              "decision",
+              "rationale"
+            ],
+            "keys_exact": true
+          },
+          "pass": true,
+          "status": "checked",
+          "task_class": "bounded_architect_reviewer_json_decision"
+        },
+        {
+          "checker": "states no blocking bug and cites the invariant",
+          "details": {
+            "bullet_like": true,
+            "cites_invariant": true,
+            "line_count": 3,
+            "states_no_bug": true
+          },
+          "pass": true,
+          "status": "checked",
+          "task_class": "short_code_review_no_bug_control"
+        },
+        {
+          "checker": "exact prefix and item count",
+          "details": {
+            "line_count": 5,
+            "starts_ok": [
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "word_counts": [
+              7,
+              7,
+              7,
+              7,
+              7
+            ]
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "exact_format_strict_instruction"
+        }
+      ],
+      "request_count": 4,
+      "spec_accept_by_depth": [],
+      "spec_draft_time_s": 0.0,
+      "spec_process_time_s": 0.0,
+      "spec_sample_accept_time_s": 0.0,
+      "spec_telemetry_status": "missing",
+      "spec_verify_steps": 0,
+      "spec_verify_time_s": 0.0,
+      "status": "ok",
+      "task_results": [
+        {
+          "content_len": 617,
+          "content_sha256": "5030d7866a448165c51c845c2170464d1d7055fba9c02b00662741415c4b9c61",
+          "finish_reason": "length",
+          "quality_pass": false,
+          "reasoning_content_len": 0,
+          "spec_telemetry_status": "missing",
+          "status": "ok",
+          "task_class": "repetitive_structured_generation"
+        },
+        {
+          "content_len": 321,
+          "content_sha256": "13e930784d259af71d4024e3c485b0c2486c12eb70727b2d110973b88a271282",
+          "finish_reason": "stop",
+          "quality_pass": true,
+          "reasoning_content_len": 0,
+          "spec_telemetry_status": "missing",
+          "status": "ok",
+          "task_class": "bounded_architect_reviewer_json_decision"
+        },
+        {
+          "content_len": 324,
+          "content_sha256": "24b2bd60cac6de062700ea1f4c739a66a4307ec75049b76a6526aea3b7bc3f34",
+          "finish_reason": "stop",
+          "quality_pass": true,
+          "reasoning_content_len": 0,
+          "spec_telemetry_status": "missing",
+          "status": "ok",
+          "task_class": "short_code_review_no_bug_control"
+        },
+        {
+          "content_len": 187,
+          "content_sha256": "f868d1a0c64103f88f2a05b4f88b7bb0d6e2430380cd07ef023fa3fcf0616b4b",
+          "finish_reason": "stop",
+          "quality_pass": false,
+          "reasoning_content_len": 0,
+          "spec_telemetry_status": "missing",
+          "status": "ok",
+          "task_class": "exact_format_strict_instruction"
+        }
+      ],
+      "wall_time_s": 67.61378237814642
+    },
+    "mi210_aggressive_drafter_alone_k2": {
+      "accepted_draft_tokens": 284,
+      "alpha": 0.8930817610062893,
+      "arm": "mi210_aggressive_drafter_alone_k2",
+      "artifacts": {
+        "cleanup": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/mi210_aggressive_drafter_alone_k2.cleanup.json",
+        "command": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/mi210_aggressive_drafter_alone_k2.command.json",
+        "metrics": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/mi210_aggressive_drafter_alone_k2.metrics.json",
+        "quality": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/mi210_aggressive_drafter_alone_k2.quality.json",
+        "responses": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/mi210_aggressive_drafter_alone_k2.responses.jsonl",
+        "server_log": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/mi210_aggressive_drafter_alone_k2.server.log"
+      },
+      "base_arm": "mi210_aggressive_drafter_alone",
+      "cleanup": {
+        "pid": 558361,
+        "pid_alive_after": false,
+        "port_open_after": false,
+        "returncode": 0,
+        "sigkill_sent": false,
+        "sigterm_sent": true,
+        "status": "ok",
+        "terminated": true
+      },
+      "decode_time_s": 7.43708,
+      "decode_tps": 59.566388959107606,
+      "draft_tokens": 318,
+      "error_count": 0,
+      "fresh_server": true,
+      "generated_tokens": 443,
+      "k": 2,
+      "load_wall_clock_s": 8.229600610909984,
+      "prompt_time_s": 1.48524,
+      "prompt_tokens": 199,
+      "prompt_tps": 133.98507985241443,
+      "quality_results": [
+        {
+          "checker": "strict repeated/structured output count",
+          "details": {
+            "all_status_ready": true,
+            "error_count": 0,
+            "errors": [],
+            "indexes_unique_0_to_63": false,
+            "json_object_count": 19,
+            "keys_exact": true,
+            "line_count": 19
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "repetitive_structured_generation"
+        },
+        {
+          "checker": "single valid JSON decision object with required keys",
+          "details": {
+            "confidence_ok": true,
+            "decision_ok": true,
+            "json_ok": true,
+            "keys": [
+              "confidence",
+              "decision",
+              "rationale"
+            ],
+            "keys_exact": true
+          },
+          "pass": true,
+          "status": "checked",
+          "task_class": "bounded_architect_reviewer_json_decision"
+        },
+        {
+          "checker": "states no blocking bug and cites the invariant",
+          "details": {
+            "bullet_like": true,
+            "cites_invariant": true,
+            "line_count": 3,
+            "states_no_bug": true
+          },
+          "pass": true,
+          "status": "checked",
+          "task_class": "short_code_review_no_bug_control"
+        },
+        {
+          "checker": "exact prefix and item count",
+          "details": {
+            "line_count": 5,
+            "starts_ok": [
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "word_counts": [
+              6,
+              7,
+              6,
+              7,
+              7
+            ]
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "exact_format_strict_instruction"
+        }
+      ],
+      "request_count": 4,
+      "spec_accept_by_depth": [
+        152,
+        132,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "spec_draft_time_s": 0.5464220000000001,
+      "spec_process_time_s": 0.342234,
+      "spec_sample_accept_time_s": 0.058637,
+      "spec_telemetry_status": "observed",
+      "spec_verify_steps": 159,
+      "spec_verify_time_s": 6.477434,
+      "status": "ok",
+      "task_results": [
+        {
+          "content_len": 617,
+          "content_sha256": "5030d7866a448165c51c845c2170464d1d7055fba9c02b00662741415c4b9c61",
+          "finish_reason": "length",
+          "quality_pass": false,
+          "reasoning_content_len": 0,
+          "spec_telemetry_status": "observed",
+          "status": "ok",
+          "task_class": "repetitive_structured_generation"
+        },
+        {
+          "content_len": 378,
+          "content_sha256": "d8926493b79cca6a734f814091a43c75e7255017840e4a509dad6aab6a31f42b",
+          "finish_reason": "stop",
+          "quality_pass": true,
+          "reasoning_content_len": 0,
+          "spec_telemetry_status": "observed",
+          "status": "ok",
+          "task_class": "bounded_architect_reviewer_json_decision"
+        },
+        {
+          "content_len": 297,
+          "content_sha256": "5d9e3eadbe1a2a3f904c18e62dbe2d87ace71b15c50da0261c58ab17f4d157e1",
+          "finish_reason": "stop",
+          "quality_pass": true,
+          "reasoning_content_len": 0,
+          "spec_telemetry_status": "observed",
+          "status": "ok",
+          "task_class": "short_code_review_no_bug_control"
+        },
+        {
+          "content_len": 175,
+          "content_sha256": "58840927ee3c8ae1756e1aa0a8005f418d105e4a9160141df224fcb1e00b3b23",
+          "finish_reason": "stop",
+          "quality_pass": false,
+          "reasoning_content_len": 0,
+          "spec_telemetry_status": "observed",
+          "status": "ok",
+          "task_class": "exact_format_strict_instruction"
+        }
+      ],
+      "wall_time_s": 9.092957292916253
+    },
+    "quant_asymmetric_combined_k2": {
+      "accepted_draft_tokens": 278,
+      "alpha": 0.8910256410256411,
+      "arm": "quant_asymmetric_combined_k2",
+      "artifacts": {
+        "cleanup": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/quant_asymmetric_combined_k2.cleanup.json",
+        "command": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/quant_asymmetric_combined_k2.command.json",
+        "metrics": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/quant_asymmetric_combined_k2.metrics.json",
+        "quality": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/quant_asymmetric_combined_k2.quality.json",
+        "responses": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/quant_asymmetric_combined_k2.responses.jsonl",
+        "server_log": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/quant_asymmetric_combined_k2.server.log"
+      },
+      "base_arm": "quant_asymmetric_combined",
+      "cleanup": {
+        "pid": 558674,
+        "pid_alive_after": false,
+        "port_open_after": false,
+        "returncode": 0,
+        "sigkill_sent": false,
+        "sigterm_sent": true,
+        "status": "ok",
+        "terminated": true
+      },
+      "decode_time_s": 40.678298999999996,
+      "decode_tps": 10.693662485739633,
+      "draft_tokens": 312,
+      "error_count": 0,
+      "fresh_server": true,
+      "generated_tokens": 435,
+      "k": 2,
+      "load_wall_clock_s": 31.209852466126904,
+      "prompt_time_s": 5.7105049999999995,
+      "prompt_tokens": 199,
+      "prompt_tps": 34.848056345279446,
+      "quality_results": [
+        {
+          "checker": "strict repeated/structured output count",
+          "details": {
+            "all_status_ready": true,
+            "error_count": 0,
+            "errors": [],
+            "indexes_unique_0_to_63": false,
+            "json_object_count": 19,
+            "keys_exact": true,
+            "line_count": 19
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "repetitive_structured_generation"
+        },
+        {
+          "checker": "single valid JSON decision object with required keys",
+          "details": {
+            "confidence_ok": true,
+            "decision_ok": true,
+            "json_ok": true,
+            "keys": [
+              "confidence",
+              "decision",
+              "rationale"
+            ],
+            "keys_exact": true
+          },
+          "pass": true,
+          "status": "checked",
+          "task_class": "bounded_architect_reviewer_json_decision"
+        },
+        {
+          "checker": "states no blocking bug and cites the invariant",
+          "details": {
+            "bullet_like": true,
+            "cites_invariant": true,
+            "line_count": 3,
+            "states_no_bug": true
+          },
+          "pass": true,
+          "status": "checked",
+          "task_class": "short_code_review_no_bug_control"
+        },
+        {
+          "checker": "exact prefix and item count",
+          "details": {
+            "line_count": 5,
+            "starts_ok": [
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "word_counts": [
+              7,
+              7,
+              7,
+              8,
+              7
+            ]
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "exact_format_strict_instruction"
+        }
+      ],
+      "request_count": 4,
+      "spec_accept_by_depth": [
+        144,
+        134
+      ],
+      "spec_draft_time_s": 0.5778519999999999,
+      "spec_process_time_s": 0.08690200000000001,
+      "spec_sample_accept_time_s": 0.075291,
+      "spec_telemetry_status": "observed",
+      "spec_verify_steps": 156,
+      "spec_verify_time_s": 39.88888,
+      "status": "ok",
+      "task_results": [
+        {
+          "content_len": 617,
+          "content_sha256": "5030d7866a448165c51c845c2170464d1d7055fba9c02b00662741415c4b9c61",
+          "finish_reason": "length",
+          "quality_pass": false,
+          "reasoning_content_len": 0,
+          "spec_telemetry_status": "observed",
+          "status": "ok",
+          "task_class": "repetitive_structured_generation"
+        },
+        {
+          "content_len": 321,
+          "content_sha256": "13e930784d259af71d4024e3c485b0c2486c12eb70727b2d110973b88a271282",
+          "finish_reason": "stop",
+          "quality_pass": true,
+          "reasoning_content_len": 0,
+          "spec_telemetry_status": "observed",
+          "status": "ok",
+          "task_class": "bounded_architect_reviewer_json_decision"
+        },
+        {
+          "content_len": 324,
+          "content_sha256": "24b2bd60cac6de062700ea1f4c739a66a4307ec75049b76a6526aea3b7bc3f34",
+          "finish_reason": "stop",
+          "quality_pass": true,
+          "reasoning_content_len": 0,
+          "spec_telemetry_status": "observed",
+          "status": "ok",
+          "task_class": "short_code_review_no_bug_control"
+        },
+        {
+          "content_len": 192,
+          "content_sha256": "8b119acd5a255e2a72d7b41b815b4f168d1c98ad1573dde122cca26b9d2e17c1",
+          "finish_reason": "stop",
+          "quality_pass": false,
+          "reasoning_content_len": 0,
+          "spec_telemetry_status": "observed",
+          "status": "ok",
+          "task_class": "exact_format_strict_instruction"
+        }
+      ],
+      "wall_time_s": 46.947090934729204
+    }
+  },
+  "artifact_dir": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2",
+  "artifacts": {
+    "commands": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/commands.sh",
+    "manifest": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/manifest.json",
+    "summary": "/mnt/raid0/llm/epyc-inference-research/data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2/summary.json"
+  },
+  "cleanup_proof": {
+    "new_post_process_pids": [],
+    "no_kfd_pid_leak": true,
+    "no_llama_process_leak": true,
+    "post_process_snapshot": {
+      "command": [
+        "pgrep",
+        "-af",
+        "llama-bench|llama-server|llama-cli|llama-mtmd-cli"
+      ],
+      "lines": [],
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "1849379 /usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh\n"
+    },
+    "post_rocm_smi_showpids": {
+      "command": [
+        "rocm-smi",
+        "--showpids"
+      ],
+      "kfd_pids_observed": false,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "\n\n============================ ROCm System Management Interface ============================\n===================================== KFD Processes ======================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    "pre_process_snapshot": {
+      "command": [
+        "pgrep",
+        "-af",
+        "llama-bench|llama-server|llama-cli|llama-mtmd-cli"
+      ],
+      "lines": [],
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "1849379 /usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh\n"
+    },
+    "pre_rocm_smi_showpids": {
+      "command": [
+        "rocm-smi",
+        "--showpids"
+      ],
+      "kfd_pids_observed": false,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "\n\n============================ ROCm System Management Interface ============================\n===================================== KFD Processes ======================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    "status": "pass"
+  },
+  "created_at": "2026-07-20T05:05:31.743485+00:00",
+  "decision_grade": false,
+  "dry_run_only": false,
+  "fh_accounting": {
+    "E_alpha_K": {
+      "status": "coarse_observed_speed_delta_only",
+      "unit": "aggregate_decode_seconds_and_tps_ratio",
+      "value": {
+        "rows": [
+          {
+            "arm": "quant_asymmetric_combined_k2",
+            "baseline_decode_tps": 7.332630594742234,
+            "coarse_decode_seconds_saved_vs_baseline": 18.509191,
+            "combined_decode_tps": 10.693662485739633,
+            "decode_tps_ratio_vs_baseline": 1.4583664549264739,
+            "k": 2,
+            "spec_hidden_overhead_time_s": 0.740045,
+            "spec_telemetry_status": "observed",
+            "spec_verify_time_s": 39.88888,
+            "target_output_match_vs_baseline": {
+              "bounded_architect_reviewer_json_decision": true,
+              "exact_format_strict_instruction": false,
+              "repetitive_structured_generation": true,
+              "short_code_review_no_bug_control": true
+            }
+          }
+        ],
+        "status": "coarse_speed_delta_only",
+        "warning": "speed delta remains coarse; F(K)/H(K) are upgraded only for rows with spec_telemetry_status=observed"
+      }
+    },
+    "F_K": {
+      "caveat": "exact for single-slot DR-0e runs; attributed batch time under batching",
+      "status": "observed_from_llama_server_spec_telemetry",
+      "unit": "seconds",
+      "value": [
+        {
+          "arm": "quant_asymmetric_combined_k2",
+          "k": 2,
+          "spec_verify_steps": 156,
+          "verify_time_s": 39.88888
+        }
+      ]
+    },
+    "H_K": {
+      "caveat": "HTTP/request wall time remains outside engine telemetry",
+      "status": "observed_from_llama_server_spec_telemetry",
+      "unit": "seconds",
+      "value": [
+        {
+          "arm": "quant_asymmetric_combined_k2",
+          "coordination_time_s": 0.740045,
+          "k": 2,
+          "spec_draft_time_s": 0.5778519999999999,
+          "spec_process_time_s": 0.08690200000000001,
+          "spec_sample_accept_time_s": 0.075291
+        }
+      ]
+    },
+    "accounting_verdict": "engine_F_K_and_H_K_observed_not_decision_grade_until_quality_and_output_stability_pass",
+    "k_values": [
+      2
+    ],
+    "observable_from_llama_server_response_today": [
+      "prompt_tokens",
+      "generated_tokens",
+      "draft_tokens",
+      "accepted_draft_tokens",
+      "alpha",
+      "spec_verify_steps",
+      "spec_draft_ms",
+      "spec_verify_ms",
+      "spec_process_ms",
+      "spec_sample_accept_ms",
+      "spec_accept_by_depth",
+      "wall_time_s",
+      "prompt_time_s",
+      "decode_time_s",
+      "prompt_tps",
+      "decode_tps",
+      "quality_results"
+    ],
+    "rule": "E(alpha,K) > F(K)+H(K)"
+  },
+  "mode": "execute",
+  "observation_grade": false,
+  "quality_gate": {
+    "pass_count": 6,
+    "required": "quality sanity passes on every included row",
+    "status": "fail",
+    "total_count": 12
+  },
+  "recent_observation_inputs": [
+    {
+      "artifact": "data/model_admission_throughput/qwen35_122b_iq2m_long_mtp_ab_local_20260719T013555Z/summary.json",
+      "summary": "long repeated output: no-spec 37.87 t/s, draft-mtp 60.65 t/s, 511/511 accepted"
+    },
+    {
+      "artifact": "data/model_admission_throughput/qwen35_122b_iq2m_long_ngram_mtp_local_20260719T013814Z/summary.json",
+      "summary": "long repeated output: ngram-mod,draft-mtp 287.09 t/s, 746/746 accepted, quality_sanity=true"
+    },
+    {
+      "artifact": "data/model_admission_throughput/qwen35_122b_iq2m_mixed_ngram_mtp_ab_local_20260719T013943Z/summary.json",
+      "summary": "mixed 3-prompt slice: no-spec 41.85 t/s, composed 50.77 t/s, 3/3 quality"
+    },
+    {
+      "artifact": "data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/summary.json",
+      "summary": "broad 8-prompt slice: composed mean 80.77 t/s, 1166/1440 accepted, 5/8 quality"
+    }
+  ],
+  "run_id": "dr0_quant_asym_self_spec_20260720T050531Z_telemetry_k2",
+  "schema": "epyc.dr0_quant_asym_self_spec.summary.v1"
+}

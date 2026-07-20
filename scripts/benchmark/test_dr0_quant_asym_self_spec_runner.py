@@ -217,6 +217,74 @@ def test_quiet_preflight_ignores_earlyoom_ignore_pattern() -> None:
     runner.ensure_quiet_preflight(args, pre_process, {"kfd_pids_observed": False})
 
 
+def test_row_from_response_extracts_spec_telemetry(tmp_path: Path) -> None:
+    variant = next(
+        variant
+        for variant in runner.execution_variants(runner.parse_args(["--k", "2"]))
+        if variant.id == "quant_asymmetric_combined_k2"
+    )
+    task = next(task for task in runner.TASK_CLASSES if task["id"] == "bounded_architect_reviewer_json_decision")
+    response = {
+        "choices": [{"message": {"content": '{"decision":"run","confidence":0.8,"rationale":"ok"}'}}],
+        "timings": {
+            "prompt_n": 10,
+            "predicted_n": 20,
+            "draft_n": 8,
+            "draft_n_accepted": 6,
+            "prompt_ms": 100.0,
+            "predicted_ms": 200.0,
+            "spec_verify_steps": 2,
+            "spec_draft_ms": 1.0,
+            "spec_verify_ms": 12.0,
+            "spec_process_ms": 2.0,
+            "spec_sample_accept_ms": 3.0,
+            "spec_accept_by_depth": [2, 2, 1],
+        },
+    }
+
+    row = runner.row_from_response(variant, task, response, tmp_path / "raw.json", 0.5)
+
+    assert row["alpha"] == 0.75
+    assert row["spec_telemetry"]["status"] == "observed"
+    assert row["spec_telemetry"]["spec_verify_ms"] == 12.0
+    assert row["spec_telemetry"]["spec_accept_by_depth"] == [2, 2, 1]
+
+
+def test_fh_accounting_upgrades_when_spec_telemetry_is_observed() -> None:
+    arms = {
+        "quant_asymmetric_combined_k2": {
+            "k": 2,
+            "spec_telemetry_status": "observed",
+            "spec_verify_time_s": 0.012,
+            "spec_draft_time_s": 0.001,
+            "spec_process_time_s": 0.002,
+            "spec_sample_accept_time_s": 0.003,
+            "spec_verify_steps": 2,
+            "draft_tokens": 8,
+            "accepted_draft_tokens": 6,
+            "alpha": 0.75,
+        }
+    }
+
+    rows = runner.observed_fh_rows(arms)
+
+    assert rows == [
+        {
+            "arm": "quant_asymmetric_combined_k2",
+            "k": 2,
+            "F_K_verify_time_s": 0.012,
+            "H_K_coordination_time_s": 0.006,
+            "spec_draft_time_s": 0.001,
+            "spec_process_time_s": 0.002,
+            "spec_sample_accept_time_s": 0.003,
+            "spec_verify_steps": 2,
+            "draft_tokens": 8,
+            "accepted_draft_tokens": 6,
+            "alpha": 0.75,
+        }
+    ]
+
+
 def json_load(path: Path):
     import json
 

@@ -60,6 +60,12 @@ DEFAULT_SEED = 42
 DEFAULT_TEMPERATURE = 0.0
 FH_NOT_OBSERVABLE = "not_observable_without_engine_telemetry"
 PROCESS_PATTERN = "llama-bench|llama-server|llama-cli|llama-mtmd-cli"
+SPEC_TELEMETRY_MS_FIELDS = (
+    "spec_draft_ms",
+    "spec_verify_ms",
+    "spec_process_ms",
+    "spec_sample_accept_ms",
+)
 
 TASK_CLASSES = [
     {
@@ -479,6 +485,13 @@ def empty_arm_metrics(arm_id: str, task_ids: list[str]) -> dict[str, Any]:
         "decode_time_s": None,
         "prompt_tps": None,
         "decode_tps": None,
+        "spec_telemetry_status": "not_run",
+        "spec_verify_steps": None,
+        "spec_draft_time_s": None,
+        "spec_verify_time_s": None,
+        "spec_process_time_s": None,
+        "spec_sample_accept_time_s": None,
+        "spec_accept_by_depth": None,
         "load_wall_clock_s": None,
         "request_count": None,
         "error_count": None,
@@ -521,6 +534,12 @@ def fh_accounting_stub() -> dict[str, Any]:
             "draft_tokens",
             "accepted_draft_tokens",
             "alpha",
+            "spec_verify_steps",
+            "spec_draft_ms",
+            "spec_verify_ms",
+            "spec_process_ms",
+            "spec_sample_accept_ms",
+            "spec_accept_by_depth",
             "wall_time_s",
             "prompt_time_s",
             "decode_time_s",
@@ -1000,6 +1019,38 @@ def number_or_none(value: Any) -> float | int | None:
     return None
 
 
+def numeric_ms(timings: dict[str, Any], field: str) -> float:
+    value = number_or_none(timings.get(field))
+    return float(value) if value is not None else 0.0
+
+
+def int_list_or_empty(value: Any) -> list[int]:
+    if not isinstance(value, list):
+        return []
+    result: list[int] = []
+    for item in value:
+        if isinstance(item, bool) or not isinstance(item, int):
+            return []
+        result.append(item)
+    return result
+
+
+def spec_telemetry_from_timings(timings: dict[str, Any]) -> dict[str, Any]:
+    verify_steps = int(number_or_none(timings.get("spec_verify_steps")) or 0)
+    accept_by_depth = int_list_or_empty(timings.get("spec_accept_by_depth"))
+    fields_ms = {field: numeric_ms(timings, field) for field in SPEC_TELEMETRY_MS_FIELDS}
+    observed = verify_steps > 0 or any(value > 0.0 for value in fields_ms.values())
+    return {
+        "status": "observed" if observed else "missing",
+        "spec_verify_steps": verify_steps,
+        "spec_draft_ms": fields_ms["spec_draft_ms"],
+        "spec_verify_ms": fields_ms["spec_verify_ms"],
+        "spec_process_ms": fields_ms["spec_process_ms"],
+        "spec_sample_accept_ms": fields_ms["spec_sample_accept_ms"],
+        "spec_accept_by_depth": accept_by_depth,
+    }
+
+
 def row_from_response(
     variant: ArmVariant,
     task: dict[str, Any],
@@ -1019,6 +1070,7 @@ def row_from_response(
     generated_tokens = number_or_none(usage.get("completion_tokens")) or number_or_none(timings.get("predicted_n"))
     draft_tokens = int(number_or_none(timings.get("draft_n")) or 0)
     accepted_draft_tokens = int(number_or_none(timings.get("draft_n_accepted")) or 0)
+    spec_telemetry = spec_telemetry_from_timings(timings)
     return {
         "arm": variant.id,
         "base_arm": variant.arm.id,
@@ -1031,6 +1083,7 @@ def row_from_response(
         "draft_tokens": draft_tokens,
         "accepted_draft_tokens": accepted_draft_tokens,
         "alpha": accepted_draft_tokens / draft_tokens if draft_tokens else None,
+        "spec_telemetry": spec_telemetry,
         "prompt_time_s": (number_or_none(timings.get("prompt_ms")) or 0) / 1000.0,
         "decode_time_s": (number_or_none(timings.get("predicted_ms")) or 0) / 1000.0,
         "prompt_tps": number_or_none(timings.get("prompt_per_second")),
@@ -1046,6 +1099,23 @@ def row_from_response(
     }
 
 
+def sum_accept_by_depth(rows: list[dict[str, Any]]) -> list[int]:
+    total: list[int] = []
+    for row in rows:
+        telemetry = row.get("spec_telemetry")
+        if not isinstance(telemetry, dict):
+            continue
+        values = telemetry.get("spec_accept_by_depth")
+        if not isinstance(values, list):
+            continue
+        if len(total) < len(values):
+            total.extend([0] * (len(values) - len(total)))
+        for index, value in enumerate(values):
+            if isinstance(value, int) and not isinstance(value, bool):
+                total[index] += value
+    return total
+
+
 def aggregate_arm_rows(variant: ArmVariant, rows: list[dict[str, Any]], load_wall_clock_s: float | None) -> dict[str, Any]:
     ok_rows = [row for row in rows if row.get("status") == "ok"]
     error_rows = [row for row in rows if row.get("status") != "ok"]
@@ -1056,6 +1126,19 @@ def aggregate_arm_rows(variant: ArmVariant, rows: list[dict[str, Any]], load_wal
     wall_time_s = sum(float(row.get("wall_time_s") or 0.0) for row in ok_rows)
     prompt_time_s = sum(float(row.get("prompt_time_s") or 0.0) for row in ok_rows)
     decode_time_s = sum(float(row.get("decode_time_s") or 0.0) for row in ok_rows)
+    spec_rows = [
+        row.get("spec_telemetry")
+        for row in ok_rows
+        if isinstance(row.get("spec_telemetry"), dict)
+    ]
+    spec_observed = any(row.get("status") == "observed" for row in spec_rows)
+    spec_verify_steps = sum(int(row.get("spec_verify_steps") or 0) for row in spec_rows)
+    spec_draft_time_s = sum(float(row.get("spec_draft_ms") or 0.0) for row in spec_rows) / 1000.0
+    spec_verify_time_s = sum(float(row.get("spec_verify_ms") or 0.0) for row in spec_rows) / 1000.0
+    spec_process_time_s = sum(float(row.get("spec_process_ms") or 0.0) for row in spec_rows) / 1000.0
+    spec_sample_accept_time_s = (
+        sum(float(row.get("spec_sample_accept_ms") or 0.0) for row in spec_rows) / 1000.0
+    )
     quality_results = [row.get("quality") for row in ok_rows if row.get("quality") is not None]
     quality_results.extend(
         {
@@ -1083,6 +1166,13 @@ def aggregate_arm_rows(variant: ArmVariant, rows: list[dict[str, Any]], load_wal
         "decode_time_s": decode_time_s,
         "prompt_tps": prompt_tokens / prompt_time_s if prompt_time_s > 0 else None,
         "decode_tps": generated_tokens / decode_time_s if decode_time_s > 0 else None,
+        "spec_telemetry_status": "observed" if spec_observed else "missing",
+        "spec_verify_steps": spec_verify_steps,
+        "spec_draft_time_s": spec_draft_time_s,
+        "spec_verify_time_s": spec_verify_time_s,
+        "spec_process_time_s": spec_process_time_s,
+        "spec_sample_accept_time_s": spec_sample_accept_time_s,
+        "spec_accept_by_depth": sum_accept_by_depth(ok_rows),
         "load_wall_clock_s": load_wall_clock_s,
         "request_count": len(rows),
         "error_count": len(error_rows),
@@ -1097,6 +1187,9 @@ def aggregate_arm_rows(variant: ArmVariant, rows: list[dict[str, Any]], load_wal
                 "reasoning_content_len": row.get("reasoning_content_len"),
                 "quality_pass": row.get("quality", {}).get("pass")
                 if isinstance(row.get("quality"), dict)
+                else None,
+                "spec_telemetry_status": row.get("spec_telemetry", {}).get("status")
+                if isinstance(row.get("spec_telemetry"), dict)
                 else None,
             }
             for row in rows
@@ -1264,6 +1357,13 @@ def build_coarse_economics(arms: dict[str, dict[str, Any]]) -> dict[str, Any]:
                     and isinstance(decode_time_s, (int, float))
                     else None
                 ),
+                "spec_telemetry_status": metrics.get("spec_telemetry_status"),
+                "spec_verify_time_s": metrics.get("spec_verify_time_s"),
+                "spec_hidden_overhead_time_s": (
+                    float(metrics.get("spec_draft_time_s") or 0.0)
+                    + float(metrics.get("spec_process_time_s") or 0.0)
+                    + float(metrics.get("spec_sample_accept_time_s") or 0.0)
+                ),
                 "target_output_match_vs_baseline": {
                     row.get("task_class"): row.get("content_sha256")
                     == baseline_hashes.get(row.get("task_class"))
@@ -1274,9 +1374,42 @@ def build_coarse_economics(arms: dict[str, dict[str, Any]]) -> dict[str, Any]:
         )
     return {
         "status": "coarse_speed_delta_only",
-        "warning": "F(K) and H(K) are still not separately observable from current llama-server timings",
+        "warning": (
+            "speed delta remains coarse; F(K)/H(K) are upgraded only for rows "
+            "with spec_telemetry_status=observed"
+        ),
         "rows": rows,
     }
+
+
+def observed_fh_rows(arms: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for arm_id, metrics in sorted(arms.items()):
+        if not arm_id.startswith("quant_asymmetric_combined_"):
+            continue
+        if metrics.get("spec_telemetry_status") != "observed":
+            continue
+        h_s = (
+            float(metrics.get("spec_draft_time_s") or 0.0)
+            + float(metrics.get("spec_process_time_s") or 0.0)
+            + float(metrics.get("spec_sample_accept_time_s") or 0.0)
+        )
+        rows.append(
+            {
+                "arm": arm_id,
+                "k": metrics.get("k"),
+                "F_K_verify_time_s": metrics.get("spec_verify_time_s"),
+                "H_K_coordination_time_s": h_s,
+                "spec_draft_time_s": metrics.get("spec_draft_time_s"),
+                "spec_process_time_s": metrics.get("spec_process_time_s"),
+                "spec_sample_accept_time_s": metrics.get("spec_sample_accept_time_s"),
+                "spec_verify_steps": metrics.get("spec_verify_steps"),
+                "draft_tokens": metrics.get("draft_tokens"),
+                "accepted_draft_tokens": metrics.get("accepted_draft_tokens"),
+                "alpha": metrics.get("alpha"),
+            }
+        )
+    return rows
 
 
 def validate_live_inputs(args: argparse.Namespace) -> None:
@@ -1371,7 +1504,45 @@ def run_execute(args: argparse.Namespace, manifest: dict[str, Any]) -> dict[str,
         "value": build_coarse_economics(launched_summaries),
         "unit": "aggregate_decode_seconds_and_tps_ratio",
     }
-    summary["fh_accounting"]["accounting_verdict"] = "not_decision_grade_until_F_K_and_H_K_are_separately_observable"
+    fh_rows = observed_fh_rows(launched_summaries)
+    if fh_rows:
+        summary["fh_accounting"]["F_K"] = {
+            "status": "observed_from_llama_server_spec_telemetry",
+            "value": [
+                {
+                    "arm": row["arm"],
+                    "k": row["k"],
+                    "verify_time_s": row["F_K_verify_time_s"],
+                    "spec_verify_steps": row["spec_verify_steps"],
+                }
+                for row in fh_rows
+            ],
+            "unit": "seconds",
+            "caveat": "exact for single-slot DR-0e runs; attributed batch time under batching",
+        }
+        summary["fh_accounting"]["H_K"] = {
+            "status": "observed_from_llama_server_spec_telemetry",
+            "value": [
+                {
+                    "arm": row["arm"],
+                    "k": row["k"],
+                    "coordination_time_s": row["H_K_coordination_time_s"],
+                    "spec_draft_time_s": row["spec_draft_time_s"],
+                    "spec_process_time_s": row["spec_process_time_s"],
+                    "spec_sample_accept_time_s": row["spec_sample_accept_time_s"],
+                }
+                for row in fh_rows
+            ],
+            "unit": "seconds",
+            "caveat": "HTTP/request wall time remains outside engine telemetry",
+        }
+        summary["fh_accounting"]["accounting_verdict"] = (
+            "engine_F_K_and_H_K_observed_not_decision_grade_until_quality_and_output_stability_pass"
+        )
+    else:
+        summary["fh_accounting"]["accounting_verdict"] = (
+            "not_decision_grade_until_F_K_and_H_K_are_separately_observable"
+        )
     summary["decision_grade"] = False
     summary["observation_grade"] = (
         summary["quality_gate"]["status"] == "pass"

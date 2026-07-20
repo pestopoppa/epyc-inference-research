@@ -1,0 +1,69 @@
+[
+  {
+    "checker": "strict repeated/structured output count",
+    "details": {
+      "all_status_ready": true,
+      "error_count": 0,
+      "errors": [],
+      "indexes_unique_0_to_63": false,
+      "json_object_count": 19,
+      "keys_exact": true,
+      "line_count": 19
+    },
+    "pass": false,
+    "status": "checked",
+    "task_class": "repetitive_structured_generation"
+  },
+  {
+    "checker": "single valid JSON decision object with required keys",
+    "details": {
+      "confidence_ok": true,
+      "decision_ok": true,
+      "json_ok": true,
+      "keys": [
+        "confidence",
+        "decision",
+        "rationale"
+      ],
+      "keys_exact": true
+    },
+    "pass": true,
+    "status": "checked",
+    "task_class": "bounded_architect_reviewer_json_decision"
+  },
+  {
+    "checker": "states no blocking bug and cites the invariant",
+    "details": {
+      "bullet_like": true,
+      "cites_invariant": true,
+      "line_count": 3,
+      "states_no_bug": true
+    },
+    "pass": true,
+    "status": "checked",
+    "task_class": "short_code_review_no_bug_control"
+  },
+  {
+    "checker": "exact prefix and item count",
+    "details": {
+      "line_count": 5,
+      "starts_ok": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "word_counts": [
+        7,
+        7,
+        7,
+        7,
+        7
+      ]
+    },
+    "pass": false,
+    "status": "checked",
+    "task_class": "exact_format_strict_instruction"
+  }
+]
