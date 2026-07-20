@@ -1,0 +1,49 @@
+[
+  {
+    "checker": "strict repeated/structured output count",
+    "details": {
+      "all_indexes_present": true,
+      "all_status_ready": true,
+      "error_count": 0,
+      "errors": [],
+      "json_object_count": 0,
+      "line_count": 0
+    },
+    "pass": false,
+    "status": "checked",
+    "task_class": "repetitive_structured_generation"
+  },
+  {
+    "checker": "single valid JSON decision object with required keys",
+    "details": {
+      "error": "Expecting value: line 1 column 1 (char 0)",
+      "json_ok": false
+    },
+    "pass": false,
+    "status": "checked",
+    "task_class": "bounded_architect_reviewer_json_decision"
+  },
+  {
+    "checker": "states no blocking bug and cites the invariant",
+    "details": {
+      "bullet_like": true,
+      "cites_invariant": false,
+      "line_count": 0,
+      "states_no_bug": false
+    },
+    "pass": false,
+    "status": "checked",
+    "task_class": "short_code_review_no_bug_control"
+  },
+  {
+    "checker": "exact prefix and item count",
+    "details": {
+      "line_count": 0,
+      "starts_ok": [],
+      "word_counts": []
+    },
+    "pass": false,
+    "status": "checked",
+    "task_class": "exact_format_strict_instruction"
+  }
+]

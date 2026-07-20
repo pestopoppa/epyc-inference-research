@@ -1,0 +1,928 @@
+{
+  "arms": {
+    "cpu_high_quant_verifier_baseline": {
+      "accepted_draft_tokens": 0,
+      "alpha": null,
+      "arm": "cpu_high_quant_verifier_baseline",
+      "artifacts": {
+        "cleanup": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/cpu_high_quant_verifier_baseline.cleanup.json",
+        "command": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/cpu_high_quant_verifier_baseline.command.json",
+        "metrics": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/cpu_high_quant_verifier_baseline.metrics.json",
+        "quality": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/cpu_high_quant_verifier_baseline.quality.json",
+        "responses": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/cpu_high_quant_verifier_baseline.responses.jsonl",
+        "server_log": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/cpu_high_quant_verifier_baseline.server.log"
+      },
+      "base_arm": "cpu_high_quant_verifier_baseline",
+      "cleanup": {
+        "pid": 528008,
+        "pid_alive_after": false,
+        "port_open_after": false,
+        "returncode": 0,
+        "sigkill_sent": false,
+        "sigterm_sent": true,
+        "status": "ok",
+        "terminated": true
+      },
+      "decode_time_s": 141.21102199999999,
+      "decode_tps": 6.890396983317634,
+      "draft_tokens": 0,
+      "error_count": 0,
+      "fresh_server": true,
+      "generated_tokens": 973,
+      "k": null,
+      "load_wall_clock_s": 24.429155950900167,
+      "prompt_time_s": 5.8632040000000005,
+      "prompt_tokens": 149,
+      "prompt_tps": 25.41272655701558,
+      "quality_results": [
+        {
+          "checker": "strict repeated/structured output count",
+          "details": {
+            "all_status_ready": true,
+            "error_count": 1,
+            "errors": [
+              "line 56: Expecting property name enclosed in double quotes: line 1 column 14 (char 13)"
+            ],
+            "indexes_unique_0_to_63": false,
+            "json_object_count": 55,
+            "keys_exact": true,
+            "line_count": 56
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "repetitive_structured_generation"
+        },
+        {
+          "checker": "single valid JSON decision object with required keys",
+          "details": {
+            "confidence_ok": true,
+            "decision_ok": false,
+            "json_ok": true,
+            "keys": [
+              "confidence",
+              "decision",
+              "rationale"
+            ],
+            "keys_exact": true
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "bounded_architect_reviewer_json_decision"
+        },
+        {
+          "checker": "states no blocking bug and cites the invariant",
+          "details": {
+            "bullet_like": true,
+            "cites_invariant": false,
+            "line_count": 3,
+            "states_no_bug": false
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "short_code_review_no_bug_control"
+        },
+        {
+          "checker": "exact prefix and item count",
+          "details": {
+            "line_count": 5,
+            "starts_ok": [
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "word_counts": [
+              7,
+              7,
+              7,
+              7,
+              7
+            ]
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "exact_format_strict_instruction"
+        }
+      ],
+      "request_count": 4,
+      "status": "ok",
+      "wall_time_s": 149.75444641825743
+    },
+    "mi210_aggressive_drafter_alone_k1": {
+      "accepted_draft_tokens": 487,
+      "alpha": 0.9643564356435643,
+      "arm": "mi210_aggressive_drafter_alone_k1",
+      "artifacts": {
+        "cleanup": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/mi210_aggressive_drafter_alone_k1.cleanup.json",
+        "command": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/mi210_aggressive_drafter_alone_k1.command.json",
+        "metrics": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/mi210_aggressive_drafter_alone_k1.metrics.json",
+        "quality": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/mi210_aggressive_drafter_alone_k1.quality.json",
+        "responses": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/mi210_aggressive_drafter_alone_k1.responses.jsonl",
+        "server_log": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/mi210_aggressive_drafter_alone_k1.server.log"
+      },
+      "base_arm": "mi210_aggressive_drafter_alone",
+      "cleanup": {
+        "pid": 529182,
+        "pid_alive_after": false,
+        "port_open_after": false,
+        "returncode": 0,
+        "sigkill_sent": false,
+        "sigterm_sent": true,
+        "status": "ok",
+        "terminated": true
+      },
+      "decode_time_s": 18.678031,
+      "decode_tps": 53.217600934488225,
+      "draft_tokens": 505,
+      "error_count": 0,
+      "fresh_server": true,
+      "generated_tokens": 994,
+      "k": 1,
+      "load_wall_clock_s": 8.273608078015968,
+      "prompt_time_s": 1.315126,
+      "prompt_tokens": 149,
+      "prompt_tps": 113.29712894429888,
+      "quality_results": [
+        {
+          "checker": "strict repeated/structured output count",
+          "details": {
+            "all_status_ready": true,
+            "error_count": 1,
+            "errors": [
+              "line 56: Expecting property name enclosed in double quotes: line 1 column 14 (char 13)"
+            ],
+            "indexes_unique_0_to_63": false,
+            "json_object_count": 55,
+            "keys_exact": true,
+            "line_count": 56
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "repetitive_structured_generation"
+        },
+        {
+          "checker": "single valid JSON decision object with required keys",
+          "details": {
+            "confidence_ok": true,
+            "decision_ok": false,
+            "json_ok": true,
+            "keys": [
+              "confidence",
+              "decision",
+              "rationale"
+            ],
+            "keys_exact": true
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "bounded_architect_reviewer_json_decision"
+        },
+        {
+          "checker": "states no blocking bug and cites the invariant",
+          "details": {
+            "bullet_like": true,
+            "cites_invariant": false,
+            "line_count": 3,
+            "states_no_bug": false
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "short_code_review_no_bug_control"
+        },
+        {
+          "checker": "exact prefix and item count",
+          "details": {
+            "line_count": 5,
+            "starts_ok": [
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "word_counts": [
+              6,
+              6,
+              7,
+              7,
+              7
+            ]
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "exact_format_strict_instruction"
+        }
+      ],
+      "request_count": 4,
+      "status": "ok",
+      "wall_time_s": 20.16623645904474
+    },
+    "mi210_aggressive_drafter_alone_k2": {
+      "accepted_draft_tokens": 639,
+      "alpha": 0.922077922077922,
+      "arm": "mi210_aggressive_drafter_alone_k2",
+      "artifacts": {
+        "cleanup": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/mi210_aggressive_drafter_alone_k2.cleanup.json",
+        "command": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/mi210_aggressive_drafter_alone_k2.command.json",
+        "metrics": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/mi210_aggressive_drafter_alone_k2.metrics.json",
+        "quality": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/mi210_aggressive_drafter_alone_k2.quality.json",
+        "responses": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/mi210_aggressive_drafter_alone_k2.responses.jsonl",
+        "server_log": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/mi210_aggressive_drafter_alone_k2.server.log"
+      },
+      "base_arm": "mi210_aggressive_drafter_alone",
+      "cleanup": {
+        "pid": 529563,
+        "pid_alive_after": false,
+        "port_open_after": false,
+        "returncode": 0,
+        "sigkill_sent": false,
+        "sigterm_sent": true,
+        "status": "ok",
+        "terminated": true
+      },
+      "decode_time_s": 16.855761,
+      "decode_tps": 58.55564753202184,
+      "draft_tokens": 693,
+      "error_count": 0,
+      "fresh_server": true,
+      "generated_tokens": 987,
+      "k": 2,
+      "load_wall_clock_s": 8.289976636879146,
+      "prompt_time_s": 1.317247,
+      "prompt_tokens": 149,
+      "prompt_tps": 113.11470058386924,
+      "quality_results": [
+        {
+          "checker": "strict repeated/structured output count",
+          "details": {
+            "all_status_ready": true,
+            "error_count": 1,
+            "errors": [
+              "line 56: Expecting property name enclosed in double quotes: line 1 column 14 (char 13)"
+            ],
+            "indexes_unique_0_to_63": false,
+            "json_object_count": 55,
+            "keys_exact": true,
+            "line_count": 56
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "repetitive_structured_generation"
+        },
+        {
+          "checker": "single valid JSON decision object with required keys",
+          "details": {
+            "confidence_ok": true,
+            "decision_ok": false,
+            "json_ok": true,
+            "keys": [
+              "confidence",
+              "decision",
+              "rationale"
+            ],
+            "keys_exact": true
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "bounded_architect_reviewer_json_decision"
+        },
+        {
+          "checker": "states no blocking bug and cites the invariant",
+          "details": {
+            "bullet_like": true,
+            "cites_invariant": false,
+            "line_count": 3,
+            "states_no_bug": false
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "short_code_review_no_bug_control"
+        },
+        {
+          "checker": "exact prefix and item count",
+          "details": {
+            "line_count": 5,
+            "starts_ok": [
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "word_counts": [
+              6,
+              6,
+              6,
+              6,
+              6
+            ]
+          },
+          "pass": true,
+          "status": "checked",
+          "task_class": "exact_format_strict_instruction"
+        }
+      ],
+      "request_count": 4,
+      "status": "ok",
+      "wall_time_s": 18.349655997706577
+    },
+    "mi210_aggressive_drafter_alone_k4": {
+      "accepted_draft_tokens": 753,
+      "alpha": 0.8131749460043196,
+      "arm": "mi210_aggressive_drafter_alone_k4",
+      "artifacts": {
+        "cleanup": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/mi210_aggressive_drafter_alone_k4.cleanup.json",
+        "command": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/mi210_aggressive_drafter_alone_k4.command.json",
+        "metrics": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/mi210_aggressive_drafter_alone_k4.metrics.json",
+        "quality": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/mi210_aggressive_drafter_alone_k4.quality.json",
+        "responses": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/mi210_aggressive_drafter_alone_k4.responses.jsonl",
+        "server_log": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/mi210_aggressive_drafter_alone_k4.server.log"
+      },
+      "base_arm": "mi210_aggressive_drafter_alone",
+      "cleanup": {
+        "pid": 529926,
+        "pid_alive_after": false,
+        "port_open_after": false,
+        "returncode": 0,
+        "sigkill_sent": false,
+        "sigterm_sent": true,
+        "status": "ok",
+        "terminated": true
+      },
+      "decode_time_s": 22.218539,
+      "decode_tps": 44.15231802595121,
+      "draft_tokens": 926,
+      "error_count": 0,
+      "fresh_server": true,
+      "generated_tokens": 981,
+      "k": 4,
+      "load_wall_clock_s": 8.285759370075539,
+      "prompt_time_s": 1.325189,
+      "prompt_tokens": 149,
+      "prompt_tps": 112.43679203494747,
+      "quality_results": [
+        {
+          "checker": "strict repeated/structured output count",
+          "details": {
+            "all_status_ready": true,
+            "error_count": 1,
+            "errors": [
+              "line 56: Expecting property name enclosed in double quotes: line 1 column 14 (char 13)"
+            ],
+            "indexes_unique_0_to_63": false,
+            "json_object_count": 55,
+            "keys_exact": true,
+            "line_count": 56
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "repetitive_structured_generation"
+        },
+        {
+          "checker": "single valid JSON decision object with required keys",
+          "details": {
+            "confidence_ok": true,
+            "decision_ok": false,
+            "json_ok": true,
+            "keys": [
+              "confidence",
+              "decision",
+              "rationale"
+            ],
+            "keys_exact": true
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "bounded_architect_reviewer_json_decision"
+        },
+        {
+          "checker": "states no blocking bug and cites the invariant",
+          "details": {
+            "bullet_like": true,
+            "cites_invariant": false,
+            "line_count": 3,
+            "states_no_bug": false
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "short_code_review_no_bug_control"
+        },
+        {
+          "checker": "exact prefix and item count",
+          "details": {
+            "line_count": 5,
+            "starts_ok": [
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "word_counts": [
+              6,
+              6,
+              6,
+              7,
+              6
+            ]
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "exact_format_strict_instruction"
+        }
+      ],
+      "request_count": 4,
+      "status": "ok",
+      "wall_time_s": 23.720265882089734
+    },
+    "quant_asymmetric_combined_k1": {
+      "accepted_draft_tokens": 474,
+      "alpha": 0.9634146341463414,
+      "arm": "quant_asymmetric_combined_k1",
+      "artifacts": {
+        "cleanup": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/quant_asymmetric_combined_k1.cleanup.json",
+        "command": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/quant_asymmetric_combined_k1.command.json",
+        "metrics": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/quant_asymmetric_combined_k1.metrics.json",
+        "quality": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/quant_asymmetric_combined_k1.quality.json",
+        "responses": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/quant_asymmetric_combined_k1.responses.jsonl",
+        "server_log": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/quant_asymmetric_combined_k1.server.log"
+      },
+      "base_arm": "quant_asymmetric_combined",
+      "cleanup": {
+        "pid": 530320,
+        "pid_alive_after": false,
+        "port_open_after": false,
+        "returncode": 0,
+        "sigkill_sent": false,
+        "sigterm_sent": true,
+        "status": "ok",
+        "terminated": true
+      },
+      "decode_time_s": 97.402256,
+      "decode_tps": 9.958701572579592,
+      "draft_tokens": 492,
+      "error_count": 0,
+      "fresh_server": true,
+      "generated_tokens": 970,
+      "k": 1,
+      "load_wall_clock_s": 32.99586108699441,
+      "prompt_time_s": 4.633701,
+      "prompt_tokens": 149,
+      "prompt_tps": 32.15572174380694,
+      "quality_results": [
+        {
+          "checker": "strict repeated/structured output count",
+          "details": {
+            "all_status_ready": true,
+            "error_count": 1,
+            "errors": [
+              "line 56: Expecting property name enclosed in double quotes: line 1 column 14 (char 13)"
+            ],
+            "indexes_unique_0_to_63": false,
+            "json_object_count": 55,
+            "keys_exact": true,
+            "line_count": 56
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "repetitive_structured_generation"
+        },
+        {
+          "checker": "single valid JSON decision object with required keys",
+          "details": {
+            "confidence_ok": true,
+            "decision_ok": false,
+            "json_ok": true,
+            "keys": [
+              "confidence",
+              "decision",
+              "rationale"
+            ],
+            "keys_exact": true
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "bounded_architect_reviewer_json_decision"
+        },
+        {
+          "checker": "states no blocking bug and cites the invariant",
+          "details": {
+            "bullet_like": true,
+            "cites_invariant": false,
+            "line_count": 3,
+            "states_no_bug": false
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "short_code_review_no_bug_control"
+        },
+        {
+          "checker": "exact prefix and item count",
+          "details": {
+            "line_count": 5,
+            "starts_ok": [
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "word_counts": [
+              7,
+              7,
+              7,
+              7,
+              7
+            ]
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "exact_format_strict_instruction"
+        }
+      ],
+      "request_count": 4,
+      "status": "ok",
+      "wall_time_s": 102.21604690141976
+    },
+    "quant_asymmetric_combined_k2": {
+      "accepted_draft_tokens": 630,
+      "alpha": 0.9278350515463918,
+      "arm": "quant_asymmetric_combined_k2",
+      "artifacts": {
+        "cleanup": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/quant_asymmetric_combined_k2.cleanup.json",
+        "command": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/quant_asymmetric_combined_k2.command.json",
+        "metrics": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/quant_asymmetric_combined_k2.metrics.json",
+        "quality": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/quant_asymmetric_combined_k2.quality.json",
+        "responses": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/quant_asymmetric_combined_k2.responses.jsonl",
+        "server_log": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/quant_asymmetric_combined_k2.server.log"
+      },
+      "base_arm": "quant_asymmetric_combined",
+      "cleanup": {
+        "pid": 531333,
+        "pid_alive_after": false,
+        "port_open_after": false,
+        "returncode": 0,
+        "sigkill_sent": false,
+        "sigterm_sent": true,
+        "status": "ok",
+        "terminated": true
+      },
+      "decode_time_s": 85.579268,
+      "decode_tps": 11.334520879519559,
+      "draft_tokens": 679,
+      "error_count": 0,
+      "fresh_server": true,
+      "generated_tokens": 970,
+      "k": 2,
+      "load_wall_clock_s": 34.111298131989315,
+      "prompt_time_s": 4.975334,
+      "prompt_tokens": 149,
+      "prompt_tps": 29.947738181999437,
+      "quality_results": [
+        {
+          "checker": "strict repeated/structured output count",
+          "details": {
+            "all_status_ready": true,
+            "error_count": 1,
+            "errors": [
+              "line 56: Expecting property name enclosed in double quotes: line 1 column 14 (char 13)"
+            ],
+            "indexes_unique_0_to_63": false,
+            "json_object_count": 55,
+            "keys_exact": true,
+            "line_count": 56
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "repetitive_structured_generation"
+        },
+        {
+          "checker": "single valid JSON decision object with required keys",
+          "details": {
+            "confidence_ok": true,
+            "decision_ok": false,
+            "json_ok": true,
+            "keys": [
+              "confidence",
+              "decision",
+              "rationale"
+            ],
+            "keys_exact": true
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "bounded_architect_reviewer_json_decision"
+        },
+        {
+          "checker": "states no blocking bug and cites the invariant",
+          "details": {
+            "bullet_like": true,
+            "cites_invariant": false,
+            "line_count": 3,
+            "states_no_bug": false
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "short_code_review_no_bug_control"
+        },
+        {
+          "checker": "exact prefix and item count",
+          "details": {
+            "line_count": 5,
+            "starts_ok": [
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "word_counts": [
+              7,
+              7,
+              7,
+              7,
+              7
+            ]
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "exact_format_strict_instruction"
+        }
+      ],
+      "request_count": 4,
+      "status": "ok",
+      "wall_time_s": 91.12341580097564
+    },
+    "quant_asymmetric_combined_k4": {
+      "accepted_draft_tokens": 748,
+      "alpha": 0.8366890380313199,
+      "arm": "quant_asymmetric_combined_k4",
+      "artifacts": {
+        "cleanup": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/quant_asymmetric_combined_k4.cleanup.json",
+        "command": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/quant_asymmetric_combined_k4.command.json",
+        "metrics": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/quant_asymmetric_combined_k4.metrics.json",
+        "quality": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/quant_asymmetric_combined_k4.quality.json",
+        "responses": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/quant_asymmetric_combined_k4.responses.jsonl",
+        "server_log": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/quant_asymmetric_combined_k4.server.log"
+      },
+      "base_arm": "quant_asymmetric_combined",
+      "cleanup": {
+        "pid": 532219,
+        "pid_alive_after": false,
+        "port_open_after": false,
+        "returncode": 0,
+        "sigkill_sent": false,
+        "sigterm_sent": true,
+        "status": "ok",
+        "terminated": true
+      },
+      "decode_time_s": 78.877468,
+      "decode_tps": 12.297554987439506,
+      "draft_tokens": 894,
+      "error_count": 0,
+      "fresh_server": true,
+      "generated_tokens": 970,
+      "k": 4,
+      "load_wall_clock_s": 34.04161566612311,
+      "prompt_time_s": 4.90761,
+      "prompt_tokens": 149,
+      "prompt_tps": 30.361010756763477,
+      "quality_results": [
+        {
+          "checker": "strict repeated/structured output count",
+          "details": {
+            "all_status_ready": true,
+            "error_count": 1,
+            "errors": [
+              "line 56: Expecting property name enclosed in double quotes: line 1 column 14 (char 13)"
+            ],
+            "indexes_unique_0_to_63": false,
+            "json_object_count": 55,
+            "keys_exact": true,
+            "line_count": 56
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "repetitive_structured_generation"
+        },
+        {
+          "checker": "single valid JSON decision object with required keys",
+          "details": {
+            "confidence_ok": true,
+            "decision_ok": false,
+            "json_ok": true,
+            "keys": [
+              "confidence",
+              "decision",
+              "rationale"
+            ],
+            "keys_exact": true
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "bounded_architect_reviewer_json_decision"
+        },
+        {
+          "checker": "states no blocking bug and cites the invariant",
+          "details": {
+            "bullet_like": true,
+            "cites_invariant": false,
+            "line_count": 3,
+            "states_no_bug": false
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "short_code_review_no_bug_control"
+        },
+        {
+          "checker": "exact prefix and item count",
+          "details": {
+            "line_count": 5,
+            "starts_ok": [
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "word_counts": [
+              7,
+              7,
+              7,
+              7,
+              7
+            ]
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "exact_format_strict_instruction"
+        }
+      ],
+      "request_count": 4,
+      "status": "ok",
+      "wall_time_s": 83.94136426411569
+    }
+  },
+  "artifact_dir": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off",
+  "artifacts": {
+    "commands": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/commands.sh",
+    "manifest": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/manifest.json",
+    "summary": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/summary.json"
+  },
+  "cleanup_proof": {
+    "new_post_process_pids": [],
+    "no_kfd_pid_leak": true,
+    "no_llama_process_leak": true,
+    "post_process_snapshot": {
+      "command": [
+        "pgrep",
+        "-af",
+        "llama-bench|llama-server|llama-cli|llama-mtmd-cli"
+      ],
+      "lines": [],
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "1849379 /usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh\n"
+    },
+    "post_rocm_smi_showpids": {
+      "command": [
+        "rocm-smi",
+        "--showpids"
+      ],
+      "kfd_pids_observed": false,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "\n\n============================ ROCm System Management Interface ============================\n===================================== KFD Processes ======================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    "pre_process_snapshot": {
+      "command": [
+        "pgrep",
+        "-af",
+        "llama-bench|llama-server|llama-cli|llama-mtmd-cli"
+      ],
+      "lines": [],
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "1849379 /usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh\n"
+    },
+    "pre_rocm_smi_showpids": {
+      "command": [
+        "rocm-smi",
+        "--showpids"
+      ],
+      "kfd_pids_observed": false,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "\n\n============================ ROCm System Management Interface ============================\n===================================== KFD Processes ======================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    "status": "pass"
+  },
+  "created_at": "2026-07-20T04:30:12.627209+00:00",
+  "decision_grade": false,
+  "dry_run_only": false,
+  "fh_accounting": {
+    "E_alpha_K": {
+      "status": "coarse_observed_speed_delta_only",
+      "unit": "aggregate_decode_seconds_and_tps_ratio",
+      "value": {
+        "rows": [
+          {
+            "arm": "quant_asymmetric_combined_k1",
+            "baseline_decode_tps": 6.890396983317634,
+            "coarse_decode_seconds_saved_vs_baseline": 43.80876599999999,
+            "combined_decode_tps": 9.958701572579592,
+            "decode_tps_ratio_vs_baseline": 1.4453015692260753,
+            "k": 1
+          },
+          {
+            "arm": "quant_asymmetric_combined_k2",
+            "baseline_decode_tps": 6.890396983317634,
+            "coarse_decode_seconds_saved_vs_baseline": 55.63175399999999,
+            "combined_decode_tps": 11.334520879519559,
+            "decode_tps_ratio_vs_baseline": 1.6449735634915679,
+            "k": 2
+          },
+          {
+            "arm": "quant_asymmetric_combined_k4",
+            "baseline_decode_tps": 6.890396983317634,
+            "coarse_decode_seconds_saved_vs_baseline": 62.33355399999999,
+            "combined_decode_tps": 12.297554987439506,
+            "decode_tps_ratio_vs_baseline": 1.7847382403674508,
+            "k": 4
+          }
+        ],
+        "status": "coarse_speed_delta_only",
+        "warning": "F(K) and H(K) are still not separately observable from current llama-server timings"
+      }
+    },
+    "F_K": {
+      "required_engine_telemetry": [
+        "per-speculation-window verifier token-evaluation time for proposed draft tokens",
+        "accepted vs rejected draft-token verifier work separated from normal target decode",
+        "per-K verifier batch shape/cycle counts"
+      ],
+      "status": "not_observable_without_engine_telemetry",
+      "unit": null,
+      "value": null
+    },
+    "H_K": {
+      "required_engine_telemetry": [
+        "per-speculation-window scheduler/coordination overhead",
+        "draft proposal latency separated from verifier compute",
+        "HTTP/request framing overhead excluded or separately timed from engine decode"
+      ],
+      "status": "not_observable_without_engine_telemetry",
+      "unit": null,
+      "value": null
+    },
+    "accounting_verdict": "not_decision_grade_until_F_K_and_H_K_are_separately_observable",
+    "k_values": [
+      1,
+      2,
+      4
+    ],
+    "observable_from_llama_server_response_today": [
+      "prompt_tokens",
+      "generated_tokens",
+      "draft_tokens",
+      "accepted_draft_tokens",
+      "alpha",
+      "wall_time_s",
+      "prompt_time_s",
+      "decode_time_s",
+      "prompt_tps",
+      "decode_tps",
+      "quality_results"
+    ],
+    "rule": "E(alpha,K) > F(K)+H(K)"
+  },
+  "mode": "execute",
+  "observation_grade": false,
+  "quality_gate": {
+    "pass_count": 1,
+    "required": "quality sanity passes on every included row",
+    "status": "fail",
+    "total_count": 28
+  },
+  "recent_observation_inputs": [
+    {
+      "artifact": "data/model_admission_throughput/qwen35_122b_iq2m_long_mtp_ab_local_20260719T013555Z/summary.json",
+      "summary": "long repeated output: no-spec 37.87 t/s, draft-mtp 60.65 t/s, 511/511 accepted"
+    },
+    {
+      "artifact": "data/model_admission_throughput/qwen35_122b_iq2m_long_ngram_mtp_local_20260719T013814Z/summary.json",
+      "summary": "long repeated output: ngram-mod,draft-mtp 287.09 t/s, 746/746 accepted, quality_sanity=true"
+    },
+    {
+      "artifact": "data/model_admission_throughput/qwen35_122b_iq2m_mixed_ngram_mtp_ab_local_20260719T013943Z/summary.json",
+      "summary": "mixed 3-prompt slice: no-spec 41.85 t/s, composed 50.77 t/s, 3/3 quality"
+    },
+    {
+      "artifact": "data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/summary.json",
+      "summary": "broad 8-prompt slice: composed mean 80.77 t/s, 1166/1440 accepted, 5/8 quality"
+    }
+  ],
+  "run_id": "dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off",
+  "schema": "epyc.dr0_quant_asym_self_spec.summary.v1"
+}

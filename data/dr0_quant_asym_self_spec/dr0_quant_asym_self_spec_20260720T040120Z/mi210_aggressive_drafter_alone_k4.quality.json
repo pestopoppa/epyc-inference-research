@@ -1,0 +1,72 @@
+[
+  {
+    "checker": "strict repeated/structured output count",
+    "details": {
+      "all_indexes_present": true,
+      "all_status_ready": true,
+      "error_count": 1,
+      "errors": [
+        "line 56: Expecting property name enclosed in double quotes: line 1 column 14 (char 13)"
+      ],
+      "json_object_count": 55,
+      "line_count": 56
+    },
+    "pass": false,
+    "status": "checked",
+    "task_class": "repetitive_structured_generation"
+  },
+  {
+    "checker": "single valid JSON decision object with required keys",
+    "details": {
+      "json_ok": true,
+      "keys": [
+        "confidence",
+        "decision",
+        "rationale"
+      ],
+      "required_present": [
+        "confidence",
+        "decision",
+        "rationale"
+      ]
+    },
+    "pass": true,
+    "status": "checked",
+    "task_class": "bounded_architect_reviewer_json_decision"
+  },
+  {
+    "checker": "states no blocking bug and cites the invariant",
+    "details": {
+      "bullet_like": true,
+      "cites_invariant": false,
+      "line_count": 3,
+      "states_no_bug": false
+    },
+    "pass": false,
+    "status": "checked",
+    "task_class": "short_code_review_no_bug_control"
+  },
+  {
+    "checker": "exact prefix and item count",
+    "details": {
+      "line_count": 5,
+      "starts_ok": [
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "word_counts": [
+        6,
+        6,
+        6,
+        6,
+        6
+      ]
+    },
+    "pass": true,
+    "status": "checked",
+    "task_class": "exact_format_strict_instruction"
+  }
+]

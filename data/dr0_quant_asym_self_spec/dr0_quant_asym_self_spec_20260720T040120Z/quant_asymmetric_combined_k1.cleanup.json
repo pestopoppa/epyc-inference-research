@@ -1,0 +1,9 @@
+{
+  "pid": 520276,
+  "pid_alive_after": false,
+  "returncode": 0,
+  "sigkill_sent": false,
+  "sigterm_sent": true,
+  "status": "ok",
+  "terminated": true
+}

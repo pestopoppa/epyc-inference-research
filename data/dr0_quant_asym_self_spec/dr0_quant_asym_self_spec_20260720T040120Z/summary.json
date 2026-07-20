@@ -1,0 +1,839 @@
+{
+  "arms": {
+    "cpu_high_quant_verifier_baseline": {
+      "accepted_draft_tokens": 0,
+      "alpha": null,
+      "arm": "cpu_high_quant_verifier_baseline",
+      "artifacts": {
+        "cleanup": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/cpu_high_quant_verifier_baseline.cleanup.json",
+        "command": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/cpu_high_quant_verifier_baseline.command.json",
+        "metrics": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/cpu_high_quant_verifier_baseline.metrics.json",
+        "quality": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/cpu_high_quant_verifier_baseline.quality.json",
+        "responses": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/cpu_high_quant_verifier_baseline.responses.jsonl",
+        "server_log": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/cpu_high_quant_verifier_baseline.server.log"
+      },
+      "base_arm": "cpu_high_quant_verifier_baseline",
+      "cleanup": {
+        "pid": 515988,
+        "pid_alive_after": false,
+        "returncode": 0,
+        "sigkill_sent": false,
+        "sigterm_sent": true,
+        "status": "ok",
+        "terminated": true
+      },
+      "decode_time_s": 443.867115,
+      "decode_tps": 6.920990305848632,
+      "draft_tokens": 0,
+      "error_count": 0,
+      "fresh_server": true,
+      "generated_tokens": 3072,
+      "k": null,
+      "load_wall_clock_s": 10.199077905155718,
+      "prompt_time_s": 4.365664,
+      "prompt_tokens": 141,
+      "prompt_tps": 32.29749243185,
+      "quality_results": [
+        {
+          "checker": "strict repeated/structured output count",
+          "details": {
+            "all_indexes_present": true,
+            "all_status_ready": true,
+            "error_count": 0,
+            "errors": [],
+            "json_object_count": 0,
+            "line_count": 0
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "repetitive_structured_generation"
+        },
+        {
+          "checker": "single valid JSON decision object with required keys",
+          "details": {
+            "error": "Expecting value: line 1 column 1 (char 0)",
+            "json_ok": false
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "bounded_architect_reviewer_json_decision"
+        },
+        {
+          "checker": "states no blocking bug and cites the invariant",
+          "details": {
+            "bullet_like": true,
+            "cites_invariant": false,
+            "line_count": 0,
+            "states_no_bug": false
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "short_code_review_no_bug_control"
+        },
+        {
+          "checker": "exact prefix and item count",
+          "details": {
+            "line_count": 0,
+            "starts_ok": [],
+            "word_counts": []
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "exact_format_strict_instruction"
+        }
+      ],
+      "request_count": 4,
+      "status": "ok",
+      "wall_time_s": 448.6543836540077
+    },
+    "mi210_aggressive_drafter_alone_k1": {
+      "accepted_draft_tokens": 486,
+      "alpha": 0.9585798816568047,
+      "arm": "mi210_aggressive_drafter_alone_k1",
+      "artifacts": {
+        "cleanup": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/mi210_aggressive_drafter_alone_k1.cleanup.json",
+        "command": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/mi210_aggressive_drafter_alone_k1.command.json",
+        "metrics": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/mi210_aggressive_drafter_alone_k1.metrics.json",
+        "quality": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/mi210_aggressive_drafter_alone_k1.quality.json",
+        "responses": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/mi210_aggressive_drafter_alone_k1.responses.jsonl",
+        "server_log": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/mi210_aggressive_drafter_alone_k1.server.log"
+      },
+      "base_arm": "mi210_aggressive_drafter_alone",
+      "cleanup": {
+        "pid": 519151,
+        "pid_alive_after": false,
+        "returncode": 0,
+        "sigkill_sent": false,
+        "sigterm_sent": true,
+        "status": "ok",
+        "terminated": true
+      },
+      "decode_time_s": 18.762921000000002,
+      "decode_tps": 53.083419154192455,
+      "draft_tokens": 507,
+      "error_count": 0,
+      "fresh_server": true,
+      "generated_tokens": 996,
+      "k": 1,
+      "load_wall_clock_s": 8.302136000012979,
+      "prompt_time_s": 1.334248,
+      "prompt_tokens": 149,
+      "prompt_tps": 111.6733920530516,
+      "quality_results": [
+        {
+          "checker": "strict repeated/structured output count",
+          "details": {
+            "all_indexes_present": true,
+            "all_status_ready": true,
+            "error_count": 1,
+            "errors": [
+              "line 56: Expecting property name enclosed in double quotes: line 1 column 14 (char 13)"
+            ],
+            "json_object_count": 55,
+            "line_count": 56
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "repetitive_structured_generation"
+        },
+        {
+          "checker": "single valid JSON decision object with required keys",
+          "details": {
+            "json_ok": true,
+            "keys": [
+              "confidence",
+              "decision",
+              "rationale"
+            ],
+            "required_present": [
+              "confidence",
+              "decision",
+              "rationale"
+            ]
+          },
+          "pass": true,
+          "status": "checked",
+          "task_class": "bounded_architect_reviewer_json_decision"
+        },
+        {
+          "checker": "states no blocking bug and cites the invariant",
+          "details": {
+            "bullet_like": true,
+            "cites_invariant": false,
+            "line_count": 3,
+            "states_no_bug": false
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "short_code_review_no_bug_control"
+        },
+        {
+          "checker": "exact prefix and item count",
+          "details": {
+            "line_count": 5,
+            "starts_ok": [
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "word_counts": [
+              6,
+              6,
+              6,
+              7,
+              6
+            ]
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "exact_format_strict_instruction"
+        }
+      ],
+      "request_count": 4,
+      "status": "ok",
+      "wall_time_s": 20.273975715972483
+    },
+    "mi210_aggressive_drafter_alone_k2": {
+      "accepted_draft_tokens": 639,
+      "alpha": 0.9194244604316547,
+      "arm": "mi210_aggressive_drafter_alone_k2",
+      "artifacts": {
+        "cleanup": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/mi210_aggressive_drafter_alone_k2.cleanup.json",
+        "command": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/mi210_aggressive_drafter_alone_k2.command.json",
+        "metrics": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/mi210_aggressive_drafter_alone_k2.metrics.json",
+        "quality": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/mi210_aggressive_drafter_alone_k2.quality.json",
+        "responses": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/mi210_aggressive_drafter_alone_k2.responses.jsonl",
+        "server_log": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/mi210_aggressive_drafter_alone_k2.server.log"
+      },
+      "base_arm": "mi210_aggressive_drafter_alone",
+      "cleanup": {
+        "pid": 519510,
+        "pid_alive_after": false,
+        "returncode": 0,
+        "sigkill_sent": false,
+        "sigterm_sent": true,
+        "status": "ok",
+        "terminated": true
+      },
+      "decode_time_s": 16.903689,
+      "decode_tps": 58.62625607936824,
+      "draft_tokens": 695,
+      "error_count": 0,
+      "fresh_server": true,
+      "generated_tokens": 991,
+      "k": 2,
+      "load_wall_clock_s": 8.320467218989506,
+      "prompt_time_s": 1.317762,
+      "prompt_tokens": 149,
+      "prompt_tps": 113.07049376139241,
+      "quality_results": [
+        {
+          "checker": "strict repeated/structured output count",
+          "details": {
+            "all_indexes_present": true,
+            "all_status_ready": true,
+            "error_count": 1,
+            "errors": [
+              "line 56: Expecting property name enclosed in double quotes: line 1 column 14 (char 13)"
+            ],
+            "json_object_count": 55,
+            "line_count": 56
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "repetitive_structured_generation"
+        },
+        {
+          "checker": "single valid JSON decision object with required keys",
+          "details": {
+            "json_ok": true,
+            "keys": [
+              "confidence",
+              "decision",
+              "rationale"
+            ],
+            "required_present": [
+              "confidence",
+              "decision",
+              "rationale"
+            ]
+          },
+          "pass": true,
+          "status": "checked",
+          "task_class": "bounded_architect_reviewer_json_decision"
+        },
+        {
+          "checker": "states no blocking bug and cites the invariant",
+          "details": {
+            "bullet_like": true,
+            "cites_invariant": false,
+            "line_count": 3,
+            "states_no_bug": false
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "short_code_review_no_bug_control"
+        },
+        {
+          "checker": "exact prefix and item count",
+          "details": {
+            "line_count": 5,
+            "starts_ok": [
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "word_counts": [
+              6,
+              7,
+              6,
+              6,
+              6
+            ]
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "exact_format_strict_instruction"
+        }
+      ],
+      "request_count": 4,
+      "status": "ok",
+      "wall_time_s": 18.389310695929453
+    },
+    "mi210_aggressive_drafter_alone_k4": {
+      "accepted_draft_tokens": 756,
+      "alpha": 0.849438202247191,
+      "arm": "mi210_aggressive_drafter_alone_k4",
+      "artifacts": {
+        "cleanup": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/mi210_aggressive_drafter_alone_k4.cleanup.json",
+        "command": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/mi210_aggressive_drafter_alone_k4.command.json",
+        "metrics": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/mi210_aggressive_drafter_alone_k4.metrics.json",
+        "quality": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/mi210_aggressive_drafter_alone_k4.quality.json",
+        "responses": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/mi210_aggressive_drafter_alone_k4.responses.jsonl",
+        "server_log": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/mi210_aggressive_drafter_alone_k4.server.log"
+      },
+      "base_arm": "mi210_aggressive_drafter_alone",
+      "cleanup": {
+        "pid": 519885,
+        "pid_alive_after": false,
+        "returncode": 0,
+        "sigkill_sent": false,
+        "sigterm_sent": true,
+        "status": "ok",
+        "terminated": true
+      },
+      "decode_time_s": 21.257880999999998,
+      "decode_tps": 45.865342834499835,
+      "draft_tokens": 890,
+      "error_count": 0,
+      "fresh_server": true,
+      "generated_tokens": 975,
+      "k": 4,
+      "load_wall_clock_s": 8.307127455016598,
+      "prompt_time_s": 1.3204850000000001,
+      "prompt_tokens": 149,
+      "prompt_tps": 112.83732870876987,
+      "quality_results": [
+        {
+          "checker": "strict repeated/structured output count",
+          "details": {
+            "all_indexes_present": true,
+            "all_status_ready": true,
+            "error_count": 1,
+            "errors": [
+              "line 56: Expecting property name enclosed in double quotes: line 1 column 14 (char 13)"
+            ],
+            "json_object_count": 55,
+            "line_count": 56
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "repetitive_structured_generation"
+        },
+        {
+          "checker": "single valid JSON decision object with required keys",
+          "details": {
+            "json_ok": true,
+            "keys": [
+              "confidence",
+              "decision",
+              "rationale"
+            ],
+            "required_present": [
+              "confidence",
+              "decision",
+              "rationale"
+            ]
+          },
+          "pass": true,
+          "status": "checked",
+          "task_class": "bounded_architect_reviewer_json_decision"
+        },
+        {
+          "checker": "states no blocking bug and cites the invariant",
+          "details": {
+            "bullet_like": true,
+            "cites_invariant": false,
+            "line_count": 3,
+            "states_no_bug": false
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "short_code_review_no_bug_control"
+        },
+        {
+          "checker": "exact prefix and item count",
+          "details": {
+            "line_count": 5,
+            "starts_ok": [
+              true,
+              true,
+              true,
+              true,
+              true
+            ],
+            "word_counts": [
+              6,
+              6,
+              6,
+              6,
+              6
+            ]
+          },
+          "pass": true,
+          "status": "checked",
+          "task_class": "exact_format_strict_instruction"
+        }
+      ],
+      "request_count": 4,
+      "status": "ok",
+      "wall_time_s": 22.749018032103777
+    },
+    "quant_asymmetric_combined_k1": {
+      "accepted_draft_tokens": 1416,
+      "alpha": 0.8592233009708737,
+      "arm": "quant_asymmetric_combined_k1",
+      "artifacts": {
+        "cleanup": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/quant_asymmetric_combined_k1.cleanup.json",
+        "command": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/quant_asymmetric_combined_k1.command.json",
+        "metrics": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/quant_asymmetric_combined_k1.metrics.json",
+        "quality": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/quant_asymmetric_combined_k1.quality.json",
+        "responses": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/quant_asymmetric_combined_k1.responses.jsonl",
+        "server_log": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/quant_asymmetric_combined_k1.server.log"
+      },
+      "base_arm": "quant_asymmetric_combined",
+      "cleanup": {
+        "pid": 520276,
+        "pid_alive_after": false,
+        "returncode": 0,
+        "sigkill_sent": false,
+        "sigterm_sent": true,
+        "status": "ok",
+        "terminated": true
+      },
+      "decode_time_s": 319.123446,
+      "decode_tps": 9.626368850378984,
+      "draft_tokens": 1648,
+      "error_count": 0,
+      "fresh_server": true,
+      "generated_tokens": 3072,
+      "k": 1,
+      "load_wall_clock_s": 34.203076398931444,
+      "prompt_time_s": 4.40527,
+      "prompt_tokens": 141,
+      "prompt_tps": 32.00711874641055,
+      "quality_results": [
+        {
+          "checker": "strict repeated/structured output count",
+          "details": {
+            "all_indexes_present": true,
+            "all_status_ready": true,
+            "error_count": 0,
+            "errors": [],
+            "json_object_count": 0,
+            "line_count": 0
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "repetitive_structured_generation"
+        },
+        {
+          "checker": "single valid JSON decision object with required keys",
+          "details": {
+            "error": "Expecting value: line 1 column 1 (char 0)",
+            "json_ok": false
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "bounded_architect_reviewer_json_decision"
+        },
+        {
+          "checker": "states no blocking bug and cites the invariant",
+          "details": {
+            "bullet_like": true,
+            "cites_invariant": false,
+            "line_count": 0,
+            "states_no_bug": false
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "short_code_review_no_bug_control"
+        },
+        {
+          "checker": "exact prefix and item count",
+          "details": {
+            "line_count": 0,
+            "starts_ok": [],
+            "word_counts": []
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "exact_format_strict_instruction"
+        }
+      ],
+      "request_count": 4,
+      "status": "ok",
+      "wall_time_s": 323.69723742152564
+    },
+    "quant_asymmetric_combined_k2": {
+      "accepted_draft_tokens": 1856,
+      "alpha": 0.7666253614209004,
+      "arm": "quant_asymmetric_combined_k2",
+      "artifacts": {
+        "cleanup": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/quant_asymmetric_combined_k2.cleanup.json",
+        "command": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/quant_asymmetric_combined_k2.command.json",
+        "metrics": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/quant_asymmetric_combined_k2.metrics.json",
+        "quality": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/quant_asymmetric_combined_k2.quality.json",
+        "responses": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/quant_asymmetric_combined_k2.responses.jsonl",
+        "server_log": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/quant_asymmetric_combined_k2.server.log"
+      },
+      "base_arm": "quant_asymmetric_combined",
+      "cleanup": {
+        "pid": 522660,
+        "pid_alive_after": false,
+        "returncode": 0,
+        "sigkill_sent": false,
+        "sigterm_sent": true,
+        "status": "ok",
+        "terminated": true
+      },
+      "decode_time_s": 298.423747,
+      "decode_tps": 10.294086951465026,
+      "draft_tokens": 2421,
+      "error_count": 0,
+      "fresh_server": true,
+      "generated_tokens": 3072,
+      "k": 2,
+      "load_wall_clock_s": 34.13638890883885,
+      "prompt_time_s": 5.121544999999999,
+      "prompt_tokens": 141,
+      "prompt_tps": 27.53075487963105,
+      "quality_results": [
+        {
+          "checker": "strict repeated/structured output count",
+          "details": {
+            "all_indexes_present": true,
+            "all_status_ready": true,
+            "error_count": 0,
+            "errors": [],
+            "json_object_count": 0,
+            "line_count": 0
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "repetitive_structured_generation"
+        },
+        {
+          "checker": "single valid JSON decision object with required keys",
+          "details": {
+            "error": "Expecting value: line 1 column 1 (char 0)",
+            "json_ok": false
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "bounded_architect_reviewer_json_decision"
+        },
+        {
+          "checker": "states no blocking bug and cites the invariant",
+          "details": {
+            "bullet_like": true,
+            "cites_invariant": false,
+            "line_count": 0,
+            "states_no_bug": false
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "short_code_review_no_bug_control"
+        },
+        {
+          "checker": "exact prefix and item count",
+          "details": {
+            "line_count": 0,
+            "starts_ok": [],
+            "word_counts": []
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "exact_format_strict_instruction"
+        }
+      ],
+      "request_count": 4,
+      "status": "ok",
+      "wall_time_s": 304.6462785161566
+    },
+    "quant_asymmetric_combined_k4": {
+      "accepted_draft_tokens": 2161,
+      "alpha": 0.5977869986168741,
+      "arm": "quant_asymmetric_combined_k4",
+      "artifacts": {
+        "cleanup": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/quant_asymmetric_combined_k4.cleanup.json",
+        "command": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/quant_asymmetric_combined_k4.command.json",
+        "metrics": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/quant_asymmetric_combined_k4.metrics.json",
+        "quality": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/quant_asymmetric_combined_k4.quality.json",
+        "responses": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/quant_asymmetric_combined_k4.responses.jsonl",
+        "server_log": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/quant_asymmetric_combined_k4.server.log"
+      },
+      "base_arm": "quant_asymmetric_combined",
+      "cleanup": {
+        "pid": 524579,
+        "pid_alive_after": false,
+        "returncode": 0,
+        "sigkill_sent": false,
+        "sigterm_sent": true,
+        "status": "ok",
+        "terminated": true
+      },
+      "decode_time_s": 309.4087,
+      "decode_tps": 9.928615452635947,
+      "draft_tokens": 3615,
+      "error_count": 0,
+      "fresh_server": true,
+      "generated_tokens": 3072,
+      "k": 4,
+      "load_wall_clock_s": 33.05011526099406,
+      "prompt_time_s": 4.781196,
+      "prompt_tokens": 141,
+      "prompt_tps": 29.490529147937046,
+      "quality_results": [
+        {
+          "checker": "strict repeated/structured output count",
+          "details": {
+            "all_indexes_present": true,
+            "all_status_ready": true,
+            "error_count": 0,
+            "errors": [],
+            "json_object_count": 0,
+            "line_count": 0
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "repetitive_structured_generation"
+        },
+        {
+          "checker": "single valid JSON decision object with required keys",
+          "details": {
+            "error": "Expecting value: line 1 column 1 (char 0)",
+            "json_ok": false
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "bounded_architect_reviewer_json_decision"
+        },
+        {
+          "checker": "states no blocking bug and cites the invariant",
+          "details": {
+            "bullet_like": true,
+            "cites_invariant": false,
+            "line_count": 0,
+            "states_no_bug": false
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "short_code_review_no_bug_control"
+        },
+        {
+          "checker": "exact prefix and item count",
+          "details": {
+            "line_count": 0,
+            "starts_ok": [],
+            "word_counts": []
+          },
+          "pass": false,
+          "status": "checked",
+          "task_class": "exact_format_strict_instruction"
+        }
+      ],
+      "request_count": 4,
+      "status": "ok",
+      "wall_time_s": 314.37341253669
+    }
+  },
+  "artifact_dir": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z",
+  "artifacts": {
+    "commands": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/commands.sh",
+    "manifest": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/manifest.json",
+    "summary": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T040120Z/summary.json"
+  },
+  "cleanup_proof": {
+    "no_kfd_pid_leak": true,
+    "no_llama_process_leak": true,
+    "post_process_snapshot": {
+      "command": [
+        "pgrep",
+        "-af",
+        "llama-bench|llama-server|llama-cli|llama-mtmd-cli"
+      ],
+      "lines": [
+        "1849379 /usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh"
+      ],
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "1849379 /usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh\n"
+    },
+    "post_rocm_smi_showpids": {
+      "command": [
+        "rocm-smi",
+        "--showpids"
+      ],
+      "kfd_pids_observed": false,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "\n\n============================ ROCm System Management Interface ============================\n===================================== KFD Processes ======================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    "pre_process_snapshot": {
+      "command": [
+        "pgrep",
+        "-af",
+        "llama-bench|llama-server|llama-cli|llama-mtmd-cli"
+      ],
+      "lines": [
+        "1849379 /usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh"
+      ],
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "1849379 /usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh\n"
+    },
+    "pre_rocm_smi_showpids": {
+      "command": [
+        "rocm-smi",
+        "--showpids"
+      ],
+      "kfd_pids_observed": false,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "\n\n============================ ROCm System Management Interface ============================\n===================================== KFD Processes ======================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    "status": "pass"
+  },
+  "created_at": "2026-07-20T04:01:10.314750+00:00",
+  "decision_grade": false,
+  "dry_run_only": false,
+  "fh_accounting": {
+    "E_alpha_K": {
+      "status": "coarse_observed_speed_delta_only",
+      "unit": "aggregate_decode_seconds_and_tps_ratio",
+      "value": {
+        "rows": [
+          {
+            "arm": "quant_asymmetric_combined_k1",
+            "baseline_decode_tps": 6.920990305848632,
+            "coarse_decode_seconds_saved_vs_baseline": 124.74366900000001,
+            "combined_decode_tps": 9.626368850378984,
+            "decode_tps_ratio_vs_baseline": 1.3908947166483028,
+            "k": 1
+          },
+          {
+            "arm": "quant_asymmetric_combined_k2",
+            "baseline_decode_tps": 6.920990305848632,
+            "coarse_decode_seconds_saved_vs_baseline": 145.44336800000002,
+            "combined_decode_tps": 10.294086951465026,
+            "decode_tps_ratio_vs_baseline": 1.4873719650735435,
+            "k": 2
+          },
+          {
+            "arm": "quant_asymmetric_combined_k4",
+            "baseline_decode_tps": 6.920990305848632,
+            "coarse_decode_seconds_saved_vs_baseline": 134.458415,
+            "combined_decode_tps": 9.928615452635947,
+            "decode_tps_ratio_vs_baseline": 1.434565721649068,
+            "k": 4
+          }
+        ],
+        "status": "coarse_speed_delta_only",
+        "warning": "F(K) and H(K) are still not separately observable from current llama-server timings"
+      }
+    },
+    "F_K": {
+      "required_engine_telemetry": [
+        "per-speculation-window verifier token-evaluation time for proposed draft tokens",
+        "accepted vs rejected draft-token verifier work separated from normal target decode",
+        "per-K verifier batch shape/cycle counts"
+      ],
+      "status": "not_observable_without_engine_telemetry",
+      "unit": null,
+      "value": null
+    },
+    "H_K": {
+      "required_engine_telemetry": [
+        "per-speculation-window scheduler/coordination overhead",
+        "draft proposal latency separated from verifier compute",
+        "HTTP/request framing overhead excluded or separately timed from engine decode"
+      ],
+      "status": "not_observable_without_engine_telemetry",
+      "unit": null,
+      "value": null
+    },
+    "accounting_verdict": "not_decision_grade_until_F_K_and_H_K_are_separately_observable",
+    "k_values": [
+      1,
+      2,
+      4
+    ],
+    "observable_from_llama_server_response_today": [
+      "prompt_tokens",
+      "generated_tokens",
+      "draft_tokens",
+      "accepted_draft_tokens",
+      "alpha",
+      "wall_time_s",
+      "prompt_time_s",
+      "decode_time_s",
+      "prompt_tps",
+      "decode_tps",
+      "quality_results"
+    ],
+    "rule": "E(alpha,K) > F(K)+H(K)"
+  },
+  "mode": "execute",
+  "observation_grade": true,
+  "quality_gate": {
+    "pass_count": 4,
+    "required": "quality sanity passes on every included row",
+    "status": "fail",
+    "total_count": 28
+  },
+  "recent_observation_inputs": [
+    {
+      "artifact": "data/model_admission_throughput/qwen35_122b_iq2m_long_mtp_ab_local_20260719T013555Z/summary.json",
+      "summary": "long repeated output: no-spec 37.87 t/s, draft-mtp 60.65 t/s, 511/511 accepted"
+    },
+    {
+      "artifact": "data/model_admission_throughput/qwen35_122b_iq2m_long_ngram_mtp_local_20260719T013814Z/summary.json",
+      "summary": "long repeated output: ngram-mod,draft-mtp 287.09 t/s, 746/746 accepted, quality_sanity=true"
+    },
+    {
+      "artifact": "data/model_admission_throughput/qwen35_122b_iq2m_mixed_ngram_mtp_ab_local_20260719T013943Z/summary.json",
+      "summary": "mixed 3-prompt slice: no-spec 41.85 t/s, composed 50.77 t/s, 3/3 quality"
+    },
+    {
+      "artifact": "data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/summary.json",
+      "summary": "broad 8-prompt slice: composed mean 80.77 t/s, 1166/1440 accepted, 5/8 quality"
+    }
+  ],
+  "run_id": "dr0_quant_asym_self_spec_20260720T040120Z",
+  "schema": "epyc.dr0_quant_asym_self_spec.summary.v1"
+}

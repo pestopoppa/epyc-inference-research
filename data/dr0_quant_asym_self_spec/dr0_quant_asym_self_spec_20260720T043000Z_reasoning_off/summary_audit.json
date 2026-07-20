@@ -1,0 +1,55 @@
+{
+  "artifact_dir": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off",
+  "baseline_decode_tps": 6.890396983317634,
+  "blocking_gaps": [
+    "quality sanity failed on this strict-output slice",
+    "short_code_review_no_bug_control target output changed under combined spec",
+    "F(K) and H(K) remain not separately observable from current llama-server timings"
+  ],
+  "cleanup_status": "pass",
+  "combined": [
+    {
+      "alpha": 0.9634146341463414,
+      "arm": "quant_asymmetric_combined_k1",
+      "decode_tps": 9.958701572579592,
+      "ratio_vs_baseline": 1.4453015692260753,
+      "target_output_match_vs_baseline": {
+        "bounded_architect_reviewer_json_decision": true,
+        "exact_format_strict_instruction": true,
+        "repetitive_structured_generation": true,
+        "short_code_review_no_bug_control": false
+      }
+    },
+    {
+      "alpha": 0.9278350515463918,
+      "arm": "quant_asymmetric_combined_k2",
+      "decode_tps": 11.334520879519559,
+      "ratio_vs_baseline": 1.6449735634915679,
+      "target_output_match_vs_baseline": {
+        "bounded_architect_reviewer_json_decision": true,
+        "exact_format_strict_instruction": true,
+        "repetitive_structured_generation": true,
+        "short_code_review_no_bug_control": false
+      }
+    },
+    {
+      "alpha": 0.8366890380313199,
+      "arm": "quant_asymmetric_combined_k4",
+      "decode_tps": 12.297554987439506,
+      "ratio_vs_baseline": 1.7847382403674508,
+      "target_output_match_vs_baseline": {
+        "bounded_architect_reviewer_json_decision": true,
+        "exact_format_strict_instruction": true,
+        "repetitive_structured_generation": true,
+        "short_code_review_no_bug_control": false
+      }
+    }
+  ],
+  "decision_grade": false,
+  "quality_pass_count": 1,
+  "quality_status": "fail",
+  "quality_total_count": 28,
+  "schema": "epyc.dr0_quant_asym_self_spec.audit.v1",
+  "source_summary": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T043000Z_reasoning_off/summary.json",
+  "verdict": "speed_alpha_promising_but_quality_and_FH_not_closed"
+}
