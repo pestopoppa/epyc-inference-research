@@ -1,0 +1,21 @@
+{
+  "admission_ready_to_execute": false,
+  "blocked_on": [
+    "live executor implementation",
+    "broader task rows/materialization",
+    "post-promotion production-named P-GPU-1 if used for decision-grade GPU claims"
+  ],
+  "command_template_count": 4,
+  "context_bands": [
+    8192,
+    16384
+  ],
+  "created_at": "2026-07-20T06:31:37.007243+00:00",
+  "decision_grade": false,
+  "fixed_k": 2,
+  "mode": "dry_run_only",
+  "next_step": "implement broader K2 admission executor; do not add serving route yet",
+  "observation_grade": false,
+  "schema": "epyc.dr3_quant_asym_k2_admission_prep.v1.summary",
+  "task_class_count": 6
+}

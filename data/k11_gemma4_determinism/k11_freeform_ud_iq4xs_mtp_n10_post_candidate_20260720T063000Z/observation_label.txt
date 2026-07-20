@@ -1,0 +1,5 @@
+post-candidate research observation
+experimental build: 12a292f0c21d
+production promotion evidence: no
+lane: one MI210 / ROCm0
+task: no-schema exact 200 benchmark repetitions

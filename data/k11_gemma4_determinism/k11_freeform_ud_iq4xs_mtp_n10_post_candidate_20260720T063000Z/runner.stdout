@@ -1,0 +1,34 @@
+K11 Gemma4 determinism runner
+mode: execute
+output_dir: data/k11_gemma4_determinism/k11_freeform_ud_iq4xs_mtp_n10_post_candidate_20260720T063000Z
+server_bin: /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server
+ld_library_path: /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin
+target_model: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf
+draft_model: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf
+runs: 10
+prompt: Return exactly 200 repetitions of the word benchmark separated by single spaces. Do not output any other text.
+seed: 42
+temperature: 0.0
+max_tokens: 1024
+stop: []
+spec_type: draft-mtp
+spec_draft_n_max: 2
+slots: 4
+request_sampler_mode: current
+draft_backend_sampling: default
+schema_task: none
+expected_word: benchmark
+expected_word_count: 200
+run_01: ok hash=f66370861ce2 draft=133/134 accept=99.3% pid=625149
+run_02: ok hash=f66370861ce2 draft=133/134 accept=99.3% pid=625395
+run_03: ok hash=f66370861ce2 draft=133/134 accept=99.3% pid=625669
+run_04: ok hash=f66370861ce2 draft=133/134 accept=99.3% pid=625906
+run_05: ok hash=f66370861ce2 draft=133/134 accept=99.3% pid=626125
+run_06: ok hash=f66370861ce2 draft=133/134 accept=99.3% pid=626370
+run_07: ok hash=f66370861ce2 draft=133/134 accept=99.3% pid=626620
+run_08: ok hash=f66370861ce2 draft=133/134 accept=99.3% pid=627058
+run_09: ok hash=f66370861ce2 draft=133/134 accept=99.3% pid=627301
+run_10: ok hash=f66370861ce2 draft=133/134 accept=99.3% pid=627535
+Summary written to data/k11_gemma4_determinism/k11_freeform_ud_iq4xs_mtp_n10_post_candidate_20260720T063000Z/summary.json
+Unique output hashes: 1
+Determinism check passed.

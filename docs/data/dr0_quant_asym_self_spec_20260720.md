@@ -133,3 +133,29 @@ cleaner middle point (`1.610x`, alpha `0.900`, lower H than K4). This does not
 roll out serving: the result is observation-grade and still needs a separate
 serving/routing design plus any production-named GPU certification required by
 `P-GPU-1`.
+
+## DR-3 K2 Admission Package Prep
+
+DR-2 selected K2 as the first default-off serving candidate: K2 reached `1.610x`
+over CPU baseline at alpha `0.900`, while K4 added only `3.85%` throughput over
+K2 and dropped alpha to `0.787`.
+
+Prep script:
+`scripts/benchmark/dr3_quant_asym_k2_admission_prep.py`.
+
+Dry-run artifact:
+`data/dr3_quant_asym_k2_admission/dr3_quant_asym_k2_admission_20260720T063100Z_codex_dryrun/`.
+
+The package is no-inference and not admission-ready. It writes fixed-K2 CPU
+baseline and combined-K2 launch templates for 8K/16K context bands, six broader
+task-class definitions, and required gates for CPU-target equivalence, quality
+non-regression, lease/cleanup proof, frontdoor opportunity-cost measurement, and
+post-promotion production-named `P-GPU-1` certification.
+
+Validation:
+
+- `python3 -m py_compile scripts/benchmark/dr3_quant_asym_k2_admission_prep.py scripts/benchmark/test_dr3_quant_asym_k2_admission_prep.py`
+- `uv run --with pytest pytest -q scripts/benchmark/test_dr3_quant_asym_k2_admission_prep.py` (`5 passed`)
+
+Next step: implement the live admission executor; do not add a serving route or
+NumericSwarm K tunable until the broader K2 package passes.

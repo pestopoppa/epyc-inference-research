@@ -1,0 +1,12 @@
+2026-07-20T06:26:50Z
+--- matching processes ---
+ 625115 /usr/bin/bash -lc source /mnt/raid0/llm/epyc-root/scripts/utils/agent_log.sh && agent_task_start "K11.1 Gemma4 MI210 no-schema free-form gate" "Run requested unconstrained n=10 exact-word-count observation with strict sequential cleanup" && set -uo pipefail OUT="data/k11_gemma4_determinism/k11_freeform_ud_iq4xs_mtp_n10_post_candidate_20260720T063000Z" mkdir -p "$OUT" printf '%s\n' "post-candidate research observation" "experimental build: 12a292f0c21d" "production promotion evidence: no" "lane: one MI210 / ROCm0" "task: no-schema exact 200 benchmark repetitions" > "$OUT/observation_label.txt" {   date -u +%FT%TZ   printf '%s\n' '--- matching processes ---'   ps -eo pid=,args= | awk '$2=="llama-server" || tolower($0) ~ /autopilot|aria2|wget|python.*download/ {print}' || true   printf '%s\n' '--- rocm-smi ---'   rocm-smi --showpids 2>&1 || true } > "$OUT/preflight.txt" python3 scripts/benchmark/k11_gemma4_determinism_runner.py \   --execute \   --output-dir "$OUT" \   --runs 10 \   --max-tokens 1024 \   --threads 24 \   --target-model /mnt/raid0/llm/models/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf \   --draft-model /mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf \   --spec-type draft-mtp \   --prompt 'Return exactly 200 repetitions of the word benchmark separated by single spaces. Do not output any other text.' \   --expected-word benchmark \   --expected-word-count 200 \   > "$OUT/runner.stdout" 2> "$OUT/runner.stderr" RC=$? printf '%s\n' "$RC" > "$OUT/runner.exit_code" {   date -u +%FT%TZ   printf '%s\n' '--- matching processes ---'   ps -eo pid=,args= | awk '$2=="llama-server" || tolower($0) ~ /autopilot|aria2|wget|python.*download/ {print}' || true   printf '%s\n' '--- rocm-smi ---'   rocm-smi --showpids 2>&1 || true } > "$OUT/postflight.txt" exit "$RC"
+ 625143 awk $2=="llama-server" || tolower($0) ~ /autopilot|aria2|wget|python.*download/ {print}
+--- rocm-smi ---
+
+
+============================ ROCm System Management Interface ============================
+===================================== KFD Processes ======================================
+No KFD PIDs currently running
+==========================================================================================
+================================== End of ROCm SMI Log ===================================
