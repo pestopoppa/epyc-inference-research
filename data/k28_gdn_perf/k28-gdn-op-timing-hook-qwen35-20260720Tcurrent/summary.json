@@ -1,0 +1,53 @@
+{
+  "protocol": "K28 direct GDN op timing hook smoke",
+  "date_utc": "2026-07-20",
+  "kernel_tree": "/mnt/raid0/llm/llama.cpp-experimental",
+  "kernel_branch": "experimental-v7-refresh-20260716",
+  "kernel_commit": "93d945885",
+  "build_number": 10100,
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench",
+  "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+  "device": "ROCm0 AMD Instinct MI210 gfx90a",
+  "env": {
+    "GGML_CUDA_DISABLE_GRAPHS": "1",
+    "GGML_CUDA_GDN_TIMING": "1",
+    "LD_LIBRARY_PATH": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin"
+  },
+  "command": "llama-bench -v -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf -ngl 99 -dev ROCm0 -fa on -p 2048,8192 -n 1 -r 1 -o json",
+  "log": "qwen35_p2048_p8192_verbose.log",
+  "validation": {
+    "build": "cmake --build build-hip --target test-backend-ops -j 32 passed",
+    "backend_ops": "GGML_CUDA_DISABLE_GRAPHS=1 GGML_CUDA_GDN_TIMING=1 test-backend-ops test -o GATED_DELTA_NET -b ROCm0 -j 8 passed 38/38",
+    "notes": "timing hook is default-off and requires GGML_CUDA_DISABLE_GRAPHS=1 to avoid graph-capture synchronization"
+  },
+  "results": [
+    {
+      "n_prompt": 2048,
+      "n_gen": 0,
+      "avg_ns": 987580742,
+      "avg_ts": 2073.754492,
+      "gdn_prompt_timing_calls": 240,
+      "gdn_prompt_total_ms_including_warmup": 305.258858,
+      "gdn_prompt_measured_ms": 152.629429,
+      "gdn_prompt_share": 0.154549
+    },
+    {
+      "n_prompt": 8192,
+      "n_gen": 0,
+      "avg_ns": 4145872014,
+      "avg_ts": 1975.941363,
+      "gdn_prompt_timing_calls": 960,
+      "gdn_prompt_total_ms_including_warmup": 1213.806466,
+      "gdn_prompt_measured_ms": 606.903233,
+      "gdn_prompt_share": 0.146387
+    }
+  ],
+  "interpretation": {
+    "phase0_ceiling_validation": "Direct HIP-event timing validates the earlier K28 Phase-0 modeled GDN share instead of raising it.",
+    "full_model_ceiling_if_gdn_op_4x": {
+      "p2048": 0.115912,
+      "p8192": 0.10979
+    },
+    "decision": "Do not delay frozen v7 promotion for K28 Phase 1. Keep K28 as a default-off/post-promotion fused recurrence research item unless a prototype proves a materially higher full-model ceiling."
+  }
+}
