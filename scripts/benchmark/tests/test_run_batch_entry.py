@@ -116,6 +116,39 @@ def fail_runner(argv, *, timeout_s):  # noqa: ARG001
     return 1, "", "CanonicalRecipeViolation: host drift\nfix: reboot"
 
 
+def ok_stack_gate(resolved, *, runner):  # noqa: ARG001
+    return rbe.StackContractGateResult(required=False, ok=True, warnings=[], reasons=[])
+
+
+def ok_matrix_gate(resolved, *, runner):  # noqa: ARG001
+    return rbe.ContentionMatrixGateResult(
+        required=False,
+        ok=True,
+        command=None,
+        exit_code=None,
+        reasons=[],
+    )
+
+
+def stale_matrix_gate(resolved, *, runner):  # noqa: ARG001
+    return rbe.ContentionMatrixGateResult(
+        required=True,
+        ok=False,
+        command="check_contention_matrix_fresh.py",
+        exit_code=2,
+        reasons=["contention matrix freshness gate failed (exit 2): stale"],
+    )
+
+
+def drift_stack_gate(resolved, *, runner):  # noqa: ARG001
+    return rbe.StackContractGateResult(
+        required=True,
+        ok=False,
+        warnings=["frontdoor pid 123 runtime spec.type expected draft-mtp; live cmdline has none"],
+        reasons=["live stack launch contract has 1 warning(s); refusing to measure a drifted/non-optimized stack"],
+    )
+
+
 @contextlib.contextmanager
 def swap_attr(obj, name, value):
     sentinel = object()
@@ -288,6 +321,27 @@ def test_command_driver_raw_argv():
     assert resolved.command_argv == ["bash", "some_probe.sh", "--flag"]
 
 
+def test_full_manifest_command_entry_resolution_and_live_stack_requirement():
+    entry = {
+        "task_id": "EV-4-calibration-baseline",
+        "preconditions": {
+            "models": ["worker_general", "frontdoor"],
+            "topology": {"required_topology_hash": "HASH_A"},
+        },
+        "execution": {
+            "command": ".venv/bin/python scripts/benchmark/eval_batch_serving_evaltower_window.py --api-url http://localhost:8000 --apply",
+            "concurrency_mode": "same_trial_eval_fanout",
+            "cwd": "/mnt/raid0/llm/epyc-orchestrator",
+        },
+    }
+    resolved = rbe.resolve_entry(entry)
+    assert resolved.entry_id == "EV-4-calibration-baseline"
+    assert resolved.required_topology_hash == "HASH_A"
+    assert resolved.cwd == "/mnt/raid0/llm/epyc-orchestrator"
+    assert resolved.requires_live_stack_contract is True
+    assert "eval_batch_serving_evaltower_window.py" in resolved.command_resolved
+
+
 # ---------------------------------------------------------------------------
 # Topology-hash gate + B4 attestation
 # ---------------------------------------------------------------------------
@@ -364,7 +418,10 @@ def test_preflight_server_suite_dry_run_ok():
     resolved = _resolved_for_topology()
     with tempfile.TemporaryDirectory() as d:
         res = rbe.run_preflight(
-            resolved, attestation_dir=Path(d), runner=ok_runner, live_hash_override="HASH_A"
+            resolved, attestation_dir=Path(d), runner=ok_runner,
+            stack_contract_checker=ok_stack_gate,
+            contention_matrix_checker=ok_matrix_gate,
+            live_hash_override="HASH_A",
         )
     assert res["phase"] == "preflight"
     assert res["dry_run_ok"] is True
@@ -390,7 +447,10 @@ def test_preflight_dry_run_failure_captured():
     resolved = _resolved_for_topology()
     with tempfile.TemporaryDirectory() as d:
         res = rbe.run_preflight(
-            resolved, attestation_dir=Path(d), runner=fail_runner, live_hash_override="HASH_A"
+            resolved, attestation_dir=Path(d), runner=fail_runner,
+            stack_contract_checker=ok_stack_gate,
+            contention_matrix_checker=ok_matrix_gate,
+            live_hash_override="HASH_A",
         )
     assert res["dry_run_ok"] is False
     assert res["dry_run_exit_code"] == 1
@@ -410,7 +470,10 @@ def test_preflight_resolved_command_is_resolution_only():
 
     with tempfile.TemporaryDirectory() as d:
         res = rbe.run_preflight(
-            resolved, attestation_dir=Path(d), runner=explode, live_hash_override="HASH_A"
+            resolved, attestation_dir=Path(d), runner=explode,
+            stack_contract_checker=ok_stack_gate,
+            contention_matrix_checker=ok_matrix_gate,
+            live_hash_override="HASH_A",
         )
     assert res["dry_run_mode"] == "resolution_only"
     assert res["dry_run_ok"] is True
@@ -428,8 +491,14 @@ def test_execute_default_off_never_enters_gated_path():
     rbe._EXECUTE_INVOKED = False
     with tempfile.TemporaryDirectory() as d:
         res = rbe.run_batch_entry(
-            entry, manifest=m, attestation_dir=Path(d), runner=ok_runner, live_hash_override="HASH_A"
-        )
+            entry,
+            manifest=m,
+            attestation_dir=Path(d),
+                runner=ok_runner,
+                stack_contract_checker=ok_stack_gate,
+                contention_matrix_checker=ok_matrix_gate,
+                live_hash_override="HASH_A",
+            )
     assert rbe._EXECUTE_INVOKED is False
     assert res["phase"] == "preflight"
     assert res["exit_code"] is None
@@ -445,6 +514,8 @@ def test_execute_default_off_never_enters_gated_path():
         with tempfile.TemporaryDirectory() as d:
             rbe.run_batch_entry(
                 entry, manifest=m, attestation_dir=Path(d), runner=ok_runner,
+                stack_contract_checker=ok_stack_gate,
+                contention_matrix_checker=ok_matrix_gate,
                 live_hash_override="HASH_A",
             )
     assert called["n"] == 0
@@ -467,7 +538,10 @@ def test_execute_requested_but_unverified_still_refuses():
         with tempfile.TemporaryDirectory() as d:  # empty attestation dir -> unverified
             res = rbe.run_batch_entry(
                 entry, manifest=m, attestation_dir=Path(d), runner=ok_runner,
-                execute=True, live_hash_override="HASH_A",
+                execute=True,
+                stack_contract_checker=ok_stack_gate,
+                contention_matrix_checker=ok_matrix_gate,
+                live_hash_override="HASH_A",
             )
     assert called["n"] == 0
     assert res["phase"] == "preflight"
@@ -498,10 +572,116 @@ def test_result_dict_is_jsonl_serialisable():
     resolved = _resolved_for_topology()
     with tempfile.TemporaryDirectory() as d:
         res = rbe.run_preflight(
-            resolved, attestation_dir=Path(d), runner=ok_runner, live_hash_override="HASH_A"
+            resolved, attestation_dir=Path(d), runner=ok_runner,
+            stack_contract_checker=ok_stack_gate,
+            contention_matrix_checker=ok_matrix_gate,
+            live_hash_override="HASH_A",
         )
     line = json.dumps(res, sort_keys=True)
     assert json.loads(line)["schema_version"] == rbe.RESULT_SCHEMA_VERSION
+
+
+def test_live_stack_contract_warning_blocks_execute_even_with_verified_topology():
+    resolved = _resolved_for_topology(topo_hash="HASH_A")
+    resolved.requires_live_stack_contract = True
+    called = {"n": 0}
+
+    def spy(*a, **k):
+        called["n"] += 1
+        raise AssertionError("execute must not run on launch-contract drift")
+
+    with tempfile.TemporaryDirectory() as d:
+        att = Path(d) / "attest-20260720.json"
+        att.write_text(
+            json.dumps({"topology_hash": "HASH_A", "live_affinity_verified": True, "status": "ok"})
+        )
+        with swap_attr(rbe, "_execute_resolved", spy):
+            res = rbe.run_batch_entry(
+                {
+                    "driver": rbe.DRIVER_CLEAN_WINDOW,
+                    "selector": {
+                        "package": "G10",
+                        "kind": "run_benchmark_suite",
+                        "role": "architect_general",
+                    },
+                },
+                manifest=synthetic_manifest(),
+                attestation_dir=Path(d),
+                runner=ok_runner,
+                stack_contract_checker=drift_stack_gate,
+                contention_matrix_checker=ok_matrix_gate,
+                execute=True,
+                live_hash_override="HASH_A",
+            )
+    assert called["n"] == 0
+    assert res["phase"] == "preflight"
+    assert res["stack_contract"]["ok"] is False
+    assert any("launch contract" in r for r in res["blocking_reasons"])
+
+
+def test_eval_fanout_preflight_blocks_on_stale_contention_matrix():
+    entry = {
+        "task_id": "EV-4-calibration-baseline",
+        "preconditions": {
+            "models": ["worker_general", "frontdoor"],
+            "topology": {
+                "required_topology_hash": "HASH_A",
+                "contention_matrix": "v7-recert-required",
+            },
+        },
+        "execution": {
+            "command": ".venv/bin/python scripts/benchmark/eval_batch_serving_evaltower_window.py --api-url http://localhost:8000 --apply",
+            "concurrency_mode": "same_trial_eval_fanout",
+            "cwd": "/mnt/raid0/llm/epyc-orchestrator",
+        },
+    }
+    resolved = rbe.resolve_entry(entry)
+    with tempfile.TemporaryDirectory() as d:
+        att = Path(d) / "attest-20260720.json"
+        att.write_text(
+            json.dumps({"topology_hash": "HASH_A", "live_affinity_verified": True, "status": "ok"})
+        )
+        res = rbe.run_preflight(
+            resolved,
+            attestation_dir=Path(d),
+            runner=ok_runner,
+            stack_contract_checker=ok_stack_gate,
+            contention_matrix_checker=stale_matrix_gate,
+            live_hash_override="HASH_A",
+        )
+
+    assert res["phase"] == "preflight"
+    assert res["topology"]["verified"] is True
+    assert res["contention_matrix"]["required"] is True
+    assert res["contention_matrix"]["ok"] is False
+    assert any("contention matrix freshness" in r for r in res["blocking_reasons"])
+
+
+def test_eval_fanout_not_required_contention_matrix_is_blocked():
+    entry = {
+        "task_id": "EV-4-calibration-baseline",
+        "preconditions": {
+            "models": ["worker_general"],
+            "topology": {
+                "required_topology_hash": "HASH_A",
+                "contention_matrix": "not_required",
+            },
+        },
+        "execution": {
+            "command": ".venv/bin/python scripts/benchmark/eval_batch_serving_evaltower_window.py --api-url http://localhost:8000 --apply",
+            "concurrency_mode": "same_trial_eval_fanout",
+        },
+    }
+    resolved = rbe.resolve_entry(entry)
+
+    def runner(argv, *, timeout_s, cwd=None):  # noqa: ARG001
+        return 0, "OK: contention matrix is fresh", ""
+
+    gate = rbe.contention_matrix_gate(resolved, runner=runner)
+
+    assert gate.required is True
+    assert gate.ok is False
+    assert any("not_required" in reason for reason in gate.reasons)
 
 
 def test_never_regenerates_manifest_when_supplied():

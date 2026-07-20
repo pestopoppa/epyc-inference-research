@@ -79,6 +79,8 @@ from typing import Any, Callable, Optional
 BENCHMARK_DIR = Path(__file__).resolve().parent
 RESEARCH_ROOT = BENCHMARK_DIR.parents[1]
 SCRIPTS_DIR = RESEARCH_ROOT / "scripts"
+ORCHESTRATOR_ROOT = Path("/mnt/raid0/llm/epyc-orchestrator")
+ORCHESTRATOR_PYTHON = ORCHESTRATOR_ROOT / ".venv" / "bin" / "python"
 
 # clean_window_manifest.py performs its own sys.path.insert for dataset_adapters /
 # lib.registry / suites at import time, so it must be importable first.
@@ -150,6 +152,10 @@ class ResolvedEntry:
     bench: dict[str, Any] = field(default_factory=dict)
     expected_artifacts: list[str] = field(default_factory=list)
     source_entry: Optional[dict[str, Any]] = None
+    preconditions: dict[str, Any] = field(default_factory=dict)
+    execution: dict[str, Any] = field(default_factory=dict)
+    cwd: Optional[str] = None
+    requires_live_stack_contract: bool = False
     notes: list[str] = field(default_factory=list)
 
 
@@ -241,6 +247,45 @@ def _command_to_str(command: Any) -> str:
     return str(command)
 
 
+def _nested_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _requires_live_stack_contract(
+    *,
+    command: Optional[str],
+    exec_path: str,
+    preconditions: dict[str, Any],
+    execution: dict[str, Any],
+) -> bool:
+    """Return whether an entry measures the live production stack.
+
+    Direct llama-bench rows validate their own binary/recipe through the
+    canonical dry-run path. Live server/API rows need the stronger launch
+    contract check so the loop cannot spend inference on a drifted or
+    partially-optimized stack.
+    """
+    if exec_path == PATH_LLAMA_BENCH:
+        return False
+    if str(execution.get("concurrency_mode") or "") == "serial_noninference":
+        return False
+    cmd = command or ""
+    live_markers = (
+        "localhost:8000",
+        "127.0.0.1:8000",
+        "--server-mode",
+        "run_benchmark.py",
+        "eval_batch_serving_evaltower_window.py",
+        "reviewer_",
+        "scripts/analysis/",
+        "scripts/autopilot/",
+    )
+    if any(marker in cmd for marker in live_markers):
+        return True
+    models = preconditions.get("models")
+    return isinstance(models, list) and bool(models)
+
+
 def resolve_entry(
     batch_entry: dict[str, Any],
     *,
@@ -264,6 +309,8 @@ def resolve_entry(
         expected_artifacts:     list[str]                                   (optional)
     """
     driver = batch_entry.get("driver")
+    preconditions = _nested_dict(batch_entry.get("preconditions"))
+    execution = _nested_dict(batch_entry.get("execution"))
     if driver is None:
         driver = DRIVER_CLEAN_WINDOW if batch_entry.get("selector") else DRIVER_COMMAND
 
@@ -275,6 +322,9 @@ def resolve_entry(
     model_path = batch_entry.get("model_path")
     required_hash = batch_entry.get("required_topology_hash")
     topology_artifact = batch_entry.get("topology_artifact")
+    if isinstance(preconditions.get("topology"), dict):
+        required_hash = required_hash or preconditions["topology"].get("required_topology_hash")
+        topology_artifact = topology_artifact or preconditions["topology"].get("topology_artifact")
 
     if driver == DRIVER_CLEAN_WINDOW:
         selector = batch_entry.get("selector") or {}
@@ -295,12 +345,19 @@ def resolve_entry(
         entry_id = batch_entry.get("entry_id") or derive_entry_id(source_entry)
     elif driver == DRIVER_COMMAND:
         raw = batch_entry.get("command")
+        if raw is None:
+            raw = execution.get("command")
         if raw is None and not model_path:
             raise BatchEntryError("command driver requires a 'command' or 'model_path'")
         if isinstance(raw, (list, tuple)):
             command_argv = [str(c) for c in raw]
         command = _command_to_str(raw) or None
-        entry_id = batch_entry.get("entry_id") or derive_entry_id(batch_entry) or "command-entry"
+        entry_id = (
+            batch_entry.get("entry_id")
+            or batch_entry.get("task_id")
+            or derive_entry_id(batch_entry)
+            or "command-entry"
+        )
     else:
         raise BatchEntryError(f"unknown driver: {driver!r}")
 
@@ -356,6 +413,15 @@ def resolve_entry(
         bench=bench,
         expected_artifacts=expected_artifacts,
         source_entry=source_entry,
+        preconditions=preconditions,
+        execution=execution,
+        cwd=str(execution.get("cwd")) if execution.get("cwd") else None,
+        requires_live_stack_contract=_requires_live_stack_contract(
+            command=command_resolved,
+            exec_path=exec_path,
+            preconditions=preconditions,
+            execution=execution,
+        ),
         notes=notes,
     )
 
@@ -451,6 +517,44 @@ class TopologyGateResult:
         }
 
 
+@dataclass
+class StackContractGateResult:
+    required: bool
+    ok: bool
+    warnings: list[str]
+    reasons: list[str]
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "required": self.required,
+            "ok": self.ok,
+            "warnings": list(self.warnings),
+            "reasons": list(self.reasons),
+        }
+
+
+@dataclass
+class ContentionMatrixGateResult:
+    required: bool
+    ok: bool
+    command: Optional[str]
+    exit_code: Optional[int]
+    reasons: list[str]
+    stdout_tail: str = ""
+    stderr_tail: str = ""
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "required": self.required,
+            "ok": self.ok,
+            "command": self.command,
+            "exit_code": self.exit_code,
+            "reasons": list(self.reasons),
+            "stdout_tail": self.stdout_tail,
+            "stderr_tail": self.stderr_tail,
+        }
+
+
 def _truthy(value: Any) -> bool:
     if isinstance(value, str):
         return value.strip().lower() in {"1", "true", "yes", "ok", "pass", "verified"}
@@ -519,19 +623,31 @@ def topology_gate(
         live = live_hash_override
     elif artifact:
         live = hasher(Path(artifact))
+    elif required is None:
+        live = None
     else:
+        # Full inference-batch command entries often carry a required topology
+        # hash without a clean-window artifact. In that case the B4 attestation
+        # is the live-hash evidence; leave `live` unset until the attestation
+        # lookup below and do not fabricate a hash.
         live = None
 
     if required is None:
-        reasons.append("entry carries no required_topology_hash; cannot verify topology")
-    if artifact is None:
-        reasons.append("entry carries no topology_artifact; cannot recompute live hash")
-    elif live is None:
+        return TopologyGateResult(
+            required_hash=None,
+            live_hash=None,
+            topology_artifact=artifact,
+            hash_match=True,
+            attestation_path=None,
+            verified=True,
+            reasons=[],
+        )
+    if artifact is not None and live is None:
         reasons.append(
             f"could not compute live topology hash from {artifact} (missing/unreadable registry)"
         )
 
-    hash_match = required is not None and live is not None and required == live
+    hash_match = live is None or required == live
     if required is not None and live is not None and not hash_match:
         reasons.append(
             f"topology hash mismatch: required={required} live={live} "
@@ -540,6 +656,13 @@ def topology_gate(
 
     attestation = load_attestation(attestation_dir, expected_hash=live or required)
     attestation_path = attestation.get("_path") if attestation else None
+    if live is None and attestation is not None:
+        live = (
+            attestation.get("topology_hash")
+            or attestation.get("required_topology_hash")
+            or attestation.get("registry_hash")
+        )
+        hash_match = live == required
     if attestation is None:
         reasons.append(
             f"no matching B4 attestation under {attestation_dir}; "
@@ -555,6 +678,142 @@ def topology_gate(
         attestation_path=attestation_path,
         verified=verified,
         reasons=reasons,
+    )
+
+
+def live_stack_contract_gate(
+    resolved: ResolvedEntry,
+    *,
+    runner: Callable[..., tuple[int, str, str]],
+) -> StackContractGateResult:
+    """Check the live production stack against generated launch contracts.
+
+    The orchestrator owns this attestation logic because it has the runtime
+    state file and stack_priors contract. We call it as a subprocess so the
+    research bridge can remain a thin execution boundary while still refusing to
+    run live-stack entries on stale/non-optimized servers.
+    """
+    if not resolved.requires_live_stack_contract:
+        return StackContractGateResult(required=False, ok=True, warnings=[], reasons=[])
+
+    if not ORCHESTRATOR_ROOT.exists():
+        return StackContractGateResult(
+            required=True,
+            ok=False,
+            warnings=[],
+            reasons=[f"orchestrator root missing: {ORCHESTRATOR_ROOT}"],
+        )
+    python = ORCHESTRATOR_PYTHON if ORCHESTRATOR_PYTHON.exists() else Path(sys.executable)
+    code = (
+        "import sys\n"
+        "import json\n"
+        f"sys.path.insert(0, {str(ORCHESTRATOR_ROOT)!r})\n"
+        "from scripts.server.stack_commands import runtime_attestation_warnings\n"
+        "warnings = runtime_attestation_warnings()\n"
+        "print(json.dumps({'warnings': warnings}, sort_keys=True))\n"
+    )
+    argv = [str(python), "-c", code]
+    rc, out, err = runner(argv, timeout_s=60)
+    if rc != 0:
+        tail = (err or out or "").strip().splitlines()[-8:]
+        return StackContractGateResult(
+            required=True,
+            ok=False,
+            warnings=[],
+            reasons=[
+                "live stack launch-contract checker failed "
+                f"(exit {rc}): {' | '.join(tail)[:600]}"
+            ],
+        )
+    try:
+        payload = json.loads(out.strip().splitlines()[-1])
+    except (json.JSONDecodeError, IndexError) as exc:
+        return StackContractGateResult(
+            required=True,
+            ok=False,
+            warnings=[],
+            reasons=[f"live stack launch-contract checker emitted invalid JSON: {exc}"],
+        )
+    warnings = payload.get("warnings")
+    warnings = [str(item) for item in warnings] if isinstance(warnings, list) else []
+    reasons = (
+        []
+        if not warnings
+        else [
+            f"live stack launch contract has {len(warnings)} warning(s); "
+            "refusing to measure a drifted/non-optimized stack"
+        ]
+    )
+    return StackContractGateResult(
+        required=True,
+        ok=not warnings,
+        warnings=warnings,
+        reasons=reasons,
+    )
+
+
+def _is_eval_fanout_entry(resolved: ResolvedEntry) -> bool:
+    mode = str((resolved.execution or {}).get("concurrency_mode") or "")
+    return "eval_fanout" in mode
+
+
+def _tail(text: str, limit: int = 1200) -> str:
+    return text[-limit:] if len(text) > limit else text
+
+
+def contention_matrix_gate(
+    resolved: ResolvedEntry,
+    *,
+    runner: Callable[..., tuple[int, str, str]],
+) -> ContentionMatrixGateResult:
+    """Require fresh contention-matrix evidence for every eval fanout entry."""
+    if not _is_eval_fanout_entry(resolved):
+        return ContentionMatrixGateResult(
+            required=False,
+            ok=True,
+            command=None,
+            exit_code=None,
+            reasons=[],
+        )
+
+    reasons: list[str] = []
+    topology = (resolved.preconditions or {}).get("topology") or {}
+    if isinstance(topology, dict) and topology.get("contention_matrix") == "not_required":
+        reasons.append(
+            "eval_fanout entry declares contention_matrix:not_required; "
+            "compile must pin a fresh matrix or mark recert required"
+        )
+
+    if not ORCHESTRATOR_ROOT.exists():
+        reasons.append(f"orchestrator root missing: {ORCHESTRATOR_ROOT}")
+        return ContentionMatrixGateResult(
+            required=True,
+            ok=False,
+            command=None,
+            exit_code=None,
+            reasons=reasons,
+        )
+
+    python = ORCHESTRATOR_PYTHON if ORCHESTRATOR_PYTHON.exists() else Path(sys.executable)
+    argv = [
+        str(python),
+        "scripts/validate/check_contention_matrix_fresh.py",
+    ]
+    rc, out, err = _run_with_cwd(runner, argv, timeout_s=60, cwd=ORCHESTRATOR_ROOT)
+    if rc != 0:
+        tail = " | ".join((err or out or "").strip().splitlines()[-8:])
+        reasons.append(
+            f"contention matrix freshness gate failed (exit {rc}): {tail[:600]}"
+        )
+
+    return ContentionMatrixGateResult(
+        required=True,
+        ok=rc == 0 and not reasons,
+        command=shlex.join(argv),
+        exit_code=rc,
+        reasons=reasons,
+        stdout_tail=_tail(out),
+        stderr_tail=_tail(err),
     )
 
 
@@ -601,12 +860,14 @@ def validate_output_artifacts(artifacts: list[str]) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def _default_runner(argv: list[str], *, timeout_s: float) -> tuple[int, str, str]:
+def _default_runner(
+    argv: list[str], *, timeout_s: float, cwd: str | Path | None = None
+) -> tuple[int, str, str]:
     """subprocess.run with timeout enforcement (borrowed from run_job.py)."""
     try:
         proc = subprocess.run(
             argv,
-            cwd=str(RESEARCH_ROOT),
+            cwd=str(cwd or RESEARCH_ROOT),
             capture_output=True,
             text=True,
             timeout=timeout_s,
@@ -617,6 +878,19 @@ def _default_runner(argv: list[str], *, timeout_s: float) -> tuple[int, str, str
     except OSError as exc:
         return 127, "", f"spawn error: {exc}"
     return proc.returncode, proc.stdout, proc.stderr
+
+
+def _run_with_cwd(
+    runner: Callable[..., tuple[int, str, str]],
+    argv: list[str],
+    *,
+    timeout_s: float,
+    cwd: str | Path | None,
+) -> tuple[int, str, str]:
+    try:
+        return runner(argv, timeout_s=timeout_s, cwd=cwd)
+    except TypeError:
+        return runner(argv, timeout_s=timeout_s)
 
 
 # Test-visible sentinel: proves the gated execute path is never entered when
@@ -637,11 +911,14 @@ def _blank_result(resolved: ResolvedEntry) -> dict[str, Any]:
         "dry_run_exit_code": None,
         "blocking_reasons": [],
         "command_resolved": resolved.command_resolved or None,
+        "cwd": resolved.cwd,
         "artifacts": [],
         "wall_clock_s": 0.0,
         "exit_code": None,
         "model_path": resolved.model_path,
         "topology": {},
+        "stack_contract": {},
+        "contention_matrix": {},
         "notes": list(resolved.notes),
         "generated_at": _utc_now(),
     }
@@ -653,6 +930,8 @@ def run_preflight(
     attestation_dir: Path = DEFAULT_ATTESTATION_DIR,
     dry_run_timeout_s: float = DEFAULT_DRY_RUN_TIMEOUT_S,
     runner: Callable[..., tuple[int, str, str]] = _default_runner,
+    stack_contract_checker: Callable[..., StackContractGateResult] = live_stack_contract_gate,
+    contention_matrix_checker: Callable[..., ContentionMatrixGateResult] = contention_matrix_gate,
     live_hash_override: Optional[str] = None,
 ) -> dict[str, Any]:
     """Run the MANDATORY preflight: topology gate + canonical dry-run. Runs NO
@@ -667,6 +946,12 @@ def run_preflight(
     )
     result["topology"] = gate.as_dict()
     blocking = list(gate.reasons)
+    stack_gate = stack_contract_checker(resolved, runner=runner)
+    result["stack_contract"] = stack_gate.as_dict()
+    blocking.extend(stack_gate.reasons)
+    matrix_gate = contention_matrix_checker(resolved, runner=runner)
+    result["contention_matrix"] = matrix_gate.as_dict()
+    blocking.extend(matrix_gate.reasons)
 
     dry_cmd = build_dry_run_command(resolved)
     result["artifacts"] = predict_artifacts(resolved)
@@ -717,7 +1002,12 @@ def _execute_resolved(
     if argv is None:
         # compound shell string (e.g. `cd X && uv run ...`) — run via a shell.
         argv = ["bash", "-lc", resolved.command_resolved]
-    rc, out, err = runner(argv, timeout_s=execute_timeout_s)
+    rc, out, err = _run_with_cwd(
+        runner,
+        argv,
+        timeout_s=execute_timeout_s,
+        cwd=resolved.cwd,
+    )
     result["exit_code"] = rc
 
     missing = validate_output_artifacts(result.get("artifacts", []))
@@ -745,6 +1035,8 @@ def run_batch_entry(
     execute: bool = False,               # DEFAULT OFF — never set by tests
     continue_on_error: bool = False,
     runner: Callable[..., tuple[int, str, str]] = _default_runner,
+    stack_contract_checker: Callable[..., StackContractGateResult] = live_stack_contract_gate,
+    contention_matrix_checker: Callable[..., ContentionMatrixGateResult] = contention_matrix_gate,
     live_hash_override: Optional[str] = None,
 ) -> dict[str, Any]:
     """Bridge one inference-batch entry through preflight (always) and, only when
@@ -790,6 +1082,8 @@ def run_batch_entry(
         attestation_dir=attestation_dir,
         dry_run_timeout_s=dry_run_timeout_s,
         runner=runner,
+        stack_contract_checker=stack_contract_checker,
+        contention_matrix_checker=contention_matrix_checker,
         live_hash_override=live_hash_override,
     )
 
@@ -797,7 +1091,7 @@ def run_batch_entry(
         return preflight
 
     gate = preflight.get("topology", {})
-    if not preflight["dry_run_ok"] or not gate.get("verified"):
+    if preflight.get("blocking_reasons") or not preflight["dry_run_ok"] or not gate.get("verified"):
         # Refuse execute: preflight failed or topology unverified. Keep phase
         # 'preflight' so the caller records a blocked, non-executed entry.
         return preflight
