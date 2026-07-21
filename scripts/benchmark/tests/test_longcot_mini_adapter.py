@@ -202,6 +202,7 @@ def test_row_shape_and_canary_carried():
     assert q["scoring_method"] == "structural_exact_match"
     assert q["scoring_config"]["canary"]           # non-empty canary carried
     assert q["metadata"]["canary"] == q["scoring_config"]["canary"]
+    assert "solution =" in q["prompt"].lower()
     # end-to-end: a synthetic correct answer scores True against the real gold
     gold = q["metadata"]["gold_value"]
     resp = f"...\nsolution = {json.dumps(gold, ensure_ascii=False)}"

@@ -111,6 +111,10 @@ _DEFAULT_DATA_DIR = Path(
 _NULL_GOLD = "null"
 
 SCORING_METHOD = "structural_exact_match"
+SOLUTION_FORMAT_INSTRUCTION = (
+    "\n\nReturn the final answer on its own final line exactly as:\n"
+    "solution = <value>"
+)
 
 # Domains that ship a real stored gold answer (logic ships none).
 SCORABLE_DOMAINS = ("chemistry", "chess", "cs", "math")
@@ -362,6 +366,8 @@ class LongCoTMiniAdapter(BaseAdapter):
         difficulty = str(row.get("difficulty", "easy"))
         template = str(row.get("template", ""))
         prompt = str(row.get("prompt", ""))
+        if "solution =" not in prompt.lower():
+            prompt = prompt.rstrip() + SOLUTION_FORMAT_INSTRUCTION
         canary = str(row.get("canary", ""))
         gold_raw = row.get("answer", _NULL_GOLD)
 
