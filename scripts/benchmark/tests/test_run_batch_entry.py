@@ -321,6 +321,44 @@ def test_predict_artifacts_parses_out_flag():
     assert "/tmp/clean_window/rope_probe/frontdoor/ctx_4096.json" in arts
 
 
+def test_command_driver_artifacts_outputs_are_expected_artifacts():
+    entry = {
+        "driver": rbe.DRIVER_COMMAND,
+        "task_id": "TM-7",
+        "execution": {
+            "command": "python scripts/trace/run_task_lg_parity.py --execute",
+            "cwd": "/tmp/orchestrator",
+        },
+        "artifacts": {"outputs": ["data/trace/tm7_realnode_parity.json"]},
+    }
+    resolved = rbe.resolve_entry(entry)
+    assert resolved.expected_artifacts == ["data/trace/tm7_realnode_parity.json"]
+    assert rbe.predict_artifacts(resolved) == ["data/trace/tm7_realnode_parity.json"]
+
+
+def test_validate_output_artifacts_uses_entry_cwd_for_relative_paths():
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        artifact = root / "data" / "trace" / "tm7_realnode_parity.json"
+        artifact.parent.mkdir(parents=True)
+        artifact.write_text("{}", encoding="utf-8")
+
+        assert (
+            rbe.validate_output_artifacts(
+                ["data/trace/tm7_realnode_parity.json"],
+                cwd=root,
+            )
+            == []
+        )
+        assert (
+            rbe.validate_output_artifacts(
+                ["data/trace/missing.json"],
+                cwd=root,
+            )
+            == ["data/trace/missing.json"]
+        )
+
+
 def test_command_driver_raw_argv():
     entry = {"driver": rbe.DRIVER_COMMAND, "command": ["bash", "some_probe.sh", "--flag"]}
     resolved = rbe.resolve_entry(entry)

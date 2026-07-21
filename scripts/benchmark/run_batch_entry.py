@@ -311,6 +311,7 @@ def resolve_entry(
         bench:                  {n_gen,n_prompt,reps,extra_flags}           (optional)
         exec_path:              force "llama_bench"|"server_suite"|"resolved_command"
         expected_artifacts:     list[str]                                   (optional)
+        artifacts.outputs:      list[str]                                   (optional)
     """
     driver = batch_entry.get("driver")
     preconditions = _nested_dict(batch_entry.get("preconditions"))
@@ -402,7 +403,10 @@ def resolve_entry(
         command_argv = exec_argv
         command_resolved = shlex.join(exec_argv)
 
-    expected_artifacts = list(batch_entry.get("expected_artifacts") or [])
+    expected_artifacts = [str(a) for a in (batch_entry.get("expected_artifacts") or [])]
+    artifacts_meta = _nested_dict(batch_entry.get("artifacts"))
+    for item in artifacts_meta.get("outputs") or []:
+        expected_artifacts.append(str(item))
 
     return ResolvedEntry(
         entry_id=entry_id,
@@ -921,10 +925,18 @@ def predict_artifacts(resolved: ResolvedEntry) -> list[str]:
     return deduped
 
 
-def validate_output_artifacts(artifacts: list[str]) -> list[str]:
+def validate_output_artifacts(artifacts: list[str], *, cwd: str | Path | None = None) -> list[str]:
     """Return the subset of predicted artifacts that DO NOT exist after execute.
     An empty list means every expected artifact was produced."""
-    return [a for a in artifacts if not Path(a).exists()]
+    base = Path(cwd) if cwd else None
+    missing: list[str] = []
+    for artifact in artifacts:
+        path = Path(artifact)
+        if not path.is_absolute() and base is not None:
+            path = base / path
+        if not path.exists():
+            missing.append(artifact)
+    return missing
 
 
 # ---------------------------------------------------------------------------
@@ -1123,7 +1135,7 @@ def _execute_resolved(
         rc, out, err = 130, "", "INTERRUPTED by KeyboardInterrupt before runner returned"
     result["exit_code"] = rc
 
-    missing = validate_output_artifacts(result.get("artifacts", []))
+    missing = validate_output_artifacts(result.get("artifacts", []), cwd=resolved.cwd)
     reasons = list(result.get("blocking_reasons", []))
     if rc != 0:
         tail = (err or out or "").strip().splitlines()[-8:]
