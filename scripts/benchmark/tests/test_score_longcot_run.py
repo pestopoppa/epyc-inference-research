@@ -213,6 +213,17 @@ class TestEdgeCases(unittest.TestCase):
         self.assertEqual(scored["summary"]["scorable_correct"], 1)
         self.assertEqual(scored["summary"]["missing_from_prompt_index"], 0)
 
+    def test_huge_integer_prediction_does_not_abort_score_run(self):
+        huge = "9" * 500
+        prompt = _prompt("longcot_mini_huge", "chess", huge, "canary-huge")
+        row = {"question_id": "longcot_mini_huge", "response": f"solution = {huge}"}
+        scored = slr.score_run_payload(
+            [("longcot_mini_huge", row)],
+            {"longcot_mini_huge": prompt},
+        )
+        self.assertEqual(scored["summary"]["scorable_rows"], 1)
+        self.assertEqual(scored["summary"]["scorable_correct"], 1)
+
 
 class TestMarkdownAndCLI(unittest.TestCase):
     def setUp(self):

@@ -85,6 +85,12 @@ def test_chess_number_string_bridges_int_and_string():
     assert score_structural("solution = 391366", gold)["correct"] is False
 
 
+def test_huge_integer_string_does_not_overflow():
+    huge = "9" * 500
+    assert score_structural(f"solution = {huge}", huge)["correct"] is True
+    assert score_structural(f"solution = {huge[:-1]}8", huge)["correct"] is False
+
+
 def test_chess_fen_is_case_sensitive():
     gold = "8/r7/kn3p2/1pr1pPpp/NP2PbPP/5K2/3B4/1bR1bB2 w - - 122 349"
     assert score_structural(f"solution = {gold}", gold)["correct"] is True

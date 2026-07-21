@@ -88,6 +88,7 @@ from __future__ import annotations
 
 import ast
 import json
+import math
 import os
 import re
 from pathlib import Path
@@ -216,14 +217,19 @@ def _norm_scalar(v: Any) -> Any:
     """
     if isinstance(v, bool):
         return v
-    if isinstance(v, (int, float)):
-        f = float(v)
-        return int(f) if f.is_integer() else f
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float):
+        return int(v) if math.isfinite(v) and v.is_integer() else v
     if isinstance(v, str):
         t = " ".join(v.strip().split())
         # numeric string → canonical number
+        if re.fullmatch(r"[+-]?\d+", t):
+            return int(t)
         try:
             f = float(t)
+            if not math.isfinite(f):
+                return t
             return int(f) if f.is_integer() else f
         except (ValueError, TypeError):
             return t
