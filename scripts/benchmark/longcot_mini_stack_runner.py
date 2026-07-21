@@ -30,6 +30,24 @@ from suites import Question, load_suite  # noqa: E402
 
 SUITE_NAME = "longcot_mini"
 
+PROMPT_MODE_STANDARD = "standard"
+PROMPT_MODE_CONCISE_SOLUTION = "concise_solution"
+PROMPT_MODES = (PROMPT_MODE_STANDARD, PROMPT_MODE_CONCISE_SOLUTION)
+
+CONCISE_SOLUTION_SYSTEM = (
+    "You are solving a deterministic benchmark. Compute the answer internally, "
+    "but do not show derivation, scratch work, caveats, or prose. Return exactly "
+    "one final-answer line in this form: solution = <value>"
+)
+CONCISE_SOLUTION_SUFFIX = (
+    "\n\nOutput contract for this run: do not show your derivation. Return exactly "
+    "one line, and that line must be: solution = <value>"
+)
+LONGCOT_STEP_BY_STEP_PREAMBLE = (
+    "Solve this problem step by step and return the final solution at the end."
+)
+SOLUTION_MARKER_GRAMMAR = r'root ::= "solution = " ([^\n])+ "\n"?'
+
 
 def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -92,6 +110,21 @@ def _completion_text(data: dict[str, Any]) -> str:
     return content if isinstance(content, str) else ""
 
 
+def _prompt_for_mode(prompt: str, prompt_mode: str) -> str:
+    if prompt_mode == PROMPT_MODE_STANDARD:
+        return prompt
+    if prompt_mode == PROMPT_MODE_CONCISE_SOLUTION:
+        body = prompt.strip()
+        if body.startswith(LONGCOT_STEP_BY_STEP_PREAMBLE):
+            body = body[len(LONGCOT_STEP_BY_STEP_PREAMBLE):].lstrip()
+        return (
+            "Answer-only LongCoT-Mini item. Do not reason aloud; compute privately "
+            "and return only the final answer.\n\n"
+            f"{body}{CONCISE_SOLUTION_SUFFIX}"
+        )
+    raise ValueError(f"unknown prompt mode {prompt_mode!r}")
+
+
 def _run_question(
     *,
     host: str,
@@ -103,6 +136,8 @@ def _run_question(
     timeout_s: int,
     endpoint: str,
     disable_thinking: bool,
+    prompt_mode: str,
+    force_solution_grammar: bool,
 ) -> tuple[str, dict[str, Any]]:
     start = time.time()
     url = (
@@ -110,31 +145,43 @@ def _run_question(
         if endpoint == "chat"
         else f"http://{host}:{port}/completion"
     )
+    prompt = _prompt_for_mode(question.prompt, prompt_mode)
     if endpoint == "chat":
+        messages = [{"role": "user", "content": prompt}]
+        if prompt_mode == PROMPT_MODE_CONCISE_SOLUTION:
+            messages.insert(0, {"role": "system", "content": CONCISE_SOLUTION_SYSTEM})
         payload: dict[str, Any] = {
-            "messages": [{"role": "user", "content": question.prompt}],
+            "messages": messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
             "stream": False,
         }
         if disable_thinking:
             payload["chat_template_kwargs"] = {"enable_thinking": False}
+        if force_solution_grammar:
+            payload["grammar"] = SOLUTION_MARKER_GRAMMAR
     else:
+        if prompt_mode == PROMPT_MODE_CONCISE_SOLUTION:
+            prompt = CONCISE_SOLUTION_SYSTEM + "\n\n" + prompt
         payload = {
-            "prompt": question.prompt,
+            "prompt": prompt,
             "n_predict": max_tokens,
             "temperature": temperature,
             "stream": False,
             "cache_prompt": False,
         }
+        if force_solution_grammar:
+            payload["grammar"] = SOLUTION_MARKER_GRAMMAR
 
     row: dict[str, Any] = {
         "question_id": question.id,
-        "prompt": question.prompt,
+        "prompt": prompt,
         "expected": question.expected,
         "port": port,
         "role": role,
         "endpoint": endpoint,
+        "prompt_mode": prompt_mode,
+        "force_solution_grammar": force_solution_grammar,
     }
     try:
         data = _http_json(url, payload, timeout_s=timeout_s)
@@ -222,6 +269,8 @@ def run_role(
     temperature: float = 0.6,
     timeout_s: int = 900,
     disable_thinking: bool = True,
+    prompt_mode: str = PROMPT_MODE_STANDARD,
+    force_solution_grammar: bool = False,
     resume: bool = True,
 ) -> dict[str, Any]:
     unhealthy = [p for p in ports if not _health_ok(p, host=host)]
@@ -251,6 +300,8 @@ def run_role(
                     timeout_s=timeout_s,
                     endpoint=endpoint,
                     disable_thinking=disable_thinking,
+                    prompt_mode=prompt_mode,
+                    force_solution_grammar=force_solution_grammar,
                 )
             ] = question
         for fut in cf.as_completed(futures):
@@ -283,6 +334,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--no-resume", action="store_true")
     parser.add_argument("--allow-thinking", action="store_true")
+    parser.add_argument("--prompt-mode", choices=PROMPT_MODES, default=PROMPT_MODE_STANDARD)
+    parser.add_argument("--force-solution-grammar", action="store_true")
     parser.add_argument("--summary-out", default=None)
     args = parser.parse_args(argv)
 
@@ -303,6 +356,8 @@ def main(argv: list[str] | None = None) -> int:
         "endpoint": args.endpoint,
         "max_tokens": args.max_tokens,
         "temperature": args.temperature,
+        "prompt_mode": args.prompt_mode,
+        "force_solution_grammar": args.force_solution_grammar,
         "roles": [],
     }
     exit_code = 0
@@ -320,6 +375,8 @@ def main(argv: list[str] | None = None) -> int:
             temperature=args.temperature,
             timeout_s=args.timeout,
             disable_thinking=not args.allow_thinking,
+            prompt_mode=args.prompt_mode,
+            force_solution_grammar=args.force_solution_grammar,
             resume=not args.no_resume,
         )
         summary["roles"].append(role_summary)
