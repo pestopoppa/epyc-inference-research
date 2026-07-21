@@ -204,6 +204,93 @@ def _normalize_numeric(value: str) -> str:
     return stripped
 
 
+from fractions import Fraction  # noqa: E402
+
+
+def parse_math_number(raw: str):
+    """Parse a competition-math answer to a float, or None if not a clean number.
+
+    Handles the forms that appear in OlympiadBench 'Numerical' gold answers:
+    plain int/decimal, \\frac{a}{b}, \\sqrt{n}, a\\sqrt{b}, \\pi, percentages,
+    with $/\\boxed/\\left/\\right/degree/unit wrappers and an optional 'VAR='
+    prefix stripped. Returns None on anything it cannot reduce to a number, so
+    a suite can be filtered to only cleanly-scorable items and a model answer
+    that is not a clean number simply fails to parse (reported, not miscounted).
+    """
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    # strip common wrappers
+    s = s.replace("\\boxed", "").replace("\\left", "").replace("\\right", "")
+    s = s.replace("$", "").replace("\\,", "").replace("\\!", "").replace("\\ ", "")
+    s = s.replace("{", "(").replace("}", ")").replace(" ", "")
+    s = re.sub(r"\\text\(([^)]*)\)", "", s)
+    s = re.sub(r"^[A-Za-z]=", "", s)                      # M= prefix
+    s = re.sub(r"(\\circ|\^\(\\circ\)|degrees?|°)$", "", s)
+    percent = s.endswith("%")
+    s = s.rstrip("%")
+    if not s:
+        return None
+    # \frac(a)(b) and \dfrac -> (a)/(b)
+    s = re.sub(r"\\d?frac\(([^()]*)\)\(([^()]*)\)", r"((\1)/(\2))", s)
+    # \sqrt(n) -> (n)**0.5 ; \pi -> pi
+    s = re.sub(r"\\sqrt\(([^()]*)\)", r"((\1)**0.5)", s)
+    s = re.sub(r"\\sqrt(\d+)", r"((\1)**0.5)", s)
+    s = s.replace("\\pi", "pi").replace("\\cdot", "*").replace("\\times", "*")
+    s = s.replace("\\", "")
+    # implicit multiplication: 2( -> 2*(, )2 -> )*2, )( -> )*(
+    s = re.sub(r"(\d)\(", r"\1*(", s)
+    s = re.sub(r"\)(\d)", r")*\1", s)
+    s = re.sub(r"\)\(", r")*(", s)
+    s = re.sub(r"(\d)pi", r"\1*pi", s)
+    if not re.fullmatch(r"[0-9pi.+\-*/()]*", s):
+        return None
+    try:
+        import math
+        val = eval(s, {"__builtins__": {}}, {"pi": math.pi})  # restricted, digits/ops only
+        val = float(val)
+        return val / 100.0 if percent else val
+    except Exception:
+        try:
+            return float(Fraction(s))
+        except Exception:
+            return None
+
+
+def extract_boxed(text: str) -> str:
+    r"""Return the content of the LAST \boxed{...}, brace-balanced (LaTeX nests).
+
+    Falls back to an 'ANSWER:'/'final answer' tail, then the last line, so a
+    model that states its answer without \boxed still parses.
+    """
+    idx = text.rfind("\\boxed")
+    if idx != -1:
+        i = text.find("{", idx)
+        if i != -1:
+            depth = 0
+            for j in range(i, len(text)):
+                if text[j] == "{":
+                    depth += 1
+                elif text[j] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        return text[i + 1:j].strip()
+    m = re.findall(r"(?:ANSWER|final answer)\s*[:=]\s*(.+)", text, re.IGNORECASE)
+    if m:
+        return m[-1].strip().rstrip(".")
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    return lines[-1] if lines else ""
+
+
+def score_math_numeric(response: str, expected: str, rel_tol: float = 1e-4) -> bool:
+    """Compare a model response's \\boxed answer to gold numerically."""
+    a = parse_math_number(extract_boxed(response))
+    b = parse_math_number(expected)
+    if a is None or b is None:
+        return False
+    return abs(a - b) <= rel_tol * max(1.0, abs(b))
+
+
 def _first_pattern_match(text: str, patterns: list) -> str:
     """Return the last match of the first pattern in `patterns` that hits."""
     for pattern in patterns:
@@ -256,6 +343,10 @@ def score_response(response: str, expected: str, q: dict) -> bool:
             got = _normalize_numeric(got)
             want = _normalize_numeric(want)
         return got == want
+
+    if scoring_method == "math_numeric":
+        # Extract \boxed{} (brace-balanced) then compare numerically.
+        return score_math_numeric(response, expected)
 
     return response.strip() == expected.strip()
 
@@ -327,6 +418,44 @@ def run_suite(
     per_tier: dict[str, dict] = {}
     per_item: dict[str, dict] = {}
 
+    # Idempotent resume: never re-query a (question, seed) already on disk.
+    # Lets an interrupted run resume, and an avg@k top-up add only new seeds,
+    # without re-spending inference on results already collected. Prior draws
+    # are folded into the counters so result.json still reflects ALL draws.
+    already: set = set()
+    if per_question_out is not None:
+        done_path = getattr(per_question_out, "name", None)
+        if done_path and Path(done_path).exists():
+            for line in Path(done_path).read_text().splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    r = json.loads(line)
+                except Exception:
+                    continue
+                key = (r.get("id"), r.get("seed"))
+                if key in already:
+                    continue
+                already.add(key)
+                tier = str(r.get("tier", 2))
+                qid = r.get("id", "")
+                per_tier.setdefault(tier, {"correct": 0, "n": 0})
+                per_item.setdefault(qid, {"correct": 0, "n": 0})
+                per_tier[tier]["n"] += 1
+                per_item[qid]["n"] += 1
+                total += 1
+                if r.get("correct"):
+                    correct += 1
+                    per_tier[tier]["correct"] += 1
+                    per_item[qid]["correct"] += 1
+                if r.get("empty_response"):
+                    errors += 1
+                if r.get("truncated"):
+                    truncated += 1
+            if already:
+                print(f"  [runner] resume: {len(already)} (id,seed) draws already "
+                      f"on disk — folded in, not re-queried", file=sys.stderr)
+
     # Repeats are the OUTER loop on purpose. Iterating questions outermost
     # would mean an interrupted avg@k run had all k draws for early questions
     # and none for late ones -- a subset-biased score. Sweeping the full
@@ -341,13 +470,18 @@ def run_suite(
                   f"(seed {rep_seed})", file=sys.stderr)
 
         for i, q in enumerate(questions):
-            expected = q.get("expected", "").upper().strip()
+            # Do NOT uppercase: fine for A-J / digits, but corrupts LaTeX gold
+            # (\frac -> \FRAC). score_response applies case rules per method.
+            expected = str(q.get("expected", "")).strip()
             if not expected:
                 continue
 
+            qid = q.get("id", f"{suite_name}_{i:04d}")
+            if (qid, rep_seed) in already:
+                continue  # already collected — never re-query (idempotent resume)
+
             tier = str(q.get("tier", 2))
             per_tier.setdefault(tier, {"correct": 0, "n": 0})
-            qid = q.get("id", f"{suite_name}_{i:04d}")
             per_item.setdefault(qid, {"correct": 0, "n": 0})
 
             per_tier[tier]["n"] += 1
@@ -374,9 +508,13 @@ def run_suite(
                 got = ""
             else:
                 is_correct = score_response(response, expected, q)
-                got = (extract_letter_answer(response)
-                       if q.get("scoring_method", "multiple_choice") == "multiple_choice"
-                       else extract_exact_answer(response, q.get("scoring_config", {}) or {}))
+                _method = q.get("scoring_method", "multiple_choice")
+                if _method == "multiple_choice":
+                    got = extract_letter_answer(response)
+                elif _method == "math_numeric":
+                    got = extract_boxed(response)
+                else:
+                    got = extract_exact_answer(response, q.get("scoring_config", {}) or {})
                 if is_correct:
                     correct += 1
                     per_tier[tier]["correct"] += 1

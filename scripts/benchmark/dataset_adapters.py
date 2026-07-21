@@ -61,7 +61,7 @@ ADAPTER_SUITES = {
     # Phase 4: competition math
     "aime", "olympiadbench",
     # Architect bench: uncontaminated / hard-subset variants of the above
-    "aime25", "gpqa_diamond", "gpqa_diamond_cot",
+    "aime25", "gpqa_diamond", "gpqa_diamond_cot", "olympiadbench_numeric",
     # Phase 5: long-context evaluation datasets
     "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized",
     # Phase 6: knowledge reliability / hallucination detection
@@ -170,6 +170,7 @@ def get_adapter(suite: str) -> Optional["BaseAdapter"]:
         "aime25": AIME25Adapter,
         "gpqa_diamond": GPQADiamondAdapter,
         "gpqa_diamond_cot": GPQADiamondCoTAdapter,
+        "olympiadbench_numeric": OlympiadBenchNumericAdapter,
         # Phase 6: knowledge reliability / hallucination detection
         "omniscience": AAOmniscienceAdapter,
         # Phase 6: long-context multi-document reasoning
@@ -2844,3 +2845,75 @@ class GPQADiamondCoTAdapter(GPQADiamondAdapter):
         q["suite"] = "gpqa_diamond_cot"
         q["id"] = q["id"].replace("gpqa_diamond_", "gpqa_diamond_cot_", 1)
         return q
+
+
+class OlympiadBenchNumericAdapter(BaseAdapter):
+    """OlympiadBench, restricted to cleanly-scorable single-answer numeric items.
+
+    OlympiadBench ships `substring`/LaTeX scoring, which is brittle and would
+    reintroduce per-arm parse bias (a model that writes cleaner LaTeX scores
+    higher). This variant instead filters to answer_type == Numerical,
+    single-answer, whose gold **parses to a clean number** (via the runner's
+    parse_math_number), and scores the model's \\boxed{} numerically. ~490 items,
+    genuinely olympiad-hard, but with AIME-like clean answers.
+
+    No per-item difficulty field exists (dataset `difficulty` is constant
+    'Competition'), so items are seed-shuffled; the suite as a whole is the
+    harder tier relative to AIME/GPQA.
+
+    Scoring: math_numeric (\\boxed extraction + numeric equivalence).
+    """
+
+    suite_name = "olympiadbench_numeric"
+    has_real_tiers = True
+    SUBFIELD_TIER_MAP = {"Algebra": 2, "Combinatorics": 3, "Geometry": 3, "Number Theory": 3}
+
+    def _ensure_loaded(self):
+        if self._dataset is not None:
+            return
+        try:
+            import datasets as hf
+            from v7_quality_gate_runner import parse_math_number
+        except Exception as e:
+            print(f"  [adapter] OlympiadBenchNumeric deps failed: {e}")
+            self._dataset = []
+            return
+        try:
+            raw = hf.load_dataset("math-ai/olympiadbench", split="test")
+        except Exception as e:
+            print(f"  [adapter] OlympiadBenchNumeric load failed: {e}")
+            self._dataset = []
+            return
+        kept = []
+        for row in raw:
+            if row.get("answer_type") != "Numerical" or row.get("is_multiple_answer"):
+                continue
+            ans = row.get("final_answer") or []
+            if not ans or not ans[0].strip():
+                continue
+            if parse_math_number(ans[0]) is None:  # gold must be cleanly scorable
+                continue
+            kept.append(dict(row))
+        self._dataset = kept
+
+    def _get_tier_for_index(self, idx: int) -> int:
+        return self.SUBFIELD_TIER_MAP.get(self._dataset[idx].get("subfield", ""), 3)
+
+    def _row_to_prompt(self, idx: int, row: dict) -> dict:
+        subfield = row.get("subfield", "Math")
+        unit = row.get("unit", "")
+        unit_clause = f" Express your answer in {unit}." if unit else ""
+        return {
+            "id": f"olympiadbench_numeric_{subfield.lower().replace(' ', '_')}_{row.get('id', idx)}",
+            "suite": "olympiadbench_numeric",
+            "prompt": (row.get("question", "") +
+                       f"\n\nSolve step by step.{unit_clause} "
+                       "Put your final answer as a single number in \\boxed{}."),
+            "context": "",
+            "expected": row["final_answer"][0].strip(),
+            "scoring": [],
+            "image_path": "",
+            "tier": self.SUBFIELD_TIER_MAP.get(subfield, 3),
+            "scoring_method": "math_numeric",
+            "scoring_config": {},
+        }
