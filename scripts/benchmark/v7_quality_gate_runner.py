@@ -524,6 +524,7 @@ def run_suite(
     questions_in: Path | None = None,
     limit: int = 0,
     arm: str = "",
+    concurrency: int = 1,
 ) -> dict:
     """Run eval on a single suite and return per-suite results."""
     questions = load_questions(suite_name, n, seed, stratify, questions_in, limit)
@@ -589,43 +590,30 @@ def run_suite(
             print(f"  [runner] {suite_name}: pass {rep+1}/{repeats} "
                   f"(seed {rep_seed})", file=sys.stderr)
 
+        # Build this pass's work list, skipping (id,seed) already on disk.
+        pending = []
         for i, q in enumerate(questions):
             # Do NOT uppercase: fine for A-J / digits, but corrupts LaTeX gold
             # (\frac -> \FRAC). score_response applies case rules per method.
             expected = str(q.get("expected", "")).strip()
             if not expected:
                 continue
-
             qid = q.get("id", f"{suite_name}_{i:04d}")
             if (qid, rep_seed) in already:
                 continue  # already collected — never re-query (idempotent resume)
+            pending.append((i, q, qid, expected))
 
-            tier = str(q.get("tier", 2))
-            per_tier.setdefault(tier, {"correct": 0, "n": 0})
-            per_item.setdefault(qid, {"correct": 0, "n": 0})
-
-            per_tier[tier]["n"] += 1
-            per_item[qid]["n"] += 1
-            total += 1
-
+        def _work(item):
+            """Pure: query + score one question. No shared-state mutation, so it
+            runs safely in a thread pool; the main thread applies the record."""
+            i, q, qid, expected = item
             meta = query_server_meta(
-                url,
-                q["prompt"],
-                max_tokens=max_tokens,
-                temperature=temperature,
-                seed=rep_seed,
-                endpoint=endpoint,
-                top_p=top_p,
-                top_k=top_k,
-                enable_thinking=enable_thinking,
-            )
+                url, q["prompt"], max_tokens=max_tokens, temperature=temperature,
+                seed=rep_seed, endpoint=endpoint, top_p=top_p, top_k=top_k,
+                enable_thinking=enable_thinking)
             response = meta["text"]
-            if meta.get("finish_reason") == "length":
-                truncated += 1
             if not response:
-                errors += 1
-                is_correct = False
-                got = ""
+                is_correct, got = False, ""
             else:
                 is_correct = score_response(response, expected, q)
                 _method = q.get("scoring_method", "multiple_choice")
@@ -635,43 +623,63 @@ def run_suite(
                     got = extract_boxed(response)
                 else:
                     got = extract_exact_answer(response, q.get("scoring_config", {}) or {})
-                if is_correct:
-                    correct += 1
-                    per_tier[tier]["correct"] += 1
-                    per_item[qid]["correct"] += 1
+            return (i, q, qid, expected, meta, response, is_correct, got)
 
+        def _apply(res):
+            """Main-thread only: fold one result into counters + JSONL."""
+            nonlocal correct, total, errors, truncated
+            i, q, qid, expected, meta, response, is_correct, got = res
+            tier = str(q.get("tier", 2))
+            per_tier.setdefault(tier, {"correct": 0, "n": 0})
+            per_item.setdefault(qid, {"correct": 0, "n": 0})
+            per_tier[tier]["n"] += 1
+            per_item[qid]["n"] += 1
+            total += 1
+            if meta.get("finish_reason") == "length":
+                truncated += 1
+            if not response:
+                errors += 1
+            elif is_correct:
+                correct += 1
+                per_tier[tier]["correct"] += 1
+                per_item[qid]["correct"] += 1
             if per_question_out is not None:
-                # Written per question, not at completion: a run that dies at
-                # item 180/198 must not lose the first 179 results.
+                # Written per result, not at completion: an interrupted run keeps
+                # everything collected so far.
                 per_question_out.write(json.dumps({
-                    "arm": arm,
-                    "suite": suite_name,
-                    "id": qid,
-                    "tier": tier,
-                    "rep": rep,
-                    "seed": rep_seed,
-                    "expected": expected,
-                    "extracted": got,
-                    "correct": bool(is_correct),
+                    "arm": arm, "suite": suite_name, "id": qid, "tier": tier,
+                    "rep": rep, "seed": rep_seed, "expected": expected,
+                    "extracted": got, "correct": bool(is_correct),
                     "empty_response": not response,
                     "finish_reason": meta.get("finish_reason", ""),
                     "truncated": meta.get("finish_reason") == "length",
                     "completion_tokens": meta.get("completion_tokens", 0),
                     "request_error": meta.get("error", ""),
                     "reasoning_chars": len(meta.get("reasoning") or ""),
-                    # The documented thinking-mode failure: the model burns the
-                    # budget inside <think> and emits no answer at all.
                     "empty_content_with_reasoning": (
                         not response and bool(meta.get("reasoning"))),
                     "response": response[-4000:],
                 }) + "\n")
                 per_question_out.flush()
 
-            done = i + 1
-            if done % 25 == 0:
-                print(f"  [runner] {suite_name}: pass {rep+1}/{repeats} "
-                      f"{done}/{len(questions)} ({correct}/{total} correct so far)",
-                      file=sys.stderr)
+        if concurrency > 1 and len(pending) > 1:
+            # Client-side concurrency; server serves them from its -np slots.
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            with ThreadPoolExecutor(max_workers=concurrency) as pool:
+                futs = {pool.submit(_work, it): it for it in pending}
+                for n, fut in enumerate(as_completed(futs), 1):
+                    _apply(fut.result())  # main thread — no lock needed
+                    if n % 25 == 0:
+                        print(f"  [runner] {suite_name}: pass {rep+1}/{repeats} "
+                              f"{n}/{len(pending)} ({correct}/{total} correct so far)",
+                              file=sys.stderr)
+        else:
+            for n, it in enumerate(pending, 1):
+                _apply(_work(it))
+                if n % 25 == 0:
+                    print(f"  [runner] {suite_name}: pass {rep+1}/{repeats} "
+                          f"{n}/{len(pending)} ({correct}/{total} correct so far)",
+                          file=sys.stderr)
 
     accuracy = correct / total if total > 0 else 0.0
 
@@ -749,6 +757,9 @@ def main() -> int:
                    help="Replay a pinned item set instead of sampling (paired arms)")
     p.add_argument("--limit", type=int, default=0,
                    help="Use only the first N items of a pinned set (ablations)")
+    p.add_argument("--concurrency", type=int, default=1,
+                   help="Concurrent in-flight requests (client-side); match to the "
+                        "server's -np slots. 1 = sequential.")
     p.add_argument("--arm", default="",
                    help="Arm label recorded in per-question records")
     args = p.parse_args()
@@ -797,6 +808,7 @@ def main() -> int:
             questions_in=questions_in,
             limit=args.limit,
             arm=args.arm,
+            concurrency=args.concurrency,
         )
         suites_results.append(result)
         acc = result.get("accuracy", 0)
