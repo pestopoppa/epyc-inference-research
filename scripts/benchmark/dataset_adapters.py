@@ -61,7 +61,7 @@ ADAPTER_SUITES = {
     # Phase 4: competition math
     "aime", "olympiadbench",
     # Architect bench: uncontaminated / hard-subset variants of the above
-    "aime25", "gpqa_diamond", "gpqa_diamond_cot", "olympiadbench_numeric",
+    "aime25", "gpqa_diamond", "gpqa_diamond_cot", "olympiadbench_numeric", "olympiadbench_hard",
     # Phase 5: long-context evaluation datasets
     "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized",
     # Phase 6: knowledge reliability / hallucination detection
@@ -171,6 +171,7 @@ def get_adapter(suite: str) -> Optional["BaseAdapter"]:
         "gpqa_diamond": GPQADiamondAdapter,
         "gpqa_diamond_cot": GPQADiamondCoTAdapter,
         "olympiadbench_numeric": OlympiadBenchNumericAdapter,
+        "olympiadbench_hard": OlympiadBenchHardAdapter,
         # Phase 6: knowledge reliability / hallucination detection
         "omniscience": AAOmniscienceAdapter,
         # Phase 6: long-context multi-document reasoning
@@ -2915,5 +2916,88 @@ class OlympiadBenchNumericAdapter(BaseAdapter):
             "image_path": "",
             "tier": self.SUBFIELD_TIER_MAP.get(subfield, 3),
             "scoring_method": "math_numeric",
+            "scoring_config": {},
+        }
+
+
+class OlympiadBenchHardAdapter(BaseAdapter):
+    """OlympiadBench HARD tier: the Expression / Tuple / multi-answer items that
+    `olympiadbench_numeric` excluded — where the difficulty actually lives.
+
+    `olympiadbench_numeric` filtered to single clean-numeric gold, which turned
+    out to select the *easy-answer* subset (it saturated ~89% for all arms,
+    2026-07-22). This variant keeps exactly the complement: answer_type in
+    {Expression, Tuple} plus multi-answer Numerical (sets), whose gold is
+    symbolically parseable by the runner's `math_symbolic` scorer (sympy-backed:
+    numeric → set/tuple → symbolic equivalence; validated 0 perturbation-FP,
+    0 LaTeX-variant-asymmetry). Items whose gold does not self-canonicalize are
+    dropped, so every item is guaranteed scorable and a parse miss can only be
+    the model's.
+
+    Scoring: math_symbolic. Tiers: subfield-based (all olympiad-hard).
+    """
+
+    suite_name = "olympiadbench_hard"
+    has_real_tiers = True
+    SUBFIELD_TIER_MAP = {"Algebra": 2, "Combinatorics": 3, "Geometry": 3, "Number Theory": 3}
+
+    def _ensure_loaded(self):
+        if self._dataset is not None:
+            return
+        try:
+            import datasets as hf
+            from v7_quality_gate_runner import gold_symbolically_parseable
+        except Exception as e:
+            print(f"  [adapter] OlympiadBenchHard deps failed: {e}")
+            self._dataset = []
+            return
+        try:
+            raw = hf.load_dataset("math-ai/olympiadbench", split="test")
+        except Exception as e:
+            print(f"  [adapter] OlympiadBenchHard load failed: {e}")
+            self._dataset = []
+            return
+        kept = []
+        for row in raw:
+            atype = row.get("answer_type")
+            multi = bool(row.get("is_multiple_answer"))
+            # the complement of olympiadbench_numeric (single clean Numerical)
+            is_hard = atype in ("Expression", "Tuple") or (atype == "Numerical" and multi)
+            if not is_hard:
+                continue
+            ans = row.get("final_answer") or []
+            if not ans or not any(a.strip() for a in ans):
+                continue
+            gold = ans[0].strip() if len(ans) == 1 else ", ".join(a.strip() for a in ans if a.strip())
+            if not gold_symbolically_parseable(gold):  # gold must be scorable + self-match
+                continue
+            r = dict(row)
+            r["_gold"] = gold
+            kept.append(r)
+        self._dataset = kept
+
+    def _get_tier_for_index(self, idx: int) -> int:
+        return self.SUBFIELD_TIER_MAP.get(self._dataset[idx].get("subfield", ""), 3)
+
+    def _row_to_prompt(self, idx: int, row: dict) -> dict:
+        subfield = row.get("subfield", "Math")
+        atype = row.get("answer_type", "Expression")
+        multi = bool(row.get("is_multiple_answer"))
+        # tell the model the shape so it emits a comparable \boxed
+        if atype == "Tuple" or multi:
+            shape = ("If there are multiple solutions, give them all as a comma-separated "
+                     "list inside a single \\boxed{}.")
+        else:
+            shape = "Give the final expression in \\boxed{}."
+        return {
+            "id": f"olympiadbench_hard_{subfield.lower().replace(' ', '_')}_{row.get('id', idx)}",
+            "suite": "olympiadbench_hard",
+            "prompt": row.get("question", "") + f"\n\nSolve step by step. {shape}",
+            "context": "",
+            "expected": row["_gold"],
+            "scoring": [],
+            "image_path": "",
+            "tier": self.SUBFIELD_TIER_MAP.get(subfield, 3),
+            "scoring_method": "math_symbolic",
             "scoring_config": {},
         }

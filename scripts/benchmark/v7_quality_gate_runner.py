@@ -257,6 +257,122 @@ def parse_math_number(raw: str):
             return None
 
 
+# ── Symbolic scoring (OlympiadBench hard tier: Expression / Tuple / set answers) ──
+# sympy-backed equivalence for answers a numeric compare cannot handle (free
+# variables, tuples, sets). Lazily imported + guarded so the runner still works
+# without sympy for the numeric/MC suites.
+
+def _latex_to_sympy_str(s: str):
+    """Best-effort LaTeX -> sympy-parseable string; None if empty."""
+    if s is None:
+        return None
+    s = str(s).strip()
+    for a in ("$", "\\left", "\\right", "\\,", "\\!", "\\displaystyle", "\\boxed", " "):
+        s = s.replace(a, "")
+    s = s.strip(". ")
+    if s.count("=") == 1:  # strip a leading  f(x)= / VAR= / m_{\max}=  -> keep RHS
+        m = re.match(r"^[A-Za-z](_\{?\w+\}?)?(\([^)]*\))?=(.+)$", s)
+        if m:
+            s = m.group(3)
+    s = s.replace("{", "(").replace("}", ")")
+    s = re.sub(r"\\d?frac\(([^()]*)\)\(([^()]*)\)", r"((\1)/(\2))", s)
+    s = re.sub(r"\\lfloor(.*?)\\rfloor", r"floor(\1)", s)
+    s = re.sub(r"\\lceil(.*?)\\rceil", r"ceiling(\1)", s)
+    s = re.sub(r"\\sqrt\(([^()]*)\)", r"sqrt(\1)", s)
+    s = re.sub(r"\\sqrt(\w+)", r"sqrt(\1)", s)
+    s = s.replace("\\cdot", "*").replace("\\times", "*").replace("\\pi", "pi")
+    s = re.sub(r"\^", "**", s)
+    s = s.replace("\\", "")
+    return s
+
+
+def _sympy_expr(s: str):
+    ss = _latex_to_sympy_str(s)
+    if not ss or len(ss) > 400:  # bound: pred is model output
+        return None
+    try:
+        from sympy.parsing.sympy_parser import (
+            parse_expr, standard_transformations, implicit_multiplication_application)
+        trans = standard_transformations + (implicit_multiplication_application,)
+        return parse_expr(ss, transformations=trans)
+    except Exception:
+        return None
+
+
+def _split_top(s: str) -> list:
+    """Split on top-level commas (not inside brackets)."""
+    s = str(s).replace("$", "").strip().strip(".")
+    parts, depth, cur = [], 0, ""
+    for ch in s:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        if ch == "," and depth == 0:
+            parts.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    parts.append(cur)
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _canon_elem(e: str):
+    """Canonicalize one answer element (ordered tuple, number, or expr)."""
+    inner = e.strip().strip("$").strip()
+    if inner.startswith("(") and inner.endswith(")") and "," in inner:
+        return ("T",) + tuple(str(_sympy_expr(x)) for x in _split_top(inner[1:-1]))
+    v = parse_math_number(inner)
+    if v is not None:
+        return ("N", round(v, 9))
+    ex = _sympy_expr(inner)
+    return ("E", str(ex)) if ex is not None else None
+
+
+def _is_set_answer(gold: str) -> bool:
+    g = str(gold).replace("$", "").strip()
+    return len(_split_top(g)) > 1 or (g.startswith("(") and "," in g)
+
+
+def score_math_symbolic(response: str, gold: str) -> bool:
+    r"""Compare a model \boxed answer to gold via numeric → set → sympy equivalence."""
+    pred = extract_boxed(response)
+    if not pred:
+        return False
+    # 1) numeric-first (robust for numeric-valued answers, incl. \sqrt/\frac)
+    pv, gv = parse_math_number(pred), parse_math_number(gold)
+    if pv is not None and gv is not None:
+        return abs(pv - gv) <= 1e-4 * max(1.0, abs(gv))
+    # 2) set / tuple answers (order-independent across elements)
+    if _is_set_answer(gold):
+        gset = {_canon_elem(x) for x in _split_top(gold)}
+        pset = {_canon_elem(x) for x in _split_top(pred)}
+        return (None not in gset) and gset == pset
+    # 3) single symbolic expression
+    ge, pe = _sympy_expr(gold), _sympy_expr(pred)
+    if ge is None or pe is None:
+        return False
+    try:
+        from sympy import simplify
+        if simplify(ge - pe) == 0:
+            return True
+    except Exception:
+        pass
+    try:
+        return bool(ge.equals(pe))
+    except Exception:
+        return False
+
+
+def gold_symbolically_parseable(gold: str) -> bool:
+    """True iff score_math_symbolic can canonicalize this gold (suite filter)."""
+    if parse_math_number(gold) is not None:
+        return True
+    if _is_set_answer(gold):
+        return all(_canon_elem(x) is not None for x in _split_top(gold))
+    return _sympy_expr(gold) is not None
+
+
 def extract_boxed(text: str) -> str:
     r"""Return the content of the LAST \boxed{...}, brace-balanced (LaTeX nests).
 
@@ -347,6 +463,10 @@ def score_response(response: str, expected: str, q: dict) -> bool:
     if scoring_method == "math_numeric":
         # Extract \boxed{} (brace-balanced) then compare numerically.
         return score_math_numeric(response, expected)
+
+    if scoring_method == "math_symbolic":
+        # \boxed{} + numeric → set/tuple → sympy symbolic equivalence.
+        return score_math_symbolic(response, expected)
 
     return response.strip() == expected.strip()
 
@@ -511,7 +631,7 @@ def run_suite(
                 _method = q.get("scoring_method", "multiple_choice")
                 if _method == "multiple_choice":
                     got = extract_letter_answer(response)
-                elif _method == "math_numeric":
+                elif _method in ("math_numeric", "math_symbolic"):
                     got = extract_boxed(response)
                 else:
                     got = extract_exact_answer(response, q.get("scoring_config", {}) or {})
