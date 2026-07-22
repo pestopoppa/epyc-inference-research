@@ -133,12 +133,17 @@ def query_server_meta(
             reasoning = ""
             if endpoint == "chat":
                 reasoning = str(message.get("reasoning_content") or "")
+            usage = result.get("usage", {}) or {}
+            timings = result.get("timings", {}) or {}
             return {
                 "text": text,
                 "reasoning": reasoning,
                 "finish_reason": choice.get("finish_reason", ""),
-                "completion_tokens": (result.get("usage", {}) or {}).get(
-                    "completion_tokens", 0),
+                "completion_tokens": usage.get("completion_tokens", 0),
+                "prompt_tokens": usage.get("prompt_tokens", 0),
+                # server-reported per-request rates (single-request view)
+                "decode_tok_s": timings.get("predicted_per_second", 0.0),
+                "prompt_tok_s": timings.get("prompt_per_second", 0.0),
                 "error": "",
             }
     except Exception as e:
@@ -538,6 +543,8 @@ def run_suite(
     truncated = 0
     per_tier: dict[str, dict] = {}
     per_item: dict[str, dict] = {}
+    tok_acc = [0, 0]  # [completion, prompt] tokens generated THIS run (excludes resumed)
+    suite_t0 = time.monotonic()
 
     # Idempotent resume: never re-query a (question, seed) already on disk.
     # Lets an interrupted run resume, and an avg@k top-up add only new seeds,
@@ -654,6 +661,8 @@ def run_suite(
                     "finish_reason": meta.get("finish_reason", ""),
                     "truncated": meta.get("finish_reason") == "length",
                     "completion_tokens": meta.get("completion_tokens", 0),
+                    "prompt_tokens": meta.get("prompt_tokens", 0),
+                    "decode_tok_s": round(meta.get("decode_tok_s", 0.0), 2),
                     "request_error": meta.get("error", ""),
                     "reasoning_chars": len(meta.get("reasoning") or ""),
                     "empty_content_with_reasoning": (
@@ -661,6 +670,8 @@ def run_suite(
                     "response": response[-4000:],
                 }) + "\n")
                 per_question_out.flush()
+            tok_acc[0] += meta.get("completion_tokens", 0)
+            tok_acc[1] += meta.get("prompt_tokens", 0)
 
         if concurrency > 1 and len(pending) > 1:
             # Client-side concurrency; server serves them from its -np slots.
@@ -691,6 +702,7 @@ def run_suite(
             "correct": data["correct"],
         }
 
+    suite_wall = time.monotonic() - suite_t0
     return {
         "suite": suite_name,
         "accuracy": accuracy,
@@ -702,6 +714,16 @@ def run_suite(
         "truncated": truncated,
         "per_tier": tier_results,
         "per_item": per_item,
+        # Throughput (this run only; excludes resumed draws). Aggregate =
+        # tokens generated across all concurrent slots / wall-clock.
+        "throughput": {
+            "concurrency": concurrency,
+            "wall_s": round(suite_wall, 1),
+            "completion_tokens": tok_acc[0],
+            "prompt_tokens": tok_acc[1],
+            "aggregate_decode_tok_s": round(tok_acc[0] / suite_wall, 1) if suite_wall > 0 else 0,
+            "aggregate_total_tok_s": round((tok_acc[0] + tok_acc[1]) / suite_wall, 1) if suite_wall > 0 else 0,
+        },
     }
 
 
