@@ -379,23 +379,30 @@ def gold_symbolically_parseable(gold: str) -> bool:
 
 
 def extract_boxed(text: str) -> str:
-    r"""Return the content of the LAST \boxed{...}, brace-balanced (LaTeX nests).
+    r"""Return the content of the LAST *complete* \boxed{...}, brace-balanced.
 
-    Falls back to an 'ANSWER:'/'final answer' tail, then the last line, so a
-    model that states its answer without \boxed still parses.
+    Iterates \boxed occurrences from last to first and returns the first one that
+    brace-closes. This matters when a response is TRUNCATED mid-\boxed (or loops
+    on \boxed and gets cut): the final \boxed{... is incomplete, but an earlier
+    complete \boxed{answer} is the model's real answer. Taking the last complete
+    one recovers it instead of returning the cut-off fragment.
+
+    Falls back to an 'ANSWER:'/'final answer' tail, then the last line.
     """
-    idx = text.rfind("\\boxed")
-    if idx != -1:
+    starts = [m.start() for m in re.finditer(r"\\boxed", text)]
+    for idx in reversed(starts):
         i = text.find("{", idx)
-        if i != -1:
-            depth = 0
-            for j in range(i, len(text)):
-                if text[j] == "{":
-                    depth += 1
-                elif text[j] == "}":
-                    depth -= 1
-                    if depth == 0:
-                        return text[i + 1:j].strip()
+        if i == -1:
+            continue
+        depth = 0
+        for j in range(i, len(text)):
+            if text[j] == "{":
+                depth += 1
+            elif text[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[i + 1:j].strip()
+        # this \boxed never closed (truncated) -> try the previous one
     m = re.findall(r"(?:ANSWER|final answer)\s*[:=]\s*(.+)", text, re.IGNORECASE)
     if m:
         return m[-1].strip().rstrip(".")
