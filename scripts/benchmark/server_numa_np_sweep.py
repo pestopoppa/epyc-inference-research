@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import re
 import json
 import os
 import signal
@@ -770,6 +771,34 @@ def teardown_cell(
 # ---------------------------------------------------------------------------
 
 
+def ensure_clean_runtime_allowing(pattern: str | None) -> list[str]:
+    """ensure_clean_runtime, tolerating OPERATOR-SANCTIONED coexisting processes.
+
+    With no pattern this is exactly ensure_clean_runtime(). With a pattern
+    (e.g. 'build-hip' — the GPU session's short-lived MI210 bench servers,
+    2026-07-23 coexistence grant), the E1 checker's refusal is parsed: if
+    EVERY offending process line matches the pattern, the run proceeds and
+    the allowed lines are returned for the run manifest (recorded, never
+    silently dropped); any non-matching process re-raises unchanged.
+    """
+    if not pattern:
+        ensure_clean_runtime()
+        return []
+    try:
+        ensure_clean_runtime()
+        return []
+    except RuntimeError as exc:
+        allow_re = re.compile(pattern)
+        lines = [
+            line.strip()
+            for line in str(exc).splitlines()[1:]
+            if line.strip()
+        ]
+        if lines and all(allow_re.search(line) for line in lines):
+            return lines
+        raise
+
+
 def run_affinity_preflight(
     *,
     preflight_script: Path,
@@ -777,6 +806,7 @@ def run_affinity_preflight(
     pid_map: dict[str, int],
     artifact_path: Path,
     timeout_s: float = 120.0,
+    foreign_allow_pattern: str | None = None,
 ) -> tuple[int, dict[str, Any] | None, str]:
     """Invoke affinity_preflight.py --cell-manifest as a subprocess.
 
@@ -793,6 +823,8 @@ def run_affinity_preflight(
         "--output",
         str(artifact_path),
     ]
+    if foreign_allow_pattern:
+        cmd += ["--foreign-allow-pattern", foreign_allow_pattern]
     proc = subprocess.run(
         cmd,
         check=False,
@@ -1317,6 +1349,7 @@ def run_cell_execute(
             cell=cell,
             pid_map=pid_map,
             artifact_path=artifact_path,
+            foreign_allow_pattern=getattr(args, "coexist_allow_pattern", None),
         )
         affinity_info = {
             "artifact_path": str(artifact_path),
@@ -1455,7 +1488,9 @@ def run_cell_execute(
                         "results": stop_results,
                     },
                 )
-                ensure_clean_runtime()
+                ensure_clean_runtime_allowing(
+                    getattr(args, "coexist_allow_pattern", None)
+                )
             except Exception as exc:
                 # Surviving llama processes: the run MUST stop (never launch the
                 # next cell over survivors).
@@ -1527,6 +1562,7 @@ def build_run_manifest(
         "overrides": {
             "allow_host_health_warning": bool(args.allow_host_health_warning),
             "skip_clean_check": bool(args.skip_clean_check),
+            "coexist_allow_pattern": getattr(args, "coexist_allow_pattern", None),
         },
         "decision_grade": decision_grade,
     }
@@ -1623,8 +1659,11 @@ def cmd_sweep(args: argparse.Namespace) -> int:
             raise FileNotFoundError(
                 f"{cell.cell_id}: model file not found: {cell.model_path}"
             )
+    coexist_allowed_at_start: list[str] = []
     if not args.skip_clean_check:
-        ensure_clean_runtime()
+        coexist_allowed_at_start = ensure_clean_runtime_allowing(
+            getattr(args, "coexist_allow_pattern", None)
+        )
 
     env = build_cell_env(args.llama_server)
     assert_canonical_env(env)
@@ -2556,6 +2595,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--skip-clean-check",
         action="store_true",
         help="scout-only escape hatch; forces decision_grade=false",
+    )
+    parser.add_argument(
+        "--coexist-allow-pattern",
+        default=None,
+        help="regex for OPERATOR-SANCTIONED coexisting llama processes (e.g. "
+             "'build-hip' for the GPU session's short-lived MI210 bench "
+             "servers, 2026-07-23): matching processes do not gate the "
+             "run-level clean check, the per-cell affinity preflight, or "
+             "teardown verification — but every allowed overlap is RECORDED "
+             "in the run manifest and cell attestation; non-matching foreign "
+             "processes still refuse as always",
     )
     parser.add_argument("--startup-timeout", type=float, default=900.0)
     parser.add_argument("--request-timeout", type=float, default=900.0)

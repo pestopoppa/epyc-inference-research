@@ -1482,5 +1482,57 @@ def _run_all() -> int:
     return 1 if failed else 0
 
 
+
+
+def test_ensure_clean_runtime_allowing():
+    """Coexistence grant (2026-07-23): build-hip GPU bench servers matching the
+    pattern do not gate; any non-matching survivor still refuses; no pattern =
+    byte-identical passthrough."""
+    import server_numa_np_sweep as mod
+
+    calls = {"n": 0}
+
+    def _clean_ok():
+        calls["n"] += 1
+
+    def _clean_hip_only():
+        raise RuntimeError(
+            "existing llama processes would contaminate P-BENCH-3:\n"
+            "  111 /mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server -m x --port 18072"
+        )
+
+    def _clean_mixed():
+        raise RuntimeError(
+            "existing llama processes would contaminate P-BENCH-3:\n"
+            "  111 /mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server --port 18072\n"
+            "  222 /mnt/raid0/llm/llama.cpp/build/bin/llama-server --port 8080"
+        )
+
+    _orig = mod.ensure_clean_runtime
+    try:
+        mod.ensure_clean_runtime = _clean_ok
+        assert mod.ensure_clean_runtime_allowing(None) == []
+        assert mod.ensure_clean_runtime_allowing("build-hip") == []
+        assert calls["n"] == 2
+
+        mod.ensure_clean_runtime = _clean_hip_only
+        allowed = mod.ensure_clean_runtime_allowing("build-hip")
+        assert len(allowed) == 1 and "build-hip" in allowed[0]
+        try:
+            mod.ensure_clean_runtime_allowing(None)
+            raise AssertionError("no-pattern must re-raise")
+        except RuntimeError:
+            pass
+
+        mod.ensure_clean_runtime = _clean_mixed
+        try:
+            mod.ensure_clean_runtime_allowing("build-hip")
+            raise AssertionError("non-matching survivor must re-raise")
+        except RuntimeError:
+            pass
+    finally:
+        mod.ensure_clean_runtime = _orig
+
+
 if __name__ == "__main__":
     raise SystemExit(_run_all())
