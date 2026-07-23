@@ -110,8 +110,14 @@ KVU_PROBE_ESCALATION = 0.05         # M06: >=5% split-vs-unified probe delta esc
 # (config_id, np) cell in R1/R2/R4 picks (review F3/F5): tagged via
 # stage_b_families (preferred) with a cell_id-suffix fallback for rows that
 # predate the tag propagation.
-VARIANT_FAMILY_TAGS = ("scout_kvu_probe", "scout_dense_c1_shape_pair")
-VARIANT_CELL_ID_SUFFIXES = ("-kvu", "-scout-full")
+VARIANT_FAMILY_TAGS = (
+    "scout_kvu_probe",
+    "scout_dense_c1_shape_pair",
+    # temperature-0 twins of the E1-tied solo anchors (operator-decided
+    # sampling regime 2026-07-23): continuity reads only, never R1/R2/R4.
+    "e1_parity_anchor",
+)
+VARIANT_CELL_ID_SUFFIXES = ("-kvu", "-scout-full", "-e1parity")
 # The pre-registered Stage-B grid has no C1b@1 / C2@1 anchor; R2 falls back to
 # the same-per-instance-shape K=1 baseline with the substitution recorded
 # (review F5: C1b instances are halves like C1@1; C2 instances are quarters
@@ -1019,13 +1025,14 @@ def trimmed_aggregate(records: list[StreamRequestRecord]) -> dict[str, Any]:
 def resolve_sampling(cell: Cell) -> dict[str, Any]:
     """Effective sampling regime for the cell (recorded in row + run manifest).
 
-    A manifest "sampling" block wins; the default is temperature-0 E1 parity.
-    Review F4 (spec-completeness gap, operator call pending): accept rates
-    measured under greedy decoding may misrepresent production spec-dec
-    (feedback_production_sampling_seed_not_temp0 argues production temp +
-    seed 42) — the effective regime is therefore always recorded so the
-    choice is auditable, and dry-run flags decision-grade cells that carry
-    no explicit block.
+    A manifest "sampling" block wins; the bare default is temperature-0 E1
+    parity. Review F4 is RESOLVED (operator decision 2026-07-23): the
+    generated grid stamps production temp+seed42 on every cell
+    (e5_cell_manifests.PRODUCTION_SAMPLING) and temperature-0 exists only in
+    the ``-e1parity`` twin cells of the E1-tied anchors, which the variant
+    exclusion keeps out of R1/R2/R4. The effective regime is always recorded
+    so the choice stays auditable, and dry-run still flags decision-grade
+    cells that carry no explicit block (hand-written manifests).
     """
     sampling = cell.manifest.get("sampling")
     if isinstance(sampling, dict):

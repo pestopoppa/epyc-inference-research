@@ -344,11 +344,13 @@ def test_grid_unique_cell_ids():
 
 def test_grid_total_counts():
     cells = grid()
-    assert len(cells) == 116
+    # 116 base + 5 E1-parity twins (operator sampling decision 2026-07-23):
+    # qwen36 C1@1/C3@1, dense C1@1/C3@1 + scout-full@1.
+    assert len(cells) == 121
     scout = [c for c in cells if c["window"] == "W0"]
     stage_b = [c for c in cells if c["window"] != "W0"]
-    assert len(scout) == 68
-    assert len(stage_b) == 48
+    assert len(scout) == 69
+    assert len(stage_b) == 52
 
 
 def test_grid_counts_per_model_and_config():
@@ -362,19 +364,19 @@ def test_grid_counts_per_model_and_config():
         ("qwen36_q8_0", "C1b", "W0"): 5,
         ("qwen36_q8_0", "C2", "W0"): 5,
         ("qwen36_q8_0", "C3", "W0"): 4,
-        ("qwen36_q8_0", "C1", "B"): 5,
+        ("qwen36_q8_0", "C1", "B"): 6,  # +e1parity twin @1
         ("qwen36_q8_0", "C1b", "B"): 3,
         ("qwen36_q8_0", "C2", "B"): 2,
-        ("qwen36_q8_0", "C3", "B"): 4,
+        ("qwen36_q8_0", "C3", "B"): 5,  # +e1parity twin @1
         # dense control: + the 2-cell full-machine scout pair
-        ("qwen36_27b_q8", "C1", "W0"): 8,  # 6 ladder + 2 scout-full pair
+        ("qwen36_27b_q8", "C1", "W0"): 9,  # 6 ladder + 2 scout-full pair + scout-full e1parity twin
         ("qwen36_27b_q8", "C1b", "W0"): 5,
         ("qwen36_27b_q8", "C2", "W0"): 5,
         ("qwen36_27b_q8", "C3", "W0"): 4,
-        ("qwen36_27b_q8", "C1", "B"): 5,
+        ("qwen36_27b_q8", "C1", "B"): 6,  # +e1parity twin @1
         ("qwen36_27b_q8", "C1b", "B"): 3,
         ("qwen36_27b_q8", "C2", "B"): 2,
-        ("qwen36_27b_q8", "C3", "B"): 4,
+        ("qwen36_27b_q8", "C3", "B"): 5,  # +e1parity twin @1
         # ingest arm: no C2 anywhere
         ("qwen3_next_80b", "C1", "W0"): 6,
         ("qwen3_next_80b", "C1b", "W0"): 5,
@@ -404,9 +406,14 @@ def test_grid_stage_b_window_mapping():
 
 def test_grid_scout_flags():
     for c in grid():
+        is_twin = "e1_parity_anchor" in (c.get("stage_b_families") or [])
         if c["window"] == "W0":
             assert c["decision_grade_intent"] is False, c["cell_id"]
             assert c["prompt_caps"]["n_predict"] == 64, c["cell_id"]
+        elif is_twin:
+            # E1-parity twins live in the stage-B windows for scheduling but
+            # are continuity reads, never decision cells.
+            assert c["decision_grade_intent"] is False, c["cell_id"]
         else:
             assert c["decision_grade_intent"] is True, c["cell_id"]
             assert c["prompt_caps"]["n_predict"] == 256, c["cell_id"]
@@ -597,11 +604,11 @@ def test_cli_generate_writes_grid_grouped_by_model():
         model_dirs = sorted(p.name for p in root.iterdir() if p.is_dir())
         assert model_dirs == sorted(e5.MODELS)
         files = list(root.glob("*/*.json"))
-        assert len(files) == 116
+        assert len(files) == 121
         # spot-check one file round-trips through the validator
         sample = json.loads((root / "qwen36_q8_0" / "qwen36_q8_0-C3-np8.json").read_text())
         assert e5.validate_cell_manifest(sample) == []
-        assert "wrote 116 cell manifests" in out
+        assert "wrote 121 cell manifests" in out
 
 
 def test_cli_validate_exit_codes():
@@ -656,6 +663,45 @@ def _run_all() -> int:
             print(f"PASS {name}")
     print(f"\n{passed} passed, {failed} failed, {len(tests)} total")
     return 1 if failed else 0
+
+
+
+
+def test_sampling_regime_operator_decision():
+    """Operator decision 2026-07-23: production temp+seed42 everywhere;
+    temperature-0 only in the five -e1parity twins of the E1-tied anchors;
+    ingest production is already greedy (seed pinned)."""
+    cells = grid()
+    twins = [c for c in cells if c["cell_id"].endswith("-e1parity")]
+    assert sorted(c["cell_id"] for c in twins) == [
+        "qwen36_27b_q8-C1-np1-e1parity",
+        "qwen36_27b_q8-C1-np1-scout-full-e1parity",
+        "qwen36_27b_q8-C3-np1-e1parity",
+        "qwen36_q8_0-C1-np1-e1parity",
+        "qwen36_q8_0-C3-np1-e1parity",
+    ]
+    twin_ids = {c["cell_id"] for c in twins}
+    for c in cells:
+        s = c.get("sampling")
+        assert isinstance(s, dict), c["cell_id"]
+        assert s.get("seed") == 42, c["cell_id"]
+        if c["cell_id"] in twin_ids:
+            assert s["regime"] == "e1_parity_greedy", c["cell_id"]
+            assert s["temperature"] == 0.0, c["cell_id"]
+            assert "e1_parity_anchor" in c["stage_b_families"], c["cell_id"]
+            assert c["decision_grade_intent"] is False, c["cell_id"]
+        else:
+            assert s["regime"] == "production", c["cell_id"]
+            if c["model_key"] == "qwen3_next_80b":
+                assert s["temperature"] == 0.0, c["cell_id"]  # production greedy
+            else:
+                assert s["temperature"] == 0.3, c["cell_id"]
+
+
+def test_e1_parity_twins_only_for_e1_tied_models():
+    for c in grid():
+        if c["cell_id"].endswith("-e1parity"):
+            assert c["model_key"] in ("qwen36_q8_0", "qwen36_27b_q8"), c["cell_id"]
 
 
 if __name__ == "__main__":

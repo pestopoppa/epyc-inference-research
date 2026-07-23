@@ -83,6 +83,14 @@
     "seed": 42,
     "limit": 43
   },
+  "sampling": {
+    "regime": "production",
+    "temperature": 0.0,
+    "top_k": 20,
+    "top_p": 0.8,
+    "min_p": 0.05,
+    "seed": 42
+  },
   "spec_dec": {
     "enabled": false,
     "spec_type": null,

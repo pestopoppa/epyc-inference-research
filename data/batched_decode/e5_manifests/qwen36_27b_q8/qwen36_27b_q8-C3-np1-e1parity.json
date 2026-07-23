@@ -6,42 +6,42 @@
     "eval_instrument": "E7-eval-instrument",
     "source": "epyc-orchestrator/orchestration/instrument_eras.yaml"
   },
-  "window": "W1",
-  "cell_id": "qwen36_q8_0-C3-np8",
-  "model_key": "qwen36_q8_0",
-  "model_path": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+  "window": "W3",
+  "cell_id": "qwen36_27b_q8-C3-np1-e1parity",
+  "model_key": "qwen36_27b_q8",
+  "model_path": "/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf",
   "quant": "Q8_0",
-  "architecture": "qwen35moe",
+  "architecture": "qwen35",
   "config_id": "C3",
   "instances": [
     {
       "cpu_list": "0-23,96-119",
-      "port": 19080,
+      "port": 19180,
       "threads": 48,
       "numactl_policy": "none"
     },
     {
       "cpu_list": "24-47,120-143",
-      "port": 19081,
+      "port": 19181,
       "threads": 48,
       "numactl_policy": "none"
     },
     {
       "cpu_list": "48-71,144-167",
-      "port": 19082,
+      "port": 19182,
       "threads": 48,
       "numactl_policy": "none"
     },
     {
       "cpu_list": "72-95,168-191",
-      "port": 19083,
+      "port": 19183,
       "threads": 48,
       "numactl_policy": "none"
     }
   ],
-  "np": 8,
+  "np": 1,
   "per_stream_ctx": 2048,
-  "ctx": 16384,
+  "ctx": 8192,
   "ubatch_size": 512,
   "prompt_caps": {
     "n_predict": 256,
@@ -102,11 +102,8 @@
     "limit": 43
   },
   "sampling": {
-    "regime": "production",
-    "temperature": 0.3,
-    "top_k": 40,
-    "top_p": 0.95,
-    "min_p": 0.05,
+    "regime": "e1_parity_greedy",
+    "temperature": 0.0,
     "seed": 42
   },
   "spec_dec": {
@@ -140,10 +137,11 @@
     "prompts": 1,
     "n_predict": 32
   },
-  "decision_grade_intent": true,
-  "notes": "",
+  "decision_grade_intent": false,
+  "notes": "dense control; NEXTN self-draft recipe mirrored from the 35B arm (dm=4, ps=0) on the MTP-variant GGUF; E1-parity twin (temperature 0, operator-decided regime 2026-07-23): continuity read against the E1 ladder only \u2014 excluded from R1/R2/R4 via the e1_parity_anchor variant tag",
   "stage_b_families": [
-    "whole_machine_T32"
+    "anchor_C3",
+    "e1_parity_anchor"
   ],
   "model_path_present": true
 }

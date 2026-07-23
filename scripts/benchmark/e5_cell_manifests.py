@@ -323,6 +323,47 @@ STAGE_B_K = {
     "gemma4_26b_a4b_q4km_mtp": {"C1": (1, 8, 16, 32), "C3": (1, 2, 4, 8)},
 }
 
+# Sampling regime — OPERATOR-DECIDED 2026-07-23: production temp+seed42 for
+# EVERY cell (spec-dec accept rates are sampling-sensitive; house precedent
+# feedback_production_sampling_seed_not_temp0). temperature-0 exists ONLY in
+# the paired ``-e1parity`` twin cells of the E1-tied solo anchors, so the E1
+# direction cross-check exists without mixing regimes inside R1/R2/R4 (twins
+# carry the ``e1_parity_anchor`` family tag, which the summarizer's variant
+# exclusion drops from every decision rule).
+#
+# Params are the REALIZED serving defaults read from the live stack
+# 2026-07-23 (/slots on 8080/8082/8185): qwen36 + gemma serve temp 0.3 /
+# top_k 40 / top_p 0.95 / min_p 0.05 / seed 42 (top_k/top_p/min_p are the
+# llama-server defaults, so harness requests carrying temperature+seed
+# reproduce the full production regime); the ingest 80B serves GREEDY in
+# production (temp 0; its top_k 20 / top_p 0.8 launch args are inert at
+# temp 0) with the seed pinned to 42 here for reproducibility; the dense
+# control (not serving) inherits the qwen36 family regime.
+_QWEN_GEMMA_PRODUCTION = {
+    "temperature": 0.3,
+    "top_k": 40,
+    "top_p": 0.95,
+    "min_p": 0.05,
+    "seed": 42,
+}
+PRODUCTION_SAMPLING: dict[str, dict] = {
+    "qwen36_q8_0": dict(_QWEN_GEMMA_PRODUCTION),
+    "qwen36_27b_q8": dict(_QWEN_GEMMA_PRODUCTION),
+    "gemma4_26b_a4b_q4km_mtp": dict(_QWEN_GEMMA_PRODUCTION),
+    "qwen3_next_80b": {
+        "temperature": 0.0,
+        "top_k": 20,
+        "top_p": 0.8,
+        "min_p": 0.05,
+        "seed": 42,
+    },
+}
+E1_PARITY_SAMPLING = {"regime": "e1_parity_greedy", "temperature": 0.0, "seed": 42}
+# Models with E1 (P-BENCH-3) rows to cross-check direction against; gemma and
+# the ingest 80B never appeared in E1 (and the 80B's production regime is
+# already greedy), so they get no twins.
+E1_TIED_MODELS = ("qwen36_q8_0", "qwen36_27b_q8")
+
 
 # ---------------------------------------------------------------------------
 # Shape helpers
@@ -450,11 +491,14 @@ def make_cell(
     cell_id_suffix: str = "",
     extra_notes: str = "",
     stage_b_families: list[str] | None = None,
+    sampling: dict | None = None,
 ) -> dict:
     """Build one cell manifest in the frozen e5-cell-manifest/1 field order."""
     model = MODELS[model_key]
     instances = _instances_for(model_key, config_id, full_variant)
     notes = "; ".join(part for part in (model["notes"], extra_notes) if part)
+    if sampling is None:
+        sampling = {"regime": "production", **PRODUCTION_SAMPLING[model_key]}
     return {
         "schema_version": SCHEMA_VERSION,
         "protocol_id": PROTOCOL_ID,
@@ -489,6 +533,7 @@ def make_cell(
             "seed": 42,
             "limit": 43,
         },
+        "sampling": dict(sampling),
         "spec_dec": copy.deepcopy(model["spec_dec"]),
         "kv": {
             "type_k": "q8_0",
@@ -607,6 +652,40 @@ def build_grid() -> list[dict]:
                         stage_b_families=_stage_b_families(model_key, config_id, np),
                     )
                 )
+
+    # --- E1-parity twin cells (operator-decided sampling regime 2026-07-23) --
+    # Every E1-tied model's solo anchor (anchor_C1/anchor_C3) plus the dense
+    # control's full-machine scout variant at K=1 (the closest true E1 shape
+    # replica) gets a temperature-0 twin so the E1 direction cross-check runs
+    # regime-clean. Twins are continuity reads, never decision cells: the
+    # e1_parity_anchor family tag makes the summarizer's variant exclusion
+    # drop them from R1/R2/R4, and decision_grade_intent is False.
+    twins: list[dict] = []
+    for cell in cells:
+        if cell["model_key"] not in E1_TIED_MODELS:
+            continue
+        fams = cell.get("stage_b_families") or []
+        is_anchor = any(f in ("anchor_C1", "anchor_C3") for f in fams)
+        is_dense_full_scout_k1 = (
+            "scout_dense_c1_shape_pair" in fams
+            and cell["np"] == 1
+            and cell["cell_id"].endswith("-scout-full")
+        )
+        if not (is_anchor or is_dense_full_scout_k1):
+            continue
+        twin = copy.deepcopy(cell)
+        twin["cell_id"] = cell["cell_id"] + "-e1parity"
+        twin["sampling"] = dict(E1_PARITY_SAMPLING)
+        twin["decision_grade_intent"] = False
+        twin["stage_b_families"] = [*fams, "e1_parity_anchor"]
+        twin["notes"] = (
+            (twin.get("notes") or "")
+            + "; E1-parity twin (temperature 0, operator-decided regime "
+            "2026-07-23): continuity read against the E1 ladder only — "
+            "excluded from R1/R2/R4 via the e1_parity_anchor variant tag"
+        ).lstrip("; ")
+        twins.append(twin)
+    cells.extend(twins)
 
     return cells
 
