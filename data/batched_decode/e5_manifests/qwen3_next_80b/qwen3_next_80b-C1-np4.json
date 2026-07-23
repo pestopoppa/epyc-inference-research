@@ -91,6 +91,8 @@
     "min_p": 0.05,
     "seed": 42
   },
+  "request_endpoint": "chat_completions",
+  "chat_template_kwargs": {},
   "spec_dec": {
     "enabled": false,
     "spec_type": null,

@@ -924,16 +924,38 @@ def send_streaming_completion(
         raise RuntimeError("httpx is required for --execute (pip install httpx)")
     sampling = cell.manifest.get("sampling")
     sampling = sampling if isinstance(sampling, dict) else {}
-    payload: dict[str, Any] = {
-        "prompt": prompt.prompt,
-        "n_predict": n_predict,
-        "temperature": float(sampling.get("temperature", 0.0)),
-        "cache_prompt": False,
-        "stream": True,
-    }
+    # Endpoint selection (2026-07-23 think-truncation incident): production
+    # serves TEMPLATED chat with per-model chat_template_kwargs (qwen3.x
+    # enable_thinking=false — template-path-only per house memory), while raw
+    # /completion elicits the model's spontaneous <think> format, which ate
+    # the whole 64-token scout budget. Main cells therefore run
+    # /v1/chat/completions (production recipe); e1parity twins keep raw
+    # /completion (the E1 shape they exist to tie to).
+    endpoint = str(cell.manifest.get("request_endpoint") or "completion")
+    template_kwargs = cell.manifest.get("chat_template_kwargs")
+    template_kwargs = template_kwargs if isinstance(template_kwargs, dict) else {}
+    if endpoint == "chat_completions":
+        payload: dict[str, Any] = {
+            "messages": [{"role": "user", "content": prompt.prompt}],
+            "max_tokens": n_predict,
+            "temperature": float(sampling.get("temperature", 0.0)),
+            "cache_prompt": False,
+            "stream": True,
+        }
+        if template_kwargs:
+            payload["chat_template_kwargs"] = dict(template_kwargs)
+        url = f"http://127.0.0.1:{instance.port}/v1/chat/completions"
+    else:
+        payload = {
+            "prompt": prompt.prompt,
+            "n_predict": n_predict,
+            "temperature": float(sampling.get("temperature", 0.0)),
+            "cache_prompt": False,
+            "stream": True,
+        }
+        url = f"http://127.0.0.1:{instance.port}/completion"
     if sampling.get("seed") is not None:
         payload["seed"] = int(sampling["seed"])
-    url = f"http://127.0.0.1:{instance.port}/completion"
     start = time.perf_counter()
     first_token: float | None = None
     text_parts: list[str] = []
@@ -949,6 +971,12 @@ def send_streaming_completion(
                     if chunk is None:
                         continue
                     content = chunk.get("content")
+                    if content is None:
+                        # OpenAI-compat chat stream shape: choices[0].delta.content
+                        choices = chunk.get("choices")
+                        if isinstance(choices, list) and choices:
+                            delta = choices[0].get("delta") or {}
+                            content = delta.get("content")
                     if content:
                         if first_token is None:
                             first_token = time.perf_counter()

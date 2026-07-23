@@ -106,6 +106,8 @@
     "temperature": 0.0,
     "seed": 42
   },
+  "request_endpoint": "completion",
+  "chat_template_kwargs": {},
   "spec_dec": {
     "enabled": true,
     "spec_type": "draft-mtp",

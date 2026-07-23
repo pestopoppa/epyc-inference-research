@@ -704,5 +704,25 @@ def test_e1_parity_twins_only_for_e1_tied_models():
             assert c["model_key"] in ("qwen36_q8_0", "qwen36_27b_q8"), c["cell_id"]
 
 
+
+
+def test_request_endpoint_production_chat_with_per_model_template_kwargs():
+    """2026-07-23 think-truncation incident: main cells run the production
+    chat+template recipe; qwen3x carries enable_thinking=false, the 80B GGUF
+    template ignores the kwarg (registry: pass nothing), gemma has no toggle;
+    -e1parity twins keep raw /completion (the E1 shape)."""
+    for c in grid():
+        is_twin = c["cell_id"].endswith("-e1parity")
+        if is_twin:
+            assert c["request_endpoint"] == "completion", c["cell_id"]
+            assert c["chat_template_kwargs"] == {}, c["cell_id"]
+            continue
+        assert c["request_endpoint"] == "chat_completions", c["cell_id"]
+        if c["model_key"] in ("qwen36_q8_0", "qwen36_27b_q8"):
+            assert c["chat_template_kwargs"] == {"enable_thinking": False}, c["cell_id"]
+        else:
+            assert c["chat_template_kwargs"] == {}, c["cell_id"]
+
+
 if __name__ == "__main__":
     raise SystemExit(_run_all())

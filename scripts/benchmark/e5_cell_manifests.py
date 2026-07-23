@@ -359,6 +359,25 @@ PRODUCTION_SAMPLING: dict[str, dict] = {
     },
 }
 E1_PARITY_SAMPLING = {"regime": "e1_parity_greedy", "temperature": 0.0, "seed": 42}
+
+# Request endpoint + template kwargs (2026-07-23 think-truncation incident):
+# raw /completion elicits qwen3.6's spontaneous <think> preamble, which
+# consumed the entire 64-token W0 budget (offline scoring: 26/43 responses
+# truncated inside an unclosed think block). Production serves TEMPLATED chat
+# with per-model chat_template_kwargs, so MAIN cells run /v1/chat/completions
+# with the model's production kwargs; the -e1parity twins keep raw /completion
+# (the E1 shape they tie to). Registry truth per model: frontdoor qwen36
+# enable_thinking=false (model_registry.yaml:1150); dense control inherits the
+# family regime; the Qwen3-Next-80B GGUF template IGNORES
+# chat_template_kwargs.enable_thinking (registry: template_ignores_
+# enable_thinking — pass nothing, preserve native behavior); gemma has no
+# thinking toggle.
+CHAT_TEMPLATE_KWARGS: dict[str, dict] = {
+    "qwen36_q8_0": {"enable_thinking": False},
+    "qwen36_27b_q8": {"enable_thinking": False},
+    "qwen3_next_80b": {},
+    "gemma4_26b_a4b_q4km_mtp": {},
+}
 # Models with E1 (P-BENCH-3) rows to cross-check direction against; gemma and
 # the ingest 80B never appeared in E1 (and the 80B's production regime is
 # already greedy), so they get no twins.
@@ -534,6 +553,8 @@ def make_cell(
             "limit": 43,
         },
         "sampling": dict(sampling),
+        "request_endpoint": "chat_completions",
+        "chat_template_kwargs": dict(CHAT_TEMPLATE_KWARGS.get(model_key, {})),
         "spec_dec": copy.deepcopy(model["spec_dec"]),
         "kv": {
             "type_k": "q8_0",
@@ -676,6 +697,11 @@ def build_grid() -> list[dict]:
         twin = copy.deepcopy(cell)
         twin["cell_id"] = cell["cell_id"] + "-e1parity"
         twin["sampling"] = dict(E1_PARITY_SAMPLING)
+        # E1 replica shape: raw /completion, no chat template (E1 posted raw
+        # prompts; the model's spontaneous think-format is part of what E1
+        # measured). Main cells run the production chat+template recipe.
+        twin["request_endpoint"] = "completion"
+        twin["chat_template_kwargs"] = {}
         twin["decision_grade_intent"] = False
         twin["stage_b_families"] = [*fams, "e1_parity_anchor"]
         twin["notes"] = (

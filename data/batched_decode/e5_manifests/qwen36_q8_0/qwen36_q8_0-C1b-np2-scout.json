@@ -97,6 +97,10 @@
     "min_p": 0.05,
     "seed": 42
   },
+  "request_endpoint": "chat_completions",
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  },
   "spec_dec": {
     "enabled": true,
     "spec_type": "draft-mtp",
