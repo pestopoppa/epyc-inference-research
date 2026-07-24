@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -196,6 +197,38 @@ def test_mapped_openmp_runtime_requires_pinned_runtime(tmp_path: Path) -> None:
 def test_semantic_contract_accepts_each_deterministic_task(task: str, content: str) -> None:
     result = runner.validate_semantics(task, content, runner.MODELS[0])
     assert result["status"] == "pass"
+
+
+def test_routing_semantic_contract_counts_hyphenated_compounds_as_words() -> None:
+    content = (
+        "In a mixture-of-experts inference router, increasing compute cost by deploying more experts "
+        "improves accuracy but strains resource budgets. Higher bandwidth demands arise when routing "
+        "requires frequent communication between experts and clients, especially with dynamic load "
+        "balancing that redistributes queries to prevent bottlenecks. Overly aggressive load balancing "
+        "increases routing overhead due to constant re-evaluation of expert suitability, slowing "
+        "inference. Conversely, minimizing routing overhead by using static routing reduces adaptability, "
+        "leading to underutilized experts and skewed loads. Balancing these four—compute cost, bandwidth, "
+        "load balancing, and routing overhead—is critical: optimizing one often degrades another, "
+        "demanding a system-wide tradeoff that prioritizes latency, throughput, and efficiency based on "
+        "deployment constraints."
+    )
+    assert len(content.split()) == 105
+    assert len(re.findall(r"[A-Za-z]+", content)) == 111
+    assert len(re.findall(r"[A-Za-z]+(?:[-'][A-Za-z]+)*", content)) == 107
+    assert runner.validate_semantics("routing_tradeoffs", content, runner.MODELS[0])["status"] == "pass"
+
+
+def test_routing_semantic_contract_rejects_punctuation_padding() -> None:
+    content = "compute cost bandwidth load balancing routing overhead " + " ".join(["---"] * 50)
+    with pytest.raises(runner.GateFailure, match="out of bounds"):
+        runner.validate_semantics("routing_tradeoffs", content, runner.MODELS[0])
+
+
+def test_routing_semantic_contract_rejects_more_than_110_lexical_words() -> None:
+    content = "compute cost bandwidth load balancing routing overhead " + " ".join(["word"] * 104)
+    assert len(re.findall(r"[A-Za-z]+(?:[-'][A-Za-z]+)*", content)) == 111
+    with pytest.raises(runner.GateFailure, match="out of bounds"):
+        runner.validate_semantics("routing_tradeoffs", content, runner.MODELS[0])
 
 
 @pytest.mark.parametrize(

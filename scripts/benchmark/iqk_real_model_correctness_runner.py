@@ -860,7 +860,7 @@ def validate_semantics(task_name: str, content: str, model: Model) -> dict[str, 
         if stripped != "IQK-DELTA-9421" or stripped.count("IQK-DELTA-9421") != 1:
             raise GateFailure(f"needle task mismatch: {stripped!r}")
     elif task_name == "routing_tradeoffs":
-        words = re.findall(r"[A-Za-z]+", stripped)
+        words = re.findall(r"[A-Za-z]+(?:[-'][A-Za-z]+)*", stripped)
         lower = stripped.lower()
         required = ("compute", "bandwidth", "load balancing", "routing", "overhead")
         if not 45 <= len(words) <= 110 or any(token not in lower for token in required):
