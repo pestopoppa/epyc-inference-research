@@ -938,6 +938,87 @@ def monitored_query(
     return response, evidence, query_error
 
 
+def parse_cpu_list(value: str) -> set[int]:
+    if not value:
+        raise RuntimeError("empty Cpus_allowed_list")
+    cpus: set[int] = set()
+    for piece in value.split(","):
+        if not re.fullmatch(r"\d+(?:-\d+)?", piece):
+            raise RuntimeError(f"malformed Cpus_allowed_list: {value!r}")
+        if "-" in piece:
+            left, right = (int(item) for item in piece.split("-", 1))
+            if left > right:
+                raise RuntimeError(f"malformed descending CPU range: {value!r}")
+            cpus.update(range(left, right + 1))
+        else:
+            cpus.add(int(piece))
+    return cpus
+
+
+def thread_affinity_evidence(
+    pid: int,
+    proc_root: Path = Path("/proc"),
+    max_attempts: int = 3,
+) -> dict[str, Any]:
+    expected = parse_cpu_list(CPUSET)
+    task_dir = proc_root / str(pid) / "task"
+    for attempt in range(1, max_attempts + 1):
+        try:
+            before = sorted(path.name for path in task_dir.iterdir() if path.name.isdecimal())
+        except OSError as exc:
+            raise RuntimeError(f"cannot list server threads: {exc}") from exc
+        if not before:
+            raise RuntimeError("server has no observable threads")
+        threads: list[dict[str, Any]] = []
+        churned = False
+        for tid in before:
+            try:
+                status = (task_dir / tid / "status").read_text(encoding="utf-8")
+            except FileNotFoundError:
+                churned = True
+                break
+            except OSError as exc:
+                raise RuntimeError(f"cannot read server thread status for TID {tid}: {exc}") from exc
+            matches = re.findall(r"^Cpus_allowed_list:\s*(\S*)\s*$", status, re.MULTILINE)
+            if len(matches) != 1:
+                raise RuntimeError(f"TID {tid} lacks exactly one Cpus_allowed_list")
+            allowed_list = matches[0]
+            allowed = parse_cpu_list(allowed_list)
+            if not allowed <= expected:
+                raise RuntimeError(
+                    f"TID {tid} affinity escapes required CPU set {CPUSET}: {allowed_list}"
+                )
+            threads.append(
+                {
+                    "tid": int(tid),
+                    "cpus_allowed_list": allowed_list,
+                    "cpus": sorted(allowed),
+                }
+            )
+        try:
+            after = sorted(path.name for path in task_dir.iterdir() if path.name.isdecimal())
+        except OSError as exc:
+            raise RuntimeError(f"cannot relist server threads: {exc}") from exc
+        if churned or before != after:
+            continue
+        union = set().union(*(set(thread["cpus"]) for thread in threads))
+        if union != expected:
+            raise RuntimeError(
+                f"thread affinity union does not exactly cover required CPU set {CPUSET}: "
+                f"{sorted(union)}"
+            )
+        return {
+            "status": "pass",
+            "attempt": attempt,
+            "expected_cpus_allowed_list": CPUSET,
+            "threads": threads,
+            "union_cpus": sorted(union),
+        }
+    raise RuntimeError(
+        f"server thread list did not stabilize within {max_attempts} snapshots"
+    )
+
+
 def live_cpu_evidence(
     pid: int,
     port: int,
@@ -955,16 +1036,7 @@ def live_cpu_evidence(
         evidence["target_executable"] = target_executable_evidence(pid, runtime_artifacts["server"])
         evidence["target_mapped_runtime"] = target_mapped_runtime_evidence(pid, runtime_artifacts)
         evidence["target_listener"] = target_listener_evidence(pid, port)
-        affinity = run_capture(["taskset", "-pc", str(pid)], timeout=20)
-        evidence["affinity"] = affinity
-        command_required(affinity, "live taskset placement")
-        affinity_rows = [
-            line.rsplit(":", 1)[1].strip()
-            for line in affinity["stdout"].splitlines()
-            if "current affinity list:" in line
-        ]
-        if affinity_rows != [CPUSET]:
-            raise RuntimeError(f"live server CPU affinity is not pinned to {CPUSET}: {affinity}")
+        evidence["thread_affinity"] = thread_affinity_evidence(pid)
         expected_nodes = numactl_available_nodes(snapshot["numactl_hardware"])
         evidence["available_numa_nodes"] = expected_nodes
         evidence["target_process_policy"] = target_process_policy(pid, expected_nodes)
@@ -1006,8 +1078,16 @@ def target_process_policy(pid: int, expected_nodes: list[int], proc_root: Path =
     except OSError as exc:
         raise RuntimeError(f"cannot read target process CPU/NUMA policy for pid {pid}: {exc}") from exc
     allowed_rows = [line.split(":", 1)[1].strip() for line in status.splitlines() if line.startswith("Cpus_allowed_list:")]
-    if allowed_rows != [CPUSET]:
-        raise RuntimeError(f"target process Cpus_allowed_list is not exactly {CPUSET}: {allowed_rows}")
+    if len(allowed_rows) != 1:
+        raise RuntimeError(
+            f"target process does not expose exactly one Cpus_allowed_list: {allowed_rows}"
+        )
+    leader_allowed = parse_cpu_list(allowed_rows[0])
+    expected_cpus = parse_cpu_list(CPUSET)
+    if not leader_allowed <= expected_cpus:
+        raise RuntimeError(
+            f"target process affinity escapes required CPU set {CPUSET}: {allowed_rows[0]}"
+        )
     map_rows = [line.split() for line in numa_maps.splitlines() if line.strip()]
     if not map_rows or any(len(row) < 2 for row in map_rows):
         raise RuntimeError("target process numa_maps is empty or malformed")

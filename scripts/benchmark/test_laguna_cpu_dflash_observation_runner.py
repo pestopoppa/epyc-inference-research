@@ -282,27 +282,32 @@ def test_live_cpu_evidence_uses_target_proc_not_invalid_numactl_pid_probe(monkey
     monkeypatch.setattr(runner, "target_executable_evidence", lambda target_pid, _: {"pid": target_pid})
     monkeypatch.setattr(runner, "target_mapped_runtime_evidence", lambda target_pid, _: {"pid": target_pid})
     monkeypatch.setattr(runner, "target_listener_evidence", lambda target_pid, port: {"pid": target_pid, "port": port})
+    monkeypatch.setattr(
+        runner,
+        "thread_affinity_evidence",
+        lambda target_pid: {"status": "pass", "pid": target_pid},
+    )
     monkeypatch.setattr(runner, "parse_numastat_residency", lambda _, nodes: {"nodes": nodes, "total_mib": 10.0})
     calls = []
 
     def capture(argv: list[str], **_: object) -> dict[str, object]:
         calls.append(argv)
-        stdout = f"pid {pid}'s current affinity list: 0-95\n" if argv[0] == "taskset" else "numastat"
         return {
             "ok": True,
             "returncode": 0,
-            "stdout": stdout,
+            "stdout": "numastat",
             "stderr": "",
         }
 
     monkeypatch.setattr(runner, "run_capture", capture)
     evidence = runner.live_cpu_evidence(pid, 19000, {"server": {}})
     assert evidence["target_process_policy"]["pid"] == pid
-    assert calls == [["taskset", "-pc", str(pid)], ["numastat", "-p", str(pid)]]
+    assert evidence["thread_affinity"] == {"status": "pass", "pid": pid}
+    assert calls == [["numastat", "-p", str(pid)]]
     assert all(command[0] != "numactl" for command in calls)
 
 
-def test_target_process_policy_requires_exact_affinity_and_consistent_interleave(tmp_path: Path) -> None:
+def test_target_process_policy_requires_affinity_subset_and_consistent_interleave(tmp_path: Path) -> None:
     process_dir = tmp_path / "77"
     process_dir.mkdir()
     status = process_dir / "status"
@@ -317,8 +322,12 @@ def test_target_process_policy_requires_exact_affinity_and_consistent_interleave
     assert policy["interleave_policy"] == "interleave:0-3"
     assert policy["numa_map_rows"] == 2
 
+    status.write_text("Name:\tllama-server\nCpus_allowed_list:\t0\n")
+    policy = runner.target_process_policy(77, [0, 1, 2, 3], tmp_path)
+    assert policy["cpus_allowed_list"] == "0"
+
     status.write_text("Name:\tllama-server\nCpus_allowed_list:\t0-95,100\n")
-    with pytest.raises(RuntimeError, match="not exactly"):
+    with pytest.raises(RuntimeError, match="escapes required"):
         runner.target_process_policy(77, [0, 1, 2, 3], tmp_path)
 
     status.write_text("Name:\tllama-server\nCpus_allowed_list:\t0-95\n")
@@ -328,6 +337,113 @@ def test_target_process_policy_requires_exact_affinity_and_consistent_interleave
     numa_maps.write_text("00400000 interleave:0-1 file=x\n7fff0000 interleave:0-1 stack\n")
     with pytest.raises(RuntimeError, match="all available nodes"):
         runner.target_process_policy(77, [0, 1, 2, 3], tmp_path)
+
+
+def write_thread_status(
+    proc_root: Path,
+    pid: int,
+    tid: int,
+    cpus_allowed_list: str,
+) -> None:
+    status = proc_root / str(pid) / "task" / str(tid) / "status"
+    status.parent.mkdir(parents=True, exist_ok=True)
+    status.write_text(
+        f"Name:\tllama-server\nCpus_allowed_list:\t{cpus_allowed_list}\n"
+    )
+
+
+def test_thread_affinity_accepts_openmp_team_with_leader_on_cpu_zero(
+    tmp_path: Path,
+) -> None:
+    write_thread_status(tmp_path, 77, 77, "0")
+    write_thread_status(tmp_path, 77, 78, "1-95")
+    evidence = runner.thread_affinity_evidence(77, proc_root=tmp_path)
+    assert evidence["union_cpus"] == list(range(96))
+    assert evidence["threads"] == [
+        {"tid": 77, "cpus_allowed_list": "0", "cpus": [0]},
+        {"tid": 78, "cpus_allowed_list": "1-95", "cpus": list(range(1, 96))},
+    ]
+
+
+@pytest.mark.parametrize(
+    ("cpus_allowed_list", "error"),
+    [
+        ("0,96", "escapes required CPU set"),
+        ("0-94", "union does not exactly cover"),
+        ("0-foo", "malformed Cpus_allowed_list"),
+    ],
+)
+def test_thread_affinity_rejects_outside_incomplete_or_malformed_masks(
+    tmp_path: Path,
+    cpus_allowed_list: str,
+    error: str,
+) -> None:
+    write_thread_status(tmp_path, 77, 77, cpus_allowed_list)
+    with pytest.raises(RuntimeError, match=error):
+        runner.thread_affinity_evidence(77, proc_root=tmp_path)
+
+
+def test_thread_affinity_fails_closed_on_unreadable_thread_status(
+    tmp_path: Path,
+) -> None:
+    status = tmp_path / "77/task/77/status"
+    status.mkdir(parents=True)
+    with pytest.raises(RuntimeError, match="cannot read server thread status"):
+        runner.thread_affinity_evidence(77, proc_root=tmp_path)
+
+
+def test_thread_affinity_retries_bounded_thread_list_churn(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    write_thread_status(tmp_path, 77, 77, "0")
+    write_thread_status(tmp_path, 77, 78, "1-95")
+    task_dir = tmp_path / "77/task"
+    original_iterdir = Path.iterdir
+    calls = 0
+
+    def churn_once(path: Path):
+        nonlocal calls
+        if path == task_dir:
+            calls += 1
+            if calls == 2:
+                return iter([task_dir / "77"])
+        return original_iterdir(path)
+
+    monkeypatch.setattr(Path, "iterdir", churn_once)
+    evidence = runner.thread_affinity_evidence(
+        77,
+        proc_root=tmp_path,
+        max_attempts=2,
+    )
+    assert evidence["attempt"] == 2
+
+
+def test_thread_affinity_fails_after_bounded_thread_list_churn(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    write_thread_status(tmp_path, 77, 77, "0")
+    write_thread_status(tmp_path, 77, 78, "1-95")
+    task_dir = tmp_path / "77/task"
+    original_iterdir = Path.iterdir
+    calls = 0
+
+    def churn_forever(path: Path):
+        nonlocal calls
+        if path == task_dir:
+            calls += 1
+            if calls % 2 == 0:
+                return iter([task_dir / "77"])
+        return original_iterdir(path)
+
+    monkeypatch.setattr(Path, "iterdir", churn_forever)
+    with pytest.raises(RuntimeError, match="did not stabilize"):
+        runner.thread_affinity_evidence(
+            77,
+            proc_root=tmp_path,
+            max_attempts=2,
+        )
 
 
 def test_numactl_and_numastat_require_exact_all_node_residency() -> None:
