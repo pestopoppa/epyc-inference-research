@@ -1295,6 +1295,73 @@ def test_monitor_snapshot_excludes_only_verified_target_group_llama(
     ]
 
 
+def test_monitor_snapshot_interpolates_cpu_counters_to_target_sample(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cpu_samples = iter([(1000, 900), (1200, 1100)])
+    monotonic = iter([0.0, 0.2, 0.2, 0.8, 0.8, 1.0])
+    monkeypatch.setattr(runner, "_proc_stat_cpu", lambda: next(cpu_samples))
+    monkeypatch.setattr(
+        runner,
+        "_target_group_cpu",
+        lambda _leader, _pgid: {
+            "members": [101],
+            "cpu_ticks": 950,
+            "ownership_changed": False,
+        },
+    )
+    monkeypatch.setattr(
+        runner,
+        "process_ownership",
+        lambda: {"exact_llama_processes": [], "autopilot_processes": []},
+    )
+    monkeypatch.setattr(runner, "kfd_ownership", lambda: {"users": []})
+    monkeypatch.setattr(runner, "_swap_counters", lambda: {"pswpin": 0, "pswpout": 0})
+    monkeypatch.setattr(runner.time, "monotonic", lambda: next(monotonic))
+
+    snapshot = runner.monitor_snapshot(101, 77)
+
+    assert snapshot["monotonic"] == pytest.approx(0.5)
+    assert snapshot["cpu_total_ticks"] == pytest.approx(1100)
+    assert snapshot["cpu_busy_ticks"] == pytest.approx(1000)
+    assert snapshot["cpu_counter_bracket"]["interpolation_fraction"] == pytest.approx(0.5)
+    assert snapshot["cpu_counter_bracket"]["target_scan"] == {
+        "started_monotonic": 0.2,
+        "finished_monotonic": 0.8,
+        "elapsed_s": pytest.approx(0.6),
+    }
+
+
+def test_contention_monitor_rejects_interpolated_target_over_busy() -> None:
+    samples = [
+        monitor_sample(monotonic=0.0, busy=0, total=0, target=0),
+        monitor_sample(monotonic=1.0, busy=100.5, total=9600.5, target=101),
+    ]
+    with pytest.raises(RuntimeError, match="invalid counter"):
+        runner.validate_monitor_samples(samples)
+
+
+def test_monitor_snapshot_rejects_invalid_counter_sampling_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cpu_samples = iter([(1000, 900), (1200, 1100)])
+    monotonic = iter([0.0, 0.2, 0.9, 1.1, 0.8, 1.0])
+    monkeypatch.setattr(runner, "_proc_stat_cpu", lambda: next(cpu_samples))
+    monkeypatch.setattr(
+        runner,
+        "_target_group_cpu",
+        lambda _leader, _pgid: {
+            "members": [101],
+            "cpu_ticks": 950,
+            "ownership_changed": False,
+        },
+    )
+    monkeypatch.setattr(runner.time, "monotonic", lambda: next(monotonic))
+
+    with pytest.raises(RuntimeError, match="sampling order"):
+        runner.monitor_snapshot(101, 77)
+
+
 def test_run_monitored_accepts_normal_terminal_process_group(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

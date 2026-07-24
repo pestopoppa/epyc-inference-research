@@ -1540,8 +1540,24 @@ def _target_group_cpu(leader_pid: int, pgid: int) -> dict[str, Any]:
 
 
 def monitor_snapshot(leader_pid: int, pgid: int) -> dict[str, Any]:
-    total, busy = _proc_stat_cpu()
+    cpu_before_started = time.monotonic()
+    total_before, busy_before = _proc_stat_cpu()
+    cpu_before_finished = time.monotonic()
+    target_started = time.monotonic()
     target = _target_group_cpu(leader_pid, pgid)
+    target_finished = time.monotonic()
+    cpu_after_started = time.monotonic()
+    total_after, busy_after = _proc_stat_cpu()
+    cpu_after_finished = time.monotonic()
+    cpu_before_at = (cpu_before_started + cpu_before_finished) / 2
+    target_at = (target_started + target_finished) / 2
+    cpu_after_at = (cpu_after_started + cpu_after_finished) / 2
+    cpu_bracket_elapsed = cpu_after_at - cpu_before_at
+    if cpu_bracket_elapsed <= 0 or not cpu_before_at <= target_at <= cpu_after_at:
+        raise RuntimeError("CPU and target counter sampling order is invalid")
+    interpolation_fraction = (target_at - cpu_before_at) / cpu_bracket_elapsed
+    total = total_before + (total_after - total_before) * interpolation_fraction
+    busy = busy_before + (busy_after - busy_before) * interpolation_fraction
     target_members = set(target["members"])
     ownership = process_ownership()
     kfd = kfd_ownership()
@@ -1554,8 +1570,33 @@ def monitor_snapshot(leader_pid: int, pgid: int) -> dict[str, Any]:
         "autopilot": ownership["autopilot_processes"],
         "kfd_users": kfd["users"],
     }
-    return {"monotonic": time.monotonic(), "cpu_total_ticks": total, "cpu_busy_ticks": busy,
-            "swap": _swap_counters(), "target": target, "contamination": contamination}
+    return {
+        "monotonic": target_at,
+        "cpu_total_ticks": total,
+        "cpu_busy_ticks": busy,
+        "cpu_counter_bracket": {
+            "before": {
+                "monotonic": cpu_before_at,
+                "total_ticks": total_before,
+                "busy_ticks": busy_before,
+            },
+            "after": {
+                "monotonic": cpu_after_at,
+                "total_ticks": total_after,
+                "busy_ticks": busy_after,
+            },
+            "target_scan": {
+                "started_monotonic": target_started,
+                "finished_monotonic": target_finished,
+                "elapsed_s": target_finished - target_started,
+            },
+            "target_monotonic": target_at,
+            "interpolation_fraction": interpolation_fraction,
+        },
+        "swap": _swap_counters(),
+        "target": target,
+        "contamination": contamination,
+    }
 
 
 def validate_monitor_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
@@ -1564,8 +1605,8 @@ def validate_monitor_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
     intervals: list[dict[str, Any]] = []
     for before, after in zip(samples, samples[1:]):
         elapsed = float(after["monotonic"]) - float(before["monotonic"])
-        total_delta = int(after["cpu_total_ticks"]) - int(before["cpu_total_ticks"])
-        busy_delta = int(after["cpu_busy_ticks"]) - int(before["cpu_busy_ticks"])
+        total_delta = float(after["cpu_total_ticks"]) - float(before["cpu_total_ticks"])
+        busy_delta = float(after["cpu_busy_ticks"]) - float(before["cpu_busy_ticks"])
         target_delta = int(after["target"]["cpu_ticks"]) - int(before["target"]["cpu_ticks"])
         if (
             elapsed <= 0
