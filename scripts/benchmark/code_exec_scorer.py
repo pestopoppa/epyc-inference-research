@@ -47,16 +47,27 @@ def _limits(cpu_s: int, mem_mb: int):
     return _apply
 
 
-def _run_once(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int) -> tuple[bool, str]:
+def _run_once(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
+              python_exe: str | None = None) -> tuple[bool, str]:
     """Run code with stdin, return (ok, stdout-or-error)."""
+    # absolutize BEFORE the child runs with cwd=tempdir — a relative interpreter
+    # path would otherwise resolve inside the tempdir and fail to spawn.
+    # absolute(), NOT resolve(): resolve() dereferences the venv's bin/python
+    # symlink to the BASE interpreter, silently dropping the venv site-packages.
+    exe = str(Path(python_exe).absolute()) if python_exe else sys.executable
     with tempfile.TemporaryDirectory(prefix="codeexec_") as d:
         src = Path(d) / "sol.py"
         src.write_text(code)
         try:
             p = subprocess.run(
-                [sys.executable, str(src)],
+                [exe, str(src)],
                 input=stdin, capture_output=True, text=True, timeout=timeout,
-                cwd=d, env={"PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1"},
+                cwd=d, env={"PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1",
+                            "MPLBACKEND": "Agg", "HOME": d,
+                            # single-threaded math libs: OpenBLAS sizes buffers by
+                            # nproc (192 here) and blows RLIMIT_AS otherwise
+                            "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1",
+                            "MKL_NUM_THREADS": "1", "NUMEXPR_NUM_THREADS": "1"},
                 preexec_fn=_limits(cpu_s, mem_mb),
             )
         except subprocess.TimeoutExpired:
@@ -124,6 +135,32 @@ def score_functional(
         code = (prompt or "") + "\n" + code
     program = f"{code}\n\n{test_code}\n\ncheck({entry_point})\n"
     ok, _ = _run_once(program, "", timeout, cpu_s, mem_mb)
+    return ok
+
+
+def score_unittest(
+    response: str,
+    test_code: str,
+    entry_point: str,
+    code_prompt: str = "",
+    python_exe: str | None = None,
+    timeout: int = 30,
+    cpu_s: int = 25,
+    mem_mb: int = 4096,
+) -> bool:
+    """BigCodeBench-style: the model implements `entry_point` (task_func); the
+    suite ships a unittest.TestCase in `test_code`. Pass iff the whole unittest
+    run exits 0. Requires the dep-rich interpreter via `python_exe`
+    (matplotlib/pandas/sklearn tasks won't import under the default venv);
+    MPLBACKEND=Agg + HOME=tmpdir are set by the runner env."""
+    code = extract_code(response, "python")
+    if not code:
+        return False
+    if not re.search(rf"\bdef\s+{re.escape(entry_point)}\s*\(", code):
+        code = (code_prompt or "") + "\n" + code
+    program = (f"{code}\n\n{test_code}\n\n"
+               "import unittest as _ut\n_ut.main(argv=['x'], exit=True)\n")
+    ok, _ = _run_once(program, "", timeout, cpu_s, mem_mb, python_exe=python_exe)
     return ok
 
 

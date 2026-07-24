@@ -343,9 +343,14 @@ def score_response(response: str, expected: str, q: dict) -> bool:
     if scoring_method == "code_execution":
         # Run the model's code against the suite's tests in an isolated subprocess.
         # Lazy import so answer_scoring stays dependency-light for the text scorers.
-        from code_exec_scorer import score_functional, score_code
+        from code_exec_scorer import score_functional, score_code, score_unittest
         cfg = scoring_config
-        if cfg.get("test") and cfg.get("entry_point"):  # HumanEval/MBPP functional
+        if cfg.get("test") and cfg.get("entry_point"):
+            if cfg.get("test_style") == "unittest":  # BigCodeBench: TestCase oracle
+                return score_unittest(response, cfg["test"], cfg["entry_point"],
+                                      cfg.get("code_prompt", ""),
+                                      cfg.get("python_exe"), cfg.get("timeout", 30))
+            # HumanEval/MBPP functional: check(candidate) asserts
             return score_functional(response, cfg["test"], cfg["entry_point"],
                                     cfg.get("prompt", ""), cfg.get("timeout", 10))
         if cfg.get("test_cases"):  # stdin/stdout or assert list
