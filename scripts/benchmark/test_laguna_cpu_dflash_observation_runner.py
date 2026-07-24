@@ -528,13 +528,14 @@ def test_proc_tcp_listener_parser_and_exact_port_closure(monkeypatch: pytest.Mon
     assert runner.port_closed(19000) is True
 
 
-def test_request_monitor_rejects_cpu_swap_process_kfd_and_pid_reuse() -> None:
+def test_request_monitor_records_cpu_and_rejects_swap_process_kfd_and_pid_reuse() -> None:
     def sample(
         *,
         at: float,
         busy: int,
         target_ticks: int,
         starttime: int = 500,
+        hz: int = 100,
         swap_in: int = 0,
         swap_out: int = 0,
         forbidden: list[dict[str, object]] | None = None,
@@ -543,7 +544,7 @@ def test_request_monitor_rejects_cpu_swap_process_kfd_and_pid_reuse() -> None:
         return {
             "captured_at": "test",
             "monotonic_s": at,
-            "clock_ticks_per_second": 100,
+            "clock_ticks_per_second": hz,
             "aggregate_cpu_busy_ticks": busy,
             "target": {"pid": 77, "starttime": starttime, "cpu_ticks": target_ticks},
             "swap_io_pages": {"pswpin": swap_in, "pswpout": swap_out},
@@ -555,11 +556,19 @@ def test_request_monitor_rejects_cpu_swap_process_kfd_and_pid_reuse() -> None:
     clean_after = sample(at=2.0, busy=1100, target_ticks=195)
     evidence = runner.validate_request_monitor_samples([before, clean_after])
     assert evidence["status"] == "pass"
-    assert evidence["intervals"][0]["external_cpu_cores"] == pytest.approx(0.05)
+    assert evidence["external_cpu_use"] == "non_gating_telemetry_only"
+    assert "external_cpu_ceiling_cores" not in evidence
+    assert "external_cpu_cores" not in evidence["intervals"][0]
+    assert evidence["intervals"][0]["signed_external_cpu_cores_observation"] == pytest.approx(0.05)
 
     contaminated = sample(at=2.0, busy=1600, target_ticks=100)
-    with pytest.raises(RuntimeError, match="external CPU"):
-        runner.validate_request_monitor_samples([before, contaminated])
+    positive = runner.validate_request_monitor_samples([before, contaminated])
+    assert positive["intervals"][0]["signed_external_cpu_cores_observation"] == pytest.approx(6.0)
+    counter_skew = runner.validate_request_monitor_samples([
+        before,
+        sample(at=2.0, busy=1100, target_ticks=250),
+    ])
+    assert counter_skew["intervals"][0]["signed_external_cpu_cores_observation"] == pytest.approx(-0.5)
     with pytest.raises(RuntimeError, match="swap IO"):
         runner.validate_request_monitor_samples([before, sample(at=2.0, busy=1100, target_ticks=195, swap_in=1)])
     with pytest.raises(RuntimeError, match="competing inference"):
@@ -577,9 +586,34 @@ def test_request_monitor_rejects_cpu_swap_process_kfd_and_pid_reuse() -> None:
             before,
             sample(at=2.0, busy=1100, target_ticks=195, starttime=501),
         ])
+    with pytest.raises(RuntimeError, match="counters regressed"):
+        runner.validate_request_monitor_samples([
+            before,
+            sample(at=2.0, busy=999, target_ticks=195),
+        ])
+    with pytest.raises(RuntimeError, match="counters regressed"):
+        runner.validate_request_monitor_samples([
+            before,
+            sample(at=2.0, busy=1100, target_ticks=99),
+        ])
+    with pytest.raises(RuntimeError, match="nonpositive or nonfinite"):
+        runner.validate_request_monitor_samples([
+            before,
+            sample(at=1.0, busy=1100, target_ticks=195),
+        ])
+    with pytest.raises(RuntimeError, match="clock tick rate changed"):
+        runner.validate_request_monitor_samples([
+            before,
+            sample(at=2.0, busy=1100, target_ticks=195, hz=250),
+        ])
+    with pytest.raises(RuntimeError, match="no interval"):
+        runner.validate_request_monitor_samples([
+            before,
+            sample(at=1.1, busy=1010, target_ticks=109),
+        ])
 
 
-def test_monitored_query_surfaces_transient_interference(
+def test_monitored_query_records_mixed_counter_delta_without_gating(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     snapshots = iter((
@@ -608,9 +642,9 @@ def test_monitored_query_surfaces_transient_interference(
     monkeypatch.setattr(runner, "query_chat", lambda *_: {"response": "ok"})
     response, evidence, error = runner.monitored_query(19000, {"request": "body"}, 77)
     assert response == {"response": "ok"}
-    assert evidence["status"] == "fail"
-    assert isinstance(error, RuntimeError)
-    assert "external CPU" in str(error)
+    assert evidence["status"] == "pass"
+    assert error is None
+    assert evidence["intervals"][0]["signed_external_cpu_cores_observation"] == pytest.approx(6.0)
 
 
 def test_kfd_fd_users_is_exact_and_excludes_runner(tmp_path: Path) -> None:
@@ -635,6 +669,7 @@ def test_recipe_drift_and_noncanonical_q8_are_rejected() -> None:
 
 def test_plan_is_complete_observation_only_matrix() -> None:
     plan = runner.build_plan()
+    assert plan["schema"] == "epyc.laguna_cpu_dflash_observation.plan.v4"
     assert len(plan["cells"]) == 20
     assert all(cell["prompt_count"] == 3 and cell["seed"] == 424242 for cell in plan["cells"])
     assert [(cell["rep"], cell["lane"], cell["arm"]) for cell in plan["cells"][:4]] == [
@@ -655,6 +690,11 @@ def test_plan_is_complete_observation_only_matrix() -> None:
     assert plan["observation_policy"]["decision_grade"] is False
     assert plan["observation_policy"]["promotion_gate"] is False
     assert plan["observation_policy"]["march_no_go_reopened"] is False
+    assert plan["observation_policy"]["external_cpu_accounting"] == (
+        "record_only_signed_delta_from_mixed_proc_counter_sources"
+    )
+    assert plan["observation_policy"]["external_cpu_use"] == "non_gating_telemetry_only"
+    assert "request_external_cpu_ceiling_cores" not in plan["recipe"]["host_requirements"]
 
 
 def test_schedule_counterbalances_lanes_and_arm_first_positions() -> None:

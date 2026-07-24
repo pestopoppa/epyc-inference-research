@@ -68,9 +68,6 @@ REQUEST_TIMEOUT_S = 900
 SETTLE_S = 2
 MONITOR_INTERVAL_S = 1.0
 MIN_MONITORED_INTERVAL_S = 0.25
-# Four busy cores is 4.17% of the pinned 96-core team: large enough to exceed
-# timer/IRQ noise, small enough to reject contention material to this observation.
-MAX_EXTERNAL_CPU_CORES = 4.0
 MAX_SWAP_IO_PAGES = 0
 WARMUP_MAX_TOKENS = 128
 WARMUP_PROMPT = (
@@ -138,7 +135,8 @@ OBSERVATION_POLICY = {
     "functional_equality_use": "non_gating_output_stability_observation_only",
     "speculative_semantics": "distribution_lossless_not_byte_exact_greedy",
     "host_window": "warmed_bounded_interference_observation_not_clean_host_claim",
-    "external_cpu_ceiling_cores": MAX_EXTERNAL_CPU_CORES,
+    "external_cpu_accounting": "record_only_signed_delta_from_mixed_proc_counter_sources",
+    "external_cpu_use": "non_gating_telemetry_only",
     "swap_io_page_ceiling": MAX_SWAP_IO_PAGES,
 }
 
@@ -854,21 +852,19 @@ def validate_request_monitor_samples(samples: list[dict[str, Any]]) -> dict[str,
                 "swap_out_pages": swap_out,
             })
             continue
-        if target_delta > busy_delta:
+        signed_external_cores = (busy_delta - target_delta) / (elapsed * hz)
+        if not math.isfinite(signed_external_cores):
             raise RuntimeError(
-                f"request monitor CPU counters disagree: busy={busy_delta} target={target_delta}"
-            )
-        external_cores = (busy_delta - target_delta) / (elapsed * hz)
-        if not math.isfinite(external_cores) or external_cores > MAX_EXTERNAL_CPU_CORES:
-            raise RuntimeError(
-                f"material external CPU interference exceeded {MAX_EXTERNAL_CPU_CORES} cores: {external_cores}"
+                "request monitor produced a nonfinite signed external CPU observation: "
+                f"{signed_external_cores}"
             )
         cpu_intervals += 1
         intervals.append({
             "elapsed_s": elapsed,
             "aggregate_busy_tick_delta": busy_delta,
             "target_tick_delta": target_delta,
-            "external_cpu_cores": external_cores,
+            "signed_external_cpu_cores_observation": signed_external_cores,
+            "cpu_evaluation": "record_only_non_gating_mixed_proc_counters",
             "swap_in_pages": swap_in,
             "swap_out_pages": swap_out,
         })
@@ -881,7 +877,8 @@ def validate_request_monitor_samples(samples: list[dict[str, Any]]) -> dict[str,
         "sample_count": len(samples),
         "interval_s": MONITOR_INTERVAL_S,
         "minimum_cpu_interval_s": MIN_MONITORED_INTERVAL_S,
-        "external_cpu_ceiling_cores": MAX_EXTERNAL_CPU_CORES,
+        "external_cpu_accounting": "record_only_signed_delta_from_mixed_proc_counter_sources",
+        "external_cpu_use": "non_gating_telemetry_only",
         "swap_io_page_ceiling": MAX_SWAP_IO_PAGES,
         "intervals": intervals,
         "samples": samples,
@@ -1792,7 +1789,7 @@ def validate_schedule_contract(cells: list[dict[str, Any]]) -> None:
 
 
 def build_plan() -> dict[str, Any]:
-    return {"schema": "epyc.laguna_cpu_dflash_observation.plan.v3", "created_at": utc_now(), "recipe": {"context": CONTEXT, "max_tokens": MAX_TOKENS, "min_completion_tokens": MIN_COMPLETION_TOKENS, "seed": SEED, "threads": THREADS, "cpuset": CPUSET, "ggml_iqk": "1", "mmap": False, "warmup_policy": WARMUP_POLICY, "host_requirements": {"scaling_governor": "performance_on_every_online_cpu", "thp_enabled_active": "always", "thp_defrag_active": "always", "numa_balancing": "0", "request_external_cpu_ceiling_cores": MAX_EXTERNAL_CPU_CORES, "request_swap_io_page_ceiling": MAX_SWAP_IO_PAGES}, "prompt_pack": list(PROMPTS), "semantic_tasks": list(SEMANTIC_TASKS), "prompt_count": len(PROMPTS)}, "observation_policy": OBSERVATION_POLICY, "schedule_contract": "rep_outer_lane_counterbalanced_arm_paired_and_globally_counterbalanced", "cells": balanced_schedule()}
+    return {"schema": "epyc.laguna_cpu_dflash_observation.plan.v4", "created_at": utc_now(), "recipe": {"context": CONTEXT, "max_tokens": MAX_TOKENS, "min_completion_tokens": MIN_COMPLETION_TOKENS, "seed": SEED, "threads": THREADS, "cpuset": CPUSET, "ggml_iqk": "1", "mmap": False, "warmup_policy": WARMUP_POLICY, "host_requirements": {"scaling_governor": "performance_on_every_online_cpu", "thp_enabled_active": "always", "thp_defrag_active": "always", "numa_balancing": "0", "request_external_cpu_accounting": "record_only_signed_delta_from_mixed_proc_counter_sources", "request_external_cpu_use": "non_gating_telemetry_only", "request_swap_io_page_ceiling": MAX_SWAP_IO_PAGES}, "prompt_pack": list(PROMPTS), "semantic_tasks": list(SEMANTIC_TASKS), "prompt_count": len(PROMPTS)}, "observation_policy": OBSERVATION_POLICY, "schedule_contract": "rep_outer_lane_counterbalanced_arm_paired_and_globally_counterbalanced", "cells": balanced_schedule()}
 
 
 def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
@@ -1905,7 +1902,7 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
             "DFlash decode ratio",
         )
     equality_rate = sum(row["exact_equal"] for row in equality) / len(equality)
-    return {"schema": "epyc.laguna_cpu_dflash_observation.summary.v3", "created_at": utc_now(), "status": "ok", "arm_summaries": summaries, "output_stability_observation": {"non_gating": True, "contract": "distribution_lossless_not_byte_exact_greedy", "rows": equality, "exact_equality_rate": equality_rate}, "observation_policy": OBSERVATION_POLICY}
+    return {"schema": "epyc.laguna_cpu_dflash_observation.summary.v4", "created_at": utc_now(), "status": "ok", "arm_summaries": summaries, "output_stability_observation": {"non_gating": True, "contract": "distribution_lossless_not_byte_exact_greedy", "rows": equality, "exact_equality_rate": equality_rate}, "observation_policy": OBSERVATION_POLICY}
 
 
 def execute(output_dir: Path) -> dict[str, Any]:
@@ -1985,13 +1982,13 @@ def main(argv: list[str] | None = None) -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     write_json(args.output_dir / "plan.json", build_plan())
     if not args.execute:
-        write_json(args.output_dir / "summary.json", {"schema": "epyc.laguna_cpu_dflash_observation.summary.v3", "status": "prepared_no_inference", "observation_policy": OBSERVATION_POLICY})
+        write_json(args.output_dir / "summary.json", {"schema": "epyc.laguna_cpu_dflash_observation.summary.v4", "status": "prepared_no_inference", "observation_policy": OBSERVATION_POLICY})
         print(f"prepared: {args.output_dir}")
         return 0
     try:
         summary = execute(args.output_dir)
     except RunFailure as exc:
-        summary = {"schema": "epyc.laguna_cpu_dflash_observation.summary.v3", "status": "failed", "error": repr(exc), "run_dir": str(exc.run_dir) if exc.run_dir else None, "observation_policy": OBSERVATION_POLICY}
+        summary = {"schema": "epyc.laguna_cpu_dflash_observation.summary.v4", "status": "failed", "error": repr(exc), "run_dir": str(exc.run_dir) if exc.run_dir else None, "observation_policy": OBSERVATION_POLICY}
     write_json(args.output_dir / "summary.json", summary)
     return 0 if summary["status"] == "ok" else 1
 
