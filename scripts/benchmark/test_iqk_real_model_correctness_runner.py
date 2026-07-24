@@ -295,6 +295,68 @@ def test_numastat_requires_positive_total_and_matching_node_sum() -> None:
         runner.validate_numastat_totals([10.0, 0.0, 10.0], [0, 1])
 
 
+def write_thread_status(proc_root: Path, pid: int, tid: int, cpus_allowed_list: str) -> None:
+    status = proc_root / str(pid) / "task" / str(tid) / "status"
+    status.parent.mkdir(parents=True, exist_ok=True)
+    status.write_text(f"Name:\tllama-server\nCpus_allowed_list:\t{cpus_allowed_list}\n")
+
+
+def test_thread_affinity_accepts_split_team_with_leader_pinned_to_cpu_zero(tmp_path: Path) -> None:
+    write_thread_status(tmp_path, 77, 77, "0")
+    write_thread_status(tmp_path, 77, 78, "1-95")
+    evidence = runner.thread_affinity_evidence(77, proc_root=tmp_path)
+    assert evidence["union_cpus"] == list(range(96))
+    assert evidence["threads"] == [
+        {"tid": 77, "cpus_allowed_list": "0", "cpus": [0]},
+        {"tid": 78, "cpus_allowed_list": "1-95", "cpus": list(range(1, 96))},
+    ]
+
+
+@pytest.mark.parametrize(
+    ("cpus_allowed_list", "error"),
+    [
+        ("0,96", "escapes required CPU set"),
+        ("0-94", "union does not exactly cover"),
+        ("0-foo", "malformed Cpus_allowed_list"),
+    ],
+)
+def test_thread_affinity_rejects_outside_incomplete_or_malformed_masks(
+    tmp_path: Path,
+    cpus_allowed_list: str,
+    error: str,
+) -> None:
+    write_thread_status(tmp_path, 77, 77, cpus_allowed_list)
+    with pytest.raises(runner.GateFailure, match=error):
+        runner.thread_affinity_evidence(77, proc_root=tmp_path)
+
+
+def test_thread_affinity_fails_closed_on_unreadable_thread_status(tmp_path: Path) -> None:
+    status = tmp_path / "77/task/77/status"
+    status.mkdir(parents=True)
+    with pytest.raises(runner.GateFailure, match="cannot read child thread status"):
+        runner.thread_affinity_evidence(77, proc_root=tmp_path)
+
+
+def test_thread_affinity_retries_bounded_thread_list_churn(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    write_thread_status(tmp_path, 77, 77, "0")
+    write_thread_status(tmp_path, 77, 78, "1-95")
+    task_dir = tmp_path / "77/task"
+    original_iterdir = Path.iterdir
+    calls = 0
+
+    def churn_once(path: Path):
+        nonlocal calls
+        if path == task_dir:
+            calls += 1
+            if calls == 2:
+                return iter([task_dir / "77"])
+        return original_iterdir(path)
+
+    monkeypatch.setattr(Path, "iterdir", churn_once)
+    evidence = runner.thread_affinity_evidence(77, proc_root=tmp_path, max_attempts=2)
+    assert evidence["attempt"] == 2
+
+
 def test_split_identity_hashes_every_shard_and_rejects_missing_shard(tmp_path: Path) -> None:
     first = tmp_path / "model-00001-of-00003.gguf"
     for index, body in enumerate((b"a", b"bb", b"ccc"), 1):

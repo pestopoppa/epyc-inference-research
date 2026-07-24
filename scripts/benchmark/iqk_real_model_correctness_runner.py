@@ -533,23 +533,87 @@ def validate_numastat_totals(values: list[float], nodes: list[int]) -> None:
         raise GateFailure(f"numastat node sum does not match Total: {values}")
 
 
+def parse_cpu_list(value: str) -> set[int]:
+    """Parse Linux Cpus_allowed_list syntax without accepting ambiguous input."""
+    if not value:
+        raise GateFailure("empty Cpus_allowed_list")
+    cpus: set[int] = set()
+    for piece in value.split(","):
+        if not re.fullmatch(r"\d+(?:-\d+)?", piece):
+            raise GateFailure(f"malformed Cpus_allowed_list: {value!r}")
+        if "-" in piece:
+            left, right = (int(item) for item in piece.split("-", 1))
+            if left > right:
+                raise GateFailure(f"malformed descending CPU range: {value!r}")
+            cpus.update(range(left, right + 1))
+        else:
+            cpus.add(int(piece))
+    return cpus
+
+
+def thread_affinity_evidence(
+    pid: int,
+    proc_root: Path = Path("/proc"),
+    max_attempts: int = 3,
+) -> dict[str, Any]:
+    """Capture a stable, fail-closed affinity witness for every server thread."""
+    expected = parse_cpu_list(CPUSET)
+    task_dir = proc_root / str(pid) / "task"
+    for attempt in range(1, max_attempts + 1):
+        try:
+            before = sorted(path.name for path in task_dir.iterdir() if path.name.isdecimal())
+        except OSError as exc:
+            raise GateFailure(f"cannot list child threads: {exc}") from exc
+        if not before:
+            raise GateFailure("child has no observable threads")
+        threads: list[dict[str, Any]] = []
+        churned = False
+        for tid in before:
+            try:
+                status = (task_dir / tid / "status").read_text(encoding="utf-8")
+            except FileNotFoundError:
+                churned = True
+                break
+            except OSError as exc:
+                raise GateFailure(f"cannot read child thread status for TID {tid}: {exc}") from exc
+            matches = re.findall(r"^Cpus_allowed_list:\s*(\S*)\s*$", status, re.MULTILINE)
+            if len(matches) != 1:
+                raise GateFailure(f"TID {tid} lacks exactly one Cpus_allowed_list")
+            allowed_list = matches[0]
+            allowed = parse_cpu_list(allowed_list)
+            if not allowed <= expected:
+                raise GateFailure(f"TID {tid} affinity escapes required CPU set {CPUSET}: {allowed_list}")
+            threads.append({"tid": int(tid), "cpus_allowed_list": allowed_list, "cpus": sorted(allowed)})
+        try:
+            after = sorted(path.name for path in task_dir.iterdir() if path.name.isdecimal())
+        except OSError as exc:
+            raise GateFailure(f"cannot relist child threads: {exc}") from exc
+        if churned or before != after:
+            continue
+        union = set().union(*(set(thread["cpus"]) for thread in threads))
+        if union != expected:
+            raise GateFailure(
+                f"thread affinity union does not exactly cover required CPU set {CPUSET}: {sorted(union)}"
+            )
+        return {
+            "status": "pass", "attempt": attempt, "expected_cpus_allowed_list": CPUSET,
+            "threads": threads, "union_cpus": sorted(union),
+        }
+    raise GateFailure(f"child thread list did not stabilize within {max_attempts} snapshots")
+
+
 def live_cpu_evidence(pid: int, iqk: int, openmp_runtime: dict[str, Any]) -> dict[str, Any]:
     host = host_snapshot()
     require_host_state(host, expected_llama_pid=pid)
     expected_nodes_capture = run_capture(["numactl", "--hardware"], env=child_env(iqk))
     require_ok(expected_nodes_capture, "numactl hardware")
     nodes = parse_nodes(str(expected_nodes_capture["stdout"]))
-    affinity = run_capture(["taskset", "-pc", str(pid)], env=child_env(iqk))
-    require_ok(affinity, "live CPU affinity")
-    if f"current affinity list: {CPUSET}" not in str(affinity["stdout"]):
-        raise GateFailure(f"server is not exactly pinned to {CPUSET}: {affinity}")
     try:
         status = Path(f"/proc/{pid}/status").read_text(encoding="utf-8")
         numa_maps = Path(f"/proc/{pid}/numa_maps").read_text(encoding="utf-8")
     except OSError as exc:
         raise GateFailure(f"cannot read child placement state: {exc}") from exc
-    if f"Cpus_allowed_list:\t{CPUSET}" not in status:
-        raise GateFailure("child /proc status does not prove exact CPU set")
+    affinity = thread_affinity_evidence(pid)
     policies = {line.split()[1] for line in numa_maps.splitlines() if len(line.split()) >= 2}
     expected_policy = f"interleave:0-{nodes[-1]}"
     if policies != {expected_policy}:
@@ -568,7 +632,7 @@ def live_cpu_evidence(pid: int, iqk: int, openmp_runtime: dict[str, Any]) -> dic
     validate_numastat_totals(values, nodes)
     return {"status": "pass", "captured_at": utc_now(), "pid": pid, "environment": exact_process_env(pid, iqk),
             "openmp_runtime": mapped_openmp_runtime(pid, openmp_runtime),
-            "host": host, "nodes": nodes, "affinity": affinity,
+            "host": host, "nodes": nodes, "thread_affinity": affinity,
             "status_file": status, "numa_maps": numa_maps, "numastat": numastat,
             "numastat_total_mib": values}
 
