@@ -45,6 +45,10 @@ All results are for AMD EPYC 9655 "Turin" (96C/192T Zen 5, 1.13TB DDR5-5600 ECC,
 - **Qwen3-Coder family**: BOS=comma (token 11), requires jukofyork vocab transplant draft
 - **Architect models**: Always full experts + speculative decode (quality over speed)
 
+## Operator Decision Requests
+
+Never ask the operator an open-ended question when escalating a decision. Present a decision package: 2–4 concrete options with tradeoffs and supporting data, a recommendation with reasoning, and the default outcome if no choice is made. Claude Code sessions deliver this via the AskUserQuestion tool (recommended option first). Full contract: `/mnt/raid0/llm/epyc-root/agents/shared/OPERATING_CONSTRAINTS.md` → *Operator Decision Requests*.
+
 ## Related Repositories
 
 - [epyc-root](https://github.com/pestopoppa/epyc-root) — Governance, agents, handoffs, progress
