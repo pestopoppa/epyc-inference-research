@@ -25,7 +25,7 @@ def valid_semantic_content(prompt_index: int, variant: int = 0) -> str:
         ("FLAT: [2,1,\"hi\",3,null,false]", "FLAT: [ 2, 1, \"hi\", 3, null, false ]"),
         ("NORMALIZED: [0,0.2,0.3,0.5]\nZERO_CASE: [0,0,0]", "NORMALIZED: [0.0,2e-1,3e-1,5e-1]\nZERO_CASE: [0.0,0e0,0]"),
     )
-    return markers[prompt_index - 1][variant] + "\n" + explanations[prompt_index - 1]
+    return explanations[prompt_index - 1] + "\n" + markers[prompt_index - 1][variant]
 
 
 def valid_summary_rows() -> list[dict[str, object]]:
@@ -68,6 +68,7 @@ def test_fixed_cpu_recipe_and_dflash_placement() -> None:
     args = runner.parse_args([])
     assert args.context == 4096
     assert args.max_tokens == 320
+    assert args.min_completion_tokens == 64
     base = runner.server_argv(runner.lanes()[0], runner.BASE, 19000)
     dflash = runner.server_argv(runner.lanes()[0], runner.DFLASH, 19001)
     assert base[:6] == ["taskset", "-c", "0-95", "numactl", "--interleave=all", str(runner.CANONICAL_BINARY)]
@@ -669,7 +670,7 @@ def test_recipe_drift_and_noncanonical_q8_are_rejected() -> None:
 
 def test_plan_is_complete_observation_only_matrix() -> None:
     plan = runner.build_plan()
-    assert plan["schema"] == "epyc.laguna_cpu_dflash_observation.plan.v4"
+    assert plan["schema"] == "epyc.laguna_cpu_dflash_observation.plan.v5"
     assert len(plan["cells"]) == 20
     assert all(cell["prompt_count"] == 3 and cell["seed"] == 424242 for cell in plan["cells"])
     assert [(cell["rep"], cell["lane"], cell["arm"]) for cell in plan["cells"][:4]] == [
@@ -687,9 +688,10 @@ def test_plan_is_complete_observation_only_matrix() -> None:
     assert plan["recipe"]["host_requirements"]["thp_defrag_active"] == "always"
     assert all("exactly one" in prompt.lower() for prompt in runner.PROMPTS)
     assert not any("words" in prompt.lower() for prompt in runner.PROMPTS)
-    assert all(prompt.startswith("Begin your response") for prompt in runner.PROMPTS)
     for prompt, prefix in zip(runner.PROMPTS, ("PRIMES:", "FLAT:", "NORMALIZED:"), strict=True):
-        assert prompt.index(prefix) < prompt.lower().index("explain")
+        assert prompt.index(prefix) > prompt.lower().index("explain")
+    assert plan["recipe"]["prompt_protocol"] == runner.PROMPT_PROTOCOL
+    assert plan["recipe"]["prompt_protocol"]["result_lines_terminal"] is True
     assert plan["observation_policy"]["decision_grade"] is False
     assert plan["observation_policy"]["promotion_gate"] is False
     assert plan["observation_policy"]["march_no_go_reopened"] is False
@@ -876,7 +878,7 @@ def test_provenance_rejects_dirty_version_and_ldd(monkeypatch: pytest.MonkeyPatc
 
 def test_dflash_requires_explicit_nonzero_counters() -> None:
     content = valid_semantic_content(1)
-    response = {"usage": {"prompt_tokens": 4, "completion_tokens": 100}, "timings": {"prompt_n": 4, "predicted_n": 100, "prompt_ms": 4, "predicted_ms": 10}, "choices": [{"message": {"content": content}}]}
+    response = {"usage": {"prompt_tokens": 4, "completion_tokens": 100}, "timings": {"prompt_n": 4, "predicted_n": 100, "prompt_ms": 4, "predicted_ms": 10}, "choices": [{"finish_reason": "stop", "message": {"content": content}}]}
     with pytest.raises(RuntimeError, match="draft_n"):
         runner.response_row(response, runner.DFLASH, 1)
     response["timings"].update({"draft_n": 0, "draft_n_accepted": 0})
@@ -904,7 +906,7 @@ def test_response_rejects_reasoning_content_under_reasoning_off() -> None:
     content = valid_semantic_content(1)
     response = {
         "timings": {"prompt_n": 4, "predicted_n": 100, "prompt_ms": 4, "predicted_ms": 10},
-        "choices": [{"message": {"content": content, "reasoning_content": "hidden reasoning"}}],
+        "choices": [{"finish_reason": "stop", "message": {"content": content, "reasoning_content": "hidden reasoning"}}],
     }
     with pytest.raises(RuntimeError, match="reasoning_content"):
         runner.response_row(response, runner.BASE, 1)
@@ -937,7 +939,7 @@ def test_semantic_validators_reject_coherent_but_wrong_outputs(prompt_index: int
 
 
 @pytest.mark.parametrize("prompt_index", [1, 2, 3])
-def test_semantic_validators_accept_result_first_wording_and_formatting(prompt_index: int) -> None:
+def test_semantic_validators_accept_result_last_wording_and_formatting(prompt_index: int) -> None:
     first = valid_semantic_content(prompt_index, 0)
     second = valid_semantic_content(prompt_index, 1)
     assert first != second
@@ -946,6 +948,7 @@ def test_semantic_validators_accept_result_first_wording_and_formatting(prompt_i
     assert first_result["valid"] is True
     assert second_result["valid"] is True
     assert first_result["task"] == second_result["task"] == runner.SEMANTIC_TASKS[prompt_index - 1]
+    assert first_result["terminal_footer"]["valid"] is True
 
 
 @pytest.mark.parametrize(
@@ -963,6 +966,44 @@ def test_semantic_validators_reject_duplicate_or_missing_result_lines(
     missing = "\n".join(line for line in content.splitlines() if line != result_line)
     with pytest.raises(RuntimeError, match=f"exactly one nonempty {label}:"):
         runner.validate_prompt_semantics(missing, prompt_index)
+
+
+@pytest.mark.parametrize("prompt_index", [1, 2, 3])
+def test_semantic_validators_reject_result_first_or_trailing_prose(prompt_index: int) -> None:
+    content = valid_semantic_content(prompt_index)
+    lines = content.splitlines()
+    footer_count = 2 if prompt_index in {1, 3} else 1
+    footer = lines[-footer_count:]
+    prose = lines[:-footer_count]
+    with pytest.raises(RuntimeError, match="terminal result footer"):
+        runner.validate_prompt_semantics("\n".join(footer + prose), prompt_index)
+    with pytest.raises(RuntimeError, match="terminal result footer"):
+        runner.validate_prompt_semantics(content + "\nThis trailing prose invalidates the footer.", prompt_index)
+
+
+def test_prime_semantics_enforces_bounded_non_enumerated_rationale() -> None:
+    footer = "PRIMES: 11,13,17,19,23,29,31,37,41,43,47\nSUM: 311"
+    three_sentences = (
+        "Trial division checks possible factors. Confirmed primes are retained. Their values are summed.\n"
+        f"{footer}"
+    )
+    with pytest.raises(RuntimeError, match="one or two prime rationale sentences"):
+        runner.validate_prompt_semantics(three_sentences, 1)
+    enumerated = f"A concise method was used.\n- 10 is composite.\n{footer}"
+    with pytest.raises(RuntimeError, match="forbids bullet or numbered"):
+        runner.validate_prompt_semantics(enumerated, 1)
+    too_long = " ".join(["method"] * 81) + ".\n" + footer
+    with pytest.raises(RuntimeError, match="80-word ceiling"):
+        runner.validate_prompt_semantics(too_long, 1)
+
+
+def test_response_rejects_length_finish_even_when_semantics_pass() -> None:
+    response = {
+        "timings": {"prompt_n": 4, "predicted_n": 100, "prompt_ms": 4, "predicted_ms": 10},
+        "choices": [{"finish_reason": "length", "message": {"content": valid_semantic_content(1)}}],
+    }
+    with pytest.raises(RuntimeError, match="finish_reason='length'"):
+        runner.response_row(response, runner.BASE, 1)
 
 
 def test_iqk_engagement_requires_q4_k_type_and_no_q8_false_claim(tmp_path: Path) -> None:
@@ -1138,7 +1179,7 @@ def test_run_replicate_writes_prompt_artifacts_with_mocked_server(monkeypatch: p
         return {
             "usage": {"prompt_tokens": 10, "completion_tokens": 100},
             "timings": {"prompt_n": 10, "predicted_n": 100, "prompt_ms": 10, "predicted_ms": 20, "draft_n": 10, "draft_n_accepted": 5},
-            "choices": [{"message": {"content": content}}],
+            "choices": [{"finish_reason": "stop", "message": {"content": content}}],
         }, {"status": "pass"}, None
 
     monkeypatch.setattr(runner, "monitored_query", monitored)
@@ -1205,7 +1246,7 @@ def test_run_replicate_fails_on_transient_boundary_owner(monkeypatch: pytest.Mon
         content = "1,2,3,4,5" if calls == 1 else valid_semantic_content(1)
         return {
             "timings": {"prompt_n": 10, "predicted_n": 100, "prompt_ms": 10, "predicted_ms": 20},
-            "choices": [{"message": {"content": content}}],
+            "choices": [{"finish_reason": "stop", "message": {"content": content}}],
         }, {"status": "pass"}, None
 
     monkeypatch.setattr(runner, "monitored_query", monitored)

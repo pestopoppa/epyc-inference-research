@@ -59,7 +59,7 @@ DRAFTER_SHA256 = "24614292a4477f3ae5203c3875edcde0bc219f02616a9c9f65791e29b18a67
 REPS = 5
 CONTEXT = 4096
 MAX_TOKENS = 320
-MIN_COMPLETION_TOKENS = 96
+MIN_COMPLETION_TOKENS = 64
 SEED = 424242
 THREADS = 96
 CPUSET = "0-95"
@@ -120,11 +120,21 @@ THP_MEMINFO_KEYS = (
     "DirectMap1G",
 )
 PROMPTS = (
-    "Begin your response with exactly one dedicated line beginning `PRIMES:` followed only by every prime integer from 10 through 50 inclusive in ascending order, separated by commas. Immediately follow it with exactly one dedicated line beginning `SUM:` followed only by their integer sum. Do not repeat either prefix. After those result lines, briefly explain a reliable method for deciding which integers are prime and enough arithmetic to check the sum.",
-    'Begin your response with exactly one dedicated line beginning `FLAT:` followed only by the valid JSON array obtained by flattening every scalar in {"z":[3,{"b":false,"a":null}],"a":{"y":"hi","x":[2,1]}}. Visit object keys in ascending lexicographic order and array elements in index order; numbers, strings, booleans, and null are scalars. Do not repeat the prefix. After the result line, briefly explain the traversal.',
-    "Begin your response with exactly one dedicated line beginning `NORMALIZED:` followed only by the valid JSON array obtained by normalizing [0, 2, 3, 5] by its total. Immediately follow it with exactly one dedicated line beginning `ZERO_CASE:` followed only by the same-length all-zero vector required when normalizing [0, 0, 0]. Do not repeat either prefix. After those result lines, briefly explain the calculation and why the zero-total branch is necessary.",
+    "Determine every prime integer from 10 through 50 inclusive and compute their sum. In at most two concise sentences, explain a reliable primality method and how you checked the total; do not enumerate or discuss individual candidate integers. Then include exactly one dedicated line beginning `PRIMES:` followed only by the ascending prime values separated by commas and exactly one dedicated line beginning `SUM:` followed only by the integer sum. Put no prose on or after either result line.",
+    'Flatten every scalar in this JSON value: {"z":[3,{"b":false,"a":null}],"a":{"y":"hi","x":[2,1]}}. Visit object keys in ascending lexicographic order and array elements in index order. Treat numbers, strings, booleans, and null as scalars. Explain the traversal in prose, then include exactly one dedicated line beginning `FLAT:` followed only by the resulting valid JSON array. Other prose may vary, but do not put prose on or after the result line.',
+    "Normalize the nonnegative list [0, 2, 3, 5] by dividing each value by the total. Under the required zero-total policy, normalizing [0, 0, 0] returns a same-length all-zero vector. Explain the calculation and why the zero-total branch is necessary. Then include exactly one dedicated line beginning `NORMALIZED:` followed only by the first result as a valid JSON array, and exactly one dedicated line beginning `ZERO_CASE:` followed only by the zero-total result as a valid JSON array. Other prose may vary, but do not put prose on or after either result line.",
 )
 SEMANTIC_TASKS = ("prime_list_and_sum", "nested_json_flatten", "normalization_and_zero_policy")
+PROMPT_PROTOCOL = {
+    "rationale_position": "before_results",
+    "result_lines_terminal": True,
+    "finish_reason": "stop",
+    "prime_rationale_sentence_range": [1, 2],
+    "prime_rationale_word_ceiling": 80,
+    "prime_candidate_enumeration_guard": "bullet_or_numbered_lines_forbidden",
+    "max_tokens": MAX_TOKENS,
+    "minimum_completion_tokens": MIN_COMPLETION_TOKENS,
+}
 OBSERVATION_POLICY = {
     "decision_grade": False,
     "promotion_gate": False,
@@ -1419,11 +1429,52 @@ def validate_normalization_semantics(content: str) -> dict[str, Any]:
     }
 
 
+def validate_terminal_result_footer(content: str, prompt_index: int) -> dict[str, Any]:
+    footer_labels = (("PRIMES", "SUM"), ("FLAT",), ("NORMALIZED", "ZERO_CASE"))
+    if isinstance(prompt_index, bool) or not 1 <= prompt_index <= len(footer_labels):
+        raise RuntimeError(f"terminal result validation received invalid prompt index: {prompt_index}")
+    labels = footer_labels[prompt_index - 1]
+    nonempty_lines = [line.strip() for line in content.splitlines() if line.strip()]
+    footer = nonempty_lines[-len(labels):]
+    if len(footer) != len(labels) or any(
+        not line.startswith(f"{label}:") for line, label in zip(footer, labels, strict=True)
+    ):
+        raise RuntimeError(
+            f"semantic validation requires terminal result footer {labels}: got {footer}"
+        )
+    return {"valid": True, "labels": list(labels)}
+
+
+def validate_prime_rationale(content: str) -> dict[str, Any]:
+    nonempty_lines = [line.strip() for line in content.splitlines() if line.strip()]
+    rationale_lines = nonempty_lines[:-2]
+    if not rationale_lines:
+        raise RuntimeError("semantic validation requires a prime rationale before the result footer")
+    if any(re.match(r"^(?:[-*]|\d+[.)])\s+", line) for line in rationale_lines):
+        raise RuntimeError("semantic validation forbids bullet or numbered prime-candidate enumeration")
+    rationale = " ".join(rationale_lines)
+    sentence_count = len(re.findall(r"[.!?](?:[\"')\]]*)?(?:\s|$)", rationale))
+    word_count = len(re.findall(r"\b[\w'-]+\b", rationale))
+    if not 1 <= sentence_count <= 2:
+        raise RuntimeError(
+            f"semantic validation requires one or two prime rationale sentences: {sentence_count}"
+        )
+    if word_count > 80:
+        raise RuntimeError(
+            f"semantic validation prime rationale exceeds the 80-word ceiling: {word_count}"
+        )
+    return {"valid": True, "sentence_count": sentence_count, "word_count": word_count}
+
+
 def validate_prompt_semantics(content: str, prompt_index: int) -> dict[str, Any]:
     validators = (validate_prime_semantics, validate_flatten_semantics, validate_normalization_semantics)
     if isinstance(prompt_index, bool) or not 1 <= prompt_index <= len(validators):
         raise RuntimeError(f"semantic validation received invalid prompt index: {prompt_index}")
-    return validators[prompt_index - 1](content)
+    result = validators[prompt_index - 1](content)
+    result["terminal_footer"] = validate_terminal_result_footer(content, prompt_index)
+    if prompt_index == 1:
+        result["rationale"] = validate_prime_rationale(content)
+    return result
 
 
 def iqk_engagement_evidence(log_path: Path, lane: Lane) -> dict[str, Any]:
@@ -1481,7 +1532,12 @@ def validate_warmup_response(response: dict[str, Any]) -> dict[str, Any]:
 def response_row(response: dict[str, Any], arm: Arm, prompt_index: int) -> dict[str, Any]:
     timings = response.get("timings") or {}
     choices = response.get("choices") or []
-    message = choices[0].get("message") or {} if choices and isinstance(choices[0], dict) else {}
+    if len(choices) != 1 or not isinstance(choices[0], dict):
+        raise RuntimeError("response requires exactly one structured choice")
+    finish_reason = choices[0].get("finish_reason")
+    if finish_reason != "stop":
+        raise RuntimeError(f"response did not finish cleanly: finish_reason={finish_reason!r}")
+    message = choices[0].get("message") or {}
     message = message if isinstance(message, dict) else {}
     reasoning_content = message.get("reasoning_content")
     if reasoning_content is not None and str(reasoning_content).strip():
@@ -1492,6 +1548,7 @@ def response_row(response: dict[str, Any], arm: Arm, prompt_index: int) -> dict[
         "completion_tokens": positive_int(timings.get("predicted_n"), "timings.predicted_n"),
         "prompt_ms": metric_ms(timings, "prompt_ms"), "decode_ms": metric_ms(timings, "predicted_ms"),
         "content": content, "content_sha256": hashlib.sha256(content.encode()).hexdigest(),
+        "finish_reason": finish_reason,
     }
     row["semantic_validation"] = validate_prompt_semantics(content, prompt_index)
     validity = anti_garbage_validity(content)
@@ -1789,7 +1846,7 @@ def validate_schedule_contract(cells: list[dict[str, Any]]) -> None:
 
 
 def build_plan() -> dict[str, Any]:
-    return {"schema": "epyc.laguna_cpu_dflash_observation.plan.v4", "created_at": utc_now(), "recipe": {"context": CONTEXT, "max_tokens": MAX_TOKENS, "min_completion_tokens": MIN_COMPLETION_TOKENS, "seed": SEED, "threads": THREADS, "cpuset": CPUSET, "ggml_iqk": "1", "mmap": False, "warmup_policy": WARMUP_POLICY, "host_requirements": {"scaling_governor": "performance_on_every_online_cpu", "thp_enabled_active": "always", "thp_defrag_active": "always", "numa_balancing": "0", "request_external_cpu_accounting": "record_only_signed_delta_from_mixed_proc_counter_sources", "request_external_cpu_use": "non_gating_telemetry_only", "request_swap_io_page_ceiling": MAX_SWAP_IO_PAGES}, "prompt_pack": list(PROMPTS), "semantic_tasks": list(SEMANTIC_TASKS), "prompt_count": len(PROMPTS)}, "observation_policy": OBSERVATION_POLICY, "schedule_contract": "rep_outer_lane_counterbalanced_arm_paired_and_globally_counterbalanced", "cells": balanced_schedule()}
+    return {"schema": "epyc.laguna_cpu_dflash_observation.plan.v5", "created_at": utc_now(), "recipe": {"context": CONTEXT, "max_tokens": MAX_TOKENS, "min_completion_tokens": MIN_COMPLETION_TOKENS, "seed": SEED, "threads": THREADS, "cpuset": CPUSET, "ggml_iqk": "1", "mmap": False, "warmup_policy": WARMUP_POLICY, "prompt_protocol": PROMPT_PROTOCOL, "host_requirements": {"scaling_governor": "performance_on_every_online_cpu", "thp_enabled_active": "always", "thp_defrag_active": "always", "numa_balancing": "0", "request_external_cpu_accounting": "record_only_signed_delta_from_mixed_proc_counter_sources", "request_external_cpu_use": "non_gating_telemetry_only", "request_swap_io_page_ceiling": MAX_SWAP_IO_PAGES}, "prompt_pack": list(PROMPTS), "semantic_tasks": list(SEMANTIC_TASKS), "prompt_count": len(PROMPTS)}, "observation_policy": OBSERVATION_POLICY, "schedule_contract": "rep_outer_lane_counterbalanced_arm_paired_and_globally_counterbalanced", "cells": balanced_schedule()}
 
 
 def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
@@ -1902,7 +1959,7 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
             "DFlash decode ratio",
         )
     equality_rate = sum(row["exact_equal"] for row in equality) / len(equality)
-    return {"schema": "epyc.laguna_cpu_dflash_observation.summary.v4", "created_at": utc_now(), "status": "ok", "arm_summaries": summaries, "output_stability_observation": {"non_gating": True, "contract": "distribution_lossless_not_byte_exact_greedy", "rows": equality, "exact_equality_rate": equality_rate}, "observation_policy": OBSERVATION_POLICY}
+    return {"schema": "epyc.laguna_cpu_dflash_observation.summary.v5", "created_at": utc_now(), "status": "ok", "arm_summaries": summaries, "output_stability_observation": {"non_gating": True, "contract": "distribution_lossless_not_byte_exact_greedy", "rows": equality, "exact_equality_rate": equality_rate}, "prompt_protocol": PROMPT_PROTOCOL, "observation_policy": OBSERVATION_POLICY}
 
 
 def execute(output_dir: Path) -> dict[str, Any]:
@@ -1982,13 +2039,13 @@ def main(argv: list[str] | None = None) -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     write_json(args.output_dir / "plan.json", build_plan())
     if not args.execute:
-        write_json(args.output_dir / "summary.json", {"schema": "epyc.laguna_cpu_dflash_observation.summary.v4", "status": "prepared_no_inference", "observation_policy": OBSERVATION_POLICY})
+        write_json(args.output_dir / "summary.json", {"schema": "epyc.laguna_cpu_dflash_observation.summary.v5", "status": "prepared_no_inference", "prompt_protocol": PROMPT_PROTOCOL, "observation_policy": OBSERVATION_POLICY})
         print(f"prepared: {args.output_dir}")
         return 0
     try:
         summary = execute(args.output_dir)
     except RunFailure as exc:
-        summary = {"schema": "epyc.laguna_cpu_dflash_observation.summary.v4", "status": "failed", "error": repr(exc), "run_dir": str(exc.run_dir) if exc.run_dir else None, "observation_policy": OBSERVATION_POLICY}
+        summary = {"schema": "epyc.laguna_cpu_dflash_observation.summary.v5", "status": "failed", "error": repr(exc), "run_dir": str(exc.run_dir) if exc.run_dir else None, "prompt_protocol": PROMPT_PROTOCOL, "observation_policy": OBSERVATION_POLICY}
     write_json(args.output_dir / "summary.json", summary)
     return 0 if summary["status"] == "ok" else 1
 
