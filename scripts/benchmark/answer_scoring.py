@@ -340,4 +340,17 @@ def score_response(response: str, expected: str, q: dict) -> bool:
         # \boxed{} + numeric → set/tuple → sympy symbolic equivalence.
         return score_math_symbolic(response, expected)
 
+    if scoring_method == "code_execution":
+        # Run the model's code against the suite's tests in an isolated subprocess.
+        # Lazy import so answer_scoring stays dependency-light for the text scorers.
+        from code_exec_scorer import score_functional, score_code
+        cfg = scoring_config
+        if cfg.get("test") and cfg.get("entry_point"):  # HumanEval/MBPP functional
+            return score_functional(response, cfg["test"], cfg["entry_point"],
+                                    cfg.get("prompt", ""), cfg.get("timeout", 10))
+        if cfg.get("test_cases"):  # stdin/stdout or assert list
+            return score_code(response, cfg["test_cases"], cfg.get("language", "python"),
+                              cfg.get("timeout", 10)).get("correct", False)
+        return False
+
     return response.strip() == expected.strip()

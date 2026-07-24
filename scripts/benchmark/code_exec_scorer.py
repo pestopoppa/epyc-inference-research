@@ -101,6 +101,32 @@ def score_code(
             "correct": n > 0 and passed == n, "detail": detail}
 
 
+def score_functional(
+    response: str,
+    test_code: str,
+    entry_point: str,
+    prompt: str = "",
+    timeout: int = 10,
+    cpu_s: int = 8,
+    mem_mb: int = 1024,
+) -> bool:
+    """HumanEval/MBPP-style: the model completes a function; `test_code` is a
+    `check(candidate)` body of asserts. Pass iff the assembled program runs clean.
+
+    Robust to instruct models that either reproduce the full function or emit only
+    the body: if the extracted code does not define `entry_point`, we prepend the
+    prompt (signature+docstring) so the completion attaches to it.
+    """
+    code = extract_code(response, "python")
+    if not code:
+        return False
+    if not re.search(rf"\bdef\s+{re.escape(entry_point)}\s*\(", code):
+        code = (prompt or "") + "\n" + code
+    program = f"{code}\n\n{test_code}\n\ncheck({entry_point})\n"
+    ok, _ = _run_once(program, "", timeout, cpu_s, mem_mb)
+    return ok
+
+
 if __name__ == "__main__":
     # smoke test on TRUSTED code (no model involved) — proves the harness scores
     # correct vs wrong solutions and enforces timeout.
@@ -119,5 +145,12 @@ if __name__ == "__main__":
     fn = "```python\ndef sq(x):\n    return x*x\n```"
     r_fn = score_code(fn, [{"assert": "assert sq(4)==16"}, {"assert": "assert sq(0)==0"}])
     assert r_fn["correct"], r_fn
+    # HumanEval/MBPP functional path: model completes a function, check() asserts
+    hprompt = "def add(a, b):\n    "
+    hgood = "```python\ndef add(a, b):\n    return a + b\n```"
+    hbad = "```python\ndef add(a, b):\n    return a - b\n```"
+    htest = "def check(candidate):\n    assert candidate(2, 3) == 5\n    assert candidate(0, 0) == 0"
+    assert score_functional(hgood, htest, "add", hprompt)
+    assert not score_functional(hbad, htest, "add", hprompt)
     print("PASS code_exec_scorer smoke:",
           {"good": r_good, "bad": r_bad["passed"], "loop": r_loop["detail"][0], "fn": r_fn["correct"]})
