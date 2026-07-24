@@ -148,6 +148,28 @@ def test_local_library_provenance_requires_exact_complete_filename_sha_set(
         runner.local_library_identities(tmp_path / "llama-server")
 
 
+def test_ldd_evidence_normalization_removes_only_aslr_addresses() -> None:
+    capture = {"argv": ["ldd", "/tmp/server"], "environment": {"PATH": "/usr/bin"}, "returncode": 0,
+               "stderr": "", "ok": True,
+               "stdout": "\tlinux-vdso.so.1 (0x7abcde1000)\nlibfoo.so.1 => /tmp/libfoo.so.1 (0x7abcde2000)\n/lib64/ld-linux-x86-64.so.2 (0x7abcde3000)"}
+    alternate = {**capture, "stdout": capture["stdout"].replace("7abcde", "7fedcb")}
+    normalized = runner.normalize_ldd_evidence(capture)
+    assert normalized == runner.normalize_ldd_evidence(alternate)
+    assert normalized["argv"] == capture["argv"]
+    assert normalized["environment"] == capture["environment"]
+    assert normalized["stdout"] == "linux-vdso.so.1\nlibfoo.so.1 => /tmp/libfoo.so.1\n/lib64/ld-linux-x86-64.so.2"
+    different_path = {**capture, "stdout": capture["stdout"].replace("/tmp/libfoo.so.1", "/tmp/other.so.1")}
+    different_soname = {**capture, "stdout": capture["stdout"].replace("libfoo.so.1 =>", "libbar.so.1 =>")}
+    assert normalized != runner.normalize_ldd_evidence(different_path)
+    assert normalized != runner.normalize_ldd_evidence(different_soname)
+
+
+@pytest.mark.parametrize("stdout", ["libfoo.so.1 => /tmp/libfoo.so.1", "libfoo.so.1 => not found (0x0)", "noise (0x123)"])
+def test_ldd_evidence_normalization_rejects_malformed_or_unrecognized_lines(stdout: str) -> None:
+    with pytest.raises(runner.GateFailure, match="malformed or unrecognized"):
+        runner.normalize_ldd_evidence({"stdout": stdout})
+
+
 def test_mapped_openmp_runtime_requires_pinned_runtime(tmp_path: Path) -> None:
     runtime = tmp_path / "llvm-20/lib/libomp.so.5"
     runtime.parent.mkdir(parents=True)

@@ -80,6 +80,9 @@ BENIGN_EOG_LOGIT_BIAS_INF_RE = re.compile(
 SHARD_RE = re.compile(r"^(?P<prefix>.+)-(?P<index>\d{5})-of-(?P<count>\d{5})\.gguf$")
 LOCAL_LIB_RE = re.compile(r"^\s*(?:libllama|libggml)\S*\s*=>\s*(\S+)", re.MULTILINE)
 OPENMP_LIB_RE = re.compile(r"^\s*(lib(?:gomp|omp)\S*)\s*=>\s*(\S+)", re.MULTILINE)
+LDD_LINE_RE = re.compile(
+    r"^\s*(?P<binding>(?:\S+\s+=>\s+\S+|linux-vdso\.so\.1|/\S+))\s+\(0x[0-9a-f]+\)$"
+)
 VERSION_BUILD_COMMIT_RE = re.compile(r"^version:\s+\d+\s+\(([0-9a-f]{7,40})\)\s*$", re.MULTILINE)
 MEMORY_KIB_KEYS = ("MemTotal", "MemFree", "MemAvailable", "Buffers", "Cached")
 THP_MEMINFO_KEYS = (
@@ -210,9 +213,26 @@ def resolve_version_build_commit(version: dict[str, Any]) -> dict[str, str]:
     return {"abbreviated": abbreviated, "resolved": resolved}
 
 
+def normalize_ldd_evidence(ldd: dict[str, Any]) -> dict[str, Any]:
+    """Remove only ASLR addresses after strictly validating every ldd binding line."""
+    stdout = ldd.get("stdout")
+    if not isinstance(stdout, str) or not stdout:
+        raise GateFailure("ldd evidence lacks nonempty stdout")
+    bindings: list[str] = []
+    for line in stdout.splitlines():
+        match = LDD_LINE_RE.fullmatch(line)
+        if match is None:
+            raise GateFailure(f"ldd contains malformed or unrecognized binding line: {line!r}")
+        bindings.append(match.group("binding"))
+    if not bindings:
+        raise GateFailure("ldd evidence lacks binding lines")
+    return {**ldd, "stdout": "\n".join(bindings)}
+
+
 def local_library_identities(binary: Path) -> dict[str, Any]:
     ldd = run_capture(["ldd", str(binary)], env=child_env(0))
     require_ok(ldd, "ldd candidate server")
+    ldd = normalize_ldd_evidence(ldd)
     targets: list[Path] = []
     for target_text in LOCAL_LIB_RE.findall(str(ldd["stdout"])):
         target = Path(target_text)
