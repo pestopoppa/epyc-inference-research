@@ -46,7 +46,6 @@ from __future__ import annotations
 
 import os
 import re
-import shlex
 import subprocess
 import sys
 from typing import Optional
@@ -118,7 +117,8 @@ LLVM20_LIBDIR: str = "/usr/lib/llvm-20/lib"
 
 
 def build_canonical_env(extra_vars: Optional[dict] = None,
-                        use_v4_gate_extras: bool = False) -> dict[str, str]:
+                        use_v4_gate_extras: bool = False,
+                        library_path: Optional[str] = None) -> dict[str, str]:
     """Build a subprocess environment with the canonical OMP stack + libomp override.
 
     Starts from os.environ.copy(), prepends LLVM20_LIBDIR to LD_LIBRARY_PATH (if
@@ -133,14 +133,26 @@ def build_canonical_env(extra_vars: Optional[dict] = None,
             (KMP_BLOCKTIME=10, GGML_NUMA_WEIGHTS=1). Required for the V4
             §Throughput gate. NOT applied for non-V4 callers — orchestrator
             stack_env.py deliberately excludes these for the worker role.
+        library_path: explicit build-library directory to place first in
+            LD_LIBRARY_PATH. Used by candidate A/B arms so their shared
+            libraries cannot be shadowed by the production build directory.
     """
     env = os.environ.copy()
 
     existing_ld = env.get("LD_LIBRARY_PATH", "")
-    if LLVM20_LIBDIR not in existing_ld.split(":"):
-        env["LD_LIBRARY_PATH"] = (
-            f"{LLVM20_LIBDIR}:{existing_ld}" if existing_ld else LLVM20_LIBDIR
-        )
+    ld_entries = [entry for entry in existing_ld.split(":") if entry]
+    if library_path is not None:
+        resolved_library_path = os.path.realpath(library_path)
+        ld_entries = [
+            entry
+            for entry in ld_entries
+            if os.path.realpath(entry) != resolved_library_path
+        ]
+        ld_entries.insert(0, resolved_library_path)
+    if LLVM20_LIBDIR not in ld_entries:
+        insert_at = 1 if library_path is not None else 0
+        ld_entries.insert(insert_at, LLVM20_LIBDIR)
+    env["LD_LIBRARY_PATH"] = ":".join(ld_entries)
 
     for k, v in CANONICAL_OMP_ENV.items():
         env[k] = v
@@ -320,7 +332,33 @@ EXPECTED_LIBS_V4_FORK: list[str] = [
 ]
 
 
-def assert_binary_resolves_correctly(binary: str, expected_libs: list[str]) -> None:
+def _ldd_output(binary: str, env: Optional[dict[str, str]] = None) -> str:
+    """Return ldd output for binary, raising a fail-closed recipe violation."""
+    if not os.path.isfile(binary):
+        raise CanonicalRecipeViolation(f"binary not found: {binary}")
+    if not os.access(binary, os.X_OK):
+        raise CanonicalRecipeViolation(f"binary is not executable: {binary}")
+
+    try:
+        return subprocess.check_output(
+            ["ldd", binary],
+            text=True,
+            stderr=subprocess.STDOUT,
+            env=env,
+        )
+    except (OSError, subprocess.CalledProcessError) as e:
+        output = getattr(e, "output", "")
+        returncode = getattr(e, "returncode", "unavailable")
+        raise CanonicalRecipeViolation(
+            f"ldd {binary} failed (exit {returncode}):\n{output}"
+        ) from e
+
+
+def assert_binary_resolves_correctly(
+    binary: str,
+    expected_libs: list[str],
+    env: Optional[dict[str, str]] = None,
+) -> None:
     """Run `ldd binary` and check that libllama/libggml resolve to expected paths.
 
     Catches the RUNPATH-vs-LD_LIBRARY_PATH drift that broke ik_llama llama-bench
@@ -332,17 +370,7 @@ def assert_binary_resolves_correctly(binary: str, expected_libs: list[str]) -> N
 
     Raises CanonicalRecipeViolation with the actual resolution if drift is found.
     """
-    if not os.path.isfile(binary):
-        raise CanonicalRecipeViolation(f"binary not found: {binary}")
-
-    try:
-        out = subprocess.check_output(
-            ["ldd", binary], text=True, stderr=subprocess.STDOUT
-        )
-    except subprocess.CalledProcessError as e:
-        raise CanonicalRecipeViolation(
-            f"ldd {binary} failed (exit {e.returncode}):\n{e.output}"
-        )
+    out = _ldd_output(binary, env=env)
 
     for expected in expected_libs:
         lib_name = os.path.basename(expected)
@@ -402,6 +430,123 @@ def assert_binary_resolves_correctly(binary: str, expected_libs: list[str]) -> N
                 f"      -DCMAKE_SHARED_LINKER_FLAGS='-Wl,--disable-new-dtags'\n"
                 f"  cmake --build . -j 32"
             )
+
+
+def _path_is_within(path: str, root: str) -> bool:
+    """Return whether path resolves to root or one of its descendants."""
+    resolved_path = os.path.realpath(path)
+    resolved_root = os.path.realpath(root)
+    try:
+        return os.path.commonpath([resolved_path, resolved_root]) == resolved_root
+    except ValueError:
+        return False
+
+
+def assert_explicit_bench_identity(
+    binary: str,
+    source_root: str,
+    library_path: str,
+    env: dict[str, str],
+) -> None:
+    """Validate an explicit candidate arm's source, binary, and shared libraries.
+
+    All three paths are required for explicit A/B arms. The binary and library
+    directory must belong to the selected Git worktree, that directory must be
+    first in LD_LIBRARY_PATH, and every dynamic llama.cpp library must resolve
+    from it. This prevents an experimental binary from silently loading
+    production libraries through an ambient loader path or embedded RUNPATH.
+    """
+    resolved_binary = os.path.realpath(binary)
+    resolved_source_root = os.path.realpath(source_root)
+    resolved_library_path = os.path.realpath(library_path)
+
+    if not os.path.isfile(resolved_binary):
+        raise CanonicalRecipeViolation(f"binary not found: {resolved_binary}")
+    if not os.access(resolved_binary, os.X_OK):
+        raise CanonicalRecipeViolation(f"binary is not executable: {resolved_binary}")
+    if not os.path.isdir(resolved_source_root):
+        raise CanonicalRecipeViolation(
+            f"source root is not a directory: {resolved_source_root}"
+        )
+    if not os.path.isdir(resolved_library_path):
+        raise CanonicalRecipeViolation(
+            f"library path is not a directory: {resolved_library_path}"
+        )
+    if not _path_is_within(resolved_binary, resolved_source_root):
+        raise CanonicalRecipeViolation(
+            f"binary is outside --source-root:\n"
+            f"  binary:      {resolved_binary}\n"
+            f"  source root: {resolved_source_root}"
+        )
+    if not _path_is_within(resolved_library_path, resolved_source_root):
+        raise CanonicalRecipeViolation(
+            f"--library-path is outside --source-root:\n"
+            f"  library path: {resolved_library_path}\n"
+            f"  source root:  {resolved_source_root}"
+        )
+    if os.path.dirname(resolved_binary) != resolved_library_path:
+        raise CanonicalRecipeViolation(
+            f"--library-path must be the selected binary's directory:\n"
+            f"  binary directory: {os.path.dirname(resolved_binary)}\n"
+            f"  library path:     {resolved_library_path}"
+        )
+
+    try:
+        git_root = subprocess.check_output(
+            ["git", "-C", resolved_source_root, "rev-parse", "--show-toplevel"],
+            text=True,
+            stderr=subprocess.STDOUT,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError) as e:
+        output = getattr(e, "output", "")
+        raise CanonicalRecipeViolation(
+            f"--source-root is not a readable Git worktree: {resolved_source_root}\n"
+            f"{output}"
+        ) from e
+    if os.path.realpath(git_root) != resolved_source_root:
+        raise CanonicalRecipeViolation(
+            f"--source-root does not identify the worktree root:\n"
+            f"  supplied: {resolved_source_root}\n"
+            f"  git root: {os.path.realpath(git_root)}"
+        )
+
+    ld_entries = [
+        os.path.realpath(entry)
+        for entry in env.get("LD_LIBRARY_PATH", "").split(":")
+        if entry
+    ]
+    if not ld_entries or ld_entries[0] != resolved_library_path:
+        raise CanonicalRecipeViolation(
+            f"--library-path must be first in LD_LIBRARY_PATH:\n"
+            f"  expected first: {resolved_library_path}\n"
+            f"  actual:         {env.get('LD_LIBRARY_PATH', '')}"
+        )
+
+    out = _ldd_output(resolved_binary, env=env)
+    relevant_count = 0
+    dependency_pattern = re.compile(
+        r"^\s*((?:libllama|libggml)\S*\.so(?:\.[0-9.]+)?)\s*=>\s*(\S+)",
+        re.MULTILINE,
+    )
+    for match in dependency_pattern.finditer(out):
+        lib_name, actual = match.groups()
+        relevant_count += 1
+        if actual == "not":
+            raise CanonicalRecipeViolation(
+                f"{resolved_binary} has unresolved candidate dependency: {lib_name}"
+            )
+        if not _path_is_within(actual, resolved_library_path):
+            raise CanonicalRecipeViolation(
+                f"{resolved_binary} resolves {lib_name} outside --library-path:\n"
+                f"  expected under: {resolved_library_path}\n"
+                f"  actual:         {os.path.realpath(actual)}\n"
+                f"Refusing to run a mixed candidate/production benchmark arm."
+            )
+    if relevant_count == 0:
+        raise CanonicalRecipeViolation(
+            f"ldd found no libllama/libggml dependencies for {resolved_binary}; "
+            f"cannot verify candidate library identity"
+        )
 
 
 def discover_v4_fork_bench() -> tuple[str, list[str]]:
@@ -674,6 +819,10 @@ def build_canonical_bench_command(
     prefer_v6: bool = True,  # 2026-06-26 v6 cutover: select v6-iqk by default
     prefer_ik_llama: bool = False,
     use_v4_fork: bool = False,
+    binary: Optional[str] = None,
+    source_root: Optional[str] = None,
+    library_path: Optional[str] = None,
+    ggml_iqk: str = "1",
 ) -> tuple[str, list[str], dict[str, str]]:
     """Build (binary_path, cmd_list, env_dict) for the canonical llama-bench run.
 
@@ -699,6 +848,12 @@ def build_canonical_bench_command(
         use_v4_fork: select the DeepSeek-V4 fork binary (V4_FORK_BENCH). The
             V4 fork is the ONLY way to run V4 GGUFs; it doesn't support other
             archs. See handoff deepseek-v4-flash-cpu-port.md Strategy D.
+        binary: explicit llama-bench binary for a candidate A/B arm. Must be
+            supplied together with source_root and library_path.
+        source_root: Git worktree root owning an explicit binary.
+        library_path: directory containing the explicit binary's llama.cpp
+            shared libraries. It is placed first in LD_LIBRARY_PATH.
+        ggml_iqk: runtime iqk gate, either "0" or "1" (default "1").
 
     Returns:
         binary: absolute path to llama-bench
@@ -710,7 +865,41 @@ def build_canonical_bench_command(
     if not os.path.isfile(model):
         raise FileNotFoundError(f"Model file not found: {model}")
 
-    if use_v4_fork:
+    ggml_iqk = str(ggml_iqk)
+    if ggml_iqk not in {"0", "1"}:
+        raise CanonicalRecipeViolation(
+            f"ggml_iqk must be '0' or '1', got {ggml_iqk!r}"
+        )
+
+    explicit_values = (binary, source_root, library_path)
+    if any(value is not None for value in explicit_values) and not all(
+        value is not None for value in explicit_values
+    ):
+        raise CanonicalRecipeViolation(
+            "--binary, --source-root, and --library-path must be supplied together"
+        )
+    explicit_arm = all(value is not None for value in explicit_values)
+    if explicit_arm and (use_v4_fork or prefer_ik_llama):
+        raise CanonicalRecipeViolation(
+            "explicit binary identity options cannot be combined with "
+            "--v4-fork or --ik-llama"
+        )
+
+    env = build_canonical_env(
+        extra_vars={"GGML_IQK": ggml_iqk},
+        use_v4_gate_extras=use_v4_fork,
+        library_path=library_path,
+    )
+
+    if explicit_arm:
+        assert binary is not None
+        assert source_root is not None
+        assert library_path is not None
+        binary = os.path.realpath(binary)
+        source_root = os.path.realpath(source_root)
+        library_path = os.path.realpath(library_path)
+        assert_explicit_bench_identity(binary, source_root, library_path, env)
+    elif use_v4_fork:
         binary, _expected_libs = discover_v4_fork_bench()
     else:
         # 2026-06-26 v6 cutover: default selection is the v6-iqk candidate.
@@ -726,10 +915,6 @@ def build_canonical_bench_command(
         bench_args = bench_args + list(extra_flags)
 
     cmd = apply_canonical_prefix([binary, *bench_args])
-    # V4 fork bench is the only path that gets V4 gate extras — those
-    # additions match §Throughput gate in the V4 port handoff and are NOT
-    # part of the canonical baseline for non-V4 benches.
-    env = build_canonical_env(use_v4_gate_extras=use_v4_fork)
 
     return binary, cmd, env
 
@@ -762,6 +947,10 @@ def _emit_bench_command_json(args) -> int:
             prefer_v6=not prefer_ik,
             prefer_ik_llama=prefer_ik,
             use_v4_fork=args.v4_fork,
+            binary=args.binary,
+            source_root=args.source_root,
+            library_path=args.library_path,
+            ggml_iqk=args.ggml_iqk,
         )
     except (FileNotFoundError, CanonicalRecipeViolation) as e:
         print(f"ERROR: {e}", file=sys.stderr)
@@ -779,12 +968,21 @@ def _emit_bench_command_json(args) -> int:
     # match the orchestrator's non-V4 launch env (stack_env.py).
     emitted_env = {
         "LD_LIBRARY_PATH": env["LD_LIBRARY_PATH"],
-        **CANONICAL_OMP_ENV,
+        **{key: env[key] for key in CANONICAL_OMP_ENV},
     }
     if args.v4_fork:
         emitted_env.update(V4_GATE_EXTRA_ENV)
 
-    out = {"binary": binary, "cmd": cmd, "env": emitted_env}
+    out = {
+        "binary": binary,
+        "cmd": cmd,
+        "env": emitted_env,
+        "source_root": os.path.realpath(args.source_root) if args.source_root else None,
+        "library_path": (
+            os.path.realpath(args.library_path) if args.library_path else None
+        ),
+        "ggml_iqk": args.ggml_iqk,
+    }
     print(json.dumps(out, indent=2))
     return 0
 
@@ -870,6 +1068,25 @@ def _main() -> int:
     pe.add_argument("--n-prompt", type=int, default=0)
     pe.add_argument("--n-gen", type=int, default=512)
     pe.add_argument("--reps", type=int, default=2)
+    pe.add_argument(
+        "--binary",
+        help="Explicit llama-bench binary. Requires --source-root and --library-path.",
+    )
+    pe.add_argument(
+        "--source-root",
+        help="Git worktree root owning --binary. Requires all explicit identity options.",
+    )
+    pe.add_argument(
+        "--library-path",
+        help="Directory containing candidate llama.cpp libraries; pinned first in "
+        "LD_LIBRARY_PATH. Requires all explicit identity options.",
+    )
+    pe.add_argument(
+        "--ggml-iqk",
+        choices=("0", "1"),
+        default="1",
+        help="Set the GGML_IQK runtime gate (default: 1).",
+    )
     # NOTE: --extra is handled by the pre-argparse split-on-`--` above.
     # Any args after `--` on the command line are captured into extra_args and
     # attached to args.extra below. Do not declare --extra as an argparse arg —

@@ -17,7 +17,9 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 # Allow running directly OR via pytest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -139,6 +141,26 @@ class TestCanonicalEnv(unittest.TestCase):
             self.assertEqual(env.get(k), v,
                              f"V4 opt-in build_canonical_env() must set {k}={v}")
 
+    def test_explicit_library_path_is_first_and_iqk_can_be_disabled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate_lib = os.path.join(tmp, "build", "bin")
+            os.makedirs(candidate_lib)
+            with mock.patch.dict(
+                os.environ,
+                {"LD_LIBRARY_PATH": "/mnt/raid0/llm/llama.cpp/build/bin:/opt/rocm/lib"},
+            ):
+                env = r.build_canonical_env(
+                    extra_vars={"GGML_IQK": "0"},
+                    library_path=candidate_lib,
+                )
+
+        self.assertEqual(
+            env["LD_LIBRARY_PATH"].split(":")[0],
+            os.path.realpath(candidate_lib),
+        )
+        self.assertIn(r.LLVM20_LIBDIR, env["LD_LIBRARY_PATH"].split(":"))
+        self.assertEqual(env["GGML_IQK"], "0")
+
 
 class TestBinaryResolution(unittest.TestCase):
     """Tests for assert_binary_resolves_correctly — catches drift-trap 5
@@ -182,7 +204,6 @@ class TestBinaryResolution(unittest.TestCase):
             # Simplest: write a shell script that mimics ldd's output for a
             # binary we point at, by intercepting ldd via PATH.
             fake_binary = os.path.join(tmp, "fake-bench")
-            fake_ldd_out = os.path.join(tmp, "fake-bench")
             # Create an actual executable file so the os.path.isfile check passes.
             with open(fake_binary, "w") as f:
                 f.write("#!/bin/sh\nexit 0\n")
@@ -211,15 +232,78 @@ class TestBinaryResolution(unittest.TestCase):
                 os.environ["PATH"] = old_path
 
 
+class TestExplicitBinaryIdentity(unittest.TestCase):
+    def _make_candidate(self, tmp: str) -> tuple[str, str, str]:
+        source_root = os.path.join(tmp, "llama.cpp-experimental")
+        library_path = os.path.join(source_root, "build", "bin")
+        binary = os.path.join(library_path, "llama-bench")
+        os.makedirs(library_path)
+        with open(binary, "w") as f:
+            f.write("#!/bin/sh\nexit 0\n")
+        os.chmod(binary, 0o755)
+        return source_root, library_path, binary
+
+    def test_candidate_identity_accepts_libraries_from_selected_build(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source_root, library_path, binary = self._make_candidate(tmp)
+            env = {"LD_LIBRARY_PATH": f"{library_path}:{r.LLVM20_LIBDIR}"}
+            ldd_output = "\n".join(
+                [
+                    f"libllama-bench-impl.so => {library_path}/libllama-bench-impl.so",
+                    f"libllama.so.0 => {library_path}/libllama.so.0",
+                    f"libggml-cpu.so.0 => {library_path}/libggml-cpu.so.0",
+                ]
+            )
+
+            def fake_check_output(argv, **kwargs):
+                if argv[0] == "git":
+                    return f"{source_root}\n"
+                if argv[0] == "ldd":
+                    self.assertEqual(kwargs["env"], env)
+                    return ldd_output
+                self.fail(f"unexpected command: {argv}")
+
+            with mock.patch.object(
+                r.subprocess, "check_output", side_effect=fake_check_output
+            ):
+                r.assert_explicit_bench_identity(
+                    binary, source_root, library_path, env
+                )
+
+    def test_candidate_identity_rejects_production_library_resolution(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source_root, library_path, binary = self._make_candidate(tmp)
+            env = {"LD_LIBRARY_PATH": f"{library_path}:{r.LLVM20_LIBDIR}"}
+            production_lib = "/mnt/raid0/llm/llama.cpp/build/bin/libggml-cpu.so.0"
+
+            def fake_check_output(argv, **kwargs):
+                if argv[0] == "git":
+                    return f"{source_root}\n"
+                if argv[0] == "ldd":
+                    return f"libggml-cpu.so.0 => {production_lib} (0x1234)\n"
+                self.fail(f"unexpected command: {argv}")
+
+            with mock.patch.object(
+                r.subprocess, "check_output", side_effect=fake_check_output
+            ):
+                with self.assertRaises(r.CanonicalRecipeViolation) as ctx:
+                    r.assert_explicit_bench_identity(
+                        binary, source_root, library_path, env
+                    )
+
+        self.assertIn("outside --library-path", str(ctx.exception))
+        self.assertIn("mixed candidate/production", str(ctx.exception))
+
+
 class TestBinaryDiscovery(unittest.TestCase):
     """Tests for discover_canonical_bench_binary + discover_v4_fork_bench."""
 
-    def test_discovery_returns_ik_llama_by_default(self):
-        if not os.path.isfile(r.IK_LLAMA_BENCH):
-            self.skipTest("ik_llama bench binary not built")
+    def test_discovery_returns_production_consolidated_by_default(self):
+        if not os.path.isfile(r.V6_IQK_BENCH):
+            self.skipTest("production consolidated bench binary not built")
         binary, libs = r.discover_canonical_bench_binary()
-        self.assertEqual(binary, r.IK_LLAMA_BENCH)
-        self.assertEqual(libs, r.EXPECTED_LIBS_IK_LLAMA)
+        self.assertEqual(binary, r.V6_IQK_BENCH)
+        self.assertEqual(libs, r.EXPECTED_LIBS_V6_IQK)
 
     def test_v4_fork_discovery_when_built(self):
         if not os.path.isfile(r.V4_FORK_BENCH):
@@ -311,6 +395,87 @@ class TestBuildCanonicalBenchCommand(unittest.TestCase):
         r.assert_canonical_env(env)
         # cmd must include the binary as the executable
         self.assertIn(binary, cmd)
+
+    def test_explicit_arm_requires_complete_identity_tuple(self):
+        with tempfile.NamedTemporaryFile(suffix=".gguf") as model:
+            with self.assertRaises(r.CanonicalRecipeViolation) as ctx:
+                r.build_canonical_bench_command(
+                    model=model.name,
+                    binary="/tmp/build/bin/llama-bench",
+                )
+        self.assertIn("must be supplied together", str(ctx.exception))
+
+    def test_explicit_arm_threads_identity_and_iqk_zero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source_root = os.path.join(tmp, "llama.cpp-experimental")
+            library_path = os.path.join(source_root, "build", "bin")
+            binary_path = os.path.join(library_path, "llama-bench")
+            model_path = os.path.join(tmp, "model.gguf")
+            os.makedirs(library_path)
+            for path in (binary_path, model_path):
+                with open(path, "w") as f:
+                    f.write("")
+            os.chmod(binary_path, 0o755)
+
+            with mock.patch.object(
+                r, "assert_explicit_bench_identity"
+            ) as identity_check:
+                binary, cmd, env = r.build_canonical_bench_command(
+                    model=model_path,
+                    binary=binary_path,
+                    source_root=source_root,
+                    library_path=library_path,
+                    ggml_iqk="0",
+                    n_gen=8,
+                    reps=1,
+                )
+
+        self.assertEqual(binary, os.path.realpath(binary_path))
+        self.assertIn(binary, cmd)
+        self.assertEqual(env["GGML_IQK"], "0")
+        self.assertEqual(
+            env["LD_LIBRARY_PATH"].split(":")[0],
+            os.path.realpath(library_path),
+        )
+        identity_check.assert_called_once_with(
+            os.path.realpath(binary_path),
+            os.path.realpath(source_root),
+            os.path.realpath(library_path),
+            env,
+        )
+
+
+class TestEmitBenchCommandCli(unittest.TestCase):
+    def test_explicit_options_are_parsed_and_forwarded(self):
+        captured = {}
+
+        def fake_emit(args):
+            captured.update(vars(args))
+            return 0
+
+        argv = [
+            "canonical_recipe.py",
+            "emit-bench-command",
+            "--model",
+            "/tmp/model.gguf",
+            "--binary",
+            "/candidate/build/bin/llama-bench",
+            "--source-root",
+            "/candidate",
+            "--library-path",
+            "/candidate/build/bin",
+            "--ggml-iqk",
+            "0",
+        ]
+        with mock.patch.object(sys, "argv", argv), mock.patch.object(
+            r, "_emit_bench_command_json", side_effect=fake_emit
+        ):
+            self.assertEqual(r._main(), 0)
+
+        self.assertEqual(captured["binary"], "/candidate/build/bin/llama-bench")
+        self.assertEqual(captured["source_root"], "/candidate")
+        self.assertEqual(captured["library_path"], "/candidate/build/bin")
+        self.assertEqual(captured["ggml_iqk"], "0")
 
 
 if __name__ == "__main__":

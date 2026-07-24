@@ -13,7 +13,8 @@
 #
 # Usage:
 #   bench_canonical.sh -m MODEL [-n N_GEN] [-p N_PROMPT] [-r REPS] [--perf]
-#                       [--no-ik-llama] [-- EXTRA_BENCH_FLAGS...]
+#                       [--binary PATH --source-root DIR --library-path DIR]
+#                       [--ggml-iqk {0,1}] [-- EXTRA_BENCH_FLAGS...]
 #
 # Examples:
 #   # gemma4-26B-A4B Q4_K_M tg512 r=2, no perf wrap
@@ -66,6 +67,10 @@ USE_PERF=0
 NO_IK_LLAMA=0
 V4_FORK=0
 DRY_RUN=0
+BINARY_OVERRIDE=""
+SOURCE_ROOT=""
+LIBRARY_PATH=""
+GGML_IQK=1
 EXTRA_ARGS=()
 
 usage() {
@@ -79,6 +84,12 @@ Usage: $(basename "$0") -m MODEL [OPTIONS] [-- EXTRA_BENCH_FLAGS...]
   --perf              Wrap in sudo perf stat with canonical event set
   --no-ik-llama       Prefer v5_clean over ik_llama (default: prefer ik_llama)
   --v4-fork           Use the DeepSeek-V4 fork binary (only for V4 GGUFs)
+  --binary PATH        Explicit llama-bench binary for a candidate A/B arm
+  --source-root DIR    Git worktree root owning --binary
+  --library-path DIR   Candidate llama.cpp library directory; pinned first
+                      in LD_LIBRARY_PATH
+                      (all three explicit identity options are required together)
+  --ggml-iqk {0,1}    Set the GGML_IQK runtime gate (default: 1)
   --dry-run           Validate + print the canonical command without executing
                       llama-bench. Use this to verify the wiring without firing
                       inference (respects feedback_no_concurrent_inference).
@@ -100,6 +111,10 @@ while [[ $# -gt 0 ]]; do
         --perf) USE_PERF=1; shift ;;
         --no-ik-llama) NO_IK_LLAMA=1; shift ;;
         --v4-fork) V4_FORK=1; shift ;;
+        --binary) BINARY_OVERRIDE="$2"; shift 2 ;;
+        --source-root) SOURCE_ROOT="$2"; shift 2 ;;
+        --library-path) LIBRARY_PATH="$2"; shift 2 ;;
+        --ggml-iqk) GGML_IQK="$2"; shift 2 ;;
         --dry-run) DRY_RUN=1; shift ;;
         -h|--help) usage; exit 0 ;;
         --) shift; EXTRA_ARGS=("$@"); break ;;
@@ -123,6 +138,10 @@ PY_ARGS=(emit-bench-command --model "$MODEL" --n-prompt "$N_PROMPT" --n-gen "$N_
 [[ "$NO_IK_LLAMA" -eq 1 ]] && PY_ARGS+=(--no-ik-llama)
 [[ "$V4_FORK" -eq 1 ]] && PY_ARGS+=(--v4-fork)
 [[ "$USE_PERF" -eq 1 ]] && PY_ARGS+=(--with-perf)
+[[ -n "$BINARY_OVERRIDE" ]] && PY_ARGS+=(--binary "$BINARY_OVERRIDE")
+[[ -n "$SOURCE_ROOT" ]] && PY_ARGS+=(--source-root "$SOURCE_ROOT")
+[[ -n "$LIBRARY_PATH" ]] && PY_ARGS+=(--library-path "$LIBRARY_PATH")
+PY_ARGS+=(--ggml-iqk "$GGML_IQK")
 if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
     # canonical_recipe.py splits sys.argv on the bare `--` before argparse;
     # no `--extra` flag needed (and would be rejected as unknown).
