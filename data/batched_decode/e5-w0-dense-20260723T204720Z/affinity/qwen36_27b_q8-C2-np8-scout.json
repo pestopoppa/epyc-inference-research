@@ -1,0 +1,98 @@
+{
+  "generated_at": "2026-07-23T21:54:52",
+  "mode": "cell",
+  "schema_version": "e5-cell-manifest/1",
+  "manifest_path": "data/batched_decode/e5_manifests_w0/qwen36_27b_q8/qwen36_27b_q8-C2-np8-scout.json",
+  "cell_id": "qwen36_27b_q8-C2-np8-scout",
+  "live_affinity_verified": true,
+  "live_memory_placement_verified": true,
+  "memory_locality_required": false,
+  "memory_locality_threshold": 0.85,
+  "memory_required_entries": 0,
+  "memory_mismatches": 0,
+  "foreign_llama_overlaps": [],
+  "foreign_allowed_overlaps": [],
+  "foreign_allow_pattern": "build-hip",
+  "instances": [
+    {
+      "source": "cell-manifest",
+      "cell_index": 0,
+      "port": 19180,
+      "pid": "3695099",
+      "pid_on_port": "3695099",
+      "expected_cpus": "48-71,144-167",
+      "observed_thread_union": "48-71,144-167",
+      "expected_numa_nodes": "N2",
+      "n_expected": 48,
+      "n_observed": 48,
+      "match": true,
+      "memory_placement": {
+        "checked": true,
+        "required": false,
+        "match": null,
+        "threshold": 0.85,
+        "no_mmap": false,
+        "signal_kind": "mmap_gguf_pages",
+        "expected_nodes": "N2",
+        "pages_by_node": {
+          "N0": 1689772,
+          "N1": 1689758,
+          "N2": 1689778,
+          "N3": 2019582
+        },
+        "total_pages": 7088890,
+        "expected_node_pages": 1689778,
+        "local_fraction": 0.23836989994202196,
+        "model_files": [
+          "/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf"
+        ],
+        "largest_anon_pages_by_node": {
+          "N2": 1674270
+        },
+        "largest_anon_total_pages": 1674270,
+        "note": "shared mmap placement observed"
+      },
+      "note": "ok"
+    },
+    {
+      "source": "cell-manifest",
+      "cell_index": 1,
+      "port": 19181,
+      "pid": "3695420",
+      "pid_on_port": "3695420",
+      "expected_cpus": "72-95,168-191",
+      "observed_thread_union": "72-95,168-191",
+      "expected_numa_nodes": "N3",
+      "n_expected": 48,
+      "n_observed": 48,
+      "match": true,
+      "memory_placement": {
+        "checked": true,
+        "required": false,
+        "match": null,
+        "threshold": 0.85,
+        "no_mmap": false,
+        "signal_kind": "mmap_gguf_pages",
+        "expected_nodes": "N3",
+        "pages_by_node": {
+          "N0": 1689772,
+          "N1": 1689758,
+          "N2": 1689778,
+          "N3": 2019582
+        },
+        "total_pages": 7088890,
+        "expected_node_pages": 2019582,
+        "local_fraction": 0.284893967884958,
+        "model_files": [
+          "/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf"
+        ],
+        "largest_anon_pages_by_node": {
+          "N3": 1671429
+        },
+        "largest_anon_total_pages": 1671429,
+        "note": "shared mmap placement observed"
+      },
+      "note": "ok"
+    }
+  ]
+}

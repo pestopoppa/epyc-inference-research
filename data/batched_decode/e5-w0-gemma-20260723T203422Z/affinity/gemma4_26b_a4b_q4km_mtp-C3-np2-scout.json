@@ -1,0 +1,188 @@
+{
+  "generated_at": "2026-07-23T20:43:52",
+  "mode": "cell",
+  "schema_version": "e5-cell-manifest/1",
+  "manifest_path": "data/batched_decode/e5_manifests_w0/gemma4_26b_a4b_q4km_mtp/gemma4_26b_a4b_q4km_mtp-C3-np2-scout.json",
+  "cell_id": "gemma4_26b_a4b_q4km_mtp-C3-np2-scout",
+  "live_affinity_verified": true,
+  "live_memory_placement_verified": true,
+  "memory_locality_required": false,
+  "memory_locality_threshold": 0.85,
+  "memory_required_entries": 0,
+  "memory_mismatches": 0,
+  "foreign_llama_overlaps": [],
+  "foreign_allowed_overlaps": [
+    {
+      "pid": "3621445",
+      "args": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf --host 127.0.0.1 --port 18072 --metrics --slots --jinja --reasoning off --device ROCm0 -ngl all -fa on -np 2 -c 65536 -t 8 -tb 8 -b 2048 -ub 2048 -ctk f16 -ctv f16 --spec-type draft-mtp --spec-draft-n-max 4",
+      "overlap_cpus": "0-191"
+    }
+  ],
+  "foreign_allow_pattern": "build-hip",
+  "instances": [
+    {
+      "source": "cell-manifest",
+      "cell_index": 0,
+      "port": 19380,
+      "pid": "3622730",
+      "pid_on_port": "3622730",
+      "expected_cpus": "0-23,96-119",
+      "observed_thread_union": "0-23,96-119",
+      "expected_numa_nodes": "N0",
+      "n_expected": 48,
+      "n_observed": 48,
+      "match": true,
+      "memory_placement": {
+        "checked": true,
+        "required": false,
+        "match": null,
+        "threshold": 0.85,
+        "no_mmap": false,
+        "signal_kind": "mmap_gguf_pages",
+        "expected_nodes": "N0",
+        "pages_by_node": {
+          "N0": 1051415,
+          "N1": 1051402,
+          "N2": 1051396,
+          "N3": 1051403
+        },
+        "total_pages": 4205616,
+        "expected_node_pages": 1051415,
+        "local_fraction": 0.2500026155502547,
+        "model_files": [
+          "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+          "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf"
+        ],
+        "largest_anon_pages_by_node": {
+          "N0": 104341
+        },
+        "largest_anon_total_pages": 104341,
+        "note": "shared mmap placement observed"
+      },
+      "note": "ok"
+    },
+    {
+      "source": "cell-manifest",
+      "cell_index": 1,
+      "port": 19381,
+      "pid": "3623026",
+      "pid_on_port": "3623026",
+      "expected_cpus": "24-47,120-143",
+      "observed_thread_union": "24-47,120-143",
+      "expected_numa_nodes": "N1",
+      "n_expected": 48,
+      "n_observed": 48,
+      "match": true,
+      "memory_placement": {
+        "checked": true,
+        "required": false,
+        "match": null,
+        "threshold": 0.85,
+        "no_mmap": false,
+        "signal_kind": "mmap_gguf_pages",
+        "expected_nodes": "N1",
+        "pages_by_node": {
+          "N0": 1051415,
+          "N1": 1051402,
+          "N2": 1051396,
+          "N3": 1051403
+        },
+        "total_pages": 4205616,
+        "expected_node_pages": 1051402,
+        "local_fraction": 0.24999952444540824,
+        "model_files": [
+          "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+          "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf"
+        ],
+        "largest_anon_pages_by_node": {
+          "N1": 104341
+        },
+        "largest_anon_total_pages": 104341,
+        "note": "shared mmap placement observed"
+      },
+      "note": "ok"
+    },
+    {
+      "source": "cell-manifest",
+      "cell_index": 2,
+      "port": 19382,
+      "pid": "3623336",
+      "pid_on_port": "3623336",
+      "expected_cpus": "48-71,144-167",
+      "observed_thread_union": "48-71,144-167",
+      "expected_numa_nodes": "N2",
+      "n_expected": 48,
+      "n_observed": 48,
+      "match": true,
+      "memory_placement": {
+        "checked": true,
+        "required": false,
+        "match": null,
+        "threshold": 0.85,
+        "no_mmap": false,
+        "signal_kind": "mmap_gguf_pages",
+        "expected_nodes": "N2",
+        "pages_by_node": {
+          "N0": 1051415,
+          "N1": 1051402,
+          "N2": 1051396,
+          "N3": 1051403
+        },
+        "total_pages": 4205616,
+        "expected_node_pages": 1051396,
+        "local_fraction": 0.24999809778163293,
+        "model_files": [
+          "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+          "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf"
+        ],
+        "largest_anon_pages_by_node": {
+          "N2": 104341
+        },
+        "largest_anon_total_pages": 104341,
+        "note": "shared mmap placement observed"
+      },
+      "note": "ok"
+    },
+    {
+      "source": "cell-manifest",
+      "cell_index": 3,
+      "port": 19383,
+      "pid": "3623631",
+      "pid_on_port": "3623631",
+      "expected_cpus": "72-95,168-191",
+      "observed_thread_union": "72-95,168-191",
+      "expected_numa_nodes": "N3",
+      "n_expected": 48,
+      "n_observed": 48,
+      "match": true,
+      "memory_placement": {
+        "checked": true,
+        "required": false,
+        "match": null,
+        "threshold": 0.85,
+        "no_mmap": false,
+        "signal_kind": "mmap_gguf_pages",
+        "expected_nodes": "N3",
+        "pages_by_node": {
+          "N0": 1051415,
+          "N1": 1051402,
+          "N2": 1051396,
+          "N3": 1051403
+        },
+        "total_pages": 4205616,
+        "expected_node_pages": 1051403,
+        "local_fraction": 0.24999976222270412,
+        "model_files": [
+          "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+          "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf"
+        ],
+        "largest_anon_pages_by_node": {
+          "N3": 104341
+        },
+        "largest_anon_total_pages": 104341,
+        "note": "shared mmap placement observed"
+      },
+      "note": "ok"
+    }
+  ]
+}

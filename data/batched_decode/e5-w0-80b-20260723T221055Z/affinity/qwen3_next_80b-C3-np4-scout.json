@@ -1,0 +1,166 @@
+{
+  "generated_at": "2026-07-23T22:36:03",
+  "mode": "cell",
+  "schema_version": "e5-cell-manifest/1",
+  "manifest_path": "data/batched_decode/e5_manifests_w0/qwen3_next_80b/qwen3_next_80b-C3-np4-scout.json",
+  "cell_id": "qwen3_next_80b-C3-np4-scout",
+  "live_affinity_verified": true,
+  "live_memory_placement_verified": true,
+  "memory_locality_required": false,
+  "memory_locality_threshold": 0.85,
+  "memory_required_entries": 0,
+  "memory_mismatches": 0,
+  "foreign_llama_overlaps": [],
+  "foreign_allowed_overlaps": [],
+  "foreign_allow_pattern": "build-hip",
+  "instances": [
+    {
+      "source": "cell-manifest",
+      "cell_index": 0,
+      "port": 19280,
+      "pid": "3727549",
+      "pid_on_port": "3727549",
+      "expected_cpus": "0-23,96-119",
+      "observed_thread_union": "0-23,96-119",
+      "expected_numa_nodes": "N0",
+      "n_expected": 48,
+      "n_observed": 48,
+      "match": true,
+      "memory_placement": {
+        "checked": true,
+        "required": false,
+        "match": null,
+        "threshold": 0.85,
+        "no_mmap": false,
+        "signal_kind": "mmap_gguf_pages",
+        "expected_nodes": "N0",
+        "pages_by_node": {
+          "N0": 11817629
+        },
+        "total_pages": 11817629,
+        "expected_node_pages": 11817629,
+        "local_fraction": 1.0,
+        "model_files": [
+          "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf"
+        ],
+        "largest_anon_pages_by_node": {
+          "N0": 105588
+        },
+        "largest_anon_total_pages": 105588,
+        "note": "shared mmap placement observed"
+      },
+      "note": "ok"
+    },
+    {
+      "source": "cell-manifest",
+      "cell_index": 1,
+      "port": 19281,
+      "pid": "3727855",
+      "pid_on_port": "3727855",
+      "expected_cpus": "24-47,120-143",
+      "observed_thread_union": "24-47,120-143",
+      "expected_numa_nodes": "N1",
+      "n_expected": 48,
+      "n_observed": 48,
+      "match": true,
+      "memory_placement": {
+        "checked": true,
+        "required": false,
+        "match": null,
+        "threshold": 0.85,
+        "no_mmap": false,
+        "signal_kind": "mmap_gguf_pages",
+        "expected_nodes": "N1",
+        "pages_by_node": {
+          "N0": 11817629
+        },
+        "total_pages": 11817629,
+        "expected_node_pages": 0,
+        "local_fraction": 0.0,
+        "model_files": [
+          "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf"
+        ],
+        "largest_anon_pages_by_node": {
+          "N1": 105588
+        },
+        "largest_anon_total_pages": 105588,
+        "note": "shared mmap placement observed"
+      },
+      "note": "ok"
+    },
+    {
+      "source": "cell-manifest",
+      "cell_index": 2,
+      "port": 19282,
+      "pid": "3728106",
+      "pid_on_port": "3728106",
+      "expected_cpus": "48-71,144-167",
+      "observed_thread_union": "48-71,144-167",
+      "expected_numa_nodes": "N2",
+      "n_expected": 48,
+      "n_observed": 48,
+      "match": true,
+      "memory_placement": {
+        "checked": true,
+        "required": false,
+        "match": null,
+        "threshold": 0.85,
+        "no_mmap": false,
+        "signal_kind": "mmap_gguf_pages",
+        "expected_nodes": "N2",
+        "pages_by_node": {
+          "N0": 11817629
+        },
+        "total_pages": 11817629,
+        "expected_node_pages": 0,
+        "local_fraction": 0.0,
+        "model_files": [
+          "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf"
+        ],
+        "largest_anon_pages_by_node": {
+          "N2": 105613
+        },
+        "largest_anon_total_pages": 105613,
+        "note": "shared mmap placement observed"
+      },
+      "note": "ok"
+    },
+    {
+      "source": "cell-manifest",
+      "cell_index": 3,
+      "port": 19283,
+      "pid": "3728383",
+      "pid_on_port": "3728383",
+      "expected_cpus": "72-95,168-191",
+      "observed_thread_union": "72-95,168-191",
+      "expected_numa_nodes": "N3",
+      "n_expected": 48,
+      "n_observed": 48,
+      "match": true,
+      "memory_placement": {
+        "checked": true,
+        "required": false,
+        "match": null,
+        "threshold": 0.85,
+        "no_mmap": false,
+        "signal_kind": "mmap_gguf_pages",
+        "expected_nodes": "N3",
+        "pages_by_node": {
+          "N0": 11817629
+        },
+        "total_pages": 11817629,
+        "expected_node_pages": 0,
+        "local_fraction": 0.0,
+        "model_files": [
+          "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf"
+        ],
+        "largest_anon_pages_by_node": {
+          "N3": 105613
+        },
+        "largest_anon_total_pages": 105613,
+        "note": "shared mmap placement observed"
+      },
+      "note": "ok"
+    }
+  ]
+}
