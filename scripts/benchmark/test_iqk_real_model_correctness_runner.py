@@ -20,22 +20,22 @@ def test_version_build_commit_accepts_current_nine_character_prefix(monkeypatch:
         return runner.EXPECTED_HEAD
 
     monkeypatch.setattr(runner, "git_value", fake_git_value)
-    version = {"stdout": "version: 10101 (6c44557bf)\nbuilt with GNU 15.2.0 for Linux x86_64\n", "stderr": ""}
+    version = {"stdout": "version: 10102 (1977a5d78)\nbuilt with GNU 15.2.0 for Linux x86_64\n", "stderr": ""}
     assert runner.resolve_version_build_commit(version) == {
-        "abbreviated": "6c44557bf",
+        "abbreviated": "1977a5d78",
         "resolved": runner.EXPECTED_HEAD,
     }
-    assert seen == [("rev-parse", "--verify", "6c44557bf^{commit}")]
+    assert seen == [("rev-parse", "--verify", "1977a5d78^{commit}")]
 
 
 @pytest.mark.parametrize(
     ("version", "error"),
     [
         ({"stdout": "", "stderr": ""}, "does not contain a build commit"),
-        ({"stdout": "version: 10101 (6C44557BF)\n", "stderr": ""}, "is malformed"),
+        ({"stdout": "version: 10102 (1977A5D78)\n", "stderr": ""}, "is malformed"),
         ({"stdout": "version: 10101 (123456)\n", "stderr": ""}, "is malformed"),
-        ({"stdout": "version: 10101 (6c44557bf)\nversion: 10101 (6c44557bf)\n", "stderr": ""}, "ambiguous"),
-        ({"stdout": "version: 10101 (6c44557bf)\nversion: unknown\n", "stderr": ""}, "ambiguous"),
+        ({"stdout": "version: 10102 (1977a5d78)\nversion: 10102 (1977a5d78)\n", "stderr": ""}, "ambiguous"),
+        ({"stdout": "version: 10102 (1977a5d78)\nversion: unknown\n", "stderr": ""}, "ambiguous"),
     ],
 )
 def test_version_build_commit_rejects_missing_malformed_or_ambiguous_witness(
@@ -49,7 +49,7 @@ def test_version_build_commit_rejects_missing_malformed_or_ambiguous_witness(
 def test_version_build_commit_rejects_wrong_resolved_commit(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runner, "git_value", lambda *_args: "a" * 40)
     with pytest.raises(runner.GateFailure, match="does not resolve to the expected HEAD"):
-        runner.resolve_version_build_commit({"stdout": "version: 10101 (6c44557bf)\n", "stderr": ""})
+        runner.resolve_version_build_commit({"stdout": "version: 10102 (1977a5d78)\n", "stderr": ""})
 
 
 def test_plan_is_fixed_to_three_cpu_models_and_six_fresh_arms() -> None:
@@ -129,7 +129,7 @@ def test_local_library_provenance_requires_exact_complete_filename_sha_set(
     tmp_path: Path,
 ) -> None:
     libraries = {}
-    for name, body in (("libllama.so.0.0.10101", b"llama"), ("libggml.so.0.16.0", b"ggml")):
+    for name, body in (("libllama.so.0.0.10102", b"llama"), ("libggml.so.0.16.0", b"ggml")):
         path = tmp_path / name
         path.write_bytes(body)
         libraries[name] = runner.stable_file_identity(path)["sha256"]

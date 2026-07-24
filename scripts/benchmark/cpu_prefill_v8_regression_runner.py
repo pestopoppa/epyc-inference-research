@@ -36,7 +36,7 @@ CANDIDATE_BINARY = CANDIDATE_ROOT / "build-v8-cpu/bin/llama-bench"
 PRODUCTION_BRANCH = "production-consolidated-v7"
 CANDIDATE_BRANCH = "experimental-v8-refresh-20260724"
 PRODUCTION_HEAD = "6ad45fa3ff6718c07c000061dbc6e29c1771f6e3"
-CANDIDATE_HEAD = "6c44557bf9e88d7954f5e39e9bd667815985dd17"
+CANDIDATE_HEAD = "1977a5d78a5a9c0b1e0050105f8741b7d0a00284"
 CPU_EXTRA = ("-dev", "none", "-ngl", "0", "--no-op-offload", "1")
 # JSON preserves all ten samples; markdown on stderr preserves the mandatory
 # result-emitted build witness required by the 2026-07-24 identity erratum.
@@ -137,15 +137,15 @@ EXPECTED_NATIVE_TYPES_BY_MODEL = {
     "glm52_ud_iq2": {16, 18, 22},
     "hy3_iq1_m": {16, 18},
 }
-IQK_RUNNER_SHA256 = "9f19c1c0bd64da1e2deb75410937f61cdf205baa1aadcbcefcfb3c418bffbf37"
-IQK_SERVER_SHA256 = "57ba67c1313c03d8a1c07f3a230e5f2396f070713dbba18c8098d77d8681e585"
+IQK_RUNNER_SHA256 = "9397899168efe290596f310a29c25c80b6d606cec8d33440a6f6a158fcf32ada"
+IQK_SERVER_SHA256 = "d255be4e7735da2b18ff958e6a02400bc1ec86104fa8e8530bb3519fed0e8302"
 IQK_SERVER_LIBRARY_SHA256 = {
-    "libggml-base.so.0.16.0": "08177ca73f6da0f3125b02f655c35749a7ee8c9f5e66fb317a46ff276a295ef0",
-    "libggml-cpu.so.0.16.0": "ea9b93bf07ae0825dd8fb48f3b55fc491e8e6c3b3da43179f35f3e77b967a9f3",
+    "libggml-base.so.0.16.0": "c289b60b2cc1ddb741f0b9aba0c320d7f56bda8a106e4295ac9af3336a2fc2b4",
+    "libggml-cpu.so.0.16.0": "4b1a63e842afa0a57857fcb68c9f3e4906b007526d561122603958c9118c45c5",
     "libggml.so.0.16.0": "ed67a5d9340c256abdcd9b2729871d3dbab6f979031e752bd4c92c2f73a5dacd",
-    "libllama-common.so.0.0.10101": "5d40f8d39b64b792ac474c4a3456ece9a44ec5e27c21fd3da66b409c1e19e2a9",
+    "libllama-common.so.0.0.10102": "99e9dde64c440091fb2e77b49cb74bf50137a724275f2ffde8299756453a4574",
     "libllama-server-impl.so": "8248f8f1d69d80c0af92483e0a060b34059826d967fbfe88e6f629a61973fa5a",
-    "libllama.so.0.0.10101": "293d19eb0bc7c4cde9fbc48d0d38a0a0f9c499f639e302fea36f31035d87f0b8",
+    "libllama.so.0.0.10102": "293d19eb0bc7c4cde9fbc48d0d38a0a0f9c499f639e302fea36f31035d87f0b8",
 }
 
 # These are release artifacts, not source-tree claims.  The shared objects are
@@ -163,14 +163,14 @@ RELEASE_ARTIFACTS = {
         },
     },
     "candidate": {
-        "llama_bench_sha256": "185b494efa6cf1e243b1bf2503e31deb1f1a2974d222e646ab74ac7cbb644374",
+        "llama_bench_sha256": "875a6a9e20ecac5b6bfce5d62100a30f638e41d6ef30372de3741a18fc9840bb",
         "libraries": {
-            "libggml-base.so.0.16.0": "08177ca73f6da0f3125b02f655c35749a7ee8c9f5e66fb317a46ff276a295ef0",
-            "libggml-cpu.so.0.16.0": "ea9b93bf07ae0825dd8fb48f3b55fc491e8e6c3b3da43179f35f3e77b967a9f3",
+            "libggml-base.so.0.16.0": "c289b60b2cc1ddb741f0b9aba0c320d7f56bda8a106e4295ac9af3336a2fc2b4",
+            "libggml-cpu.so.0.16.0": "4b1a63e842afa0a57857fcb68c9f3e4906b007526d561122603958c9118c45c5",
             "libggml.so.0.16.0": "ed67a5d9340c256abdcd9b2729871d3dbab6f979031e752bd4c92c2f73a5dacd",
             "libllama-bench-impl.so": "20aea71e0de1ea50552b67b86f72a4f629e5004ede8a9e5ded43a0ef18470811",
-            "libllama-common.so.0.0.10101": "5d40f8d39b64b792ac474c4a3456ece9a44ec5e27c21fd3da66b409c1e19e2a9",
-            "libllama.so.0.0.10101": "293d19eb0bc7c4cde9fbc48d0d38a0a0f9c499f639e302fea36f31035d87f0b8",
+            "libllama-common.so.0.0.10102": "99e9dde64c440091fb2e77b49cb74bf50137a724275f2ffde8299756453a4574",
+            "libllama.so.0.0.10102": "293d19eb0bc7c4cde9fbc48d0d38a0a0f9c499f639e302fea36f31035d87f0b8",
         },
     },
 }

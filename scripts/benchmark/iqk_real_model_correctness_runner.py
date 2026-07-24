@@ -34,16 +34,16 @@ RESEARCH_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_ROOT = Path("/mnt/raid0/llm/llama.cpp-experimental")
 BINARY = SOURCE_ROOT / "build-v8-cpu/bin/llama-server"
 EXPECTED_BRANCH = "experimental-v8-refresh-20260724"
-EXPECTED_HEAD = "6c44557bf9e88d7954f5e39e9bd667815985dd17"
+EXPECTED_HEAD = "1977a5d78a5a9c0b1e0050105f8741b7d0a00284"
 # Frozen candidate identity, not a caller-supplied assertion.
-EXPECTED_SERVER_SHA256 = "57ba67c1313c03d8a1c07f3a230e5f2396f070713dbba18c8098d77d8681e585"
+EXPECTED_SERVER_SHA256 = "d255be4e7735da2b18ff958e6a02400bc1ec86104fa8e8530bb3519fed0e8302"
 EXPECTED_LOCAL_LIBRARY_SHA256 = {
-    "libggml-base.so.0.16.0": "08177ca73f6da0f3125b02f655c35749a7ee8c9f5e66fb317a46ff276a295ef0",
-    "libggml-cpu.so.0.16.0": "ea9b93bf07ae0825dd8fb48f3b55fc491e8e6c3b3da43179f35f3e77b967a9f3",
+    "libggml-base.so.0.16.0": "c289b60b2cc1ddb741f0b9aba0c320d7f56bda8a106e4295ac9af3336a2fc2b4",
+    "libggml-cpu.so.0.16.0": "4b1a63e842afa0a57857fcb68c9f3e4906b007526d561122603958c9118c45c5",
     "libggml.so.0.16.0": "ed67a5d9340c256abdcd9b2729871d3dbab6f979031e752bd4c92c2f73a5dacd",
-    "libllama-common.so.0.0.10101": "5d40f8d39b64b792ac474c4a3456ece9a44ec5e27c21fd3da66b409c1e19e2a9",
+    "libllama-common.so.0.0.10102": "99e9dde64c440091fb2e77b49cb74bf50137a724275f2ffde8299756453a4574",
     "libllama-server-impl.so": "8248f8f1d69d80c0af92483e0a060b34059826d967fbfe88e6f629a61973fa5a",
-    "libllama.so.0.0.10101": "293d19eb0bc7c4cde9fbc48d0d38a0a0f9c499f639e302fea36f31035d87f0b8",
+    "libllama.so.0.0.10102": "293d19eb0bc7c4cde9fbc48d0d38a0a0f9c499f639e302fea36f31035d87f0b8",
 }
 LLVM20_LIBDIR = Path("/usr/lib/llvm-20/lib")
 OPENMP_RUNTIME = LLVM20_LIBDIR / "libomp.so.5"
@@ -59,7 +59,7 @@ REQUEST_TIMEOUT_S = 900
 SETTLE_S = 2
 MAX_UPTIME_SECONDS = 7 * 24 * 60 * 60
 
-# The native path added in 6c44557b.  IQ1_M (29) intentionally remains a
+# The native path added in b8ad9d292.  IQ1_M (29) intentionally remains a
 # fallback; Hy3 is included because its IQ2/IQ3 tensors are newly covered.
 NATIVE_IQ_TYPE_CODES = {16, 17, 18, 21, 22}
 EXPECTED_NATIVE_TYPES_BY_MODEL = {
