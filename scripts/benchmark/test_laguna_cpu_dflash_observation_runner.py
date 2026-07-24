@@ -25,7 +25,7 @@ def valid_semantic_content(prompt_index: int, variant: int = 0) -> str:
         ("FLAT: [2,1,\"hi\",3,null,false]", "FLAT: [ 2, 1, \"hi\", 3, null, false ]"),
         ("NORMALIZED: [0,0.2,0.3,0.5]\nZERO_CASE: [0,0,0]", "NORMALIZED: [0.0,2e-1,3e-1,5e-1]\nZERO_CASE: [0.0,0e0,0]"),
     )
-    return explanations[prompt_index - 1] + "\n" + markers[prompt_index - 1][variant]
+    return markers[prompt_index - 1][variant] + "\n" + explanations[prompt_index - 1]
 
 
 def valid_summary_rows() -> list[dict[str, object]]:
@@ -687,6 +687,9 @@ def test_plan_is_complete_observation_only_matrix() -> None:
     assert plan["recipe"]["host_requirements"]["thp_defrag_active"] == "always"
     assert all("exactly one" in prompt.lower() for prompt in runner.PROMPTS)
     assert not any("words" in prompt.lower() for prompt in runner.PROMPTS)
+    assert all(prompt.startswith("Begin your response") for prompt in runner.PROMPTS)
+    for prompt, prefix in zip(runner.PROMPTS, ("PRIMES:", "FLAT:", "NORMALIZED:"), strict=True):
+        assert prompt.index(prefix) < prompt.lower().index("explain")
     assert plan["observation_policy"]["decision_grade"] is False
     assert plan["observation_policy"]["promotion_gate"] is False
     assert plan["observation_policy"]["march_no_go_reopened"] is False
@@ -934,7 +937,7 @@ def test_semantic_validators_reject_coherent_but_wrong_outputs(prompt_index: int
 
 
 @pytest.mark.parametrize("prompt_index", [1, 2, 3])
-def test_semantic_validators_accept_different_correct_wording_and_formatting(prompt_index: int) -> None:
+def test_semantic_validators_accept_result_first_wording_and_formatting(prompt_index: int) -> None:
     first = valid_semantic_content(prompt_index, 0)
     second = valid_semantic_content(prompt_index, 1)
     assert first != second
@@ -943,6 +946,23 @@ def test_semantic_validators_accept_different_correct_wording_and_formatting(pro
     assert first_result["valid"] is True
     assert second_result["valid"] is True
     assert first_result["task"] == second_result["task"] == runner.SEMANTIC_TASKS[prompt_index - 1]
+
+
+@pytest.mark.parametrize(
+    ("prompt_index", "label"),
+    [(1, "PRIMES"), (2, "FLAT"), (3, "NORMALIZED")],
+)
+def test_semantic_validators_reject_duplicate_or_missing_result_lines(
+    prompt_index: int,
+    label: str,
+) -> None:
+    content = valid_semantic_content(prompt_index)
+    result_line = next(line for line in content.splitlines() if line.startswith(f"{label}:"))
+    with pytest.raises(RuntimeError, match=f"exactly one nonempty {label}:"):
+        runner.validate_prompt_semantics(f"{content}\n{result_line}", prompt_index)
+    missing = "\n".join(line for line in content.splitlines() if line != result_line)
+    with pytest.raises(RuntimeError, match=f"exactly one nonempty {label}:"):
+        runner.validate_prompt_semantics(missing, prompt_index)
 
 
 def test_iqk_engagement_requires_q4_k_type_and_no_q8_false_claim(tmp_path: Path) -> None:
