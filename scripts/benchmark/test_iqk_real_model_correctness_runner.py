@@ -371,8 +371,16 @@ def test_split_identity_hashes_every_shard_and_rejects_missing_shard(tmp_path: P
 
 
 def test_response_validation_rejects_nonfinite_or_reasoning_content() -> None:
-    valid = {"choices": [{"message": {"content": "95"}, "logprobs": {"content": [{"token": "95", "logprob": -0.1}]}}], "timings": {"prompt_n": 1, "predicted_n": 1, "prompt_ms": 1, "predicted_ms": 1}, "usage": {"prompt_tokens": 1, "completion_tokens": 1}}
-    assert runner.content_from_response(valid)[0] == "95"
+    valid = {"choices": [{"message": {"content": "95"}, "logprobs": {"content": [{"token": "95", "bytes": [57, 53], "logprob": -0.1}]}}], "timings": {"prompt_n": 1, "predicted_n": 1, "prompt_ms": 1, "predicted_ms": 1}, "usage": {"prompt_tokens": 1, "prompt_tokens_details": {"cached_tokens": 0}, "metadata": {"ratio": 0.5}, "completion_tokens": 1}}
+    content, telemetry, _logprobs = runner.content_from_response(valid)
+    assert content == "95"
+    assert telemetry["counters"] == {"prompt_tokens": 1, "prompt_tokens_details.cached_tokens": 0, "metadata.ratio": 0.5, "completion_tokens": 1}
+    round_tripped = json.loads(json.dumps(telemetry))
+    assert type(round_tripped["timings"]["prompt_n"]) is int
+    assert type(round_tripped["timings"]["predicted_n"]) is int
+    assert type(round_tripped["counters"]["completion_tokens"]) is int
+    assert type(round_tripped["counters"]["prompt_tokens_details.cached_tokens"]) is int
+    assert type(round_tripped["counters"]["metadata.ratio"]) is float
     invalid = json.loads(json.dumps(valid))
     invalid["timings"]["prompt_ms"] = float("inf")
     with pytest.raises(runner.GateFailure, match="nonfinite"):
@@ -390,7 +398,7 @@ def test_response_validation_rejects_nonfinite_or_reasoning_content() -> None:
     with pytest.raises(runner.GateFailure, match="nonempty"):
         runner.content_from_response(invalid)
     invalid = json.loads(json.dumps(valid))
-    invalid["choices"][0]["logprobs"]["content"].append({"token": "!", "logprob": -0.2})
+    invalid["choices"][0]["logprobs"]["content"].append({"token": "!", "bytes": [33], "logprob": -0.2})
     with pytest.raises(runner.GateFailure, match="token count"):
         runner.content_from_response(invalid)
     invalid = json.loads(json.dumps(valid))
@@ -405,6 +413,56 @@ def test_response_validation_rejects_nonfinite_or_reasoning_content() -> None:
     invalid["usage"]["completion_tokens"] = True
     with pytest.raises(runner.GateFailure, match="native integral"):
         runner.content_from_response(invalid)
+
+
+def test_logprob_evidence_accepts_one_final_empty_eog_token() -> None:
+    evidence = runner.logprob_evidence({"logprobs": {"content": [
+        {"token": "95", "bytes": [57, 53], "logprob": -0.1},
+        {"token": "", "bytes": [], "logprob": -0.2},
+    ]}})
+    assert evidence["token_count"] == 2
+    assert evidence["terminal_eog_empty"] is True
+    assert evidence["tokens"][-1] == {
+        "token_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": [], "terminal_eog_empty": True, "logprob": -0.2,
+    }
+
+
+@pytest.mark.parametrize(
+    ("content", "error"),
+    [
+        ([{"token": "x", "logprob": 0.0}], "bytes is not a JSON byte list"),
+        ([{"token": "x", "bytes": [True], "logprob": 0.0}], "bytes is not a JSON byte list"),
+        ([{"token": "x", "bytes": [-1], "logprob": 0.0}], "bytes is not a JSON byte list"),
+        ([{"token": "x", "bytes": [121], "logprob": 0.0}], "does not match token UTF-8"),
+        ([{"token": "", "bytes": [], "logprob": 0.0}, {"token": "x", "bytes": [120], "logprob": 0.0}], "exactly one terminal empty"),
+        ([{"token": "x", "bytes": [120], "logprob": 0.0}, {"token": "", "bytes": [], "logprob": 0.0}, {"token": "", "bytes": [], "logprob": 0.0}], "exactly one terminal empty"),
+        ([{"token": "", "bytes": [0], "logprob": 0.0}], "exactly one terminal empty"),
+    ],
+)
+def test_logprob_evidence_rejects_invalid_token_bytes_or_empty_eog(
+    content: list[dict[str, object]],
+    error: str,
+) -> None:
+    with pytest.raises(runner.GateFailure, match=error):
+        runner.logprob_evidence({"logprobs": {"content": content}})
+
+
+@pytest.mark.parametrize(
+    ("usage", "error"),
+    [
+        ({"completion_tokens": 1, "nested": {"value": float("inf")}}, "nonfinite"),
+        ({"completion_tokens": 1, "nested": {"value": True}}, "strict native JSON number"),
+        ({"completion_tokens": 1, "nested": {"value": None}}, "strict native JSON number"),
+        ({"completion_tokens": 1, "nested": {"value": "one"}}, "strict native JSON number"),
+        ({"completion_tokens": 1, "nested": {"value": []}}, "strict native JSON number"),
+        ({"completion_tokens": 1, "nested": {}}, "object is empty"),
+        ({"completion_tokens": 1, "nested.value": 0}, "key is ambiguous"),
+    ],
+)
+def test_usage_counter_flattening_fails_closed(usage: dict[str, object], error: str) -> None:
+    with pytest.raises(runner.GateFailure, match=error):
+        runner.flatten_usage_counters(usage)
 
 
 def valid_arm(model: runner.Model, iqk: int) -> dict[str, object]:

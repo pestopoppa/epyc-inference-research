@@ -718,32 +718,74 @@ def finite_positive(value: Any, name: str, *, zero_ok: bool = False) -> float:
     return number
 
 
-def finite_native_number(value: Any, name: str, *, zero_ok: bool = True) -> float:
+def finite_native_number(value: Any, name: str, *, zero_ok: bool = True) -> int | float:
     if type(value) not in (int, float):
         raise GateFailure(f"{name} is not a strict native JSON number")
     number = float(value)
     if not math.isfinite(number) or (not zero_ok and number == 0):
         raise GateFailure(f"{name} is nonfinite or invalid")
-    return number
+    return value
 
 
 def logprob_evidence(choice: dict[str, Any]) -> dict[str, Any]:
     logprobs = choice.get("logprobs")
     if not isinstance(logprobs, dict) or not isinstance(logprobs.get("content"), list) or not logprobs["content"]:
         raise GateFailure("completion lacks nonempty per-token logprobs")
+    empty_indices = [
+        index for index, item in enumerate(logprobs["content"])
+        if isinstance(item, dict) and item.get("token") == ""
+    ]
     tokens: list[dict[str, Any]] = []
     for index, item in enumerate(logprobs["content"]):
-        if not isinstance(item, dict) or not isinstance(item.get("token"), str) or not item["token"]:
+        if not isinstance(item, dict) or not isinstance(item.get("token"), str):
             raise GateFailure(f"logprobs.content[{index}] lacks a returned completion token")
-        tokens.append({"token_sha256": hashlib.sha256(item["token"].encode()).hexdigest(),
-                       "logprob": finite_native_number(item.get("logprob"), f"logprobs.content[{index}].logprob")})
-    return {"status": "pass", "token_count": len(tokens), "tokens": tokens}
+        byte_values = item.get("bytes")
+        if not isinstance(byte_values, list) or any(type(value) is not int or not 0 <= value <= 255 for value in byte_values):
+            raise GateFailure(f"logprobs.content[{index}].bytes is not a JSON byte list")
+        token = item["token"]
+        terminal_eog_empty = token == ""
+        if terminal_eog_empty:
+            if empty_indices != [len(logprobs["content"]) - 1] or byte_values != []:
+                raise GateFailure("completion may contain exactly one terminal empty EOG token with bytes=[]")
+        elif list(token.encode("utf-8")) != byte_values:
+            raise GateFailure(f"logprobs.content[{index}].bytes does not match token UTF-8")
+        tokens.append({
+            "token_sha256": hashlib.sha256(token.encode()).hexdigest(),
+            "bytes": byte_values,
+            "terminal_eog_empty": terminal_eog_empty,
+            "logprob": finite_native_number(item.get("logprob"), f"logprobs.content[{index}].logprob"),
+        })
+    return {"status": "pass", "token_count": len(tokens), "terminal_eog_empty": bool(empty_indices), "tokens": tokens}
 
 
 def strict_native_integral(value: Any, name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise GateFailure(f"{name} is not a positive native integral count")
     return value
+
+
+def flatten_usage_counters(usage: dict[str, Any]) -> dict[str, int | float]:
+    """Accept only finite native numeric usage leaves under unambiguous dotted paths."""
+    counters: dict[str, int | float] = {}
+
+    def visit(node: dict[str, Any], prefix: str = "") -> None:
+        if not node:
+            raise GateFailure(f"usage counter object is empty at {prefix or '<root>'}")
+        for key, value in node.items():
+            if not isinstance(key, str) or not key or "." in key:
+                raise GateFailure(f"usage counter key is ambiguous at {prefix or '<root>'}: {key!r}")
+            path = f"{prefix}.{key}" if prefix else key
+            if isinstance(value, dict):
+                visit(value, path)
+            elif type(value) in (int, float):
+                if path in counters:
+                    raise GateFailure(f"duplicate flattened usage counter path: {path}")
+                counters[path] = finite_native_number(value, f"usage.{path}")
+            else:
+                raise GateFailure(f"usage.{path} is not a strict native JSON number")
+
+    visit(usage)
+    return counters
 
 
 def content_from_response(response: dict[str, Any]) -> tuple[str, dict[str, Any], dict[str, Any]]:
@@ -758,15 +800,21 @@ def content_from_response(response: dict[str, Any]) -> tuple[str, dict[str, Any]
     timings = response.get("timings")
     if not isinstance(timings, dict):
         raise GateFailure("completion lacks timings")
+    prompt_n = strict_native_integral(timings.get("prompt_n"), "timings.prompt_n")
     predicted_n = strict_native_integral(timings.get("predicted_n"), "timings.predicted_n")
-    telemetry = {key: finite_positive(timings.get(key), f"timings.{key}") for key in ("prompt_n", "predicted_n", "prompt_ms", "predicted_ms")}
+    telemetry = {
+        "prompt_n": prompt_n,
+        "predicted_n": predicted_n,
+        "prompt_ms": finite_positive(timings.get("prompt_ms"), "timings.prompt_ms"),
+        "predicted_ms": finite_positive(timings.get("predicted_ms"), "timings.predicted_ms"),
+    }
     for key, value in timings.items():
         finite_native_number(value, f"timings.{key}")
     usage = response.get("usage", {})
     if not isinstance(usage, dict):
         raise GateFailure("completion usage counters are not an object")
     completion_tokens = strict_native_integral(usage.get("completion_tokens"), "usage.completion_tokens")
-    counters = {key: finite_native_number(value, f"usage.{key}") for key, value in usage.items()}
+    counters = flatten_usage_counters(usage)
     logprobs = logprob_evidence(choices[0])
     if logprobs["token_count"] != predicted_n or logprobs["token_count"] != completion_tokens:
         raise GateFailure(
