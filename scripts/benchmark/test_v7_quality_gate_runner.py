@@ -72,6 +72,27 @@ def test_extract_letter_answer_prefers_explicit_answer():
     assert runner.extract_letter_answer("I think C is likely") == ""
 
 
+def test_extract_letter_answer_verbose_bare_letter_no_penalty():
+    """Regression: a verbose arm that reasons then puts a bare letter on the
+    final line HAS answered. The 2026-07 architect-bench artifact was that
+    A4 (verbose) leaked 15% of gpqa to false parse-failures on exactly this
+    shape while terse A1 scored 0% failures -- a systematic bias against
+    models that show their work. Must parse; must NOT bias by verbosity."""
+    verbose = (
+        "Let me work through the equilibrium. [PO4^3-] approx 6.2e-7 M.\n"
+        "This matches option D.\n\nD"
+    )
+    assert runner.extract_letter_answer(verbose) == "D"
+    # bold / parenthesised final-line variants a CoT model emits
+    assert runner.extract_letter_answer("...so the product is the ether.\n\n**B**") == "B"
+    assert runner.extract_letter_answer("reasoning...\n(A)") == "A"
+    # a genuinely truncated derivation (no answer) must still fail to parse,
+    # so truncations are not silently credited.
+    assert runner.extract_letter_answer(
+        "Step 1: balance the redox couple. Step 2: the half reaction for"
+    ) == ""
+
+
 def test_score_response_handles_aime_numeric_exact_match():
     q = {
         "scoring_method": "exact_match",
