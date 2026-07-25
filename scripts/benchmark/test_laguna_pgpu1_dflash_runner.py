@@ -326,7 +326,8 @@ def test_plan_is_exact_and_records_provisional_promotion_requirements() -> None:
 def test_normalize_prompt_requires_normalized_output_sum_not_input_total() -> None:
     prompt = dict(runner.PROMPT_SPECS)["normalize"]
     assert "input total is 10" in prompt
-    assert "JSON `sum` is the sum of the normalized values and must be 1.0" in prompt
+    assert "JSON `sum` must be the sum of the normalized values" in prompt
+    assert "must be 1.0" not in prompt
     assert "Do not report the input total in JSON" in prompt
 
 

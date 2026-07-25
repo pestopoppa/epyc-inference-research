@@ -1650,6 +1650,98 @@ def test_host_attestation_rejects_malformed_timezone_and_artifact_binding(
     )["verified_by_runner"] is True
 
 
+def host_attestation_arms() -> dict[str, dict[str, object]]:
+    return {
+        name: {
+            "name": name,
+            "actual_branch": spec["expected_branch"],
+            "actual_head": spec["expected_head"],
+            "binary_identity": {
+                "sha256": runner.RELEASE_ARTIFACTS[name]["llama_bench_sha256"],
+            },
+        }
+        for name, spec in (
+            ("production", runner.arm_spec("production")),
+            ("candidate", runner.arm_spec("candidate")),
+        )
+    }
+
+
+def test_write_host_attestation_captures_current_arm_bindings_atomically(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    arms = host_attestation_arms()
+    target = tmp_path / "new" / "host.json"
+    monkeypatch.setattr(runner, "collect_arm_identity", lambda spec: arms[spec["name"]])
+    monkeypatch.setattr(runner, "host_snapshot", valid_host)
+    monkeypatch.setattr(
+        runner,
+        "fresh_output_dir",
+        lambda _requested: (_ for _ in ()).throw(AssertionError("normal output mode ran")),
+    )
+
+    assert runner.main(["--write-host-attestation", str(target)]) == 0
+
+    value = json.loads(target.read_text())
+    assert set(value) == {
+        "schema", "protocol", "status", "created_at", "candidate", "production", "artifact_binding",
+    }
+    assert value["schema"] == runner.HOST_ATTESTATION_SCHEMA
+    assert value["protocol"] == "P-BENCH-PREFILL-1"
+    assert value["status"] == "pass"
+    assert runner.validate_host_attestation(target, arms, require_fresh=True)["verified_by_runner"] is True
+    for name in ("candidate", "production"):
+        assert value[name] == {
+            "branch": arms[name]["actual_branch"],
+            "head": arms[name]["actual_head"],
+        }
+        assert value["artifact_binding"][name] == {
+            "binary_sha256": arms[name]["binary_identity"]["sha256"],
+        }
+    emitted = json.loads(capsys.readouterr().out)
+    assert emitted["mode"] == "host_attestation_written"
+    assert emitted["promotion_decision"] is False
+    assert not (tmp_path / "plan.json").exists()
+
+
+def test_write_host_attestation_rejects_dirty_host_and_existing_target(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    arms = host_attestation_arms()
+    target = tmp_path / "host.json"
+    monkeypatch.setattr(runner, "collect_arm_identity", lambda spec: arms[spec["name"]])
+    dirty = valid_host()
+    dirty["governors"] = {"cpu0": "powersave"}
+    monkeypatch.setattr(runner, "host_snapshot", lambda: dirty)
+
+    with pytest.raises(RuntimeError, match="strict host check failed"):
+        runner.write_host_attestation(target)
+    assert not target.exists()
+
+    target.write_text("existing artifact\n")
+    monkeypatch.setattr(runner, "host_snapshot", valid_host)
+    with pytest.raises(RuntimeError, match="already exists; refusing overwrite"):
+        runner.write_host_attestation(target)
+    assert target.read_text() == "existing artifact\n"
+
+
+def test_write_host_attestation_mode_is_exclusive(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit):
+        runner.parse_args([
+            "--execute", "--write-host-attestation", str(tmp_path / "host.json"),
+        ])
+    with pytest.raises(SystemExit):
+        runner.parse_args([
+            "--write-host-attestation", str(tmp_path / "host.json"),
+            "--output-dir", str(tmp_path / "output"),
+        ])
+    with pytest.raises(SystemExit):
+        runner.parse_args([
+            "--write-host-attestation", str(tmp_path / "host.json"),
+            "--host-attestation-path", str(tmp_path / "other.json"),
+        ])
+
+
 def test_default_main_writes_preparation_only(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     output = tmp_path / "fresh"
     assert runner.main(["--output-dir", str(output)]) == 0

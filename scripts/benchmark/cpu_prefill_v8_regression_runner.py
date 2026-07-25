@@ -18,6 +18,7 @@ import re
 import shlex
 import statistics
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -835,6 +836,67 @@ def validate_host_attestation(
     live = host_snapshot()
     require_clean_host(live, "external host-attestation validation")
     return {"artifact": file_identity(path), "verified_by_runner": True, "live_host": live}
+
+
+def write_new_json_atomic(path: Path, value: Any) -> None:
+    """Publish a JSON artifact atomically without replacing an existing one."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    target = path.parent.resolve() / path.name
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=target.parent,
+        prefix=f".{target.name}.",
+        suffix=".tmp",
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+            os.fchmod(output.fileno(), 0o600)
+            output.write(json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n")
+            output.flush()
+            os.fsync(output.fileno())
+        try:
+            os.link(temporary, target)
+        except FileExistsError as exc:
+            raise RuntimeError(
+                f"host attestation target already exists; refusing overwrite: {target}"
+            ) from exc
+        directory = os.open(target.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def write_host_attestation(path: Path) -> dict[str, Any]:
+    """Capture exact current arm identities and a clean-host attestation."""
+    arms = {
+        name: collect_arm_identity(arm_spec(name))
+        for name in ("production", "candidate")
+    }
+    live_host = host_snapshot()
+    require_clean_host(live_host, "host-attestation production")
+    value = {
+        "schema": HOST_ATTESTATION_SCHEMA,
+        "protocol": "P-BENCH-PREFILL-1",
+        "status": "pass",
+        "created_at": utc_now(),
+        "candidate": {
+            "branch": arms["candidate"]["actual_branch"],
+            "head": arms["candidate"]["actual_head"],
+        },
+        "production": {
+            "branch": arms["production"]["actual_branch"],
+            "head": arms["production"]["actual_head"],
+        },
+        "artifact_binding": {
+            name: {"binary_sha256": arms[name]["binary_identity"]["sha256"]}
+            for name in ("candidate", "production")
+        },
+    }
+    write_new_json_atomic(path, value)
+    return value
 
 
 def validate_external_attestations(
@@ -2492,12 +2554,28 @@ def execute(
 def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path)
-    parser.add_argument("--execute", action="store_true", help="Run cache preparation and all 32 live cells. Default only writes plan.json.")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--execute", action="store_true", help="Run cache preparation and all 32 live cells. Default only writes plan.json.")
+    mode.add_argument("--write-host-attestation", type=Path)
     parser.add_argument("--host-attestation-path", type=Path)
     parser.add_argument("--correctness-attestation-path", type=Path)
     parser.add_argument("--coherence-attestation-path", type=Path)
     parser.add_argument("--numerical-safety-attestation-path", type=Path)
     args = parser.parse_args(argv)
+    if args.write_host_attestation is not None:
+        incompatible = {
+            "--output-dir": args.output_dir,
+            "--host-attestation-path": args.host_attestation_path,
+            "--correctness-attestation-path": args.correctness_attestation_path,
+            "--coherence-attestation-path": args.coherence_attestation_path,
+            "--numerical-safety-attestation-path": args.numerical_safety_attestation_path,
+        }
+        supplied = [flag for flag, value in incompatible.items() if value is not None]
+        if supplied:
+            parser.error(
+                "--write-host-attestation is a standalone mode and cannot be combined with: "
+                + ", ".join(supplied)
+            )
     if args.execute:
         required = {
             "--host-attestation-path": args.host_attestation_path,
@@ -2534,6 +2612,14 @@ def fresh_output_dir(requested: Path | None) -> Path:
 
 def main(argv: Iterable[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.write_host_attestation is not None:
+        write_host_attestation(args.write_host_attestation)
+        print(json_text({
+            "mode": "host_attestation_written",
+            "host_attestation": str(args.write_host_attestation),
+            "promotion_decision": False,
+        }))
+        return 0
     output = fresh_output_dir(args.output_dir)
     plan = manifest()
     write_json(output / "plan.json", plan)

@@ -48,7 +48,7 @@ DEFAULT_REQUEST_TIMEOUT_S = 900
 PROMPT_SPECS = (
     ("primes", "Write a concise explanation of how to enumerate every prime below 30 and sum them. Do not enumerate rejected or composite candidates one by one. Then end with exactly `RESULT_JSON: {\"primes\":[...],\"sum\":...}` using the computed values. The final JSON is machine-validated."),
     ("nested_flatten", "Write a concise explanation of a deterministic encounter-order flatten of {\"a\":[1,{\"b\":[2,3]}],\"c\":{\"d\":4},\"e\":[5]}. Then end with exactly `RESULT_JSON: {\"values\":[...]}` using the computed scalar order. The final JSON is machine-validated."),
-    ("normalize", "Write a concise explanation of normalization of [0,2,3,5] by its sum, including the zero-sum edge case. The input total is 10. Then end with exactly `RESULT_JSON: {\"normalized\":[...],\"sum\":...}` using the computed normalized values: JSON `sum` is the sum of the normalized values and must be 1.0. Do not report the input total in JSON. The final JSON is machine-validated."),
+    ("normalize", "Write a concise explanation of normalization of [0,2,3,5] by its sum, including the zero-sum edge case. The input total is 10. Then end with exactly `RESULT_JSON: {\"normalized\":[...],\"sum\":...}` using the computed normalized values. JSON `sum` must be the sum of the normalized values. Do not report the input total in JSON. The final JSON is machine-validated."),
 )
 PROMPTS = tuple(text for _, text in PROMPT_SPECS)
 PGPU1_WARMUP_POLICY = "no warm-up requests; no discarded reps; fresh server per rep; graph recapture remains inside each measured fresh-server replicate"
