@@ -1089,6 +1089,33 @@ def test_weighted_aggregation_and_per_prompt_equality() -> None:
         runner.summarize(rows)
 
 
+def test_summarize_surfaces_primary_error_and_status_before_warmup_or_numeric_validation() -> None:
+    rows = valid_summary_rows()
+    rows[0]["status"] = "error"
+    rows[0]["primary_error"] = "RuntimeError('semantic validation failed')"
+    rows[0]["warmup"] = None
+    rows[0]["prompt_tps"] = 0
+    with pytest.raises(RuntimeError, match="primary error: RuntimeError\\('semantic validation failed'\\)"):
+        runner.summarize(rows)
+
+    rows = valid_summary_rows()
+    rows[0]["status"] = "error"
+    rows[0]["warmup"] = None
+    rows[0]["prompt_tps"] = 0
+    with pytest.raises(RuntimeError, match="cell status is not ok: 'error'"):
+        runner.summarize(rows)
+
+
+def test_summarize_rejects_reordered_rows_before_primary_error_preflight() -> None:
+    rows = valid_summary_rows()
+    rows[0], rows[1] = rows[1], rows[0]
+    rows[0]["status"] = "error"
+    rows[0]["primary_error"] = "RuntimeError('semantic validation failed')"
+    rows[0]["warmup"] = None
+    with pytest.raises(RuntimeError, match="balanced paired schedule mismatch"):
+        runner.summarize(rows)
+
+
 @pytest.mark.parametrize("bad_value", [True, 0, -1, float("nan"), float("inf"), float("-inf")])
 def test_summarize_rejects_invalid_counts_timings_tps_and_draft_metrics(bad_value: object) -> None:
     rows = valid_summary_rows()
@@ -1334,7 +1361,7 @@ def test_execute_writes_partial_observation_summary_after_strict_semantic_failur
     monkeypatch.setattr(runner, "run_stamp", lambda: "run-partial")
     monkeypatch.setattr(runner, "run_replicate", lambda lane, arm, rep, *_args: by_key[(lane.name, arm.name, rep)])
 
-    with pytest.raises(runner.RunFailure, match="required complete replicates missing"):
+    with pytest.raises(runner.RunFailure, match="cell primary error: RuntimeError"):
         runner.execute(tmp_path)
 
     partial = json.loads((tmp_path / "run-partial/partial_summary.json").read_text())
@@ -1342,7 +1369,7 @@ def test_execute_writes_partial_observation_summary_after_strict_semantic_failur
     assert partial["status"] == "failed/partial"
     assert partial["observation_only"] is True
     assert partial["non_gating"] is True
-    assert "required complete replicates missing" in partial["strict_summary_failure"]
+    assert "cell primary error: RuntimeError" in partial["strict_summary_failure"]
     assert partial["cell_counts"] == {
         "expected": 20,
         "observed": 20,
@@ -1360,7 +1387,7 @@ def test_execute_writes_partial_observation_summary_after_strict_semantic_failur
     q8_ratio = partial["arm_summaries"]["q8_0_dflash"]["decode_ratio_vs_base_higher_better"]
     assert q8_ratio["status"] == "unavailable"
     assert "base" in q8_ratio["reason"]
-    with pytest.raises(RuntimeError, match="required complete replicates missing"):
+    with pytest.raises(RuntimeError, match="cell primary error: RuntimeError"):
         runner.summarize(rows)
     next(row for row in rows if row["lane"] == "q8_0" and row["arm"] == runner.BASE.name)["warmup"] = None
     historical_partial = runner.partial_summary(rows, "legacy warmup omission")

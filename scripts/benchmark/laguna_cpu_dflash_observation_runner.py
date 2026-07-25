@@ -1872,6 +1872,12 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
     ]
     if actual_schedule != expected_schedule:
         raise RuntimeError(f"balanced paired schedule mismatch: expected={expected_schedule} actual={actual_schedule}")
+    for row in results:
+        primary_error = row.get("primary_error")
+        if primary_error:
+            raise RuntimeError(f"cell primary error: {primary_error}")
+        if row.get("status") != "ok":
+            raise RuntimeError(f"cell status is not ok: {row.get('status')!r}")
     if any(row.get("cleanup", {}).get("status") != "pass" for row in results):
         raise RuntimeError("one or more cells has failed cleanup")
     if any(row.get("warmup", {}).get("status") != "pass" for row in results):
