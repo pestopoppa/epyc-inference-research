@@ -1,7 +1,7 @@
 # Laguna IQ2 MI210 K/V and Flash-Attention Sweep
 
-**Date:** 2026-07-25  
-**Status:** Observation only; not a promotion gate or global optimum claim  
+**Date:** 2026-07-25
+**Status:** Observation only; not a promotion gate or global optimum claim
 **Raw artifact:** `data/gpu-mi210/laguna-iq2-kv-sweep-exact-tip/run-20260725T125201Z`
 
 ## Fixed identity
