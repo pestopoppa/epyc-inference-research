@@ -14,7 +14,7 @@
 # Usage:
 #   bench_canonical.sh -m MODEL [-n N_GEN] [-p N_PROMPT] [-r REPS] [--perf]
 #                       [--binary PATH --source-root DIR --library-path DIR]
-#                       [--ggml-iqk {0,1}] [-- EXTRA_BENCH_FLAGS...]
+#                       [--ggml-iqk {0,1}] [--ggml-iqk-q8-0 1] [-- EXTRA_BENCH_FLAGS...]
 #
 # Examples:
 #   # gemma4-26B-A4B Q4_K_M tg512 r=2, no perf wrap
@@ -71,6 +71,7 @@ BINARY_OVERRIDE=""
 SOURCE_ROOT=""
 LIBRARY_PATH=""
 GGML_IQK=1
+GGML_IQK_Q8_0=""
 EXTRA_ARGS=()
 
 usage() {
@@ -90,6 +91,7 @@ Usage: $(basename "$0") -m MODEL [OPTIONS] [-- EXTRA_BENCH_FLAGS...]
                       in LD_LIBRARY_PATH
                       (all three explicit identity options are required together)
   --ggml-iqk {0,1}    Set the GGML_IQK runtime gate (default: 1)
+  --ggml-iqk-q8-0 1   Explicitly enable the Q8_0 IQK sub-gate
   --dry-run           Validate + print the canonical command without executing
                       llama-bench. Use this to verify the wiring without firing
                       inference (respects feedback_no_concurrent_inference).
@@ -115,6 +117,7 @@ while [[ $# -gt 0 ]]; do
         --source-root) SOURCE_ROOT="$2"; shift 2 ;;
         --library-path) LIBRARY_PATH="$2"; shift 2 ;;
         --ggml-iqk) GGML_IQK="$2"; shift 2 ;;
+        --ggml-iqk-q8-0) GGML_IQK_Q8_0="$2"; shift 2 ;;
         --dry-run) DRY_RUN=1; shift ;;
         -h|--help) usage; exit 0 ;;
         --) shift; EXTRA_ARGS=("$@"); break ;;
@@ -142,6 +145,7 @@ PY_ARGS=(emit-bench-command --model "$MODEL" --n-prompt "$N_PROMPT" --n-gen "$N_
 [[ -n "$SOURCE_ROOT" ]] && PY_ARGS+=(--source-root "$SOURCE_ROOT")
 [[ -n "$LIBRARY_PATH" ]] && PY_ARGS+=(--library-path "$LIBRARY_PATH")
 PY_ARGS+=(--ggml-iqk "$GGML_IQK")
+[[ -n "$GGML_IQK_Q8_0" ]] && PY_ARGS+=(--ggml-iqk-q8-0 "$GGML_IQK_Q8_0")
 if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
     # canonical_recipe.py splits sys.argv on the bare `--` before argparse;
     # no `--extra` flag needed (and would be rejected as unknown).

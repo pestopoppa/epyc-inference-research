@@ -24,11 +24,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+import yaml
+
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 RESEARCH_ROOT = SCRIPT_DIR.parents[1]
 CANONICAL_WRAPPER = SCRIPT_DIR / "bench_canonical.sh"
 CANONICAL_RECIPE = RESEARCH_ROOT / "scripts/lib/canonical_recipe.py"
+INSTRUMENT_ERAS = Path("/mnt/raid0/llm/epyc-orchestrator/orchestration/instrument_eras.yaml")
 PRODUCTION_ROOT = Path("/mnt/raid0/llm/llama.cpp")
 CANDIDATE_ROOT = Path("/mnt/raid0/llm/llama.cpp-experimental")
 PRODUCTION_BINARY = PRODUCTION_ROOT / "build/bin/llama-bench"
@@ -63,7 +66,6 @@ CANONICAL_PARENT_ENV = {
     "LC_ALL": "C.UTF-8",
     "TZ": "UTC",
     "PYTHONNOUSERSITE": "1",
-    "KMP_BLOCKTIME": "10",
 }
 OPTIONAL_SUBPROCESS_ENV_KEYS = {"LD_LIBRARY_PATH"}
 LLVM20_LIBDIR = "/usr/lib/llvm-20/lib"
@@ -72,18 +74,6 @@ REQUIRED_WRAPPER_OMP_ENV = {
     "OMP_PLACES": "cores",
     "OMP_WAIT_POLICY": "active",
     "OMP_DYNAMIC": "false",
-}
-CANONICAL_RECIPE_KMP_DRIFT = {
-    "id": "canonical-recipe-non-v4-kmp-emission",
-    "observed": (
-        "canonical_recipe.py omits KMP_BLOCKTIME from non-V4 emitted_env even "
-        "though KMP_BLOCKTIME=10 is universal production shape"
-    ),
-    "gate_treatment": (
-        "inherit KMP_BLOCKTIME=10 from the runner's exact parent environment; "
-        "record and validate parent, wrapper-emitted, and effective environments"
-    ),
-    "trust_boundary_change_required": True,
 }
 BASE_MEMINFO_KEYS = (
     "MemTotal",
@@ -308,6 +298,8 @@ def wrapper_argv(cell: ModelCell, arm: dict[str, Any], iqk: int, *, dry_run: boo
     argv = ["bash", str(CANONICAL_WRAPPER), "-m", str(cell.path), "-p", str(PREFILL), "-n", "0", "-r", str(REPS),
             "--binary", arm["binary"], "--source-root", arm["source_root"], "--library-path", arm["library_path"],
             "--ggml-iqk", str(iqk)]
+    if cell.name == "qwen36_q8":
+        argv.extend(("--ggml-iqk-q8-0", "1"))
     if dry_run:
         argv.append("--dry-run")
     return [*argv, "--", *CPU_EXTRA, *OUTPUT_EXTRA]
@@ -393,6 +385,7 @@ def canonical_environment_witness(
     arm: dict[str, Any],
 ) -> dict[str, Any]:
     emitted = parse_wrapper_emitted_environment(raw_stderr)
+    q8_subgate = cell.get("model") == "qwen36_q8"
     expected_emitted = {
         "LD_LIBRARY_PATH": (
             f"{Path(arm['library_path']).resolve()}:{Path(LLVM20_LIBDIR).resolve()}"
@@ -400,6 +393,8 @@ def canonical_environment_witness(
         **REQUIRED_WRAPPER_OMP_ENV,
         "GGML_IQK": str(cell["iqk"]),
     }
+    if q8_subgate:
+        expected_emitted["GGML_IQK_Q8_0"] = "1"
     if emitted != expected_emitted:
         raise RuntimeError(
             "canonical wrapper environment drifted: "
@@ -409,10 +404,11 @@ def canonical_environment_witness(
     effective = {**parent, **emitted}
     required_effective = {
         **REQUIRED_WRAPPER_OMP_ENV,
-        "KMP_BLOCKTIME": "10",
         "GGML_IQK": str(cell["iqk"]),
         "LD_LIBRARY_PATH": expected_emitted["LD_LIBRARY_PATH"],
     }
+    if q8_subgate:
+        required_effective["GGML_IQK_Q8_0"] = "1"
     drift = {
         key: {"expected": value, "actual": effective.get(key)}
         for key, value in required_effective.items()
@@ -425,7 +421,6 @@ def canonical_environment_witness(
         "wrapper_emitted": environment_identity(emitted),
         "effective": environment_identity(effective),
         "required_effective_settings": required_effective,
-        "canonical_recipe_drift": dict(CANONICAL_RECIPE_KMP_DRIFT),
     }
 
 
@@ -464,12 +459,62 @@ def file_identity(path: Path) -> dict[str, Any]:
     }
 
 
+def instrument_era_attestation() -> dict[str, Any]:
+    """Bind this run to the active CPU and evaluation instrument eras."""
+    identity = file_identity(INSTRUMENT_ERAS)
+    raw = INSTRUMENT_ERAS.read_text(encoding="utf-8")
+    raw_sha256 = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    if raw_sha256 != identity["sha256"]:
+        raise RuntimeError(
+            "instrument-era registry changed between identity hashing and parsing: "
+            f"hashed={identity['sha256']} parsed={raw_sha256}"
+        )
+    try:
+        document = yaml.safe_load(raw)
+    except yaml.YAMLError as exc:
+        raise RuntimeError("instrument-era registry is not valid YAML") from exc
+    eras = document.get("eras") if isinstance(document, dict) else None
+    if not isinstance(eras, list) or not all(isinstance(row, dict) for row in eras):
+        raise RuntimeError("instrument-era registry lacks a valid eras list")
+
+    rows: dict[str, dict[str, Any]] = {}
+    for scope, expected_id in (("cpu_bench", "E6-cpu-kernel"), ("eval_quality", "E7-eval-instrument")):
+        scoped = [row for row in eras if row.get("scope") == scope]
+        if not scoped or scoped[-1].get("id") != expected_id:
+            raise RuntimeError(
+                f"instrument-era registry active {scope} row drifted: "
+                f"expected={expected_id!r} actual={scoped[-1].get('id') if scoped else None!r}"
+            )
+        row = scoped[-1]
+        if not isinstance(row.get("from"), (str, datetime)):
+            raise RuntimeError(f"instrument-era registry {expected_id} lacks a valid from boundary")
+        pattern = re.compile(rf"^  - id: {re.escape(expected_id)}\s*$", re.MULTILINE)
+        match = pattern.search(raw)
+        if match is None:
+            raise RuntimeError(f"instrument-era registry cannot locate raw row {expected_id}")
+        start_line = raw.count("\n", 0, match.start()) + 1
+        next_row = re.compile(r"^  - id: ", re.MULTILINE).search(raw, match.end())
+        end_offset = next_row.start() if next_row else len(raw)
+        raw_row = raw[match.start():end_offset]
+        end_line = raw.count("\n", 0, end_offset)
+        rows[scope] = {
+            "id": expected_id,
+            "scope": scope,
+            "from": row["from"].isoformat() if isinstance(row["from"], datetime) else row["from"],
+            "parsed_row": row,
+            "raw_row_sha256": hashlib.sha256(raw_row.encode("utf-8")).hexdigest(),
+            "row_boundaries": {"start_line": start_line, "end_line": end_line},
+        }
+    return {"source": identity, "active": rows}
+
+
 def harness_identities() -> dict[str, dict[str, Any]]:
     return {
         "runner": file_identity(Path(__file__)),
         "bench_canonical": file_identity(CANONICAL_WRAPPER),
         "canonical_recipe": file_identity(CANONICAL_RECIPE),
         "parent_environment": parent_environment_identity(),
+        "instrument_eras": instrument_era_attestation(),
     }
 
 
@@ -1407,18 +1452,25 @@ def parse_result(raw_stdout: str, metric: str, expected_head: str) -> dict[str, 
     if isinstance(build_number, bool) or not isinstance(build_number, int) or build_number <= 0:
         raise RuntimeError(f"invalid JSON build_number: {build_number!r}")
     samples = row.get("samples_ts")
+    samples_ns = row.get("samples_ns")
     if not isinstance(samples, list) or len(samples) != REPS:
         raise RuntimeError(f"expected exactly {REPS} numeric samples_ts in canonical JSON")
+    if not isinstance(samples_ns, list) or len(samples_ns) != REPS:
+        raise RuntimeError(f"expected exactly {REPS} numeric samples_ns in canonical JSON")
     normalized: list[float] = []
-    for value in samples:
+    normalized_ns: list[float] = []
+    for value, value_ns in zip(samples, samples_ns):
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise RuntimeError(f"samples_ts contains a non-numeric value: {value!r}")
         converted = float(value)
         if not math.isfinite(converted) or converted <= 0:
             raise RuntimeError(f"samples_ts contains a nonpositive or non-finite value: {value!r}")
         normalized.append(converted)
+        converted_ns = require_finite_positive(value_ns, "samples_ns value")
+        normalized_ns.append(converted_ns)
     return {
         "samples_ts": normalized,
+        "samples_ns": normalized_ns,
         "build_commit": build_commit,
         "build_number": build_number,
     }
@@ -1483,6 +1535,52 @@ def stats(samples: list[float]) -> dict[str, Any]:
     if not math.isfinite(median) or not math.isfinite(mad):
         raise RuntimeError("median or MAD is non-finite")
     return {"samples_ts": checked, "median_ts": median, "mad_ts": mad}
+
+
+def measurement_window_witness(
+    monitor: dict[str, Any], samples_ns: list[float]
+) -> dict[str, Any]:
+    """Prove clean-window coverage without inventing unavailable per-rep clocks."""
+    sustained = monitor.get("sustained_window")
+    samples = monitor.get("samples")
+    if not isinstance(sustained, dict) or not isinstance(samples, list) or len(samples) < 2:
+        raise RuntimeError("contention monitor lacks raw intervals for measurement coverage")
+    total_measured_s = sum(
+        require_finite_positive(value, "samples_ns") for value in samples_ns
+    ) / 1_000_000_000
+    first = require_finite_positive(samples[0].get("monotonic"), "first monitor monotonic")
+    last = require_finite_positive(samples[-1].get("monotonic"), "last monitor monotonic")
+    selected_start = require_finite_positive(sustained.get("start_monotonic"), "sustained window start")
+    selected_end = require_finite_positive(sustained.get("end_monotonic"), "sustained window end")
+    selected_duration = require_finite_positive(sustained.get("elapsed_s"), "sustained window duration")
+    if last <= first or selected_end <= selected_start or selected_start < first or selected_end > last:
+        raise RuntimeError("contention monitor window bounds are invalid for measurement coverage")
+    endpoint_duration = selected_end - selected_start
+    if not math.isclose(
+        selected_duration, endpoint_duration, rel_tol=1e-9, abs_tol=1e-9
+    ):
+        raise RuntimeError(
+            "contention monitor sustained window duration disagrees with endpoints: "
+            f"declared={selected_duration} endpoints={endpoint_duration}"
+        )
+    observed_duration = last - first
+    minimum_overlap_s = max(0.0, total_measured_s + selected_duration - observed_duration)
+    witness = {
+        "samples_ns": samples_ns,
+        "total_measured_repetition_duration_s": total_measured_s,
+        "selected_clean_window_duration_s": selected_duration,
+        "observed_monitor_duration_s": observed_duration,
+        "overlap_basis": "interval-arithmetic-lower-bound; per-repetition timestamps unavailable",
+        "minimum_clean_overlap_s": minimum_overlap_s,
+        "required_clean_overlap_s": total_measured_s,
+        "raw_monitor_interval_count": len(monitor.get("intervals", [])),
+    }
+    if minimum_overlap_s + 1e-9 < total_measured_s:
+        raise RuntimeError(
+            "clean sustained window cannot conservatively cover the full measured "
+            f"repetition duration: {witness}"
+        )
+    return witness
 
 
 def _proc_stat_cpu() -> tuple[int, int]:
@@ -1918,6 +2016,7 @@ def run_arm(cell: dict[str, Any], arm: dict[str, Any], artifact: Path) -> dict[s
         arm,
     )
     parsed = parse_result(completed.stdout, cell["metric"], arm["actual_head"])
+    measurement_coverage = measurement_window_witness(monitor, parsed["samples_ns"])
     witness = build_witness(completed.stderr, arm["actual_head"])
     if parsed["build_commit"] != witness["commit"] or str(parsed["build_number"]) != witness["build_number"]:
         raise RuntimeError(f"JSON and Markdown build witnesses disagree: {parsed} / {witness}")
@@ -1939,6 +2038,7 @@ def run_arm(cell: dict[str, Any], arm: dict[str, Any], artifact: Path) -> dict[s
         "parent_environment_identity": parent_environment_identity(),
         "canonical_environment_witness": environment_witness,
         "contention_monitor": monitor,
+        "measurement_window_coverage": measurement_coverage,
         "witness": {
             **witness,
             "json_resolved_full_commit": json_resolved,
@@ -2213,7 +2313,7 @@ def manifest() -> dict[str, Any]:
             },
             "explicit_exclusion": ["qwen3.5-122b"],
             "parent_environment_identity": parent_environment_identity(),
-            "known_recipe_drift": [dict(CANONICAL_RECIPE_KMP_DRIFT)],
+            "instrument_eras": instrument_era_attestation(),
             "profile": {"prefill": PREFILL, "reps": REPS, "cpu_extra": list(CPU_EXTRA), "output_extra": list(OUTPUT_EXTRA), "initial_order": ["production", "candidate"], "gray_retry_order": ["candidate", "production"], "gray_retry_scope": "non-IQ regression pairs and IQK=0 control pairs only"},
             "arms": {name: arm_spec(name) for name in ("production", "candidate")},
             "models": {model.name: {"path": str(model.path), "iq": model.iq} for model in MODELS},

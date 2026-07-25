@@ -106,6 +106,7 @@ def result_json(
     metric: str = "pp2048",
     commit: str = "1977a5d78",
 ) -> str:
+    samples_ns = [1_000_000_000] * len(samples)
     return json.dumps(
         [
             {
@@ -114,6 +115,7 @@ def result_json(
                 "build_commit": commit,
                 "build_number": 10102,
                 "samples_ts": samples,
+                "samples_ns": samples_ns,
             }
         ]
     )
@@ -123,6 +125,7 @@ def wrapper_stderr(
     *,
     library_path: str = "/candidate",
     iqk: int = 1,
+    q8_0: bool = False,
     build: str = "build: 1977a5d78 (10102)",
 ) -> str:
     emitted = {
@@ -130,6 +133,8 @@ def wrapper_stderr(
         **runner.REQUIRED_WRAPPER_OMP_ENV,
         "GGML_IQK": str(iqk),
     }
+    if q8_0:
+        emitted["GGML_IQK_Q8_0"] = "1"
     assignments = " ".join(f"{key}={value}" for key, value in emitted.items())
     return f"Env:       {assignments}\n{build}\n"
 
@@ -458,6 +463,14 @@ def test_samples_and_json_build_identity_are_strict() -> None:
             "pp2048",
             runner.CANDIDATE_HEAD,
         )
+    missing_ns = json.loads(result_json(samples))
+    del missing_ns[0]["samples_ns"]
+    with pytest.raises(RuntimeError, match="samples_ns"):
+        runner.parse_result(json.dumps(missing_ns), "pp2048", runner.CANDIDATE_HEAD)
+    invalid_ns = json.loads(result_json(samples))
+    invalid_ns[0]["samples_ns"][0] = 0
+    with pytest.raises(RuntimeError, match="samples_ns"):
+        runner.parse_result(json.dumps(invalid_ns), "pp2048", runner.CANDIDATE_HEAD)
 
 
 def test_split_model_identity_hashes_every_exact_shard(tmp_path: Path) -> None:
@@ -916,6 +929,7 @@ def test_harness_identity_binds_runner_wrapper_and_recipe() -> None:
         "bench_canonical",
         "canonical_recipe",
         "parent_environment",
+        "instrument_eras",
     }
     for role in ("runner", "bench_canonical", "canonical_recipe"):
         assert identity[role]["bytes"] > 0 and identity[role]["sha256"]
@@ -942,7 +956,7 @@ def test_hostile_parent_environment_cannot_propagate(
         monkeypatch.setenv(key, value)
     environment = runner.canonical_parent_environment()
     assert environment == runner.CANONICAL_PARENT_ENV
-    assert environment["KMP_BLOCKTIME"] == "10"
+    assert "KMP_BLOCKTIME" not in environment
     assert all(
         key not in environment or environment[key] != value
         for key, value in poisoned.items()
@@ -959,15 +973,13 @@ def test_canonical_environment_witness_validates_emitted_and_effective_stack() -
         cell,
         arm,
     )
-    assert witness["parent"]["environment"]["KMP_BLOCKTIME"] == "10"
     assert "KMP_BLOCKTIME" not in witness["wrapper_emitted"]["environment"]
     effective = witness["effective"]["environment"]
-    assert effective["KMP_BLOCKTIME"] == "10"
+    assert "KMP_BLOCKTIME" not in effective
     assert effective["GGML_IQK"] == "0"
     assert {
         key: effective[key] for key in runner.REQUIRED_WRAPPER_OMP_ENV
     } == runner.REQUIRED_WRAPPER_OMP_ENV
-    assert witness["canonical_recipe_drift"]["trust_boundary_change_required"] is True
 
 
 def test_canonical_environment_witness_rejects_missing_duplicate_and_drift() -> None:
@@ -985,6 +997,66 @@ def test_canonical_environment_witness_rejects_missing_duplicate_and_drift() -> 
             {"iqk": 1},
             {"library_path": "/candidate"},
         )
+
+
+def test_q8_subgate_is_explicit_and_iq_rows_reject_it() -> None:
+    q8_cell = {"model": "qwen36_q8", "iqk": 1}
+    witness = runner.canonical_environment_witness(
+        wrapper_stderr(q8_0=True), q8_cell, {"library_path": "/candidate"}
+    )
+    assert witness["effective"]["environment"]["GGML_IQK_Q8_0"] == "1"
+    with pytest.raises(RuntimeError, match="environment drifted"):
+        runner.canonical_environment_witness(
+            wrapper_stderr(q8_0=True), {"model": "glm_iq2", "iqk": 1},
+            {"library_path": "/candidate"},
+        )
+    assert "--ggml-iqk-q8-0" in runner.wrapper_argv(
+        runner.MODELS[0], {"binary": "/b", "source_root": "/s", "library_path": "/l"}, 1, dry_run=True
+    )
+
+
+def test_instrument_era_attestation_fails_closed_on_missing_or_drift(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    missing = tmp_path / "missing.yaml"
+    monkeypatch.setattr(runner, "INSTRUMENT_ERAS", missing)
+    with pytest.raises(RuntimeError, match="required file missing"):
+        runner.instrument_era_attestation()
+    registry = tmp_path / "eras.yaml"
+    registry.write_text(
+        "eras:\n  - id: E6-cpu-kernel\n    from: '2026-07-20T13:30:13Z'\n    scope: cpu_bench\n"
+        "  - id: E7-eval-instrument\n    from: '2026-07-21T10:30:00Z'\n    scope: eval_quality\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runner, "INSTRUMENT_ERAS", registry)
+    attestation = runner.instrument_era_attestation()
+    assert attestation["active"]["cpu_bench"]["id"] == "E6-cpu-kernel"
+    assert attestation["active"]["eval_quality"]["row_boundaries"] == {"start_line": 5, "end_line": 7}
+    real_file_identity = runner.file_identity
+    monkeypatch.setattr(runner, "file_identity", lambda _path: {"sha256": "0" * 64})
+    with pytest.raises(RuntimeError, match="changed between identity hashing and parsing"):
+        runner.instrument_era_attestation()
+    monkeypatch.setattr(runner, "file_identity", real_file_identity)
+    registry.write_text(registry.read_text(encoding="utf-8").replace("E6-cpu-kernel", "E9-cpu-kernel"), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="drifted"):
+        runner.instrument_era_attestation()
+
+
+def test_measurement_window_witness_requires_conservative_full_coverage() -> None:
+    monitor = {
+        "samples": [{"monotonic": 1.0}, {"monotonic": 11.0}],
+        "intervals": [{"index": 0}],
+        "sustained_window": {"start_monotonic": 1.0, "end_monotonic": 11.0, "elapsed_s": 10.0},
+    }
+    witness = runner.measurement_window_witness(monitor, [2_000_000_000] * 2)
+    assert witness["total_measured_repetition_duration_s"] == 4.0
+    assert witness["minimum_clean_overlap_s"] == 4.0
+    monitor["sustained_window"]["elapsed_s"] = 9.5
+    with pytest.raises(RuntimeError, match="duration disagrees with endpoints"):
+        runner.measurement_window_witness(monitor, [2_000_000_000] * 2)
+    monitor["sustained_window"] = {"start_monotonic": 3.0, "end_monotonic": 9.0, "elapsed_s": 6.0}
+    with pytest.raises(RuntimeError, match="cannot conservatively cover"):
+        runner.measurement_window_witness(monitor, [2_000_000_000] * 2)
 
 
 def test_run_default_environment_is_exact_under_parent_poison(
@@ -1072,7 +1144,16 @@ def test_run_arm_passes_only_exact_parent_environment(
         return Result(
             stdout=result_json([1.0] * 10),
             stderr=wrapper_stderr(),
-        ), {"status": "pass", "samples": [], "intervals": []}
+        ), {
+            "status": "pass",
+            "samples": [{"monotonic": 1.0}, {"monotonic": 11.0}],
+            "intervals": [{}],
+            "sustained_window": {
+                "start_monotonic": 1.0,
+                "end_monotonic": 11.0,
+                "elapsed_s": 10.0,
+            },
+        }
 
     monkeypatch.setattr(runner, "run_monitored", fake_run_monitored)
     identity = {
@@ -1109,12 +1190,7 @@ def test_run_arm_passes_only_exact_parent_environment(
     row = runner.run_arm(cell, arm, tmp_path / "candidate.log")
     assert observed == runner.CANONICAL_PARENT_ENV
     assert row["parent_environment_identity"] == runner.parent_environment_identity()
-    assert (
-        row["canonical_environment_witness"]["effective"]["environment"][
-            "KMP_BLOCKTIME"
-        ]
-        == "10"
-    )
+    assert "KMP_BLOCKTIME" not in row["canonical_environment_witness"]["effective"]["environment"]
 
 
 def test_ratios_reject_nonfinite_and_overflow() -> None:

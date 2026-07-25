@@ -478,5 +478,18 @@ class TestEmitBenchCommandCli(unittest.TestCase):
         self.assertEqual(captured["ggml_iqk"], "0")
 
 
+class TestQ8Subgate(unittest.TestCase):
+    def test_q8_subgate_is_explicit_and_rejects_other_values(self):
+        with tempfile.NamedTemporaryFile() as model:
+            with mock.patch.object(r, "discover_canonical_bench_binary", return_value=("/bench", [])):
+                _binary, _cmd, env = r.build_canonical_bench_command(
+                    model=model.name, ggml_iqk_q8_0="1"
+                )
+        self.assertEqual(env["GGML_IQK_Q8_0"], "1")
+        with tempfile.NamedTemporaryFile() as model:
+            with self.assertRaises(r.CanonicalRecipeViolation):
+                r.build_canonical_bench_command(model=model.name, ggml_iqk_q8_0="0")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

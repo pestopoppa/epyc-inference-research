@@ -823,6 +823,7 @@ def build_canonical_bench_command(
     source_root: Optional[str] = None,
     library_path: Optional[str] = None,
     ggml_iqk: str = "1",
+    ggml_iqk_q8_0: Optional[str] = None,
 ) -> tuple[str, list[str], dict[str, str]]:
     """Build (binary_path, cmd_list, env_dict) for the canonical llama-bench run.
 
@@ -854,6 +855,8 @@ def build_canonical_bench_command(
         library_path: directory containing the explicit binary's llama.cpp
             shared libraries. It is placed first in LD_LIBRARY_PATH.
         ggml_iqk: runtime iqk gate, either "0" or "1" (default "1").
+        ggml_iqk_q8_0: Q8_0 IQK sub-gate. Only "1" is accepted when supplied;
+            omission leaves the sub-gate absent from the effective environment.
 
     Returns:
         binary: absolute path to llama-bench
@@ -870,6 +873,11 @@ def build_canonical_bench_command(
         raise CanonicalRecipeViolation(
             f"ggml_iqk must be '0' or '1', got {ggml_iqk!r}"
         )
+    if ggml_iqk_q8_0 is not None and str(ggml_iqk_q8_0) != "1":
+        raise CanonicalRecipeViolation(
+            "ggml_iqk_q8_0 must be omitted or '1', got "
+            f"{ggml_iqk_q8_0!r}"
+        )
 
     explicit_values = (binary, source_root, library_path)
     if any(value is not None for value in explicit_values) and not all(
@@ -885,8 +893,11 @@ def build_canonical_bench_command(
             "--v4-fork or --ik-llama"
         )
 
+    extra_vars = {"GGML_IQK": ggml_iqk}
+    if ggml_iqk_q8_0 is not None:
+        extra_vars["GGML_IQK_Q8_0"] = "1"
     env = build_canonical_env(
-        extra_vars={"GGML_IQK": ggml_iqk},
+        extra_vars=extra_vars,
         use_v4_gate_extras=use_v4_fork,
         library_path=library_path,
     )
@@ -951,6 +962,7 @@ def _emit_bench_command_json(args) -> int:
             source_root=args.source_root,
             library_path=args.library_path,
             ggml_iqk=args.ggml_iqk,
+            ggml_iqk_q8_0=args.ggml_iqk_q8_0,
         )
     except (FileNotFoundError, CanonicalRecipeViolation) as e:
         print(f"ERROR: {e}", file=sys.stderr)
@@ -972,6 +984,8 @@ def _emit_bench_command_json(args) -> int:
     }
     if args.v4_fork:
         emitted_env.update(V4_GATE_EXTRA_ENV)
+    if args.ggml_iqk_q8_0 is not None:
+        emitted_env["GGML_IQK_Q8_0"] = "1"
 
     out = {
         "binary": binary,
@@ -982,6 +996,7 @@ def _emit_bench_command_json(args) -> int:
             os.path.realpath(args.library_path) if args.library_path else None
         ),
         "ggml_iqk": args.ggml_iqk,
+        "ggml_iqk_q8_0": args.ggml_iqk_q8_0,
     }
     print(json.dumps(out, indent=2))
     return 0
@@ -1086,6 +1101,11 @@ def _main() -> int:
         choices=("0", "1"),
         default="1",
         help="Set the GGML_IQK runtime gate (default: 1).",
+    )
+    pe.add_argument(
+        "--ggml-iqk-q8-0",
+        choices=("1",),
+        help="Explicitly enable GGML_IQK_Q8_0 for Q8_0 benchmark rows.",
     )
     # NOTE: --extra is handled by the pre-argparse split-on-`--` above.
     # Any args after `--` on the command line are captured into extra_args and
