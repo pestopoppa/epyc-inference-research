@@ -122,6 +122,26 @@ def test_complete_artifact_is_retro_cert_candidate() -> None:
     assert result["missing_required_fields"] == []
 
 
+def test_large_valid_summary_is_scanned_as_marker_and_cannot_be_vacuously_complete() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        artifact = Path(tmp) / "large_summary"
+        _write_artifact(
+            artifact,
+            {"status": "ok", "padding": "x" * (2 * 1024 * 1024)},
+        )
+
+        result = audit_artifact(artifact, max_bytes=2 * 1024 * 1024)
+
+    summary_path = str(artifact / "summary.json")
+    assert result["summary_status"] == "ok"
+    assert result["status"] == "incomplete"
+    assert "summary_json" in result["present_required_fields"]
+    assert "summary_json" not in result["missing_required_fields"]
+    assert "result_grammar" in result["missing_required_fields"]
+    assert result["files_scanned"] == [summary_path]
+    assert result["files_skipped_large"] == [summary_path]
+
+
 def test_batch_report_marks_incomplete_when_any_artifact_fails() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         complete = Path(tmp) / "complete"
@@ -146,4 +166,5 @@ def test_batch_report_marks_incomplete_when_any_artifact_fails() -> None:
 if __name__ == "__main__":
     test_primary_near_misses_do_not_satisfy_explicit_policy_fields()
     test_complete_artifact_is_retro_cert_candidate()
+    test_large_valid_summary_is_scanned_as_marker_and_cannot_be_vacuously_complete()
     test_batch_report_marks_incomplete_when_any_artifact_fails()

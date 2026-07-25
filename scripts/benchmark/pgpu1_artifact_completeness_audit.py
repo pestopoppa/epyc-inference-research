@@ -189,7 +189,7 @@ def _candidate_files(path: Path, max_bytes: int) -> list[Path]:
             continue
         if file_path.name.startswith("."):
             continue
-        if file_path.stat().st_size > max_bytes:
+        if file_path.name != "summary.json" and file_path.stat().st_size > max_bytes:
             continue
         files.append(file_path)
     return files
