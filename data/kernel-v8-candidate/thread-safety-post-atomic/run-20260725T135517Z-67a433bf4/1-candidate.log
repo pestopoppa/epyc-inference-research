@@ -1,0 +1,73 @@
+0.00.033.604 I system_info: n_threads = 2 (n_threads_batch = 2) / 192 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.00.045.673 W load: empty token at index 30143
+0.00.045.821 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.045.823 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.221.676 W load: empty token at index 30143
+0.00.221.792 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.221.794 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.241.260 W load: empty token at index 30143
+0.00.241.369 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.241.371 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.253.149 I Creating context 1/4 for model 1/3
+0.00.253.160 I Creating context 2/4 for model 1/3
+0.00.253.220 I Creating context 3/4 for model 1/3
+0.00.253.249 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.253.252 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.253.263 I Creating context 4/4 for model 1/3
+0.00.253.295 I Creating context 1/4 for model 2/3
+0.00.253.307 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.253.321 I Creating context 2/4 for model 2/3
+0.00.253.326 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.253.344 I Creating context 3/4 for model 2/3
+0.00.253.371 I Creating context 4/4 for model 2/3
+0.00.253.375 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.253.432 I Creating context 1/4 for model 3/3
+0.00.253.439 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.253.450 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.253.460 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.253.528 I Creating context 2/4 for model 3/3
+0.00.253.604 I Creating context 3/4 for model 3/3
+0.00.253.609 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.253.613 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.253.657 I Creating context 4/4 for model 3/3
+0.00.253.700 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.253.810 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.258.158 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.258.159 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.262.360 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.262.362 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.262.840 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.262.842 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.263.520 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.263.522 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.263.706 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.263.708 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.264.840 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.264.844 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.265.791 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.265.793 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.265.834 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.265.836 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.324.796 I Model 2/3, Context 2/4: The meaning of life is on a dark night and it will never come back. But one day, it does. It is a bright and sunny day for a meal. But the food was very dry. It had no way of getting food.
+The food was starting to rot. It smelled bad and made the night feel bad. Everyone was sad and hungry. The food was all over the ground and the ground was not getting enough to eat.
+But then, a kind person came by and saw the food. It was a happy and peaceful meal.
+The kind person took the food and put it in the meal
+
+0.00.325.028 I Model 2/3, Context 3/4: The meaning of life is a very sad little girl. She is very sad because she has no friends to play with. One day she went to the park and saw a funny-looking bird. The bird had a big beak and he was eating a piece of candy.
+The little girl said, "Hello, bird! Can I eat you?"
+The bird said, "No, I don't want to be eaten. I want to find you a friend."
+The bird said, "I know where you can find a friend. Follow me!"
+So the bird flew away and soon he came back with a bird
+
+0.00.325.339 I Model 2/3, Context 1/4: The meaning of life is to be kind to others. Some people were very harsh, some were very nice, but some people were harsh. One day, a little girl saw what was happening. She felt very sad and she wanted to help.
+The little girl walked up to the little girl and said, "Hello, I'm here to help. I'm just passing by. What's wrong?"
+The little girl smiled and said, "I'm sorry, I don't have a home to live in. I don't have any friends."
+The little girl felt sad for the little girl and said, "
+
+0.00.330.882 I Model 2/3, Context 4/4: The meaning of life is on the head. It is a magical day. Suddenly, an old man appeared. He had a big smile and he was very patient. 
+The old man said to the little boy, "Do you know what this means?"
+The boy shook his head and said, "No."
+The old man said, "I have something that will make you happy."
+He bent down and told the little boy, "Look over there, I have something to give you."
+The little boy was curious. He walked to the old man's hand and looked inside. He saw a beautiful flower and it was
+

@@ -1,0 +1,66 @@
+0.00.033.350 I system_info: n_threads = 2 (n_threads_batch = 2) / 192 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.00.045.269 W load: empty token at index 30143
+0.00.045.407 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.045.409 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.220.727 W load: empty token at index 30143
+0.00.220.852 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.220.854 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.240.166 W load: empty token at index 30143
+0.00.240.282 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.240.284 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.250.302 I Creating context 1/4 for model 1/3
+0.00.250.313 I Creating context 2/4 for model 1/3
+0.00.250.365 I Creating context 3/4 for model 1/3
+0.00.250.397 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.250.402 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.250.425 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.250.439 I Creating context 4/4 for model 1/3
+0.00.250.474 I Creating context 1/4 for model 2/3
+0.00.250.495 I Creating context 2/4 for model 2/3
+0.00.250.545 I Creating context 3/4 for model 2/3
+0.00.250.551 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.250.582 I Creating context 4/4 for model 2/3
+0.00.250.602 I Creating context 1/4 for model 3/3
+0.00.250.608 I Creating context 2/4 for model 3/3
+0.00.250.624 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.250.630 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.250.646 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.250.649 I Creating context 3/4 for model 3/3
+0.00.250.768 I Creating context 4/4 for model 3/3
+0.00.250.885 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.250.900 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.250.905 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.250.907 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.250.936 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.727 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.256.731 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.261.382 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.261.383 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.262.385 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.262.387 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.262.393 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.262.393 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.263.048 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.263.050 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.263.123 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.263.125 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.263.904 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.263.906 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.264.467 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.264.468 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.322.924 I Model 2/3, Context 3/4: The meaning of life is for everyone because it is important to always be kind. People will trust the value of others and they will be kind to the people around. This means that the town is very peaceful and safe. 
+One day, a little girl named Mia decided to take a walk in the town. She was very careful to stay close to the town and she trusted the people there. She was always thankful for their kindness and always followed her steps. 
+The people at the town welcomed Mia and told her that the value of being kind is the way to make a peaceful difference. Mia was so
+
+0.00.323.618 I Model 2/3, Context 2/4: The meaning of life is to remember that life is very important. It brings happiness to everyone, no matter how small the life was. Each day, the world became more and more calm. 
+One day, the sky was very grey, but the sun was still shining brightly in the sky. The world was getting bigger, and the sky became clear. The sun was shining so brightly that it was almost evening, and the sky was full of light and warmth. 
+The sun and the sky had been the day before. Then, the sun said to the sky, "We must stop now. The evening is going to end
+
+0.00.323.829 I Model 2/3, Context 1/4: The meaning of life is being overwhelming and missing. It is a mystery. Even when you don't understand, the mystery will come up for the next day. But you must be sure you will be obedient and take care of your family.<s> Once upon a time, there was a little boy named Tim. Tim had a small cat named Fluffy. Fluffy was a very naughty cat. He liked to run around and make a lot of noise.
+One day, Tim's mom asked him to pack his bag with food and toys. Tim did not want to stop playing with Fluffy.
+
+0.00.332.260 I Model 2/3, Context 4/4: The meaning of life is a bit sad. We need to send something to our destination so we can get to the top of the hill. 
+One day, the people who lived nearby have been very busy, but they were not too happy to go. They were not ready to go. 
+At first, the people were so sad. They did not want to go to the top of the hill. But then, one day, the people on the hill had an idea. They decided to do something to help them.
+They worked very hard to send something to the people on the hill. After a lot of hard work, they finally sent it
+

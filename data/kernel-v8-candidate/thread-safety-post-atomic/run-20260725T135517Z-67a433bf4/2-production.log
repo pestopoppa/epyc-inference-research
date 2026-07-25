@@ -1,0 +1,2 @@
+env: '/mnt/raid0/llm/llama.cpp/build-hip/bin/test-thread-safety': No such file or directory
+env: use -[v]S to pass options in shebang lines

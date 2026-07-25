@@ -1,0 +1,8 @@
+captured_at_utc=2026-07-25T13:58:37Z
+production_head=6ad45fa3ff6718c07c000061dbc6e29c1771f6e3
+candidate_branch=experimental-v8-refresh-20260724
+candidate_head=67a433bf45a8a091d83b4ea0b32ff0735fd51800
+atomic_fix_ancestor=true
+bd409d3bcd3edb671eb7a2a33e297b4c1ee2ae7ffaf5a83f21f5360753347661  /mnt/raid0/llm/llama.cpp-v7-thread-safety-scratch/build-hip-thread-safety/bin/test-thread-safety
+24b3d35a9b549f7bf2f5c208858be15095960e5f37c2ccd097ab83da10b80f10  /mnt/raid0/llm/llama.cpp-experimental/build-v8-hip/bin/test-thread-safety
+66967fbece6dbe97886593fdbb73589584927e29119ec31f08090732d1861739  /mnt/raid0/llm/llama.cpp-experimental/build-v8-hip/tinyllamas/stories15M-q4_0.gguf

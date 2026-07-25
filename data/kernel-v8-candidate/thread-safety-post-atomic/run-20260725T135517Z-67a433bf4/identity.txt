@@ -1,0 +1,7 @@
+2026-07-25T13:55:17Z
+production-consolidated-v7
+6ad45fa3ff6718c07c000061dbc6e29c1771f6e3
+experimental-v8-refresh-20260724
+67a433bf45a8a091d83b4ea0b32ff0735fd51800
+24b3d35a9b549f7bf2f5c208858be15095960e5f37c2ccd097ab83da10b80f10  /mnt/raid0/llm/llama.cpp-experimental/build-v8-hip/bin/test-thread-safety
+66967fbece6dbe97886593fdbb73589584927e29119ec31f08090732d1861739  /mnt/raid0/llm/llama.cpp-experimental/build-v8-hip/tinyllamas/stories15M-q4_0.gguf

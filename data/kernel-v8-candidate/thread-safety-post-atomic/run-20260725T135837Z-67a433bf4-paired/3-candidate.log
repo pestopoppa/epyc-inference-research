@@ -1,0 +1,68 @@
+0.00.034.829 I system_info: n_threads = 2 (n_threads_batch = 2) / 192 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.00.046.927 W load: empty token at index 30143
+0.00.047.072 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.047.074 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.226.223 W load: empty token at index 30143
+0.00.226.340 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.226.342 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.245.692 W load: empty token at index 30143
+0.00.245.804 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.245.805 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.255.935 I Creating context 1/4 for model 1/3
+0.00.255.951 I Creating context 2/4 for model 1/3
+0.00.256.011 I Creating context 3/4 for model 1/3
+0.00.256.022 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.028 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.040 I Creating context 4/4 for model 1/3
+0.00.256.074 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.085 I Creating context 1/4 for model 2/3
+0.00.256.107 I Creating context 2/4 for model 2/3
+0.00.256.111 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.155 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.166 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.173 I Creating context 3/4 for model 2/3
+0.00.256.194 I Creating context 4/4 for model 2/3
+0.00.256.231 I Creating context 1/4 for model 3/3
+0.00.256.274 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.294 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.310 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.316 I Creating context 2/4 for model 3/3
+0.00.256.356 I Creating context 3/4 for model 3/3
+0.00.256.376 I Creating context 4/4 for model 3/3
+0.00.256.442 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.484 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.606 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.261.027 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.261.028 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.266.417 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.266.419 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.266.995 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.266.997 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.267.687 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.267.691 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.268.021 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.268.023 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.268.292 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.268.293 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.268.965 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.268.968 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.269.971 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.269.972 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.324.731 I Model 2/3, Context 1/4: The meaning of life is very important for us to know what we need to do. We need to give us to the storekeeper so that we can get food and be safe and strong in life.
+The storekeeper was very kind, but he had a lot of regret. He had been very persistent in finding the right way.
+One day, he was sitting at the store, looking for something that might be available. He finally saw it and knew he had to give it to the storekeeper.
+The storekeeper was very surprised and asked the man what he was doing. The man told him the problem that was a hard one and that he couldn
+
+0.00.325.753 I Model 2/3, Context 4/4: The meaning of life is called night, but I know how to stay warm. I want a warm hug and warmth from the sun. I want a warm hug and warmth in my heart."
+Mommy smiled. "I know, sweetheart. But it's okay. I'll make sure it's warm and safe for you."
+Mommy got a warm blanket and cuddled it in her bed. Mommy said, "Now you will always stay warm. Just remember to stay warm and warm in your heart."
+Little Sarah smiled and nodded. She knew Mommy was
+
+0.00.332.109 I Model 2/3, Context 2/4: The meaning of life is written on paper. It is a very important message that can make people happy. It is an important part of life. Everyone is happy when things are important. But one day, the people in the body get angry and leave. They don't let the purpose know what to do. They don't want to listen to the meaning of life.
+The note that the person was doing something very wrong. It was the same message it was told to come from. But the person didn't listen and kept on doing this. The note got more and more angry and soon, the person had taken the note that had got
+
+0.00.332.492 I Model 2/3, Context 3/4: The meaning of life is called 'bounce' and it's the safest day ever. The safari is a lot of fun, but it's a little bit too scary to stay still. 
+One day, the safari was in a very bad situation. The safers had to leave because the safers were very busy. They had to leave and all the animals were very worried. 
+The animals were so scared that they did not want to stay still. But they were brave and stayed still. 
+After a few hours, the animals came back to the safari. The animals were happy that the saf
+

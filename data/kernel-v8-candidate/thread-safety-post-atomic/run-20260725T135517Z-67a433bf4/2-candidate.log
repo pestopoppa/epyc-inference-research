@@ -1,0 +1,70 @@
+0.00.055.263 I system_info: n_threads = 2 (n_threads_batch = 2) / 192 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.00.067.383 W load: empty token at index 30143
+0.00.067.523 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.067.525 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.245.199 W load: empty token at index 30143
+0.00.245.321 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.245.323 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.264.654 W load: empty token at index 30143
+0.00.264.771 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.264.773 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.274.769 I Creating context 1/4 for model 1/3
+0.00.274.789 I Creating context 2/4 for model 1/3
+0.00.274.856 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.274.867 I Creating context 3/4 for model 1/3
+0.00.274.875 I Creating context 4/4 for model 1/3
+0.00.274.885 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.274.909 I Creating context 1/4 for model 2/3
+0.00.274.950 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.274.962 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.274.971 I Creating context 2/4 for model 2/3
+0.00.274.998 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.275.015 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.275.026 I Creating context 3/4 for model 2/3
+0.00.275.035 I Creating context 4/4 for model 2/3
+0.00.275.093 I Creating context 1/4 for model 3/3
+0.00.275.116 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.275.139 I Creating context 2/4 for model 3/3
+0.00.275.150 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.275.196 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.275.202 I Creating context 3/4 for model 3/3
+0.00.275.263 I Creating context 4/4 for model 3/3
+0.00.275.319 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.275.342 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.275.415 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.280.991 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.280.994 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.286.069 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.286.073 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.286.635 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.286.637 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.286.907 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.286.910 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.287.190 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.287.193 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.287.712 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.287.715 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.289.220 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.289.223 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.290.060 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.290.063 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.343.659 I Model 2/3, Context 2/4: The meaning of life is very important. It has been to many times, but all the people had been busy and were just nowhere to be found. 
+One day, a little girl came into the room. She wanted to see what was so special about the meaning of life. She looked around and saw the words she had read.
+The little girl was so excited that she couldn't help but shout. She jumped up and down and ran around the room. She ran and ran and ran.
+But then, the little girl got very tired and she was too tired to go very quickly. She sat down and kept looking at the meaning
+
+0.00.345.562 I Model 2/3, Context 3/4: The meaning of life is called simple. Every day it is just a special thing that brings good things to life.
+One day, the sun decided to go for a walk in the park. As soon as she stepped outside she could see the birds flying in the sky, a yellow and black-bird glow.
+The sun was so bright that it was getting warmter and warmth. Then suddenly, it stopped and the sun made a huge, beautiful light in the sky.
+The sky glowed with a soft, yellow, black and yellow light. It was so beautiful that it lit up the sky with bright colours.
+The sun was
+
+0.00.346.482 I Model 2/3, Context 4/4: The meaning of life is called "hate". All of the children were excited to know what was around them. One day, they all went to a big house and the children saw a big, colourful house.
+The children were so happy they could hardly contain themselves. They all wanted to go inside but the door was locked.
+The children tried to open the door but it was too stubborn. Then, one of the children had an idea. He said, "I know the answer! We can ask the King who lives in the castle to open it".
+The children were so excited, they couldn't believe their luck. They waited
+
+0.00.346.602 I Model 2/3, Context 1/4: The meaning of life is being humming. It has been a very special day, and it is important to be humble. But it is also very important to know the value of life. Every day, the little girl who was young, she was always reminded of the value of her life.
+One day, the little girl was walking in the woods and she saw a beautiful bird. She stopped and looked at the bird. The bird was so small and the little girl was so happy. She thought that the bird was so humming with her.
+The little girl knew that the bird was so special. She had heard that it was the
+

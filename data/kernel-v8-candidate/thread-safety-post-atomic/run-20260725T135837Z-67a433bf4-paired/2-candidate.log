@@ -1,0 +1,69 @@
+0.00.034.442 I system_info: n_threads = 2 (n_threads_batch = 2) / 192 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.00.046.763 W load: empty token at index 30143
+0.00.046.904 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.046.906 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.225.974 W load: empty token at index 30143
+0.00.226.091 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.226.093 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.245.505 W load: empty token at index 30143
+0.00.245.618 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.245.619 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.255.714 I Creating context 1/4 for model 1/3
+0.00.255.726 I Creating context 2/4 for model 1/3
+0.00.255.785 I Creating context 3/4 for model 1/3
+0.00.255.831 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.255.835 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.255.841 I Creating context 4/4 for model 1/3
+0.00.255.855 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.255.868 I Creating context 1/4 for model 2/3
+0.00.255.899 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.255.921 I Creating context 2/4 for model 2/3
+0.00.255.943 I Creating context 3/4 for model 2/3
+0.00.255.952 I Creating context 4/4 for model 2/3
+0.00.255.958 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.255.984 I Creating context 1/4 for model 3/3
+0.00.255.990 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.152 I Creating context 2/4 for model 3/3
+0.00.256.160 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.166 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.190 I Creating context 3/4 for model 3/3
+0.00.256.202 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.228 I Creating context 4/4 for model 3/3
+0.00.256.232 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.317 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.327 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.261.153 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.261.155 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.266.165 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.266.167 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.266.711 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.266.714 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.267.223 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.267.226 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.267.920 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.267.922 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.268.366 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.268.368 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.268.979 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.268.980 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.269.152 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.269.154 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.324.216 I Model 2/3, Context 2/4: The meaning of life is a story about a fierce dragon. He lived in a cage in the forest. Every day, the dragon would look out of the cage and watch the people walking around. He was very alert and made sure to stay still and quiet.
+One day, the dragon was feeling particularly tired and wanted to take a break. He looked around and saw a big, fierce dragon on the side of the road. He had never seen anything like it before! He was very excited and wanted to get closer.
+He slowly approached the dragon and the dragon stopped. He was so surprised when the drag
+
+0.00.329.561 I Model 2/3, Context 1/4: The meaning of life is on. It is a mysterious place. Every day, however, nothing else was there.
+Then one day, it started to rain. A voice from the sky said, “What are you doing?!”
+A little boy was so excited. He wanted to know what the voice was. He looked up and saw a big, grey cloud. The cloud was talking to him!
+“You can come and stay with me,” said the cloud. “You can stay here.”
+The little boy was so happy. He jumped out of the cloud and started to jump around. He jumped over the clouds and ran around
+
+0.00.341.283 I Model 2/3, Context 3/4: The meaning of life is being bossy, so they all live together. They have no idea what to do when they get around, and only have one opinion. But one day, something bad happened. As their opinions were about what they had been doing, the bossy one just couldn't do what he wanted.
+The other animals tried to help, but nothing could help them. They had worked so hard that their opinions got to be bossy and just wanted to do what they wanted.
+Finally, the other animals had an idea. They decided to take a break from their bossy opinions and sit in a circle.
+
+0.00.344.059 I Model 2/3, Context 4/4: The meaning of life is written on the ground. The sky is gloomy and there's a lot of rain. Then it starts to rain and the rain makes big puddles.
+The rain is getting heavy, but it doesn't stop. Then suddenly, the rain began to fall. The rain fell harder and harder, and the puddles got bigger and bigger.
+The rain was so heavy that it blew a big puddle right into the ground. The puddles started to fill up with water and the water filled up the puddles.
+The puddles were very heavy and
+

@@ -1,0 +1,69 @@
+0.00.056.100 I system_info: n_threads = 2 (n_threads_batch = 2) / 192 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.00.068.053 W load: empty token at index 30143
+0.00.068.192 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.068.194 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.247.557 W load: empty token at index 30143
+0.00.247.686 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.247.687 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.267.444 W load: empty token at index 30143
+0.00.267.570 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.267.572 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.277.665 I Creating context 1/4 for model 1/3
+0.00.277.676 I Creating context 2/4 for model 1/3
+0.00.277.721 I Creating context 3/4 for model 1/3
+0.00.277.757 I Creating context 4/4 for model 1/3
+0.00.277.770 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.277.773 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.277.787 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.277.816 I Creating context 1/4 for model 2/3
+0.00.277.825 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.277.849 I Creating context 2/4 for model 2/3
+0.00.277.870 I Creating context 3/4 for model 2/3
+0.00.277.886 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.277.926 I Creating context 4/4 for model 2/3
+0.00.277.949 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.277.957 I Creating context 1/4 for model 3/3
+0.00.277.959 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.278.013 I Creating context 2/4 for model 3/3
+0.00.278.073 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.278.086 I Creating context 3/4 for model 3/3
+0.00.278.090 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.278.110 I Creating context 4/4 for model 3/3
+0.00.278.146 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.278.204 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.278.206 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.284.058 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.284.060 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.288.777 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.288.780 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.289.130 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.289.132 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.289.569 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.289.570 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.290.369 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.290.372 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.290.721 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.290.723 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.291.497 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.291.500 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.292.267 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.292.269 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.347.224 I Model 2/3, Context 4/4: The meaning of life is to be a very modest child. Every day, the little boy would come home from school and he would go out for a walk. The little boy liked to explore the world around him, but he never went too far.
+One day, the little boy was walking by the side of town and he heard a noise. He was scared and he looked around to see if anyone was around. He heard the noise again and he stopped and listened.
+He was a little bit scared and he wanted to go home, but he was still scared. Then, he saw a big, bright star in the sky. It
+
+0.00.347.420 I Model 2/3, Context 1/4: The meaning of life is in order to tell the truth. He has a special friend who is very reliable. The friend always comes for way and is very nice.
+The friend was so happy to have his reliable friend and they went on lots of fun adventures together. They went to the park and the friends all liked it.
+One day, the friend was feeling a bit sad and he needed help. He was so sad that he couldn't be popular with his reliable friend. But then, something wonderful happened!
+The friend saw a big, friendly dog running around. He smiled and asked the owner if he could stay and play with the dog
+
+0.00.348.324 I Model 2/3, Context 3/4: The meaning of life is the same. On a cold winter day, a strong wind blew through the town, and it started to snow. The snow was so cold that it could barely keep in the air.
+The snow kept falling and falling as the winter as it could, but still kept falling. Soon it was all over the ground.
+But then, a small bird came by, and it thought it could help. So it flew over to the snow and tried to grab the bird, but it was too small.
+The bird tried and tried, but it couldn't get the bird to be able to keep in the air
+
+0.00.350.034 I Model 2/3, Context 2/4: The meaning of life is a reminder and it will come to life. Sally was so excited that she ran to her bedroom and opened the door. She saw something very strange on the floor. It was a big, black box with strange things inside.
+Sally was a bit scared. She asked her mom what had happened. Her mom just smiled and said, "This is a secret box from Grandma!"
+Sally was so curious and she asked, "What is it?"
+Her mom explained, "It's a box with the things inside, but it's a very special surprise. You must be careful and wait
+

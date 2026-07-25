@@ -1,0 +1,73 @@
+0.00.033.898 I system_info: n_threads = 2 (n_threads_batch = 2) / 192 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.00.045.869 W load: empty token at index 30143
+0.00.046.013 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.046.014 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.225.613 W load: empty token at index 30143
+0.00.225.732 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.225.733 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.245.136 W load: empty token at index 30143
+0.00.245.249 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.245.250 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.255.315 I Creating context 1/4 for model 1/3
+0.00.255.326 I Creating context 2/4 for model 1/3
+0.00.255.380 I Creating context 3/4 for model 1/3
+0.00.255.390 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.255.401 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.255.428 I Creating context 4/4 for model 1/3
+0.00.255.454 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.255.478 I Creating context 1/4 for model 2/3
+0.00.255.509 I Creating context 2/4 for model 2/3
+0.00.255.521 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.255.523 I Creating context 3/4 for model 2/3
+0.00.255.548 I Creating context 4/4 for model 2/3
+0.00.255.562 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.255.592 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.255.610 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.068 I Creating context 1/4 for model 3/3
+0.00.256.105 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.135 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.156 I Creating context 2/4 for model 3/3
+0.00.256.212 I Creating context 3/4 for model 3/3
+0.00.256.241 I Creating context 4/4 for model 3/3
+0.00.256.286 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.359 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.256.368 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.260.980 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.260.983 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.266.213 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.266.217 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.267.080 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.267.081 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.267.234 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.267.236 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.268.179 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.268.182 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.268.368 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.268.371 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.269.159 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.269.161 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.270.630 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.270.633 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.324.125 I Model 2/3, Context 2/4: The meaning of life is in a world that is very boring. All of the things were boring and it was much more exciting. But as they were about to leave, one of the things they had been bored was still on the ground. It was starting to weep.
+Suddenly, an old man stepped in. He was smiling and he had a big smile. "Why are you so sad?" he asked.
+The person who was wearing the most comfortable life around him smiled. "My life is not boring. It is all boring!" he said.
+The old man was amazed. He
+
+0.00.324.223 I Model 2/3, Context 1/4: The meaning of life is a happy life when people are together and the day was a bit harsh. But one day, two friends were arguing.
+"I want to go to university!" one friend said.
+"No, I want to go to university!" the other one said.
+The first friend said,"No, I want to stay here!"
+The other friend said, "I want to go to university!"
+The first friend got very angry and said, "No, I don't want to go to university!"
+The second friend got very mad and said, "No, I want to go to university!"
+The
+
+0.00.332.317 I Model 2/3, Context 3/4: The meaning of life is a beautiful thing. It has been here for a very long time, and it is very special. Every year, the sun would shine on the sun, but this time it was not just pretty.
+The sun shone so brightly that it shone even brighter than the sun! The sun was so happy and it made the world a bright and happy place.
+The sun shone so brightly that it made everything look beautiful. Everywhere it went, the sun's shine was so beautiful that everyone who saw it wanted to touch its bright light.
+The sun was so happy and it shined even
+
+0.00.339.655 I Model 2/3, Context 4/4: The meaning of life is high in the air. The sky is dark, and it is very loud. All of the animals run around and it is very loud. But when something goes wrong, it happens over the city!
+A little bird flew through the window and it was making the noise of the rain. The bird was very scared. It started to cry as it saw the rain falling down. But then, something unexpected happened!
+A big, fierce bear came in. He was so loud that he scared all the birds away! The bird flew up to the bear and started to sing. The bear was so surprised that he
+

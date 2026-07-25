@@ -1,0 +1,69 @@
+0.00.033.297 I system_info: n_threads = 2 (n_threads_batch = 2) / 192 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.00.045.327 W load: empty token at index 30143
+0.00.045.466 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.045.468 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.224.547 W load: empty token at index 30143
+0.00.224.664 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.224.666 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.244.501 W load: empty token at index 30143
+0.00.244.614 W load: bad special token: 'tokenizer.ggml.seperator_token_id' = 4294967295, using default id -1
+0.00.244.616 W load: bad special token: 'tokenizer.ggml.padding_token_id' = 4294967295, using default id -1
+0.00.254.767 I Creating context 1/4 for model 1/3
+0.00.254.785 I Creating context 2/4 for model 1/3
+0.00.254.829 I Creating context 3/4 for model 1/3
+0.00.254.851 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.254.855 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.254.873 I Creating context 4/4 for model 1/3
+0.00.254.899 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.254.935 I Creating context 1/4 for model 2/3
+0.00.254.940 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.254.965 I Creating context 2/4 for model 2/3
+0.00.254.988 I Creating context 3/4 for model 2/3
+0.00.255.012 I Creating context 4/4 for model 2/3
+0.00.255.017 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.255.081 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.255.122 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.255.126 I Creating context 1/4 for model 3/3
+0.00.255.139 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.255.141 I Creating context 2/4 for model 3/3
+0.00.255.192 I Creating context 3/4 for model 3/3
+0.00.255.223 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.255.250 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.255.269 I Creating context 4/4 for model 3/3
+0.00.255.418 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.255.442 W llama_context: n_ctx_seq (256) > n_ctx_train (128) -- possible training context overflow
+0.00.259.863 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.259.867 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.264.082 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.264.084 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.264.234 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.264.236 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.265.157 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.265.159 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.265.809 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.265.812 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.266.887 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.266.890 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.267.619 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.267.622 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.267.741 W resolve_fused_ops: layer 0 is assigned to device ROCm0 but Flash Attention is assigned to device CPU (usually due to missing support)
+0.00.267.743 W resolve_fused_ops: Flash Attention not supported, set to disabled
+0.00.326.098 I Model 2/3, Context 2/4: The meaning of life is called a bad number. One day, something strange happened. A big storm came and the storm was very scary. All of the people in the town were scared and tried to run away. But the storm was too strong and it broke the house. 
+The people in the house were so scared that they didn't know what to do. But then they heard a loud voice from the next house. It was a friendly voice and it said "Welcome to the neighborhood, welcome to the school!"
+The people were so happy. They were so excited and they all ran to the school to meet the school.
+
+0.00.328.789 I Model 2/3, Context 3/4: The meaning of life is very important. Mommy is waiting for it to be done. She is very busy taking care of her little one. 
+Mommy sees her little one looking at a magazine. She is very patient and knows exactly what to do. 
+Mommy tells the little one, "Let me show you the magazine. I want to make sure you like it. I know the perfect place."
+The little one was so excited. She smiled and clapped her hands. Mommy took her to the special spot on the magazine.
+The little one was so excited. She loved looking at the magazine with M
+
+0.00.330.084 I Model 2/3, Context 1/4: The meaning of life is a disaster of life. Two friends, Bill and Sam, were on their way, to the store. Bill had been on a very important mission, and he wanted to get some groceries. But when they got to the store, Bill was disappointed. He had already forgotten something at home with his family.
+Sam was upset. He wanted to go to the store for a while but he was scared. He didn't know what to do. He was so upset and felt like he had to give up.
+Then, his mom came to the store and saw the problem. She told Bill he
+
+0.00.331.536 I Model 2/3, Context 4/4: The meaning of life is a distant sight. On the side of the street, all of the people had started to move in through. There was no one else there, but so many people were happy.
+Suddenly, there was a big sound. It was coming from a truck that was carrying something very big. The truck was carrying a big machine.
+The people on the truck were scared, so they ran away. But they kept running and running until they reached a park.
+They stopped in front of a big building. Everyone was in shock. They didn't know what was happening. Then, they saw
+

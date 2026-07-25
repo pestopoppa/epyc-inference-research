@@ -1,0 +1,1 @@
+INVALID: production HIP test binary was absent, so production arms exited 127. Do not cite this directory as a paired differential.
