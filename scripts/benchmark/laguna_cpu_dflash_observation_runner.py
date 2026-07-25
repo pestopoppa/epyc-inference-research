@@ -1713,6 +1713,7 @@ def run_replicate(
         write_json(rep_dir / "warmup_response.json", warmup_response)
         warmup_result = validate_warmup_response(warmup_response)
         write_json(rep_dir / "warmup_result.json", warmup_result)
+        result["warmup"] = warmup_result
         for index, prompt in enumerate(PROMPTS, 1):
             body = request_body(prompt)
             write_json(rep_dir / f"request_{index}.json", body)
@@ -1962,6 +1963,382 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
     return {"schema": "epyc.laguna_cpu_dflash_observation.summary.v5", "created_at": utc_now(), "status": "ok", "arm_summaries": summaries, "output_stability_observation": {"non_gating": True, "contract": "distribution_lossless_not_byte_exact_greedy", "rows": equality, "exact_equality_rate": equality_rate}, "prompt_protocol": PROMPT_PROTOCOL, "observation_policy": OBSERVATION_POLICY}
 
 
+def json_safe_observation(value: Any) -> Any:
+    try:
+        json.dumps(value, allow_nan=False)
+    except (TypeError, ValueError):
+        return repr(value)
+    return value
+
+
+def partial_failure_record(row: Any, input_index: int | None, reason: str) -> dict[str, Any]:
+    if not isinstance(row, dict):
+        return {
+            "input_index": input_index,
+            "rep": None,
+            "status": None,
+            "primary_error": None,
+            "warmup_status": None,
+            "prompt_row_count": 0,
+            "reason": reason,
+            "row_type": type(row).__name__,
+        }
+    warmup = row.get("warmup")
+    prompt_rows = row.get("prompt_rows")
+    return {
+        "input_index": input_index,
+        "rep": json_safe_observation(row.get("rep")),
+        "status": json_safe_observation(row.get("status")),
+        "primary_error": json_safe_observation(row.get("primary_error")),
+        "warmup_status": warmup.get("status") if isinstance(warmup, dict) else None,
+        "prompt_row_count": len(prompt_rows) if isinstance(prompt_rows, list) else 0,
+        "reason": reason,
+    }
+
+
+def partial_row_validation_error(
+    row: Any,
+    lane: Lane,
+    arm: Arm,
+    expected_cell: dict[str, Any],
+) -> str | None:
+    try:
+        if not isinstance(row, dict):
+            raise RuntimeError(f"row is not an object: {type(row).__name__}")
+        actual_schedule = tuple(
+            row.get(key)
+            for key in (
+                "schedule_position",
+                "lane_position",
+                "pair_position",
+                "lane",
+                "arm",
+                "rep",
+            )
+        )
+        expected_schedule = tuple(
+            expected_cell[key]
+            for key in (
+                "schedule_position",
+                "lane_position",
+                "pair_position",
+                "lane",
+                "arm",
+                "rep",
+            )
+        )
+        if actual_schedule != expected_schedule:
+            raise RuntimeError(
+                f"cell schedule identity mismatch: expected={expected_schedule} actual={actual_schedule}"
+            )
+        if row.get("status") != "ok":
+            raise RuntimeError(f"cell status is not ok: {row.get('status')!r}")
+        warmup = row.get("warmup")
+        cleanup = row.get("cleanup")
+        if not isinstance(warmup, dict) or warmup.get("status") != "pass":
+            raise RuntimeError("cell lacks a successful fixed unmeasured warmup")
+        if not isinstance(cleanup, dict) or cleanup.get("status") != "pass":
+            raise RuntimeError("cell lacks successful cleanup")
+        engagement = row.get("iqk_engagement")
+        if (
+            not isinstance(engagement, dict)
+            or engagement.get("status") != "pass"
+            or engagement.get("lane") != lane.name
+        ):
+            raise RuntimeError("cell lacks valid lane-specific IQK engagement evidence")
+        active_type_codes = engagement.get("active_type_codes")
+        if lane.name == "q4_k_m" and (
+            not isinstance(active_type_codes, list) or 12 not in active_type_codes
+        ):
+            raise RuntimeError("Q4 cell did not activate required IQK type 12")
+        if lane.name == "q8_0" and active_type_codes != []:
+            raise RuntimeError("Q8 cell unexpectedly activated IQK types")
+        finite_number(row.get("prompt_tps"), "partial replicate prompt_tps")
+        finite_number(row.get("decode_tps"), "partial replicate decode_tps")
+        completion_tokens = positive_int(
+            row.get("completion_tokens"),
+            "partial replicate completion_tokens",
+        )
+        prompt_rows = row.get("prompt_rows")
+        if not isinstance(prompt_rows, list) or len(prompt_rows) != len(PROMPTS):
+            raise RuntimeError("cell does not contain the exact prompt count")
+        prompt_indices = [
+            positive_int(prompt.get("prompt_index"), "partial prompt_index")
+            if isinstance(prompt, dict)
+            else -1
+            for prompt in prompt_rows
+        ]
+        if prompt_indices != list(range(1, len(PROMPTS) + 1)):
+            raise RuntimeError(
+                f"cell prompt order is invalid: expected={list(range(1, len(PROMPTS) + 1))} "
+                f"actual={prompt_indices}"
+            )
+        prompt_completion_tokens = 0
+        for prompt, prompt_index in zip(prompt_rows, prompt_indices, strict=True):
+            semantic = prompt.get("semantic_validation")
+            if (
+                not isinstance(semantic, dict)
+                or semantic.get("valid") is not True
+                or semantic.get("task") != SEMANTIC_TASKS[prompt_index - 1]
+            ):
+                raise RuntimeError(
+                    f"prompt {prompt_index} lacks valid task-specific semantic evidence"
+                )
+            positive_int(prompt.get("prompt_tokens"), "partial prompt_tokens")
+            prompt_completion_tokens += positive_int(
+                prompt.get("completion_tokens"),
+                "partial completion_tokens",
+            )
+            finite_number(prompt.get("prompt_ms"), "partial prompt_ms")
+            finite_number(prompt.get("decode_ms"), "partial decode_ms")
+        if completion_tokens != prompt_completion_tokens:
+            raise RuntimeError(
+                "partial replicate completion token total does not match prompt rows"
+            )
+        if arm.speculative:
+            generated = positive_int(row.get("draft_n"), "partial replicate draft_n")
+            accepted = positive_int(
+                row.get("draft_n_accepted"),
+                "partial replicate draft_n_accepted",
+            )
+            if accepted > generated:
+                raise RuntimeError("partial replicate accepted draft count exceeds generated")
+        elif row.get("draft_n") is not None or row.get("draft_n_accepted") is not None:
+            raise RuntimeError("partial base replicate unexpectedly contains draft metrics")
+    except Exception as exc:
+        return repr(exc)
+    return None
+
+
+def partial_summary(results: list[Any], strict_failure: str) -> dict[str, Any]:
+    schedule_keys = (
+        "schedule_position",
+        "lane_position",
+        "pair_position",
+        "lane",
+        "arm",
+        "rep",
+    )
+    expected_schedule = balanced_schedule()
+    expected_cells = {
+        (cell["lane"], cell["arm"], cell["rep"]): cell for cell in expected_schedule
+    }
+    expected_sequence = [
+        tuple(cell[key] for key in schedule_keys) for cell in expected_schedule
+    ]
+    actual_sequence = [
+        (
+            tuple(json_safe_observation(row.get(key)) for key in schedule_keys)
+            if isinstance(row, dict)
+            else ("unattributed", input_index, type(row).__name__)
+        )
+        for input_index, row in enumerate(results)
+    ]
+    schedule_sequence_valid = actual_sequence == expected_sequence
+    schedule_sequence_error = (
+        None
+        if schedule_sequence_valid
+        else "observed result sequence does not match the balanced 20-cell schedule"
+    )
+    rows_by_arm: dict[tuple[str, str], list[tuple[int, dict[str, Any]]]] = {
+        (lane.name, arm.name): []
+        for lane in lanes()
+        for arm in ARMS
+    }
+    unattributed_rows: list[dict[str, Any]] = []
+    for input_index, row in enumerate(results):
+        if not isinstance(row, dict):
+            unattributed_rows.append(
+                partial_failure_record(
+                    row,
+                    input_index,
+                    "row is not an object and cannot be attributed to an expected arm",
+                )
+            )
+            continue
+        lane_name = row.get("lane")
+        arm_name = row.get("arm")
+        arm_key = (lane_name, arm_name)
+        if (
+            not isinstance(lane_name, str)
+            or not isinstance(arm_name, str)
+            or arm_key not in rows_by_arm
+        ):
+            unattributed_rows.append(
+                partial_failure_record(
+                    row,
+                    input_index,
+                    f"row has unexpected lane/arm identity: {arm_key!r}",
+                )
+            )
+            continue
+        rows_by_arm[arm_key].append((input_index, row))
+
+    arm_summaries: dict[str, Any] = {}
+    for lane in lanes():
+        for arm in ARMS:
+            rows = rows_by_arm[(lane.name, arm.name)]
+            rows_by_rep: dict[int, list[tuple[int, dict[str, Any]]]] = {
+                rep: [] for rep in range(1, REPS + 1)
+            }
+            unexpected_rows: list[tuple[int, dict[str, Any]]] = []
+            for input_index, row in rows:
+                rep = row.get("rep")
+                if isinstance(rep, int) and not isinstance(rep, bool) and rep in rows_by_rep:
+                    rows_by_rep[rep].append((input_index, row))
+                else:
+                    unexpected_rows.append((input_index, row))
+
+            complete_rows: list[dict[str, Any]] = []
+            failures: list[dict[str, Any]] = []
+            missing_reps: list[int] = []
+            duplicate_reps: list[int] = []
+            for rep, matches in rows_by_rep.items():
+                if not matches:
+                    missing_reps.append(rep)
+                    failures.append(
+                        partial_failure_record(
+                            {},
+                            None,
+                            f"missing expected cell for {lane.name}/{arm.name}/rep{rep}",
+                        )
+                    )
+                    failures[-1]["rep"] = rep
+                    continue
+                if len(matches) != 1:
+                    duplicate_reps.append(rep)
+                    for input_index, row in matches:
+                        failures.append(
+                            partial_failure_record(
+                                row,
+                                input_index,
+                                f"duplicate expected cell: observed {len(matches)} rows "
+                                f"for {lane.name}/{arm.name}/rep{rep}",
+                            )
+                        )
+                    continue
+                input_index, row = matches[0]
+                validation_error = (
+                    partial_row_validation_error(
+                        row,
+                        lane,
+                        arm,
+                        expected_cells[(lane.name, arm.name, rep)],
+                    )
+                    if schedule_sequence_valid
+                    else schedule_sequence_error
+                )
+                if validation_error is None:
+                    complete_rows.append(row)
+                else:
+                    failures.append(
+                        partial_failure_record(
+                            row,
+                            input_index,
+                            validation_error,
+                        )
+                    )
+            for input_index, row in unexpected_rows:
+                failures.append(
+                    partial_failure_record(
+                        row,
+                        input_index,
+                        f"unexpected rep identity for {lane.name}/{arm.name}: {row.get('rep')!r}",
+                    )
+                )
+
+            arm_complete = len(complete_rows) == REPS and len(rows) == REPS
+            summary: dict[str, Any] = {
+                "status": "complete" if arm_complete else "incomplete",
+                "expected_replicates": REPS,
+                "observed_replicates": len(rows),
+                "successful_complete_replicates": len(complete_rows),
+                "failed_or_incomplete_replicates": REPS - len(complete_rows),
+                "successful_reps": [row["rep"] for row in complete_rows],
+                "missing_reps": missing_reps,
+                "duplicate_reps": duplicate_reps,
+                "unexpected_or_duplicate_rows": (
+                    len(unexpected_rows)
+                    + sum(max(len(matches) - 1, 0) for matches in rows_by_rep.values())
+                ),
+                "failures": failures,
+            }
+            if arm_complete:
+                summary["prompt_tps"] = median_mad(
+                    [row["prompt_tps"] for row in complete_rows]
+                )
+                summary["decode_tps"] = median_mad(
+                    [row["decode_tps"] for row in complete_rows]
+                )
+                if arm.speculative:
+                    generated = sum(row["draft_n"] for row in complete_rows)
+                    accepted = sum(row["draft_n_accepted"] for row in complete_rows)
+                    summary["draft_counters"] = {
+                        "generated": generated,
+                        "accepted": accepted,
+                        "acceptance": finite_number(
+                            accepted / generated,
+                            "partial summary draft acceptance",
+                        ),
+                    }
+                else:
+                    summary["draft_counters"] = "not_applicable"
+            arm_summaries[f"{lane.name}_{arm.name}"] = summary
+        base = arm_summaries[f"{lane.name}_base"]
+        dflash = arm_summaries[f"{lane.name}_dflash"]
+        if base["status"] == "complete" and dflash["status"] == "complete":
+            dflash["decode_ratio_vs_base_higher_better"] = finite_number(
+                dflash["decode_tps"]["median"] / base["decode_tps"]["median"],
+                "partial DFlash decode ratio",
+            )
+        else:
+            incomplete_arms = [
+                arm_name
+                for arm_name, summary in (("base", base), ("dflash", dflash))
+                if summary["status"] != "complete"
+            ]
+            dflash["decode_ratio_vs_base_higher_better"] = {
+                "status": "unavailable",
+                "reason": (
+                    "requires exactly one strict-complete row for reps 1..5 in both arms; "
+                    f"incomplete={incomplete_arms}"
+                ),
+            }
+    complete = sum(
+        summary["successful_complete_replicates"]
+        for summary in arm_summaries.values()
+    )
+    expected = len(expected_cells)
+    unexpected_or_unattributed = len(unattributed_rows) + sum(
+        summary["unexpected_or_duplicate_rows"]
+        for summary in arm_summaries.values()
+    )
+    return {
+        "schema": "epyc.laguna_cpu_dflash_observation.partial_summary.v1",
+        "created_at": utc_now(),
+        "status": "failed/partial",
+        "observation_only": True,
+        "non_gating": True,
+        "strict_summary_failure": strict_failure,
+        "cell_counts": {
+            "expected": expected,
+            "observed": len(results),
+            "successful_complete": complete,
+            "failed_or_incomplete": expected - complete,
+            "unexpected_or_unattributed": unexpected_or_unattributed,
+        },
+        "schedule_sequence": {
+            "status": "pass" if schedule_sequence_valid else "fail",
+            "error": schedule_sequence_error,
+            "expected": expected_sequence,
+            "actual": actual_sequence,
+        },
+        "unattributed_rows": unattributed_rows,
+        "arm_summaries": arm_summaries,
+        "observation_policy": OBSERVATION_POLICY,
+    }
+
+
 def execute(output_dir: Path) -> dict[str, Any]:
     run_dir: Path | None = None
     try:
@@ -2000,7 +2377,11 @@ def execute(output_dir: Path) -> dict[str, Any]:
         postflight_identity = collect_execution_identity()
         write_json(run_dir / "postflight_identity.json", postflight_identity)
         require_matching_postflight(preflight_identity, postflight_identity)
-        summary = summarize(results)
+        try:
+            summary = summarize(results)
+        except Exception as exc:
+            write_json(run_dir / "partial_summary.json", partial_summary(results, repr(exc)))
+            raise
         write_json(run_dir / "summary.json", summary)
         return {"run_dir": str(run_dir), **summary}
     except Exception as exc:

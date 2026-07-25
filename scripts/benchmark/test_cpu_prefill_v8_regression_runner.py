@@ -479,21 +479,36 @@ def test_file_identity_rejects_mutation_during_hash(
 ) -> None:
     target = tmp_path / "trusted.bin"
     target.write_bytes(b"trusted")
+    resolved_target = target.resolve()
     real_stat = Path.stat
-    target_calls = 0
+    real_sha256 = runner.hashlib.sha256
+    hash_started = False
+    drifted = False
+
+    class TrackingDigest:
+        def __init__(self) -> None:
+            self.digest = real_sha256()
+
+        def update(self, chunk: bytes) -> None:
+            nonlocal hash_started
+            self.digest.update(chunk)
+            hash_started = True
+
+        def hexdigest(self) -> str:
+            return self.digest.hexdigest()
 
     def drifting_stat(path: Path, *args: object, **kwargs: object) -> object:
-        nonlocal target_calls
+        nonlocal drifted
         result = real_stat(path, *args, **kwargs)
-        if path == target:
-            target_calls += 1
-            if target_calls == 3:
-                values = list(result)
-                values[8] += 1
-                return type(result)(values)
+        if path == resolved_target and hash_started and not drifted:
+            drifted = True
+            values = list(result)
+            values[8] += 1
+            return type(result)(values)
         return result
 
     monkeypatch.setattr(Path, "stat", drifting_stat)
+    monkeypatch.setattr(runner.hashlib, "sha256", TrackingDigest)
     with pytest.raises(RuntimeError, match="changed while hashing"):
         runner.file_identity(target)
 

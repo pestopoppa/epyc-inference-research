@@ -1264,6 +1264,7 @@ def test_run_replicate_fails_on_transient_boundary_owner(monkeypatch: pytest.Mon
     evidence = json.loads((tmp_path / "runs/q4_k_m_base_rep1/request_1_post_evidence.json").read_text())
     assert result["status"] == "error"
     assert "transient KFD owner" in result["primary_error"]
+    assert result["warmup"]["status"] == "pass"
     assert evidence["status"] == "fail"
     assert "transient KFD owner" in evidence["error"]
 
@@ -1309,6 +1310,158 @@ def test_execute_writes_timestamped_run_and_uses_mocked_lifecycle(monkeypatch: p
     assert (run_dir / "schedule.json").is_file()
     assert (run_dir / "summary.json").is_file()
     assert report["status"] == "ok"
+
+
+def test_execute_writes_partial_observation_summary_after_strict_semantic_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    models = {"q4": {"sha256": "q4"}, "q8": {"sha256": "q8"}, "drafter": {"sha256": "d"}}
+    execution_identity = {
+        "candidate": {"head": "abc"},
+        "models": models,
+        "artifacts": {"server": {"sha256": "server"}, "local_llama_ggml_libraries": [{"sha256": "lib"}], "openmp_runtime": {"sha256": "openmp"}, "models": models, "runner": {"sha256": "runner"}},
+    }
+    rows = valid_summary_rows()
+    for row in rows:
+        if row["lane"] == "q8_0" and row["arm"] == runner.BASE.name:
+            row["status"] = "error"
+            row["primary_error"] = "RuntimeError('semantic validation failed')"
+            row["prompt_rows"][0]["semantic_validation"]["valid"] = False
+    by_key = {(row["lane"], row["arm"], row["rep"]): row for row in rows}
+    monkeypatch.setattr(runner, "collect_execution_identity", lambda: json.loads(json.dumps(execution_identity)))
+    monkeypatch.setattr(runner, "system_snapshot", lambda: {"processes": {"exact_llama_processes": [], "autopilot_processes": [], "kfd_owner": False, "rocm_owner": False}})
+    monkeypatch.setattr(runner, "run_stamp", lambda: "run-partial")
+    monkeypatch.setattr(runner, "run_replicate", lambda lane, arm, rep, *_args: by_key[(lane.name, arm.name, rep)])
+
+    with pytest.raises(runner.RunFailure, match="required complete replicates missing"):
+        runner.execute(tmp_path)
+
+    partial = json.loads((tmp_path / "run-partial/partial_summary.json").read_text())
+    assert partial["schema"] == "epyc.laguna_cpu_dflash_observation.partial_summary.v1"
+    assert partial["status"] == "failed/partial"
+    assert partial["observation_only"] is True
+    assert partial["non_gating"] is True
+    assert "required complete replicates missing" in partial["strict_summary_failure"]
+    assert partial["cell_counts"] == {
+        "expected": 20,
+        "observed": 20,
+        "successful_complete": 15,
+        "failed_or_incomplete": 5,
+        "unexpected_or_unattributed": 0,
+    }
+    assert partial["arm_summaries"]["q4_k_m_base"]["prompt_tps"]["n"] == 5
+    assert partial["arm_summaries"]["q4_k_m_dflash"]["draft_counters"]["acceptance"] == 0.5
+    assert partial["arm_summaries"]["q8_0_dflash"]["decode_tps"]["n"] == 5
+    assert partial["arm_summaries"]["q8_0_dflash"]["draft_counters"]["acceptance"] == 0.5
+    assert "prompt_tps" not in partial["arm_summaries"]["q8_0_base"]
+    assert partial["arm_summaries"]["q8_0_base"]["failures"][0]["primary_error"] == "RuntimeError('semantic validation failed')"
+    assert partial["arm_summaries"]["q4_k_m_dflash"]["decode_ratio_vs_base_higher_better"] == 1.0
+    q8_ratio = partial["arm_summaries"]["q8_0_dflash"]["decode_ratio_vs_base_higher_better"]
+    assert q8_ratio["status"] == "unavailable"
+    assert "base" in q8_ratio["reason"]
+    with pytest.raises(RuntimeError, match="required complete replicates missing"):
+        runner.summarize(rows)
+    next(row for row in rows if row["lane"] == "q8_0" and row["arm"] == runner.BASE.name)["warmup"] = None
+    historical_partial = runner.partial_summary(rows, "legacy warmup omission")
+    assert historical_partial["arm_summaries"]["q8_0_base"]["failures"][0]["warmup_status"] is None
+
+
+def test_partial_summary_rejects_duplicate_and_missing_expected_cells() -> None:
+    rows = valid_summary_rows()
+    duplicate = next(
+        row
+        for row in rows
+        if row["lane"] == "q4_k_m"
+        and row["arm"] == runner.BASE.name
+        and row["rep"] == 5
+    )
+    duplicate["rep"] = 4
+
+    partial = runner.partial_summary(rows, "duplicate cell")
+
+    q4_base = partial["arm_summaries"]["q4_k_m_base"]
+    assert q4_base["status"] == "incomplete"
+    assert q4_base["successful_complete_replicates"] == 0
+    assert q4_base["failed_or_incomplete_replicates"] == 5
+    assert q4_base["duplicate_reps"] == [4]
+    assert q4_base["missing_reps"] == [5]
+    assert q4_base["unexpected_or_duplicate_rows"] == 1
+    assert "prompt_tps" not in q4_base
+    q4_ratio = partial["arm_summaries"]["q4_k_m_dflash"][
+        "decode_ratio_vs_base_higher_better"
+    ]
+    assert q4_ratio["status"] == "unavailable"
+    assert partial["schedule_sequence"]["status"] == "fail"
+    assert partial["cell_counts"]["successful_complete"] == 0
+    assert partial["cell_counts"]["failed_or_incomplete"] == 20
+    assert partial["cell_counts"]["unexpected_or_unattributed"] == 1
+
+
+def test_partial_summary_rejects_prompt_contract_drift() -> None:
+    rows = valid_summary_rows()
+    drifted = next(
+        row
+        for row in rows
+        if row["lane"] == "q4_k_m"
+        and row["arm"] == runner.DFLASH.name
+        and row["rep"] == 1
+    )
+    drifted["prompt_rows"][0]["semantic_validation"]["task"] = "wrong_task"
+
+    partial = runner.partial_summary(rows, "prompt drift")
+
+    q4_dflash = partial["arm_summaries"]["q4_k_m_dflash"]
+    assert q4_dflash["status"] == "incomplete"
+    assert q4_dflash["successful_complete_replicates"] == 4
+    assert "task-specific semantic evidence" in q4_dflash["failures"][0]["reason"]
+    assert q4_dflash["decode_ratio_vs_base_higher_better"]["status"] == "unavailable"
+    assert partial["cell_counts"] == {
+        "expected": 20,
+        "observed": 20,
+        "successful_complete": 19,
+        "failed_or_incomplete": 1,
+        "unexpected_or_unattributed": 0,
+    }
+    assert partial["schedule_sequence"]["status"] == "pass"
+
+
+def test_partial_summary_records_malformed_rows_without_masking_failure() -> None:
+    partial = runner.partial_summary(
+        [None, {"lane": [], "arm": "base"}],
+        "malformed rows",
+    )
+
+    assert partial["cell_counts"] == {
+        "expected": 20,
+        "observed": 2,
+        "successful_complete": 0,
+        "failed_or_incomplete": 20,
+        "unexpected_or_unattributed": 2,
+    }
+    assert partial["schedule_sequence"]["status"] == "fail"
+    assert partial["unattributed_rows"][0]["row_type"] == "NoneType"
+    assert "unexpected lane/arm identity" in partial["unattributed_rows"][1]["reason"]
+
+
+def test_partial_summary_rejects_reordered_complete_cells() -> None:
+    rows = valid_summary_rows()
+    rows[0], rows[1] = rows[1], rows[0]
+
+    partial = runner.partial_summary(rows, "schedule drift")
+
+    assert partial["schedule_sequence"]["status"] == "fail"
+    assert partial["cell_counts"]["successful_complete"] == 0
+    assert all(
+        summary["status"] == "incomplete"
+        for summary in partial["arm_summaries"].values()
+    )
+    assert (
+        partial["arm_summaries"]["q4_k_m_dflash"][
+            "decode_ratio_vs_base_higher_better"
+        ]["status"]
+        == "unavailable"
+    )
 
 
 def test_dry_run_writes_no_inference_artifacts(tmp_path: Path) -> None:
