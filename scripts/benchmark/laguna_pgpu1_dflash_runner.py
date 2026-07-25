@@ -45,6 +45,10 @@ MIN_EXPLANATION_WORDS = 8
 DEFAULT_SEED = 424242
 DEFAULT_STARTUP_TIMEOUT_S = 600
 DEFAULT_REQUEST_TIMEOUT_S = 900
+TARGET_CACHE_K = "f16"
+TARGET_CACHE_V = "f16"
+DRAFTER_CACHE_K = "q8_0"
+DRAFTER_CACHE_V = "q8_0"
 PROMPT_SPECS = (
     ("primes", "Write a concise explanation of how to enumerate every prime below 30 and sum them. Do not enumerate rejected or composite candidates one by one. Then end with exactly `RESULT_JSON: {\"primes\":[...],\"sum\":...}` using the computed values. The final JSON is machine-validated."),
     ("nested_flatten", "Write a concise explanation of a deterministic encounter-order flatten of {\"a\":[1,{\"b\":[2,3]}],\"c\":{\"d\":4},\"e\":[5]}. Then end with exactly `RESULT_JSON: {\"values\":[...]}` using the computed scalar order. The final JSON is machine-validated."),
@@ -902,7 +906,7 @@ def server_argv(args: argparse.Namespace, arm: Arm, port: int) -> list[str]:
     argv = [
         str(args.binary), "-m", str(args.target_model), "--host", "127.0.0.1", "--port", str(port),
         "-c", str(args.context), "-ngl", "all", "-dev", "ROCm0", "-ot", "token_embd.weight=ROCm0", "-fa", "on",
-        "--cache-type-k", "q8_0", "--cache-type-v", "q8_0",
+        "--cache-type-k", TARGET_CACHE_K, "--cache-type-v", TARGET_CACHE_V,
         "--seed", str(args.seed), "--temp", "0", "--top-k", "1", "--top-p", "1", "--jinja",
         "--reasoning", "off", "--reasoning-budget", "0", "-v",
     ]
@@ -910,7 +914,8 @@ def server_argv(args: argparse.Namespace, arm: Arm, port: int) -> list[str]:
         argv.extend([
             "-md", str(args.drafter_model), "--spec-draft-device", "ROCm0", "--spec-draft-ngl", "all",
             "--spec-type", "draft-dflash", "--spec-draft-n-max", "15", "--spec-draft-n-min", "0",
-            "--spec-draft-p-min", "0", "--spec-draft-type-k", "q8_0", "--spec-draft-type-v", "q8_0",
+            "--spec-draft-p-min", "0", "--spec-draft-type-k", DRAFTER_CACHE_K,
+            "--spec-draft-type-v", DRAFTER_CACHE_V,
         ])
     return argv
 
@@ -1005,11 +1010,12 @@ def _positive_model_buffers(section: str, layer_count: int) -> list[float]:
     return [float(match.group(1)) for match in pattern.finditer(section) if float(match.group(1)) > 0]
 
 
-def _positive_q8_kv_buffers(section: str) -> list[dict[str, float]]:
+def _positive_kv_buffers(section: str, *, cache_k: str, cache_v: str) -> list[dict[str, float]]:
     pattern = re.compile(
         rf"{LOG_PREFIX}ROCm0 KV buffer size =\s*([0-9]+(?:\.[0-9]+)?) MiB\s*\n"
         rf"{LOG_PREFIX}size =\s*([0-9]+(?:\.[0-9]+)?) MiB .*"
-        r"K \(q8_0\):\s*([0-9]+(?:\.[0-9]+)?) MiB, V \(q8_0\):\s*([0-9]+(?:\.[0-9]+)?) MiB\s*$",
+        rf"K \({re.escape(cache_k)}\):\s*([0-9]+(?:\.[0-9]+)?) MiB, "
+        rf"V \({re.escape(cache_v)}\):\s*([0-9]+(?:\.[0-9]+)?) MiB\s*$",
         flags=re.MULTILINE,
     )
     rows = [
@@ -1039,9 +1045,13 @@ def parse_log_residency(log_text: str, arm: Arm) -> dict[str, Any]:
     target_section = log_text[:split_at]
     draft_section = log_text[split_at:] if draft_load is not None else ""
     target_models = _positive_model_buffers(target_section, 49)
-    target_kv = _positive_q8_kv_buffers(target_section)
+    target_kv = _positive_kv_buffers(
+        target_section, cache_k=TARGET_CACHE_K, cache_v=TARGET_CACHE_V
+    )
     draft_models = _positive_model_buffers(draft_section, 7)
-    draft_kv = _positive_q8_kv_buffers(draft_section)
+    draft_kv = _positive_kv_buffers(
+        draft_section, cache_k=DRAFTER_CACHE_K, cache_v=DRAFTER_CACHE_V
+    )
     target_valid = target_load is not None and len(target_models) == 1 and len(target_kv) == 2
     draft_valid = (
         draft_load is not None and len(draft_models) == 1 and len(draft_kv) == 1
@@ -1052,13 +1062,16 @@ def parse_log_residency(log_text: str, arm: Arm) -> dict[str, Any]:
         "passed": target_valid and draft_valid,
         "target_model_load_exact": target_load is not None,
         "target_positive_rocm0_model_buffers_mib": target_models,
-        "target_positive_q8_kv_buffers": target_kv,
+        "target_positive_f16_kv_buffers": target_kv,
         "target_valid": target_valid,
         "drafter_model_load_exact": draft_load is not None,
         "drafter_positive_rocm0_model_buffers_mib": draft_models,
         "drafter_positive_q8_kv_buffers": draft_kv,
         "drafter_valid": draft_valid,
-        "proof_contract": "anchored exact layer offload plus positive ROCm0 model/KV buffers and explicit q8_0 K/V types",
+        "proof_contract": (
+            "anchored exact layer offload plus positive ROCm0 model/KV buffers; "
+            "target K/V=f16 and DFlash drafter K/V=q8_0 are independently required"
+        ),
     }
 
 
@@ -1263,7 +1276,8 @@ def build_plan(args: argparse.Namespace, model_identity: dict[str, Any] | None =
         "fixed_prompt_pack": [{"id": prompt_id, "text": text} for prompt_id, text in PROMPT_SPECS], "prompt_pack_sha256": sha256_text("\n".join(f"{prompt_id}:{text}" for prompt_id, text in PROMPT_SPECS)),
         "seed": args.seed, "max_tokens": args.max_tokens, "min_completion_tokens": args.min_completion_tokens,
         "min_explanation_words": MIN_EXPLANATION_WORDS,
-        "target_kv_quant": {"k": "q8_0", "v": "q8_0"},
+        "target_kv_quant": {"k": TARGET_CACHE_K, "v": TARGET_CACHE_V},
+        "drafter_kv_quant": {"k": DRAFTER_CACHE_K, "v": DRAFTER_CACHE_V},
         "provisional_promotion_identity": {"expected_head": args.expected_production_head or "execute_required", "expected_server_sha256": args.expected_server_sha256 or "execute_required"},
         "source_untracked_allowlist": SOURCE_UNTRACKED_ALLOWLIST,
         "warmup_discard_policy": PGPU1_WARMUP_POLICY, "cpu_interference_policy": CPU_INTERFERENCE_POLICY,
@@ -1533,7 +1547,7 @@ def execute(args: argparse.Namespace, output_dir: Path, plan: dict[str, Any]) ->
     execution_binding_valid = binding_unchanged and final_identity["valid"] and per_replicate_bindings_valid
     final_guard_valid = final_clean and final_vram_settled and execution_binding_valid
     status = "ok" if cardinality_valid and all(summary["all_ok"] for summary in summaries.values()) and final_guard_valid else "failed"
-    return {"schema": "epyc.laguna_iq2_dflash_pgpu1.summary.v2", "created_at": utc_now(), "status": status, "production_named_kernel": True, "required_branch": EXPECTED_BRANCH, "attestation_ref": str(args.attestation_ref), "attestation_sha256": attestation["sha256"], "n": args.reps, "rep_policy": plan["rep_policy"], "median": True, "mad": True, "arm_order": plan["arm_order"], "results": results, "matrix_cardinality_valid": cardinality_valid, "matrix_cardinality_reason": cardinality_reason, "arm_summaries": summaries, "base_vs_dflash": {"decode_tps_ratio": ratio, "direction": "higher_better"}, "cross_arm_hash_observation": {"contract": "distribution-lossless, not byte-exact greedy", "decision_gating": False, "quality_equivalence_claimed": False, "rows": hash_observations}, "warmup_discard_policy": PGPU1_WARMUP_POLICY, "cpu_interference_policy": CPU_INTERFERENCE_POLICY, "hardware_state": hardware_state, "target_kv_quant": {"k": "q8_0", "v": "q8_0"}, "replicate_binding_checks": replicate_binding_checks, "per_replicate_bindings_valid": per_replicate_bindings_valid, "execution_binding_valid": execution_binding_valid, "post_execution_identity": post_identity, "final_process_guard": final_processes, "final_rocm": final_rocm, "final_clean": final_clean, "final_reason": final_reason, "final_vram_settled": final_vram_settled, "final_guard_valid": final_guard_valid, "post_cleanup_vram_sample": "after_cleanup ROCm snapshots in every replicate"}
+    return {"schema": "epyc.laguna_iq2_dflash_pgpu1.summary.v2", "created_at": utc_now(), "status": status, "production_named_kernel": True, "required_branch": EXPECTED_BRANCH, "attestation_ref": str(args.attestation_ref), "attestation_sha256": attestation["sha256"], "n": args.reps, "rep_policy": plan["rep_policy"], "median": True, "mad": True, "arm_order": plan["arm_order"], "results": results, "matrix_cardinality_valid": cardinality_valid, "matrix_cardinality_reason": cardinality_reason, "arm_summaries": summaries, "base_vs_dflash": {"decode_tps_ratio": ratio, "direction": "higher_better"}, "cross_arm_hash_observation": {"contract": "distribution-lossless, not byte-exact greedy", "decision_gating": False, "quality_equivalence_claimed": False, "rows": hash_observations}, "warmup_discard_policy": PGPU1_WARMUP_POLICY, "cpu_interference_policy": CPU_INTERFERENCE_POLICY, "hardware_state": hardware_state, "target_kv_quant": {"k": TARGET_CACHE_K, "v": TARGET_CACHE_V}, "drafter_kv_quant": {"k": DRAFTER_CACHE_K, "v": DRAFTER_CACHE_V}, "replicate_binding_checks": replicate_binding_checks, "per_replicate_bindings_valid": per_replicate_bindings_valid, "execution_binding_valid": execution_binding_valid, "post_execution_identity": post_identity, "final_process_guard": final_processes, "final_rocm": final_rocm, "final_clean": final_clean, "final_reason": final_reason, "final_vram_settled": final_vram_settled, "final_guard_valid": final_guard_valid, "post_cleanup_vram_sample": "after_cleanup ROCm snapshots in every replicate"}
 
 
 def run_audit(output_dir: Path) -> dict[str, Any]:
