@@ -1,0 +1,1 @@
+cmake --build <scratch>/build --target test-quant-type-selection --parallel 8

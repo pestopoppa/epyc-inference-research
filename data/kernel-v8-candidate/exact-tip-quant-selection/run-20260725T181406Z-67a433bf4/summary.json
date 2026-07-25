@@ -1,0 +1,61 @@
+{
+  "canonical_v7_hip_binary_available": false,
+  "canonical_v7_hip_binary_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/test-quant-type-selection",
+  "comparisons": {
+    "cpu": {
+      "both_expected_exit_1": true,
+      "classification": "inherited_baseline_path_normalized",
+      "path_normalized_byte_identical_stdout_and_stderr": true,
+      "raw_byte_identical_stdout_and_stderr": false,
+      "v7": {
+        "binary_sha256": "cd3e1760d6e47abf3504eb213ce2814ab9be839f6649e1b2ce5a965a75935c41",
+        "combined_sha256": "3a1f6bc278d87d9ab80c7423a92c88503c42b1e0a826673127e322693d9adf7e",
+        "exit_code": 1,
+        "label": "v7-cpu",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "a8fc96909249c25c7120772cebb8f89461b31c87aea5c9620c7114b610fd724a"
+      },
+      "v8": {
+        "binary_sha256": "2a0de9867dadd1cb170166f086f5edc35bacb28a61eaaf2247db2aed45b8eb01",
+        "combined_sha256": "e5815faeed20fe6e635035a14959a3855ad838f26f498cbc2e42551b83396558",
+        "exit_code": 1,
+        "label": "v8-cpu",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "6b227094c493d631bb719656a900c9359ac7880a6b1582a07319c1c2ea5a2f57"
+      }
+    },
+    "hip": {
+      "both_expected_exit_1": true,
+      "classification": "inherited_baseline_path_normalized",
+      "path_normalized_byte_identical_stdout_and_stderr": true,
+      "raw_byte_identical_stdout_and_stderr": false,
+      "v7": {
+        "binary_sha256": "a9be1d8cf4bfebdf1b37c6aec3add09a56b15bc01785e066141aae308ae861ea",
+        "combined_sha256": "ed37658f9bd1d0061a5bb1734872871322740f9ed950d2005f64a57c162b39c2",
+        "exit_code": 1,
+        "label": "v7-hip-scratch-retry",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "a5b93e219a527f56d70f5f2f09cbb28b47086cb646b3760ab53bccdc4f49b6a9"
+      },
+      "v8": {
+        "binary_sha256": "e1579c66d13e90f7e78552fb1bb037a56d2b22644d78aa1b55304db3b34f6a83",
+        "combined_sha256": "c8dae7a087202d15d99e2a4832b83ad0cc84c32511745f6dadaab6360fa42661",
+        "exit_code": 1,
+        "label": "v8-hip",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "3b6ba38357d26f3506d6e4c40a56f6245e8c76eaaf956e383d3808930256827f"
+      }
+    }
+  },
+  "overall_classification": "inherited_baseline_path_normalized",
+  "promotion_interpretation": "The nonzero quant-selection result is inherited at the exact v8 candidate tip under the documented path-normalized functional comparison. This is an inherited-baseline classification, not a passing quant-selection test.",
+  "raw_difference_explanation": "The only raw CPU/HIP output difference is the final regenerate instruction, which embeds the absolute executable path. Raw output is retained; path-normalized output is the functional comparison.",
+  "schema": "epyc.kernel_v8.exact_tip_quant_selection_differential.v2",
+  "v7_hip_substitute": {
+    "kind": "isolated_detached_worktree_build",
+    "reason": "The frozen canonical HIP runtime tree did not include the test executable. The isolated exact-v7 build used matching HIP CMake options and was removed after capture.",
+    "source_head": "6ad45fa3ff6718c07c000061dbc6e29c1771f6e3"
+  },
+  "v7_source_head": "6ad45fa3ff6718c07c000061dbc6e29c1771f6e3",
+  "v8_source_head": "67a433bf45a8a091d83b4ea0b32ff0735fd51800"
+}

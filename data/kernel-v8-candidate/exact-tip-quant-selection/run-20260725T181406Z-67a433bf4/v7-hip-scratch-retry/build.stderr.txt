@@ -1,0 +1,477 @@
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+In file included from /mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:22:
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_quantize.h:23:9: warning: ‘GGML_RESTRICT’ redefined
+   23 | #define GGML_RESTRICT
+      |         ^~~~~~~~~~~~~
+In file included from /mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/./ggml-impl.h:5,
+                 from /mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:19:
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/../include/ggml.h:2830:17: note: this is the location of the previous definition
+ 2830 | #        define GGML_RESTRICT __restrict__
+      |                 ^~~~~~~~~~~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp: In static member function ‘static ggml_type {anonymous}::MulMat::is_dequant_better(ggml_type, int)’:
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:277:13: warning: case value ‘133’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  277 |             case GGML_TYPE_Q6_0   : return nrc_y >= 32 ? GGML_TYPE_Q8_0_R8 : type;
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:263:13: warning: case value ‘137’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  263 |             case GGML_TYPE_IQ2_K  : return nrc_y >= 32 ? q8_k_type : type;
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:266:13: warning: case value ‘138’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  266 |             case GGML_TYPE_IQ3_K  : return nrc_y >= 32 ? q8_k_type : type;
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:269:13: warning: case value ‘139’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  269 |             case GGML_TYPE_IQ4_K  : return nrc_y >= 32 ? q8_k_type : type;
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:271:13: warning: case value ‘140’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  271 |             case GGML_TYPE_IQ5_K  : return nrc_y >= 32 ? q8_k_type : type;
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:272:13: warning: case value ‘141’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  272 |             case GGML_TYPE_IQ6_K  : return nrc_y >= 32 ? q8_k_type : type;
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:267:13: warning: case value ‘144’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  267 |             case GGML_TYPE_IQ4_KS : return nrc_y >= 32 ? q8_k_type : type;
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:262:13: warning: case value ‘145’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  262 |             case GGML_TYPE_IQ2_KS : return nrc_y >= 32 ? q8_k_type : type;
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:268:13: warning: case value ‘146’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  268 |             case GGML_TYPE_IQ4_KSS: return nrc_y >= 32 ? q8_k_type : type;
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:270:13: warning: case value ‘152’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  270 |             case GGML_TYPE_IQ5_KS : return nrc_y >= 32 ? q8_k_type : type;
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:282:13: warning: case value ‘153’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  282 |             case GGML_TYPE_IQ2_KT : return nrc_y >= 16 ? GGML_TYPE_Q8_0_R8 : type;
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:283:13: warning: case value ‘154’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  283 |             case GGML_TYPE_IQ3_KT : return nrc_y >= 16 ? GGML_TYPE_Q8_0_R8 : type;
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:284:13: warning: case value ‘155’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  284 |             case GGML_TYPE_IQ4_KT : return nrc_y >= 24 ? GGML_TYPE_Q8_0_R8 : type;
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:265:13: warning: case value ‘156’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  265 |             case GGML_TYPE_IQ3_KS : return nrc_y >= 32 ? q8_k_type : type;
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:264:13: warning: case value ‘157’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  264 |             case GGML_TYPE_IQ2_KL : return nrc_y >= 32 ? q8_k_type : type;
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:281:13: warning: case value ‘158’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  281 |             case GGML_TYPE_IQ1_KT : return nrc_y >= 16 ? GGML_TYPE_Q8_0_R8 : type;
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp: In static member function ‘static int {anonymous}::MulMat::num_rows(ggml_type)’:
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:359:13: warning: case value ‘151’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  359 |             case GGML_TYPE_Q8_KV:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:362:13: warning: case value ‘202’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  362 |             case GGML_TYPE_Q4_0_R8:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:353:13: warning: case value ‘206’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  353 |             case GGML_TYPE_Q5_0_R4:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:363:13: warning: case value ‘208’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  363 |             case GGML_TYPE_Q8_0_R8:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:336:13: warning: case value ‘210’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  336 |             case GGML_TYPE_Q2_K_R4:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:337:13: warning: case value ‘211’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  337 |             case GGML_TYPE_Q3_K_R4:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:357:13: warning: case value ‘212’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  357 |             case GGML_TYPE_Q4_K_R4:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:358:13: warning: case value ‘213’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  358 |             case GGML_TYPE_Q5_K_R4:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:338:13: warning: case value ‘214’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  338 |             case GGML_TYPE_Q6_K_R4:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:345:13: warning: case value ‘216’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  345 |             case GGML_TYPE_IQ2_XXS_R4:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:346:13: warning: case value ‘217’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  346 |             case GGML_TYPE_IQ2_XS_R4:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:348:13: warning: case value ‘218’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  348 |             case GGML_TYPE_IQ3_XXS_R4:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:349:13: warning: case value ‘219’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  349 |             case GGML_TYPE_IQ1_S_R4:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:352:13: warning: case value ‘220’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  352 |             case GGML_TYPE_IQ4_NL_R4:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:351:13: warning: case value ‘221’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  351 |             case GGML_TYPE_IQ3_S_R4: return 4;
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:347:13: warning: case value ‘222’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  347 |             case GGML_TYPE_IQ2_S_R4:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:356:13: warning: case value ‘223’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  356 |             case GGML_TYPE_IQ4_XS_R8:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:350:13: warning: case value ‘229’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  350 |             case GGML_TYPE_IQ1_M_R4:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:366:13: warning: case value ‘230’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  366 |             case GGML_TYPE_BF16_R16: return 16;
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:354:13: warning: case value ‘233’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  354 |             case GGML_TYPE_Q6_0_R4:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:355:13: warning: case value ‘335’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  355 |             case GGML_TYPE_IQ2_BN_R4:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:339:13: warning: case value ‘337’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  339 |             case GGML_TYPE_IQ2_K_R4:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:340:13: warning: case value ‘338’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  340 |             case GGML_TYPE_IQ3_K_R4:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:341:13: warning: case value ‘339’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  341 |             case GGML_TYPE_IQ4_K_R4:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:342:13: warning: case value ‘340’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  342 |             case GGML_TYPE_IQ5_K_R4:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:343:13: warning: case value ‘344’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  343 |             case GGML_TYPE_IQ4_KS_R4:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:344:13: warning: case value ‘352’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  344 |             case GGML_TYPE_IQ5_KS_R4:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:365:13: warning: case value ‘397’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  365 |             case GGML_TYPE_Q8_K_R16:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:360:13: warning: case value ‘398’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  360 |             case GGML_TYPE_Q8_KV_R8:
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:361:13: warning: case value ‘399’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  361 |             case GGML_TYPE_Q8_K_R8: return 8;
+      |             ^~~~
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_quantize_min.cpp:198:17: warning: no previous declaration for ‘void quantize_row_q8_2_x4(const float*, void*, int64_t)’ [-Wmissing-declarations]
+  198 | extern "C" void quantize_row_q8_2_x4(const float * x, void * vy, int64_t k) {
+      |                 ^~~~~~~~~~~~~~~~~~~~
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+In file included from /mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_common.h:31,
+                 from /mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_stubs.cpp:18:
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_quantize.h:23:9: warning: ‘GGML_RESTRICT’ redefined
+   23 | #define GGML_RESTRICT
+      |         ^~~~~~~~~~~~~
+In file included from /mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/./ggml-impl.h:5,
+                 from /mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_common.h:28:
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/../include/ggml.h:2830:17: note: this is the location of the previous definition
+ 2830 | #        define GGML_RESTRICT __restrict__
+      |                 ^~~~~~~~~~~~~
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+In file included from /mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_common.h:31,
+                 from /mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.h:3,
+                 from /mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp:1:
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_quantize.h:23:9: warning: ‘GGML_RESTRICT’ redefined
+   23 | #define GGML_RESTRICT
+      |         ^~~~~~~~~~~~~
+In file included from /mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/./ggml-impl.h:5,
+                 from /mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_common.h:28:
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/../include/ggml.h:2830:17: note: this is the location of the previous definition
+ 2830 | #        define GGML_RESTRICT __restrict__
+      |                 ^~~~~~~~~~~~~
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+In file included from /mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_common.h:31,
+                 from /mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_gemm_legacy_quants.h:3,
+                 from /mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_gemm_legacy_quants.cpp:1:
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_quantize.h:23:9: warning: ‘GGML_RESTRICT’ redefined
+   23 | #define GGML_RESTRICT
+      |         ^~~~~~~~~~~~~
+In file included from /mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/./ggml-impl.h:5,
+                 from /mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cpu/iqk/iqk_common.h:28:
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/../include/ggml.h:2830:17: note: this is the location of the previous definition
+ 2830 | #        define GGML_RESTRICT __restrict__
+      |                 ^~~~~~~~~~~~~
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cuda/lightning-indexer.cu:244:24: warning: loop not unrolled: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering [-Wpass-failed=transform-warning]
+  244 | static __global__ void lightning_indexer_kernel_vec(
+      |                        ^
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cuda/lightning-indexer.cu:244:24: warning: loop not unrolled: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering [-Wpass-failed=transform-warning]
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cuda/lightning-indexer.cu:244:24: warning: loop not unrolled: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering [-Wpass-failed=transform-warning]
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cuda/lightning-indexer.cu:244:24: warning: loop not unrolled: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering [-Wpass-failed=transform-warning]
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cuda/lightning-indexer.cu:244:24: warning: loop not unrolled: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering [-Wpass-failed=transform-warning]
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cuda/lightning-indexer.cu:244:24: warning: loop not unrolled: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering [-Wpass-failed=transform-warning]
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cuda/lightning-indexer.cu:244:24: warning: loop not unrolled: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering [-Wpass-failed=transform-warning]
+/mnt/raid0/llm/tmp/v8-exact-tip-v7-hip-quant-selection-20260725T182000Z/ggml/src/ggml-cuda/lightning-indexer.cu:244:24: warning: loop not unrolled: the optimizer was unable to perform the requested transformation; the transformation might be disabled or specified as part of an unsupported transformation ordering [-Wpass-failed=transform-warning]
+8 warnings generated when compiling for gfx90a.
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/lld)
+/opt/rocm/lib/llvm/bin/ld.lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/ld.lld)
+/opt/rocm/lib/llvm/bin/ld.lld: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /opt/rocm/lib/llvm/bin/ld.lld)

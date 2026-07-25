@@ -1,0 +1,2 @@
+2026-07-25T18:21:51Z: Removed both isolated scratch worktrees with `git worktree remove --force` and verified their paths were absent.
+The canonical production worktree was not modified or built.
