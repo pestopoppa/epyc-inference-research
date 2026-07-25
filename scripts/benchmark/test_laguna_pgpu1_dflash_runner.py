@@ -152,6 +152,7 @@ def _records(arm_name: str) -> list[dict]:
         {
             "prompt_index": index,
             "prompt_id": prompt_id,
+            "finish_reason": "stop",
             "assistant_content_sha256": f"{arm_name}-{prompt_id}",
             "prompt_tokens": 10,
             "completion_tokens": 100,
@@ -653,17 +654,44 @@ def test_summary_math_and_json_reject_nonfinite_values() -> None:
             runner.write_json(Path(tmp) / "bad.json", {"value": float("inf")})
 
 
-def test_semantic_validators_accept_wording_variation_and_reject_coherent_wrong() -> None:
-    prefix = " ".join(f"word{index}" for index in range(150)) + " "
-    assert runner.semantic_validation("primes", prefix + 'RESULT_JSON: {"primes":[2,3,5,7,11,13,17,19,23,29],"sum":129}')["passed"]
-    assert runner.semantic_validation("nested_flatten", prefix + 'RESULT_JSON: {"values":[1,2,3,4,5]}')["passed"]
-    assert runner.semantic_validation("normalize", prefix + 'RESULT_JSON: {"normalized":[0,0.20,0.30,0.50],"sum":1.0}')["passed"]
-    assert not runner.semantic_validation("primes", prefix + 'RESULT_JSON: {"primes":[2,3,5,7,11,13,17,19,23,29],"sum":128}')["passed"]
-    assert not runner.semantic_validation("nested_flatten", prefix + 'RESULT_JSON: {"values":[true,2,3,4,5]}')["passed"]
-    assert not runner.semantic_validation("normalize", prefix + 'RESULT_JSON: {"normalized":[0,0.2,0.3,0.4],"sum":1.0}')["passed"]
-    assert not runner.semantic_validation("primes", 'RESULT_JSON: {"primes":[2],"sum":2}\nextra')["passed"]
-    too_short = " ".join(f"word{index}" for index in range(139))
-    assert not runner.semantic_validation("primes", too_short + ' RESULT_JSON: {"primes":[2,3,5,7,11,13,17,19,23,29],"sum":129}')["passed"]
+def test_semantic_validators_accept_concise_explanations_and_reject_bad_structure_or_json() -> None:
+    concise = "Trial division through the square root identifies each prime. "
+    varied = "Visit values in encounter order, recurse into lists and objects, and emit only scalar leaves. "
+    assert runner.semantic_validation("primes", concise + 'RESULT_JSON: {"primes":[2,3,5,7,11,13,17,19,23,29],"sum":129}')["passed"]
+    assert runner.semantic_validation("nested_flatten", varied + 'RESULT_JSON: {"values":[1,2,3,4,5]}')["passed"]
+    assert runner.semantic_validation("normalize", "Divide by the total and preserve the zero-sum rule. RESULT_JSON: {\"normalized\":[0,0.20,0.30,0.50],\"sum\":1.0}")["passed"]
+    assert not runner.semantic_validation("primes", 'RESULT_JSON: {"primes":[2,3,5,7,11,13,17,19,23,29],"sum":129}')["passed"]
+    assert not runner.semantic_validation("primes", concise + 'RESULT_JSON: {"primes":[2,3,5,7,11,13,17,19,23,29],"sum":128}')["passed"]
+    assert not runner.semantic_validation("nested_flatten", varied + 'RESULT_JSON: {"values":[true,2,3,4,5]}')["passed"]
+    assert not runner.semantic_validation("normalize", concise + 'RESULT_JSON: {"normalized":[0,0.2,0.3,0.4],"sum":1.0}')["passed"]
+    assert not runner.semantic_validation("primes", concise + 'RESULT_JSON: {"primes":[2],"sum":2}\nextra')["passed"]
+    punctuation_padding = ". " * 100
+    assert not runner.semantic_validation(
+        "primes",
+        punctuation_padding
+        + 'RESULT_JSON: {"primes":[2,3,5,7,11,13,17,19,23,29],"sum":129}',
+    )["passed"]
+    seven_words = "one two three four five six seven "
+    assert not runner.semantic_validation(
+        "primes",
+        seven_words
+        + 'RESULT_JSON: {"primes":[2,3,5,7,11,13,17,19,23,29],"sum":129}',
+    )["passed"]
+    eight_words = seven_words + "eight "
+    assert runner.semantic_validation(
+        "primes",
+        eight_words
+        + 'RESULT_JSON: {"primes":[2,3,5,7,11,13,17,19,23,29],"sum":129}',
+    )["passed"]
+
+
+def test_finish_reason_requires_stop() -> None:
+    assert runner.finish_reason_from_response({"choices": [{"finish_reason": "stop"}]}) == "stop"
+    with pytest.raises(RuntimeError, match="did not finish normally"):
+        runner.finish_reason_from_response({"choices": [{"finish_reason": "length"}]})
+    for malformed in ({}, {"choices": []}, {"choices": "not-a-list"}, {"choices": [None]}):
+        with pytest.raises(RuntimeError, match="exactly one completion choice"):
+            runner.finish_reason_from_response(malformed)
 
 
 def test_matrix_cardinality_rejects_vacuous_missing_duplicate_and_bad_prompt() -> None:
@@ -680,6 +708,9 @@ def test_matrix_cardinality_rejects_vacuous_missing_duplicate_and_bad_prompt() -
     failed_semantics = copy.deepcopy(results)
     failed_semantics[0]["records"][0]["semantic_validation"]["passed"] = False
     assert not runner.matrix_cardinality_valid(failed_semantics, 5)[0]
+    failed_finish = copy.deepcopy(results)
+    failed_finish[0]["records"][0]["finish_reason"] = "length"
+    assert not runner.matrix_cardinality_valid(failed_finish, 5)[0]
 
 
 def test_request_sampler_captures_binding_while_query_is_active(monkeypatch) -> None:

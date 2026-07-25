@@ -41,13 +41,14 @@ DEFAULT_PORT_BASE = 19880
 DEFAULT_CONTEXT = 4096
 DEFAULT_MAX_TOKENS = 320
 DEFAULT_MIN_COMPLETION_TOKENS = 96
+MIN_EXPLANATION_WORDS = 8
 DEFAULT_SEED = 424242
 DEFAULT_STARTUP_TIMEOUT_S = 600
 DEFAULT_REQUEST_TIMEOUT_S = 900
 PROMPT_SPECS = (
-    ("primes", "Write an explanation of 140 to 180 words describing how to enumerate every prime below 30 and sum them. Then end with exactly `RESULT_JSON: {\"primes\":[...],\"sum\":...}` using the computed values. The explanation word count and final JSON are machine-validated."),
-    ("nested_flatten", "Write an explanation of 140 to 180 words describing a deterministic encounter-order flatten of {\"a\":[1,{\"b\":[2,3]}],\"c\":{\"d\":4},\"e\":[5]}. Then end with exactly `RESULT_JSON: {\"values\":[...]}` using the computed scalar order. The explanation word count and final JSON are machine-validated."),
-    ("normalize", "Write an explanation of 140 to 180 words describing normalization of [0,2,3,5] by its sum, including the zero-sum edge case. Then end with exactly `RESULT_JSON: {\"normalized\":[...],\"sum\":...}` using the computed normalized values. The explanation word count and final JSON are machine-validated."),
+    ("primes", "Write a concise explanation of how to enumerate every prime below 30 and sum them. Do not enumerate rejected or composite candidates one by one. Then end with exactly `RESULT_JSON: {\"primes\":[...],\"sum\":...}` using the computed values. The final JSON is machine-validated."),
+    ("nested_flatten", "Write a concise explanation of a deterministic encounter-order flatten of {\"a\":[1,{\"b\":[2,3]}],\"c\":{\"d\":4},\"e\":[5]}. Then end with exactly `RESULT_JSON: {\"values\":[...]}` using the computed scalar order. The final JSON is machine-validated."),
+    ("normalize", "Write a concise explanation of normalization of [0,2,3,5] by its sum, including the zero-sum edge case. Then end with exactly `RESULT_JSON: {\"normalized\":[...],\"sum\":...}` using the computed normalized values. The final JSON is machine-validated."),
 )
 PROMPTS = tuple(text for _, text in PROMPT_SPECS)
 PGPU1_WARMUP_POLICY = "no warm-up requests; no discarded reps; fresh server per rep; graph recapture remains inside each measured fresh-server replicate"
@@ -1128,8 +1129,15 @@ def semantic_validation(prompt_id: str, content: str) -> dict[str, Any]:
     if match is None:
         return {"passed": False, "reason": "output must contain an explanation followed by one terminal RESULT_JSON object"}
     explanation_word_count = len(re.findall(r"\b[\w'-]+\b", match.group("explanation")))
-    if not 140 <= explanation_word_count <= 180:
-        return {"passed": False, "reason": f"explanation word count {explanation_word_count} is outside 140..180", "explanation_word_count": explanation_word_count}
+    if explanation_word_count < MIN_EXPLANATION_WORDS:
+        return {
+            "passed": False,
+            "reason": (
+                f"explanation has {explanation_word_count} lexical words; "
+                f"minimum is {MIN_EXPLANATION_WORDS}"
+            ),
+            "explanation_word_count": explanation_word_count,
+        }
     try:
         value = json.loads(match.group("result"))
     except json.JSONDecodeError as exc:
@@ -1156,6 +1164,21 @@ def semantic_validation(prompt_id: str, content: str) -> dict[str, Any]:
     else:
         return {"passed": False, "reason": f"unknown prompt id: {prompt_id}"}
     return {"passed": passed, "reason": "ok" if passed else "machine-checkable result is incorrect", "parsed_result": value, "explanation_word_count": explanation_word_count}
+
+
+def finish_reason_from_response(response: dict[str, Any]) -> str:
+    choices = response.get("choices")
+    if (
+        not isinstance(choices, list)
+        or len(choices) != 1
+        or not isinstance(choices[0], dict)
+    ):
+        raise RuntimeError("response does not contain exactly one completion choice")
+    choice = choices[0]
+    finish_reason = choice.get("finish_reason")
+    if finish_reason != "stop":
+        raise RuntimeError(f"response did not finish normally: {finish_reason!r}")
+    return finish_reason
 
 
 def median_mad(values: list[float]) -> dict[str, Any]:
@@ -1208,6 +1231,8 @@ def matrix_cardinality_valid(results: list[dict[str, Any]], reps: int) -> tuple[
                 return False, f"{arm.name} rep {row.get('rep')} has invalid prompt indices"
             if [record.get("prompt_id") for record in records] != expected_prompt_ids:
                 return False, f"{arm.name} rep {row.get('rep')} has invalid prompt IDs"
+            if any(record.get("finish_reason") != "stop" for record in records):
+                return False, f"{arm.name} rep {row.get('rep')} has a non-stop finish reason"
             if any((record.get("semantic_validation") or {}).get("passed") is not True for record in records):
                 return False, f"{arm.name} rep {row.get('rep')} has a failed semantic validator"
             for record in records:
@@ -1237,6 +1262,7 @@ def build_plan(args: argparse.Namespace, model_identity: dict[str, Any] | None =
         "target_model": model_identity, "drafter_model": args.drafter_identity,
         "fixed_prompt_pack": [{"id": prompt_id, "text": text} for prompt_id, text in PROMPT_SPECS], "prompt_pack_sha256": sha256_text("\n".join(f"{prompt_id}:{text}" for prompt_id, text in PROMPT_SPECS)),
         "seed": args.seed, "max_tokens": args.max_tokens, "min_completion_tokens": args.min_completion_tokens,
+        "min_explanation_words": MIN_EXPLANATION_WORDS,
         "target_kv_quant": {"k": "q8_0", "v": "q8_0"},
         "provisional_promotion_identity": {"expected_head": args.expected_production_head or "execute_required", "expected_server_sha256": args.expected_server_sha256 or "execute_required"},
         "source_untracked_allowlist": SOURCE_UNTRACKED_ALLOWLIST,
@@ -1299,6 +1325,7 @@ def run_replicate(args: argparse.Namespace, arm: Arm, rep: int, port: int, outpu
             response, elapsed, lifecycle = query_with_live_samples(port, body, args.request_timeout, proc.pid, args.binary, index, expected_identity["binding"], arm.speculative)
             memory_samples.extend(lifecycle["samples"])
             write_json(rep_dir / f"response_{index}.json", response)
+            finish_reason = finish_reason_from_response(response)
             content = ((response.get("choices") or [{}])[0].get("message") or {}).get("content")
             if not isinstance(content, str) or not content.strip():
                 raise RuntimeError(f"response {index} lacks nonempty assistant content")
@@ -1311,7 +1338,7 @@ def run_replicate(args: argparse.Namespace, arm: Arm, rep: int, port: int, outpu
             semantics = semantic_validation(prompt_id, content)
             if not semantics["passed"]:
                 raise RuntimeError(f"response {index} failed semantic validation: {semantics}")
-            row = {"prompt_index": index, "prompt_id": prompt_id, "elapsed_s": elapsed, "request_lifecycle": lifecycle, "assistant_content": content, "assistant_content_sha256": sha256_text(content), "reasoning_content": reasoning_content, "response_sanity": sanity, "semantic_validation": semantics, **timings_from_response(response, speculative=arm.speculative)}
+            row = {"prompt_index": index, "prompt_id": prompt_id, "elapsed_s": elapsed, "request_lifecycle": lifecycle, "finish_reason": finish_reason, "assistant_content": content, "assistant_content_sha256": sha256_text(content), "reasoning_content": reasoning_content, "response_sanity": sanity, "semantic_validation": semantics, **timings_from_response(response, speculative=arm.speculative)}
             if arm.speculative and row["draft_n"] <= 0:
                 raise RuntimeError(f"DFlash draft_n must be positive for prompt {index}")
             if row["completion_tokens"] < args.min_completion_tokens:
