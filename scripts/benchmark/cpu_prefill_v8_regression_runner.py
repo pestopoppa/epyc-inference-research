@@ -10,6 +10,7 @@ an immutable preparation manifest only; --execute is required before inference.
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import math
@@ -1738,8 +1739,8 @@ def _swap_counters() -> dict[str, int]:
     return values
 
 
-def _process_stat(pid: int) -> tuple[int, int, int]:
-    raw = (Path("/proc") / str(pid) / "stat").read_text(encoding="utf-8")
+def _process_stat(pid: int, proc_root: Path = Path("/proc")) -> tuple[int, int, int]:
+    raw = (proc_root / str(pid) / "stat").read_text(encoding="utf-8")
     close = raw.rfind(")")
     if close < 0:
         raise RuntimeError(f"/proc/{pid}/stat is malformed")
@@ -1751,18 +1752,31 @@ def _process_stat(pid: int) -> tuple[int, int, int]:
     return int(fields[1]), int(fields[2]), sum(int(fields[index]) for index in range(11, 15))
 
 
-def _target_group_cpu(leader_pid: int, pgid: int) -> dict[str, Any]:
+def _target_group_cpu(
+    leader_pid: int, pgid: int, proc_root: Path = Path("/proc")
+) -> dict[str, Any]:
     members: list[int] = []
     total_ticks = 0
     ownership_changed = False
-    for child in Path("/proc").iterdir():
+    vanished_processes: list[dict[str, Any]] = []
+    for child in proc_root.iterdir():
         if not child.name.isdigit():
             continue
         try:
-            ppid, observed_pgid, ticks = _process_stat(int(child.name))
-        except FileNotFoundError:
-            continue
+            ppid, observed_pgid, ticks = _process_stat(int(child.name), proc_root)
         except (OSError, ValueError) as exc:
+            # /proc enumeration and stat reads are not atomic. Only a confirmed
+            # vanished PID may be classified as that race; every other unreadable
+            # process remains a hard ownership-monitor failure.
+            if (
+                isinstance(exc, OSError)
+                and exc.errno in {errno.ENOENT, errno.ESRCH}
+                and not child.exists()
+            ):
+                vanished_processes.append(
+                    {"pid": int(child.name), "errno": exc.errno, "error": repr(exc)}
+                )
+                continue
             raise RuntimeError(f"unable to sample benchmark process ownership: {child}") from exc
         if observed_pgid == pgid:
             members.append(int(child.name))
@@ -1771,7 +1785,12 @@ def _target_group_cpu(leader_pid: int, pgid: int) -> dict[str, Any]:
                 ownership_changed = True
     if leader_pid not in members:
         ownership_changed = True
-    return {"members": sorted(members), "cpu_ticks": total_ticks, "ownership_changed": ownership_changed}
+    return {
+        "members": sorted(members),
+        "cpu_ticks": total_ticks,
+        "ownership_changed": ownership_changed,
+        "vanished_processes": vanished_processes,
+    }
 
 
 def monitor_snapshot(leader_pid: int, pgid: int) -> dict[str, Any]:
@@ -1878,7 +1897,9 @@ def validate_monitor_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
         if any(not isinstance(value, list) for value in contamination.values()):
             raise failure(index, "contamination witnesses must be lists")
 
-        target = exact_keys(sample["target"], {"members", "cpu_ticks", "ownership_changed"}, index, "target")
+        target = exact_keys(
+            sample["target"], {"members", "cpu_ticks", "ownership_changed", "vanished_processes"}, index, "target"
+        )
         if not isinstance(target["members"], list) or not target["members"] or any(
             type(pid) is not int or pid <= 0 for pid in target["members"]
         ) or len(set(target["members"])) != len(target["members"]):
@@ -1887,6 +1908,20 @@ def validate_monitor_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
             raise failure(index, "target cpu_ticks is invalid")
         if type(target["ownership_changed"]) is not bool:
             raise failure(index, "target ownership_changed is invalid")
+        if not isinstance(target["vanished_processes"], list):
+            raise failure(index, "vanished process witnesses must be a list")
+        for witness in target["vanished_processes"]:
+            if (
+                not isinstance(witness, dict)
+                or set(witness) != {"pid", "errno", "error"}
+                or type(witness["pid"]) is not int
+                or witness["pid"] <= 0
+                or type(witness["errno"]) is not int
+                or witness["errno"] not in {errno.ENOENT, errno.ESRCH}
+                or not isinstance(witness["error"], str)
+                or not witness["error"]
+            ):
+                raise failure(index, "vanished process witness is invalid")
 
         swap = exact_keys(sample["swap"], {"pswpin", "pswpout"}, index, "swap")
         if any(type(value) is not int or value < 0 for value in swap.values()):

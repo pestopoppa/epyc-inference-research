@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import json
 import sys
 from pathlib import Path
@@ -1405,7 +1406,7 @@ def monitor_sample(
                 "interpolation_fraction": 0.5,
             },
             "swap": {"pswpin": swap_in, "pswpout": swap_out},
-            "target": {"cpu_ticks": target, "ownership_changed": ownership_changed, "members": [1]},
+            "target": {"cpu_ticks": target, "ownership_changed": ownership_changed, "members": [1], "vanished_processes": []},
             "contamination": {"exact_llama": [{"pid": 7}] if contaminated else [], "autopilot": [], "kfd_users": []}}
 
 
@@ -1518,6 +1519,7 @@ def test_contention_monitor_rejects_short_and_malformed_runs() -> None:
     lambda sample: sample.__setitem__("contamination", {}),
     lambda sample: sample["contamination"].__setitem__("exact_llama", {}),
     lambda sample: sample["target"].__setitem__("members", []),
+    lambda sample: sample["target"]["vanished_processes"].append({}),
     lambda sample: sample.__setitem__("cpu_counter_bracket", {}),
     lambda sample: sample["cpu_counter_bracket"]["target_scan"].__setitem__("elapsed_s", 3.0),
     lambda sample: sample["cpu_counter_bracket"].__setitem__("interpolation_fraction", 0.25),
@@ -1555,6 +1557,7 @@ def test_monitor_snapshot_excludes_only_verified_target_group_llama(
             "members": [101, 102],
             "cpu_ticks": 800,
             "ownership_changed": False,
+            "vanished_processes": [],
         },
     )
     monkeypatch.setattr(
@@ -1584,6 +1587,97 @@ def test_monitor_snapshot_excludes_only_verified_target_group_llama(
     ]
 
 
+@pytest.mark.parametrize(
+    ("error_type", "error_number"),
+    [(FileNotFoundError, errno.ENOENT), (ProcessLookupError, errno.ESRCH)],
+)
+def test_target_group_cpu_records_confirmed_vanished_process(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    error_type: type[OSError],
+    error_number: int,
+) -> None:
+    (tmp_path / "101").mkdir()
+    (tmp_path / "202").mkdir()
+
+    def process_stat(pid: int, proc_root: Path) -> tuple[int, int, int]:
+        if pid == 202:
+            (proc_root / "202").rmdir()
+            raise error_type(error_number, "process exited")
+        return 1, 77, 123
+
+    monkeypatch.setattr(runner, "_process_stat", process_stat)
+
+    target = runner._target_group_cpu(101, 77, tmp_path)
+
+    assert target == {
+        "members": [101],
+        "cpu_ticks": 123,
+        "ownership_changed": False,
+        "vanished_processes": [
+            {"pid": 202, "errno": error_number, "error": repr(error_type(error_number, "process exited"))}
+        ],
+    }
+
+
+def test_target_group_cpu_rejects_permission_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "101").mkdir()
+    (tmp_path / "202").mkdir()
+
+    def process_stat(pid: int, _proc_root: Path) -> tuple[int, int, int]:
+        if pid == 202:
+            raise PermissionError(errno.EACCES, "permission denied")
+        return 1, 77, 123
+
+    monkeypatch.setattr(runner, "_process_stat", process_stat)
+
+    with pytest.raises(RuntimeError, match="unable to sample benchmark process ownership") as exc_info:
+        runner._target_group_cpu(101, 77, tmp_path)
+    assert isinstance(exc_info.value.__cause__, PermissionError)
+
+
+@pytest.mark.parametrize(
+    ("error_type", "error_number"),
+    [(FileNotFoundError, errno.ENOENT), (ProcessLookupError, errno.ESRCH)],
+)
+def test_target_group_cpu_rejects_unconfirmed_vanished_process(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    error_type: type[OSError],
+    error_number: int,
+) -> None:
+    (tmp_path / "101").mkdir()
+    (tmp_path / "202").mkdir()
+
+    def process_stat(pid: int, _proc_root: Path) -> tuple[int, int, int]:
+        if pid == 202:
+            raise error_type(error_number, "process still present")
+        return 1, 77, 123
+
+    monkeypatch.setattr(runner, "_process_stat", process_stat)
+
+    with pytest.raises(RuntimeError, match="unable to sample benchmark process ownership") as exc_info:
+        runner._target_group_cpu(101, 77, tmp_path)
+    assert isinstance(exc_info.value.__cause__, error_type)
+
+
+def test_contention_monitor_accepts_confirmed_vanished_process_witness() -> None:
+    samples = monitor_series([(9000, 8800)] * 10)
+    witness = {"pid": 202, "errno": errno.ENOENT, "error": "FileNotFoundError(2, 'gone')"}
+    samples[0]["target"]["vanished_processes"].append(witness)  # type: ignore[index]
+
+    assert runner.validate_monitor_samples(samples)["status"] == "pass"
+
+
+@pytest.mark.parametrize("witnesses", [{}, None])
+def test_contention_monitor_rejects_non_list_vanished_process_witnesses(witnesses: object) -> None:
+    samples = monitor_series([(9000, 8800)] * 10)
+    samples[0]["target"]["vanished_processes"] = witnesses  # type: ignore[index]
+
+    with pytest.raises(RuntimeError, match="vanished process witnesses must be a list"):
+        runner.validate_monitor_samples(samples)
+
+
 def test_monitor_snapshot_interpolates_cpu_counters_to_target_sample(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1597,6 +1691,7 @@ def test_monitor_snapshot_interpolates_cpu_counters_to_target_sample(
             "members": [101],
             "cpu_ticks": 950,
             "ownership_changed": False,
+            "vanished_processes": [],
         },
     )
     monkeypatch.setattr(
@@ -1646,6 +1741,7 @@ def test_monitor_snapshot_rejects_invalid_counter_sampling_order(
             "members": [101],
             "cpu_ticks": 950,
             "ownership_changed": False,
+            "vanished_processes": [],
         },
     )
     monkeypatch.setattr(runner.time, "monotonic", lambda: next(monotonic))
