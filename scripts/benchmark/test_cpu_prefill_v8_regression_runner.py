@@ -270,18 +270,55 @@ def candidate_identity_for_attestation() -> dict[str, object]:
     return {"shared_library_identity": {"openmp_runtime": {"sha256": runner.LLVM20_OPENMP_IDENTITY["sha256"]}}}
 
 
-def test_matrix_has_exact_32_runs_and_16_unique_pairs_without_qwen122() -> None:
+def test_matrix_has_exact_28_runs_and_14_unique_pairs_with_q8_waived() -> None:
     plan = runner.manifest()
     cells = plan["arm_runs"]
     pairs = plan["pairs"]
-    assert len(cells) == 32
-    assert len({cell["id"] for cell in cells}) == 32
-    assert len(pairs) == len({pair["pair_id"] for pair in pairs}) == 16
+    assert len(cells) == 28
+    assert len({cell["id"] for cell in cells}) == 28
+    assert len(pairs) == len({pair["pair_id"] for pair in pairs}) == 14
     assert all("id" not in pair and "kernel_arm" not in pair for pair in pairs)
     assert all(cell["reps"] == 10 and "122" not in cell["model"] for cell in cells)
-    assert sum(not cell["iq"] for cell in cells) == 8
+    assert all("q8" not in cell["model"] for cell in cells)
+    assert sum(not cell["iq"] for cell in cells) == 4
     assert sum(cell["iq"] for cell in cells) == 24
+    assert plan["cardinality"] == {"arm_runs": 28, "unique_pairs": 14}
+    assert plan["q8_waiver"]["source"]["path"] == str(runner.Q8_WAIVER_PATH)
+    assert plan["q8_waiver"]["source"]["sha256"] == runner.Q8_WAIVER_SHA256
+    assert plan["q8_waiver"]["semantic_binding"]["scope"]["excluded_arm_runs"] == 4
+    assert plan["q8_waiver"]["semantic_binding"]["scope"]["remaining_arm_runs"] == 28
     assert plan["promotion_decision"] is False
+
+
+def test_q8_waiver_fails_closed_on_missing_hash_and_semantic_drift(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    missing = tmp_path / "missing.json"
+    monkeypatch.setattr(runner, "Q8_WAIVER_PATH", missing)
+    with pytest.raises(RuntimeError, match="required file missing"):
+        runner.q8_waiver_attestation()
+    with pytest.raises(RuntimeError, match="required file missing"):
+        runner.manifest()
+
+    waiver = json.loads(Path(runner.__file__).parents[3].joinpath(
+        "epyc-root/artifacts/operator/waive_q8_cpu_prefill_v8_20260725.json"
+    ).read_text())
+    candidate = tmp_path / "waiver.json"
+    candidate.write_text(json.dumps(waiver))
+    monkeypatch.setattr(runner, "Q8_WAIVER_PATH", candidate)
+    with pytest.raises(RuntimeError, match="SHA256 mismatch"):
+        runner.q8_waiver_attestation()
+
+    monkeypatch.setattr(
+        runner, "Q8_WAIVER_SHA256", runner.hashlib.sha256(candidate.read_bytes()).hexdigest()
+    )
+    waiver["scope"]["remaining_arm_runs"] = 27
+    candidate.write_text(json.dumps(waiver))
+    monkeypatch.setattr(
+        runner, "Q8_WAIVER_SHA256", runner.hashlib.sha256(candidate.read_bytes()).hexdigest()
+    )
+    with pytest.raises(RuntimeError, match="semantic binding"):
+        runner.q8_waiver_attestation()
 
 
 def test_build_pairs_rejects_duplicate_or_missing_arm() -> None:
@@ -386,7 +423,7 @@ def test_candidate_iqk_attribution_emits_six_non_gating_ratios() -> None:
     attribution = runner.evaluate_candidate_iqk_attribution(attribution_records())
     assert attribution["status"] == "valid"
     assert attribution["promotion_gate"] is False
-    assert attribution["sample_scope"] == "initial_32_arm_matrix_only"
+    assert attribution["sample_scope"] == "initial_28_arm_matrix_only"
     assert len(attribution["cells"]) == 6
     assert {cell["metric"] for cell in attribution["cells"]} == {
         "pp2048",
@@ -817,6 +854,7 @@ def test_attestation_roles_are_hashed_and_path_mutation_is_detected(tmp_path: Pa
         "models": {},
         "harness": {},
         "attestations": runner.attestation_identities(paths),
+        "q8_waiver": runner.q8_waiver_attestation(),
     }
     assert set(before["attestations"]) == {
         "host",
@@ -865,6 +903,7 @@ def test_bound_binary_library_model_and_harness_mutations_fail() -> None:
         "models": {"m": {"shards": [{"sha256": "c"}]}},
         "harness": {"runner": {"sha256": "d"}},
         "attestations": {},
+        "q8_waiver": runner.q8_waiver_attestation(),
     }
     for section, replacement in (
         ("arms", {**arm, "binary_identity": {"path": "/binary", "bytes": 1, "sha256": "x"}}),
@@ -893,6 +932,7 @@ def test_bound_binary_library_model_and_harness_mutations_fail() -> None:
             "models": before["models"],
             "harness": before["harness"],
             "attestations": {},
+            "q8_waiver": before["q8_waiver"],
         }
         if section == "arms":
             after["arms"] = {"production": replacement}
@@ -902,6 +942,10 @@ def test_bound_binary_library_model_and_harness_mutations_fail() -> None:
             after["harness"] = {"runner": replacement}
         with pytest.raises(RuntimeError, match="mutated"):
             runner.require_identical_bound_inputs(before, after)
+
+    after = {**before, "q8_waiver": {"source": {"sha256": "mutated"}}}
+    with pytest.raises(RuntimeError, match="mutated"):
+        runner.require_identical_bound_inputs(before, after)
 
     after = {
         **before,
@@ -999,20 +1043,17 @@ def test_canonical_environment_witness_rejects_missing_duplicate_and_drift() -> 
         )
 
 
-def test_q8_subgate_is_explicit_and_iq_rows_reject_it() -> None:
-    q8_cell = {"model": "qwen36_q8", "iqk": 1}
-    witness = runner.canonical_environment_witness(
-        wrapper_stderr(q8_0=True), q8_cell, {"library_path": "/candidate"}
-    )
-    assert witness["effective"]["environment"]["GGML_IQK_Q8_0"] == "1"
+def test_q8_only_flag_is_absent_from_every_retained_command_and_witness() -> None:
+    plan = runner.manifest()
+    assert all("qwen36_q8" not in cell["id"] for cell in plan["arm_runs"])
+    assert all("--ggml-iqk-q8-0" not in runner.argv_for_cell(
+        cell, plan["arms"][cell["kernel_arm"]], dry_run=True
+    ) for cell in plan["arm_runs"])
     with pytest.raises(RuntimeError, match="environment drifted"):
         runner.canonical_environment_witness(
             wrapper_stderr(q8_0=True), {"model": "glm_iq2", "iqk": 1},
             {"library_path": "/candidate"},
         )
-    assert "--ggml-iqk-q8-0" in runner.wrapper_argv(
-        runner.MODELS[0], {"binary": "/b", "source_root": "/s", "library_path": "/l"}, 1, dry_run=True
-    )
 
 
 def test_instrument_era_attestation_fails_closed_on_missing_or_drift(
@@ -1432,6 +1473,10 @@ def test_manifest_marks_sustained_accounting_v3_as_prospective() -> None:
     assert accounting["id"] == "sustained-window-v1"
     assert accounting["prospective_only"] is True
     assert accounting["minimum_target_core_equivalents"] == pytest.approx(72.0)
+    assert plan["q8_waiver"]["semantic_binding"]["protocol_changed"] is False
+    assert "72-core eligibility floor remains unchanged" in " ".join(
+        plan["q8_waiver"]["semantic_binding"]["consequences"]
+    )
 
 
 def test_monitor_snapshot_excludes_only_verified_target_group_llama(
@@ -1747,8 +1792,8 @@ def test_default_main_writes_preparation_only(tmp_path: Path, capsys: pytest.Cap
     assert runner.main(["--output-dir", str(output)]) == 0
     plan = json.loads((output / "plan.json").read_text())
     emitted = json.loads(capsys.readouterr().out)
-    assert len(plan["arm_runs"]) == 32
-    assert len(plan["pairs"]) == 16
+    assert len(plan["arm_runs"]) == 28
+    assert len(plan["pairs"]) == 14
     assert emitted["promotion_decision"] is False
     assert "status" not in emitted
 

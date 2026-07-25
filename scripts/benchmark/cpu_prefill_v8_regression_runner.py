@@ -41,6 +41,11 @@ PRODUCTION_BRANCH = "production-consolidated-v7"
 CANDIDATE_BRANCH = "experimental-v8-refresh-20260724"
 PRODUCTION_HEAD = "6ad45fa3ff6718c07c000061dbc6e29c1771f6e3"
 CANDIDATE_HEAD = "67a433bf45a8a091d83b4ea0b32ff0735fd51800"
+Q8_WAIVER_PATH = Path(
+    "/mnt/raid0/llm/epyc-root/artifacts/operator/waive_q8_cpu_prefill_v8_20260725.json"
+)
+Q8_WAIVER_SHA256 = "fcd52b61610fcc2782e11f41ffac359343233924805f83d872eeceffbb7522d7"
+Q8_WAIVER_SCHEMA = "epyc.cpu_prefill_v8.operator_waiver.v1"
 CPU_EXTRA = ("-dev", "none", "-ngl", "0", "--no-op-offload", "1")
 # JSON preserves all ten samples; markdown on stderr preserves the mandatory
 # result-emitted build witness required by the 2026-07-24 identity erratum.
@@ -185,7 +190,6 @@ class ModelCell:
 
 
 MODELS = (
-    ModelCell("qwen36_q8", Path("/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf"), False),
     ModelCell("gemma_orig_q4", Path("/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf"), False),
     ModelCell("qwen_next_iq2", Path("/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf"), True),
     ModelCell("glm_iq2", Path("/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf"), True),
@@ -299,8 +303,6 @@ def wrapper_argv(cell: ModelCell, arm: dict[str, Any], iqk: int, *, dry_run: boo
     argv = ["bash", str(CANONICAL_WRAPPER), "-m", str(cell.path), "-p", str(PREFILL), "-n", "0", "-r", str(REPS),
             "--binary", arm["binary"], "--source-root", arm["source_root"], "--library-path", arm["library_path"],
             "--ggml-iqk", str(iqk)]
-    if cell.name == "qwen36_q8":
-        argv.extend(("--ggml-iqk-q8-0", "1"))
     if dry_run:
         argv.append("--dry-run")
     return [*argv, "--", *CPU_EXTRA, *OUTPUT_EXTRA]
@@ -318,14 +320,14 @@ def build_cells() -> list[dict[str, Any]]:
                                   "kernel_arm": arm, "model": model.name,
                                   "model_path": str(model.path), "iq": model.iq, "iqk": iqk,
                                   "metric": metric, "n_prompt": prompt, "n_gen": gen, "reps": REPS})
-    if len(cells) != 32:
-        raise AssertionError(f"matrix drift: expected 32 cells, got {len(cells)}")
-    if len({cell["id"] for cell in cells}) != 32:
+    if len(cells) != 28:
+        raise AssertionError(f"matrix drift: expected 28 cells, got {len(cells)}")
+    if len({cell["id"] for cell in cells}) != 28:
         raise AssertionError("matrix cell IDs are not unique")
     pair_arms: dict[str, set[str]] = {}
     for cell in cells:
         pair_arms.setdefault(cell["pair_id"], set()).add(cell["kernel_arm"])
-    if len(pair_arms) != 16 or any(arms != {"production", "candidate"} for arms in pair_arms.values()):
+    if len(pair_arms) != 14 or any(arms != {"production", "candidate"} for arms in pair_arms.values()):
         raise AssertionError(f"matrix pair cardinality drift: {pair_arms}")
     return cells
 
@@ -344,8 +346,8 @@ def build_pairs(cells: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if left != right:
             raise RuntimeError(f"pair {pair_id} has inconsistent arm metadata")
         pairs.append(left)
-    if len(pairs) != 16 or len({pair["pair_id"] for pair in pairs}) != 16:
-        raise RuntimeError("expected 16 unique matched pairs")
+    if len(pairs) != 14 or len({pair["pair_id"] for pair in pairs}) != 14:
+        raise RuntimeError("expected 14 unique matched pairs")
     return pairs
 
 
@@ -386,7 +388,6 @@ def canonical_environment_witness(
     arm: dict[str, Any],
 ) -> dict[str, Any]:
     emitted = parse_wrapper_emitted_environment(raw_stderr)
-    q8_subgate = cell.get("model") == "qwen36_q8"
     expected_emitted = {
         "LD_LIBRARY_PATH": (
             f"{Path(arm['library_path']).resolve()}:{Path(LLVM20_LIBDIR).resolve()}"
@@ -394,8 +395,6 @@ def canonical_environment_witness(
         **REQUIRED_WRAPPER_OMP_ENV,
         "GGML_IQK": str(cell["iqk"]),
     }
-    if q8_subgate:
-        expected_emitted["GGML_IQK_Q8_0"] = "1"
     if emitted != expected_emitted:
         raise RuntimeError(
             "canonical wrapper environment drifted: "
@@ -408,8 +407,6 @@ def canonical_environment_witness(
         "GGML_IQK": str(cell["iqk"]),
         "LD_LIBRARY_PATH": expected_emitted["LD_LIBRARY_PATH"],
     }
-    if q8_subgate:
-        required_effective["GGML_IQK_Q8_0"] = "1"
     drift = {
         key: {"expected": value, "actual": effective.get(key)}
         for key, value in required_effective.items()
@@ -545,6 +542,84 @@ def _require_exact_keys(value: dict[str, Any], required: set[str], label: str) -
     missing, extras = required - set(value), set(value) - required
     if missing or extras:
         raise RuntimeError(f"{label} schema keys are invalid: missing={sorted(missing)} extras={sorted(extras)}")
+
+
+def q8_waiver_attestation() -> dict[str, Any]:
+    """Fail closed unless the operator-ratified Q8 campaign waiver is exact."""
+    before = file_identity(Q8_WAIVER_PATH)
+    if before["sha256"] != Q8_WAIVER_SHA256:
+        raise RuntimeError(
+            "Q8 waiver SHA256 mismatch: "
+            f"expected={Q8_WAIVER_SHA256} actual={before['sha256']}"
+        )
+    waiver = _strict_json_object(Q8_WAIVER_PATH, "Q8 waiver")
+    after = file_identity(Q8_WAIVER_PATH)
+    if before != after:
+        raise RuntimeError("Q8 waiver changed while validating")
+    _require_exact_keys(
+        waiver,
+        {
+            "schema", "decision", "ratified_at", "protocol", "protocol_changed",
+            "candidate_head", "production_head", "runner_sha256_before_waiver_implementation",
+            "scope", "reason", "consequences",
+        },
+        "Q8 waiver",
+    )
+    expected_scope = {
+        "excluded_model": "qwen36_q8",
+        "excluded_model_path": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "excluded_pairs": ["qwen36_q8-tg128-iqk1", "qwen36_q8-pp2048-iqk1"],
+        "excluded_arm_runs": 4,
+        "remaining_matched_pairs": 14,
+        "remaining_arm_runs": 28,
+    }
+    if (
+        waiver["schema"] != Q8_WAIVER_SCHEMA
+        or waiver["decision"] != "WAIVE-Q8"
+        or waiver["ratified_at"] != "2026-07-25T14:04:16Z"
+        or waiver["protocol"] != "P-BENCH-PREFILL-1"
+        or waiver["protocol_changed"] is not False
+        or waiver["candidate_head"] != CANDIDATE_HEAD
+        or waiver["production_head"] != PRODUCTION_HEAD
+        or waiver["runner_sha256_before_waiver_implementation"]
+        != "2fb0013d2cb71b149a7429995830ac0356048582671ae83428cb1ef15ccfe024"
+        or waiver["scope"] != expected_scope
+        or waiver["reason"]
+        != "The Qwen3.6 Q8 workload naturally sustains about 50-55 target core-equivalents and cannot satisfy the ratified 72-core eligibility floor."
+    ):
+        raise RuntimeError("Q8 waiver semantic binding is invalid")
+    consequences = waiver["consequences"]
+    required_consequences = {
+        "No v8 Q8 non-regression claim may be made from this campaign.",
+        "The ratified 72-core eligibility floor remains unchanged for every remaining arm.",
+        "The Gemma Q4 non-IQ B4 pairs remain mandatory.",
+        "All retained IQ B3 pairs remain mandatory.",
+        "Pre-waiver artifacts remain ineligible and cannot be retro-certified.",
+    }
+    if (
+        not isinstance(consequences, list)
+        or len(consequences) != len(required_consequences)
+        or set(consequences) != required_consequences
+    ):
+        raise RuntimeError("Q8 waiver consequences are invalid")
+    return {
+        "source": after,
+        "semantic_binding": {
+            "schema": waiver["schema"],
+            "decision": waiver["decision"],
+            "ratified_at": waiver["ratified_at"],
+            "protocol": waiver["protocol"],
+            "protocol_changed": waiver["protocol_changed"],
+            "candidate_head": waiver["candidate_head"],
+            "production_head": waiver["production_head"],
+            "runner_sha256_before_waiver_implementation": waiver[
+                "runner_sha256_before_waiver_implementation"
+            ],
+            "scope": waiver["scope"],
+            "reason": waiver["reason"],
+            "consequences": consequences,
+        },
+    }
 
 
 def _require_utc_timestamp(value: Any, label: str) -> None:
@@ -2324,7 +2399,7 @@ def evaluate_candidate_iqk_attribution(
     return {
         "status": "valid",
         "promotion_gate": False,
-        "sample_scope": "initial_32_arm_matrix_only",
+        "sample_scope": "initial_28_arm_matrix_only",
         "ratio_direction": "candidate_iqk1_median / candidate_iqk0_median",
         "cells": cells,
     }
@@ -2360,6 +2435,7 @@ def collect_throughput_failures(
 def manifest() -> dict[str, Any]:
     cells = build_cells()
     pairs = build_pairs(cells)
+    q8_waiver = q8_waiver_attestation()
     return {"schema": "cpu-prefill-v8-regression.v3", "protocol": "P-BENCH-PREFILL-1", "created_at": utc_now(),
             "measurement_intent": "decision_gating_throughput_only", "promotion_decision": False,
             "contention_accounting": {
@@ -2373,14 +2449,18 @@ def manifest() -> dict[str, Any]:
                 },
                 "prospective_only": True,
             },
-            "explicit_exclusion": ["qwen3.5-122b"],
+            "explicit_exclusion": [
+                "qwen3.5-122b",
+                "qwen36_q8 (operator-ratified WAIVE-Q8; no v8 Q8 non-regression claim)",
+            ],
+            "q8_waiver": q8_waiver,
             "parent_environment_identity": parent_environment_identity(),
             "instrument_eras": instrument_era_attestation(),
             "profile": {"prefill": PREFILL, "reps": REPS, "cpu_extra": list(CPU_EXTRA), "output_extra": list(OUTPUT_EXTRA), "initial_order": ["production", "candidate"], "gray_retry_order": ["candidate", "production"], "gray_retry_scope": "non-IQ regression pairs and IQK=0 control pairs only"},
             "arms": {name: arm_spec(name) for name in ("production", "candidate")},
             "models": {model.name: {"path": str(model.path), "iq": model.iq} for model in MODELS},
             "arm_runs": cells, "pairs": pairs,
-            "cardinality": {"arm_runs": 32, "unique_pairs": 16}}
+            "cardinality": {"arm_runs": 28, "unique_pairs": 14}}
 
 
 def write_json(path: Path, value: Any) -> None:
@@ -2434,6 +2514,7 @@ def collect_bound_inputs(
         "models": models,
         "harness": harness_identities(),
         "attestations": attestation_identities(attestation_paths),
+        "q8_waiver": q8_waiver_attestation(),
     }
 
 
@@ -2446,6 +2527,7 @@ def stable_input_binding(inputs: dict[str, Any]) -> dict[str, Any]:
         "models": inputs["models"],
         "harness": inputs["harness"],
         "attestations": inputs["attestations"],
+        "q8_waiver": inputs["q8_waiver"],
     }
 
 
@@ -2471,6 +2553,9 @@ def execute(
     output: Path,
     attestation_paths: dict[str, Path],
 ) -> dict[str, Any]:
+    current_waiver = q8_waiver_attestation()
+    if plan.get("q8_waiver") != current_waiver:
+        raise RuntimeError("plan Q8 waiver binding does not match the exact ratified waiver")
     preflight_inputs = collect_bound_inputs(plan, attestation_paths)
     arms = preflight_inputs["arms"]
     models = preflight_inputs["models"]
@@ -2555,7 +2640,7 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path)
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--execute", action="store_true", help="Run cache preparation and all 32 live cells. Default only writes plan.json.")
+    mode.add_argument("--execute", action="store_true", help="Run cache preparation and all 28 live cells. Default only writes plan.json.")
     mode.add_argument("--write-host-attestation", type=Path)
     parser.add_argument("--host-attestation-path", type=Path)
     parser.add_argument("--correctness-attestation-path", type=Path)
