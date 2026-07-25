@@ -1106,6 +1106,35 @@ def test_summarize_surfaces_primary_error_and_status_before_warmup_or_numeric_va
         runner.summarize(rows)
 
 
+def test_dflash_lineup_enablement_is_fail_closed_for_acceptance_and_prompt_speed() -> None:
+    summary = runner.summarize(valid_summary_rows())
+    eligibility = summary["dflash_lineup_enablement"]
+    assert eligibility["eligible"] is False
+    assert eligibility["policy"]["status"] == "provisional_not_ratified"
+    assert all("pooled_acceptance_below_floor" in lane["blockers"] for lane in eligibility["lanes"])
+
+    rows = valid_summary_rows()
+    for row in rows:
+        if row["arm"] == runner.DFLASH.name:
+            row["draft_n_accepted"] = 24
+            for prompt in row["prompt_rows"]:
+                prompt["decode_ms"] = 1
+    eligibility = runner.summarize(rows)["dflash_lineup_enablement"]
+    assert eligibility["eligible"] is True
+    assert all(not lane["blockers"] for lane in eligibility["lanes"])
+
+    rows = valid_summary_rows()
+    for row in rows:
+        if row["arm"] == runner.DFLASH.name:
+            row["draft_n_accepted"] = 24
+            for prompt in row["prompt_rows"]:
+                if prompt["prompt_index"] == 2:
+                    prompt["decode_ms"] = 3
+    eligibility = runner.summarize(rows)["dflash_lineup_enablement"]
+    assert eligibility["eligible"] is False
+    assert all("per_prompt_decode_ratio_below_floor" in lane["blockers"] for lane in eligibility["lanes"])
+
+
 def test_summarize_rejects_reordered_rows_before_primary_error_preflight() -> None:
     rows = valid_summary_rows()
     rows[0], rows[1] = rows[1], rows[0]

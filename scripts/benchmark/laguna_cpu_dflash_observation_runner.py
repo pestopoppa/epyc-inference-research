@@ -149,6 +149,17 @@ OBSERVATION_POLICY = {
     "external_cpu_use": "non_gating_telemetry_only",
     "swap_io_page_ceiling": MAX_SWAP_IO_PAGES,
 }
+DFLASH_LINEUP_REOPEN_SCREEN = {
+    # This is a fail-closed operational screen, not a ratified measurement gate.
+    # The active Laguna handoff names a Q8 recovery toward ~60% as the only
+    # concrete reopen signal after March's 27%-acceptance, net-negative NO-GO.
+    "status": "provisional_not_ratified",
+    "acceptance_floor": 0.60,
+    "prompt_decode_ratio_floor": 1.0,
+    "requires_every_prompt_to_meet_ratio_floor": True,
+    "source": "root handoffs: speculative-decoding-mtp-refresh.md:223; dflash-block-diffusion-speculation.md:743-752",
+    "scope": "lineup enablement only; does not gate kernel capability promotion",
+}
 
 
 @dataclass(frozen=True)
@@ -1636,6 +1647,54 @@ def median_mad(values: list[float]) -> dict[str, Any]:
     return {"n": len(checked), "median": median, "mad": mad}
 
 
+def dflash_lineup_eligibility(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return a fail-closed operational screen for future DFlash lineup flips."""
+    lane_results = []
+    for lane in lanes():
+        base_rows = [row for row in results if row["lane"] == lane.name and row["arm"] == BASE.name]
+        dflash_rows = [row for row in results if row["lane"] == lane.name and row["arm"] == DFLASH.name]
+        generated = sum(positive_int(row["draft_n"], "lineup draft_n") for row in dflash_rows)
+        accepted = sum(positive_int(row["draft_n_accepted"], "lineup draft_n_accepted") for row in dflash_rows)
+        acceptance = finite_number(accepted / generated, "lineup pooled acceptance")
+        prompt_rows = []
+        for prompt_index in range(1, len(PROMPTS) + 1):
+            base_prompt_rows = [
+                prompt for row in base_rows for prompt in row["prompt_rows"]
+                if prompt["prompt_index"] == prompt_index
+            ]
+            dflash_prompt_rows = [
+                prompt for row in dflash_rows for prompt in row["prompt_rows"]
+                if prompt["prompt_index"] == prompt_index
+            ]
+            base_tps = weighted_tps(base_prompt_rows, "completion_tokens", "decode_ms")
+            dflash_tps = weighted_tps(dflash_prompt_rows, "completion_tokens", "decode_ms")
+            ratio = finite_number(dflash_tps / base_tps, "lineup per-prompt DFlash decode ratio")
+            prompt_rows.append({
+                "prompt_index": prompt_index,
+                "base_decode_tps": base_tps,
+                "dflash_decode_tps": dflash_tps,
+                "decode_ratio_vs_base_higher_better": ratio,
+                "meets_floor": ratio >= DFLASH_LINEUP_REOPEN_SCREEN["prompt_decode_ratio_floor"],
+            })
+        blockers = []
+        if acceptance < DFLASH_LINEUP_REOPEN_SCREEN["acceptance_floor"]:
+            blockers.append("pooled_acceptance_below_floor")
+        if any(not row["meets_floor"] for row in prompt_rows):
+            blockers.append("per_prompt_decode_ratio_below_floor")
+        lane_results.append({
+            "lane": lane.name,
+            "pooled_acceptance": acceptance,
+            "prompt_decode": prompt_rows,
+            "eligible": not blockers,
+            "blockers": blockers,
+        })
+    return {
+        "policy": DFLASH_LINEUP_REOPEN_SCREEN,
+        "eligible": all(row["eligible"] for row in lane_results),
+        "lanes": lane_results,
+    }
+
+
 def run_replicate(
     lane: Lane,
     arm: Arm,
@@ -1966,7 +2025,7 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
             "DFlash decode ratio",
         )
     equality_rate = sum(row["exact_equal"] for row in equality) / len(equality)
-    return {"schema": "epyc.laguna_cpu_dflash_observation.summary.v5", "created_at": utc_now(), "status": "ok", "arm_summaries": summaries, "output_stability_observation": {"non_gating": True, "contract": "distribution_lossless_not_byte_exact_greedy", "rows": equality, "exact_equality_rate": equality_rate}, "prompt_protocol": PROMPT_PROTOCOL, "observation_policy": OBSERVATION_POLICY}
+    return {"schema": "epyc.laguna_cpu_dflash_observation.summary.v5", "created_at": utc_now(), "status": "ok", "arm_summaries": summaries, "output_stability_observation": {"non_gating": True, "contract": "distribution_lossless_not_byte_exact_greedy", "rows": equality, "exact_equality_rate": equality_rate}, "dflash_lineup_enablement": dflash_lineup_eligibility(results), "prompt_protocol": PROMPT_PROTOCOL, "observation_policy": OBSERVATION_POLICY}
 
 
 def json_safe_observation(value: Any) -> Any:
