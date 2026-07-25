@@ -1,0 +1,107 @@
+{
+  "harness": {
+    "bytes": 93345,
+    "dev": 2431,
+    "inode": 96501097,
+    "mtime_ns": 1784990324389636566,
+    "path": "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/laguna_pgpu1_dflash_runner.py",
+    "resolved_path": "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/laguna_pgpu1_dflash_runner.py",
+    "sha256": "f97309a93737929a06464a23efddddbf87fa60b443bd25101f6d354e39a0e050",
+    "stable": true
+  },
+  "models": {
+    "drafter": {
+      "bytes": 2233764000,
+      "dev": 2431,
+      "inode": 99615747,
+      "mtime_ns": 1784712390090488991,
+      "path": "/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/laguna-s-2.1-DFlash-BF16.gguf",
+      "resolved_path": "/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/laguna-s-2.1-DFlash-BF16.gguf",
+      "sha256": "24614292a4477f3ae5203c3875edcde0bc219f02616a9c9f65791e29b18a67ee",
+      "stable": true
+    },
+    "target": {
+      "bytes": 37268665376,
+      "dev": 2431,
+      "inode": 99615750,
+      "mtime_ns": 1784715969253268738,
+      "path": "/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/Laguna-S-2.1-UD-IQ2_M.gguf",
+      "resolved_path": "/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/Laguna-S-2.1-UD-IQ2_M.gguf",
+      "sha256": "1a0d44795f71044de1a9671bf70def4655f4ab7294b002263dfc8046820bfd2c",
+      "stable": true
+    }
+  },
+  "promotion_attestation": {
+    "path": "/mnt/raid0/llm/epyc-root/handoffs/active/laguna-pgpu1-v8-promotion-attestation.json",
+    "sha256": "54daa05c3c0540a65fda3cb008fd1ec6e89a9c2a169ced0b2af81bf12783bc5d"
+  },
+  "server": {
+    "artifact": {
+      "bytes": 17984,
+      "dev": 2431,
+      "inode": 100402737,
+      "mtime_ns": 1785003880498407373,
+      "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+      "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+      "sha256": "112c560f1c978c584a9899539851348a0ce1e05cde458061c281758aff066882",
+      "stable": true
+    },
+    "local_llama_ggml_libraries": [
+      {
+        "identity_error": "[Errno 40] Too many levels of symbolic links: '/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-base.so.0'",
+        "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-base.so.0",
+        "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-base.so.0.16.0",
+        "soname": "libggml-base.so.0",
+        "stable": false
+      },
+      {
+        "identity_error": "[Errno 40] Too many levels of symbolic links: '/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-cpu.so.0'",
+        "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-cpu.so.0",
+        "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-cpu.so.0.16.0",
+        "soname": "libggml-cpu.so.0",
+        "stable": false
+      },
+      {
+        "identity_error": "[Errno 40] Too many levels of symbolic links: '/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-hip.so.0'",
+        "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-hip.so.0",
+        "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-hip.so.0.16.0",
+        "soname": "libggml-hip.so.0",
+        "stable": false
+      },
+      {
+        "identity_error": "[Errno 40] Too many levels of symbolic links: '/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml.so.0'",
+        "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml.so.0",
+        "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml.so.0.16.0",
+        "soname": "libggml.so.0",
+        "stable": false
+      },
+      {
+        "identity_error": "[Errno 40] Too many levels of symbolic links: '/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-common.so.0'",
+        "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-common.so.0",
+        "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-common.so.0.0.10107",
+        "soname": "libllama-common.so.0",
+        "stable": false
+      },
+      {
+        "bytes": 7317264,
+        "dev": 2431,
+        "inode": 100402768,
+        "mtime_ns": 1785003880435406817,
+        "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-server-impl.so",
+        "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-server-impl.so",
+        "sha256": "d2002354abe74313571e8277cf336f1616eef5962c13e1aee8d578122841c5c2",
+        "soname": "libllama-server-impl.so",
+        "stable": true
+      },
+      {
+        "identity_error": "[Errno 40] Too many levels of symbolic links: '/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama.so.0'",
+        "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama.so.0",
+        "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama.so.0.0.10107",
+        "soname": "libllama.so.0",
+        "stable": false
+      }
+    ],
+    "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+    "sha256": "112c560f1c978c584a9899539851348a0ce1e05cde458061c281758aff066882"
+  }
+}

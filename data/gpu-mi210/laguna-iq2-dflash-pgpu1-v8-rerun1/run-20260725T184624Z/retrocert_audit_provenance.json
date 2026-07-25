@@ -1,0 +1,37 @@
+{
+  "schema": "epyc.pgpu1_retrocert_audit_provenance.v1",
+  "created_at": "2026-07-25T18:59:31Z",
+  "protocol": "P-GPU-1",
+  "scope": "artifact-only; no inference, server, benchmark, build, or ROCm command executed",
+  "reason": "The original runner audit excluded summary.json solely because its valid 37091750-byte content exceeded the bounded text-scan limit. The corrected auditor includes the filename marker without reading oversized content; the original audit remains unchanged.",
+  "source_run": "data/gpu-mi210/laguna-iq2-dflash-pgpu1-v8-rerun1/run-20260725T184624Z",
+  "source_summary": {
+    "path": "summary.json",
+    "bytes": 37091750,
+    "sha256": "73c28e4b86a38732c7fa99f3210e31f53efcced6420b8e81607007690621059e",
+    "status": "ok"
+  },
+  "original_audit": {
+    "path": "completeness_audit.json",
+    "sha256": "f9df3c91fdc09924c2bcf0a49ff92d7cdf6fcd3790a3cdeae9931c7ac8bf3d0b",
+    "status": "incomplete",
+    "missing_required_fields": [
+      "summary_json"
+    ]
+  },
+  "corrected_audit": {
+    "path": "retrocert_completeness_audit.json",
+    "sha256": "c9410dc7124232c8652f5ccec17e3bea3e9d5c6a0a77d537a0b70ea8689c74e9",
+    "status": "complete",
+    "missing_required_fields": []
+  },
+  "auditor": {
+    "path": "scripts/benchmark/pgpu1_artifact_completeness_audit.py",
+    "git_commit": "31dd6fcaeaf24e6a973e8a25b4644b8647402e53",
+    "sha256": "1518f42d79324c164a8c109fe50c50a68397919937b3dd15cb83211194378d46"
+  },
+  "decision": {
+    "retro_certification_eligible": true,
+    "basis": "All P-GPU-1 mandatory fields are present; summary status is ok; the production-named kernel, per-replicate bindings, cleanup, and final guard are valid."
+  }
+}

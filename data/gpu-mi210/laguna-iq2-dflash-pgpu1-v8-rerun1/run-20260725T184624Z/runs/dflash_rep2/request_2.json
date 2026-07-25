@@ -1,0 +1,14 @@
+{
+  "max_tokens": 320,
+  "messages": [
+    {
+      "content": "Write a concise explanation of a deterministic encounter-order flatten of {\"a\":[1,{\"b\":[2,3]}],\"c\":{\"d\":4},\"e\":[5]}. Then end with exactly `RESULT_JSON: {\"values\":[...]}` using the computed scalar order. The final JSON is machine-validated.",
+      "role": "user"
+    }
+  ],
+  "seed": 424242,
+  "stream": false,
+  "temperature": 0,
+  "top_k": 1,
+  "top_p": 1
+}

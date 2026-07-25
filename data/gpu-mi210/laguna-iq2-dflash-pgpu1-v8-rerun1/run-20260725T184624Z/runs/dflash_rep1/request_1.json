@@ -1,0 +1,14 @@
+{
+  "max_tokens": 320,
+  "messages": [
+    {
+      "content": "Write a concise explanation of how to enumerate every prime below 30 and sum them. Do not enumerate rejected or composite candidates one by one. Then end with exactly `RESULT_JSON: {\"primes\":[...],\"sum\":...}` using the computed values. The final JSON is machine-validated.",
+      "role": "user"
+    }
+  ],
+  "seed": 424242,
+  "stream": false,
+  "temperature": 0,
+  "top_k": 1,
+  "top_p": 1
+}

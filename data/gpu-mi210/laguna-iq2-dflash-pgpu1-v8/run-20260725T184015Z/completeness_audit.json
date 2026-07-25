@@ -1,0 +1,182 @@
+{
+  "artifact": "data/gpu-mi210/laguna-iq2-dflash-pgpu1-v8/run-20260725T184015Z",
+  "field_results": {
+    "binary_model_identity": {
+      "label": "binary, git, model, and backend identity",
+      "matched_patterns": [
+        "llama-server",
+        "\\.gguf\\b",
+        "rev-parse",
+        "ld_library_path"
+      ],
+      "near_miss_patterns": [],
+      "required": true,
+      "state": "present"
+    },
+    "cleanup_proof": {
+      "label": "process cleanup proof",
+      "matched_patterns": [],
+      "near_miss_patterns": [],
+      "required": true,
+      "state": "missing"
+    },
+    "cpu_interference_policy": {
+      "label": "explicit CPU-stack interference policy",
+      "matched_patterns": [
+        "\\bquiesced\\b",
+        "\\bproduction stack\\b"
+      ],
+      "near_miss_patterns": [
+        "process_blockers"
+      ],
+      "required": true,
+      "state": "present"
+    },
+    "post_cleanup_vram_sample": {
+      "label": "post-cleanup VRAM/KFD sample",
+      "matched_patterns": [
+        "after_cleanup",
+        "post[-_ ]cleanup.*vram",
+        "post[-_ ]cleanup.*kfd",
+        "no kfd pids"
+      ],
+      "near_miss_patterns": [
+        "before_cleanup"
+      ],
+      "required": true,
+      "state": "present"
+    },
+    "production_named_kernel_identity": {
+      "label": "production-named kernel identity",
+      "matched_patterns": [
+        "production-consolidated-v[0-9]"
+      ],
+      "near_miss_patterns": [],
+      "required": true,
+      "state": "present"
+    },
+    "rep_count": {
+      "label": "rep count sufficient for >=5% claim",
+      "matched_patterns": [
+        "\"rep\"\\s*:\\s*5\\b"
+      ],
+      "near_miss_patterns": [],
+      "required": true,
+      "state": "present"
+    },
+    "result_grammar": {
+      "label": "median/MAD throughput, prompt/decode split, and draft counters",
+      "matched_patterns": [],
+      "near_miss_patterns": [],
+      "required": true,
+      "state": "missing"
+    },
+    "rocm_clocks_before_after": {
+      "label": "ROCm clocks before+after",
+      "matched_patterns": [
+        "--showclocks?\\b",
+        "\\bsclk\\b",
+        "\\bmclk\\b"
+      ],
+      "near_miss_patterns": [
+        "rocm-smi",
+        "rocm system management interface"
+      ],
+      "required": true,
+      "state": "present"
+    },
+    "rocm_power_before_after": {
+      "label": "ROCm power before+after",
+      "matched_patterns": [
+        "--showpower\\b",
+        "\\bpower\\b"
+      ],
+      "near_miss_patterns": [
+        "rocm-smi",
+        "rocm system management interface"
+      ],
+      "required": true,
+      "state": "present"
+    },
+    "rocm_temp_before_after": {
+      "label": "ROCm temperature before+after",
+      "matched_patterns": [
+        "--showtemp\\b",
+        "\\btemperature\\b"
+      ],
+      "near_miss_patterns": [
+        "rocm-smi",
+        "rocm system management interface"
+      ],
+      "required": true,
+      "state": "present"
+    },
+    "summary_json": {
+      "label": "summary.json or explicit summary file",
+      "matched_patterns": [
+        "__file__:summary\\.json"
+      ],
+      "near_miss_patterns": [],
+      "required": true,
+      "state": "present"
+    },
+    "vram_pid_util_samples": {
+      "label": "VRAM, utilization, and GPU PID samples",
+      "matched_patterns": [
+        "--showuse\\b",
+        "\\bvram",
+        "\\bgpu use"
+      ],
+      "near_miss_patterns": [],
+      "required": true,
+      "state": "present"
+    },
+    "warmup_discard_policy": {
+      "label": "explicit warm-up/discard policy",
+      "matched_patterns": [
+        "\\bwarm[-_ ]?up\\b",
+        "\\bdiscard(?:ed)?\\b",
+        "\\bgraph recapture\\b",
+        "\\bno warm[-_ ]?up\\b"
+      ],
+      "near_miss_patterns": [
+        "\\bfresh-server\\b",
+        "\\brep(?:s|licate)?\\b"
+      ],
+      "required": true,
+      "state": "present"
+    }
+  },
+  "files_scanned": [
+    "data/gpu-mi210/laguna-iq2-dflash-pgpu1-v8/run-20260725T184015Z/binary_identity.json",
+    "data/gpu-mi210/laguna-iq2-dflash-pgpu1-v8/run-20260725T184015Z/guard_state.json",
+    "data/gpu-mi210/laguna-iq2-dflash-pgpu1-v8/run-20260725T184015Z/hardware_state.json",
+    "data/gpu-mi210/laguna-iq2-dflash-pgpu1-v8/run-20260725T184015Z/operator_run.sh",
+    "data/gpu-mi210/laguna-iq2-dflash-pgpu1-v8/run-20260725T184015Z/plan.json",
+    "data/gpu-mi210/laguna-iq2-dflash-pgpu1-v8/run-20260725T184015Z/pre_execution_binding.json",
+    "data/gpu-mi210/laguna-iq2-dflash-pgpu1-v8/run-20260725T184015Z/summary.json"
+  ],
+  "files_scanned_n": 7,
+  "files_skipped_large": [],
+  "missing_required_fields": [
+    "result_grammar",
+    "cleanup_proof"
+  ],
+  "near_miss_fields": [],
+  "present_required_fields": [
+    "summary_json",
+    "rocm_clocks_before_after",
+    "rocm_power_before_after",
+    "rocm_temp_before_after",
+    "vram_pid_util_samples",
+    "binary_model_identity",
+    "production_named_kernel_identity",
+    "warmup_discard_policy",
+    "rep_count",
+    "cpu_interference_policy",
+    "post_cleanup_vram_sample"
+  ],
+  "recommendation": "rerun_required",
+  "status": "incomplete",
+  "summary_status": "failed"
+}

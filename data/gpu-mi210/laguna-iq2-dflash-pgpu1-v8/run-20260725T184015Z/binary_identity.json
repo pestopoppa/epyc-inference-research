@@ -1,0 +1,215 @@
+{
+  "artifact": {
+    "bytes": 17984,
+    "dev": 2431,
+    "inode": 100402737,
+    "mtime_ns": 1785003880498407373,
+    "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+    "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+    "sha256": "112c560f1c978c584a9899539851348a0ce1e05cde458061c281758aff066882",
+    "stable": true
+  },
+  "binary": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+  "binary_sha256": "112c560f1c978c584a9899539851348a0ce1e05cde458061c281758aff066882",
+  "environment": {
+    "HIP_VISIBLE_DEVICES": "0",
+    "LANG": "C",
+    "LC_ALL": "C",
+    "LD_LIBRARY_PATH": "/mnt/raid0/llm/llama.cpp/build-hip/bin:/opt/rocm/lib",
+    "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "ROCR_VISIBLE_DEVICES": "0"
+  },
+  "git": {
+    "branch": {
+      "argv": [
+        "git",
+        "-C",
+        "/mnt/raid0/llm/llama.cpp",
+        "branch",
+        "--show-current"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "production-consolidated-v8\n"
+    },
+    "commit": {
+      "argv": [
+        "git",
+        "-C",
+        "/mnt/raid0/llm/llama.cpp",
+        "rev-parse",
+        "HEAD"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "67a433bf45a8a091d83b4ea0b32ff0735fd51800\n"
+    },
+    "index_diff": {
+      "argv": [
+        "git",
+        "-C",
+        "/mnt/raid0/llm/llama.cpp",
+        "diff",
+        "--cached",
+        "--name-only"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": ""
+    },
+    "source_root": "/mnt/raid0/llm/llama.cpp",
+    "tracked_diff": {
+      "argv": [
+        "git",
+        "-C",
+        "/mnt/raid0/llm/llama.cpp",
+        "diff",
+        "--name-only"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": ""
+    },
+    "untracked": {
+      "argv": [
+        "git",
+        "-C",
+        "/mnt/raid0/llm/llama.cpp",
+        "ls-files",
+        "--others",
+        "--exclude-standard"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": ".gitnexusignore\ntools/math-tools/external/eigen/\ntools/math-tools/external/odeint/\n"
+    }
+  },
+  "ld_library_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin:/opt/rocm/lib",
+  "ldd": {
+    "argv": [
+      "ldd",
+      "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server"
+    ],
+    "environment": {
+      "HIP_VISIBLE_DEVICES": "0",
+      "LANG": "C",
+      "LC_ALL": "C",
+      "LD_LIBRARY_PATH": "/mnt/raid0/llm/llama.cpp/build-hip/bin:/opt/rocm/lib",
+      "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "ROCR_VISIBLE_DEVICES": "0"
+    },
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "\tlinux-vdso.so.1 (0x000079b755ddb000)\n\tlibllama-server-impl.so => /mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-server-impl.so (0x000079b755600000)\n\tlibstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6 (0x000079b755373000)\n\tlibgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x000079b755d9d000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x000079b755130000)\n\tlibllama-common.so.0 => /mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-common.so.0 (0x000079b754c00000)\n\tlibmtmd.so.0 => /mnt/raid0/llm/llama.cpp/build-hip/bin/libmtmd.so.0 (0x000079b755c53000)\n\tlibllama.so.0 => /mnt/raid0/llm/llama.cpp/build-hip/bin/libllama.so.0 (0x000079b754800000)\n\tlibggml.so.0 => /mnt/raid0/llm/llama.cpp/build-hip/bin/libggml.so.0 (0x000079b755c46000)\n\tlibggml-base.so.0 => /mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-base.so.0 (0x000079b754723000)\n\tlibssl.so.3 => /lib/x86_64-linux-gnu/libssl.so.3 (0x000079b754615000)\n\tlibcrypto.so.3 => /lib/x86_64-linux-gnu/libcrypto.so.3 (0x000079b754002000)\n\tlibm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x000079b753ef5000)\n\t/lib64/ld-linux-x86-64.so.2 (0x000079b755ddd000)\n\tlibggml-cpu.so.0 => /mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-cpu.so.0 (0x000079b753a00000)\n\tlibggml-hip.so.0 => /mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-hip.so.0 (0x000079b74fc00000)\n\tlibgomp.so.1 => /lib/x86_64-linux-gnu/libgomp.so.1 (0x000079b7550d7000)\n\tlibz.so.1 => /lib/x86_64-linux-gnu/libz.so.1 (0x000079b754be0000)\n\tlibzstd.so.1 => /lib/x86_64-linux-gnu/libzstd.so.1 (0x000079b753e2c000)\n\tlibhipblas.so.2 => /opt/rocm/lib/libhipblas.so.2 (0x000079b74fae5000)\n\tlibrocblas.so.4 => /opt/rocm/lib/librocblas.so.4 (0x000079b70e600000)\n\tlibamdhip64.so.6 => /opt/rocm/lib/libamdhip64.so.6 (0x000079b70ce00000)\n\tlibrocsolver.so.0 => /opt/rocm/lib/librocsolver.so.0 (0x000079b6a8000000)\n\tlibrocprofiler-register.so.0 => /opt/rocm/lib/librocprofiler-register.so.0 (0x000079b753da7000)\n\tlibamd_comgr.so.2 => /opt/rocm/lib/libamd_comgr.so.2 (0x000079b69f400000)\n\tlibhsa-runtime64.so.1 => /opt/rocm/lib/libhsa-runtime64.so.1 (0x000079b69f000000)\n\tlibnuma.so.1 => /lib/x86_64-linux-gnu/libnuma.so.1 (0x000079b755c32000)\n\tlibrocsparse.so.1 => /opt/rocm/lib/librocsparse.so.1 (0x000079b64ae00000)\n\tlibtinfo.so.6 => /lib/x86_64-linux-gnu/libtinfo.so.6 (0x000079b754ba9000)\n\tlibelf.so.1 => /lib/x86_64-linux-gnu/libelf.so.1 (0x000079b754b8a000)\n\tlibdrm.so.2 => /lib/x86_64-linux-gnu/libdrm.so.2 (0x000079b7550c0000)\n\tlibdrm_amdgpu.so.1 => /lib/x86_64-linux-gnu/libdrm_amdgpu.so.1 (0x000079b754b7d000)\n"
+  },
+  "local_llama_ggml_libraries": [
+    {
+      "identity_error": "[Errno 40] Too many levels of symbolic links: '/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-base.so.0'",
+      "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-base.so.0",
+      "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-base.so.0.16.0",
+      "soname": "libggml-base.so.0",
+      "stable": false
+    },
+    {
+      "identity_error": "[Errno 40] Too many levels of symbolic links: '/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-cpu.so.0'",
+      "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-cpu.so.0",
+      "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-cpu.so.0.16.0",
+      "soname": "libggml-cpu.so.0",
+      "stable": false
+    },
+    {
+      "identity_error": "[Errno 40] Too many levels of symbolic links: '/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-hip.so.0'",
+      "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-hip.so.0",
+      "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-hip.so.0.16.0",
+      "soname": "libggml-hip.so.0",
+      "stable": false
+    },
+    {
+      "identity_error": "[Errno 40] Too many levels of symbolic links: '/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml.so.0'",
+      "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml.so.0",
+      "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml.so.0.16.0",
+      "soname": "libggml.so.0",
+      "stable": false
+    },
+    {
+      "identity_error": "[Errno 40] Too many levels of symbolic links: '/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-common.so.0'",
+      "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-common.so.0",
+      "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-common.so.0.0.10107",
+      "soname": "libllama-common.so.0",
+      "stable": false
+    },
+    {
+      "bytes": 7317264,
+      "dev": 2431,
+      "inode": 100402768,
+      "mtime_ns": 1785003880435406817,
+      "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-server-impl.so",
+      "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-server-impl.so",
+      "sha256": "d2002354abe74313571e8277cf336f1616eef5962c13e1aee8d578122841c5c2",
+      "soname": "libllama-server-impl.so",
+      "stable": true
+    },
+    {
+      "identity_error": "[Errno 40] Too many levels of symbolic links: '/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama.so.0'",
+      "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama.so.0",
+      "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama.so.0.0.10107",
+      "soname": "libllama.so.0",
+      "stable": false
+    }
+  ],
+  "scrubbed_parent_env_keys": [
+    "HIP_PATH"
+  ],
+  "server_version": {
+    "argv": [
+      "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+      "--version"
+    ],
+    "environment": {
+      "HIP_VISIBLE_DEVICES": "0",
+      "LANG": "C",
+      "LC_ALL": "C",
+      "LD_LIBRARY_PATH": "/mnt/raid0/llm/llama.cpp/build-hip/bin:/opt/rocm/lib",
+      "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "ROCR_VISIBLE_DEVICES": "0"
+    },
+    "returncode": 0,
+    "stderr": "version: 10107 (67a433bf4)\nbuilt with GNU 15.2.0 for Linux x86_64\n",
+    "stdout": ""
+  }
+}

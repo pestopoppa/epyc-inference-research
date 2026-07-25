@@ -1,0 +1,13 @@
+{
+  "exact_server_environment": {
+    "HIP_VISIBLE_DEVICES": "0",
+    "LANG": "C",
+    "LC_ALL": "C",
+    "LD_LIBRARY_PATH": "/mnt/raid0/llm/llama.cpp/build-hip/bin:/opt/rocm/lib",
+    "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "ROCR_VISIBLE_DEVICES": "0"
+  },
+  "scrubbed_parent_env_keys": [
+    "HIP_PATH"
+  ]
+}

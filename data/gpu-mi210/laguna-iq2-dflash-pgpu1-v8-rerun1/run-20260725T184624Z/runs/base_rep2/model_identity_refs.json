@@ -1,0 +1,22 @@
+{
+  "drafter": {
+    "bytes": 2233764000,
+    "dev": 2431,
+    "inode": 99615747,
+    "mtime_ns": 1784712390090488991,
+    "path": "/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/laguna-s-2.1-DFlash-BF16.gguf",
+    "resolved_path": "/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/laguna-s-2.1-DFlash-BF16.gguf",
+    "sha256": "24614292a4477f3ae5203c3875edcde0bc219f02616a9c9f65791e29b18a67ee",
+    "stable": true
+  },
+  "target": {
+    "bytes": 37268665376,
+    "dev": 2431,
+    "inode": 99615750,
+    "mtime_ns": 1784715969253268738,
+    "path": "/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/Laguna-S-2.1-UD-IQ2_M.gguf",
+    "resolved_path": "/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/Laguna-S-2.1-UD-IQ2_M.gguf",
+    "sha256": "1a0d44795f71044de1a9671bf70def4655f4ab7294b002263dfc8046820bfd2c",
+    "stable": true
+  }
+}

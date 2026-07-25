@@ -1,0 +1,140 @@
+{
+  "__verbose": {
+    "content": "Deterministic encounter-order flattening traverses the input structure depth-first, visiting keys in their declared order and collecting scalar leaf values as they are first encountered.\n\nFor the given input, the traversal order is:\n- `\"a\"` \u2192 `1` (scalar)\n- `\"a\"` \u2192 `\"b\"` \u2192 `2` (scalar)\n- `\"a\"` \u2192 `\"b\"` \u2192 `3` (scalar)\n- `\"c\"` \u2192 `\"d\"` \u2192 `4` (scalar)\n- `\"e\"` \u2192 `5` (scalar)\n\nRESULT_JSON: {\"values\":[1,2,3,4,5]}",
+    "generation_settings": {
+      "backend_sampling": false,
+      "chat_format": "peg-native",
+      "dry_allowed_length": 2,
+      "dry_base": 1.75,
+      "dry_multiplier": 0.0,
+      "dry_penalty_last_n": 4096,
+      "dry_sequence_breakers": [
+        "\n",
+        ":",
+        "\"",
+        "*"
+      ],
+      "dynatemp_exponent": 1.0,
+      "dynatemp_range": 0.0,
+      "frequency_penalty": 0.0,
+      "generation_prompt": "<assistant></think>",
+      "grammar": "",
+      "grammar_lazy": false,
+      "grammar_triggers": [],
+      "ignore_eos": false,
+      "kv_streaming_sink": 0,
+      "kv_streaming_window": 0,
+      "logit_bias": [],
+      "lora": [],
+      "max_tokens": 320,
+      "min_keep": 0,
+      "min_p": 0.0,
+      "mirostat": 0,
+      "mirostat_eta": 0.10000000149011612,
+      "mirostat_tau": 5.0,
+      "n_discard": 0,
+      "n_keep": 0,
+      "n_predict": 320,
+      "n_probs": 0,
+      "post_sampling_probs": false,
+      "presence_penalty": 0.0,
+      "preserved_tokens": [
+        18,
+        19,
+        25,
+        26
+      ],
+      "reasoning_format": "deepseek",
+      "reasoning_in_content": false,
+      "repeat_last_n": 64,
+      "repeat_penalty": 1.0,
+      "samplers": [
+        "penalties",
+        "dry",
+        "top_n_sigma",
+        "top_k",
+        "typ_p",
+        "top_p",
+        "min_p",
+        "xtc",
+        "temperature"
+      ],
+      "seed": 424242,
+      "speculative.types": "none,draft-dflash",
+      "stop": [
+        "</assistant>"
+      ],
+      "stream": false,
+      "temperature": 0.0,
+      "timings_per_token": false,
+      "top_k": 1,
+      "top_n_sigma": -1.0,
+      "top_p": 1.0,
+      "typical_p": 1.0,
+      "xtc_probability": 0.0,
+      "xtc_threshold": 0.10000000149011612
+    },
+    "has_new_line": true,
+    "id_slot": 3,
+    "index": 0,
+    "model": "/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/Laguna-S-2.1-UD-IQ2_M.gguf",
+    "prompt": "\u3008|EOS|\u3009<system>You are a helpful, conversationally-fluent assistant made by Poolside. You are here to be helpful to users through natural language conversations.</system>\n<user>Write a concise explanation of a deterministic encounter-order flatten of {\"a\":[1,{\"b\":[2,3]}],\"c\":{\"d\":4},\"e\":[5]}. Then end with exactly `RESULT_JSON: {\"values\":[...]}` using the computed scalar order. The final JSON is machine-validated.</user>\n<assistant></think>",
+    "stop": true,
+    "stop_type": "eos",
+    "stopping_word": "",
+    "timings": {
+      "cache_n": 33,
+      "draft_n": 510,
+      "draft_n_accepted": 94,
+      "predicted_ms": 5049.099,
+      "predicted_n": 129,
+      "predicted_per_second": 25.549112821911393,
+      "predicted_per_token_ms": 39.140302325581395,
+      "prompt_ms": 403.932,
+      "prompt_n": 72,
+      "prompt_per_second": 178.24782389115,
+      "prompt_per_token_ms": 5.610166666666667
+    },
+    "tokens": [],
+    "tokens_cached": 233,
+    "tokens_evaluated": 105,
+    "tokens_predicted": 129,
+    "truncated": false
+  },
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Deterministic encounter-order flattening traverses the input structure depth-first, visiting keys in their declared order and collecting scalar leaf values as they are first encountered.\n\nFor the given input, the traversal order is:\n- `\"a\"` \u2192 `1` (scalar)\n- `\"a\"` \u2192 `\"b\"` \u2192 `2` (scalar)\n- `\"a\"` \u2192 `\"b\"` \u2192 `3` (scalar)\n- `\"c\"` \u2192 `\"d\"` \u2192 `4` (scalar)\n- `\"e\"` \u2192 `5` (scalar)\n\nRESULT_JSON: {\"values\":[1,2,3,4,5]}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1785005416,
+  "id": "chatcmpl-c3RXlAguE79f7gPIsI2vpVPIIm0mx56P",
+  "model": "/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/Laguna-S-2.1-UD-IQ2_M.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10107-67a433bf4",
+  "timings": {
+    "cache_n": 33,
+    "draft_n": 510,
+    "draft_n_accepted": 94,
+    "predicted_ms": 5049.099,
+    "predicted_n": 129,
+    "predicted_per_second": 25.549112821911393,
+    "predicted_per_token_ms": 39.140302325581395,
+    "prompt_ms": 403.932,
+    "prompt_n": 72,
+    "prompt_per_second": 178.24782389115,
+    "prompt_per_token_ms": 5.610166666666667
+  },
+  "usage": {
+    "completion_tokens": 129,
+    "prompt_tokens": 105,
+    "prompt_tokens_details": {
+      "cached_tokens": 33
+    },
+    "total_tokens": 234
+  }
+}
