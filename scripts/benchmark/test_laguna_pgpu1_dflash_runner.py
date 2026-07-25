@@ -323,6 +323,13 @@ def test_plan_is_exact_and_records_provisional_promotion_requirements() -> None:
     assert plan["source_untracked_allowlist"] == runner.SOURCE_UNTRACKED_ALLOWLIST
 
 
+def test_normalize_prompt_requires_normalized_output_sum_not_input_total() -> None:
+    prompt = dict(runner.PROMPT_SPECS)["normalize"]
+    assert "input total is 10" in prompt
+    assert "JSON `sum` is the sum of the normalized values and must be 1.0" in prompt
+    assert "Do not report the input total in JSON" in prompt
+
+
 def test_evidence_and_server_environments_are_closed_and_scrub_parent_knobs(monkeypatch) -> None:
     monkeypatch.setenv("LD_PRELOAD", "/tmp/evil.so")
     monkeypatch.setenv("HSA_OVERRIDE_GFX_VERSION", "1.2.3")
@@ -664,6 +671,7 @@ def test_semantic_validators_accept_concise_explanations_and_reject_bad_structur
     assert not runner.semantic_validation("primes", concise + 'RESULT_JSON: {"primes":[2,3,5,7,11,13,17,19,23,29],"sum":128}')["passed"]
     assert not runner.semantic_validation("nested_flatten", varied + 'RESULT_JSON: {"values":[true,2,3,4,5]}')["passed"]
     assert not runner.semantic_validation("normalize", concise + 'RESULT_JSON: {"normalized":[0,0.2,0.3,0.4],"sum":1.0}')["passed"]
+    assert not runner.semantic_validation("normalize", concise + 'RESULT_JSON: {"normalized":[0,0.2,0.3,0.5],"sum":10}')["passed"]
     assert not runner.semantic_validation("primes", concise + 'RESULT_JSON: {"primes":[2],"sum":2}\nextra')["passed"]
     punctuation_padding = ". " * 100
     assert not runner.semantic_validation(
