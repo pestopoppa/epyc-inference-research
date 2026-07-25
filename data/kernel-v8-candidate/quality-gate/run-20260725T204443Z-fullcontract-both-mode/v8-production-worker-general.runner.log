@@ -1,0 +1,25 @@
+[runner] Waiting for server at http://localhost:8072...
+[runner] Server healthy
+
+[runner] Evaluating mmlu_pro (n=200, seed=42)...
+  [runner] mmlu_pro: pass 1/1 25/200 (11/25 correct so far)
+  [runner] mmlu_pro: pass 1/1 50/200 (20/50 correct so far)
+  [runner] mmlu_pro: pass 1/1 75/200 (29/75 correct so far)
+  [runner] mmlu_pro: pass 1/1 100/200 (38/100 correct so far)
+  [runner] mmlu_pro: pass 1/1 125/200 (47/125 correct so far)
+  [runner] mmlu_pro: pass 1/1 150/200 (56/150 correct so far)
+  [runner] mmlu_pro: pass 1/1 175/200 (65/175 correct so far)
+  [runner] mmlu_pro: pass 1/1 200/200 (73/200 correct so far)
+[runner] mmlu_pro: 36.5% (73/200)
+
+[runner] Evaluating gpqa (n=200, seed=42)...
+  [runner] gpqa: pass 1/1 25/195 (5/25 correct so far)
+  [runner] gpqa: pass 1/1 50/195 (10/50 correct so far)
+  [runner] gpqa: pass 1/1 75/195 (17/75 correct so far)
+  [runner] gpqa: pass 1/1 100/195 (24/100 correct so far)
+  [runner] gpqa: pass 1/1 125/195 (29/125 correct so far)
+  [runner] gpqa: pass 1/1 150/195 (35/150 correct so far)
+  [runner] gpqa: pass 1/1 175/195 (44/175 correct so far)
+[runner] gpqa: 24.6% (48/195)
+
+[runner] Results written to /mnt/raid0/llm/epyc-inference-research/data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v8-production-worker-general.json

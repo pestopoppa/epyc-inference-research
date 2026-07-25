@@ -1,0 +1,1677 @@
+{
+  "meta": {
+    "kernel": "production-consolidated-v8",
+    "binary": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server",
+    "models": "architect_general Qwen3.5-122B-A10B-UD-Q4_K_M MTP q4/f16",
+    "arm": "v8-production-architect-general-full-8083",
+    "timestamp": "2026-07-25T21:51:09.201694+00:00",
+    "elapsed_s": 1361.0,
+    "n_per_suite": 200,
+    "seed": 42,
+    "stratify": true,
+    "endpoint": "chat",
+    "temperature": 0.0,
+    "top_p": null,
+    "top_k": null,
+    "enable_thinking": null,
+    "repeats": 1,
+    "max_tokens": 64,
+    "questions_pinned": "/mnt/raid0/llm/epyc-inference-research/data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/questions.json"
+  },
+  "suites": [
+    {
+      "suite": "mmlu_pro",
+      "accuracy": 0.635,
+      "n": 200,
+      "n_questions": 200,
+      "repeats": 1,
+      "correct": 127,
+      "errors": 0,
+      "truncated": 0,
+      "per_tier": {
+        "1": {
+          "accuracy": 0.6567164179104478,
+          "n": 67,
+          "correct": 44
+        },
+        "2": {
+          "accuracy": 0.6716417910447762,
+          "n": 67,
+          "correct": 45
+        },
+        "3": {
+          "accuracy": 0.5757575757575758,
+          "n": 66,
+          "correct": 38
+        }
+      },
+      "per_item": {
+        "mmlu_pro_history_04825": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_economics_07001": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_psychology_02432": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_law_01647": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_philosophy_10606": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_economics_06980": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_other_05395": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_chemistry_03998": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_physics_08937": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_computer science_10411": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_math_07963": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_chemistry_03940": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_other_04994": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_economics_06875": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_law_01455": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_psychology_02244": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_other_04988": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_psychology_01974": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_chemistry_04151": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_health_06397": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_engineering_11632": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_economics_07179": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_other_05786": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_economics_07366": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_business_00189": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_economics_07125": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_math_08671": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_health_06052": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_other_05781": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_other_05361": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_philosophy_10943": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_psychology_01894": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_chemistry_03821": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_psychology_02345": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_law_01885": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_other_05595": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_physics_08995": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_business_00051": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_psychology_02305": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_economics_07088": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_other_05692": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_math_07989": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_biology_02714": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_business_00407": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_health_06145": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_physics_09722": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_law_01115": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_business_00326": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_math_08398": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_biology_03208": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_math_07802": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_economics_06661": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_law_01081": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_other_05514": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_law_01722": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_chemistry_03601": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_physics_09369": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_philosophy_10856": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_business_00740": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_computer science_10409": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_other_05647": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_physics_09235": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_business_00778": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_other_05416": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_math_07623": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_law_01202": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_other_05779": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_law_01458": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_business_00447": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_philosophy_10892": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_law_01489": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_other_05683": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_physics_09252": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_biology_03073": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_business_00735": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_engineering_11251": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_philosophy_11029": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_physics_10103": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_economics_07184": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_philosophy_10806": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_other_05459": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_health_06178": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_law_01659": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_philosophy_10737": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_computer science_10421": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_chemistry_03432": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_other_05645": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_engineering_11487": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_economics_07265": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_philosophy_10587": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_law_01018": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_chemistry_03586": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_law_01073": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_math_08346": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_business_00209": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_psychology_02343": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_law_00920": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_business_00013": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_business_00054": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_physics_09959": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_math_08108": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_physics_09011": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_law_01576": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_economics_07320": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_other_05278": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_other_05048": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_business_00178": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_physics_09977": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_business_00440": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_law_01727": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_engineering_11824": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_business_00285": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_chemistry_03983": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_math_08553": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_psychology_02646": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_chemistry_04484": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_business_00457": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_economics_07254": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_law_01688": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_business_00775": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_business_00541": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_psychology_02409": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_business_00689": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_other_05623": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_health_06013": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_economics_06703": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_other_05245": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_business_00198": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_psychology_02682": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_health_06162": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_business_00600": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_physics_09171": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_business_00569": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_health_06437": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_chemistry_03626": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_law_00976": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_business_00161": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_economics_07064": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_engineering_11455": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_economics_06983": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_other_05637": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_engineering_11240": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_physics_09617": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_other_04993": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_business_00191": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_business_00228": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_other_05069": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_business_00255": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_physics_09435": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_business_00501": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_psychology_02283": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_business_00065": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_other_05227": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_other_05827": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_business_00451": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_philosophy_10618": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_history_04682": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_psychology_02117": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_engineering_11577": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_law_01791": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_philosophy_10989": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_other_05365": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_health_06150": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_business_00088": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_economics_07198": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_chemistry_03559": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_engineering_11231": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_economics_06744": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_business_00318": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_engineering_11438": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_psychology_02081": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_physics_09718": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_biology_02782": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_other_05335": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_chemistry_03858": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_business_00061": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_law_01060": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_other_05163": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_business_00476": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_physics_09625": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_physics_10087": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_other_05338": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_other_05259": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_law_01742": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_law_01882": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_other_05565": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_business_00563": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_law_01653": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_psychology_01927": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_physics_08879": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_other_05438": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_math_08595": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_chemistry_03831": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_business_00696": {
+          "correct": 0,
+          "n": 1
+        },
+        "mmlu_pro_economics_07034": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_other_05558": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_business_00704": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_engineering_11527": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_psychology_02077": {
+          "correct": 1,
+          "n": 1
+        },
+        "mmlu_pro_math_08295": {
+          "correct": 0,
+          "n": 1
+        }
+      },
+      "throughput": {
+        "concurrency": 1,
+        "wall_s": 663.8,
+        "completion_tokens": 400,
+        "prompt_tokens": 43792,
+        "aggregate_decode_tok_s": 0.6,
+        "aggregate_total_tok_s": 66.6
+      }
+    },
+    {
+      "suite": "gpqa",
+      "accuracy": 0.5692307692307692,
+      "n": 195,
+      "n_questions": 195,
+      "repeats": 1,
+      "correct": 111,
+      "errors": 0,
+      "truncated": 0,
+      "per_tier": {
+        "1": {
+          "accuracy": 0.7258064516129032,
+          "n": 62,
+          "correct": 45
+        },
+        "2": {
+          "accuracy": 0.5522388059701493,
+          "n": 67,
+          "correct": 37
+        },
+        "3": {
+          "accuracy": 0.4393939393939394,
+          "n": 66,
+          "correct": 29
+        }
+      },
+      "per_item": {
+        "gpqa_Organic Chemistry_0098": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0145": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Astrophysics_0133": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Relativistic Mechanics_0187": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0374": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0010": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0314": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_High-energy particle physics_0129": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0069": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0265": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Genetics_0151": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Chemistry (general)_0362": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Statistical Mechanics_0172": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Relativistic Mechanics_0326": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0278": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Astrophysics_0048": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0030": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0110": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0379": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0104": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0031": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Electromagnetism and Photonics_0337": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0243": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0043": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Chemistry (general)_0125": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0320": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0174": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0233": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Genetics_0409": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0054": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0372": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Physics (general)_0305": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0282": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0184": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0264": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Chemistry (general)_0423": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0141": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0288": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Astrophysics_0092": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0085": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0298": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0186": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Astrophysics_0434": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0446": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Electromagnetism and Photonics_0052": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0430": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0280": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0077": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Physics (general)_0197": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0328": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0162": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0198": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Chemistry (general)_0241": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Relativistic Mechanics_0335": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Genetics_0420": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0065": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0303": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0380": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0130": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0297": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0157": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Physics (general)_0001": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0232": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0299": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0026": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0062": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Genetics_0061": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0331": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0439": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0334": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0169": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0079": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0120": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0143": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0416": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0350": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0122": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Electromagnetism and Photonics_0364": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0013": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0202": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Electromagnetism and Photonics_0144": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0007": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0167": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0400": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Chemistry (general)_0147": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0084": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0216": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Chemistry (general)_0300": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0302": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0382": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Relativistic Mechanics_0108": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0386": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0149": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Genetics_0014": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0391": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Physics (general)_0403": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0113": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Chemistry (general)_0436": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0385": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0201": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0340": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Optics and Acoustics_0422": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Electromagnetism and Photonics_0008": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Statistical Mechanics_0378": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0055": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0398": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0194": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0253": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0009": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_High-energy particle physics_0195": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Genetics_0025": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0351": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0217": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0292": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Electromagnetism and Photonics_0208": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0118": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Physics (general)_0090": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0357": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_High-energy particle physics_0164": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Statistical Mechanics_0101": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0064": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Physics (general)_0426": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0063": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0204": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0286": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_High-energy particle physics_0363": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0249": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0088": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Genetics_0359": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0389": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Electromagnetism and Photonics_0131": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0053": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0281": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0369": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0103": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0309": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0330": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0259": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Physics (general)_0236": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Genetics_0071": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0094": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Condensed Matter Physics_0215": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0114": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0102": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0273": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Condensed Matter Physics_0428": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0242": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Genetics_0381": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0419": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Chemistry (general)_0018": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0196": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0051": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0211": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0290": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0332": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0245": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0091": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0035": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Relativistic Mechanics_0338": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Relativistic Mechanics_0318": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0199": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0163": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Electromagnetism and Photonics_0342": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Physics (general)_0392": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0263": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0344": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Genetics_0269": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_High-energy particle physics_0044": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Relativistic Mechanics_0425": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Genetics_0066": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Astrophysics_0348": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Chemistry (general)_0231": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0000": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Astrophysics_0206": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0257": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0193": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Chemistry (general)_0445": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Quantum Mechanics_0189": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0175": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0132": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0410": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Genetics_0127": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0405": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0414": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_High-energy particle physics_0182": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0214": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Astrophysics_0421": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0135": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0333": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0047": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0086": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0019": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Molecular Biology_0128": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0093": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_Organic Chemistry_0002": {
+          "correct": 0,
+          "n": 1
+        }
+      },
+      "throughput": {
+        "concurrency": 1,
+        "wall_s": 697.1,
+        "completion_tokens": 390,
+        "prompt_tokens": 49171,
+        "aggregate_decode_tok_s": 0.6,
+        "aggregate_total_tok_s": 71.1
+      }
+    }
+  ]
+}
