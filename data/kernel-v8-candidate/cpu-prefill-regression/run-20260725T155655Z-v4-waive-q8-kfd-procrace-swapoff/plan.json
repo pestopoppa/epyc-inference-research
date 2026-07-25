@@ -1,0 +1,706 @@
+{
+  "arm_runs": [
+    {
+      "id": "gemma_orig_q4-tg128-iqk1-production",
+      "iq": false,
+      "iqk": 1,
+      "kernel_arm": "production",
+      "metric": "tg128",
+      "model": "gemma_orig_q4",
+      "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+      "n_gen": 128,
+      "n_prompt": 0,
+      "pair_id": "gemma_orig_q4-tg128-iqk1",
+      "reps": 10
+    },
+    {
+      "id": "gemma_orig_q4-tg128-iqk1-candidate",
+      "iq": false,
+      "iqk": 1,
+      "kernel_arm": "candidate",
+      "metric": "tg128",
+      "model": "gemma_orig_q4",
+      "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+      "n_gen": 128,
+      "n_prompt": 0,
+      "pair_id": "gemma_orig_q4-tg128-iqk1",
+      "reps": 10
+    },
+    {
+      "id": "gemma_orig_q4-pp2048-iqk1-production",
+      "iq": false,
+      "iqk": 1,
+      "kernel_arm": "production",
+      "metric": "pp2048",
+      "model": "gemma_orig_q4",
+      "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+      "n_gen": 0,
+      "n_prompt": 2048,
+      "pair_id": "gemma_orig_q4-pp2048-iqk1",
+      "reps": 10
+    },
+    {
+      "id": "gemma_orig_q4-pp2048-iqk1-candidate",
+      "iq": false,
+      "iqk": 1,
+      "kernel_arm": "candidate",
+      "metric": "pp2048",
+      "model": "gemma_orig_q4",
+      "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+      "n_gen": 0,
+      "n_prompt": 2048,
+      "pair_id": "gemma_orig_q4-pp2048-iqk1",
+      "reps": 10
+    },
+    {
+      "id": "qwen_next_iq2-tg128-iqk0-production",
+      "iq": true,
+      "iqk": 0,
+      "kernel_arm": "production",
+      "metric": "tg128",
+      "model": "qwen_next_iq2",
+      "model_path": "/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf",
+      "n_gen": 128,
+      "n_prompt": 0,
+      "pair_id": "qwen_next_iq2-tg128-iqk0",
+      "reps": 10
+    },
+    {
+      "id": "qwen_next_iq2-tg128-iqk0-candidate",
+      "iq": true,
+      "iqk": 0,
+      "kernel_arm": "candidate",
+      "metric": "tg128",
+      "model": "qwen_next_iq2",
+      "model_path": "/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf",
+      "n_gen": 128,
+      "n_prompt": 0,
+      "pair_id": "qwen_next_iq2-tg128-iqk0",
+      "reps": 10
+    },
+    {
+      "id": "qwen_next_iq2-pp2048-iqk0-production",
+      "iq": true,
+      "iqk": 0,
+      "kernel_arm": "production",
+      "metric": "pp2048",
+      "model": "qwen_next_iq2",
+      "model_path": "/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf",
+      "n_gen": 0,
+      "n_prompt": 2048,
+      "pair_id": "qwen_next_iq2-pp2048-iqk0",
+      "reps": 10
+    },
+    {
+      "id": "qwen_next_iq2-pp2048-iqk0-candidate",
+      "iq": true,
+      "iqk": 0,
+      "kernel_arm": "candidate",
+      "metric": "pp2048",
+      "model": "qwen_next_iq2",
+      "model_path": "/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf",
+      "n_gen": 0,
+      "n_prompt": 2048,
+      "pair_id": "qwen_next_iq2-pp2048-iqk0",
+      "reps": 10
+    },
+    {
+      "id": "qwen_next_iq2-tg128-iqk1-production",
+      "iq": true,
+      "iqk": 1,
+      "kernel_arm": "production",
+      "metric": "tg128",
+      "model": "qwen_next_iq2",
+      "model_path": "/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf",
+      "n_gen": 128,
+      "n_prompt": 0,
+      "pair_id": "qwen_next_iq2-tg128-iqk1",
+      "reps": 10
+    },
+    {
+      "id": "qwen_next_iq2-tg128-iqk1-candidate",
+      "iq": true,
+      "iqk": 1,
+      "kernel_arm": "candidate",
+      "metric": "tg128",
+      "model": "qwen_next_iq2",
+      "model_path": "/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf",
+      "n_gen": 128,
+      "n_prompt": 0,
+      "pair_id": "qwen_next_iq2-tg128-iqk1",
+      "reps": 10
+    },
+    {
+      "id": "qwen_next_iq2-pp2048-iqk1-production",
+      "iq": true,
+      "iqk": 1,
+      "kernel_arm": "production",
+      "metric": "pp2048",
+      "model": "qwen_next_iq2",
+      "model_path": "/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf",
+      "n_gen": 0,
+      "n_prompt": 2048,
+      "pair_id": "qwen_next_iq2-pp2048-iqk1",
+      "reps": 10
+    },
+    {
+      "id": "qwen_next_iq2-pp2048-iqk1-candidate",
+      "iq": true,
+      "iqk": 1,
+      "kernel_arm": "candidate",
+      "metric": "pp2048",
+      "model": "qwen_next_iq2",
+      "model_path": "/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf",
+      "n_gen": 0,
+      "n_prompt": 2048,
+      "pair_id": "qwen_next_iq2-pp2048-iqk1",
+      "reps": 10
+    },
+    {
+      "id": "glm_iq2-tg128-iqk0-production",
+      "iq": true,
+      "iqk": 0,
+      "kernel_arm": "production",
+      "metric": "tg128",
+      "model": "glm_iq2",
+      "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+      "n_gen": 128,
+      "n_prompt": 0,
+      "pair_id": "glm_iq2-tg128-iqk0",
+      "reps": 10
+    },
+    {
+      "id": "glm_iq2-tg128-iqk0-candidate",
+      "iq": true,
+      "iqk": 0,
+      "kernel_arm": "candidate",
+      "metric": "tg128",
+      "model": "glm_iq2",
+      "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+      "n_gen": 128,
+      "n_prompt": 0,
+      "pair_id": "glm_iq2-tg128-iqk0",
+      "reps": 10
+    },
+    {
+      "id": "glm_iq2-pp2048-iqk0-production",
+      "iq": true,
+      "iqk": 0,
+      "kernel_arm": "production",
+      "metric": "pp2048",
+      "model": "glm_iq2",
+      "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+      "n_gen": 0,
+      "n_prompt": 2048,
+      "pair_id": "glm_iq2-pp2048-iqk0",
+      "reps": 10
+    },
+    {
+      "id": "glm_iq2-pp2048-iqk0-candidate",
+      "iq": true,
+      "iqk": 0,
+      "kernel_arm": "candidate",
+      "metric": "pp2048",
+      "model": "glm_iq2",
+      "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+      "n_gen": 0,
+      "n_prompt": 2048,
+      "pair_id": "glm_iq2-pp2048-iqk0",
+      "reps": 10
+    },
+    {
+      "id": "glm_iq2-tg128-iqk1-production",
+      "iq": true,
+      "iqk": 1,
+      "kernel_arm": "production",
+      "metric": "tg128",
+      "model": "glm_iq2",
+      "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+      "n_gen": 128,
+      "n_prompt": 0,
+      "pair_id": "glm_iq2-tg128-iqk1",
+      "reps": 10
+    },
+    {
+      "id": "glm_iq2-tg128-iqk1-candidate",
+      "iq": true,
+      "iqk": 1,
+      "kernel_arm": "candidate",
+      "metric": "tg128",
+      "model": "glm_iq2",
+      "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+      "n_gen": 128,
+      "n_prompt": 0,
+      "pair_id": "glm_iq2-tg128-iqk1",
+      "reps": 10
+    },
+    {
+      "id": "glm_iq2-pp2048-iqk1-production",
+      "iq": true,
+      "iqk": 1,
+      "kernel_arm": "production",
+      "metric": "pp2048",
+      "model": "glm_iq2",
+      "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+      "n_gen": 0,
+      "n_prompt": 2048,
+      "pair_id": "glm_iq2-pp2048-iqk1",
+      "reps": 10
+    },
+    {
+      "id": "glm_iq2-pp2048-iqk1-candidate",
+      "iq": true,
+      "iqk": 1,
+      "kernel_arm": "candidate",
+      "metric": "pp2048",
+      "model": "glm_iq2",
+      "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+      "n_gen": 0,
+      "n_prompt": 2048,
+      "pair_id": "glm_iq2-pp2048-iqk1",
+      "reps": 10
+    },
+    {
+      "id": "hy3_iq1-tg128-iqk0-production",
+      "iq": true,
+      "iqk": 0,
+      "kernel_arm": "production",
+      "metric": "tg128",
+      "model": "hy3_iq1",
+      "model_path": "/mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf",
+      "n_gen": 128,
+      "n_prompt": 0,
+      "pair_id": "hy3_iq1-tg128-iqk0",
+      "reps": 10
+    },
+    {
+      "id": "hy3_iq1-tg128-iqk0-candidate",
+      "iq": true,
+      "iqk": 0,
+      "kernel_arm": "candidate",
+      "metric": "tg128",
+      "model": "hy3_iq1",
+      "model_path": "/mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf",
+      "n_gen": 128,
+      "n_prompt": 0,
+      "pair_id": "hy3_iq1-tg128-iqk0",
+      "reps": 10
+    },
+    {
+      "id": "hy3_iq1-pp2048-iqk0-production",
+      "iq": true,
+      "iqk": 0,
+      "kernel_arm": "production",
+      "metric": "pp2048",
+      "model": "hy3_iq1",
+      "model_path": "/mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf",
+      "n_gen": 0,
+      "n_prompt": 2048,
+      "pair_id": "hy3_iq1-pp2048-iqk0",
+      "reps": 10
+    },
+    {
+      "id": "hy3_iq1-pp2048-iqk0-candidate",
+      "iq": true,
+      "iqk": 0,
+      "kernel_arm": "candidate",
+      "metric": "pp2048",
+      "model": "hy3_iq1",
+      "model_path": "/mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf",
+      "n_gen": 0,
+      "n_prompt": 2048,
+      "pair_id": "hy3_iq1-pp2048-iqk0",
+      "reps": 10
+    },
+    {
+      "id": "hy3_iq1-tg128-iqk1-production",
+      "iq": true,
+      "iqk": 1,
+      "kernel_arm": "production",
+      "metric": "tg128",
+      "model": "hy3_iq1",
+      "model_path": "/mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf",
+      "n_gen": 128,
+      "n_prompt": 0,
+      "pair_id": "hy3_iq1-tg128-iqk1",
+      "reps": 10
+    },
+    {
+      "id": "hy3_iq1-tg128-iqk1-candidate",
+      "iq": true,
+      "iqk": 1,
+      "kernel_arm": "candidate",
+      "metric": "tg128",
+      "model": "hy3_iq1",
+      "model_path": "/mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf",
+      "n_gen": 128,
+      "n_prompt": 0,
+      "pair_id": "hy3_iq1-tg128-iqk1",
+      "reps": 10
+    },
+    {
+      "id": "hy3_iq1-pp2048-iqk1-production",
+      "iq": true,
+      "iqk": 1,
+      "kernel_arm": "production",
+      "metric": "pp2048",
+      "model": "hy3_iq1",
+      "model_path": "/mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf",
+      "n_gen": 0,
+      "n_prompt": 2048,
+      "pair_id": "hy3_iq1-pp2048-iqk1",
+      "reps": 10
+    },
+    {
+      "id": "hy3_iq1-pp2048-iqk1-candidate",
+      "iq": true,
+      "iqk": 1,
+      "kernel_arm": "candidate",
+      "metric": "pp2048",
+      "model": "hy3_iq1",
+      "model_path": "/mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf",
+      "n_gen": 0,
+      "n_prompt": 2048,
+      "pair_id": "hy3_iq1-pp2048-iqk1",
+      "reps": 10
+    }
+  ],
+  "arms": {
+    "candidate": {
+      "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-v8-cpu/bin/llama-bench",
+      "expected_branch": "experimental-v8-refresh-20260724",
+      "expected_head": "67a433bf45a8a091d83b4ea0b32ff0735fd51800",
+      "library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-v8-cpu/bin",
+      "name": "candidate",
+      "source_root": "/mnt/raid0/llm/llama.cpp-experimental"
+    },
+    "production": {
+      "binary": "/mnt/raid0/llm/llama.cpp/build/bin/llama-bench",
+      "expected_branch": "production-consolidated-v7",
+      "expected_head": "6ad45fa3ff6718c07c000061dbc6e29c1771f6e3",
+      "library_path": "/mnt/raid0/llm/llama.cpp/build/bin",
+      "name": "production",
+      "source_root": "/mnt/raid0/llm/llama.cpp"
+    }
+  },
+  "cardinality": {
+    "arm_runs": 28,
+    "unique_pairs": 14
+  },
+  "contention_accounting": {
+    "configured_cpu_count": 96,
+    "id": "sustained-window-v1",
+    "minimum_target_core_equivalents": 72.0,
+    "minimum_window_seconds": 10.0,
+    "prospective_only": true,
+    "signed_external_core_equivalents": {
+      "maximum": 4.0,
+      "minimum": -1.0
+    }
+  },
+  "created_at": "2026-07-25T15:57:32+00:00",
+  "explicit_exclusion": [
+    "qwen3.5-122b",
+    "qwen36_q8 (operator-ratified WAIVE-Q8; no v8 Q8 non-regression claim)"
+  ],
+  "instrument_eras": {
+    "active": {
+      "cpu_bench": {
+        "from": "2026-07-20T13:30:13Z",
+        "id": "E6-cpu-kernel",
+        "parsed_row": {
+          "from": "2026-07-20T13:30:13Z",
+          "id": "E6-cpu-kernel",
+          "note": "v7 production cutover. Single kernel: production-consolidated-v7 at llama.cpp commit 6ad45fa3ff6718c07c000061dbc6e29c1771f6e3 (binary version 10098 / 6ad45fa3f), promoted from frozen experimental-v7-refresh-20260716. RECONCILIATION: pre-boundary CPU throughput and quality/eval rows measured on v6+iqk or experimental-v7 are historical priors for decisions about the production-consolidated-v7 stack. Do not rescale across this boundary; re-measure within era under P-BENCH/P-QUAL/P-GPU protocols with host attestation.\n",
+          "scope": "cpu_bench"
+        },
+        "raw_row_sha256": "a98347d55d148942e58049edf49f64522cf76cbc900d004e8d9bf760a9fcc78a",
+        "row_boundaries": {
+          "end_line": 79,
+          "start_line": 67
+        },
+        "scope": "cpu_bench"
+      },
+      "eval_quality": {
+        "from": "2026-07-21T10:30:00Z",
+        "id": "E7-eval-instrument",
+        "parsed_row": {
+          "from": "2026-07-21T10:30:00Z",
+          "id": "E7-eval-instrument",
+          "note": "A3 question-pool rebuild + scorer-semantics package boundary (operator pre-authorized 2026-07-20, eval-tower-architecture-audit decision log; appended by the takeover session 2026-07-21). Pool: 53,231 questions / 21 suites (15-suite stale orchestrator registry, built 2026-06-28) -> 79,479 / 41 suites (38 nonzero) built by the research-canonical 34-suite registry; shared suites byte-identical (zero row loss); newly sampled: mmlu_pro 12032, scoring_verifiers 6701, physreason 3117, olympiadbench 674, omniscience 600, zeroscrolls 538, leval 514, longbench 503, tulving_episodic 456, longcot_mini 402, gpqa_diamond(+_cot) 396, physics 100, aime 60, web_research 50, ruler 50, aime25 30, needle_parameterized 25; absent-source (0 rows, loud): gaia, aa_lcr, document_extraction. Scorer: the B7 deterministic package (07a20a7c + 8f24679a: final-answer-region extraction, boundary-anchored substring, boxed fallback, entry_point oracle rewrite, multiset F1, mc textual labels) is live from this boundary; ratification tracked as op-bundle ESC-6. RECONCILIATION: pre-boundary T1/T2/T3 quality rows are historical priors for cross-suite/aggregate comparisons (the instrument sampled 21 suites and a laxer scorer); per-suite comparisons on the byte-identical shared suites remain usable WITHIN the same scorer semantics only. Backup of the retired pool: benchmarks/prompts/pool_rebuild_a3_20260721/ question_pool.PRE-A3-BACKUP-20260628-build.jsonl (research repo).\n",
+          "scope": "eval_quality"
+        },
+        "raw_row_sha256": "77cc46ada0d4e1640ddb9b3fe20372c7069c5daad6c8dc8023b51896a4c523a8",
+        "row_boundaries": {
+          "end_line": 121,
+          "start_line": 91
+        },
+        "scope": "eval_quality"
+      }
+    },
+    "source": {
+      "bytes": 8590,
+      "device": 2431,
+      "inode": 96479733,
+      "mtime_ns": 1784803180061448177,
+      "path": "/mnt/raid0/llm/epyc-orchestrator/orchestration/instrument_eras.yaml",
+      "sha256": "8d321c345c286616ee600fadecbc0c00d467ed5d6c10519cc7fd5b984c61eeea"
+    }
+  },
+  "measurement_intent": "decision_gating_throughput_only",
+  "models": {
+    "gemma_orig_q4": {
+      "iq": false,
+      "path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf"
+    },
+    "glm_iq2": {
+      "iq": true,
+      "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf"
+    },
+    "hy3_iq1": {
+      "iq": true,
+      "path": "/mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf"
+    },
+    "qwen_next_iq2": {
+      "iq": true,
+      "path": "/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf"
+    }
+  },
+  "pairs": [
+    {
+      "iq": false,
+      "iqk": 1,
+      "metric": "tg128",
+      "model": "gemma_orig_q4",
+      "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+      "n_gen": 128,
+      "n_prompt": 0,
+      "pair_id": "gemma_orig_q4-tg128-iqk1",
+      "reps": 10
+    },
+    {
+      "iq": false,
+      "iqk": 1,
+      "metric": "pp2048",
+      "model": "gemma_orig_q4",
+      "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+      "n_gen": 0,
+      "n_prompt": 2048,
+      "pair_id": "gemma_orig_q4-pp2048-iqk1",
+      "reps": 10
+    },
+    {
+      "iq": true,
+      "iqk": 0,
+      "metric": "tg128",
+      "model": "qwen_next_iq2",
+      "model_path": "/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf",
+      "n_gen": 128,
+      "n_prompt": 0,
+      "pair_id": "qwen_next_iq2-tg128-iqk0",
+      "reps": 10
+    },
+    {
+      "iq": true,
+      "iqk": 0,
+      "metric": "pp2048",
+      "model": "qwen_next_iq2",
+      "model_path": "/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf",
+      "n_gen": 0,
+      "n_prompt": 2048,
+      "pair_id": "qwen_next_iq2-pp2048-iqk0",
+      "reps": 10
+    },
+    {
+      "iq": true,
+      "iqk": 1,
+      "metric": "tg128",
+      "model": "qwen_next_iq2",
+      "model_path": "/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf",
+      "n_gen": 128,
+      "n_prompt": 0,
+      "pair_id": "qwen_next_iq2-tg128-iqk1",
+      "reps": 10
+    },
+    {
+      "iq": true,
+      "iqk": 1,
+      "metric": "pp2048",
+      "model": "qwen_next_iq2",
+      "model_path": "/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf",
+      "n_gen": 0,
+      "n_prompt": 2048,
+      "pair_id": "qwen_next_iq2-pp2048-iqk1",
+      "reps": 10
+    },
+    {
+      "iq": true,
+      "iqk": 0,
+      "metric": "tg128",
+      "model": "glm_iq2",
+      "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+      "n_gen": 128,
+      "n_prompt": 0,
+      "pair_id": "glm_iq2-tg128-iqk0",
+      "reps": 10
+    },
+    {
+      "iq": true,
+      "iqk": 0,
+      "metric": "pp2048",
+      "model": "glm_iq2",
+      "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+      "n_gen": 0,
+      "n_prompt": 2048,
+      "pair_id": "glm_iq2-pp2048-iqk0",
+      "reps": 10
+    },
+    {
+      "iq": true,
+      "iqk": 1,
+      "metric": "tg128",
+      "model": "glm_iq2",
+      "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+      "n_gen": 128,
+      "n_prompt": 0,
+      "pair_id": "glm_iq2-tg128-iqk1",
+      "reps": 10
+    },
+    {
+      "iq": true,
+      "iqk": 1,
+      "metric": "pp2048",
+      "model": "glm_iq2",
+      "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+      "n_gen": 0,
+      "n_prompt": 2048,
+      "pair_id": "glm_iq2-pp2048-iqk1",
+      "reps": 10
+    },
+    {
+      "iq": true,
+      "iqk": 0,
+      "metric": "tg128",
+      "model": "hy3_iq1",
+      "model_path": "/mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf",
+      "n_gen": 128,
+      "n_prompt": 0,
+      "pair_id": "hy3_iq1-tg128-iqk0",
+      "reps": 10
+    },
+    {
+      "iq": true,
+      "iqk": 0,
+      "metric": "pp2048",
+      "model": "hy3_iq1",
+      "model_path": "/mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf",
+      "n_gen": 0,
+      "n_prompt": 2048,
+      "pair_id": "hy3_iq1-pp2048-iqk0",
+      "reps": 10
+    },
+    {
+      "iq": true,
+      "iqk": 1,
+      "metric": "tg128",
+      "model": "hy3_iq1",
+      "model_path": "/mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf",
+      "n_gen": 128,
+      "n_prompt": 0,
+      "pair_id": "hy3_iq1-tg128-iqk1",
+      "reps": 10
+    },
+    {
+      "iq": true,
+      "iqk": 1,
+      "metric": "pp2048",
+      "model": "hy3_iq1",
+      "model_path": "/mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf",
+      "n_gen": 0,
+      "n_prompt": 2048,
+      "pair_id": "hy3_iq1-pp2048-iqk1",
+      "reps": 10
+    }
+  ],
+  "parent_environment_identity": {
+    "environment": {
+      "HOME": "/home/node",
+      "LANG": "C.UTF-8",
+      "LC_ALL": "C.UTF-8",
+      "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/rocm/bin",
+      "PYTHONNOUSERSITE": "1",
+      "TMPDIR": "/tmp",
+      "TZ": "UTC"
+    },
+    "sha256": "3f20f4a3e7381796f90b5a5c3d7ca31c82a97be149dd0d66af082c6128cf4c36"
+  },
+  "profile": {
+    "cpu_extra": [
+      "-dev",
+      "none",
+      "-ngl",
+      "0",
+      "--no-op-offload",
+      "1"
+    ],
+    "gray_retry_order": [
+      "candidate",
+      "production"
+    ],
+    "gray_retry_scope": "non-IQ regression pairs and IQK=0 control pairs only",
+    "initial_order": [
+      "production",
+      "candidate"
+    ],
+    "output_extra": [
+      "-o",
+      "json",
+      "-oe",
+      "md"
+    ],
+    "prefill": 2048,
+    "reps": 10
+  },
+  "promotion_decision": false,
+  "protocol": "P-BENCH-PREFILL-1",
+  "q8_waiver": {
+    "semantic_binding": {
+      "candidate_head": "67a433bf45a8a091d83b4ea0b32ff0735fd51800",
+      "consequences": [
+        "No v8 Q8 non-regression claim may be made from this campaign.",
+        "The ratified 72-core eligibility floor remains unchanged for every remaining arm.",
+        "The Gemma Q4 non-IQ B4 pairs remain mandatory.",
+        "All retained IQ B3 pairs remain mandatory.",
+        "Pre-waiver artifacts remain ineligible and cannot be retro-certified."
+      ],
+      "decision": "WAIVE-Q8",
+      "production_head": "6ad45fa3ff6718c07c000061dbc6e29c1771f6e3",
+      "protocol": "P-BENCH-PREFILL-1",
+      "protocol_changed": false,
+      "ratified_at": "2026-07-25T14:04:16Z",
+      "reason": "The Qwen3.6 Q8 workload naturally sustains about 50-55 target core-equivalents and cannot satisfy the ratified 72-core eligibility floor.",
+      "runner_sha256_before_waiver_implementation": "2fb0013d2cb71b149a7429995830ac0356048582671ae83428cb1ef15ccfe024",
+      "schema": "epyc.cpu_prefill_v8.operator_waiver.v1",
+      "scope": {
+        "excluded_arm_runs": 4,
+        "excluded_model": "qwen36_q8",
+        "excluded_model_path": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "excluded_pairs": [
+          "qwen36_q8-tg128-iqk1",
+          "qwen36_q8-pp2048-iqk1"
+        ],
+        "remaining_arm_runs": 28,
+        "remaining_matched_pairs": 14
+      }
+    },
+    "source": {
+      "bytes": 1267,
+      "device": 2431,
+      "inode": 97290147,
+      "mtime_ns": 1784988256813941900,
+      "path": "/mnt/raid0/llm/epyc-root/artifacts/operator/waive_q8_cpu_prefill_v8_20260725.json",
+      "sha256": "fcd52b61610fcc2782e11f41ffac359343233924805f83d872eeceffbb7522d7"
+    }
+  },
+  "schema": "cpu-prefill-v8-regression.v3"
+}

@@ -1,0 +1,2404 @@
+{
+  "accounting": "sustained-window-v1",
+  "intervals": [
+    {
+      "aggregate_busy_delta_ticks": 181.51146595180035,
+      "aggregate_total_delta_ticks": 25048.38499379158,
+      "elapsed_s": 1.3049488120013848,
+      "eligible": false,
+      "end_sample_index": 1,
+      "exclusion_reasons": [
+        "target_below_minimum_core_equivalents"
+      ],
+      "index": 0,
+      "signed_external_core_equivalents": 0.39473936048723485,
+      "start_sample_index": 0,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 0.9962076581427015,
+      "target_group_cpu_delta_ticks": 130
+    },
+    {
+      "aggregate_busy_delta_ticks": 182.99970227479935,
+      "aggregate_total_delta_ticks": 24737.98978829384,
+      "elapsed_s": 1.2887186839943752,
+      "eligible": false,
+      "end_sample_index": 2,
+      "exclusion_reasons": [
+        "target_below_minimum_core_equivalents"
+      ],
+      "index": 1,
+      "signed_external_core_equivalents": 0.419018541016474,
+      "start_sample_index": 1,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 1.000994255784089,
+      "target_group_cpu_delta_ticks": 129
+    },
+    {
+      "aggregate_busy_delta_ticks": 4095.34562574327,
+      "aggregate_total_delta_ticks": 24997.032394886017,
+      "elapsed_s": 1.3024718959932216,
+      "eligible": false,
+      "end_sample_index": 3,
+      "exclusion_reasons": [
+        "target_below_minimum_core_equivalents"
+      ],
+      "index": 2,
+      "signed_external_core_equivalents": -0.849572068289034,
+      "start_sample_index": 2,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 32.29244341424077,
+      "target_group_cpu_delta_ticks": 4206
+    },
+    {
+      "aggregate_busy_delta_ticks": 15247.949715465307,
+      "aggregate_total_delta_ticks": 30287.39405655861,
+      "elapsed_s": 1.5783188525092555,
+      "eligible": true,
+      "end_sample_index": 4,
+      "exclusion_reasons": [],
+      "index": 3,
+      "signed_external_core_equivalents": 0.5952518105954532,
+      "start_sample_index": 3,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 96.013552495478,
+      "target_group_cpu_delta_ticks": 15154
+    },
+    {
+      "aggregate_busy_delta_ticks": 15056.082876846194,
+      "aggregate_total_delta_ticks": 29731.171377658844,
+      "elapsed_s": 1.5495657415158348,
+      "eligible": true,
+      "end_sample_index": 5,
+      "exclusion_reasons": [],
+      "index": 4,
+      "signed_external_core_equivalents": 1.1815108706978559,
+      "start_sample_index": 4,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.9817296002605,
+      "target_group_cpu_delta_ticks": 14873
+    },
+    {
+      "aggregate_busy_delta_ticks": 15302.875679403543,
+      "aggregate_total_delta_ticks": 30392.253274440765,
+      "elapsed_s": 1.5837285749876173,
+      "eligible": true,
+      "end_sample_index": 6,
+      "exclusion_reasons": [],
+      "index": 5,
+      "signed_external_core_equivalents": 0.630636341232426,
+      "start_sample_index": 5,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.99498449485807,
+      "target_group_cpu_delta_ticks": 15203
+    },
+    {
+      "aggregate_busy_delta_ticks": 15089.81245470047,
+      "aggregate_total_delta_ticks": 29886.113833665848,
+      "elapsed_s": 1.5572127409977838,
+      "eligible": true,
+      "end_sample_index": 7,
+      "exclusion_reasons": [],
+      "index": 6,
+      "signed_external_core_equivalents": 0.8978378549027615,
+      "start_sample_index": 6,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 96.00486565773146,
+      "target_group_cpu_delta_ticks": 14950
+    },
+    {
+      "aggregate_busy_delta_ticks": 15128.50578418374,
+      "aggregate_total_delta_ticks": 30067.50566625595,
+      "elapsed_s": 1.5669560975075,
+      "eligible": true,
+      "end_sample_index": 8,
+      "exclusion_reasons": [],
+      "index": 7,
+      "signed_external_core_equivalents": 0.5520625901474981,
+      "start_sample_index": 7,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.9950315387059,
+      "target_group_cpu_delta_ticks": 15042
+    },
+    {
+      "aggregate_busy_delta_ticks": 15168.992208197713,
+      "aggregate_total_delta_ticks": 30121.488027572632,
+      "elapsed_s": 1.5695508054923266,
+      "eligible": true,
+      "end_sample_index": 9,
+      "exclusion_reasons": [],
+      "index": 8,
+      "signed_external_core_equivalents": 0.6434465698358475,
+      "start_sample_index": 8,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 96.00198953275404,
+      "target_group_cpu_delta_ticks": 15068
+    },
+    {
+      "aggregate_busy_delta_ticks": 15434.494730651379,
+      "aggregate_total_delta_ticks": 30610.98136115074,
+      "elapsed_s": 1.595156894007232,
+      "eligible": true,
+      "end_sample_index": 10,
+      "exclusion_reasons": [],
+      "index": 9,
+      "signed_external_core_equivalents": 0.7491095772478721,
+      "start_sample_index": 9,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 96.00936470598086,
+      "target_group_cpu_delta_ticks": 15315
+    },
+    {
+      "aggregate_busy_delta_ticks": 15228.339720606804,
+      "aggregate_total_delta_ticks": 30233.58611392975,
+      "elapsed_s": 1.5751388809876516,
+      "eligible": true,
+      "end_sample_index": 11,
+      "exclusion_reasons": [],
+      "index": 10,
+      "signed_external_core_equivalents": 0.6941592384428041,
+      "start_sample_index": 10,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.98518697297351,
+      "target_group_cpu_delta_ticks": 15119
+    },
+    {
+      "aggregate_busy_delta_ticks": 15157.621716156602,
+      "aggregate_total_delta_ticks": 29960.856505393982,
+      "elapsed_s": 1.5618822624965105,
+      "eligible": true,
+      "end_sample_index": 12,
+      "exclusion_reasons": [],
+      "index": 11,
+      "signed_external_core_equivalents": 1.066800745212856,
+      "start_sample_index": 11,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.98034602197482,
+      "target_group_cpu_delta_ticks": 14991
+    },
+    {
+      "aggregate_busy_delta_ticks": 15197.217461451888,
+      "aggregate_total_delta_ticks": 30136.914588451385,
+      "elapsed_s": 1.5704101565061137,
+      "eligible": true,
+      "end_sample_index": 13,
+      "exclusion_reasons": [],
+      "index": 12,
+      "signed_external_core_equivalents": 0.7655163267623714,
+      "start_sample_index": 12,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 96.00676573274126,
+      "target_group_cpu_delta_ticks": 15077
+    },
+    {
+      "aggregate_busy_delta_ticks": 15221.793541952968,
+      "aggregate_total_delta_ticks": 30210.60378217697,
+      "elapsed_s": 1.5739923485089093,
+      "eligible": true,
+      "end_sample_index": 14,
+      "exclusion_reasons": [],
+      "index": 13,
+      "signed_external_core_equivalents": 0.7166079432331446,
+      "start_sample_index": 13,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.99157209571707,
+      "target_group_cpu_delta_ticks": 15109
+    },
+    {
+      "aggregate_busy_delta_ticks": 15213.39908027649,
+      "aggregate_total_delta_ticks": 30212.802210092545,
+      "elapsed_s": 1.5744862314895727,
+      "eligible": true,
+      "end_sample_index": 15,
+      "exclusion_reasons": [],
+      "index": 14,
+      "signed_external_core_equivalents": 0.6249599285691875,
+      "start_sample_index": 14,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.99956924170856,
+      "target_group_cpu_delta_ticks": 15115
+    },
+    {
+      "aggregate_busy_delta_ticks": 15156.372172862291,
+      "aggregate_total_delta_ticks": 30030.245873212814,
+      "elapsed_s": 1.5646142405166756,
+      "eligible": true,
+      "end_sample_index": 16,
+      "exclusion_reasons": [],
+      "index": 15,
+      "signed_external_core_equivalents": 0.8716025287949428,
+      "start_sample_index": 15,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.99810362866192,
+      "target_group_cpu_delta_ticks": 15020
+    },
+    {
+      "aggregate_busy_delta_ticks": 15421.014909520745,
+      "aggregate_total_delta_ticks": 30475.521646499634,
+      "elapsed_s": 1.587973746994976,
+      "eligible": true,
+      "end_sample_index": 17,
+      "exclusion_reasons": [],
+      "index": 16,
+      "signed_external_core_equivalents": 1.114721889173054,
+      "start_sample_index": 16,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.9965492430035,
+      "target_group_cpu_delta_ticks": 15244
+    },
+    {
+      "aggregate_busy_delta_ticks": 14960.280458062887,
+      "aggregate_total_delta_ticks": 29708.562085151672,
+      "elapsed_s": 1.548143424501177,
+      "eligible": true,
+      "end_sample_index": 18,
+      "exclusion_reasons": [],
+      "index": 17,
+      "signed_external_core_equivalents": 0.6477465619517667,
+      "start_sample_index": 17,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.98593880142597,
+      "target_group_cpu_delta_ticks": 14860
+    },
+    {
+      "aggregate_busy_delta_ticks": 15218.384881928563,
+      "aggregate_total_delta_ticks": 30223.2651181221,
+      "elapsed_s": 1.57469758548541,
+      "eligible": true,
+      "end_sample_index": 19,
+      "exclusion_reasons": [],
+      "index": 18,
+      "signed_external_core_equivalents": 0.631136307343274,
+      "start_sample_index": 18,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 96.0120859989728,
+      "target_group_cpu_delta_ticks": 15119
+    },
+    {
+      "aggregate_busy_delta_ticks": 15208.989587128162,
+      "aggregate_total_delta_ticks": 30145.480568885803,
+      "elapsed_s": 1.5707685360102914,
+      "eligible": true,
+      "end_sample_index": 20,
+      "exclusion_reasons": [],
+      "index": 19,
+      "signed_external_core_equivalents": 0.8339203652555475,
+      "start_sample_index": 19,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.9912275700257,
+      "target_group_cpu_delta_ticks": 15078
+    },
+    {
+      "aggregate_busy_delta_ticks": 14962.253303602338,
+      "aggregate_total_delta_ticks": 29668.015388011932,
+      "elapsed_s": 1.5460278344980907,
+      "eligible": true,
+      "end_sample_index": 21,
+      "exclusion_reasons": [],
+      "index": 20,
+      "signed_external_core_equivalents": 0.771352888617641,
+      "start_sample_index": 20,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 96.00732709200348,
+      "target_group_cpu_delta_ticks": 14843
+    },
+    {
+      "aggregate_busy_delta_ticks": 15103.121121898293,
+      "aggregate_total_delta_ticks": 30010.743611574173,
+      "elapsed_s": 1.5638394934940152,
+      "eligible": true,
+      "end_sample_index": 22,
+      "exclusion_reasons": [],
+      "index": 21,
+      "signed_external_core_equivalents": 0.5826756663799667,
+      "start_sample_index": 21,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.9945062294045,
+      "target_group_cpu_delta_ticks": 15012
+    },
+    {
+      "aggregate_busy_delta_ticks": 15071.626413539052,
+      "aggregate_total_delta_ticks": 29902.743674755096,
+      "elapsed_s": 1.558084834512556,
+      "eligible": true,
+      "end_sample_index": 23,
+      "exclusion_reasons": [],
+      "index": 22,
+      "signed_external_core_equivalents": 0.7356878842538294,
+      "start_sample_index": 22,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.99605662472975,
+      "target_group_cpu_delta_ticks": 14957
+    },
+    {
+      "aggregate_busy_delta_ticks": 15141.792567238212,
+      "aggregate_total_delta_ticks": 30076.09225988388,
+      "elapsed_s": 1.567401140986476,
+      "eligible": true,
+      "end_sample_index": 24,
+      "exclusion_reasons": [],
+      "index": 23,
+      "signed_external_core_equivalents": 0.6047754130034126,
+      "start_sample_index": 23,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.99967491748706,
+      "target_group_cpu_delta_ticks": 15047
+    },
+    {
+      "aggregate_busy_delta_ticks": 15132.301230758429,
+      "aggregate_total_delta_ticks": 30061.104464292526,
+      "elapsed_s": 1.5660874145105481,
+      "eligible": true,
+      "end_sample_index": 25,
+      "exclusion_reasons": [],
+      "index": 24,
+      "signed_external_core_equivalents": 0.6276867424360908,
+      "start_sample_index": 24,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.99719569101192,
+      "target_group_cpu_delta_ticks": 15034
+    },
+    {
+      "aggregate_busy_delta_ticks": 15093.827471032739,
+      "aggregate_total_delta_ticks": 29931.14950323105,
+      "elapsed_s": 1.5602426450059284,
+      "eligible": true,
+      "end_sample_index": 26,
+      "exclusion_reasons": [],
+      "index": 25,
+      "signed_external_core_equivalents": 0.7359590599595641,
+      "start_sample_index": 25,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 96.00429810033224,
+      "target_group_cpu_delta_ticks": 14979
+    },
+    {
+      "aggregate_busy_delta_ticks": 14950.489332780242,
+      "aggregate_total_delta_ticks": 29680.967698335648,
+      "elapsed_s": 1.546754893992329,
+      "eligible": true,
+      "end_sample_index": 27,
+      "exclusion_reasons": [],
+      "index": 26,
+      "signed_external_core_equivalents": 0.6690738990527817,
+      "start_sample_index": 26,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.98805898508205,
+      "target_group_cpu_delta_ticks": 14847
+    },
+    {
+      "aggregate_busy_delta_ticks": 15096.07084619999,
+      "aggregate_total_delta_ticks": 29967.154292345047,
+      "elapsed_s": 1.561172401998192,
+      "eligible": true,
+      "end_sample_index": 28,
+      "exclusion_reasons": [],
+      "index": 27,
+      "signed_external_core_equivalents": 0.7050524724822594,
+      "start_sample_index": 27,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.99196079061456,
+      "target_group_cpu_delta_ticks": 14986
+    },
+    {
+      "aggregate_busy_delta_ticks": 15140.154614254832,
+      "aggregate_total_delta_ticks": 30007.28815293312,
+      "elapsed_s": 1.5637704585096799,
+      "eligible": true,
+      "end_sample_index": 29,
+      "exclusion_reasons": [],
+      "index": 28,
+      "signed_external_core_equivalents": 0.8195231823023915,
+      "start_sample_index": 28,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.99874405036968,
+      "target_group_cpu_delta_ticks": 15012
+    },
+    {
+      "aggregate_busy_delta_ticks": 15399.229790046811,
+      "aggregate_total_delta_ticks": 30527.481788873672,
+      "elapsed_s": 1.590771840477828,
+      "eligible": true,
+      "end_sample_index": 30,
+      "exclusion_reasons": [],
+      "index": 29,
+      "signed_external_core_equivalents": 0.7872265956706602,
+      "start_sample_index": 29,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 96.01628348797068,
+      "target_group_cpu_delta_ticks": 15274
+    },
+    {
+      "aggregate_busy_delta_ticks": 15296.054488509893,
+      "aggregate_total_delta_ticks": 30337.605031967163,
+      "elapsed_s": 1.5809594660095172,
+      "eligible": true,
+      "end_sample_index": 31,
+      "exclusion_reasons": [],
+      "index": 30,
+      "signed_external_core_equivalents": 0.7657026705146701,
+      "start_sample_index": 30,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.98601562064746,
+      "target_group_cpu_delta_ticks": 15175
+    },
+    {
+      "aggregate_busy_delta_ticks": 15333.6374181211,
+      "aggregate_total_delta_ticks": 30450.270469665527,
+      "elapsed_s": 1.5867774775106227,
+      "eligible": true,
+      "end_sample_index": 32,
+      "exclusion_reasons": [],
+      "index": 31,
+      "signed_external_core_equivalents": 0.653131391073741,
+      "start_sample_index": 31,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.98069178479402,
+      "target_group_cpu_delta_ticks": 15230
+    },
+    {
+      "aggregate_busy_delta_ticks": 15141.616849139333,
+      "aggregate_total_delta_ticks": 30005.74883699417,
+      "elapsed_s": 1.5637495009868871,
+      "eligible": true,
+      "end_sample_index": 33,
+      "exclusion_reasons": [],
+      "index": 32,
+      "signed_external_core_equivalents": 0.8160952189515864,
+      "start_sample_index": 32,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 96.01282040713438,
+      "target_group_cpu_delta_ticks": 15014
+    },
+    {
+      "aggregate_busy_delta_ticks": 15235.499873325229,
+      "aggregate_total_delta_ticks": 30253.498084545135,
+      "elapsed_s": 1.5764421980129555,
+      "eligible": true,
+      "end_sample_index": 34,
+      "exclusion_reasons": [],
+      "index": 33,
+      "signed_external_core_equivalents": 0.6375106772192783,
+      "start_sample_index": 33,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 96.00732598427702,
+      "target_group_cpu_delta_ticks": 15135
+    },
+    {
+      "aggregate_busy_delta_ticks": 15353.049628436565,
+      "aggregate_total_delta_ticks": 30497.58220076561,
+      "elapsed_s": 1.5891821019904455,
+      "eligible": true,
+      "end_sample_index": 35,
+      "exclusion_reasons": [],
+      "index": 34,
+      "signed_external_core_equivalents": 0.6043966158205756,
+      "start_sample_index": 34,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 96.00536012135208,
+      "target_group_cpu_delta_ticks": 15257
+    },
+    {
+      "aggregate_busy_delta_ticks": 15341.819387063384,
+      "aggregate_total_delta_ticks": 30355.13629102707,
+      "elapsed_s": 1.5820841995009687,
+      "eligible": true,
+      "end_sample_index": 36,
+      "exclusion_reasons": [],
+      "index": 35,
+      "signed_external_core_equivalents": 0.9912202341243851,
+      "start_sample_index": 35,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.98098511311693,
+      "target_group_cpu_delta_ticks": 15185
+    },
+    {
+      "aggregate_busy_delta_ticks": 15159.351303502917,
+      "aggregate_total_delta_ticks": 30088.690742969513,
+      "elapsed_s": 1.5678142444958212,
+      "eligible": true,
+      "end_sample_index": 37,
+      "exclusion_reasons": [],
+      "index": 36,
+      "signed_external_core_equivalents": 0.7038544514462179,
+      "start_sample_index": 36,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 95.98713656820658,
+      "target_group_cpu_delta_ticks": 15049
+    },
+    {
+      "aggregate_busy_delta_ticks": 15180.30061338842,
+      "aggregate_total_delta_ticks": 30149.116286754608,
+      "elapsed_s": 1.5712786084914114,
+      "eligible": true,
+      "end_sample_index": 38,
+      "exclusion_reasons": [],
+      "index": 37,
+      "signed_external_core_equivalents": 0.6065163292709592,
+      "start_sample_index": 37,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 96.00461635815908,
+      "target_group_cpu_delta_ticks": 15085
+    },
+    {
+      "aggregate_busy_delta_ticks": 7463.823975890875,
+      "aggregate_total_delta_ticks": 29828.33834218979,
+      "elapsed_s": 1.5541965050069848,
+      "eligible": false,
+      "end_sample_index": 39,
+      "exclusion_reasons": [
+        "target_below_minimum_core_equivalents"
+      ],
+      "index": 38,
+      "signed_external_core_equivalents": 1.8905201172714925,
+      "start_sample_index": 38,
+      "swap_delta": {
+        "pswpin": 0,
+        "pswpout": 0
+      },
+      "target_core_equivalents": 46.133162549916925,
+      "target_group_cpu_delta_ticks": 7170
+    }
+  ],
+  "samples": [
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 89903347.50303379,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 89903350,
+          "monotonic": 94506.657350473,
+          "total_ticks": 1813698131
+        },
+        "before": {
+          "busy_ticks": 89903345,
+          "monotonic": 94506.631321903,
+          "total_ticks": 1813697630
+        },
+        "interpolation_fraction": 0.5006067562352768,
+        "target_monotonic": 94506.644351981,
+        "target_scan": {
+          "elapsed_s": 0.02581898200151045,
+          "finished_monotonic": 94506.657261472,
+          "started_monotonic": 94506.63144249
+        }
+      },
+      "cpu_total_ticks": 1813697880.8039849,
+      "monotonic": 94506.644351981,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 0,
+        "members": [
+          1839311
+        ],
+        "ownership_changed": false,
+        "vanished_processes": [
+          {
+            "errno": 2,
+            "error": "FileNotFoundError(2, 'No such file or directory')",
+            "pid": 1839312
+          },
+          {
+            "errno": 2,
+            "error": "FileNotFoundError(2, 'No such file or directory')",
+            "pid": 1839313
+          }
+        ]
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 89903529.01449974,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 89903532,
+          "monotonic": 94507.962021516,
+          "total_ticks": 1813723174
+        },
+        "before": {
+          "busy_ticks": 89903526,
+          "monotonic": 94507.936456508,
+          "total_ticks": 1813722682
+        },
+        "interpolation_fraction": 0.5024166235399226,
+        "target_monotonic": 94507.949300793,
+        "target_scan": {
+          "elapsed_s": 0.0253021240059752,
+          "finished_monotonic": 94507.961951855,
+          "started_monotonic": 94507.936649731
+        }
+      },
+      "cpu_total_ticks": 1813722929.1889787,
+      "monotonic": 94507.949300793,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 130,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 89903712.01420201,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 89903715,
+          "monotonic": 94509.250916663,
+          "total_ticks": 1813747915
+        },
+        "before": {
+          "busy_ticks": 89903709,
+          "monotonic": 94509.22499959951,
+          "total_ticks": 1813747417
+        },
+        "interpolation_fraction": 0.5023670018706192,
+        "target_monotonic": 94509.238019477,
+        "target_scan": {
+          "elapsed_s": 0.025639190003857948,
+          "finished_monotonic": 94509.250839072,
+          "started_monotonic": 94509.225199882
+        }
+      },
+      "cpu_total_ticks": 1813747667.178767,
+      "monotonic": 94509.238019477,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 259,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 89907807.35982776,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 89908040,
+          "monotonic": 94510.564499039,
+          "total_ticks": 1813773124
+        },
+        "before": {
+          "busy_ticks": 89907574,
+          "monotonic": 94510.516409441,
+          "total_ticks": 1813772203
+        },
+        "interpolation_fraction": 0.50077216257718,
+        "target_monotonic": 94510.54049137299,
+        "target_scan": {
+          "elapsed_s": 0.04759230600029696,
+          "finished_monotonic": 94510.564287526,
+          "started_monotonic": 94510.51669522
+        }
+      },
+      "cpu_total_ticks": 1813772664.2111619,
+      "monotonic": 94510.54049137299,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 4465,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 89923055.30954322,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 89923288,
+          "monotonic": 94512.142988834,
+          "total_ticks": 1813803413
+        },
+        "before": {
+          "busy_ticks": 89922821,
+          "monotonic": 94512.0944633795,
+          "total_ticks": 1813802487
+        },
+        "interpolation_fraction": 0.5017334972710408,
+        "target_monotonic": 94512.1188102255,
+        "target_scan": {
+          "elapsed_s": 0.04805928299902007,
+          "finished_monotonic": 94512.142839867,
+          "started_monotonic": 94512.094780584
+        }
+      },
+      "cpu_total_ticks": 1813802951.6052184,
+      "monotonic": 94512.1188102255,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 19619,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 89938111.39242007,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 89938349,
+          "monotonic": 94513.69291690551,
+          "total_ticks": 1813833153
+        },
+        "before": {
+          "busy_ticks": 89937873,
+          "monotonic": 94513.6437539675,
+          "total_ticks": 1813832211
+        },
+        "interpolation_fraction": 0.5008244118949322,
+        "target_monotonic": 94513.66837596701,
+        "target_scan": {
+          "elapsed_s": 0.04857647999597248,
+          "finished_monotonic": 94513.692664207,
+          "started_monotonic": 94513.644087727
+        }
+      },
+      "cpu_total_ticks": 1813832682.776596,
+      "monotonic": 94513.66837596701,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 34492,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 89953414.26809947,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 89953647,
+          "monotonic": 94515.276109353,
+          "total_ticks": 1813863535
+        },
+        "before": {
+          "busy_ticks": 89953181,
+          "monotonic": 94515.2280444255,
+          "total_ticks": 1813862614
+        },
+        "interpolation_fraction": 0.5005753207440339,
+        "target_monotonic": 94515.252104542,
+        "target_scan": {
+          "elapsed_s": 0.04756738600553945,
+          "finished_monotonic": 94515.275888235,
+          "started_monotonic": 94515.228320849
+        }
+      },
+      "cpu_total_ticks": 1813863075.0298705,
+      "monotonic": 94515.252104542,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 49695,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 89968504.08055417,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 89968737,
+          "monotonic": 94516.83327545799,
+          "total_ticks": 1813893420
+        },
+        "before": {
+          "busy_ticks": 89968270,
+          "monotonic": 94516.785239676,
+          "total_ticks": 1813892500
+        },
+        "interpolation_fraction": 0.5012431566809579,
+        "target_monotonic": 94516.809317283,
+        "target_scan": {
+          "elapsed_s": 0.04747049399884418,
+          "finished_monotonic": 94516.83305253,
+          "started_monotonic": 94516.785582036
+        }
+      },
+      "cpu_total_ticks": 1813892961.1437042,
+      "monotonic": 94516.809317283,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 64645,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 89983632.58633836,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 89983871,
+          "monotonic": 94518.40053434,
+          "total_ticks": 1813923496
+        },
+        "before": {
+          "busy_ticks": 89983393,
+          "monotonic": 94518.3518930895,
+          "total_ticks": 1813922559
+        },
+        "interpolation_fraction": 0.5012266492928287,
+        "target_monotonic": 94518.3762733805,
+        "target_scan": {
+          "elapsed_s": 0.0481133930006763,
+          "finished_monotonic": 94518.400330077,
+          "started_monotonic": 94518.352216684
+        }
+      },
+      "cpu_total_ticks": 1813923028.6493704,
+      "monotonic": 94518.3762733805,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 79687,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 89998801.57854655,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 89999036,
+          "monotonic": 94519.970022554,
+          "total_ticks": 1813953611
+        },
+        "before": {
+          "busy_ticks": 89998566,
+          "monotonic": 94519.921506376,
+          "total_ticks": 1813952687
+        },
+        "interpolation_fraction": 0.5012309501094788,
+        "target_monotonic": 94519.945824186,
+        "target_scan": {
+          "elapsed_s": 0.04810636199545115,
+          "finished_monotonic": 94519.969877367,
+          "started_monotonic": 94519.921771005
+        }
+      },
+      "cpu_total_ticks": 1813953150.137398,
+      "monotonic": 94519.945824186,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 94755,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90014236.0732772,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90014483,
+          "monotonic": 94521.5661142965,
+          "total_ticks": 1813984243
+        },
+        "before": {
+          "busy_ticks": 90013988,
+          "monotonic": 94521.5157311625,
+          "total_ticks": 1813983277
+        },
+        "interpolation_fraction": 0.501158135771902,
+        "target_monotonic": 94521.54098108,
+        "target_scan": {
+          "elapsed_s": 0.04996379799558781,
+          "finished_monotonic": 94521.565962979,
+          "started_monotonic": 94521.515999181
+        }
+      },
+      "cpu_total_ticks": 1813983761.1187592,
+      "monotonic": 94521.54098108,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 110070,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90029464.41299781,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90029702,
+          "monotonic": 94523.1405029665,
+          "total_ticks": 1814014460
+        },
+        "before": {
+          "busy_ticks": 90029221,
+          "monotonic": 94523.091139047,
+          "total_ticks": 1814013518
+        },
+        "interpolation_fraction": 0.506056128521824,
+        "target_monotonic": 94523.11611996099,
+        "target_scan": {
+          "elapsed_s": 0.04840837600931991,
+          "finished_monotonic": 94523.140324149,
+          "started_monotonic": 94523.091915773
+        }
+      },
+      "cpu_total_ticks": 1814013994.704873,
+      "monotonic": 94523.11611996099,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 125189,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90044622.03471397,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90044854,
+          "monotonic": 94524.7020802995,
+          "total_ticks": 1814044416
+        },
+        "before": {
+          "busy_ticks": 90044389,
+          "monotonic": 94524.6538131405,
+          "total_ticks": 1814043493
+        },
+        "interpolation_fraction": 0.5011499225189268,
+        "target_monotonic": 94524.67800222349,
+        "target_scan": {
+          "elapsed_s": 0.04779411699564662,
+          "finished_monotonic": 94524.701899282,
+          "started_monotonic": 94524.654105165
+        }
+      },
+      "cpu_total_ticks": 1814043955.5613785,
+      "monotonic": 94524.67800222349,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 140180,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90059819.25217542,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90060057,
+          "monotonic": 94526.2726237325,
+          "total_ticks": 1814074559
+        },
+        "before": {
+          "busy_ticks": 90059580,
+          "monotonic": 94526.22404783001,
+          "total_ticks": 1814073623
+        },
+        "interpolation_fraction": 0.5015768876856337,
+        "target_monotonic": 94526.24841238,
+        "target_scan": {
+          "elapsed_s": 0.048035300002084114,
+          "finished_monotonic": 94526.27243003,
+          "started_monotonic": 94526.22439473
+        }
+      },
+      "cpu_total_ticks": 1814074092.475967,
+      "monotonic": 94526.24841238,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 155257,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90075041.04571737,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90075274,
+          "monotonic": 94527.84648411951,
+          "total_ticks": 1814104764
+        },
+        "before": {
+          "busy_ticks": 90074807,
+          "monotonic": 94527.79821252101,
+          "total_ticks": 1814103840
+        },
+        "interpolation_fraction": 0.501168559682939,
+        "target_monotonic": 94527.8224047285,
+        "target_scan": {
+          "elapsed_s": 0.04770379500405397,
+          "finished_monotonic": 94527.846256626,
+          "started_monotonic": 94527.798552831
+        }
+      },
+      "cpu_total_ticks": 1814104303.079749,
+      "monotonic": 94527.8224047285,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 170366,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90090254.44479765,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90090487,
+          "monotonic": 94529.42106705249,
+          "total_ticks": 1814134977
+        },
+        "before": {
+          "busy_ticks": 90090021,
+          "monotonic": 94529.3726223865,
+          "total_ticks": 1814134053
+        },
+        "interpolation_fraction": 0.5009545013794929,
+        "target_monotonic": 94529.39689096,
+        "target_scan": {
+          "elapsed_s": 0.04799586998706218,
+          "finished_monotonic": 94529.420888895,
+          "started_monotonic": 94529.372893025
+        }
+      },
+      "cpu_total_ticks": 1814134515.8819592,
+      "monotonic": 94529.39689096,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 185481,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90105410.81697051,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90105644,
+          "monotonic": 94530.98565182701,
+          "total_ticks": 1814165008
+        },
+        "before": {
+          "busy_ticks": 90105177,
+          "monotonic": 94530.93729292799,
+          "total_ticks": 1814164083
+        },
+        "interpolation_fraction": 0.5006787377218624,
+        "target_monotonic": 94530.96150520051,
+        "target_scan": {
+          "elapsed_s": 0.04783284700533841,
+          "finished_monotonic": 94530.985421624,
+          "started_monotonic": 94530.937588777
+        }
+      },
+      "cpu_total_ticks": 1814164546.1278324,
+      "monotonic": 94530.96150520051,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 200501,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90120831.83188003,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90121064,
+          "monotonic": 94532.57363230901,
+          "total_ticks": 1814195482
+        },
+        "before": {
+          "busy_ticks": 90120598,
+          "monotonic": 94532.5251524985,
+          "total_ticks": 1814194558
+        },
+        "interpolation_fraction": 0.5017851502713692,
+        "target_monotonic": 94532.5494789475,
+        "target_scan": {
+          "elapsed_s": 0.047958208990166895,
+          "finished_monotonic": 94532.573458052,
+          "started_monotonic": 94532.525499843
+        }
+      },
+      "cpu_total_ticks": 1814195021.649479,
+      "monotonic": 94532.5494789475,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 215745,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90135792.1123381,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90136025,
+          "monotonic": 94534.121682037,
+          "total_ticks": 1814225191
+        },
+        "before": {
+          "busy_ticks": 90135558,
+          "monotonic": 94534.0734361855,
+          "total_ticks": 1814224267
+        },
+        "interpolation_fraction": 0.5013112164734895,
+        "target_monotonic": 94534.097622372,
+        "target_scan": {
+          "elapsed_s": 0.04775268399680499,
+          "finished_monotonic": 94534.121498714,
+          "started_monotonic": 94534.07374603
+        }
+      },
+      "cpu_total_ticks": 1814224730.211564,
+      "monotonic": 94534.097622372,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 230605,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": [
+          {
+            "errno": 2,
+            "error": "FileNotFoundError(2, 'No such file or directory')",
+            "pid": 1839603
+          }
+        ]
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90151010.49722002,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90151248,
+          "monotonic": 94535.696499529,
+          "total_ticks": 1814255420
+        },
+        "before": {
+          "busy_ticks": 90150772,
+          "monotonic": 94535.6480391445,
+          "total_ticks": 1814254485
+        },
+        "interpolation_fraction": 0.5010445798962161,
+        "target_monotonic": 94535.67231995749,
+        "target_scan": {
+          "elapsed_s": 0.04796994700154755,
+          "finished_monotonic": 94535.696304931,
+          "started_monotonic": 94535.648334984
+        }
+      },
+      "cpu_total_ticks": 1814254953.4766822,
+      "monotonic": 94535.67231995749,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 245724,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90166219.48680715,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90166457,
+          "monotonic": 94537.2672983355,
+          "total_ticks": 1814285566
+        },
+        "before": {
+          "busy_ticks": 90165981,
+          "monotonic": 94537.2187794105,
+          "total_ticks": 1814284630
+        },
+        "interpolation_fraction": 0.5010227040886531,
+        "target_monotonic": 94537.2430884935,
+        "target_scan": {
+          "elapsed_s": 0.048064859001897275,
+          "finished_monotonic": 94537.267120923,
+          "started_monotonic": 94537.219056064
+        }
+      },
+      "cpu_total_ticks": 1814285098.957251,
+      "monotonic": 94537.2430884935,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 260802,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90181181.74011075,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90181419,
+          "monotonic": 94538.813387436,
+          "total_ticks": 1814315234
+        },
+        "before": {
+          "busy_ticks": 90180944,
+          "monotonic": 94538.7647960945,
+          "total_ticks": 1814314299
+        },
+        "interpolation_fraction": 0.5005054963390347,
+        "target_monotonic": 94538.789116328,
+        "target_scan": {
+          "elapsed_s": 0.0480972699879203,
+          "finished_monotonic": 94538.813164963,
+          "started_monotonic": 94538.765067693
+        }
+      },
+      "cpu_total_ticks": 1814314766.972639,
+      "monotonic": 94538.789116328,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 275645,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90196284.86123265,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90196517,
+          "monotonic": 94540.377027596,
+          "total_ticks": 1814345238
+        },
+        "before": {
+          "busy_ticks": 90196052,
+          "monotonic": 94540.3288091305,
+          "total_ticks": 1814344316
+        },
+        "interpolation_fraction": 0.5007768444033617,
+        "target_monotonic": 94540.3529558215,
+        "target_scan": {
+          "elapsed_s": 0.04768443301145453,
+          "finished_monotonic": 94540.376798038,
+          "started_monotonic": 94540.329113605
+        }
+      },
+      "cpu_total_ticks": 1814344777.7162507,
+      "monotonic": 94540.3529558215,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 290657,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90211356.48764619,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90211594,
+          "monotonic": 94541.9353098235,
+          "total_ticks": 1814375148
+        },
+        "before": {
+          "busy_ticks": 90211118,
+          "monotonic": 94541.8866718325,
+          "total_ticks": 1814374211
+        },
+        "interpolation_fraction": 0.5010244667797439,
+        "target_monotonic": 94541.911040656,
+        "target_scan": {
+          "elapsed_s": 0.04820241000561509,
+          "finished_monotonic": 94541.935141861,
+          "started_monotonic": 94541.886939451
+        }
+      },
+      "cpu_total_ticks": 1814374680.4599254,
+      "monotonic": 94541.911040656,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 305614,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90226498.28021343,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90226736,
+          "monotonic": 94543.50280901551,
+          "total_ticks": 1814405225
+        },
+        "before": {
+          "busy_ticks": 90226260,
+          "monotonic": 94543.4540171325,
+          "total_ticks": 1814404287
+        },
+        "interpolation_fraction": 0.5005886836752124,
+        "target_monotonic": 94543.478441797,
+        "target_scan": {
+          "elapsed_s": 0.04835637200449128,
+          "finished_monotonic": 94543.502619983,
+          "started_monotonic": 94543.454263611
+        }
+      },
+      "cpu_total_ticks": 1814404756.5521853,
+      "monotonic": 94543.478441797,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 320661,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90241630.58144419,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90241863,
+          "monotonic": 94545.06877291799,
+          "total_ticks": 1814435280
+        },
+        "before": {
+          "busy_ticks": 90241397,
+          "monotonic": 94545.0201642035,
+          "total_ticks": 1814434353
+        },
+        "interpolation_fraction": 0.5012477342954177,
+        "target_monotonic": 94545.0445292115,
+        "target_scan": {
+          "elapsed_s": 0.04804718699597288,
+          "finished_monotonic": 94545.068552805,
+          "started_monotonic": 94545.020505618
+        }
+      },
+      "cpu_total_ticks": 1814434817.6566496,
+      "monotonic": 94545.0445292115,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 335695,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90256724.40891522,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90256957,
+          "monotonic": 94546.629089684,
+          "total_ticks": 1814465211
+        },
+        "before": {
+          "busy_ticks": 90256490,
+          "monotonic": 94546.5802639715,
+          "total_ticks": 1814464283
+        },
+        "interpolation_fraction": 0.5019462852677254,
+        "target_monotonic": 94546.60477185651,
+        "target_scan": {
+          "elapsed_s": 0.04831723099050578,
+          "finished_monotonic": 94546.628930472,
+          "started_monotonic": 94546.580613241
+        }
+      },
+      "cpu_total_ticks": 1814464748.8061528,
+      "monotonic": 94546.60477185651,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 350674,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90271674.898248,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90271912,
+          "monotonic": 94548.175899784,
+          "total_ticks": 1814494898
+        },
+        "before": {
+          "busy_ticks": 90271436,
+          "monotonic": 94548.126969045,
+          "total_ticks": 1814493958
+        },
+        "interpolation_fraction": 0.5018870756432817,
+        "target_monotonic": 94548.1515267505,
+        "target_scan": {
+          "elapsed_s": 0.04837720099021681,
+          "finished_monotonic": 94548.175715351,
+          "started_monotonic": 94548.12733815
+        }
+      },
+      "cpu_total_ticks": 1814494429.7738512,
+      "monotonic": 94548.1515267505,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 365521,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": [
+          {
+            "errno": 2,
+            "error": "FileNotFoundError(2, 'No such file or directory')",
+            "pid": 1839701
+          }
+        ]
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90286770.9690942,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90287004,
+          "monotonic": 94549.7368585825,
+          "total_ticks": 1814524858
+        },
+        "before": {
+          "busy_ticks": 90286537,
+          "monotonic": 94549.68844245601,
+          "total_ticks": 1814523934
+        },
+        "interpolation_fraction": 0.5010044843808515,
+        "target_monotonic": 94549.7126991525,
+        "target_scan": {
+          "elapsed_s": 0.04796093498589471,
+          "finished_monotonic": 94549.73667962,
+          "started_monotonic": 94549.688718685
+        }
+      },
+      "cpu_total_ticks": 1814524396.9281435,
+      "monotonic": 94549.7126991525,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 380507,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90301911.12370846,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90302151,
+          "monotonic": 94551.300694697,
+          "total_ticks": 1814554872
+        },
+        "before": {
+          "busy_ticks": 90301670,
+          "monotonic": 94551.2521185485,
+          "total_ticks": 1814553934
+        },
+        "interpolation_fraction": 0.5012966911811856,
+        "target_monotonic": 94551.27646961101,
+        "target_scan": {
+          "elapsed_s": 0.048015555992606096,
+          "finished_monotonic": 94551.300477389,
+          "started_monotonic": 94551.252461833
+        }
+      },
+      "cpu_total_ticks": 1814554404.2162964,
+      "monotonic": 94551.27646961101,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 395519,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90317310.3534985,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90317548,
+          "monotonic": 94552.89173257601,
+          "total_ticks": 1814585401
+        },
+        "before": {
+          "busy_ticks": 90317072,
+          "monotonic": 94552.842677466,
+          "total_ticks": 1814584461
+        },
+        "interpolation_fraction": 0.5007426439296828,
+        "target_monotonic": 94552.86724145149,
+        "target_scan": {
+          "elapsed_s": 0.04858123300073203,
+          "finished_monotonic": 94552.891532068,
+          "started_monotonic": 94552.842950835
+        }
+      },
+      "cpu_total_ticks": 1814584931.6980853,
+      "monotonic": 94552.86724145149,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 410793,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90332606.40798701,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90332844,
+          "monotonic": 94554.47251584951,
+          "total_ticks": 1814615737
+        },
+        "before": {
+          "busy_ticks": 90332368,
+          "monotonic": 94554.4238024795,
+          "total_ticks": 1814614800
+        },
+        "interpolation_fraction": 0.5008571155757577,
+        "target_monotonic": 94554.4482009175,
+        "target_scan": {
+          "elapsed_s": 0.048296118999132887,
+          "finished_monotonic": 94554.472348977,
+          "started_monotonic": 94554.424052858
+        }
+      },
+      "cpu_total_ticks": 1814615269.3031173,
+      "monotonic": 94554.4482009175,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 425968,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90347940.04540513,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90348177,
+          "monotonic": 94556.0592659065,
+          "total_ticks": 1814646186
+        },
+        "before": {
+          "busy_ticks": 90347702,
+          "monotonic": 94556.010579077,
+          "total_ticks": 1814645251
+        },
+        "interpolation_fraction": 0.5011482213275074,
+        "target_monotonic": 94556.03497839501,
+        "target_scan": {
+          "elapsed_s": 0.04808038599730935,
+          "finished_monotonic": 94556.059018588,
+          "started_monotonic": 94556.010938202
+        }
+      },
+      "cpu_total_ticks": 1814645719.573587,
+      "monotonic": 94556.03497839501,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 441198,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90363081.66225427,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90363315,
+          "monotonic": 94557.6230892885,
+          "total_ticks": 1814676189
+        },
+        "before": {
+          "busy_ticks": 90362848,
+          "monotonic": 94557.5743326235,
+          "total_ticks": 1814675261
+        },
+        "interpolation_fraction": 0.5003474395480623,
+        "target_monotonic": 94557.598727896,
+        "target_scan": {
+          "elapsed_s": 0.04827759800537024,
+          "finished_monotonic": 94557.622866695,
+          "started_monotonic": 94557.574589097
+        }
+      },
+      "cpu_total_ticks": 1814675725.322424,
+      "monotonic": 94557.598727896,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 456212,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90378317.1621276,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90378555,
+          "monotonic": 94559.1997130285,
+          "total_ticks": 1814706449
+        },
+        "before": {
+          "busy_ticks": 90378079,
+          "monotonic": 94559.15059369901,
+          "total_ticks": 1814705508
+        },
+        "interpolation_fraction": 0.5003406041939322,
+        "target_monotonic": 94559.17517009401,
+        "target_scan": {
+          "elapsed_s": 0.048576852001133375,
+          "finished_monotonic": 94559.19945852,
+          "started_monotonic": 94559.150881668
+        }
+      },
+      "cpu_total_ticks": 1814705978.8205085,
+      "monotonic": 94559.17517009401,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 471347,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90393670.21175604,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90393909,
+          "monotonic": 94560.78897594151,
+          "total_ticks": 1814736947
+        },
+        "before": {
+          "busy_ticks": 90393430,
+          "monotonic": 94560.7395816585,
+          "total_ticks": 1814736003
+        },
+        "interpolation_fraction": 0.501485920740905,
+        "target_monotonic": 94560.764352196,
+        "target_scan": {
+          "elapsed_s": 0.04891261601005681,
+          "finished_monotonic": 94560.788808504,
+          "started_monotonic": 94560.739895888
+        }
+      },
+      "cpu_total_ticks": 1814736476.4027092,
+      "monotonic": 94560.764352196,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 486604,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90409012.0311431,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90409251,
+          "monotonic": 94562.3707242315,
+          "total_ticks": 1814767299
+        },
+        "before": {
+          "busy_ticks": 90408772,
+          "monotonic": 94562.32204059299,
+          "total_ticks": 1814766362
+        },
+        "interpolation_fraction": 0.5011088582556066,
+        "target_monotonic": 94562.3464363955,
+        "target_scan": {
+          "elapsed_s": 0.04806551500223577,
+          "finished_monotonic": 94562.370469153,
+          "started_monotonic": 94562.322403638
+        }
+      },
+      "cpu_total_ticks": 1814766831.5390003,
+      "monotonic": 94562.3464363955,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 501789,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90424171.3824466,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90424409,
+          "monotonic": 94563.938287547,
+          "total_ticks": 1814797386
+        },
+        "before": {
+          "busy_ticks": 90423932,
+          "monotonic": 94563.89003519999,
+          "total_ticks": 1814796451
+        },
+        "interpolation_fraction": 0.5018499928615244,
+        "target_monotonic": 94563.91425064,
+        "target_scan": {
+          "elapsed_s": 0.04773872000805568,
+          "finished_monotonic": 94563.93812,
+          "started_monotonic": 94563.89038128
+        }
+      },
+      "cpu_total_ticks": 1814796920.2297432,
+      "monotonic": 94563.91425064,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 516838,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90439351.68305999,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90439589,
+          "monotonic": 94565.509814224,
+          "total_ticks": 1814827537
+        },
+        "before": {
+          "busy_ticks": 90439113,
+          "monotonic": 94565.461104476,
+          "total_ticks": 1814826599
+        },
+        "interpolation_fraction": 0.5014349999860112,
+        "target_monotonic": 94565.48552924849,
+        "target_scan": {
+          "elapsed_s": 0.048129905000678264,
+          "finished_monotonic": 94565.509594201,
+          "started_monotonic": 94565.461464296
+        }
+      },
+      "cpu_total_ticks": 1814827069.34603,
+      "monotonic": 94565.48552924849,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 531923,
+        "members": [
+          1839311,
+          1839337
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    },
+    {
+      "contamination": {
+        "autopilot": [],
+        "exact_llama": [],
+        "kfd_users": []
+      },
+      "cpu_busy_ticks": 90446815.50703588,
+      "cpu_counter_bracket": {
+        "after": {
+          "busy_ticks": 90446817,
+          "monotonic": 94567.05279599901,
+          "total_ticks": 1814857149
+        },
+        "before": {
+          "busy_ticks": 90446814,
+          "monotonic": 94567.026532316,
+          "total_ticks": 1814856644
+        },
+        "interpolation_fraction": 0.5023452912916306,
+        "target_monotonic": 94567.0397257535,
+        "target_scan": {
+          "elapsed_s": 0.025967939000111073,
+          "finished_monotonic": 94567.052709723,
+          "started_monotonic": 94567.026741784
+        }
+      },
+      "cpu_total_ticks": 1814856897.6843722,
+      "monotonic": 94567.0397257535,
+      "swap": {
+        "pswpin": 185296,
+        "pswpout": 187846
+      },
+      "target": {
+        "cpu_ticks": 539093,
+        "members": [
+          1839311
+        ],
+        "ownership_changed": false,
+        "vanished_processes": []
+      }
+    }
+  ],
+  "status": "pass",
+  "sustained_window": {
+    "aggregate_busy_delta_ticks": 531544.3232322335,
+    "aggregate_total_delta_ticks": 1054405.134868145,
+    "direct_endpoint_elapsed_s": 54.94503787549911,
+    "elapsed_s": 54.94503787549911,
+    "end_interval_index": 37,
+    "end_monotonic": 94565.48552924849,
+    "end_sample_index": 38,
+    "signed_external_core_equivalents": 0.7437110593121791,
+    "start_interval_index": 3,
+    "start_monotonic": 94510.54049137299,
+    "start_sample_index": 3,
+    "target_core_equivalents": 95.99738582311582,
+    "target_group_cpu_delta_ticks": 527458
+  },
+  "thresholds": {
+    "configured_cpu_count": 96,
+    "minimum_target_core_equivalents": 72.0,
+    "minimum_window_seconds": 10.0,
+    "signed_external_core_equivalents": {
+      "maximum": 4.0,
+      "minimum": -1.0
+    }
+  }
+}

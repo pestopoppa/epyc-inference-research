@@ -1,0 +1,22 @@
+{
+  "artifact_binding": {
+    "candidate": {
+      "binary_sha256": "8b601a282dd3fb49b4791ccbbd2ab034cd8a723a200db147b22fe05f593b7a98"
+    },
+    "production": {
+      "binary_sha256": "6028e410732601b70da470a6880a2d2e4f24c17def48678b4ed1550dfe606541"
+    }
+  },
+  "candidate": {
+    "branch": "experimental-v8-refresh-20260724",
+    "head": "67a433bf45a8a091d83b4ea0b32ff0735fd51800"
+  },
+  "created_at": "2026-07-25T15:57:20+00:00",
+  "production": {
+    "branch": "production-consolidated-v7",
+    "head": "6ad45fa3ff6718c07c000061dbc6e29c1771f6e3"
+  },
+  "protocol": "P-BENCH-PREFILL-1",
+  "schema": "epyc.cpu_prefill_v8.host_attestation.v1",
+  "status": "pass"
+}
