@@ -1215,59 +1215,147 @@ def monitor_sample(
     contaminated: bool = False, ownership_changed: bool = False,
 ) -> dict[str, object]:
     return {"monotonic": monotonic, "cpu_total_ticks": total, "cpu_busy_ticks": busy,
+            "cpu_counter_bracket": {
+                "before": {"monotonic": monotonic - 0.1, "total_ticks": total, "busy_ticks": busy},
+                "after": {"monotonic": monotonic + 0.1, "total_ticks": total, "busy_ticks": busy},
+                "target_scan": {"started_monotonic": monotonic - 0.01, "finished_monotonic": monotonic + 0.01, "elapsed_s": 0.02},
+                "target_monotonic": monotonic,
+                "interpolation_fraction": 0.5,
+            },
             "swap": {"pswpin": swap_in, "pswpout": swap_out},
             "target": {"cpu_ticks": target, "ownership_changed": ownership_changed, "members": [1]},
             "contamination": {"exact_llama": [{"pid": 7}] if contaminated else [], "autopilot": [], "kfd_users": []}}
 
 
-def test_contention_monitor_rejects_busy_swap_transient_and_sampling_failure() -> None:
-    clean = [
-        monitor_sample(monotonic=0.0, busy=0, total=0, target=0),
-        monitor_sample(monotonic=1.0, busy=9000, total=9600, target=8800),
-    ]
-    result = runner.validate_monitor_samples(clean)
+def monitor_series(
+    deltas: list[tuple[int, int]], *, total_delta: int = 9600,
+) -> list[dict[str, object]]:
+    """Build one-second monitor samples from (busy, target) tick deltas."""
+    samples = [monitor_sample(monotonic=0.0, busy=0, total=0, target=0)]
+    busy = total = target = 0
+    for index, (busy_delta, target_delta) in enumerate(deltas, start=1):
+        busy += busy_delta
+        total += total_delta
+        target += target_delta
+        samples.append(monitor_sample(
+            monotonic=float(index), busy=busy, total=total, target=target,
+        ))
+    return samples
+
+
+def test_contention_monitor_selects_sustained_window_and_retains_raw_intervals() -> None:
+    samples = monitor_series([(9000, 8800)] * 10)
+    result = runner.validate_monitor_samples(samples)
     assert result["status"] == "pass"
-    assert result["intervals"][0]["external_core_equivalents"] == pytest.approx(2.0)
-    with pytest.raises(RuntimeError, match="external CPU contention"):
-        runner.validate_monitor_samples([
-            monitor_sample(monotonic=0.0, busy=0, total=0, target=0),
-            monitor_sample(monotonic=1.0, busy=9500, total=9600, target=0),
-        ])
-    with pytest.raises(RuntimeError, match="swap I/O"):
-        runner.validate_monitor_samples([
-            monitor_sample(monotonic=0.0, busy=0, total=0, target=0),
-            monitor_sample(monotonic=1.0, busy=8000, total=9600, target=7900, swap_out=1),
-        ])
+    assert result["accounting"] == "sustained-window-v1"
+    assert len(result["samples"]) == 11
+    assert len(result["intervals"]) == 10
+    assert result["intervals"][0]["signed_external_core_equivalents"] == pytest.approx(2.0)
+    assert result["intervals"][0]["exclusion_reasons"] == []
+    assert result["sustained_window"]["elapsed_s"] == pytest.approx(10.0)
+    assert result["sustained_window"]["direct_endpoint_elapsed_s"] == pytest.approx(10.0)
+    assert result["sustained_window"]["aggregate_total_delta_ticks"] == pytest.approx(96000.0)
+    assert result["sustained_window"]["target_core_equivalents"] == pytest.approx(88.0)
+    assert result["sustained_window"]["signed_external_core_equivalents"] == pytest.approx(2.0)
+
+
+def test_contention_monitor_accepts_signed_target_over_busy_and_inclusive_bounds() -> None:
+    lower = runner.validate_monitor_samples(monitor_series([(7900, 8000)] * 10))
+    assert lower["sustained_window"]["signed_external_core_equivalents"] == pytest.approx(-1.0)
+    upper = runner.validate_monitor_samples(monitor_series([(8400, 8000)] * 10))
+    assert upper["sustained_window"]["signed_external_core_equivalents"] == pytest.approx(4.0)
+    with pytest.raises(RuntimeError, match="outside inclusive bounds"):
+        runner.validate_monitor_samples(monitor_series([(7899, 8000)] * 10))
+    with pytest.raises(RuntimeError, match="outside inclusive bounds"):
+        runner.validate_monitor_samples(monitor_series([(8401, 8000)] * 10))
+
+
+def test_contention_monitor_uses_longest_eligible_run_and_earliest_tie() -> None:
+    # Two equally long 10-second windows, split by a retained low-use interval.
+    samples = monitor_series([(9000, 8800)] * 10 + [(9000, 100)] + [(9000, 8800)] * 10)
+    result = runner.validate_monitor_samples(samples)
+    assert result["intervals"][10]["eligible"] is False
+    assert result["intervals"][10]["exclusion_reasons"] == ["target_below_minimum_core_equivalents"]
+    assert result["sustained_window"]["start_interval_index"] == 0
+    assert result["sustained_window"]["end_interval_index"] == 9
+
+
+def test_contention_monitor_selects_a_later_strictly_longer_run() -> None:
+    samples = monitor_series(
+        [(9000, 8800)] * 10 + [(9000, 100)] + [(9000, 8800)] * 11,
+    )
+    result = runner.validate_monitor_samples(samples)
+    assert result["sustained_window"]["start_interval_index"] == 11
+    assert result["sustained_window"]["end_interval_index"] == 21
+    assert result["sustained_window"]["elapsed_s"] == pytest.approx(11.0)
+
+
+def test_contention_monitor_hard_failures_apply_outside_candidate_window() -> None:
+    samples = monitor_series([(9000, 8800)] * 10 + [(9000, 100)])
+    samples[-1]["contamination"]["autopilot"].append({"pid": 9})  # type: ignore[index]
     with pytest.raises(RuntimeError, match="transient competing"):
-        runner.validate_monitor_samples([
-            monitor_sample(monotonic=0.0, busy=0, total=0, target=0, contaminated=True),
-            monitor_sample(monotonic=1.0, busy=8000, total=9600, target=7900),
-        ])
-    with pytest.raises(RuntimeError, match="invalid counter"):
+        runner.validate_monitor_samples(samples)
+    samples = monitor_series([(9000, 8800)] * 10 + [(9000, 100)])
+    samples[-1]["target"]["ownership_changed"] = True  # type: ignore[index]
+    with pytest.raises(RuntimeError, match="ownership changed"):
+        runner.validate_monitor_samples(samples)
+    samples = monitor_series([(9000, 8800)] * 10 + [(9000, 100)])
+    samples[-1]["swap"]["pswpout"] = 1  # type: ignore[index]
+    with pytest.raises(RuntimeError, match="swap I/O"):
+        runner.validate_monitor_samples(samples)
+
+
+def test_contention_monitor_rejects_short_and_malformed_runs() -> None:
+    with pytest.raises(RuntimeError, match="qualifying sustained"):
+        runner.validate_monitor_samples(monitor_series([(9000, 8800)] * 9))
+    with pytest.raises(RuntimeError, match="sampling failure"):
         runner.validate_monitor_samples([
             monitor_sample(monotonic=0.0, busy=0, total=0, target=0),
             monitor_sample(monotonic=1.0, busy=9601, total=9600, target=0),
         ])
-    with pytest.raises(RuntimeError, match="invalid counter"):
+    with pytest.raises(RuntimeError, match="sampling failure"):
         runner.validate_monitor_samples([
             monitor_sample(monotonic=0.0, busy=0, total=0, target=0),
-            monitor_sample(monotonic=1.0, busy=100, total=9600, target=101),
+            monitor_sample(monotonic=1.0, busy=100, total=9600, target=-1),
         ])
-    with pytest.raises(RuntimeError, match="ownership changed"):
+    with pytest.raises(RuntimeError, match="not finite"):
         runner.validate_monitor_samples([
             monitor_sample(monotonic=0.0, busy=0, total=0, target=0),
-            monitor_sample(
-                monotonic=1.0,
-                busy=8000,
-                total=9600,
-                target=7900,
-                ownership_changed=True,
-            ),
+            monitor_sample(monotonic=1.0, busy=float("nan"), total=9600, target=0),
+        ])
+    with pytest.raises(RuntimeError, match="sampling failure"):
+        runner.validate_monitor_samples([
+            monitor_sample(monotonic=0.0, busy=0, total=0, target=0),
+            {"monotonic": 1.0},
         ])
     with pytest.raises(RuntimeError, match="insufficient"):
-        runner.validate_monitor_samples([
-            monitor_sample(monotonic=0.0, busy=0, total=0, target=0),
-        ])
+        runner.validate_monitor_samples([monitor_sample(monotonic=0.0, busy=0, total=0, target=0)])
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda sample: sample.__setitem__("contamination", {}),
+    lambda sample: sample["contamination"].__setitem__("exact_llama", {}),
+    lambda sample: sample["target"].__setitem__("members", []),
+    lambda sample: sample.__setitem__("cpu_counter_bracket", {}),
+    lambda sample: sample["cpu_counter_bracket"]["target_scan"].__setitem__("elapsed_s", 3.0),
+    lambda sample: sample["cpu_counter_bracket"].__setitem__("interpolation_fraction", 0.25),
+    lambda sample: sample["cpu_counter_bracket"]["after"].__setitem__("busy_ticks", 1.5),
+    lambda sample: sample["cpu_counter_bracket"]["after"].__setitem__("total_ticks", -1),
+])
+def test_contention_monitor_fails_closed_for_malformed_witnesses(mutation: object) -> None:
+    samples = monitor_series([(9000, 8800)] * 10)
+    mutation(samples[0])  # type: ignore[operator]
+    with pytest.raises(RuntimeError, match="sampling failure"):
+        runner.validate_monitor_samples(samples)
+
+
+def test_manifest_marks_sustained_accounting_v3_as_prospective() -> None:
+    plan = runner.manifest()
+    assert plan["schema"] == "cpu-prefill-v8-regression.v3"
+    accounting = plan["contention_accounting"]
+    assert accounting["id"] == "sustained-window-v1"
+    assert accounting["prospective_only"] is True
+    assert accounting["minimum_target_core_equivalents"] == pytest.approx(72.0)
 
 
 def test_monitor_snapshot_excludes_only_verified_target_group_llama(
@@ -1347,13 +1435,16 @@ def test_monitor_snapshot_interpolates_cpu_counters_to_target_sample(
     }
 
 
-def test_contention_monitor_rejects_interpolated_target_over_busy() -> None:
-    samples = [
-        monitor_sample(monotonic=0.0, busy=0, total=0, target=0),
-        monitor_sample(monotonic=1.0, busy=100.5, total=9600.5, target=101),
-    ]
-    with pytest.raises(RuntimeError, match="invalid counter"):
-        runner.validate_monitor_samples(samples)
+def test_contention_monitor_retains_interpolated_target_over_busy_as_telemetry() -> None:
+    samples = monitor_series([(7900, 8000)] * 10)
+    samples[1]["cpu_busy_ticks"] = 7900.5  # type: ignore[index]
+    samples[1]["cpu_total_ticks"] = 9600.5  # type: ignore[index]
+    samples[1]["cpu_counter_bracket"]["before"]["busy_ticks"] = 7900  # type: ignore[index]
+    samples[1]["cpu_counter_bracket"]["after"]["busy_ticks"] = 7901  # type: ignore[index]
+    samples[1]["cpu_counter_bracket"]["before"]["total_ticks"] = 9600  # type: ignore[index]
+    samples[1]["cpu_counter_bracket"]["after"]["total_ticks"] = 9601  # type: ignore[index]
+    result = runner.validate_monitor_samples(samples)
+    assert result["intervals"][0]["signed_external_core_equivalents"] < 0
 
 
 def test_monitor_snapshot_rejects_invalid_counter_sampling_order(
@@ -1386,10 +1477,18 @@ def test_run_monitored_accepts_normal_terminal_process_group(
         nonlocal sequence
         sequence += 1
         target = runner._target_group_cpu(leader_pid, pgid)
+        target["cpu_ticks"] = sequence * 8000
         return {
             "monotonic": float(sequence),
             "cpu_total_ticks": sequence * runner.CLOCK_TICKS * 96,
             "cpu_busy_ticks": target["cpu_ticks"],
+            "cpu_counter_bracket": {
+                "before": {"monotonic": float(sequence) - 0.1, "total_ticks": sequence * runner.CLOCK_TICKS * 96, "busy_ticks": target["cpu_ticks"]},
+                "after": {"monotonic": float(sequence) + 0.1, "total_ticks": sequence * runner.CLOCK_TICKS * 96, "busy_ticks": target["cpu_ticks"]},
+                "target_scan": {"started_monotonic": float(sequence) - 0.01, "finished_monotonic": float(sequence) + 0.01, "elapsed_s": 0.02},
+                "target_monotonic": float(sequence),
+                "interpolation_fraction": 0.5,
+            },
             "swap": {"pswpin": 0, "pswpout": 0},
             "target": target,
             "contamination": {
@@ -1401,6 +1500,7 @@ def test_run_monitored_accepts_normal_terminal_process_group(
 
     monkeypatch.setattr(runner, "monitor_snapshot", lifecycle_snapshot)
     monkeypatch.setattr(runner, "MONITOR_INTERVAL_S", 0.01)
+    monkeypatch.setattr(runner, "MIN_SUSTAINED_WINDOW_SECONDS", 1.0)
     completed, monitor = runner.run_monitored(
         ["bash", "-c", "sleep 0.05; printf done"],
         runner.canonical_parent_environment(),

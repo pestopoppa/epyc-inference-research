@@ -116,6 +116,11 @@ HUGEPAGE_POOL_FILES = (
 HUGEPAGE_POOL_RE = re.compile(r"^hugepages-(\d+)kB$")
 MONITOR_INTERVAL_S = 1.0
 MIN_MONITOR_SAMPLES = 2
+CONTENTION_ACCOUNTING = "sustained-window-v1"
+CONFIGURED_CPU_COUNT = 96
+MIN_TARGET_CORE_EQUIVALENTS = 0.75 * CONFIGURED_CPU_COUNT
+MIN_SUSTAINED_WINDOW_SECONDS = 10.0
+MIN_SIGNED_EXTERNAL_CORE_EQUIVALENTS = -1.0
 MAX_EXTERNAL_CORE_EQUIVALENTS = 4.0
 MAX_HOST_ATTESTATION_AGE_S = 300
 CLOCK_TICKS = os.sysconf("SC_CLK_TCK")
@@ -1602,36 +1607,253 @@ def monitor_snapshot(leader_pid: int, pgid: int) -> dict[str, Any]:
 def validate_monitor_samples(samples: list[dict[str, Any]]) -> dict[str, Any]:
     if len(samples) < MIN_MONITOR_SAMPLES:
         raise RuntimeError(f"insufficient continuous contention-monitor samples: {len(samples)}")
-    intervals: list[dict[str, Any]] = []
-    for before, after in zip(samples, samples[1:]):
-        elapsed = float(after["monotonic"]) - float(before["monotonic"])
-        total_delta = float(after["cpu_total_ticks"]) - float(before["cpu_total_ticks"])
-        busy_delta = float(after["cpu_busy_ticks"]) - float(before["cpu_busy_ticks"])
-        target_delta = int(after["target"]["cpu_ticks"]) - int(before["target"]["cpu_ticks"])
-        if (
-            elapsed <= 0
-            or total_delta <= 0
-            or busy_delta < 0
-            or target_delta < 0
-            or busy_delta > total_delta
-            or target_delta > busy_delta
+
+    def failure(index: int, detail: str) -> RuntimeError:
+        return RuntimeError(f"contention monitor sampling failure at sample {index}: {detail}")
+
+    def finite_number(value: Any, index: int, label: str) -> float:
+        if isinstance(value, bool):
+            raise failure(index, f"{label} must be numeric, not boolean")
+        try:
+            checked = float(value)
+        except (TypeError, ValueError) as exc:
+            raise failure(index, f"{label} is not numeric") from exc
+        if not math.isfinite(checked):
+            raise failure(index, f"{label} is not finite")
+        return checked
+
+    def exact_keys(value: Any, required: set[str], index: int, label: str) -> dict[str, Any]:
+        if not isinstance(value, dict) or set(value) != required:
+            actual = sorted(repr(key) for key in value) if isinstance(value, dict) else type(value).__name__
+            raise failure(index, f"{label} keys invalid: expected={sorted(required)} actual={actual}")
+        return value
+
+    def validate_sample(index: int, sample: dict[str, Any]) -> None:
+        if not isinstance(sample, dict):
+            raise failure(index, "sample is not an object")
+        required = {
+            "monotonic", "cpu_total_ticks", "cpu_busy_ticks", "cpu_counter_bracket",
+            "swap", "target", "contamination",
+        }
+        exact_keys(sample, required, index, "sample")
+        monotonic = finite_number(sample["monotonic"], index, "monotonic")
+        total = finite_number(sample["cpu_total_ticks"], index, "cpu_total_ticks")
+        busy = finite_number(sample["cpu_busy_ticks"], index, "cpu_busy_ticks")
+        if total < 0 or busy < 0 or busy > total:
+            raise failure(index, "top-level aggregate counters are invalid")
+
+        contamination = exact_keys(
+            sample["contamination"], {"exact_llama", "autopilot", "kfd_users"}, index, "contamination",
+        )
+        if any(not isinstance(value, list) for value in contamination.values()):
+            raise failure(index, "contamination witnesses must be lists")
+
+        target = exact_keys(sample["target"], {"members", "cpu_ticks", "ownership_changed"}, index, "target")
+        if not isinstance(target["members"], list) or not target["members"] or any(
+            type(pid) is not int or pid <= 0 for pid in target["members"]
+        ) or len(set(target["members"])) != len(target["members"]):
+            raise failure(index, "target members are invalid")
+        if type(target["cpu_ticks"]) is not int or target["cpu_ticks"] < 0:
+            raise failure(index, "target cpu_ticks is invalid")
+        if type(target["ownership_changed"]) is not bool:
+            raise failure(index, "target ownership_changed is invalid")
+
+        swap = exact_keys(sample["swap"], {"pswpin", "pswpout"}, index, "swap")
+        if any(type(value) is not int or value < 0 for value in swap.values()):
+            raise failure(index, "swap counters are invalid")
+
+        bracket = exact_keys(
+            sample["cpu_counter_bracket"], {"before", "after", "target_scan", "target_monotonic", "interpolation_fraction"}, index, "cpu_counter_bracket",
+        )
+        before = exact_keys(bracket["before"], {"monotonic", "total_ticks", "busy_ticks"}, index, "cpu_counter_bracket.before")
+        after = exact_keys(bracket["after"], {"monotonic", "total_ticks", "busy_ticks"}, index, "cpu_counter_bracket.after")
+        scan = exact_keys(bracket["target_scan"], {"started_monotonic", "finished_monotonic", "elapsed_s"}, index, "cpu_counter_bracket.target_scan")
+        before_time = finite_number(before["monotonic"], index, "bracket before monotonic")
+        after_time = finite_number(after["monotonic"], index, "bracket after monotonic")
+        before_total = finite_number(before["total_ticks"], index, "bracket before total")
+        after_total = finite_number(after["total_ticks"], index, "bracket after total")
+        before_busy = finite_number(before["busy_ticks"], index, "bracket before busy")
+        after_busy = finite_number(after["busy_ticks"], index, "bracket after busy")
+        target_started = finite_number(scan["started_monotonic"], index, "target scan start")
+        target_finished = finite_number(scan["finished_monotonic"], index, "target scan finish")
+        target_elapsed = finite_number(scan["elapsed_s"], index, "target scan elapsed")
+        target_time = finite_number(bracket["target_monotonic"], index, "target monotonic")
+        fraction = finite_number(bracket["interpolation_fraction"], index, "interpolation fraction")
+        if any(
+            type(value) is not int
+            for value in (
+                before["total_ticks"],
+                before["busy_ticks"],
+                after["total_ticks"],
+                after["busy_ticks"],
+            )
         ):
-            raise RuntimeError("contention monitor observed invalid counter interval")
-        external = (busy_delta - target_delta) / (CLOCK_TICKS * elapsed)
-        interval = {"elapsed_s": elapsed, "external_core_equivalents": external,
-                    "swap_delta": {key: int(after["swap"][key]) - int(before["swap"][key]) for key in ("pswpin", "pswpout")}}
-        if external > MAX_EXTERNAL_CORE_EQUIVALENTS:
-            raise RuntimeError(f"external CPU contention exceeds {MAX_EXTERNAL_CORE_EQUIVALENTS} core-equivalents: {interval}")
-        if any(value != 0 for value in interval["swap_delta"].values()):
-            raise RuntimeError(f"swap I/O changed during benchmark arm: {interval}")
-        intervals.append(interval)
-    for sample in samples:
+            raise failure(index, "cpu counter bracket aggregate counters must be integers")
+        if (
+            before_time >= after_time
+            or target_started > target_finished
+            or not math.isclose(target_elapsed, target_finished - target_started, rel_tol=1e-9, abs_tol=1e-9)
+            or not before_time <= target_time <= after_time
+            or not target_started <= target_time <= target_finished
+            or not math.isclose(
+                target_time,
+                (target_started + target_finished) / 2,
+                rel_tol=1e-9,
+                abs_tol=1e-9,
+            )
+            or not 0.0 <= fraction <= 1.0
+        ):
+            raise failure(index, "cpu counter bracket timing is invalid")
+        if (
+            any(value < 0 for value in (before_total, after_total, before_busy, after_busy))
+            or before_busy > before_total
+            or after_busy > after_total
+            or after_total < before_total
+            or after_busy < before_busy
+            or after_busy - before_busy > after_total - before_total
+        ):
+            raise failure(index, "cpu counter bracket aggregate counters are invalid")
+        expected_fraction = (target_time - before_time) / (after_time - before_time)
+        if not math.isclose(fraction, expected_fraction, rel_tol=1e-9, abs_tol=1e-9):
+            raise failure(index, "cpu counter bracket interpolation fraction is invalid")
+        expected_total = before_total + (after_total - before_total) * fraction
+        expected_busy = before_busy + (after_busy - before_busy) * fraction
+        if (
+            not math.isclose(monotonic, target_time, rel_tol=1e-9, abs_tol=1e-9)
+            or not math.isclose(total, expected_total, rel_tol=1e-9, abs_tol=1e-6)
+            or not math.isclose(busy, expected_busy, rel_tol=1e-9, abs_tol=1e-6)
+        ):
+            raise failure(index, "top-level counters do not match cpu counter bracket interpolation")
+
+    # These witnesses invalidate the full arm, including intervals that would
+    # otherwise be excluded from the sustained throughput window.
+    for index, sample in enumerate(samples):
+        validate_sample(index, sample)
         if sample["target"]["ownership_changed"]:
             raise RuntimeError("benchmark PID/PGID ownership changed during arm")
         if any(sample["contamination"].values()):
-            raise RuntimeError(f"transient competing llama/AutoPilot/KFD contamination detected: {sample['contamination']}")
-    return {"status": "pass", "threshold_external_core_equivalents": MAX_EXTERNAL_CORE_EQUIVALENTS,
-            "samples": samples, "intervals": intervals}
+            raise RuntimeError(
+                "transient competing llama/AutoPilot/KFD contamination detected: "
+                f"sample={index} contamination={sample['contamination']}"
+            )
+
+    intervals: list[dict[str, Any]] = []
+    for index, (before, after) in enumerate(zip(samples, samples[1:])):
+        try:
+            elapsed = float(after["monotonic"]) - float(before["monotonic"])
+            total_delta = float(after["cpu_total_ticks"]) - float(before["cpu_total_ticks"])
+            busy_delta = float(after["cpu_busy_ticks"]) - float(before["cpu_busy_ticks"])
+            target_delta = int(after["target"]["cpu_ticks"]) - int(before["target"]["cpu_ticks"])
+            swap_delta = {
+                key: int(after["swap"][key]) - int(before["swap"][key])
+                for key in ("pswpin", "pswpout")
+            }
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RuntimeError(f"contention monitor sampling failure at interval {index}") from exc
+
+        # Aggregate and target counters must be monotonic.  In contrast,
+        # target_delta > busy_delta is retained as signed timing telemetry.
+        if not all(math.isfinite(value) for value in (elapsed, total_delta, busy_delta)):
+            raise RuntimeError(f"contention monitor observed non-finite counter interval: {index}")
+        if elapsed <= 0 or total_delta <= 0 or busy_delta < 0 or target_delta < 0:
+            raise RuntimeError(f"contention monitor observed invalid counter interval: {index}")
+        if busy_delta > total_delta:
+            raise RuntimeError(f"contention monitor observed invalid counter interval: {index}")
+        if any(value < 0 for value in swap_delta.values()):
+            raise RuntimeError(f"contention monitor observed invalid swap counter interval: {index}")
+        if any(value != 0 for value in swap_delta.values()):
+            raise RuntimeError(f"swap I/O changed during benchmark arm: interval={index} delta={swap_delta}")
+
+        target_core_equivalents = target_delta / (CLOCK_TICKS * elapsed)
+        signed_external = (busy_delta - target_delta) / (CLOCK_TICKS * elapsed)
+        exclusions: list[str] = []
+        if target_core_equivalents < MIN_TARGET_CORE_EQUIVALENTS:
+            exclusions.append("target_below_minimum_core_equivalents")
+        intervals.append({
+            "index": index,
+            "start_sample_index": index,
+            "end_sample_index": index + 1,
+            "elapsed_s": elapsed,
+            "aggregate_total_delta_ticks": total_delta,
+            "aggregate_busy_delta_ticks": busy_delta,
+            "target_group_cpu_delta_ticks": target_delta,
+            "target_core_equivalents": target_core_equivalents,
+            "signed_external_core_equivalents": signed_external,
+            "swap_delta": swap_delta,
+            "exclusion_reasons": exclusions,
+            "eligible": not exclusions,
+        })
+
+    # The qualifying window consists of adjacent eligible intervals.  Iterate
+    # in order and retain the first run on equal duration, as ratified.
+    best: tuple[int, int, float] | None = None
+    run_start: int | None = None
+    duration = 0.0
+    for index, interval in enumerate(intervals):
+        if interval["eligible"]:
+            if run_start is None:
+                run_start = index
+                duration = 0.0
+            duration += float(interval["elapsed_s"])
+            if best is None or duration > best[2]:
+                best = (run_start, index, duration)
+        else:
+            run_start = None
+            duration = 0.0
+    if best is None or best[2] < MIN_SUSTAINED_WINDOW_SECONDS:
+        raise RuntimeError(
+            "contention monitor lacks a qualifying sustained eligible window: "
+            f"required_seconds={MIN_SUSTAINED_WINDOW_SECONDS} intervals={intervals}"
+        )
+
+    start, end, duration = best
+    before = samples[start]
+    after = samples[end + 1]
+    direct_endpoint_elapsed = float(after["monotonic"]) - float(before["monotonic"])
+    if not math.isclose(direct_endpoint_elapsed, duration, rel_tol=1e-9, abs_tol=1e-9):
+        raise RuntimeError(
+            "contention monitor sustained window endpoint elapsed does not match interval duration: "
+            f"endpoint={direct_endpoint_elapsed} summed={duration}"
+        )
+    endpoint_busy_delta = float(after["cpu_busy_ticks"]) - float(before["cpu_busy_ticks"])
+    endpoint_target_delta = int(after["target"]["cpu_ticks"]) - int(before["target"]["cpu_ticks"])
+    signed_external = (endpoint_busy_delta - endpoint_target_delta) / (CLOCK_TICKS * duration)
+    if not MIN_SIGNED_EXTERNAL_CORE_EQUIVALENTS <= signed_external <= MAX_EXTERNAL_CORE_EQUIVALENTS:
+        raise RuntimeError(
+            "sustained external CPU contention is outside inclusive bounds "
+            f"[{MIN_SIGNED_EXTERNAL_CORE_EQUIVALENTS}, {MAX_EXTERNAL_CORE_EQUIVALENTS}]: "
+            f"{signed_external}"
+        )
+    return {
+        "status": "pass",
+        "accounting": CONTENTION_ACCOUNTING,
+        "thresholds": {
+            "configured_cpu_count": CONFIGURED_CPU_COUNT,
+            "minimum_target_core_equivalents": MIN_TARGET_CORE_EQUIVALENTS,
+            "minimum_window_seconds": MIN_SUSTAINED_WINDOW_SECONDS,
+            "signed_external_core_equivalents": {
+                "minimum": MIN_SIGNED_EXTERNAL_CORE_EQUIVALENTS,
+                "maximum": MAX_EXTERNAL_CORE_EQUIVALENTS,
+            },
+        },
+        "samples": samples,
+        "intervals": intervals,
+        "sustained_window": {
+            "start_interval_index": start,
+            "end_interval_index": end,
+            "start_sample_index": start,
+            "end_sample_index": end + 1,
+            "start_monotonic": float(before["monotonic"]),
+            "end_monotonic": float(after["monotonic"]),
+            "elapsed_s": duration,
+            "direct_endpoint_elapsed_s": direct_endpoint_elapsed,
+            "aggregate_total_delta_ticks": float(after["cpu_total_ticks"]) - float(before["cpu_total_ticks"]),
+            "aggregate_busy_delta_ticks": endpoint_busy_delta,
+            "target_group_cpu_delta_ticks": endpoint_target_delta,
+            "target_core_equivalents": endpoint_target_delta / (CLOCK_TICKS * duration),
+            "signed_external_core_equivalents": signed_external,
+        },
+    }
 
 
 def run_monitored(argv: list[str], env: dict[str, str]) -> tuple[subprocess.CompletedProcess[str], dict[str, Any]]:
@@ -1976,8 +2198,19 @@ def collect_throughput_failures(
 def manifest() -> dict[str, Any]:
     cells = build_cells()
     pairs = build_pairs(cells)
-    return {"schema": "cpu-prefill-v8-regression.v2", "protocol": "P-BENCH-PREFILL-1", "created_at": utc_now(),
+    return {"schema": "cpu-prefill-v8-regression.v3", "protocol": "P-BENCH-PREFILL-1", "created_at": utc_now(),
             "measurement_intent": "decision_gating_throughput_only", "promotion_decision": False,
+            "contention_accounting": {
+                "id": CONTENTION_ACCOUNTING,
+                "configured_cpu_count": CONFIGURED_CPU_COUNT,
+                "minimum_target_core_equivalents": MIN_TARGET_CORE_EQUIVALENTS,
+                "minimum_window_seconds": MIN_SUSTAINED_WINDOW_SECONDS,
+                "signed_external_core_equivalents": {
+                    "minimum": MIN_SIGNED_EXTERNAL_CORE_EQUIVALENTS,
+                    "maximum": MAX_EXTERNAL_CORE_EQUIVALENTS,
+                },
+                "prospective_only": True,
+            },
             "explicit_exclusion": ["qwen3.5-122b"],
             "parent_environment_identity": parent_environment_identity(),
             "known_recipe_drift": [dict(CANONICAL_RECIPE_KMP_DRIFT)],
