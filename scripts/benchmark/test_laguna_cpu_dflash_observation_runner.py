@@ -668,7 +668,7 @@ def test_recipe_drift_and_noncanonical_q8_are_rejected() -> None:
             runner.parse_args(list(argv))
 
 
-def test_plan_is_complete_observation_only_matrix() -> None:
+def test_plan_is_complete_prospective_lineup_matrix() -> None:
     plan = runner.build_plan()
     assert plan["schema"] == "epyc.laguna_cpu_dflash_observation.plan.v5"
     assert len(plan["cells"]) == 20
@@ -692,8 +692,10 @@ def test_plan_is_complete_observation_only_matrix() -> None:
         assert prompt.index(prefix) > prompt.lower().index("explain")
     assert plan["recipe"]["prompt_protocol"] == runner.PROMPT_PROTOCOL
     assert plan["recipe"]["prompt_protocol"]["result_lines_terminal"] is True
-    assert plan["observation_policy"]["decision_grade"] is False
+    assert plan["observation_policy"]["decision_grade"] is True
     assert plan["observation_policy"]["promotion_gate"] is False
+    assert plan["observation_policy"]["protocol_id"] == "P-DFLASH-LINEUP-1"
+    assert plan["observation_policy"]["measurement_class"] == "decision_gating_for_dflash_lineup_only"
     assert plan["observation_policy"]["march_no_go_reopened"] is False
     assert plan["observation_policy"]["external_cpu_accounting"] == (
         "record_only_signed_delta_from_mixed_proc_counter_sources"
@@ -1110,7 +1112,8 @@ def test_dflash_lineup_enablement_is_fail_closed_for_acceptance_and_prompt_speed
     summary = runner.summarize(valid_summary_rows())
     eligibility = summary["dflash_lineup_enablement"]
     assert eligibility["eligible"] is False
-    assert eligibility["policy"]["status"] == "provisional_not_ratified"
+    assert eligibility["policy"]["status"] == "ratified_prospective"
+    assert eligibility["policy"]["protocol_id"] == "P-DFLASH-LINEUP-1"
     assert all("pooled_acceptance_below_floor" in lane["blockers"] for lane in eligibility["lanes"])
 
     rows = valid_summary_rows()

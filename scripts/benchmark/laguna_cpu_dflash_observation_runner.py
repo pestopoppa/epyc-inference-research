@@ -136,12 +136,12 @@ PROMPT_PROTOCOL = {
     "minimum_completion_tokens": MIN_COMPLETION_TOKENS,
 }
 OBSERVATION_POLICY = {
-    "decision_grade": False,
+    "decision_grade": True,
     "promotion_gate": False,
-    "protocol_id": None,
-    "measurement_class": "observation_only_no_ratified_cpu_spec_dec_protocol",
+    "protocol_id": "P-DFLASH-LINEUP-1",
+    "measurement_class": "decision_gating_for_dflash_lineup_only",
     "march_no_go_reopened": False,
-    "acceptance_and_throughput_use": "characterization_only_not_a_promotion_or_no_go_verdict",
+    "acceptance_and_throughput_use": "lineup_eligibility_only_not_a_kernel_promotion_gate",
     "functional_equality_use": "non_gating_output_stability_observation_only",
     "speculative_semantics": "distribution_lossless_not_byte_exact_greedy",
     "host_window": "warmed_bounded_interference_observation_not_clean_host_claim",
@@ -150,14 +150,15 @@ OBSERVATION_POLICY = {
     "swap_io_page_ceiling": MAX_SWAP_IO_PAGES,
 }
 DFLASH_LINEUP_REOPEN_SCREEN = {
-    # This is a fail-closed operational screen, not a ratified measurement gate.
-    # The active Laguna handoff names a Q8 recovery toward ~60% as the only
-    # concrete reopen signal after March's 27%-acceptance, net-negative NO-GO.
-    "status": "provisional_not_ratified",
+    # P-DFLASH-LINEUP-1 ratifies the prior fail-closed operational screen
+    # prospectively; pre-amendment artifacts remain observations.
+    "status": "ratified_prospective",
+    "protocol_id": "P-DFLASH-LINEUP-1",
+    "ratified_date": "2026-07-25",
     "acceptance_floor": 0.60,
     "prompt_decode_ratio_floor": 1.0,
     "requires_every_prompt_to_meet_ratio_floor": True,
-    "source": "root handoffs: speculative-decoding-mtp-refresh.md:223; dflash-block-diffusion-speculation.md:743-752",
+    "source": "/workspace/MEASUREMENT.md#p-dflash-lineup-1--dflash-lineup-enablement-ratified-2026-07-25",
     "scope": "lineup enablement only; does not gate kernel capability promotion",
 }
 
