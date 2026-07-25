@@ -1044,7 +1044,7 @@ def test_pinned_artifact_constants_are_exact() -> None:
     assert runner.Q4_SHA256 == "7da520c5f44bc3c79d4eeebfd1151ba7114c5d7568e72a995638417093c5753f"
     assert runner.DRAFTER_BYTES == 2233764000
     assert runner.DRAFTER_SHA256 == "24614292a4477f3ae5203c3875edcde0bc219f02616a9c9f65791e29b18a67ee"
-    assert runner.EXPECTED_HEAD == "1977a5d78a5a9c0b1e0050105f8741b7d0a00284"
+    assert runner.EXPECTED_HEAD == "67a433bf45a8a091d83b4ea0b32ff0735fd51800"
     assert runner.OPENMP_RUNTIME == Path("/usr/lib/llvm-20/lib/libomp.so.5")
     assert runner.EXPECTED_OPENMP_RUNTIME_SHA256 == "98b1f8225260f138243e8e3e7578b83802e998a240f841dc1944a908bf1aee70"
 

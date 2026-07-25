@@ -33,15 +33,15 @@ RESEARCH_ROOT = Path(__file__).resolve().parents[2]
 CANONICAL_SOURCE = Path("/mnt/raid0/llm/llama.cpp-experimental")
 CANONICAL_BINARY = CANONICAL_SOURCE / "build-v8-cpu/bin/llama-server"
 EXPECTED_BRANCH = "experimental-v8-refresh-20260724"
-EXPECTED_HEAD = "1977a5d78a5a9c0b1e0050105f8741b7d0a00284"
-EXPECTED_SERVER_SHA256 = "d255be4e7735da2b18ff958e6a02400bc1ec86104fa8e8530bb3519fed0e8302"
+EXPECTED_HEAD = "67a433bf45a8a091d83b4ea0b32ff0735fd51800"
+EXPECTED_SERVER_SHA256 = "c6accc0d5bf935e85c56a16a5f837a70774005876d2326628702325e73b6704b"
 EXPECTED_LOCAL_LIBRARY_SHA256 = {
-    "libggml-base.so.0.16.0": "c289b60b2cc1ddb741f0b9aba0c320d7f56bda8a106e4295ac9af3336a2fc2b4",
-    "libggml-cpu.so.0.16.0": "4b1a63e842afa0a57857fcb68c9f3e4906b007526d561122603958c9118c45c5",
+    "libggml-base.so.0.16.0": "f47cc4ad6ab59ea39de7e5fd302f79ba62626cdf84b48332144dfdfa34af0cde",
+    "libggml-cpu.so.0.16.0": "26c3c98a289764c11752751faf380b592ab07b00191d289637b4079d2e1a5e90",
     "libggml.so.0.16.0": "ed67a5d9340c256abdcd9b2729871d3dbab6f979031e752bd4c92c2f73a5dacd",
-    "libllama-common.so.0.0.10102": "99e9dde64c440091fb2e77b49cb74bf50137a724275f2ffde8299756453a4574",
-    "libllama-server-impl.so": "8248f8f1d69d80c0af92483e0a060b34059826d967fbfe88e6f629a61973fa5a",
-    "libllama.so.0.0.10102": "293d19eb0bc7c4cde9fbc48d0d38a0a0f9c499f639e302fea36f31035d87f0b8",
+    "libllama-common.so.0.0.10107": "c80f532417d58c52aee40bb25734661b5c7a3f74763c17d0c57921ad83d72bca",
+    "libllama-server-impl.so": "ae40403742641096519c0c336e8d2d4bb8c54a8d7404004d940b42d970eb5d31",
+    "libllama.so.0.0.10107": "f1e5a2e0976fa4f96d9f78775634b7e4869af8f6549eed384ebc94435eebee8e",
 }
 LLVM20_LIBDIR = Path("/usr/lib/llvm-20/lib")
 OPENMP_RUNTIME = LLVM20_LIBDIR / "libomp.so.5"

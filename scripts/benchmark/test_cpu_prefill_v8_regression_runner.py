@@ -104,7 +104,7 @@ def result_json(
     samples: list[object],
     *,
     metric: str = "pp2048",
-    commit: str = "1977a5d78",
+    commit: str = "67a433bf4",
 ) -> str:
     samples_ns = [1_000_000_000] * len(samples)
     return json.dumps(
@@ -113,7 +113,7 @@ def result_json(
                 "n_prompt": 2048 if metric == "pp2048" else 0,
                 "n_gen": 0 if metric == "pp2048" else 128,
                 "build_commit": commit,
-                "build_number": 10102,
+                "build_number": 10107,
                 "samples_ts": samples,
                 "samples_ns": samples_ns,
             }
@@ -126,7 +126,7 @@ def wrapper_stderr(
     library_path: str = "/candidate",
     iqk: int = 1,
     q8_0: bool = False,
-    build: str = "build: 1977a5d78 (10102)",
+    build: str = "build: 67a433bf4 (10107)",
 ) -> str:
     emitted = {
         "LD_LIBRARY_PATH": f"{library_path}:{runner.LLVM20_LIBDIR}",
@@ -438,8 +438,8 @@ def test_throughput_failure_collection_uses_pooled_control_verdict() -> None:
 
 
 def test_build_witness_requires_matching_head() -> None:
-    raw = "build: 1977a5d78 (10102)\n"
-    assert runner.build_witness(raw, runner.CANDIDATE_HEAD)["build_number"] == "10102"
+    raw = "build: 67a433bf4 (10107)\n"
+    assert runner.build_witness(raw, runner.CANDIDATE_HEAD)["build_number"] == "10107"
     with pytest.raises(RuntimeError, match="does not match"):
         runner.build_witness(raw, runner.PRODUCTION_HEAD)
 
@@ -984,7 +984,7 @@ def test_canonical_environment_witness_validates_emitted_and_effective_stack() -
 
 def test_canonical_environment_witness_rejects_missing_duplicate_and_drift() -> None:
     with pytest.raises(RuntimeError, match="expected one"):
-        runner.parse_wrapper_emitted_environment("build: 1977a5d78 (10102)\n")
+        runner.parse_wrapper_emitted_environment("build: 67a433bf4 (10107)\n")
     duplicate = wrapper_stderr() + wrapper_stderr()
     with pytest.raises(RuntimeError, match="expected one"):
         runner.parse_wrapper_emitted_environment(duplicate)
@@ -1225,12 +1225,12 @@ def test_build_commit_must_resolve_exactly_to_pinned_head(
 ) -> None:
     monkeypatch.setattr(runner, "git_value", lambda *_args: runner.CANDIDATE_HEAD)
     assert (
-        runner.resolve_build_commit(Path("/source"), "1977a5d78", runner.CANDIDATE_HEAD)
+        runner.resolve_build_commit(Path("/source"), "67a433bf4", runner.CANDIDATE_HEAD)
         == runner.CANDIDATE_HEAD
     )
     monkeypatch.setattr(runner, "git_value", lambda *_args: runner.PRODUCTION_HEAD)
     with pytest.raises(RuntimeError, match="not pinned HEAD"):
-        runner.resolve_build_commit(Path("/source"), "1977a5d78", runner.CANDIDATE_HEAD)
+        runner.resolve_build_commit(Path("/source"), "67a433bf4", runner.CANDIDATE_HEAD)
 
 
 def test_fresh_output_rejects_nonempty_directory(tmp_path: Path) -> None:
