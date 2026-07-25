@@ -112,3 +112,64 @@ def test_score_response_keeps_multiple_choice_path():
 
     assert runner.score_response("The answer is D.", "D", q)
     assert not runner.score_response("The answer is C.", "D", q)
+
+
+def test_run_suite_does_not_fold_or_resume_other_suite_rows(tmp_path, monkeypatch):
+    """A shared JSONL must not let MMLU draws satisfy GPQA work."""
+    questions = [{"id": "shared-id", "prompt": "prompt", "expected": "C", "tier": 1}]
+    monkeypatch.setattr(runner, "load_questions", lambda *args, **kwargs: questions)
+    calls = []
+
+    def fake_query(*args, **kwargs):  # noqa: ANN001
+        calls.append((args, kwargs))
+        return {
+            "text": "C", "reasoning": "", "finish_reason": "stop",
+            "completion_tokens": 1, "prompt_tokens": 1,
+            "decode_tok_s": 1.0, "error": "",
+        }
+
+    monkeypatch.setattr(runner, "query_server_meta", fake_query)
+    rows = tmp_path / "shared.jsonl"
+    rows.write_text(json.dumps({
+        "suite": "mmlu_pro", "id": "shared-id", "seed": 42,
+        "tier": "1", "correct": True,
+    }) + "\n")
+
+    with rows.open("a") as handle:
+        result = runner.run_suite(
+            "gpqa", "http://unused", n=1, seed=42, per_question_out=handle,
+        )
+
+    assert len(calls) == 1
+    assert result["n"] == 1
+    assert result["correct"] == 1
+    assert result["n_questions"] == 1
+    assert [json.loads(line)["suite"] for line in rows.read_text().splitlines()] == [
+        "mmlu_pro", "gpqa",
+    ]
+
+
+def test_run_suite_same_suite_resume_is_idempotent(tmp_path, monkeypatch):
+    questions = [{"id": "q1", "prompt": "prompt", "expected": "C", "tier": 1}]
+    monkeypatch.setattr(runner, "load_questions", lambda *args, **kwargs: questions)
+
+    def should_not_query(*args, **kwargs):  # noqa: ANN001
+        raise AssertionError("a completed same-suite draw must not be re-queried")
+
+    monkeypatch.setattr(runner, "query_server_meta", should_not_query)
+    rows = tmp_path / "same-suite.jsonl"
+    row = {
+        "suite": "gpqa", "id": "q1", "seed": 42, "tier": "1",
+        "correct": True, "empty_response": False, "truncated": False,
+    }
+    rows.write_text(json.dumps(row) + "\n")
+
+    with rows.open("a") as handle:
+        result = runner.run_suite(
+            "gpqa", "http://unused", n=1, seed=42, per_question_out=handle,
+        )
+
+    assert result["n"] == 1
+    assert result["correct"] == 1
+    assert result["n_questions"] == 1
+    assert rows.read_text().splitlines() == [json.dumps(row)]

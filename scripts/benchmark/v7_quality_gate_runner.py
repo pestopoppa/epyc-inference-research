@@ -233,10 +233,11 @@ def run_suite(
     tok_acc = [0, 0]  # [completion, prompt] tokens generated THIS run (excludes resumed)
     suite_t0 = time.monotonic()
 
-    # Idempotent resume: never re-query a (question, seed) already on disk.
-    # Lets an interrupted run resume, and an avg@k top-up add only new seeds,
-    # without re-spending inference on results already collected. Prior draws
-    # are folded into the counters so result.json still reflects ALL draws.
+    # Idempotent resume: never re-query a (suite, question, seed) already on
+    # disk. Lets an interrupted run resume, and an avg@k top-up add only new
+    # seeds, without re-spending inference on results already collected. A
+    # shared JSONL contains multiple suites, so rows from another suite must
+    # neither suppress this suite's work nor be folded into its counters.
     already: set = set()
     if per_question_out is not None:
         done_path = getattr(per_question_out, "name", None)
@@ -247,6 +248,8 @@ def run_suite(
                 try:
                     r = json.loads(line)
                 except Exception:
+                    continue
+                if r.get("suite") != suite_name:
                     continue
                 key = (r.get("id"), r.get("seed"))
                 if key in already:
