@@ -1674,10 +1674,10 @@ def stats(samples: list[float]) -> dict[str, Any]:
     return {"samples_ts": checked, "median_ts": median, "mad_ts": mad}
 
 
-def measurement_window_witness(
+def measurement_window_observation(
     monitor: dict[str, Any], samples_ns: list[float]
 ) -> dict[str, Any]:
-    """Prove clean-window coverage without inventing unavailable per-rep clocks."""
+    """Persist the available overlap facts without inventing per-repetition clocks."""
     sustained = monitor.get("sustained_window")
     samples = monitor.get("samples")
     if not isinstance(sustained, dict) or not isinstance(samples, list) or len(samples) < 2:
@@ -1702,22 +1702,17 @@ def measurement_window_witness(
         )
     observed_duration = last - first
     minimum_overlap_s = max(0.0, total_measured_s + selected_duration - observed_duration)
-    witness = {
+    return {
         "samples_ns": samples_ns,
         "total_measured_repetition_duration_s": total_measured_s,
         "selected_clean_window_duration_s": selected_duration,
         "observed_monitor_duration_s": observed_duration,
         "overlap_basis": "interval-arithmetic-lower-bound; per-repetition timestamps unavailable",
         "minimum_clean_overlap_s": minimum_overlap_s,
-        "required_clean_overlap_s": total_measured_s,
+        "binding_status": "unavailable",
+        "per_repetition_timestamps": "unavailable",
         "raw_monitor_interval_count": len(monitor.get("intervals", [])),
     }
-    if minimum_overlap_s + 1e-9 < total_measured_s:
-        raise RuntimeError(
-            "clean sustained window cannot conservatively cover the full measured "
-            f"repetition duration: {witness}"
-        )
-    return witness
 
 
 def _proc_stat_cpu() -> tuple[int, int]:
@@ -2136,6 +2131,8 @@ def run_arm(cell: dict[str, Any], arm: dict[str, Any], artifact: Path) -> dict[s
     parent_environment = canonical_parent_environment()
     before_identity = collect_arm_identity(arm)
     completed, monitor = run_monitored(argv, parent_environment)
+    monitor_path = artifact.with_suffix(".contention_monitor.json")
+    write_json(monitor_path, monitor)
     stdout_path = artifact.with_suffix(".stdout.json")
     stderr_path = artifact.with_suffix(".stderr.md")
     stdout_path.write_text(completed.stdout, encoding="utf-8")
@@ -2153,7 +2150,7 @@ def run_arm(cell: dict[str, Any], arm: dict[str, Any], artifact: Path) -> dict[s
         arm,
     )
     parsed = parse_result(completed.stdout, cell["metric"], arm["actual_head"])
-    measurement_coverage = measurement_window_witness(monitor, parsed["samples_ns"])
+    measurement_window = measurement_window_observation(monitor, parsed["samples_ns"])
     witness = build_witness(completed.stderr, arm["actual_head"])
     if parsed["build_commit"] != witness["commit"] or str(parsed["build_number"]) != witness["build_number"]:
         raise RuntimeError(f"JSON and Markdown build witnesses disagree: {parsed} / {witness}")
@@ -2175,7 +2172,8 @@ def run_arm(cell: dict[str, Any], arm: dict[str, Any], artifact: Path) -> dict[s
         "parent_environment_identity": parent_environment_identity(),
         "canonical_environment_witness": environment_witness,
         "contention_monitor": monitor,
-        "measurement_window_coverage": measurement_coverage,
+        "contention_monitor_path": str(monitor_path),
+        "measurement_window_observation": measurement_window,
         "witness": {
             **witness,
             "json_resolved_full_commit": json_resolved,

@@ -1083,21 +1083,41 @@ def test_instrument_era_attestation_fails_closed_on_missing_or_drift(
         runner.instrument_era_attestation()
 
 
-def test_measurement_window_witness_requires_conservative_full_coverage() -> None:
+def test_measurement_window_observation_preserves_unbound_overlap_facts() -> None:
     monitor = {
         "samples": [{"monotonic": 1.0}, {"monotonic": 11.0}],
         "intervals": [{"index": 0}],
         "sustained_window": {"start_monotonic": 1.0, "end_monotonic": 11.0, "elapsed_s": 10.0},
     }
-    witness = runner.measurement_window_witness(monitor, [2_000_000_000] * 2)
-    assert witness["total_measured_repetition_duration_s"] == 4.0
-    assert witness["minimum_clean_overlap_s"] == 4.0
+    observation = runner.measurement_window_observation(monitor, [2_000_000_000] * 2)
+    assert observation["total_measured_repetition_duration_s"] == 4.0
+    assert observation["minimum_clean_overlap_s"] == 4.0
+    assert observation["binding_status"] == "unavailable"
+    assert observation["per_repetition_timestamps"] == "unavailable"
     monitor["sustained_window"]["elapsed_s"] = 9.5
     with pytest.raises(RuntimeError, match="duration disagrees with endpoints"):
-        runner.measurement_window_witness(monitor, [2_000_000_000] * 2)
+        runner.measurement_window_observation(monitor, [2_000_000_000] * 2)
     monitor["sustained_window"] = {"start_monotonic": 3.0, "end_monotonic": 9.0, "elapsed_s": 6.0}
-    with pytest.raises(RuntimeError, match="cannot conservatively cover"):
-        runner.measurement_window_witness(monitor, [2_000_000_000] * 2)
+    observation = runner.measurement_window_observation(monitor, [2_000_000_000] * 2)
+    assert observation["minimum_clean_overlap_s"] == 0.0
+
+
+def test_measurement_window_observation_accepts_valid_window_with_startup_teardown() -> None:
+    samples = monitor_series([(9000, 100)] + [(9000, 8800)] * 10 + [(9000, 100)])
+    monitor = runner.validate_monitor_samples(samples)
+    assert monitor["sustained_window"]["start_interval_index"] == 1
+    assert monitor["sustained_window"]["end_interval_index"] == 10
+    for sample in monitor["samples"]:
+        sample["monotonic"] += 1.0
+    monitor["sustained_window"]["start_monotonic"] += 1.0
+    monitor["sustained_window"]["end_monotonic"] += 1.0
+    observation = runner.measurement_window_observation(
+        monitor, [1_000_000_000] * 10
+    )
+    assert observation["selected_clean_window_duration_s"] == pytest.approx(10.0)
+    assert observation["observed_monitor_duration_s"] == pytest.approx(12.0)
+    assert observation["minimum_clean_overlap_s"] == pytest.approx(8.0)
+    assert observation["binding_status"] == "unavailable"
 
 
 def test_run_default_environment_is_exact_under_parent_poison(
@@ -1232,6 +1252,51 @@ def test_run_arm_passes_only_exact_parent_environment(
     assert observed == runner.CANONICAL_PARENT_ENV
     assert row["parent_environment_identity"] == runner.parent_environment_identity()
     assert "KMP_BLOCKTIME" not in row["canonical_environment_witness"]["effective"]["environment"]
+
+
+def test_run_arm_persists_monitor_before_downstream_parse_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monitor = {
+        "status": "pass",
+        "samples": [{"monotonic": 1.0}, {"monotonic": 11.0}],
+        "intervals": [{"index": 0}],
+        "sustained_window": {
+            "start_monotonic": 1.0,
+            "end_monotonic": 11.0,
+            "elapsed_s": 10.0,
+        },
+    }
+
+    def fake_run_monitored(_argv: list[str], _env: dict[str, str]) -> tuple[Result, dict[str, object]]:
+        return Result(stdout="malformed result", stderr=wrapper_stderr()), monitor
+
+    identity = {
+        "name": "candidate", "source_root": "/candidate", "actual_head": runner.CANDIDATE_HEAD,
+        "actual_branch": runner.CANDIDATE_BRANCH, "source_status": [],
+        "binary_identity": {"path": "/candidate/llama-bench", "bytes": 1, "sha256": "x"},
+        "shared_library_identity": {"libraries": [], "openmp_runtime": {}},
+    }
+    monkeypatch.setattr(runner, "run_monitored", fake_run_monitored)
+    monkeypatch.setattr(runner, "collect_arm_identity", lambda _arm: identity)
+    monkeypatch.setattr(
+        runner,
+        "parse_result",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("downstream parse failure")),
+    )
+    cell = {
+        "pair_id": "p", "model": "m", "model_path": "/tmp/model.gguf", "iq": False,
+        "iqk": 1, "metric": "pp2048", "n_prompt": 2048, "n_gen": 0,
+    }
+    arm = {
+        "name": "candidate", "binary": "/candidate/llama-bench", "source_root": "/candidate",
+        "library_path": "/candidate", "actual_head": runner.CANDIDATE_HEAD,
+        "expected_head": runner.CANDIDATE_HEAD, "expected_branch": runner.CANDIDATE_BRANCH,
+    }
+    artifact = tmp_path / "candidate.log"
+    with pytest.raises(RuntimeError, match="downstream parse failure"):
+        runner.run_arm(cell, arm, artifact)
+    assert json.loads(artifact.with_suffix(".contention_monitor.json").read_text()) == monitor
 
 
 def test_ratios_reject_nonfinite_and_overflow() -> None:
