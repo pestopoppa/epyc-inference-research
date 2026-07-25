@@ -128,10 +128,10 @@ def _identity(*, untracked: str = "", head: str = HEAD) -> dict:
             "untracked": _command(untracked),
             "commit": _command(head + "\n"),
         },
-        "server_version": _command(f"llama-server HIP commit {head[:9]}"),
+        "server_version": _command(f"version: 10107 ({head[:9]})\n"),
         "ldd": _command(
             f"libllama.so => {runner.DEFAULT_BINARY.parent}/libllama.so\n"
-            f"libggml.so => {runner.DEFAULT_BINARY.parent}/libggml.so\n"
+            f"libggml-hip.so => {runner.DEFAULT_BINARY.parent}/libggml-hip.so\n"
         ),
     }
 
@@ -357,7 +357,10 @@ def test_evidence_and_server_environments_are_closed_and_scrub_parent_knobs(monk
 
 
 def test_production_guard_is_frozen_and_allowlist_is_exact() -> None:
-    assert runner.production_identity_valid(_identity(), HEAD, SERVER_SHA) == (True, "ok")
+    identity = _identity()
+    identity["server_version"] = _command("", 0)
+    identity["server_version"]["stderr"] = f"version: 10107 ({HEAD[:9]})\n"
+    assert runner.production_identity_valid(identity, HEAD, SERVER_SHA) == (True, "ok")
     assert runner.production_identity_valid(_identity(untracked=".gitnexusignore\ntools/math-tools/generated.txt\n"), HEAD, SERVER_SHA) == (True, "ok")
     assert not runner.production_identity_valid(_identity(untracked=".gitnexusignore.bak\n"), HEAD, SERVER_SHA)[0]
     assert not runner.production_identity_valid(_identity(), "a" * 39, SERVER_SHA)[0]
@@ -373,9 +376,33 @@ def test_production_guard_is_frozen_and_allowlist_is_exact() -> None:
     assert not runner.production_identity_valid(missing_library_hash, HEAD, SERVER_SHA)[0]
 
 
-def test_local_llama_and_ggml_libraries_are_all_hashed() -> None:
+@pytest.mark.parametrize(
+    "version_line",
+    [
+        f"version: 10107 ({'b' * 9})\n",
+        f"version: 10107 ({'a' * 8})\n",
+        "version: 10107 (A12345678)\n",
+        f"version: 10107 build-{HEAD[:9]}\n",
+        f"notice ({HEAD[:9]})\n",
+    ],
+)
+def test_production_guard_requires_exact_version_line_commit_prefix(version_line: str) -> None:
+    identity = _identity()
+    identity["server_version"] = _command("", 0)
+    identity["server_version"]["stderr"] = version_line
+    assert runner.production_identity_valid(identity, HEAD, SERVER_SHA)[0] is False
+
+
+def test_version_commit_prefix_accepts_standard_stderr_version_line() -> None:
+    capture = _command("")
+    capture["stderr"] = f"version: 10107 ({HEAD[:9]})\nbuilt with GNU\n"
+    assert runner.version_commit_prefix(capture) == HEAD[:9]
+
+
+def test_local_llama_and_ggml_libraries_are_all_hashed(monkeypatch) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
+        monkeypatch.setattr(runner, "DEFAULT_BINARY", root / "llama-server")
         llama = root / "libllama.so"
         ggml = root / "libggml-hip.so"
         llama.write_bytes(b"llama")
@@ -384,6 +411,45 @@ def test_local_llama_and_ggml_libraries_are_all_hashed() -> None:
         identities = runner.local_library_identities(ldd)
         assert [row["soname"] for row in identities] == ["libggml-hip.so", "libllama.so"]
         assert {row["sha256"] for row in identities} == {runner.sha256_file(llama), runner.sha256_file(ggml)}
+
+
+def test_local_library_identities_hash_real_file_and_reject_bad_symlink_targets(monkeypatch) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        canonical_bin = root / "bin"
+        canonical_bin.mkdir()
+        versioned = canonical_bin / "libllama.so.0.0.10107"
+        versioned.write_bytes(b"llama")
+        soname = canonical_bin / "libllama.so.0"
+        soname.symlink_to(versioned.name)
+        monkeypatch.setattr(runner, "DEFAULT_BINARY", canonical_bin / "llama-server")
+        ldd = _command(f"libllama.so.0 => {soname} (0x1)\n")
+        identity = runner.local_library_identities(ldd)[0]
+        assert identity["stable"] is True
+        assert identity["path"] == str(soname)
+        assert identity["resolved_path"] == str(versioned)
+        assert identity["sha256"] == runner.sha256_file(versioned)
+
+        dangling = canonical_bin / "libggml.so.0"
+        dangling.symlink_to("missing.so")
+        rejected = runner.local_library_identities(_command(f"libggml.so.0 => {dangling} (0x2)\n"))[0]
+        assert rejected["stable"] is False
+
+        outside = root / "outside.so"
+        outside.write_bytes(b"outside")
+        escape = canonical_bin / "libggml-hip.so.0"
+        escape.symlink_to(outside)
+        rejected = runner.local_library_identities(_command(f"libggml-hip.so.0 => {escape} (0x3)\n"))[0]
+        assert rejected["stable"] is False
+        assert "outside the canonical binary directory" in rejected["identity_error"]
+
+        loop_a = canonical_bin / "libggml-base.so.0"
+        loop_b = canonical_bin / "libggml-base-loop.so.0"
+        loop_a.symlink_to(loop_b.name)
+        loop_b.symlink_to(loop_a.name)
+        rejected = runner.local_library_identities(_command(f"libggml-base.so.0 => {loop_a} (0x4)\n"))[0]
+        assert rejected["stable"] is False
+        assert rejected["resolved_path"] == str(loop_a)
 
 
 def test_model_and_hardware_provenance_are_semantically_validated() -> None:

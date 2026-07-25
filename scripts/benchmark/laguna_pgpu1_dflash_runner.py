@@ -418,7 +418,23 @@ def local_library_identities(ldd: dict[str, Any] | None) -> list[dict[str, Any]]
         match = re.match(r"^\s*(lib(?:llama|ggml)[^\s]*)\s+=>\s+(/[^\s]+)\s+\(", line)
         if match is None:
             continue
-        identity = immutable_file_identity(Path(match.group(2)))
+        ldd_path = Path(match.group(2))
+        resolved_path = str(ldd_path)
+        try:
+            resolved = ldd_path.resolve(strict=True)
+            resolved_path = str(resolved)
+            if resolved.parent != DEFAULT_BINARY.parent.resolve():
+                raise ValueError("resolved library is outside the canonical binary directory")
+            identity = immutable_file_identity(resolved)
+            # Preserve the SONAME link reported by ldd while hashing the real file.
+            identity["path"] = str(ldd_path)
+        except (OSError, RuntimeError, ValueError) as exc:
+            identity = {
+                "path": str(ldd_path),
+                "resolved_path": resolved_path,
+                "stable": False,
+                "identity_error": str(exc),
+            }
         identity["soname"] = match.group(1)
         identities.append(identity)
     return sorted(identities, key=lambda item: (str(item["soname"]), str(item["resolved_path"])))
@@ -537,6 +553,19 @@ def harness_valid(identity: dict[str, Any]) -> tuple[bool, str]:
     return True, "ok"
 
 
+def version_commit_prefix(version_capture: dict[str, Any] | None) -> str | None:
+    """Return llama.cpp's parenthesized lowercase commit token from its version line."""
+    if not isinstance(version_capture, dict):
+        return None
+    output = "\n".join(
+        value
+        for value in (version_capture.get("stdout"), version_capture.get("stderr"))
+        if isinstance(value, str) and value
+    )
+    match = re.search(r"(?m)^version: [^\r\n]*\(([0-9a-f]{9,40})\)\r?$", output)
+    return match.group(1) if match is not None else None
+
+
 def production_identity_valid(identity: dict[str, Any], expected_head: str, expected_server_sha256: str) -> tuple[bool, str]:
     git = identity.get("git") or {}
     branch = ((git.get("branch") or {}).get("stdout") or "").strip()
@@ -544,7 +573,7 @@ def production_identity_valid(identity: dict[str, Any], expected_head: str, expe
     index_diff = ((git.get("index_diff") or {}).get("stdout") or "").strip()
     untracked = [line.strip() for line in ((git.get("untracked") or {}).get("stdout") or "").splitlines() if line.strip()]
     commit = ((git.get("commit") or {}).get("stdout") or "").strip()
-    version = ((identity.get("server_version") or {}).get("stdout") or "")
+    version_commit = version_commit_prefix(identity.get("server_version"))
     ldd = ((identity.get("ldd") or {}).get("stdout") or "")
     source_root = Path(str(git.get("source_root") or "")).resolve()
     binary = Path(str(identity.get("binary") or "")).resolve()
@@ -575,9 +604,14 @@ def production_identity_valid(identity: dict[str, Any], expected_head: str, expe
         return False, f"production has non-allowlisted untracked files: {disallowed}"
     if commit != expected_head or identity.get("binary_sha256") != expected_server_sha256:
         return False, "production HEAD or server SHA256 differs from frozen expected identity"
-    if not commit or commit[:9] not in version:
-        return False, "llama-server version does not contain the production commit short SHA"
-    if "HIP" not in version and "ROCm" not in version and "hip" not in ldd.lower():
+    if version_commit is None or not expected_head.startswith(version_commit):
+        return False, "llama-server version does not contain a valid production commit prefix"
+    version_output = "\n".join(
+        value
+        for value in ((identity.get("server_version") or {}).get("stdout"), (identity.get("server_version") or {}).get("stderr"))
+        if isinstance(value, str) and value
+    )
+    if "HIP" not in version_output and "ROCm" not in version_output and "hip" not in ldd.lower():
         return False, "binary does not prove a HIP/ROCm backend"
     libraries = identity.get("local_llama_ggml_libraries")
     if not isinstance(libraries, list) or not libraries:
