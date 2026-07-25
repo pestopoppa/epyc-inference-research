@@ -26,6 +26,7 @@ class K35VisionMatrixRunnerTests(unittest.TestCase):
         self.assertIn("--device none", joined)
         self.assertIn("ROCR_VISIBLE_DEVICES=-1", argv)
         self.assertIn("HIP_VISIBLE_DEVICES=-1", argv)
+        self.assertIn("LD_LIBRARY_PATH=/tmp", argv)
         self.assertNotIn("--override-kv", argv)
 
     def test_vision_escalation_alias_uses_qwen25vl_safety_shape(self):

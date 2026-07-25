@@ -430,9 +430,10 @@ def image_data_url(path: Path) -> str:
 
 def build_server_argv(scenario: VisionScenario, *, binary: Path, port: int) -> list[str]:
     visible_device = "0" if scenario.device != "none" else "-1"
+    library_path = binary.parent.resolve()
     argv = [
         "env",
-        f"LD_LIBRARY_PATH={EXPERIMENTAL_BIN_DIR}",
+        f"LD_LIBRARY_PATH={library_path}",
         "GGML_IQK=1",
         f"ROCR_VISIBLE_DEVICES={visible_device}",
         f"HIP_VISIBLE_DEVICES={visible_device}",
