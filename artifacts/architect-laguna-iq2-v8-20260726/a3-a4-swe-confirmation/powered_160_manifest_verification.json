@@ -1,0 +1,17 @@
+{
+  "schema": "powered_manifest_verification.v1",
+  "manifest_sha256": "770ab6f86e823d334c40f01e8dc3c4042966daea921759a9591ae91c8bb7b865",
+  "candidate_count": 180,
+  "unique_count": 180,
+  "prior_count": 40,
+  "new_count": 140,
+  "overlap_prior_new": 0,
+  "new_count_by_repo": {
+    "django/django": 64,
+    "sympy/sympy": 24,
+    "sphinx-doc/sphinx": 18,
+    "scikit-learn/scikit-learn": 17,
+    "matplotlib/matplotlib": 17
+  },
+  "verified": true
+}

@@ -1,0 +1,15 @@
+Running 27 instances...
+All instances run.
+Cleaning cached images...
+Removed 0 images.
+Total instances: 40
+Instances submitted: 40
+Instances completed: 27
+Instances incomplete: 0
+Instances resolved: 18
+Instances unresolved: 9
+Instances with empty patches: 13
+Instances with errors: 0
+Unstopped containers: 0
+Unremoved images: 0
+Report written to Laguna_S_2_1_UD_IQ2_M_v8_base.laguna-swe-oracle-v8-20260726.json

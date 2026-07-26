@@ -1,0 +1,13 @@
+protocol=A3-vs-A4 powered SWE confirmation
+arm=A3_27B_dense
+created_utc=2026-07-26T12:31:53Z
+binary=/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server
+model=/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf
+kernel=production-consolidated-v8@67a433bf45a8a091d83b4ea0b32ff0735fd51800
+device=MI210 gfx90a ROCm0
+cpu_affinity=184-191
+context=49152
+kv=f16/f16
+flash_attention=on
+draft=mtp,n_max=4,device_draft=ROCm0
+reasoning=off

@@ -1,0 +1,46 @@
+{
+  "schema": "laguna_lcb_historical_paired_comparison.v1",
+  "protocol_note": "Offline paired comparison only. Laguna uses production-consolidated-v8; comparator arms are historical v7 artifacts. It is not a same-era deployment gate.",
+  "question_set": "LiveCodeBench hard, exact shared 53 IDs",
+  "artifact_sha256": {
+    "Laguna_S_2_1_UD_IQ2_M_v8_base": "551f00632e1e20f9fee9a44bfeb4ee1c65276293a9116259b2d307b28d931fa7",
+    "A1_122B_IQ2_M_historical_v7": "9532201a1ce1d5afcc4f6abb2a1e733b3bf9496fe460ad6035b8821d5f576465",
+    "A3_27B_dense_historical_v7": "30accb4f7904d8bbc2af4001b6099b1de2b6b8137870c7eb7d3485c362607d3d",
+    "A4_35B_A3B_historical_v7": "aff6f6a8e55a5eb67fefafedecfb5d138175e5f245cf6cb38f9abdf73a6882a8"
+  },
+  "comparisons": {
+    "A1_122B_IQ2_M_historical_v7": {
+      "n_paired": 53,
+      "laguna_correct": 14,
+      "other_correct": 25,
+      "both_correct": 12,
+      "neither_correct": 26,
+      "laguna_only_discordants_b": 2,
+      "other_only_discordants_c": 13,
+      "mcnemar_exact_two_sided_p": 0.00738525390625,
+      "delta_laguna_minus_other_pp": -20.754716981132077
+    },
+    "A3_27B_dense_historical_v7": {
+      "n_paired": 53,
+      "laguna_correct": 14,
+      "other_correct": 24,
+      "both_correct": 9,
+      "neither_correct": 24,
+      "laguna_only_discordants_b": 5,
+      "other_only_discordants_c": 15,
+      "mcnemar_exact_two_sided_p": 0.04138946533203125,
+      "delta_laguna_minus_other_pp": -18.867924528301888
+    },
+    "A4_35B_A3B_historical_v7": {
+      "n_paired": 53,
+      "laguna_correct": 14,
+      "other_correct": 29,
+      "both_correct": 13,
+      "neither_correct": 23,
+      "laguna_only_discordants_b": 1,
+      "other_only_discordants_c": 16,
+      "mcnemar_exact_two_sided_p": 0.000274658203125,
+      "delta_laguna_minus_other_pp": -28.30188679245283
+    }
+  }
+}

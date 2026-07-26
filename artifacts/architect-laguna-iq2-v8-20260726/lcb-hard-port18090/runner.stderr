@@ -1,0 +1,9 @@
+[runner] Waiting for server at http://127.0.0.1:18090...
+[runner] Server healthy
+
+[runner] Evaluating livecodebench_hard (n=53, seed=42)...
+  [runner] livecodebench_hard: pass 1/1 25/53 (8/25 correct so far)
+  [runner] livecodebench_hard: pass 1/1 50/53 (14/50 correct so far)
+[runner] livecodebench_hard: 26.4% (14/53)
+
+[runner] Results written to /mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/lcb-hard-port18090/runner.json

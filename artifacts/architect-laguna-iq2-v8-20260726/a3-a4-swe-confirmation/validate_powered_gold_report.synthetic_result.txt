@@ -1,0 +1,35 @@
+good accepted IDs:
+a
+c
+good summary:
+{
+  "schema": "powered_gold_acceptance.v1",
+  "accepted_count": 2,
+  "candidate_count": 3,
+  "target_count": 2,
+  "resolved_candidate_count": 2,
+  "accepted_ids_sha256": "b72cf6d7918130f75347ff0f8b6e9fde004ee6d7fc26af90a349707207f72750",
+  "report_counts": {
+    "total_instances": 3,
+    "submitted_instances": 3,
+    "completed_instances": 2,
+    "resolved_instances": 2,
+    "unresolved_instances": 1,
+    "empty_patch_instances": 0,
+    "error_instances": 0
+  },
+  "manifest_sha256": "0557b9ad2196345461743f6be3bfba8eb936c3a3e6b78abc306206efde69e143",
+  "gold_report_sha256": "a6fef6ffaecf04c391eb0bd35b2cee21e77d113c4fb08e5a34f785efa94d44d4"
+}
+
+bad fixture rejection:
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/a3-a4-swe-confirmation/validate_powered_gold_report.py", line 84, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/a3-a4-swe-confirmation/validate_powered_gold_report.py", line 76, in main
+    accepted, summary = validate(manifest, report)
+                        ~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/a3-a4-swe-confirmation/validate_powered_gold_report.py", line 40, in validate
+    raise ValueError(f"only {len(accepted)} of required {target} candidate IDs passed gold validation")
+ValueError: only 1 of required 2 candidate IDs passed gold validation

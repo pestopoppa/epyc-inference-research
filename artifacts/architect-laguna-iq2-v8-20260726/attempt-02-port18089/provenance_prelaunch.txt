@@ -1,0 +1,19 @@
+started_utc=2026-07-26T11:37:02Z
+port=18089
+llama_branch=production-consolidated-v8
+llama_head=67a433bf45a8a091d83b4ea0b32ff0735fd51800
+binary_sha256=112c560f1c978c584a9899539851348a0ce1e05cde458061c281758aff066882
+model_size_bytes=37268665376
+model_sha256_pinned=1a0d44795f71044de1a9671bf70def4655f4ab7294b002263dfc8046820bfd2c
+command=env LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp/build-hip/bin GGML_IQK=1 ROCR_VISIBLE_DEVICES=0 HIP_VISIBLE_DEVICES=0 CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=1 taskset -c 184-191 /mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Laguna-S-2.1-GGUF/Laguna-S-2.1-UD-IQ2_M.gguf --host 127.0.0.1 --port 18089 --metrics --slots --jinja --reasoning off --device ROCm0 -ngl all -fa on -np 1 -c 49152 -t 8 -tb 8 -b 2048 -ub 2048 -ctk f16 -ctv f16 
+
+
+============================ ROCm System Management Interface ============================
+===================================== KFD Processes ======================================
+No KFD PIDs currently running
+==========================================================================================
+================================== Memory Usage (Bytes) ==================================
+GPU[0]		: VRAM Total Memory (B): 68702699520
+GPU[0]		: VRAM Total Used Memory (B): 13094912
+==========================================================================================
+================================== End of ROCm SMI Log ===================================

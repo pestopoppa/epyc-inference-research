@@ -1,0 +1,21 @@
+/mnt/raid0/llm/llama.cpp-experimental/examples/gguf/gguf.cpp:263: GGML_ASSERT((mode == "r" || mode == "w") && "mode must be r or w") failed
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/lib/x86_64-linux-gnu/libthread_db.so.1".
+__internal_syscall_cancel (a1=3077343, a2=0, a3=0, a4=0, a5=0, a6=0, nr=61) at ./nptl/cancellation.c:40
+warning: 40	./nptl/cancellation.c: No such file or directory
+#0  __internal_syscall_cancel (a1=3077343, a2=0, a3=0, a4=0, a5=0, a6=0, nr=61) at ./nptl/cancellation.c:40
+40	in ./nptl/cancellation.c
+#1  __syscall_cancel (a1=3077343, a2=0, a3=0, a4=0, a5=a5@entry=0, a6=a6@entry=0, nr=61) at ./nptl/cancellation.c:75
+75	in ./nptl/cancellation.c
+#2  0x0000782815175a0f in __GI___wait4 (pid=<optimized out>, stat_loc=<optimized out>, options=<optimized out>, usage=<optimized out>) at ../sysdeps/unix/sysv/linux/wait4.c:30
+warning: 30	../sysdeps/unix/sysv/linux/wait4.c: No such file or directory
+#3  0x0000782815577533 in ggml_print_backtrace () from /mnt/raid0/llm/llama.cpp/build/bin/libggml-base.so.0
+#4  0x00007828155776e6 in ggml_abort () from /mnt/raid0/llm/llama.cpp/build/bin/libggml-base.so.0
+#5  0x00005cee2e6e09d4 in main ()
+[Inferior 1 (process 3077342) detached]

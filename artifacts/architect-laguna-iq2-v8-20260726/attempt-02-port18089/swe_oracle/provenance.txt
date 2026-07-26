@@ -1,0 +1,8 @@
+started_utc=2026-07-26T11:37:55Z
+question_count=40
+questions_sha256=f82a5191274048f2fdf432df7a0ebf4017ad982b954d6aa075326a1302df1c3c
+runner_sha256=5805d3d5092090524914585aed9a6eb78f8a570e2c39eb89b48f4993acf931bb
+conversion_sha256=ad13519ac6d56d36e6e29938b10fb500440f01780375692f2105a5c4d08202e0
+sidecar_pid=3069535
+warmup_behavior=no warmup requests; first model requests are scored suite items
+finished_utc=2026-07-26T11:57:32Z

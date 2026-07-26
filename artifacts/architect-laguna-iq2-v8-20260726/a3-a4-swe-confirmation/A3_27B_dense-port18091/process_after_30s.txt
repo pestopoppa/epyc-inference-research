@@ -1,0 +1,1 @@
+3146789 3145183 3146789 3146789       00:35 /mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf --host 127.0.0.1 --port 18091 --metrics --slots --jinja --reasoning off --device ROCm0 --device-draft ROCm0 -ngl all -fa on -np 1 -c 49152 -t 8 -tb 8 -b 2048 -ub 2048 -ctk f16 -ctv f16 --spec-type draft-mtp --spec-draft-n-max 4

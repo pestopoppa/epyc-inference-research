@@ -1,0 +1,15 @@
+protocol=Laguna LCB-hard v8 discriminating suite
+created_utc=2026-07-26T11:59:40Z
+binary=/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server
+model=/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/Laguna-S-2.1-UD-IQ2_M.gguf
+model_sha256=1a0d44795f71044de1a9671bf70def4655f4ab7294b002263dfc8046820bfd2c
+kernel=production-consolidated-v8@67a433bf45a8a091d83b4ea0b32ff0735fd51800
+server_version=10107
+device=MI210 gfx90a ROCm0
+cpu_affinity=184-191
+context=8192
+kv=f16/f16
+flash_attention=on
+draft=none
+reasoning=off
+model_sha_verified_in_prior_attempt=attempt-02-port18089/provenance_prelaunch.txt

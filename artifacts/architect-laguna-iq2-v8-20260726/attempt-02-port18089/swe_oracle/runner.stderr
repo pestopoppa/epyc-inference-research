@@ -1,0 +1,8 @@
+[runner] Waiting for server at http://127.0.0.1:18089...
+[runner] Server healthy
+
+[runner] Evaluating swebench_oracle (n=40, seed=42)...
+  [runner] swebench_oracle: pass 1/1 25/40 (0/25 correct so far)
+[runner] swebench_oracle: 0.0% (0/40)
+
+[runner] Results written to /mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/attempt-02-port18089/swe_oracle/runner.json

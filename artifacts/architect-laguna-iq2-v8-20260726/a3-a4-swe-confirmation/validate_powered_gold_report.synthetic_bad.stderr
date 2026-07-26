@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/a3-a4-swe-confirmation/validate_powered_gold_report.py", line 84, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/a3-a4-swe-confirmation/validate_powered_gold_report.py", line 76, in main
+    accepted, summary = validate(manifest, report)
+                        ~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/a3-a4-swe-confirmation/validate_powered_gold_report.py", line 40, in validate
+    raise ValueError(f"only {len(accepted)} of required {target} candidate IDs passed gold validation")
+ValueError: only 1 of required 2 candidate IDs passed gold validation

@@ -1,0 +1,173 @@
+{
+  "decision_use": "No lineup, registry, or deployment decision may use this artifact as a gate.",
+  "fixtures": [
+    {
+      "accepted_answers": [
+        "41.0g",
+        "41.0 g"
+      ],
+      "case_id": "vl_ocr_0839",
+      "image": "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0839.png",
+      "image_sha256": "46494a355e8b5762bb27b8e6b3ea1da3f7aac26963f94a15c88e0baaf2110474",
+      "prompt": "what is the value for Total carbohydrate of per 100g/ml? Answer this question using the text in the image directly.\nReply with only the answer, with no explanation.",
+      "scoring": "normalized_exact_accepted_alternative",
+      "source_dataset": "OCRBench",
+      "source_prompt": "what is the value for Total carbohydrate of per 100g/ml? Answer this question using the text in the image directly.",
+      "source_suite": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/debug/vl.yaml",
+      "source_suite_sha256": "a627f4267824a66529167c76c56b9d810f266daa2d5facf5d9f4dbbbc02491d1"
+    },
+    {
+      "accepted_answers": [
+        "63086",
+        "63 086",
+        "63,086"
+      ],
+      "case_id": "vl_ocr_0562",
+      "image": "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0562.png",
+      "image_sha256": "42dcbd752bf781257e35813a395b64cb840e51cf522300e5b58a0e7e00354c84",
+      "prompt": "How many patients came from the neighboring state of Mexico?\nReply with only the answer, with no explanation.",
+      "scoring": "normalized_exact_accepted_alternative",
+      "source_dataset": "OCRBench",
+      "source_prompt": "How many patients came from the neighboring state of Mexico?",
+      "source_suite": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/debug/vl.yaml",
+      "source_suite_sha256": "a627f4267824a66529167c76c56b9d810f266daa2d5facf5d9f4dbbbc02491d1"
+    },
+    {
+      "accepted_answers": [
+        "50.6"
+      ],
+      "case_id": "vl_ocr_0632",
+      "image": "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0632.png",
+      "image_sha256": "d9371054d5935c90bfc7a3b6ed59153cafef6f515b0b1574a6c2e4f9f44fb10c",
+      "prompt": "what is the average of all No confidence data?\nReply with only the answer, with no explanation.",
+      "scoring": "normalized_exact_accepted_alternative",
+      "source_dataset": "OCRBench",
+      "source_prompt": "what is the average of all No confidence data?",
+      "source_suite": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/debug/vl.yaml",
+      "source_suite_sha256": "a627f4267824a66529167c76c56b9d810f266daa2d5facf5d9f4dbbbc02491d1"
+    },
+    {
+      "accepted_answers": [
+        "4"
+      ],
+      "case_id": "vl_chart_test_0051",
+      "image": "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_0051.png",
+      "image_sha256": "7e5a4f85d7b36f975e3674e66bd78bdba84ea042f860c5b7c3533f9bbf3d9350",
+      "prompt": "How many games in the chart have over 40 ratings?\nReply with only the answer, with no explanation.",
+      "scoring": "normalized_exact_accepted_alternative",
+      "source_dataset": "ChartQA",
+      "source_prompt": "How many games in the chart have over 40 ratings?",
+      "source_suite": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/debug/vl.yaml",
+      "source_suite_sha256": "a627f4267824a66529167c76c56b9d810f266daa2d5facf5d9f4dbbbc02491d1"
+    },
+    {
+      "accepted_answers": [
+        "282"
+      ],
+      "case_id": "vl_chart_test_2284",
+      "image": "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_2284.png",
+      "image_sha256": "94f34618974c7d3a75b4fe7a988fd6ea0a6a602d8c5b88f9650ed746c1af3ff5",
+      "prompt": "How many enterprises were in the manufacture of electronic components industry in Sweden in 2013?\nReply with only the answer, with no explanation.",
+      "scoring": "normalized_exact_accepted_alternative",
+      "source_dataset": "ChartQA",
+      "source_prompt": "How many enterprises were in the manufacture of electronic components industry in Sweden in 2013?",
+      "source_suite": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/debug/vl.yaml",
+      "source_suite_sha256": "a627f4267824a66529167c76c56b9d810f266daa2d5facf5d9f4dbbbc02491d1"
+    },
+    {
+      "accepted_answers": [
+        "Sofia Vergara"
+      ],
+      "case_id": "vl_chart_test_2482",
+      "image": "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_2482.png",
+      "image_sha256": "781e9618e9d907cdb1431f79dca37934dd530002569181663e167573f49eda77",
+      "prompt": "Who was the highest paid actress between June 2017 and June 2018?\nReply with only the answer, with no explanation.",
+      "scoring": "normalized_exact_accepted_alternative",
+      "source_dataset": "ChartQA",
+      "source_prompt": "Who was the highest paid actress between June 2017 and June 2018?",
+      "source_suite": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/debug/vl.yaml",
+      "source_suite_sha256": "a627f4267824a66529167c76c56b9d810f266daa2d5facf5d9f4dbbbc02491d1"
+    },
+    {
+      "accepted_answers": [
+        "37"
+      ],
+      "case_id": "vl_chart_test_0109",
+      "image": "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_0109.png",
+      "image_sha256": "c743ed4ba9b071a2ea0af9c536c1adb2479739da08a2650c363c0174ac9d8005",
+      "prompt": "What's the median value of light blue bar?\nReply with only the answer, with no explanation.",
+      "scoring": "normalized_exact_accepted_alternative",
+      "source_dataset": "ChartQA",
+      "source_prompt": "What's the median value of light blue bar?",
+      "source_suite": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/debug/vl.yaml",
+      "source_suite_sha256": "a627f4267824a66529167c76c56b9d810f266daa2d5facf5d9f4dbbbc02491d1"
+    },
+    {
+      "accepted_answers": [
+        "203"
+      ],
+      "case_id": "vl_chart_test_0209",
+      "image": "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_0209.png",
+      "image_sha256": "560f26535d53c411e3542e69b761418d3dab7f9613d27b841a2cb667c7b09f26",
+      "prompt": "What is the difference in the value of High blood sugar and High Blood pressure?\nReply with only the answer, with no explanation.",
+      "scoring": "normalized_exact_accepted_alternative",
+      "source_dataset": "ChartQA",
+      "source_prompt": "What is the difference in the value of High blood sugar and High Blood pressure?",
+      "source_suite": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/debug/vl.yaml",
+      "source_suite_sha256": "a627f4267824a66529167c76c56b9d810f266daa2d5facf5d9f4dbbbc02491d1"
+    },
+    {
+      "accepted_answers": [
+        "0.235"
+      ],
+      "case_id": "vl_chart_test_0285",
+      "image": "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_0285.png",
+      "image_sha256": "a868c38074de5257e4bdaf576369b69b7e9206f1ccd1a2a1384a94afaef238ed",
+      "prompt": "What's the average of two smallest bar??\nReply with only the answer, with no explanation.",
+      "scoring": "normalized_exact_accepted_alternative",
+      "source_dataset": "ChartQA",
+      "source_prompt": "What's the average of two smallest bar??",
+      "source_suite": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/debug/vl.yaml",
+      "source_suite_sha256": "a627f4267824a66529167c76c56b9d810f266daa2d5facf5d9f4dbbbc02491d1"
+    },
+    {
+      "accepted_answers": [
+        "0.11"
+      ],
+      "case_id": "vl_chart_test_0563",
+      "image": "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_0563.png",
+      "image_sha256": "3988788ce2ed6a29224cd4048bf285e6e658509f0dd9afe0fbee117597e49b1e",
+      "prompt": "What is the difference between maximum values of International flight and Domestic flight?\nReply with only the answer, with no explanation.",
+      "scoring": "normalized_exact_accepted_alternative",
+      "source_dataset": "ChartQA",
+      "source_prompt": "What is the difference between maximum values of International flight and Domestic flight?",
+      "source_suite": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/debug/vl.yaml",
+      "source_suite_sha256": "a627f4267824a66529167c76c56b9d810f266daa2d5facf5d9f4dbbbc02491d1"
+    }
+  ],
+  "limitations": [
+    "No source-backed spatial-reasoning fixture is included in the local corpus.",
+    "This is a narrow local OCR/chart screen, not a broad role-quality certification.",
+    "Both arms must use the exact manifest prompt, image bytes, seed, temperature, and max_tokens."
+  ],
+  "protocol_status": "observation_only_unratified",
+  "role": "vision_escalation",
+  "run_contract": {
+    "max_tokens": 32,
+    "required_record_fields": [
+      "case_id",
+      "raw_content",
+      "model_sha256",
+      "mmproj_sha256",
+      "binary_sha256",
+      "endpoint_or_sidecar",
+      "started_at",
+      "finished_at",
+      "request_parameters"
+    ],
+    "response_format": "plain short answer",
+    "seed": 35,
+    "temperature": 0
+  },
+  "schema": "epyc.minicpm.phase1.m1-observation.v1"
+}

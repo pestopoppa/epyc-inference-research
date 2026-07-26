@@ -1,0 +1,37 @@
+2026-07-26T12:42:03Z
+docker_version:
+Docker version 29.1.3, build 29.1.3-0ubuntu3~25.10.1
+docker_images:
+alpine:latest	3cb067eab609	8.45MB
+docker/dockerfile:1	1a998cca4d41	29MB
+docker/dockerfile:1.7	68ebc061390d	23.8MB
+ghcr.io/lightonai/next-plaid:cpu-1.0.4	e7ffa58d0393	185MB
+ghcr.io/succinctlabs/sp1-gnark:v6.1.0	ceb60d80f46c	110MB
+rocm/vllm:rocm6.4.1_vllm_0.10.1_20250909	7379fd8f8767	29GB
+searxng/searxng:latest	193604d4b46a	257MB
+twyne-root_devcontainer-devcontainer:latest	9933ddb7231a	2.05GB
+ubuntu:25.10	3a2e92b4133d	89.8MB
+unclecode/crawl4ai:latest	0b018a44a132	3.95GB
+vsc-epyc-root-4946b483b8e7237eab13d43325d143d82bfb2ba2674062b4d2a18450da3b0dcd-uid:latest	71f0b0bf7bd2	5.02GB
+vsc-epyc-root-4946b483b8e7237eab13d43325d143d82bfb2ba2674062b4d2a18450da3b0dcd:latest	84ad9952dc52	5.02GB
+vsc-sangha-root-b3ab8c96fb6f83833c75b22e28ede209dff18c4ab3ea078f2aea4d0781ee0a31-uid:latest	49393fc9c562	2.49GB
+vsc-sangha-root-b3ab8c96fb6f83833c75b22e28ede209dff18c4ab3ea078f2aea4d0781ee0a31:latest	d914a43556e7	2.49GB
+vsc-twyne-root-bf8dac19bc0f3f99be289a4da6a1d19c42ee1244bde9124f950b32d282bc901e-uid:latest	3ca298791c79	2.05GB
+swebench_cache:
+vl_rubric/blueprint.png	14686
+vl_rubric/chart_bar.png	6046
+vl_rubric/code_python.png	7659
+vl_rubric/diagram_flowchart.png	10390
+vl_rubric/diff_images.png	3346
+vl_rubric/doc_invoice.png	15373
+vl_rubric/icon_folder.png	370
+vl_rubric/math_equation.png	4259
+vl_rubric/puzzle_grid.png	3093
+vl_rubric/satellite_sequence.png	32663
+vl_rubric/scientific_figure.png	23617
+vl_rubric/shapes_basic.png	1154
+vl_rubric/text_simple.png	5563
+prior_gold_reports:
+-rw-r--r-- 1 node node 19893 Jul 24 10:40 /mnt/raid0/llm/epyc-inference-research/gold.gold-slice-20260724.json
+-rw-r--r-- 1 node node 17458 Jul 24 10:09 /mnt/raid0/llm/epyc-inference-research/gold.gold-smoke-20260724.json
+-rw-r--r-- 1 node node 17478 Jul 24 10:19 /mnt/raid0/llm/epyc-inference-research/gold.gold-smoke-django-20260724.json

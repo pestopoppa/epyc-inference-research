@@ -1,0 +1,5 @@
+aborted_utc=2026-07-26T12:34:47Z
+reason=powered_confirmation_requires_expanded_gold_calibrated_150_plus_manifest; parent_instruction_received_before_terminal_raw_run
+runner_pid=3149228
+runner_dead=true
+sidecar_dead=true

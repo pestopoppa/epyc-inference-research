@@ -1,0 +1,7 @@
+runner=/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/v7_quality_gate_runner.py
+runner_sha256=5805d3d5092090524914585aed9a6eb78f8a570e2c39eb89b48f4993acf931bb
+started_utc=2026-07-26T12:34:19Z
+sampling=seed42,temp0.6,top_p0.95,top_k20,max_tokens3072,repeats1,concurrency1
+suite=swebench_oracle,n=40
+scoring_deferred=official FAIL_TO_PASS Docker scoring deferred pending E8 clean-CPU clearance; raw inference GPU-only
+3149228 3149209 3149228 3149228       00:03 /mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/v7_quality_gate_runner.py --port 18091 --host 127.0.0.1 --suites swebench_oracle --n 40 --limit 40 --seed 42 --max-tokens 3072 --repeats 1 --concurrency 1 --temperature 0.6 --top-p 0.95 --top-k 20 --no-enable-thinking --endpoint chat --arm A3_27B_dense_v8_mtp4 --kernel production-consolidated-v8 --binary /mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server --models /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf --questions-in /mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/questions_swebench_oracle.json --per-question-out /mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/a3-a4-swe-confirmation/A3_27B_dense-port18091/pq.jsonl --output /mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/a3-a4-swe-confirmation/A3_27B_dense-port18091/runner.json

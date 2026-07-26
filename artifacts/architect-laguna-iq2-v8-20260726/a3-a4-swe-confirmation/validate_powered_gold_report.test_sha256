@@ -1,0 +1,4 @@
+778c66569e322723631d160ec865368834fe32bfc7d92b3446afbdc1d731b592  /mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/a3-a4-swe-confirmation/validate_powered_gold_report.py
+884d5615baefc30e86924cb8b6fea6bf6c309a61cc4c0460b9ed9def60bb95af  /mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/a3-a4-swe-confirmation/test_validate_powered_gold_report.py
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  /mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/a3-a4-swe-confirmation/validate_powered_gold_report.unittest.stdout
+698d16d7b93c4bd9707d3cfacda6fb1e0fea99ed0cda6e69bedc42772940540a  /mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/a3-a4-swe-confirmation/validate_powered_gold_report.unittest.stderr

@@ -1,0 +1,80 @@
+{
+  "schema": "laguna_gpu_lane_provenance_bundle.v1",
+  "production_kernel": "production-consolidated-v8@67a433bf45a8a091d83b4ea0b32ff0735fd51800",
+  "binary": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+  "server_version": "10107",
+  "device": "MI210 gfx90a ROCm0",
+  "model": "Laguna-S-2.1-UD-IQ2_M.gguf",
+  "model_sha256": "1a0d44795f71044de1a9671bf70def4655f4ab7294b002263dfc8046820bfd2c",
+  "laguna_serving_choice": "Banked 15-cell v8 MI210 sweep run-20260725T125201Z: f16 K/V + flash attention on (median decode 35.490117 tok/s).",
+  "phase_order": [
+    "Laguna SWE raw 40/40 terminal",
+    "SWE SEARCH/REPLACE conversion terminal",
+    "Laguna SWE official Docker FAIL_TO_PASS scoring started on taskset 184-191",
+    "Laguna 18089 sidecar TERM-stopped and verified dead",
+    "Laguna LCB 18090 sidecar loaded after prior sidecar stopped; raw 53/53 terminal",
+    "Laguna LCB sidecar TERM-stopped and verified dead",
+    "A3 40-slice attempt stopped after 2 raw rows when the required expanded 150+ confirmation scope was clarified; non-result",
+    "Powered 180-candidate/160-accepted manifest prepared; Docker validation deferred for E8 clean CPU"
+  ],
+  "terminal_results": {
+    "swe": {
+      "schema": "laguna_swe_score_summary.v1",
+      "protocol": "SWE-bench_Verified FAIL_TO_PASS official harness",
+      "pinned_oracle_items": 40,
+      "resolved_pinned": 18,
+      "unresolved_pinned": 22,
+      "pinned_accuracy_percent": 45,
+      "converted_nonempty_submitted": 27,
+      "resolved_submitted": 18,
+      "submitted_only_accuracy_percent": 66.66666666666667,
+      "no_patch_count": 13,
+      "harness_errors": 0,
+      "incomplete": 0,
+      "note": "Decision score is resolved_pinned/pinned_oracle_items; submitted-only rate is diagnostic only. No-patch outputs are pinned failures."
+    },
+    "lcb": {
+      "schema": "laguna_lcb_score_summary.v1",
+      "protocol": "livecodebench_hard code_execution",
+      "pinned_items": 53,
+      "correct": 14,
+      "accuracy_percent": 26.41509433962264,
+      "errors": 0,
+      "truncated": 8,
+      "note": "Terminal runner score; truncations are included in the denominator."
+    }
+  },
+  "file_sha256": {
+    "attempt-02-port18089/config_discovery.md": "ff410071a2fb2052ef683e49b570a7336b59c2b180a3226fd3d3d1ecf7e17044",
+    "attempt-02-port18089/provenance_prelaunch.txt": "421ec1808d55dced8b75ee2fd7a077e99d1e4f0324cf43f65027fd5feecb061f",
+    "attempt-02-port18089/launch_validation.txt": "c9f1121df50b56dc1cad9f5c7b8757c93bb2c2173977d5178863038933fb311c",
+    "attempt-02-port18089/swe_oracle/runner.json": "111d73eabfd2187411d742260df918e8af196660b3e5005d0aacd028a610be74",
+    "attempt-02-port18089/swe_oracle/conversion_summary.json": "c1654c7a28270584fd0ea6f76f0414ab3ca910ac8d8a36a1c3128d71d674857a",
+    "attempt-02-port18089/swe_oracle/official_report.json": "64bf40808b9f374f4aa6c75a7f8f830223dfe1d3390c38fa5ec034ac9be65f90",
+    "attempt-02-port18089/swe_oracle/decision_score.json": "452b6bc31ad5bdf8c7738be1e2023aa6522f5b752cf879309063177ffcee675f",
+    "attempt-02-port18089/sidecar_stop_before_lcb.txt": "1ee19dea31623502a597865fb23771c3262bec600938251e0b9a340025b982d6",
+    "lcb-hard-port18090/provenance_prelaunch.txt": "b2e35f0ca5e39464a45f1ba3daea9685d2d19cd54596ce0d39e0a329acfac82d",
+    "lcb-hard-port18090/launch_validation.txt": "4b8f3fade74519a6c1e753cfbd53edba5775ad1eaa33e4ecd5d9ffee63e9f7f6",
+    "lcb-hard-port18090/runner.json": "d42b5892dea0b006931eb59cef3bc23283ac6073b5de27bed4069aea40194802",
+    "lcb-hard-port18090/decision_score.json": "c72ea7bb3a8adf26b8ce0be345778389186141e6eba668f45440a0f31bb945bc",
+    "lcb-hard-port18090/sidecar_stop.txt": "690d4c741e11b8bda38f9b012cc89843c27f8e6242b959eb0951503892909170",
+    "laguna_lcb_historical_paired_comparison.json": "5fbbc421a783f60453af8980dee69ed1ba183ddb60b41001ab99acc605bf1749",
+    "a3-a4-swe-confirmation/powered_160_candidate_manifest.json": "770ab6f86e823d334c40f01e8dc3c4042966daea921759a9591ae91c8bb7b865",
+    "a3-a4-swe-confirmation/powered_160_manifest_verification.json": "3e3af68ea39324504ca3cb585e893c651b0f6b06d9098dfcbf646a046fb6aaf6",
+    "a3-a4-swe-confirmation/POWERED_CONFIRMATION_STATUS.md": "37665eb2c4cb44915cc90bbb9c90bbaf802b89e2aa99feb0bc3f5dbbd46dfdf1",
+    "a3-a4-swe-confirmation/DEFERRED_GOLD_VALIDATION_WORKFLOW.md": "08a5d876c1ccf2d61ee31e4ad16b5fd3ab7969da550cdb3b0192414c5b91c4b9",
+    "a3-a4-swe-confirmation/validate_powered_gold_report.py": "778c66569e322723631d160ec865368834fe32bfc7d92b3446afbdc1d731b592",
+    "a3-a4-swe-confirmation/validate_powered_gold_report.synthetic_result.txt": "0d3994480f6448c716eee5276dec5f83f5b53dfae0c7b8c15aa51d2a2ab21996",
+    "a3-a4-swe-confirmation/docker_cache_preflight.txt": "a98f7c9ed1a0395994d8686c23feed0c98169ba4ced706e8e507290e43f16852",
+    "a3-a4-swe-confirmation/test_validate_powered_gold_report.py": "884d5615baefc30e86924cb8b6fea6bf6c309a61cc4c0460b9ed9def60bb95af",
+    "a3-a4-swe-confirmation/validate_powered_gold_report.unittest.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "a3-a4-swe-confirmation/validate_powered_gold_report.unittest.stderr": "698d16d7b93c4bd9707d3cfacda6fb1e0fea99ed0cda6e69bedc42772940540a"
+  },
+  "powered_confirmation_preparation": {
+    "gold_validation": "deferred_pending_E8_clean_CPU_release",
+    "manifest_validation": "passed",
+    "validator_synthetic_tests": "passed",
+    "docker_preflight": "complete_no_SWE_images_retained",
+    "validator_direct_unittests": "8 passed"
+  }
+}

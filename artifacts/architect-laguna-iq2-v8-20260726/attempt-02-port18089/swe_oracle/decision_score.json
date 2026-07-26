@@ -1,0 +1,15 @@
+{
+  "schema": "laguna_swe_score_summary.v1",
+  "protocol": "SWE-bench_Verified FAIL_TO_PASS official harness",
+  "pinned_oracle_items": 40,
+  "resolved_pinned": 18,
+  "unresolved_pinned": 22,
+  "pinned_accuracy_percent": 45,
+  "converted_nonempty_submitted": 27,
+  "resolved_submitted": 18,
+  "submitted_only_accuracy_percent": 66.66666666666667,
+  "no_patch_count": 13,
+  "harness_errors": 0,
+  "incomplete": 0,
+  "note": "Decision score is resolved_pinned/pinned_oracle_items; submitted-only rate is diagnostic only. No-patch outputs are pinned failures."
+}

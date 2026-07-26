@@ -1,0 +1,3 @@
+stop_requested_utc=2026-07-26T12:31:22Z
+pid=3091537
+sidecar_dead=true

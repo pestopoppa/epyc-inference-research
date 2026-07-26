@@ -1,0 +1,2 @@
+health_ready_utc=2026-07-26T11:34:47Z
+{"status":"ok"}
