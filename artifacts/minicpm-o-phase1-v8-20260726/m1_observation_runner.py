@@ -741,23 +741,68 @@ def validate_cgroup_evidence(value: Any, target_pid: int, label: str) -> None:
         "kill_supported",
         "populated",
         "member_pids",
+        "root_path",
+        "root_st_dev",
+        "root_st_ino",
+        "root_st_mode",
+        "root_owner_uid",
+        "root_owner_gid",
+        "mount_id",
+        "mount_parent_id",
+        "mount_major_minor",
+        "mount_root",
+        "mount_source",
+        "mount_fs_type",
     }
     if not isinstance(value, dict) or set(value) != expected_keys:
         raise ValueError(f"{label} cgroup evidence has the wrong schema")
     path = Path(str(value["path"]))
-    numeric = ("st_dev", "st_ino", "st_mode", "owner_uid", "owner_gid")
+    numeric = (
+        "st_dev",
+        "st_ino",
+        "st_mode",
+        "owner_uid",
+        "owner_gid",
+        "root_st_dev",
+        "root_st_ino",
+        "root_st_mode",
+        "root_owner_uid",
+        "root_owner_gid",
+        "mount_id",
+        "mount_parent_id",
+    )
     if (
         not path.is_absolute()
-        or path.parent != Path("/sys/fs/cgroup")
+        or path != Path("/run/epyc-m1-cgroup")
         or any(not isinstance(value[key], int) or isinstance(value[key], bool) for key in numeric)
         or not stat.S_ISDIR(value["st_mode"])
-        or stat.S_IMODE(value["st_mode"]) != 0o700
+        or stat.S_IMODE(value["st_mode"]) != 0o755
+        or value["owner_uid"] != 0
+        or value["owner_gid"] != 0
         or value["kill_supported"] is not True
         or value["populated"] is not True
         or not isinstance(value["cgroup_type"], str)
         or not value["cgroup_type"]
         or not isinstance(value["controllers"], list)
         or not all(isinstance(item, str) and item for item in value["controllers"])
+        or value["root_path"] != "/run/epyc-m1-cgroup"
+        or value["root_st_dev"] < 0
+        or value["root_st_ino"] <= 0
+        or not stat.S_ISDIR(value["root_st_mode"])
+        or stat.S_IMODE(value["root_st_mode"]) != 0o755
+        or value["root_owner_uid"] != 0
+        or value["root_owner_gid"] != 0
+        or value["mount_id"] <= 0
+        or value["mount_parent_id"] < 0
+        or not isinstance(value["mount_major_minor"], str)
+        or not re.fullmatch(r"\d+:\d+", value["mount_major_minor"])
+        or value["mount_major_minor"]
+        != f"{os.major(value['root_st_dev'])}:{os.minor(value['root_st_dev'])}"
+        or not isinstance(value["mount_root"], str)
+        or not value["mount_root"].startswith("/")
+        or not isinstance(value["mount_source"], str)
+        or not value["mount_source"]
+        or value["mount_fs_type"] != "cgroup2"
     ):
         raise ValueError(f"{label} cgroup identity is malformed")
     members = value["member_pids"]
@@ -961,6 +1006,7 @@ def validate_transport_proof(value: Any, row: dict[str, Any], launch: dict[str, 
         "server_owner_pid",
         "server_owner_fds",
         "socket_inode_owners",
+        "unreadable_proc_pids",
         "tcp_tables",
         "server_fd_links",
         "captured_at",
@@ -1014,6 +1060,39 @@ def validate_transport_proof(value: Any, row: dict[str, Any], launch: dict[str, 
         raise ValueError(
             "response transport inode is not exclusively owned by the pinned PID"
         )
+    unreadable = value["unreadable_proc_pids"]
+    if (
+        not isinstance(unreadable, list)
+        or any(
+            not isinstance(item, dict)
+            or set(item) != {"pid", "uid", "start_ticks", "error"}
+            or not isinstance(item["pid"], int)
+            or isinstance(item["pid"], bool)
+            or item["pid"] <= 0
+            or item["pid"] == owner_pid
+            or (
+                item["uid"] is not None
+                and (
+                    not isinstance(item["uid"], int)
+                    or isinstance(item["uid"], bool)
+                    or item["uid"] < 0
+                )
+            )
+            or (
+                item["start_ticks"] is not None
+                and (
+                    not isinstance(item["start_ticks"], int)
+                    or isinstance(item["start_ticks"], bool)
+                    or item["start_ticks"] <= 0
+                )
+            )
+            or item["error"] not in {"PermissionError", "OSError"}
+            for item in unreadable
+        )
+        or [item["pid"] for item in unreadable]
+        != sorted({item["pid"] for item in unreadable})
+    ):
+        raise ValueError("response transport unreadable proc disclosure is malformed")
     tables = value["tcp_tables"]
     if (
         not isinstance(tables, list)
@@ -1080,8 +1159,31 @@ def validate_response_identity(value: Any, row: dict[str, Any], launch: dict[str
     if not isinstance(value, dict) or set(value) != keys:
         raise ValueError("per-response server identity has the wrong schema")
     expected = {key: row.get(key) for key in keys}
-    if value != expected or any(launch.get(key) != expected[key] for key in keys):
+    if any(launch.get(key) != expected[key] for key in keys):
         raise ValueError("per-response server identity differs from pinned process")
+    dynamic_numa_keys = {"server_numa_maps_sha256", "server_numa_policy_counts"}
+    exact_keys = keys - dynamic_numa_keys
+    if any(value[key] != expected[key] for key in exact_keys):
+        raise ValueError("per-response server identity differs from pinned process")
+    numa_hash = value["server_numa_maps_sha256"]
+    response_policies = value["server_numa_policy_counts"]
+    pinned_policies = expected["server_numa_policy_counts"]
+    if (
+        not isinstance(numa_hash, str)
+        or SHA256_RE.fullmatch(numa_hash) is None
+        or not isinstance(response_policies, dict)
+        or not isinstance(pinned_policies, dict)
+        or set(response_policies) != set(pinned_policies)
+        or any(
+            not isinstance(policy, str)
+            or not policy
+            or not isinstance(count, int)
+            or isinstance(count, bool)
+            or count <= 0
+            for policy, count in response_policies.items()
+        )
+    ):
+        raise ValueError("per-response NUMA policy evidence drifted")
 
 
 def validate_capture_envelope(
@@ -1191,6 +1293,18 @@ def validate_capture_envelope(
             "cgroup_type",
             "controllers",
             "kill_supported",
+            "root_path",
+            "root_st_dev",
+            "root_st_ino",
+            "root_st_mode",
+            "root_owner_uid",
+            "root_owner_gid",
+            "mount_id",
+            "mount_parent_id",
+            "mount_major_minor",
+            "mount_root",
+            "mount_source",
+            "mount_fs_type",
         )
         cgroup_values = (
             authority["candidate_cgroup"],

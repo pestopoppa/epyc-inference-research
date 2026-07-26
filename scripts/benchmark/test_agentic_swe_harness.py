@@ -120,13 +120,26 @@ def test_happy_path_explore_edit_done():
         assert any("exit code 0" in m["content"] and "setup.py" in m["content"]
                    for m in second_call if m["role"] == "user")
         # trajectory: 3 turn records + 1 summary
-        lines = [json.loads(l) for l in traj.read_text().splitlines()]
+        lines = [json.loads(raw_line) for raw_line in traj.read_text().splitlines()]
         assert len(lines) == 4
-        assert [l["turn"] for l in lines[:3]] == [1, 2, 3]
-        assert [l["action"] for l in lines[:3]] == ["bash", "edit", "done"]
+        assert [record["turn"] for record in lines[:3]] == [1, 2, 3]
+        assert [record["action"] for record in lines[:3]] == ["bash", "edit", "done"]
         assert all(k in lines[0] for k in ("command", "exit", "obs_len", "wall"))
+        # Raw evidence is complete even though only a bounded observation is
+        # supplied to later model turns.
+        response = lines[0]["assistant_responses"][0]
+        assert response["text"].startswith("I'll explore")
+        assert response["capture_status"] == "captured"
+        assert response["utf8_bytes"] == len(response["text"].encode("utf-8"))
+        assert len(response["sha256"]) == 64
+        raw_obs = lines[0]["raw_observation"]
+        assert raw_obs["text"].endswith("setup.py\n")
+        assert raw_obs["capture_status"] == "captured"
         assert lines[3]["summary"]["status"] == "done"
         assert lines[3]["summary"]["patch_chars"] == len(res["model_patch"])
+        assert lines[3]["summary"]["evidence_complete"] is True
+        live = json.loads(traj.with_suffix(".jsonl.live-status.json").read_text())
+        assert live["status"] == "done" and live["evidence_complete"] is True
 
 
 def test_failed_search_then_corrected_retry():
@@ -176,9 +189,34 @@ def test_malformed_then_nudge_recovers():
         assert "no valid action" in second_call[-1]["content"]
         # nudge retry happens INSIDE turn 1 (4 model calls, 3 turns)
         assert len(client.calls) == 4 and res["turns_used"] == 3
-        lines = [json.loads(l) for l in traj.read_text().splitlines()]
+        lines = [json.loads(raw_line) for raw_line in traj.read_text().splitlines()]
         assert lines[0]["action"] == "bash" and lines[0]["nudged"] is True
+        # Both the malformed initial output and the nudge retry are durable.
+        assert [r["stage"] for r in lines[0]["assistant_responses"]] == ["initial", "nudge"]
+        assert lines[0]["assistant_responses"][0]["text"].startswith("I think")
         assert res["model_patch"]
+
+
+def test_evidence_budget_rejects_without_silent_truncation():
+    with tempfile.TemporaryDirectory() as td:
+        traj = Path(td) / "budget.jsonl"
+        long_output = "X" * 80
+        res, _client, _env = _run(
+            ["ACTION: bash\nshow", "ACTION: done"],
+            canned={"show": (0, long_output)},
+            cfg=_cfg(max_evidence_bytes=100), traj=traj)
+        lines = [json.loads(raw_line) for raw_line in traj.read_text().splitlines()]
+        # Response fits, but the separate raw command observation does not;
+        # only identity metadata is retained and the run is visibly incomplete.
+        raw_obs = lines[0]["raw_observation"]
+        assert raw_obs["capture_status"] == "rejected_over_budget"
+        assert raw_obs["utf8_bytes"] > 0 and "text" not in raw_obs
+        summary = lines[-1]["summary"]
+        assert summary["evidence_complete"] is False
+        assert "turn_1:observation:evidence_over_budget" in summary["evidence_anomalies"]
+        # The action loop itself is unchanged; evidence integrity is a
+        # separate, fail-closed forensic signal rather than a score mutation.
+        assert res["status"] == "done"
 
 
 def test_double_malformed_wastes_turn():
@@ -292,6 +330,111 @@ def test_predictions_file_shape():
         assert isinstance(rows, list) and len(rows) == 1
         assert set(rows[0]) == {"instance_id", "model_name_or_path", "model_patch"}
         assert not p.with_suffix(".json.tmp").exists()
+
+
+def test_cli_incomplete_capture_writes_prediction_but_exits_ineligible():
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        dataset = root / "dataset.json"
+        dataset.write_text(json.dumps([INSTANCE]))
+
+        def fake_run(_client, _env, _instance, _cfg, *, traj_path, clock=None):
+            traj_path.parent.mkdir(parents=True, exist_ok=True)
+            traj_path.write_text('{"fixture": "incomplete"}\n')
+            return {
+                "model_patch": "--- a/x\n+++ b/x\n", "status": "done",
+                "turns_used": 1, "edits_applied": 0, "edits_failed": 0,
+                "patch_chars": 18, "evidence_complete": False,
+                "evidence_anomalies": ["fixture_over_budget"],
+                "evidence_bytes_captured": 10, "evidence_bytes_limit": 100,
+            }
+
+        original_client, original_env, original_run = h.ModelClient, h.DockerEnv, h.run_instance
+        h.ModelClient = lambda *_args, **_kw: object()
+        h.DockerEnv = lambda *_args, **_kw: object()
+        h.run_instance = fake_run
+        try:
+            rc = h.main(["--dataset", str(dataset), "--instance-id", INSTANCE["instance_id"],
+                         "--container", "fixture", "--arm", "fixture-arm", "--out-dir", str(root / "out")])
+        finally:
+            h.ModelClient, h.DockerEnv, h.run_instance = original_client, original_env, original_run
+        assert rc == 2
+        predictions = json.loads((root / "out" / "predictions.json").read_text())
+        assert predictions[0]["model_patch"] == "--- a/x\n+++ b/x\n"
+        status = json.loads((root / "out" / "capture-status.json").read_text())
+        assert status["scoring_eligible"] is False
+        assert status["instances"][INSTANCE["instance_id"]]["capture_status"] == "incomplete"
+        assert "runner_source_sha256" in status["instances"][INSTANCE["instance_id"]]
+
+
+def test_cli_resume_refuses_missing_or_incomplete_capture_status():
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        dataset = root / "dataset.json"
+        dataset.write_text(json.dumps([INSTANCE]))
+        out_dir = root / "out"
+        h.write_predictions(out_dir / "predictions.json", [{
+            "instance_id": INSTANCE["instance_id"], "model_name_or_path": "old",
+            "model_patch": "--- a/x\n+++ b/x\n"}])
+        args = ["--dataset", str(dataset), "--instance-id", INSTANCE["instance_id"],
+                "--container", "fixture", "--arm", "fixture-arm", "--out-dir", str(out_dir)]
+        try:
+            h.main(args)
+            assert False, "missing capture status must refuse ordinary resume"
+        except SystemExit as exc:
+            assert "no capture status" in str(exc)
+
+        # Explicit legacy acceptance remains visibly provisional and exits
+        # nonzero, so it cannot be mistaken for a scoring-eligible run.
+        assert h.main(args + ["--allow-legacy-capture"]) == 2
+        status = json.loads((out_dir / "capture-status.json").read_text())
+        assert status["scoring_eligible"] is False
+        assert status["instances"][INSTANCE["instance_id"]]["capture_status"] == "legacy_provisional"
+
+        try:
+            h.main(args)
+            assert False, "incomplete capture must not be silently skipped"
+        except SystemExit as exc:
+            assert "incomplete capture" in str(exc)
+
+
+def test_cli_rejects_nonpositive_evidence_budget():
+    try:
+        h.main(["--dataset", "unused.json", "--instance-id", "x", "--container", "x",
+                "--arm", "x", "--out-dir", "unused", "--max-evidence-bytes", "0"])
+        assert False, "zero evidence budget must be rejected before dataset access"
+    except SystemExit as exc:
+        assert "must be greater than zero" in str(exc)
+
+
+def test_complete_capture_validator_rejects_mutated_provenance():
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        iid = INSTANCE["instance_id"]
+        trajectory = root / "trajectories" / f"{iid}.jsonl"
+        trajectory.parent.mkdir()
+        trajectory.write_text('{"turn": 1}\n')
+        patch = "--- a/x\n+++ b/x\n"
+        source_sha = h._sha256_file(Path(h.__file__))
+        entry = {
+            "capture_status": "complete", "evidence_complete": True,
+            "trajectory": f"trajectories/{iid}.jsonl",
+            "trajectory_sha256": h._sha256_file(trajectory),
+            "runner_source_sha256": source_sha,
+            "model_patch_utf8_bytes": len(patch.encode("utf-8")),
+            "model_patch_sha256": h.hashlib.sha256(patch.encode("utf-8")).hexdigest(),
+        }
+        prediction = {"instance_id": iid, "model_patch": patch}
+        assert h.validate_complete_capture_entry(iid, prediction, entry, root, source_sha) is None
+
+        mutated_patch = patch[:-1] + "x"
+        assert "model_patch SHA-256 mismatch" in h.validate_complete_capture_entry(
+            iid, {**prediction, "model_patch": mutated_patch}, entry, root, source_sha)
+        assert "runner source SHA-256 mismatch" in h.validate_complete_capture_entry(
+            iid, prediction, entry, root, "0" * 64)
+        trajectory.write_text('{"turn": "tampered"}\n')
+        assert "trajectory SHA-256 mismatch" in h.validate_complete_capture_entry(
+            iid, prediction, entry, root, source_sha)
 
 
 if __name__ == "__main__":

@@ -38,7 +38,9 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import hashlib
 import json
+import os
 import posixpath
 import re
 import shlex
@@ -58,6 +60,11 @@ DEFAULT_MAX_WALL_S = 1800.0
 DEFAULT_CMD_TIMEOUT = 120
 DEFAULT_MAX_TOKENS = 2048
 OBS_TRUNCATE_CHARS = 4000
+# Raw model/tool evidence is intentionally much larger than the model-context
+# budget.  It is bounded per instance so a pathological command cannot fill a
+# filesystem; exceeding it makes the trajectory evidence-incomplete rather
+# than silently shortening data that may later be inspected or scored.
+DEFAULT_MAX_EVIDENCE_BYTES = 64 * 1024 * 1024
 TIMEOUT_EXIT = 124
 
 GIT_DIFF_CMD = f"git -C {TESTBED} diff"
@@ -73,13 +80,15 @@ SR = re.compile(r"<<<<<<<+\s*SEARCH\s*\n(.*?)\n?=======\s*\n(.*?)\n?>>>>>>>+\s*R
 
 def ws_norm_find(hay: str, needle: str) -> tuple[int, int] | None:
     """Find needle in hay comparing lines stripped of trailing ws; return char span."""
-    h_lines = hay.split("\n"); n_lines = [l.rstrip() for l in needle.split("\n")]
-    if not n_lines: return None
-    stripped = [l.rstrip() for l in h_lines]
+    h_lines = hay.split("\n")
+    n_lines = [line.rstrip() for line in needle.split("\n")]
+    if not n_lines:
+        return None
+    stripped = [line.rstrip() for line in h_lines]
     for i in range(len(stripped) - len(n_lines) + 1):
         if stripped[i:i + len(n_lines)] == n_lines:
-            start = sum(len(l) + 1 for l in h_lines[:i])
-            length = sum(len(l) + 1 for l in h_lines[i:i + len(n_lines)]) - 1
+            start = sum(len(line) + 1 for line in h_lines[:i])
+            length = sum(len(line) + 1 for line in h_lines[i:i + len(n_lines)]) - 1
             return start, start + length
     return None
 
@@ -542,7 +551,10 @@ class AgentConfig:
     obs_limit: int = OBS_TRUNCATE_CHARS
     max_history_chars: int = 150_000
     keep_recent: int = 6
-    log_full_responses: bool = False
+    max_evidence_bytes: int = DEFAULT_MAX_EVIDENCE_BYTES
+    # Retained for CLI compatibility.  Full assistant responses are now
+    # always captured in a trajectory when traj_path is supplied.
+    log_full_responses: bool = True
 
 
 def _append_jsonl(path: Path | None, obj: dict) -> None:
@@ -551,6 +563,112 @@ def _append_jsonl(path: Path | None, obj: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a") as f:
         f.write(json.dumps(obj) + "\n")
+
+
+def _text_evidence(text: str, *, remaining_bytes: int) -> tuple[dict, int, str | None]:
+    """Return durable text evidence without ever silently truncating it.
+
+    The returned dict always carries length and SHA-256 identity.  Full text
+    is present only when it fits in the configured instance-level budget; a
+    caller must treat ``rejected_over_budget`` as evidence-incomplete.
+    """
+    encoded = text.encode("utf-8")
+    n_bytes = len(encoded)
+    rec = {
+        "chars": len(text),
+        "utf8_bytes": n_bytes,
+        "sha256": hashlib.sha256(encoded).hexdigest(),
+    }
+    if n_bytes > remaining_bytes:
+        rec["capture_status"] = "rejected_over_budget"
+        return rec, 0, "evidence_over_budget"
+    rec["capture_status"] = "captured"
+    rec["text"] = text
+    return rec, n_bytes, None
+
+
+def _write_live_status(path: Path | None, obj: dict) -> None:
+    """Atomically expose per-turn trajectory integrity while an instance runs."""
+    if path is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(obj, indent=2, sort_keys=True) + "\n")
+    tmp.replace(path)
+
+
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _load_capture_status(path: Path) -> dict[str, dict]:
+    """Load a capture-status manifest, rejecting malformed structure."""
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError) as exc:
+        raise SystemExit(f"invalid capture-status manifest {path}: {exc}") from exc
+    entries = payload.get("instances")
+    if not isinstance(entries, dict):
+        raise SystemExit(f"invalid capture-status manifest {path}: missing instances object")
+    return entries
+
+
+def _write_capture_status(path: Path, entries: dict[str, dict],
+                          prediction_ids: set[str]) -> bool:
+    """Atomically write the run-level eligibility record.
+
+    ``predictions.json`` deliberately keeps SWE-bench's three-field schema.
+    This manifest is therefore the required companion for judging whether the
+    prediction set has complete forensic capture.
+    """
+    incomplete = sorted(
+        iid for iid in prediction_ids
+        if not entries.get(iid, {}).get("evidence_complete", False))
+    missing = sorted(iid for iid in prediction_ids if iid not in entries)
+    scoring_eligible = not incomplete and not missing
+    payload = {
+        "schema_version": 1,
+        "scoring_eligible": scoring_eligible,
+        "prediction_instance_ids": sorted(prediction_ids),
+        "incomplete_capture_instance_ids": incomplete,
+        "missing_capture_status_instance_ids": missing,
+        "instances": entries,
+    }
+    _write_live_status(path, payload)
+    return scoring_eligible
+
+
+def validate_complete_capture_entry(instance_id: str, prediction: dict, entry: dict,
+                                    out_dir: Path, runner_source_sha256: str) -> str | None:
+    """Return a provenance mismatch reason, or ``None`` for a safe resume."""
+    required = ("capture_status", "evidence_complete", "trajectory", "trajectory_sha256",
+                "runner_source_sha256", "model_patch_utf8_bytes", "model_patch_sha256")
+    missing = [key for key in required if key not in entry]
+    if missing:
+        return f"missing required capture field(s): {', '.join(missing)}"
+    if entry["capture_status"] != "complete" or entry["evidence_complete"] is not True:
+        return "capture entry is not complete"
+    if entry["runner_source_sha256"] != runner_source_sha256:
+        return "runner source SHA-256 mismatch"
+    expected_trajectory = Path("trajectories") / f"{instance_id}.jsonl"
+    if entry["trajectory"] != str(expected_trajectory):
+        return "trajectory path does not match the instance"
+    trajectory = out_dir / expected_trajectory
+    if not trajectory.is_file():
+        return "trajectory file is missing"
+    if _sha256_file(trajectory) != entry["trajectory_sha256"]:
+        return "trajectory SHA-256 mismatch"
+    patch = prediction.get("model_patch")
+    if not isinstance(patch, str):
+        return "prediction model_patch is missing or not text"
+    encoded_patch = patch.encode("utf-8")
+    if len(encoded_patch) != entry["model_patch_utf8_bytes"]:
+        return "prediction model_patch UTF-8 byte count mismatch"
+    if hashlib.sha256(encoded_patch).hexdigest() != entry["model_patch_sha256"]:
+        return "prediction model_patch SHA-256 mismatch"
+    return None
 
 
 def run_instance(client, env, instance: dict, cfg: AgentConfig,
@@ -566,6 +684,34 @@ def run_instance(client, env, instance: dict, cfg: AgentConfig,
     created_files: list[str] = []
     status = "turns_exhausted"
     turns_used = 0
+    evidence_bytes = 0
+    evidence_complete = True
+    anomalies: list[str] = []
+    live_status_path = (traj_path.with_suffix(traj_path.suffix + ".live-status.json")
+                        if traj_path is not None else None)
+
+    def capture_text(text: str) -> tuple[dict, str | None]:
+        nonlocal evidence_bytes, evidence_complete
+        evidence, consumed, anomaly = _text_evidence(
+            text, remaining_bytes=max(0, cfg.max_evidence_bytes - evidence_bytes))
+        evidence_bytes += consumed
+        if anomaly:
+            evidence_complete = False
+        return evidence, anomaly
+
+    def persist_turn(rec: dict) -> None:
+        _append_jsonl(traj_path, rec)
+        _write_live_status(live_status_path, {
+            "schema_version": 1,
+            "instance_id": instance.get("instance_id", "?"),
+            "status": "running",
+            "last_completed_turn": rec["turn"],
+            "last_action": rec.get("action"),
+            "evidence_complete": evidence_complete,
+            "evidence_bytes_captured": evidence_bytes,
+            "evidence_bytes_limit": cfg.max_evidence_bytes,
+            "anomalies": anomalies,
+        })
 
     for turn in range(1, cfg.max_turns + 1):
         if clock() - t0 > cfg.max_wall_s:
@@ -574,6 +720,7 @@ def run_instance(client, env, instance: dict, cfg: AgentConfig,
         compact_history(messages, cfg.max_history_chars, cfg.keep_recent)
 
         resp = client.chat(messages, cfg.max_tokens)
+        responses = [("initial", resp)]
         messages.append({"role": "assistant", "content": resp})
         act = parse_action(resp)
         nudged = False
@@ -582,13 +729,19 @@ def run_instance(client, env, instance: dict, cfg: AgentConfig,
             nudged = True
             messages.append({"role": "user", "content": NUDGE})
             resp = client.chat(messages, cfg.max_tokens)
+            responses.append(("nudge", resp))
             messages.append({"role": "assistant", "content": resp})
             act = parse_action(resp)
 
         turns_used = turn
-        rec: dict = {"turn": turn, "nudged": nudged}
-        if cfg.log_full_responses:
-            rec["response"] = resp
+        rec: dict = {"turn": turn, "nudged": nudged,
+                     "assistant_responses": []}
+        for stage, response in responses:
+            evidence, anomaly = capture_text(response)
+            evidence["stage"] = stage
+            rec["assistant_responses"].append(evidence)
+            if anomaly:
+                anomalies.append(f"turn_{turn}:assistant_response:{anomaly}")
 
         if act.kind is None:  # second failure in a row: wasted turn
             malformed_total += 1
@@ -599,7 +752,11 @@ def run_instance(client, env, instance: dict, cfg: AgentConfig,
             status = "done"
             rec.update({"action": "done", "command": None, "exit": None,
                         "obs_len": 0, "wall": round(clock() - t0, 2)})
-            _append_jsonl(traj_path, rec)
+            observation, anomaly = capture_text("")
+            rec["raw_observation"] = observation
+            if anomaly:
+                anomalies.append(f"turn_{turn}:observation:{anomaly}")
+            persist_turn(rec)
             break
         elif act.kind == "bash":
             code, out = env.run(act.command, cfg.cmd_timeout)
@@ -617,10 +774,18 @@ def run_instance(client, env, instance: dict, cfg: AgentConfig,
                         "exit": 0 if n_fail == 0 else 1,
                         "edits_applied": n_ok, "edits_failed": n_fail})
 
-        obs = truncate_output(obs, cfg.obs_limit)
-        messages.append({"role": "user", "content": obs})
-        rec.update({"obs_len": len(obs), "wall": round(clock() - t0, 2)})
-        _append_jsonl(traj_path, rec)
+        # Preserve the exact tool/edit observation for audit.  Only the
+        # bounded head+tail representation is returned to the model context.
+        raw_observation, anomaly = capture_text(obs)
+        rec["raw_observation"] = raw_observation
+        if anomaly:
+            anomalies.append(f"turn_{turn}:observation:{anomaly}")
+        model_observation = truncate_output(obs, cfg.obs_limit)
+        messages.append({"role": "user", "content": model_observation})
+        rec.update({"obs_len": len(model_observation),
+                    "raw_obs_len": len(obs),
+                    "wall": round(clock() - t0, 2)})
+        persist_turn(rec)
 
     patch = extract_patch(env, created_files, cfg.cmd_timeout)
     summary = {
@@ -632,8 +797,22 @@ def run_instance(client, env, instance: dict, cfg: AgentConfig,
         "malformed": malformed_total,
         "patch_chars": len(patch),
         "wall_s": round(clock() - t0, 2),
+        "evidence_complete": evidence_complete,
+        "evidence_bytes_captured": evidence_bytes,
+        "evidence_bytes_limit": cfg.max_evidence_bytes,
+        "evidence_anomalies": anomalies,
     }
     _append_jsonl(traj_path, {"summary": summary})
+    _write_live_status(live_status_path, {
+        "schema_version": 1,
+        "instance_id": instance.get("instance_id", "?"),
+        "status": status,
+        "last_completed_turn": turns_used,
+        "evidence_complete": evidence_complete,
+        "evidence_bytes_captured": evidence_bytes,
+        "evidence_bytes_limit": cfg.max_evidence_bytes,
+        "anomalies": anomalies,
+    })
     return {**summary, "model_patch": patch}
 
 
@@ -680,9 +859,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--request-timeout", type=int, default=3600)
     p.add_argument("--log-full-responses", action="store_true",
-                   help="store full assistant text in trajectory records")
+                   help="deprecated compatibility flag; full responses are always captured")
+    p.add_argument("--max-evidence-bytes", type=int, default=DEFAULT_MAX_EVIDENCE_BYTES,
+                   help="maximum raw UTF-8 evidence captured per instance (default: 64 MiB)")
     p.add_argument("--no-resume", action="store_true",
                    help="rerun instances already present in predictions.json")
+    p.add_argument("--allow-legacy-capture", action="store_true",
+                   help="resume legacy predictions without capture status as provisional; "
+                        "the run remains scoring-ineligible")
     p.add_argument("--dry-run", action="store_true",
                    help="print the plan; contact no server and no docker")
     return p
@@ -691,8 +875,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def _resolve_ids(args) -> list[str]:
     ids = list(args.instance_id)
     if args.instances_file:
-        ids += [l.strip() for l in Path(args.instances_file).read_text().splitlines()
-                if l.strip()]
+        ids += [line.strip() for line in Path(args.instances_file).read_text().splitlines()
+                if line.strip()]
     return ids
 
 
@@ -712,6 +896,9 @@ def _resolve_containers(args, ids: list[str]) -> dict[str, str]:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_arg_parser().parse_args(argv)
+    if args.max_evidence_bytes <= 0:
+        raise SystemExit("--max-evidence-bytes must be greater than zero")
+    runner_source_sha256 = _sha256_file(Path(__file__))
     ids = _resolve_ids(args)
     if not ids:
         raise SystemExit("no instances given (--instance-id / --instances-file)")
@@ -722,8 +909,10 @@ def main(argv: list[str] | None = None) -> int:
 
     out_dir = Path(args.out_dir)
     preds_path = out_dir / "predictions.json"
+    capture_status_path = out_dir / "capture-status.json"
     cfg = AgentConfig(max_turns=args.max_turns, max_wall_s=args.max_wall_s,
                       cmd_timeout=args.cmd_timeout, max_tokens=args.max_tokens,
+                      max_evidence_bytes=args.max_evidence_bytes,
                       log_full_responses=args.log_full_responses)
 
     if args.dry_run:
@@ -736,11 +925,13 @@ def main(argv: list[str] | None = None) -> int:
             "sampling": {"temperature": args.temperature, "top_p": args.top_p,
                          "top_k": args.top_k, "seed": args.seed},
             "budgets": {"max_turns": cfg.max_turns, "max_wall_s": cfg.max_wall_s,
-                        "cmd_timeout": cfg.cmd_timeout, "max_tokens": cfg.max_tokens},
+                        "cmd_timeout": cfg.cmd_timeout, "max_tokens": cfg.max_tokens,
+                        "max_evidence_bytes": cfg.max_evidence_bytes},
             "instances": ids,
             "containers": {i: cmap.get(i, "<unset>") for i in ids},
             "predictions": str(preds_path),
             "trajectories": str(out_dir / "trajectories"),
+            "capture_status": str(capture_status_path),
         }
         print("=== agentic_swe_harness DRY-RUN (no server, no docker) ===")
         print(json.dumps(plan, indent=2))
@@ -754,6 +945,38 @@ def main(argv: list[str] | None = None) -> int:
         except (json.JSONDecodeError, OSError):
             existing = []
     by_id = {r["instance_id"]: r for r in existing}
+    capture_entries = _load_capture_status(capture_status_path)
+
+    # Existing predictions are only resumable with a complete, matching
+    # capture-status row.  An old three-field prediction has no evidence
+    # provenance and must be explicitly marked provisional by the operator.
+    for iid in ids:
+        if iid not in by_id or args.no_resume:
+            continue
+        entry = capture_entries.get(iid)
+        if entry is None:
+            if not args.allow_legacy_capture:
+                raise SystemExit(
+                    f"{iid}: existing prediction has no capture status; rerun with "
+                    "--no-resume, or explicitly use --allow-legacy-capture "
+                    "(provisional and scoring-ineligible)")
+            capture_entries[iid] = {
+                "capture_status": "legacy_provisional",
+                "evidence_complete": False,
+                "anomalies": ["legacy_prediction_without_capture_status"],
+            }
+            print(f"{iid}: legacy prediction accepted as provisional; scoring remains ineligible")
+        elif not entry.get("evidence_complete", False):
+            raise SystemExit(
+                f"{iid}: existing prediction has incomplete capture; rerun with --no-resume "
+                "before scoring")
+        else:
+            mismatch = validate_complete_capture_entry(
+                iid, by_id[iid], entry, out_dir, runner_source_sha256)
+            if mismatch:
+                raise SystemExit(
+                    f"{iid}: complete capture provenance validation failed ({mismatch}); "
+                    "rerun with --no-resume before scoring")
 
     client = ModelClient(args.server_url, args.model,
                          temperature=args.temperature, top_p=args.top_p,
@@ -769,10 +992,33 @@ def main(argv: list[str] | None = None) -> int:
         by_id[iid] = {"instance_id": iid, "model_name_or_path": args.arm,
                       "model_patch": res["model_patch"]}
         write_predictions(preds_path, list(by_id.values()))  # after EVERY instance
+        capture_entries[iid] = {
+            "capture_status": ("complete" if res["evidence_complete"]
+                               else "incomplete"),
+            "evidence_complete": res["evidence_complete"],
+            "anomalies": res["evidence_anomalies"],
+            "evidence_bytes_captured": res["evidence_bytes_captured"],
+            "evidence_bytes_limit": res["evidence_bytes_limit"],
+            "trajectory": str(traj.relative_to(out_dir)),
+            "trajectory_sha256": _sha256_file(traj),
+            "runner_source_sha256": runner_source_sha256,
+            "model_patch_utf8_bytes": len(res["model_patch"].encode("utf-8")),
+            "model_patch_sha256": hashlib.sha256(
+                res["model_patch"].encode("utf-8")).hexdigest(),
+        }
+        scoring_eligible = _write_capture_status(
+            capture_status_path, capture_entries, set(by_id))
         print(f"{iid}: {res['status']} turns={res['turns_used']} "
               f"edits={res['edits_applied']}/{res['edits_applied'] + res['edits_failed']} "
-              f"patch_chars={res['patch_chars']}")
+              f"patch_chars={res['patch_chars']} capture="
+              f"{'complete' if res['evidence_complete'] else 'INCOMPLETE'}")
+    scoring_eligible = _write_capture_status(
+        capture_status_path, capture_entries, set(by_id))
     print(f"predictions -> {preds_path}")
+    if not scoring_eligible:
+        print(f"capture status -> {capture_status_path} (SCORING INELIGIBLE)", file=sys.stderr)
+        return 2
+    print(f"capture status -> {capture_status_path} (scoring eligible)")
     return 0
 
 

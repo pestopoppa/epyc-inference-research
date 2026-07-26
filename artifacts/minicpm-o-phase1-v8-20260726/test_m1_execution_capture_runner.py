@@ -88,22 +88,167 @@ class M1ExecutionCaptureTests(unittest.TestCase):
             "version": capture.FROZEN_VERSION.rstrip("\n"),
         }
         self.cgroup = capture.CgroupBinding(
-            path="/sys/fs/cgroup/epyc-m1-test",
+            path="/run/epyc-m1-cgroup",
             st_dev=1,
             st_ino=2,
-            st_mode=stat.S_IFDIR | 0o700,
-            owner_uid=os.getuid(),
-            owner_gid=os.getgid(),
+            st_mode=stat.S_IFDIR | 0o755,
+            owner_uid=0,
+            owner_gid=0,
             cgroup_type="domain",
             controllers=("cpu", "memory"),
             kill_supported=True,
             populated=True,
             member_pids=(4242,),
+            root_path="/run/epyc-m1-cgroup",
+            root_st_dev=1,
+            root_st_ino=3,
+            root_st_mode=stat.S_IFDIR | 0o755,
+            root_owner_uid=0,
+            root_owner_gid=0,
+            mount_id=42,
+            mount_parent_id=1,
+            mount_major_minor="0:1",
+            mount_root="/epyc-m1-source-test",
+            mount_source="cgroup",
+            mount_fs_type="cgroup2",
         )
         self.write_authority()
 
     def tearDown(self):
         self.temp.cleanup()
+
+    @staticmethod
+    def stat_result(mode, *, dev=1, ino=2, uid=0, gid=0):
+        return os.stat_result((mode, ino, dev, 1, uid, gid, 0, 0, 0, 0))
+
+    def stable_root_binding(self, *, runtime_mode=0o755, root_mode=0o755,
+                            filesystem="cgroup2", mount_dev="0:1",
+                            root_ino=3, opened_ino=3):
+        runtime = self.stat_result(stat.S_IFDIR | runtime_mode, ino=1)
+        root = self.stat_result(stat.S_IFDIR | root_mode, ino=root_ino)
+        opened = self.stat_result(stat.S_IFDIR | root_mode, ino=opened_ino)
+        mountinfo = (
+            f"42 1 {mount_dev} /epyc-m1-source-test /run/epyc-m1-cgroup "
+            f"rw,nosuid,nodev - {filesystem} cgroup rw\n"
+        )
+
+        def lstat(path):
+            if path == capture.RUNTIME_ROOT:
+                return runtime
+            if path == capture.CGROUP_ROOT:
+                return root
+            self.fail(f"unexpected lstat: {path}")
+
+        with (
+            mock.patch.object(Path, "lstat", lstat),
+            mock.patch.object(Path, "resolve", lambda path, **_kwargs: path),
+            mock.patch.object(capture.os, "open", return_value=77),
+            mock.patch.object(capture.os, "fstat", return_value=opened),
+            mock.patch.object(capture.os, "close"),
+        ):
+            return capture.bind_stable_cgroup_root(
+                mountinfo_reader=lambda: mountinfo
+            )
+
+    def test_stable_root_accepts_cgroup2_mount_without_trusting_sysfs_parent(self):
+        binding = self.stable_root_binding()
+        self.assertEqual(binding.path, "/run/epyc-m1-cgroup")
+        self.assertEqual(binding.mount_root, "/epyc-m1-source-test")
+        self.assertEqual(binding.mount_source, "cgroup")
+        self.assertEqual(binding.mount_fs_type, "cgroup2")
+
+    def test_mountinfo_parser_decodes_paths_and_rejects_malformed_rows(self):
+        rows = capture.parse_mountinfo(
+            "42 1 0:1 /epyc\\040source /run/epyc-m1-cgroup rw - cgroup2 cgroup rw\n"
+        )
+        self.assertEqual(rows[0]["mount_root"], "/epyc source")
+        with self.assertRaisesRegex(RuntimeError, "malformed"):
+            capture.parse_mountinfo("not-a-mountinfo-row\n")
+
+    def test_stable_root_rejects_non_cgroup_mount_and_identity_drift(self):
+        with self.assertRaisesRegex(RuntimeError, "exact cgroup2 mountpoint"):
+            self.stable_root_binding(filesystem="tmpfs")
+        with self.assertRaisesRegex(RuntimeError, "mount device differs"):
+            self.stable_root_binding(mount_dev="0:2")
+        with self.assertRaisesRegex(RuntimeError, "identity changed"):
+            self.stable_root_binding(root_ino=3, opened_ino=4)
+
+    def test_open_stable_root_revalidates_mount_id_while_fd_is_held(self):
+        root = capture.CgroupRootBinding(
+            path="/run/epyc-m1-cgroup", st_dev=1, st_ino=3,
+            st_mode=stat.S_IFDIR | 0o755, owner_uid=0, owner_gid=0,
+            mount_id=42, mount_parent_id=1, mount_major_minor="0:1",
+            mount_root="/epyc-m1-source-test", mount_source="cgroup",
+            mount_fs_type="cgroup2",
+        )
+        changed_mount = (
+            "43 1 0:1 /epyc-m1-source-test /run/epyc-m1-cgroup "
+            "rw - cgroup2 cgroup rw\n"
+        )
+        with mock.patch.object(
+            capture.os, "fstat", return_value=self.stat_result(stat.S_IFDIR | 0o755, ino=3)
+        ):
+            with self.assertRaisesRegex(RuntimeError, "mount identity drifted"):
+                capture.verify_open_stable_cgroup_root(
+                    root, 77, mountinfo_reader=lambda: changed_mount
+                )
+
+    def test_stable_root_requires_exact_runtime_and_root_modes(self):
+        for mode in (0o700, 0o750, 0o775):
+            with self.subTest(runtime_mode=oct(mode)):
+                with self.assertRaisesRegex(RuntimeError, "root:root mode 0755"):
+                    self.stable_root_binding(runtime_mode=mode)
+        with self.assertRaisesRegex(RuntimeError, "root:root mode 0755"):
+            self.stable_root_binding(root_mode=0o700)
+
+    def test_cgroup_binding_rejects_stable_root_and_mount_evidence_drift(self):
+        serialized = capture.dataclasses.asdict(self.cgroup)
+        for key, value in (
+            ("root_path", "/run/not-epyc"),
+            ("root_owner_uid", 1000),
+            ("root_st_mode", stat.S_IFDIR | 0o775),
+            ("mount_major_minor", "0:2"),
+            ("mount_root", "relative-source"),
+            ("mount_fs_type", "tmpfs"),
+        ):
+            with self.subTest(key=key):
+                forged = dict(serialized)
+                forged[key] = value
+                with self.assertRaisesRegex(RuntimeError, "malformed|path"):
+                    capture.cgroup_binding_from_dict(forged)
+
+    def test_runbook_uses_bind_mount_and_inode_checked_nonrecursive_cleanup(self):
+        runbook = (HERE / "M1_EXECUTION_RUNBOOK.md").read_text(encoding="utf-8")
+        self.assertIn("/usr/bin/mount', '--bind'", runbook)
+        self.assertIn("f'/proc/self/fd/{source_fd}'", runbook)
+        self.assertIn(
+            "os.chown('cgroup.procs', uid, gid, dir_fd=source_fd", runbook
+        )
+        self.assertNotIn(
+            "os.chown('cgroup.procs', uid, gid, dir_fd=target_fd", runbook
+        )
+        self.assertLess(
+            runbook.index("run_fd = os.open('/run'"),
+            runbook.index("os.mkdir(target.name"),
+        )
+        self.assertLess(
+            runbook.index("/run must be root:root mode 0755"),
+            runbook.index("os.mkdir(target.name"),
+        )
+        self.assertIn("except BaseException as original_error:", runbook)
+        self.assertIn("subprocess.run(['/usr/bin/umount', str(target)]", runbook)
+        self.assertIn("os.rmdir(target.name, dir_fd=run_fd)", runbook)
+        self.assertIn("os.rmdir(source.name, dir_fd=parent_fd)", runbook)
+        self.assertNotIn("rm -rf", runbook)
+        cleanup = runbook[runbook.index("cleanup_on_exit() {"):]
+        self.assertLess(
+            cleanup.index('/usr/bin/umount -- "$CGROUP_ROOT"'),
+            cleanup.index('/usr/bin/rmdir -- "$CGROUP_ROOT"'),
+        )
+        self.assertLess(
+            cleanup.index('/usr/bin/rmdir -- "$CGROUP_ROOT"'),
+            cleanup.index('/usr/bin/rmdir -- "$SOURCE_CGROUP"'),
+        )
 
     @staticmethod
     def digest(path):
@@ -267,6 +412,7 @@ class M1ExecutionCaptureTests(unittest.TestCase):
             "server_owner_pid": server_pid,
             "server_owner_fds": [12],
             "socket_inode_owners": [{"pid": server_pid, "fds": [12]}],
+            "unreadable_proc_pids": [],
             "tcp_tables": [
                 {
                     "path": "/proc/net/tcp",
@@ -901,6 +1047,61 @@ Runtime Version: 1.14
                 LiveSocket(), 4242, proc_root=proc_root
             )
 
+    def test_live_transport_proof_discloses_unreadable_unrelated_pid(self):
+        proc_root = self.run_dir / "proc-transport-unreadable"
+        (proc_root / "net").mkdir(parents=True)
+        (proc_root / "4242" / "fd").mkdir(parents=True)
+        (proc_root / "1" / "fd").mkdir(parents=True)
+        tcp = (
+            "  sl  local_address rem_address st tx_queue rx_queue tr tm->when "
+            "retrnsmt uid timeout inode\n"
+            "  0: 0100007F:4E1F 0100007F:C350 01 00000000:00000000 "
+            "00:00000000 00000000 1000 0 55555\n"
+        )
+        (proc_root / "net" / "tcp").write_text(tcp)
+        (proc_root / "net" / "tcp6").write_text(
+            "  sl  local_address rem_address st tx_queue rx_queue tr tm->when "
+            "retrnsmt uid timeout inode\n"
+        )
+        (proc_root / "4242" / "fd" / "12").symlink_to("socket:[55555]")
+        stat_fields = ["S", *(["0"] * 18), "123"]
+        (proc_root / "1" / "stat").write_text(f"1 (init) {' '.join(stat_fields)}\n")
+
+        class LiveSocket:
+            family = capture.socket.AF_INET
+
+            @staticmethod
+            def getsockname():
+                return ("127.0.0.1", 50000)
+
+            @staticmethod
+            def getpeername():
+                return ("127.0.0.1", 19999)
+
+        original_iterdir = Path.iterdir
+
+        def iterdir(path):
+            if path == proc_root / "1" / "fd":
+                raise PermissionError("hidepid")
+            return original_iterdir(path)
+
+        with mock.patch.object(Path, "iterdir", iterdir):
+            proof = capture.capture_transport_proof(
+                LiveSocket(), 4242, proc_root=proc_root
+            )
+        self.assertEqual(
+            proof["unreadable_proc_pids"],
+            [{
+                "pid": 1,
+                "uid": (proc_root / "1").stat().st_uid,
+                "start_ticks": 123,
+                "error": "PermissionError",
+            }],
+        )
+        self.assertEqual(
+            proof["socket_inode_owners"], [{"pid": 4242, "fds": [12]}]
+        )
+
     def test_load_log_inode_drift_from_authority_is_rejected(self):
         replacement = self.load_log.with_suffix(".replacement")
         replacement.write_text(self.load_log.read_text(encoding="utf-8"), encoding="utf-8")
@@ -1324,7 +1525,61 @@ Runtime Version: 1.14
                 cgroup_reader=lambda *_args, **_kwargs: self.fail(
                     "live cgroup must not be read for receipt validation"
                 ),
+                )
+
+    def test_cleanup_polls_until_gpu_becomes_idle(self):
+        self.call(self.successful_response)
+        receipt = self.run_dir / "cleanup-delayed-gpu.json"
+        snapshots = [
+            self.gpu_snapshot("busy-1", kfd_pids=(9999,)),
+            self.gpu_snapshot("busy-2", kfd_pids=(9999,)),
+            self.gpu_snapshot("idle", kfd_pids=()),
+        ]
+        clock = iter((0.0, 0.0, 0.1, 0.2))
+        result = capture.cleanup_captured_candidate(
+            run_dir=self.run_dir,
+            capture_path=self.launch_record,
+            receipt_path=receipt,
+            timeout_s=1,
+            listeners_reader=lambda: [],
+            gpu_reader=lambda _phase: snapshots.pop(0),
+            cgroup_reader=lambda _path, require_empty=False, **_kwargs: (
+                capture.dataclasses.replace(
+                    self.cgroup, populated=False, member_pids=()
+                )
+            ),
+            cgroup_killer=lambda *_args: (),
+            monotonic=lambda: next(clock),
+            sleeper=lambda _seconds: None,
+        )
+        self.assertEqual(result["gpu_idle_poll_count"], 3)
+        self.assertEqual(result["gpu_idle_wait_seconds"], 0.2)
+        self.assertEqual(result["gpu_state_post_cleanup"]["kfd_pids"], [])
+
+    def test_cleanup_gpu_idle_poll_times_out(self):
+        self.call(self.successful_response)
+        receipt = self.run_dir / "cleanup-gpu-timeout.json"
+        clock = iter((0.0, 1.0))
+        with self.assertRaisesRegex(RuntimeError, "did not return to an idle"):
+            capture.cleanup_captured_candidate(
+                run_dir=self.run_dir,
+                capture_path=self.launch_record,
+                receipt_path=receipt,
+                timeout_s=0.5,
+                listeners_reader=lambda: [],
+                gpu_reader=lambda phase: self.gpu_snapshot(
+                    phase, kfd_pids=(9999,)
+                ),
+                cgroup_reader=lambda _path, require_empty=False, **_kwargs: (
+                    capture.dataclasses.replace(
+                        self.cgroup, populated=False, member_pids=()
+                    )
+                ),
+                cgroup_killer=lambda *_args: (),
+                monotonic=lambda: next(clock),
+                sleeper=lambda _seconds: None,
             )
+        self.assertFalse(receipt.exists())
 
     def test_cleanup_refuses_remaining_listener_after_cgroup_kill(self):
         self.call(self.successful_response)

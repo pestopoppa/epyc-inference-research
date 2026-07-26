@@ -114,17 +114,29 @@ class M1ObservationRunnerTests(unittest.TestCase):
     @staticmethod
     def cgroup(pids=(4242,)):
         return {
-            "path": "/sys/fs/cgroup/epyc-m1-test",
+            "path": "/run/epyc-m1-cgroup",
             "st_dev": 1,
             "st_ino": 2,
-            "st_mode": stat.S_IFDIR | 0o700,
-            "owner_uid": os.getuid(),
-            "owner_gid": os.getgid(),
+            "st_mode": stat.S_IFDIR | 0o755,
+            "owner_uid": 0,
+            "owner_gid": 0,
             "cgroup_type": "domain",
             "controllers": ["cpu", "memory"],
             "kill_supported": True,
             "populated": bool(pids),
             "member_pids": list(pids),
+            "root_path": "/run/epyc-m1-cgroup",
+            "root_st_dev": 1,
+            "root_st_ino": 3,
+            "root_st_mode": stat.S_IFDIR | 0o755,
+            "root_owner_uid": 0,
+            "root_owner_gid": 0,
+            "mount_id": 42,
+            "mount_parent_id": 1,
+            "mount_major_minor": "0:1",
+            "mount_root": "/epyc-m1-source-test",
+            "mount_source": "cgroup",
+            "mount_fs_type": "cgroup2",
         }
 
     @staticmethod
@@ -356,6 +368,7 @@ class M1ObservationRunnerTests(unittest.TestCase):
             "server_owner_pid": 4242,
             "server_owner_fds": [12],
             "socket_inode_owners": [{"pid": 4242, "fds": [12]}],
+            "unreadable_proc_pids": [],
             "tcp_tables": [
                 {
                     "path": "/proc/net/tcp",
@@ -399,6 +412,39 @@ class M1ObservationRunnerTests(unittest.TestCase):
             {item["case_id"] for item in worker["fixtures"]}
             & {item["case_id"] for item in escalation["fixtures"]}
         )
+
+    def test_scorer_replays_stable_mount_evidence_without_a_live_mount(self):
+        evidence = self.cgroup()
+        with mock.patch.object(Path, "exists", side_effect=AssertionError("no live mount")):
+            m1.validate_cgroup_evidence(evidence, 4242, "candidate")
+
+    def test_scorer_rejects_stable_mount_path_owner_mode_and_source_drift(self):
+        evidence = self.cgroup()
+        mutations = {
+            "path": "/sys/fs/cgroup/epyc-m1-test",
+            "root_path": "/run/not-epyc",
+            "root_owner_gid": 1000,
+            "root_st_mode": stat.S_IFDIR | 0o775,
+            "mount_major_minor": "0:2",
+            "mount_root": "relative-source",
+            "mount_source": "",
+            "mount_fs_type": "tmpfs",
+        }
+        for key, value in mutations.items():
+            with self.subTest(key=key):
+                forged = dict(evidence)
+                forged[key] = value
+                with self.assertRaisesRegex(ValueError, "malformed"):
+                    m1.validate_cgroup_evidence(forged, 4242, "candidate")
+
+    def test_scorer_rejects_stable_mount_source_identity_drift_across_evidence(self):
+        bundle = self.bundle("minicpm-o45-mi210-v8")
+        changed = copy.deepcopy(bundle["capture"])
+        changed["candidate_cgroup_final"]["mount_root"] = "/other-source"
+        self.rewrite(bundle["capture_path"], changed)
+        bundle["capture"] = changed
+        with self.assertRaisesRegex(ValueError, "cgroup identity drifted"):
+            self.score(bundle)
 
     def test_score_binds_absolute_manifest_and_capture_hashes(self):
         bundle = self.bundle("qwen25vl-cpu-v8")
@@ -510,6 +556,46 @@ class M1ObservationRunnerTests(unittest.TestCase):
             with self.subTest(name=name):
                 changed = copy.deepcopy(original)
                 mutate(changed["rows"][0])
+                self.rewrite(bundle["capture_path"], changed)
+                bundle["capture"] = changed
+                with self.assertRaises(ValueError):
+                    self.score(bundle)
+
+    def test_response_identity_allows_dynamic_numa_map_counts_for_pinned_policy(self):
+        bundle = self.bundle("minicpm-o45-mi210-v8")
+        changed = copy.deepcopy(bundle["capture"])
+        for index, key in enumerate((
+            "server_identity_pre",
+            "server_identity_transport",
+            "server_identity_post",
+        ), start=4):
+            changed["rows"][0][key]["server_numa_maps_sha256"] = str(index) * 64
+            changed["rows"][0][key]["server_numa_policy_counts"] = {
+                "interleave:0-3": index
+            }
+        self.rewrite(bundle["capture_path"], changed)
+        bundle["capture"] = changed
+        scored = self.score(bundle)
+        self.assertEqual(scored["total"], len(bundle["manifest"]["fixtures"]))
+
+    def test_response_identity_rejects_numa_policy_or_cpuset_drift(self):
+        bundle = self.bundle("minicpm-o45-mi210-v8")
+        original = bundle["capture"]
+        mutations = {
+            "policy": lambda identity: identity.update(
+                server_numa_policy_counts={"prefer=static:0": 1}
+            ),
+            "cpuset": lambda identity: identity.update(
+                server_cpus_allowed_list="0-95"
+            ),
+            "malformed hash": lambda identity: identity.update(
+                server_numa_maps_sha256="not-a-sha256"
+            ),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(label=label):
+                changed = copy.deepcopy(original)
+                mutate(changed["rows"][0]["server_identity_transport"])
                 self.rewrite(bundle["capture_path"], changed)
                 bundle["capture"] = changed
                 with self.assertRaises(ValueError):

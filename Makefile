@@ -9,12 +9,21 @@ PYTHON_SMOKE := scripts/research/xmas_winner_table.py \
 	scripts/autopilot/candidate_eval_gate.py \
 	scripts/halo/closed_loop_observation_surface.py \
 	scripts/halo/convert_tap_to_otel.py
+CAPTURE_CONTRACT_SOURCES := scripts/benchmark/v7_quality_gate_runner.py \
+	scripts/benchmark/capture_integrity_watchdog.py \
+	scripts/benchmark/score_with_claude.py \
+	scripts/benchmark/agentic_swe_harness.py \
+	artifacts/architect-code-eval-20260724/convert_sr_to_patch.py
+PYTHON_SMOKE += $(CAPTURE_CONTRACT_SOURCES)
 PYTEST_SMOKE := scripts/research/test_xmas_winner_table.py
 PYTEST_SMOKE += scripts/docs/test_generate_docs_index.py
 PYTEST_SMOKE += scripts/analysis/test_generate_analysis_reports_index.py
 PYTEST_SMOKE += scripts/security/test_audit_repository.py
 PYTEST_SMOKE += scripts/autopilot/test_candidate_eval_gate.py
 PYTEST_SMOKE += scripts/halo/test_closed_loop_observation_surface.py
+PYTEST_SMOKE += scripts/benchmark/test_capture_contract_guard.py
+PYTEST_SMOKE += scripts/benchmark/test_capture_integrity_watchdog.py
+PYTEST_SMOKE += scripts/benchmark/test_agentic_swe_harness.py
 
 help:
 	@printf '%s\n' 'Targets: setup lint test health docs docs-check analysis analysis-check security-check autopilot-gate'

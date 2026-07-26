@@ -48,40 +48,113 @@ cd "$M1_DIR"
 
 ## Privilege Boundary
 
-The host has cgroup v2, but `/sys/fs/cgroup` is `node:root 0755` and no user
-systemd bus is available. The runner never elevates. An operator with working
-noninteractive sudo must create exactly one leaf cgroup before launch. These
-are the only privileged setup commands:
+The host has cgroup v2, but `/sys/fs/cgroup` is actually `node:root 0755`:
+the invoking user can write and rename direct children there. This differs from
+the earlier accepted assumption that the cgroup root was root-owned and
+non-user-writable. Do not change global cgroup ownership or mode. Instead, the
+root actor creates a unique root-owned source cgroup and bind-mounts it at the
+fixed, root-owned `/run/epyc-m1-cgroup`. `/run` is root-owned and not writable
+by the invoking user, so once the bind mount is in place the user cannot rename
+or replace the path that the runner opens. The source name under the writable
+`/sys/fs/cgroup` may be renamed after setup; that does not alter the mounted
+dentry under `/run`, which is the only path accepted by the runner.
+
+The runner never elevates. An operator with working noninteractive sudo must
+perform the following exact setup before launch. Root creates the source,
+target, and bind mount; it delegates only `cgroup.procs` and `cgroup.kill` on
+the mounted cgroup itself. No user-writable file is executed as root.
 
 ```bash
 RUN_TOKEN=$(/usr/bin/basename "$RUN_DIR")
-CANDIDATE_CGROUP=/sys/fs/cgroup/epyc-m1-"$RUN_TOKEN"
+SOURCE_CGROUP=/sys/fs/cgroup/epyc-m1-source-"$RUN_TOKEN"
+CGROUP_ROOT=/run/epyc-m1-cgroup
+CANDIDATE_CGROUP=$CGROUP_ROOT
 CALLER_UID=$(/usr/bin/id -u)
 CALLER_GID=$(/usr/bin/id -g)
+SETUP_FACTS=$(
+/usr/bin/sudo -n "$PYTHON" - "$SOURCE_CGROUP" "$CGROUP_ROOT" "$CALLER_UID" "$CALLER_GID" <<'PY'
+import os, pathlib, stat, subprocess, sys
+source, target, uid, gid = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+if source.parent != pathlib.Path('/sys/fs/cgroup') or target != pathlib.Path('/run/epyc-m1-cgroup'):
+    raise SystemExit('unexpected cgroup setup path')
+parent_fd = os.open('/sys/fs/cgroup', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+run_fd = os.open('/run', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+source_fd = target_fd = None
+source_created = target_created = mounted = False
+original = os.fstat(parent_fd)
+runtime = os.fstat(run_fd)
+if not stat.S_ISDIR(runtime.st_mode) or (runtime.st_uid, runtime.st_gid, stat.S_IMODE(runtime.st_mode)) != (0, 0, 0o755):
+    raise SystemExit('/run must be root:root mode 0755')
+if not stat.S_ISDIR(original.st_mode) or (original.st_uid, original.st_gid, stat.S_IMODE(original.st_mode)) != (uid, 0, 0o755):
+    raise SystemExit('/sys/fs/cgroup ownership or mode differs from the observed host')
+try:
+    # The source parent is made root-only only while its child is created/opened.
+    os.fchown(parent_fd, 0, 0); os.fchmod(parent_fd, 0o755)
+    os.mkdir(source.name, 0o755, dir_fd=parent_fd)
+    source_created = True
+    source_fd = os.open(source.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+    os.fchown(source_fd, 0, 0); os.fchmod(source_fd, 0o755)
+    os.mkdir(target.name, 0o755, dir_fd=run_fd)
+    target_created = True
+    target_fd = os.open(target.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=run_fd)
+    os.fchown(target_fd, 0, 0); os.fchmod(target_fd, 0o755)
+    source_before, target_before = os.fstat(source_fd), os.fstat(target_fd)
+    subprocess.run(
+        ['/usr/bin/mount', '--bind', f'/proc/self/fd/{source_fd}', f'/proc/self/fd/{target_fd}'],
+        check=True, pass_fds=(source_fd, target_fd),
+    )
+    mounted = True
+    # target_fd is intentionally pre-mount; source_fd names the mounted cgroup inode.
+    os.chown('cgroup.procs', uid, gid, dir_fd=source_fd, follow_symlinks=False)
+    os.chown('cgroup.kill', uid, gid, dir_fd=source_fd, follow_symlinks=False)
+    print(f'{source_before.st_dev}:{source_before.st_ino} {target_before.st_dev}:{target_before.st_ino}')
+except BaseException as original_error:
+    cleanup_errors = []
+    if mounted:
+        try:
+            subprocess.run(['/usr/bin/umount', str(target)], check=True)
+            mounted = False
+        except BaseException as exc:
+            cleanup_errors.append(f'umount: {exc}')
+    if not mounted and target_created:
+        try:
+            os.rmdir(target.name, dir_fd=run_fd)
+            target_created = False
+        except BaseException as exc:
+            cleanup_errors.append(f'target rmdir: {exc}')
+    if not mounted and not target_created and source_created:
+        try:
+            os.rmdir(source.name, dir_fd=parent_fd)
+            source_created = False
+        except BaseException as exc:
+            cleanup_errors.append(f'source rmdir: {exc}')
+    if cleanup_errors:
+        raise RuntimeError('; '.join(cleanup_errors)) from original_error
+    raise
+finally:
+    os.fchown(parent_fd, original.st_uid, original.st_gid)
+    os.fchmod(parent_fd, stat.S_IMODE(original.st_mode))
+    for fd in (target_fd, source_fd, run_fd, parent_fd):
+        if fd is not None: os.close(fd)
+PY
+)
+read -r SOURCE_CGROUP_DEV_INO CGROUP_TARGET_DIR_DEV_INO <<<"$SETUP_FACTS"
 
-/usr/bin/sudo -n /usr/bin/mkdir --mode=0700 -- "$CANDIDATE_CGROUP"
-/usr/bin/sudo -n /usr/bin/chown -- "$CALLER_UID:$CALLER_GID" \
-  "$CANDIDATE_CGROUP" \
-  "$CANDIDATE_CGROUP/cgroup.procs" \
-  "$CANDIDATE_CGROUP/cgroup.kill"
-/usr/bin/sudo -n /usr/bin/chmod 0700 -- "$CANDIDATE_CGROUP"
-
-test "$(/usr/bin/stat -c '%u:%g:%a' /sys/fs/cgroup)" = "0:0:755"
-test ! -w /sys/fs/cgroup
-test ! -L "$CANDIDATE_CGROUP"
-test "$(/usr/bin/stat -c '%u:%g' "$CANDIDATE_CGROUP")" = "$CALLER_UID:$CALLER_GID"
-test "$(/usr/bin/stat -c '%a' "$CANDIDATE_CGROUP")" = 700
-test -w "$CANDIDATE_CGROUP/cgroup.procs"
-test -w "$CANDIDATE_CGROUP/cgroup.kill"
-CANDIDATE_CGROUP_DEV_INO=$(/usr/bin/stat -c '%d:%i' "$CANDIDATE_CGROUP")
+CGROUP_ROOT_DEV_INO=$(/usr/bin/stat -c '%d:%i' "$CGROUP_ROOT")
+test "$(/usr/bin/stat -c '%u:%g:%a' /run)" = "0:0:755"
+test "$(/usr/bin/stat -c '%u:%g:%a' "$CGROUP_ROOT")" = "0:0:755"
+test -w "$CGROUP_ROOT/cgroup.procs"
+test -w "$CGROUP_ROOT/cgroup.kill"
 ```
 
-The runner independently repeats canonical path, inode, owner, mode, cgroup
-type, controller, `cgroup.events` populated state, membership, `cgroup.procs`,
-and `cgroup.kill` checks before forking. Missing delegation fails before fork;
-there is no PID-only fallback. No recursive ownership change is used. The only
-root operations name the leaf directory and its two kernel control files
-exactly; no user-writable script or executable runs as root.
+The runner independently repeats the canonical `/run/epyc-m1-cgroup` path,
+`/run` ownership/non-writability, root owner/mode/inode, exact cgroup2
+mountinfo record, mount device/root/source/filesystem type, exact mount
+inode/owner/mode, cgroup type,
+controller, `cgroup.events` populated state, membership, `cgroup.procs`, and
+`cgroup.kill` checks before forking. It holds the stable mount descriptor with
+`O_NOFOLLOW` while sampling and revalidating mountinfo. Missing delegation fails before fork;
+there is no PID-only fallback. No recursive ownership change is used.
 
 ## Candidate Lifecycle
 
@@ -102,8 +175,11 @@ CANDIDATE_AUTHORITY=$RUN_DIR/candidate-launch-authority.json
 CLEANUP_RECEIPT=$RUN_DIR/candidate-cleanup.json
 FAILURE_RECOVERY_INTENT=$CANDIDATE_AUTHORITY.failure-cleanup-intent
 
+trap - EXIT
 cleanup_armed=0
-cgroup_created=1
+target_mounted=1
+target_created=1
+source_created=1
 cleanup_on_exit() {
   original_rc=$?
   trap - EXIT
@@ -122,17 +198,47 @@ cleanup_on_exit() {
       --cleanup-receipt "$CLEANUP_RECEIPT" \
       --timeout-seconds 30 || cleanup_rc=$?
   fi
-  if [[ $cgroup_created -eq 1 ]]; then
-    current_dev_ino=unavailable
-    populated=unavailable
-    current_dev_ino=$(/usr/bin/stat -c '%d:%i' "$CANDIDATE_CGROUP") || cleanup_rc=1
-    populated=$(/usr/bin/awk '$1 == "populated" {print $2}' \
-      "$CANDIDATE_CGROUP/cgroup.events") || cleanup_rc=1
-    if [[ $current_dev_ino != "$CANDIDATE_CGROUP_DEV_INO" ||
-          $populated != 0 || -s "$CANDIDATE_CGROUP/cgroup.procs" ]]; then
-      cleanup_rc=1
-    else
-      /usr/bin/sudo -n /usr/bin/rmdir -- "$CANDIDATE_CGROUP" || cleanup_rc=$?
+  if [[ $target_mounted -eq 1 ]]; then
+    "$PYTHON" - "$SOURCE_CGROUP" "$CGROUP_ROOT" \
+      "$SOURCE_CGROUP_DEV_INO" "$CGROUP_ROOT_DEV_INO" <<'PY' || cleanup_rc=1
+import os, pathlib, sys
+source, target = map(pathlib.Path, sys.argv[1:3])
+source_expected, target_expected = sys.argv[3:]
+assert f'{source.stat().st_dev}:{source.stat().st_ino}' == source_expected
+assert f'{target.stat().st_dev}:{target.stat().st_ino}' == target_expected
+matches = []
+for line in pathlib.Path('/proc/self/mountinfo').read_text(encoding='ascii').splitlines():
+    left, right = line.split(' - ', 1)
+    fields, fs = left.split(), right.split()
+    if fields[4] == str(target):
+        matches.append((fields[2], fields[3], fs[0], fs[1]))
+assert len(matches) == 1
+major_minor, mount_root, fs_type, mount_source = matches[0]
+assert fs_type == 'cgroup2' and mount_source == 'cgroup'
+assert major_minor == f'{os.major(target.stat().st_dev)}:{os.minor(target.stat().st_dev)}'
+assert mount_root == '/' + source.name
+PY
+    if [[ $cleanup_rc -eq 0 ]]; then
+      /usr/bin/sudo -n /usr/bin/umount -- "$CGROUP_ROOT" || cleanup_rc=$?
+      [[ $cleanup_rc -eq 0 ]] && target_mounted=0
+    fi
+  fi
+  if [[ $target_mounted -eq 0 && $target_created -eq 1 ]]; then
+    test "$(/usr/bin/stat -c '%d:%i' "$CGROUP_ROOT")" = \
+      "$CGROUP_TARGET_DIR_DEV_INO" || cleanup_rc=1
+    test "$(/usr/bin/stat -c '%u:%g:%a' "$CGROUP_ROOT")" = "0:0:755" || cleanup_rc=1
+    if [[ $cleanup_rc -eq 0 ]]; then
+      /usr/bin/sudo -n /usr/bin/rmdir -- "$CGROUP_ROOT" || cleanup_rc=$?
+      [[ $cleanup_rc -eq 0 ]] && target_created=0
+    fi
+  fi
+  if [[ $target_mounted -eq 0 && $target_created -eq 0 && $source_created -eq 1 ]]; then
+    test "$(/usr/bin/stat -c '%d:%i' "$SOURCE_CGROUP")" = \
+      "$SOURCE_CGROUP_DEV_INO" || cleanup_rc=1
+    test "$(/usr/bin/stat -c '%u:%g:%a' "$SOURCE_CGROUP")" = "0:0:755" || cleanup_rc=1
+    if [[ $cleanup_rc -eq 0 ]]; then
+      /usr/bin/sudo -n /usr/bin/rmdir -- "$SOURCE_CGROUP" || cleanup_rc=$?
+      [[ $cleanup_rc -eq 0 ]] && source_created=0
     fi
   fi
   if [[ $original_rc -eq 0 && $cleanup_rc -ne 0 ]]; then
@@ -318,18 +424,15 @@ assert receipt["gpu_state_post_cleanup"]["kfd_pids"] == []
 assert receipt["gpu_state_post_cleanup"]["vram_use_percent"] == 0
 PY
 
-test "$(/usr/bin/stat -c '%d:%i' "$CANDIDATE_CGROUP")" = \
-  "$CANDIDATE_CGROUP_DEV_INO"
-/usr/bin/sudo -n /usr/bin/rmdir -- "$CANDIDATE_CGROUP"
-cgroup_created=0
-trap - EXIT
+cleanup_on_exit
 ```
 
 Cleanup publishes a durable intent before `cgroup.kill`, waits for both empty
 direct membership and `cgroup.events populated=0`, then requires the candidate
-port dead and physical GPU 0 idle before publishing the receipt. The final
-privileged action is only `rmdir` of that already-empty, inode-matched exact
-cgroup. `/sys/fs/cgroup` is root-owned mode 0755 and not writable by the
-unprivileged runner, so the caller cannot rename or replace the leaf between
-the inode check and the exact privileged `rmdir`; a concurrent root actor is
-outside this runbook's unprivileged threat boundary.
+port dead and physical GPU 0 idle before publishing the receipt. The trap and
+terminal cleanup verify the bound source/target identity, unmount the target, remove the inode-matched empty
+target directory, and finally remove the inode-matched source. They never use
+recursive removal. A source-path drift under user-writable `/sys/fs/cgroup`
+fails closed and leaves it for root inspection; it cannot redirect an operation
+on the stable `/run` bind mount. A concurrent root actor is outside this
+runbook's unprivileged threat boundary.

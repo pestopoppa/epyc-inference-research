@@ -88,7 +88,9 @@ ROCM_SMI = Path("/opt/rocm/bin/rocm-smi")
 ROCMINFO = Path("/opt/rocm/bin/rocminfo")
 HIPCONFIG = Path("/opt/rocm/bin/hipconfig")
 NUMACTL = Path("/usr/bin/numactl")
-CGROUP_ROOT = Path("/sys/fs/cgroup")
+CGROUP_SOURCE_ROOT = Path("/sys/fs/cgroup")
+CGROUP_ROOT = Path("/run/epyc-m1-cgroup")
+RUNTIME_ROOT = Path("/run")
 MI210_MIN_VRAM_NUMERATOR = 9
 MI210_MIN_VRAM_DENOMINATOR = 10
 SOCKET_RE = re.compile(r"socket:\[(\d+)\]")
@@ -272,6 +274,34 @@ class CgroupBinding:
     kill_supported: bool
     populated: bool
     member_pids: tuple[int, ...]
+    root_path: str
+    root_st_dev: int
+    root_st_ino: int
+    root_st_mode: int
+    root_owner_uid: int
+    root_owner_gid: int
+    mount_id: int
+    mount_parent_id: int
+    mount_major_minor: str
+    mount_root: str
+    mount_source: str
+    mount_fs_type: str
+
+
+@dataclasses.dataclass(frozen=True)
+class CgroupRootBinding:
+    path: str
+    st_dev: int
+    st_ino: int
+    st_mode: int
+    owner_uid: int
+    owner_gid: int
+    mount_id: int
+    mount_parent_id: int
+    mount_major_minor: str
+    mount_root: str
+    mount_source: str
+    mount_fs_type: str
 
 
 def sha256_bytes(value: bytes) -> str:
@@ -967,6 +997,7 @@ def capture_transport_proof(
             "established response socket inode is not uniquely owned by the pinned PID"
         )
     inode_owners = []
+    unreadable_proc_pids = []
     try:
         process_dirs = sorted(
             (path for path in proc_root.iterdir() if path.name.isdecimal()),
@@ -983,20 +1014,58 @@ def capture_transport_proof(
         except FileNotFoundError:
             continue
         except OSError as exc:
-            raise RuntimeError(
-                f"cannot audit response socket ownership for PID {process_dir.name}"
-            ) from exc
+            pid = int(process_dir.name)
+            try:
+                process_uid = process_dir.stat().st_uid
+            except OSError:
+                process_uid = None
+            try:
+                stat_raw = (process_dir / "stat").read_text(encoding="utf-8")
+                stat_fields = stat_raw[stat_raw.rfind(")") + 2 :].split()
+                start_ticks = int(stat_fields[19])
+            except (OSError, IndexError, ValueError):
+                start_ticks = None
+            unreadable_proc_pids.append(
+                {
+                    "pid": pid,
+                    "uid": process_uid,
+                    "start_ticks": start_ticks,
+                    "error": type(exc).__name__,
+                }
+            )
+            continue
+        process_unreadable = None
         for fd_path in fd_paths:
             try:
                 target = os.readlink(fd_path)
             except FileNotFoundError:
                 continue
             except OSError as exc:
-                raise RuntimeError(
-                    f"cannot audit response descriptor {fd_path}"
-                ) from exc
+                process_unreadable = exc
+                break
             if target == f"socket:[{inode}]":
                 process_fds.append(int(fd_path.name))
+        if process_unreadable is not None:
+            pid = int(process_dir.name)
+            try:
+                process_uid = process_dir.stat().st_uid
+            except OSError:
+                process_uid = None
+            try:
+                stat_raw = (process_dir / "stat").read_text(encoding="utf-8")
+                stat_fields = stat_raw[stat_raw.rfind(")") + 2 :].split()
+                start_ticks = int(stat_fields[19])
+            except (OSError, IndexError, ValueError):
+                start_ticks = None
+            unreadable_proc_pids.append(
+                {
+                    "pid": pid,
+                    "uid": process_uid,
+                    "start_ticks": start_ticks,
+                    "error": type(process_unreadable).__name__,
+                }
+            )
+            continue
         if process_fds:
             inode_owners.append(
                 {"pid": int(process_dir.name), "fds": process_fds}
@@ -1013,6 +1082,7 @@ def capture_transport_proof(
         "server_owner_pid": server_pid,
         "server_owner_fds": owners,
         "socket_inode_owners": inode_owners,
+        "unreadable_proc_pids": unreadable_proc_pids,
         "tcp_tables": tables,
         "server_fd_links": fd_links,
         "captured_at": utc_now(),
@@ -1551,33 +1621,202 @@ def _read_cgroup_file(dir_fd: int, name: str) -> str:
     return b"".join(chunks).decode("ascii", errors="strict")
 
 
+def _unescape_mountinfo_path(value: str) -> str:
+    """Decode the octal escapes used by procfs mountinfo path fields."""
+    return re.sub(
+        r"\\([0-7]{3})",
+        lambda match: chr(int(match.group(1), 8)),
+        value,
+    )
+
+
+def parse_mountinfo(value: str) -> tuple[dict[str, Any], ...]:
+    entries: list[dict[str, Any]] = []
+    for line in value.splitlines():
+        if not line:
+            continue
+        try:
+            left, right = line.split(" - ", 1)
+            fields = left.split()
+            filesystem = right.split()
+            mount_id = int(fields[0])
+            parent_id = int(fields[1])
+            major_minor = fields[2]
+            mount_root = _unescape_mountinfo_path(fields[3])
+            mountpoint = _unescape_mountinfo_path(fields[4])
+            mount_options = fields[5]
+            fs_type = filesystem[0]
+            source = filesystem[1]
+        except (IndexError, ValueError) as exc:
+            raise RuntimeError("/proc/self/mountinfo contains a malformed mount row") from exc
+        if (
+            mount_id <= 0
+            or parent_id < 0
+            or not re.fullmatch(r"\d+:\d+", major_minor)
+            or not mount_root.startswith("/")
+            or not mountpoint.startswith("/")
+            or not fs_type
+            or not source
+        ):
+            raise RuntimeError("/proc/self/mountinfo contains an invalid mount row")
+        entries.append(
+            {
+                "mount_id": mount_id,
+                "mount_parent_id": parent_id,
+                "major_minor": major_minor,
+                "mount_root": mount_root,
+                "mountpoint": mountpoint,
+                "mount_options": mount_options,
+                "fs_type": fs_type,
+                "source": source,
+            }
+        )
+    return tuple(entries)
+
+
+def _mode_is_exact_runtime_root(directory: os.stat_result) -> bool:
+    return (
+        stat.S_ISDIR(directory.st_mode)
+        and directory.st_uid == 0
+        and directory.st_gid == 0
+        and stat.S_IMODE(directory.st_mode) == 0o755
+    )
+
+
+def bind_stable_cgroup_root(
+    *, mountinfo_reader: Callable[[], str] | None = None
+) -> CgroupRootBinding:
+    root, root_fd = open_stable_cgroup_root(mountinfo_reader=mountinfo_reader)
+    os.close(root_fd)
+    return root
+
+
+def open_stable_cgroup_root(
+    *, mountinfo_reader: Callable[[], str] | None = None
+) -> tuple[CgroupRootBinding, int]:
+    """Open the trusted /run cgroup mount before sampling its controls."""
+    if CGROUP_ROOT.parent != RUNTIME_ROOT or CGROUP_ROOT.name in {"", ".", ".."}:
+        raise RuntimeError("stable cgroup root must be a direct child of /run")
+    try:
+        runtime_before = RUNTIME_ROOT.lstat()
+        root_before = CGROUP_ROOT.lstat()
+    except OSError as exc:
+        raise RuntimeError("stable cgroup root is unavailable") from exc
+    if (
+        stat.S_ISLNK(runtime_before.st_mode)
+        or not _mode_is_exact_runtime_root(runtime_before)
+    ):
+        raise RuntimeError("/run must be canonical root:root mode 0755")
+    if (
+        stat.S_ISLNK(root_before.st_mode)
+        or not stat.S_ISDIR(root_before.st_mode)
+        or CGROUP_ROOT.resolve(strict=True) != CGROUP_ROOT
+        or root_before.st_uid != 0
+        or root_before.st_gid != 0
+        or stat.S_IMODE(root_before.st_mode) != 0o755
+    ):
+        raise RuntimeError("stable cgroup root must be canonical root:root mode 0755")
+    root_fd = os.open(CGROUP_ROOT, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    root_after = os.fstat(root_fd)
+    if (root_before.st_dev, root_before.st_ino) != (root_after.st_dev, root_after.st_ino):
+        os.close(root_fd)
+        raise RuntimeError("stable cgroup root identity changed during validation")
+    try:
+        mountinfo = (
+            mountinfo_reader() if mountinfo_reader is not None else Path("/proc/self/mountinfo").read_text(encoding="ascii")
+        )
+        matches = [
+            entry
+            for entry in parse_mountinfo(mountinfo)
+            if entry["mountpoint"] == str(CGROUP_ROOT)
+        ]
+    except OSError as exc:
+        os.close(root_fd)
+        raise RuntimeError("cannot read /proc/self/mountinfo") from exc
+    if len(matches) != 1 or matches[0]["fs_type"] != "cgroup2":
+        os.close(root_fd)
+        raise RuntimeError("stable cgroup root is not an exact cgroup2 mountpoint")
+    mount = matches[0]
+    actual_major_minor = f"{os.major(root_after.st_dev)}:{os.minor(root_after.st_dev)}"
+    if mount["major_minor"] != actual_major_minor:
+        os.close(root_fd)
+        raise RuntimeError("stable cgroup root mount device differs from directory device")
+    return CgroupRootBinding(
+        path=str(CGROUP_ROOT),
+        st_dev=root_after.st_dev,
+        st_ino=root_after.st_ino,
+        st_mode=root_after.st_mode,
+        owner_uid=root_after.st_uid,
+        owner_gid=root_after.st_gid,
+        mount_id=mount["mount_id"],
+        mount_parent_id=mount["mount_parent_id"],
+        mount_major_minor=mount["major_minor"],
+        mount_root=mount["mount_root"],
+        mount_source=mount["source"],
+        mount_fs_type=mount["fs_type"],
+    ), root_fd
+
+
+def verify_open_stable_cgroup_root(
+    root: CgroupRootBinding,
+    root_fd: int,
+    *,
+    mountinfo_reader: Callable[[], str] | None = None,
+) -> None:
+    current = os.fstat(root_fd)
+    if (
+        current.st_dev,
+        current.st_ino,
+        current.st_mode,
+        current.st_uid,
+        current.st_gid,
+    ) != (
+        root.st_dev,
+        root.st_ino,
+        root.st_mode,
+        root.owner_uid,
+        root.owner_gid,
+    ):
+        raise RuntimeError("stable cgroup root FD identity drifted")
+    mountinfo = (
+        mountinfo_reader() if mountinfo_reader is not None else Path("/proc/self/mountinfo").read_text(encoding="ascii")
+    )
+    matches = [
+        entry for entry in parse_mountinfo(mountinfo)
+        if entry["mountpoint"] == root.path
+    ]
+    if len(matches) != 1:
+        raise RuntimeError("stable cgroup root mount identity drifted")
+    mount = matches[0]
+    mount_fields = (
+        ("mount_id", "mount_id"),
+        ("mount_parent_id", "mount_parent_id"),
+        ("major_minor", "mount_major_minor"),
+        ("mount_root", "mount_root"),
+        ("source", "mount_source"),
+        ("fs_type", "mount_fs_type"),
+    )
+    if any(mount[key] != getattr(root, attribute) for key, attribute in mount_fields):
+        raise RuntimeError("stable cgroup root mount identity drifted")
+
+
 def bind_candidate_cgroup(
     path: Path,
     *,
     require_empty: bool = False,
     required_pid: int | None = None,
 ) -> CgroupBinding:
-    if not path.is_absolute() or path.parent != CGROUP_ROOT:
-        raise RuntimeError("candidate cgroup must be an absolute direct child of /sys/fs/cgroup")
-    try:
-        before = path.lstat()
-    except OSError as exc:
-        raise RuntimeError("delegated candidate cgroup is unavailable") from exc
-    if (
-        stat.S_ISLNK(before.st_mode)
-        or not stat.S_ISDIR(before.st_mode)
-        or path.resolve(strict=True) != path
-    ):
-        raise RuntimeError("candidate cgroup must be a canonical non-symlink directory")
-    if before.st_uid != os.getuid() or before.st_gid != os.getgid():
-        raise RuntimeError("candidate cgroup ownership differs from the invoking user")
-    if stat.S_IMODE(before.st_mode) != 0o700:
-        raise RuntimeError("candidate cgroup directory mode must be exactly 0700")
-    dir_fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    if path != CGROUP_ROOT:
+        raise RuntimeError("candidate cgroup must be exactly /run/epyc-m1-cgroup")
+    root, dir_fd = open_stable_cgroup_root()
     try:
         after = os.fstat(dir_fd)
-        if (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino):
-            raise RuntimeError("candidate cgroup identity changed during validation")
+        if (
+            after.st_uid != 0
+            or after.st_gid != 0
+            or stat.S_IMODE(after.st_mode) != 0o755
+        ):
+            raise RuntimeError("candidate cgroup mount must be root:root mode 0755")
         cgroup_type = _read_cgroup_file(dir_fd, "cgroup.type").strip()
         controllers = tuple(
             sorted(_read_cgroup_file(dir_fd, "cgroup.controllers").split())
@@ -1600,6 +1839,7 @@ def bind_candidate_cgroup(
         os.close(kill_fd)
         procs_fd = os.open("cgroup.procs", os.O_WRONLY | os.O_NOFOLLOW, dir_fd=dir_fd)
         os.close(procs_fd)
+        verify_open_stable_cgroup_root(root, dir_fd)
     except OSError as exc:
         raise RuntimeError("candidate cgroup lacks delegated procs/kill capabilities") from exc
     finally:
@@ -1616,30 +1856,34 @@ def bind_candidate_cgroup(
         st_dev=after.st_dev,
         st_ino=after.st_ino,
         st_mode=after.st_mode,
-        owner_uid=after.st_uid,
-        owner_gid=after.st_gid,
+        owner_uid=0,
+        owner_gid=0,
         cgroup_type=cgroup_type,
         controllers=controllers,
         kill_supported=True,
         populated=populated,
         member_pids=members,
+        root_path=root.path,
+        root_st_dev=root.st_dev,
+        root_st_ino=root.st_ino,
+        root_st_mode=root.st_mode,
+        root_owner_uid=root.owner_uid,
+        root_owner_gid=root.owner_gid,
+        mount_id=root.mount_id,
+        mount_parent_id=root.mount_parent_id,
+        mount_major_minor=root.mount_major_minor,
+        mount_root=root.mount_root,
+        mount_source=root.mount_source,
+        mount_fs_type=root.mount_fs_type,
     )
 
 
 def verify_cgroup_identity(path: Path, expected: CgroupBinding) -> CgroupBinding:
     current = bind_candidate_cgroup(path)
-    immutable = (
-        "path",
-        "st_dev",
-        "st_ino",
-        "st_mode",
-        "owner_uid",
-        "owner_gid",
-        "cgroup_type",
-        "controllers",
-        "kill_supported",
-    )
-    if any(getattr(current, key) != getattr(expected, key) for key in immutable):
+    if any(
+        getattr(current, key) != getattr(expected, key)
+        for key in CGROUP_IMMUTABLE_FIELDS
+    ):
         raise RuntimeError("candidate cgroup identity or controller binding drifted")
     return current
 
@@ -1650,7 +1894,20 @@ def cgroup_binding_from_dict(value: Any) -> CgroupBinding:
     expected = {field.name for field in dataclasses.fields(CgroupBinding)}
     if set(value) != expected:
         raise RuntimeError("candidate cgroup evidence has the wrong schema")
-    numeric = ("st_dev", "st_ino", "st_mode", "owner_uid", "owner_gid")
+    numeric = (
+        "st_dev",
+        "st_ino",
+        "st_mode",
+        "owner_uid",
+        "owner_gid",
+        "root_st_dev",
+        "root_st_ino",
+        "root_st_mode",
+        "root_owner_uid",
+        "root_owner_gid",
+        "mount_id",
+        "mount_parent_id",
+    )
     controllers = value["controllers"]
     members = value["member_pids"]
     if (
@@ -1663,9 +1920,9 @@ def cgroup_binding_from_dict(value: Any) -> CgroupBinding:
         or value["st_dev"] < 0
         or value["st_ino"] <= 0
         or not stat.S_ISDIR(value["st_mode"])
-        or stat.S_IMODE(value["st_mode"]) != 0o700
-        or value["owner_uid"] < 0
-        or value["owner_gid"] < 0
+        or stat.S_IMODE(value["st_mode"]) != 0o755
+        or value["owner_uid"] != 0
+        or value["owner_gid"] != 0
         or not isinstance(value["cgroup_type"], str)
         or not value["cgroup_type"]
         or not isinstance(controllers, (list, tuple))
@@ -1679,13 +1936,30 @@ def cgroup_binding_from_dict(value: Any) -> CgroupBinding:
             for pid in members
         )
         or list(members) != sorted(set(members))
+        or value["root_st_dev"] < 0
+        or value["root_st_ino"] <= 0
+        or not stat.S_ISDIR(value["root_st_mode"])
+        or stat.S_IMODE(value["root_st_mode"]) != 0o755
+        or value["root_owner_uid"] != 0
+        or value["root_owner_gid"] != 0
+        or value["mount_id"] <= 0
+        or value["mount_parent_id"] < 0
+        or not isinstance(value["mount_major_minor"], str)
+        or not re.fullmatch(r"\d+:\d+", value["mount_major_minor"])
+        or value["mount_major_minor"]
+        != f"{os.major(value['root_st_dev'])}:{os.minor(value['root_st_dev'])}"
+        or not isinstance(value["mount_root"], str)
+        or not value["mount_root"].startswith("/")
+        or not isinstance(value["mount_source"], str)
+        or not value["mount_source"]
+        or value["mount_fs_type"] != "cgroup2"
     ):
         raise RuntimeError("candidate cgroup evidence is malformed")
     path = Path(value["path"])
     if (
         not path.is_absolute()
-        or path.parent != CGROUP_ROOT
-        or path.name in {"", ".", ".."}
+        or path != CGROUP_ROOT
+        or value["root_path"] != str(CGROUP_ROOT)
     ):
         raise RuntimeError("candidate cgroup evidence path is malformed")
     try:
@@ -1701,13 +1975,27 @@ def cgroup_binding_from_dict(value: Any) -> CgroupBinding:
             kill_supported=value["kill_supported"],
             populated=value["populated"],
             member_pids=tuple(value["member_pids"]),
+            root_path=value["root_path"],
+            root_st_dev=value["root_st_dev"],
+            root_st_ino=value["root_st_ino"],
+            root_st_mode=value["root_st_mode"],
+            root_owner_uid=value["root_owner_uid"],
+            root_owner_gid=value["root_owner_gid"],
+            mount_id=value["mount_id"],
+            mount_parent_id=value["mount_parent_id"],
+            mount_major_minor=value["mount_major_minor"],
+            mount_root=value["mount_root"],
+            mount_source=value["mount_source"],
+            mount_fs_type=value["mount_fs_type"],
         )
     except (KeyError, TypeError) as exc:
         raise RuntimeError("candidate cgroup evidence is malformed") from exc
 
 
 def write_cgroup_control(path: Path, name: str, value: bytes) -> None:
-    dir_fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    if path != CGROUP_ROOT:
+        raise RuntimeError("candidate cgroup control path must be the stable mount")
+    root, dir_fd = open_stable_cgroup_root()
     try:
         fd = os.open(name, os.O_WRONLY | os.O_NOFOLLOW, dir_fd=dir_fd)
         try:
@@ -1715,6 +2003,7 @@ def write_cgroup_control(path: Path, name: str, value: bytes) -> None:
                 raise RuntimeError(f"short write to candidate cgroup {name}")
         finally:
             os.close(fd)
+        verify_open_stable_cgroup_root(root, dir_fd)
     finally:
         os.close(dir_fd)
 
@@ -2602,6 +2891,18 @@ CGROUP_IMMUTABLE_FIELDS = (
     "cgroup_type",
     "controllers",
     "kill_supported",
+    "root_path",
+    "root_st_dev",
+    "root_st_ino",
+    "root_st_mode",
+    "root_owner_uid",
+    "root_owner_gid",
+    "mount_id",
+    "mount_parent_id",
+    "mount_major_minor",
+    "mount_root",
+    "mount_source",
+    "mount_fs_type",
 )
 
 
@@ -2680,6 +2981,8 @@ def validate_cleanup_receipt(
         "cgroup_empty",
         "post_cleanup_listeners",
         "gpu_state_post_cleanup",
+        "gpu_idle_poll_count",
+        "gpu_idle_wait_seconds",
         "finished_at",
     }
     if not isinstance(receipt, dict) or set(receipt) != expected_keys:
@@ -2721,6 +3024,17 @@ def validate_cleanup_receipt(
     validate_mi210_snapshot(gpu)
     if gpu.kfd_pids or gpu.vram_use_percent != 0:
         raise RuntimeError("existing cleanup receipt does not prove an idle GPU")
+    poll_count = receipt.get("gpu_idle_poll_count")
+    wait_seconds = receipt.get("gpu_idle_wait_seconds")
+    if (
+        not isinstance(poll_count, int)
+        or isinstance(poll_count, bool)
+        or poll_count <= 0
+        or not isinstance(wait_seconds, (int, float))
+        or isinstance(wait_seconds, bool)
+        or wait_seconds < 0
+    ):
+        raise RuntimeError("existing cleanup receipt has malformed GPU idle polling evidence")
     return receipt
 
 
@@ -2737,6 +3051,8 @@ def cleanup_captured_candidate(
     cgroup_killer: Callable[[Path, CgroupBinding, float], tuple[int, ...]] = (
         kill_candidate_cgroup
     ),
+    monotonic: Callable[[], float] = time.monotonic,
+    sleeper: Callable[[float], None] = time.sleep,
 ) -> dict[str, Any]:
     if timeout_s <= 0:
         raise ValueError("cleanup timeout_s must be positive")
@@ -2861,12 +3177,24 @@ def cleanup_captured_candidate(
     remaining = [row for row in listeners_reader() if row["port"] == port]
     if remaining:
         raise RuntimeError(f"candidate port still has LISTEN socket(s): {remaining}")
-    post_cleanup_gpu = gpu_reader("post_cleanup_idle_state")
-    validate_mi210_snapshot(post_cleanup_gpu)
-    if pid is not None and pid in post_cleanup_gpu.kfd_pids:
-        raise RuntimeError("candidate PID remains in post-cleanup KFD process evidence")
-    if post_cleanup_gpu.kfd_pids or post_cleanup_gpu.vram_use_percent != 0:
-        raise RuntimeError("physical GPU 0 did not return to an idle post-cleanup state")
+    gpu_poll_started = monotonic()
+    gpu_poll_deadline = gpu_poll_started + timeout_s
+    gpu_idle_poll_count = 0
+    while True:
+        gpu_idle_poll_count += 1
+        post_cleanup_gpu = gpu_reader(
+            f"post_cleanup_idle_state_poll_{gpu_idle_poll_count}"
+        )
+        validate_mi210_snapshot(post_cleanup_gpu)
+        if not post_cleanup_gpu.kfd_pids and post_cleanup_gpu.vram_use_percent == 0:
+            break
+        now = monotonic()
+        if now >= gpu_poll_deadline:
+            raise RuntimeError(
+                "physical GPU 0 did not return to an idle post-cleanup state"
+            )
+        sleeper(min(0.25, gpu_poll_deadline - now))
+    gpu_idle_wait_seconds = monotonic() - gpu_poll_started
     receipt = {
         "schema": m1.SCHEMA + ".cgroup-cleanup.v1",
         "capture_path": str(capture_path),
@@ -2882,6 +3210,8 @@ def cleanup_captured_candidate(
         "cgroup_empty": True,
         "post_cleanup_listeners": [],
         "gpu_state_post_cleanup": dataclasses.asdict(post_cleanup_gpu),
+        "gpu_idle_poll_count": gpu_idle_poll_count,
+        "gpu_idle_wait_seconds": gpu_idle_wait_seconds,
         "finished_at": utc_now(),
     }
     atomic_create_json(receipt_path, receipt, run_dir=run_dir)
