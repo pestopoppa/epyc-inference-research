@@ -1,0 +1,11 @@
+{
+  "prediction_sha256": "52a639bfde491fc1d74c6dc85c73029637f6c2b2c0243d3b11c684a2076fa8c7",
+  "rule": "Non-recovery dispositions only; shared converter matching is unchanged.",
+  "schema": "epyc.laguna-swe-v4-reviewed-conversion.v1",
+  "shared_converter_summary_sha256": "5b125350df58d45d300ee56bafb6bef240d149c38f66f1d026456d83330b9d93",
+  "stats": {
+    "applied": 35,
+    "empty": 11,
+    "skipped": 3
+  }
+}

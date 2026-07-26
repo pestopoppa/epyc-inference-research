@@ -1,0 +1,109 @@
+{
+  "authoritative_capture": {
+    "capture_validation_sha256": "7c09a98a487033d1a6b07c477d31b95e1e17a78995fdd74f11d583cf4636c586",
+    "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/scorer-artifact-rescore-20260726/clean-full40-promptfix-20260726/run-20260726T220759Z",
+    "pq_sha256": "a2ce92399d87c8f5f15b285ad27eca3cf0328f1b80eec1fec81933ed782cd81a",
+    "question_sha256": "4b03ad7703bbf2dbaa1eb91b3313cc3cab2892672db87f6242ffd1d489e76375",
+    "requested_ids": [
+      "django__django-10999",
+      "django__django-11066",
+      "django__django-11087",
+      "django__django-11095",
+      "django__django-11099",
+      "django__django-11119",
+      "django__django-11133",
+      "django__django-11138",
+      "django__django-11141",
+      "django__django-11149",
+      "django__django-11163",
+      "django__django-11179",
+      "django__django-11206",
+      "django__django-11211",
+      "django__django-11239",
+      "django__django-11265",
+      "django__django-11276",
+      "django__django-11292",
+      "django__django-11299",
+      "django__django-11333",
+      "django__django-11400",
+      "django__django-11433",
+      "django__django-11451",
+      "django__django-11477",
+      "matplotlib__matplotlib-13989",
+      "matplotlib__matplotlib-14623",
+      "matplotlib__matplotlib-20488",
+      "matplotlib__matplotlib-20676",
+      "scikit-learn__scikit-learn-10297",
+      "scikit-learn__scikit-learn-10844",
+      "scikit-learn__scikit-learn-10908",
+      "scikit-learn__scikit-learn-11310",
+      "sphinx-doc__sphinx-10323",
+      "sphinx-doc__sphinx-10435",
+      "sphinx-doc__sphinx-10449",
+      "sphinx-doc__sphinx-10466",
+      "sympy__sympy-11618",
+      "sympy__sympy-12096",
+      "sympy__sympy-12419",
+      "sympy__sympy-12481"
+    ],
+    "runner_source_sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e"
+  },
+  "converter": {
+    "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/convert_sr_to_patch.py",
+    "sha256": "6bd2302dda3e5139cc6faabcc5639bdcf85b27895f93a9181cbb53dd65749507"
+  },
+  "converter_result": {
+    "blocks_applied": 35,
+    "blocks_skipped": 3,
+    "empty_patches": 11,
+    "prediction_count": 40,
+    "scoring_eligible": false
+  },
+  "review_rule": "This exact three-entry ledger is exhaustive. Any added, removed, or hash-drifted skip fails package construction; no matcher is broadened and no model text is rewritten.",
+  "schema": "epyc.laguna-swe-v4-skip-disposition-and-supersession.v1",
+  "skipped_blocks": [
+    {
+      "block_index": 1,
+      "classification": "redundant_duplicate_after_exact_application",
+      "disposition": "non-recovery: preserve the shared converter's existing patch or empty patch",
+      "instance_id": "matplotlib__matplotlib-20488",
+      "outcome": "skipped_search_not_found",
+      "path": "lib/matplotlib/image.py",
+      "reason": "Block 0 applied exactly; block 1 is byte-identical and therefore cannot add a second patch.",
+      "replace_sha256": "e97410b868545a8bd23d81942f59667b5c380d8129df1dd82cd5b7f28b9b3c95",
+      "search_sha256": "aefc8765c94478b50b225536baf52629e03a3f684b4e8f6687e348a1b7adce62"
+    },
+    {
+      "block_index": 0,
+      "classification": "malformed_generic_path_model_output",
+      "disposition": "non-recovery: preserve the shared converter's existing patch or empty patch",
+      "instance_id": "scikit-learn__scikit-learn-11310",
+      "outcome": "skipped_path_normalization_rejected_generic_placeholder",
+      "path": null,
+      "reason": "The literal generic path/to/file.py has no safe target inference; it remains an empty prediction.",
+      "replace_sha256": "6374568460ed327132b14d9bc0bb1a51cc3c690edfe5a1af0412233210c01cad",
+      "search_sha256": "a6b8c5f645a0a0568a3a9b6e6f49b0bf46402dff9e26b4b3cdb6ebecd516dc52"
+    },
+    {
+      "block_index": 1,
+      "classification": "redundant_duplicate_after_exact_application",
+      "disposition": "non-recovery: preserve the shared converter's existing patch or empty patch",
+      "instance_id": "sphinx-doc__sphinx-10435",
+      "outcome": "skipped_search_not_found",
+      "path": "sphinx/writers/latex.py",
+      "reason": "Block 0 applied exactly; block 1 is byte-identical and therefore cannot add a second patch.",
+      "replace_sha256": "1fb63fd9cab6c566f5f650ecd943ebe22f1dc2bc5fdf2a607b76f65e568e406a",
+      "search_sha256": "38fa736f2e812819edf3d6f0bc2bf2914630ee9278d3366b2e614f01793ca1ee"
+    }
+  ],
+  "status": "TERMINAL_V4_REVIEWED_NONRECOVERY_DISPOSITION",
+  "supersession": {
+    "base_diagnostic_abort_receipt_sha256": "471f71b5651169ee06a2fb5c7a18bf0a6a7ecd2a626d95aeaef61a79554a282d",
+    "rule": "Only the named terminal promptfix v4 capture is scorer input; this package contains no fullcapture5 predictions or claims.",
+    "supersedes": [
+      "attempt-02-port18089/swe_oracle (legacy tail-capped diagnostic capture)",
+      "clean-full40-20260726/run-20260726T215138Z (pre-promptfix v4 candidate)",
+      "live-20260726T193048Z/fullcapture5 lineage (non-authoritative; never inherited)"
+    ]
+  }
+}
