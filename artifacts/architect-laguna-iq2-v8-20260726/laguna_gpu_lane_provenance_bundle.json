@@ -61,8 +61,10 @@
     "laguna_lcb_historical_paired_comparison.json": "5fbbc421a783f60453af8980dee69ed1ba183ddb60b41001ab99acc605bf1749",
     "a3-a4-swe-confirmation/powered_160_candidate_manifest.json": "770ab6f86e823d334c40f01e8dc3c4042966daea921759a9591ae91c8bb7b865",
     "a3-a4-swe-confirmation/powered_160_manifest_verification.json": "3e3af68ea39324504ca3cb585e893c651b0f6b06d9098dfcbf646a046fb6aaf6",
-    "a3-a4-swe-confirmation/POWERED_CONFIRMATION_STATUS.md": "37665eb2c4cb44915cc90bbb9c90bbaf802b89e2aa99feb0bc3f5dbbd46dfdf1",
-    "a3-a4-swe-confirmation/DEFERRED_GOLD_VALIDATION_WORKFLOW.md": "08a5d876c1ccf2d61ee31e4ad16b5fd3ab7969da550cdb3b0192414c5b91c4b9",
+    "a3-a4-swe-confirmation/POWERED_CONFIRMATION_STATUS.md": "15b2886d58b4086b5b0698dde8b22d79b6392727adacd7e1ad857de298c5d2ec",
+    "a3-a4-swe-confirmation/DEFERRED_GOLD_VALIDATION_WORKFLOW.md": "bfa0354364ae41b366f385fa8d65210ef942db57af77361fac6771cbb755b7af",
+    "a3-a4-swe-confirmation/build_powered_swebench_prompts.py": "0d99cf945002e66e7e0fcb88d5ac69730d13bd3a676b968668a934ad8ad3b94a",
+    "a3-a4-swe-confirmation/test_build_powered_swebench_prompts.py": "117017afad9c0619ad1298c18a18cbb72d79fa384498f4cb21c6a447080b090d",
     "a3-a4-swe-confirmation/validate_powered_gold_report.py": "778c66569e322723631d160ec865368834fe32bfc7d92b3446afbdc1d731b592",
     "a3-a4-swe-confirmation/validate_powered_gold_report.synthetic_result.txt": "0d3994480f6448c716eee5276dec5f83f5b53dfae0c7b8c15aa51d2a2ab21996",
     "a3-a4-swe-confirmation/docker_cache_preflight.txt": "a98f7c9ed1a0395994d8686c23feed0c98169ba4ced706e8e507290e43f16852",
@@ -75,6 +77,8 @@
     "manifest_validation": "passed",
     "validator_synthetic_tests": "passed",
     "docker_preflight": "complete_no_SWE_images_retained",
-    "validator_direct_unittests": "8 passed"
+    "validator_direct_unittests": "8 passed",
+    "prompt_builder_direct_unittests": "8 passed",
+    "prompt_builder_legacy_parity": "40/40 prompts byte-identical at f82a5191274048f2fdf432df7a0ebf4017ad982b954d6aa075326a1302df1c3c"
   }
 }

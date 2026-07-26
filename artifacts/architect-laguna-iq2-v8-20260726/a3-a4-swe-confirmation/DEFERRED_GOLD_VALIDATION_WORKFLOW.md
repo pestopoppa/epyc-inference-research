@@ -49,11 +49,23 @@ python3 "$BASE/validate_powered_gold_report.py" \
 
 The historical `build_swebench_prompts.py` intentionally hard-codes the old
 40-item gold report. Do not overwrite its historical inputs or questions file.
-Create a new, parameterized copy in this campaign artifact (or extend the utility
-with explicit input/output CLI paths and tests), then materialize prompts only
-from the accepted 160-ID list. The implementation must retain the historical
-oracle mode: base-commit file content, 120-line hunk windows, identical
-SEARCH/REPLACE instructions, and no test modification permission.
+Use the campaign-local fail-closed builder, which binds the candidate manifest,
+gold-acceptance receipt, accepted-ID order, and source-fixture hash. It retains
+the historical oracle mode byte-for-byte: base-commit file content, 120-line
+hunk windows, identical SEARCH/REPLACE instructions, and no test modification
+permission.
+
+```bash
+python3 "$BASE/build_powered_swebench_prompts.py" \
+  --manifest "$BASE/powered_160_candidate_manifest.json" \
+  --gold-report "$BASE/gold.a3-a4-powered-gold-v8-20260726.json" \
+  --gold-acceptance "$BASE/gold_acceptance.json" \
+  --accepted-ids "$BASE/accepted_160.ids.txt" \
+  --source-fixture /mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/swebench_verified.json \
+  --repos-dir /mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/swebench_repos \
+  --output "$BASE/questions_swebench_oracle_powered_160.json" \
+  --summary-out "$BASE/questions_swebench_oracle_powered_160.summary.json"
+```
 
 Record the accepted-ID list, prompt JSON SHA-256, prompt-character distribution,
 model SHA-256s, raw JSONL, conversion summaries, and official reports. Run A3 and

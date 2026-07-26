@@ -10,8 +10,9 @@ artifact, not a completed A3 or A4 measurement.
 2. Retain the first 160 IDs in manifest order that pass official gold evaluation.
    Fewer than 160 passes is a hard stop: extend the deterministic candidate
    tranche and repeat validation before any model inference.
-3. Materialize oracle prompts only from that accepted ID list, then run A3 and
-   A4 with the same v8 HIP / MI210 / 49,152-context / MTP-4 configuration.
+3. Materialize oracle prompts only from that accepted ID list using
+   `build_powered_swebench_prompts.py`, then run A3 and A4 with the same v8 HIP /
+   MI210 / 49,152-context / MTP-4 configuration.
 4. Convert SEARCH/REPLACE output and evaluate both arms with the official
    FAIL_TO_PASS harness. Count empty patches as failures over the full accepted
    160-item denominator and use paired statistics only on that fixed slice.
@@ -27,3 +28,9 @@ scored or resumed.
 
 The completed Laguna 40-item SWE result and 53-item LCB-hard result remain
 separate, terminal candidate evidence.
+
+Prompt-builder preparation is complete: eight focused tests pass, Ruff is clean,
+and the parameterized implementation reproduces the historical 40-item question
+file byte-for-byte at SHA-256
+`f82a5191274048f2fdf432df7a0ebf4017ad982b954d6aa075326a1302df1c3c`.
+No powered prompt file can be created until official gold acceptance exists.
