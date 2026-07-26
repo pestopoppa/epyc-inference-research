@@ -362,13 +362,27 @@ if (
     != "b087b5dad72b3e765a6cf93a9e7d516d8796698a0fd358abb73c6627df19f66e"
 ):
     raise SystemExit("instrument is not the reviewed repaired identity")
-repair["raw_capture_resume"] = {
+raw_capture_resume = {
     "timestamp_utc": datetime.now(timezone.utc).isoformat(),
     "reason": "defer SWE conversion/repository traversal until E8 CPU isolation ends",
     "resume_script_sha256": hashlib.sha256(resume_script.read_bytes()).hexdigest(),
     "research_head": research_head,
     "swe_conversion_deferred": True,
 }
+capture_dir = identity_path.parents[1] / "A3-tc-quality__thinkingcap"
+capture_files = {
+    "sealed_jsonl": capture_dir / "swe_oracle.sealed.jsonl",
+    "summary": capture_dir / "swe_oracle.summary.json",
+    "live_status": capture_dir / "swe_oracle.sealed.live-status.json",
+}
+if any(not path.is_file() for path in capture_files.values()):
+    raise SystemExit("reused ThinkingCap SWE capture is incomplete")
+raw_capture_resume["reused_capture_sha256"] = {
+    key: hashlib.sha256(path.read_bytes()).hexdigest()
+    for key, path in capture_files.items()
+}
+repair.setdefault("raw_capture_resumes", []).append(raw_capture_resume)
+repair["raw_capture_resume"] = raw_capture_resume
 data["instrument_repair"] = repair
 data["swe_conversion_status"] = "deferred_until_e8_cpu_boundary"
 tmp = identity_path.with_suffix(".tmp")
@@ -384,20 +398,56 @@ PY
     local path
     for path in server.argv server.stdout server.stderr server.launch.json health.json listener.json; do
         if [[ -e "$thinkingcap_dir/$path" ]]; then
-            test ! -e "$thinkingcap_dir/$path.failed-converter-gate" \
-                || die "preserved converter-gate server evidence already exists: $path"
-            mv "$thinkingcap_dir/$path" "$thinkingcap_dir/$path.failed-converter-gate"
+            if [[ ! -e "$thinkingcap_dir/$path.failed-converter-gate" ]]; then
+                mv "$thinkingcap_dir/$path" "$thinkingcap_dir/$path.failed-converter-gate"
+            fi
         fi
     done
     for path in swe_oracle.converter.argv swe_oracle.converter.stdout swe_oracle.converter.stderr \
         swe_oracle.predictions.json swe_oracle.predictions.diagnostics.jsonl \
         swe_oracle.predictions.diagnostics.summary.json; do
         if [[ -e "$thinkingcap_dir/$path" ]]; then
-            test ! -e "$thinkingcap_dir/$path.failed-missing-repos" \
-                || die "preserved missing-repos converter evidence already exists: $path"
-            mv "$thinkingcap_dir/$path" "$thinkingcap_dir/$path.failed-missing-repos"
+            if [[ ! -e "$thinkingcap_dir/$path.failed-missing-repos" ]]; then
+                mv "$thinkingcap_dir/$path" "$thinkingcap_dir/$path.failed-missing-repos"
+            fi
         fi
     done
+}
+
+archive_incomplete_arm_evidence() {
+    local arm_dir=$1
+    test -d "$arm_dir" || return 0
+    local archive="" suite expected pq summary status path
+    for suite in swe_oracle lcb_hard; do
+        [[ "$suite" == swe_oracle ]] && expected=40 || expected=53
+        pq="$arm_dir/$suite.sealed.jsonl"
+        summary="$arm_dir/$suite.summary.json"
+        status="$arm_dir/$suite.sealed.live-status.json"
+        if [[ ! -e "$pq" && ! -e "$summary" && ! -e "$status" ]]; then
+            continue
+        fi
+        if [[ -s "$pq" && -s "$summary" && -s "$status" ]] \
+            && jq -e --argjson n "$expected" \
+                '.complete == true and .completed_draws == $n and .expected_draws == $n
+                 and .request_error_rows == 0 and .artifact_integrity_fail_closed == false' \
+                "$status" >/dev/null; then
+            continue
+        fi
+        if [[ -z "$archive" ]]; then
+            archive="$arm_dir/superseded-incomplete-$(date -u +%Y%m%dT%H%M%SZ)"
+            mkdir -p "$archive"
+        fi
+        for path in "$arm_dir/$suite".*; do
+            [[ -e "$path" ]] || continue
+            mv "$path" "$archive/"
+        done
+    done
+    if [[ -n "$archive" ]]; then
+        for path in server.argv server.stdout server.stderr server.launch.json health.json listener.json; do
+            [[ -e "$arm_dir/$path" ]] && mv "$arm_dir/$path" "$archive/"
+        done
+        printf '27b-continuation: archived incomplete attempt at %s\n' "$archive"
+    fi
 }
 
 validate_capture() {
@@ -529,6 +579,103 @@ if summary.get("conversion_status") != expected_status:
 PY
 }
 
+finalize_swe_conversion() {
+    test -f "$OUT/raw-capture.complete" || die "raw capture terminal marker is missing"
+    test ! -f "$OUT/continuation.complete" || die "continuation is already finalized"
+    local repos_source="$REPO/artifacts/architect-code-eval-20260724/swebench_repos"
+    local repos_link="$OUT/instrument/swebench_repos"
+    test -d "$repos_source" || die "canonical SWE-bench repository set is missing"
+    if [[ -L "$repos_link" ]]; then
+        [[ $(readlink -f "$repos_link") == "$(readlink -f "$repos_source")" ]] \
+            || die "instrument SWE-bench repository link points elsewhere"
+    elif [[ -e "$repos_link" ]]; then
+        die "instrument SWE-bench repository path is not the reviewed link"
+    else
+        ln -s "$repos_source" "$repos_link"
+    fi
+
+    RUNNER_SHA=$(sha256sum "$OUT/instrument/v7_quality_gate_runner.py" | awk '{print $1}')
+    WATCHDOG_SHA=$(sha256sum "$OUT/instrument/capture_integrity_watchdog.py" | awk '{print $1}')
+    CONVERTER_SHA=$(sha256sum "$OUT/instrument/convert_sr_to_patch.py" | awk '{print $1}')
+    local arm arm_dir
+    for arm in A3-tc-quality__thinkingcap A3-ff-quality__stock_non_mtp \
+        A3-ff-quality__fable_non_mtp A3-ff-embedded-mtp__fable_mtp; do
+        arm_dir="$OUT/$arm"
+        validate_capture "$arm_dir/swe_oracle.sealed.jsonl" \
+            "$arm_dir/swe_oracle.summary.json" \
+            "$OUT/instrument/questions_swe_oracle.json" 40 "$RUNNER_SHA" \
+            swebench_oracle "$arm"
+        validate_capture "$arm_dir/lcb_hard.sealed.jsonl" \
+            "$arm_dir/lcb_hard.summary.json" \
+            "$OUT/instrument/questions_livecodebench_hard.json" 53 "$RUNNER_SHA" \
+            livecodebench_hard "$arm"
+        convert_swe_capture "$arm_dir" "$arm_dir/swe_oracle.sealed.jsonl" "$arm"
+    done
+
+    python3 - "$OUT/instrument/identity.json" "$OUT" "$repos_source" "$0" \
+        "$(git -C "$REPO" rev-parse HEAD)" <<'PY'
+import hashlib
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+identity_path, out, repos_source, script = map(Path, sys.argv[1:5])
+research_head = sys.argv[5]
+
+def sha(path):
+    h = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+arms = (
+    "A3-tc-quality__thinkingcap",
+    "A3-ff-quality__stock_non_mtp",
+    "A3-ff-quality__fable_non_mtp",
+    "A3-ff-embedded-mtp__fable_mtp",
+)
+files = (
+    "swe_oracle.sealed.jsonl",
+    "swe_oracle.sealed.live-status.json",
+    "swe_oracle.summary.json",
+    "swe_oracle.predictions.json",
+    "swe_oracle.predictions.diagnostics.jsonl",
+    "swe_oracle.predictions.diagnostics.summary.json",
+    "lcb_hard.sealed.jsonl",
+    "lcb_hard.sealed.live-status.json",
+    "lcb_hard.summary.json",
+)
+artifact_sha256 = {}
+for arm in arms:
+    arm_dir = out / arm
+    arm_hashes = {}
+    for name in files:
+        path = arm_dir / name
+        if not path.is_file():
+            raise SystemExit(f"missing final artifact: {arm}/{name}")
+        arm_hashes[name] = sha(path)
+    artifact_sha256[arm] = arm_hashes
+
+data = json.loads(identity_path.read_text())
+data["swe_conversion_status"] = "complete"
+data["swe_conversion_finalization"] = {
+    "schema": "27b_swe_conversion_finalization.v1",
+    "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    "research_head": research_head,
+    "finalizer_script_sha256": sha(script),
+    "swebench_repos_path": str(repos_source.resolve()),
+    "artifact_sha256": artifact_sha256,
+}
+tmp = identity_path.with_suffix(".tmp")
+tmp.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+tmp.replace(identity_path)
+PY
+    date -u +%Y-%m-%dT%H:%M:%SZ >"$OUT/swe-conversion.complete"
+    cp "$OUT/swe-conversion.complete" "$OUT/continuation.complete"
+}
+
 wait_for_live_status() {
     # The runner publishes status after its first response, not at process start.
     # A 3K-4K token first draw can legitimately take well over 30 seconds.
@@ -618,7 +765,9 @@ model_path() {
 run_arm() {
     local arm=$1 model_key=$2 thinking=$3 mtp=$4
     local model; model=$(model_path "$model_key")
-    local arm_dir="$OUT/$arm"; mkdir -p "$arm_dir"
+    local arm_dir="$OUT/$arm"
+    archive_incomplete_arm_evidence "$arm_dir"
+    mkdir -p "$arm_dir"
     local -a server=("$SERVER" -m "$model" --host 127.0.0.1 --port "$PORT" --metrics --slots --jinja --reasoning on --reasoning-budget -1 --reasoning-format deepseek --device ROCm0 -ngl all -fa on -np 1 -c 49152 -t 8 -tb 8 -b 2048 -ub 2048 -ctk f16 -ctv f16)
     [[ "$mtp" == true ]] && server+=(--spec-type draft-mtp --spec-draft-n-max 1)
     printf '%q ' env GGML_IQK=1 taskset -c "$CORES" "${server[@]}" >"$arm_dir/server.argv"
@@ -777,7 +926,7 @@ main() {
             trap - EXIT
             ;;
         --resume-raw-capture-only)
-            [[ $# -eq 1 ]] || die "usage: $0 --execute|--resume-after-converter-fix|--resume-raw-capture-only|--self-test"
+            [[ $# -eq 1 ]] || die "usage: $0 --execute|--resume-after-converter-fix|--resume-raw-capture-only|--finalize-swe-conversion|--self-test"
             wait_for_prerequisites
             ! port_listening || die "port $PORT is occupied"
             DEFER_SWE_CONVERSION=true
@@ -787,10 +936,15 @@ main() {
             run_arm A3-ff-quality__stock_non_mtp stock_non_mtp false false
             run_arm A3-ff-quality__fable_non_mtp fable_non_mtp false false
             run_arm A3-ff-embedded-mtp__fable_mtp fable_mtp false true
-            date -u +%Y-%m-%dT%H:%M:%SZ >"$OUT/continuation.complete"
+            date -u +%Y-%m-%dT%H:%M:%SZ >"$OUT/raw-capture.complete"
             trap - EXIT
             ;;
-        *) die "usage: $0 --execute|--resume-after-converter-fix|--resume-raw-capture-only|--self-test" ;;
+        --finalize-swe-conversion)
+            [[ $# -eq 1 ]] || die "usage: $0 --execute|--resume-after-converter-fix|--resume-raw-capture-only|--finalize-swe-conversion|--self-test"
+            ! port_listening || die "port $PORT is occupied"
+            finalize_swe_conversion
+            ;;
+        *) die "usage: $0 --execute|--resume-after-converter-fix|--resume-raw-capture-only|--finalize-swe-conversion|--self-test" ;;
     esac
 }
 

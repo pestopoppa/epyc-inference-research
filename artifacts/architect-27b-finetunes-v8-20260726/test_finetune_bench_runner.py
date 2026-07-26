@@ -283,6 +283,17 @@ class ContractTests(unittest.TestCase):
             '"swe_conversion_status"] = "deferred_until_e8_cpu_boundary"',
             continuation,
         )
+        self.assertIn(
+            '>"$OUT/raw-capture.complete"',
+            continuation,
+        )
+        self.assertIn("--finalize-swe-conversion)", continuation)
+        self.assertIn(
+            'data["swe_conversion_status"] = "complete"',
+            continuation,
+        )
+        self.assertIn('"artifact_sha256": artifact_sha256', continuation)
+        self.assertIn("archive_incomplete_arm_evidence", continuation)
 
 
 if __name__ == "__main__":
