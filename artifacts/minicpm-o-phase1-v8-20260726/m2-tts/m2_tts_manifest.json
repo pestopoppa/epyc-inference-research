@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "classification": "observation-only",
+  "claim_policy": "A successful run proves only that this pinned local runtime wrote a structurally valid WAV. It does not establish intelligibility, quality, latency, or suitability for a lineup decision.",
+  "upstream": {
+    "checkout": "/mnt/raid0/llm/llama.cpp-omni-experimental",
+    "commit": "5202b7b2f4d11f50b9f996161e7a2f8b8571b890",
+    "required_detached_head": true,
+    "binary_relative_path": "build-cpu/bin/llama-omni-cli"
+  },
+  "interface_contract": {
+    "state": "blocked-unknown-interface",
+    "path": null,
+    "sha256": null,
+    "reason": "5202b7b2 is the pinned feat/web-demo commit, not current master. The checked source/help evidence has not established a text-to-speech argv contract."
+  },
+  "artifacts": [
+    {"path": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf", "sha256": "1237a97ee081b8abebc47aa7dad565701e8f5f904cdc92f6723ac4281bbc0932"},
+    {"path": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/audio/MiniCPM-o-4_5-audio-F16.gguf", "sha256": "d5b188ac7feaf98e17175c3f9bd14bf269301bfd187439fdaa3e3a494fc32ef7"},
+    {"path": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/tts/MiniCPM-o-4_5-projector-F16.gguf", "sha256": "4b1b5b377358a5e594a304ff6ea5d52df606a9ba7d886c4299d232f0c67dd1fd"},
+    {"path": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/tts/MiniCPM-o-4_5-tts-F16.gguf", "sha256": "c7be3748a863dd6966ae7eed42600b7f41ca67affb03729ff245247f0e5ea088"},
+    {"path": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/token2wav-gguf/encoder.gguf", "sha256": "7f8d265da594eaf5e1de2db8f5f1867dbcb0bb75ef5878fadf2952347116f4d0"},
+    {"path": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/token2wav-gguf/flow_extra.gguf", "sha256": "c67611aa7d02500fe395a7798bf0bfdfb55c74d37ba93934ca74d82b4e63f78d"},
+    {"path": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/token2wav-gguf/flow_matching.gguf", "sha256": "eda6069f3edeb5dd3a87fbf2aedb2ddd1b46f3273926c4fcf09b24476a39cab8"},
+    {"path": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/token2wav-gguf/hifigan2.gguf", "sha256": "1b8b3bf5d8d3066aeee4324fdcdd41aefce170d0ee907645858de408d82835c2"},
+    {"path": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/token2wav-gguf/prompt_cache.gguf", "sha256": "81fe6f541ebe0b67db06a1e395df928da47991dc9637c2cf47d6c59d5b979f2c"}
+  ],
+  "audio_acceptance": {"min_duration_seconds": 0.1, "allowed_channels": [1, 2], "allowed_sample_rates_hz": [8000, 16000, 22050, 24000, 32000, 44100, 48000], "allowed_bits_per_sample": [16, 24, 32]}
+}
