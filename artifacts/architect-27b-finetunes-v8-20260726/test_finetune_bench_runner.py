@@ -274,6 +274,15 @@ class ContractTests(unittest.TestCase):
             continuation,
         )
         self.assertIn('"decode_timing_eligible": False', continuation)
+        self.assertIn("--resume-raw-capture-only)", continuation)
+        self.assertIn(
+            "deferred SWE conversion for %s until E8 CPU boundary",
+            continuation,
+        )
+        self.assertIn(
+            '"swe_conversion_status"] = "deferred_until_e8_cpu_boundary"',
+            continuation,
+        )
 
 
 if __name__ == "__main__":

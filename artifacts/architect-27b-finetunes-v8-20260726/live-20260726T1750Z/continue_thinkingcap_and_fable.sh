@@ -30,6 +30,7 @@ LAGUNA_VALIDATION=""
 HEALTH_TIMEOUT_S=180
 LIVE_STATUS_TIMEOUT_S=300
 STOP_TIMEOUT_S=30
+DEFER_SWE_CONVERSION=false
 
 die() { printf '27b-continuation: %s\n' "$*" >&2; return 1; }
 port_listening() { lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; }
@@ -339,6 +340,66 @@ tmp.replace(identity_path)
 PY
 }
 
+record_raw_capture_resume() {
+    local identity="$OUT/instrument/identity.json"
+    test -f "$identity" || die "repaired instrument identity is missing"
+    [[ $(sha256sum "$OUT/instrument/swebench_verified.json" | awk '{print $1}') == "$SWEBENCH_VERIFIED_SHA" ]] \
+        || die "repaired SWE-bench verified source drift"
+    python3 - "$identity" "$0" "$(git -C "$REPO" rev-parse HEAD)" <<'PY'
+import hashlib
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+identity_path, resume_script = map(Path, sys.argv[1:3])
+research_head = sys.argv[3]
+data = json.loads(identity_path.read_text())
+repair = data.get("instrument_repair", {})
+if (
+    repair.get("schema") != "27b_continuation_instrument_repair.v1"
+    or data.get("swebench_verified_sha256")
+    != "b087b5dad72b3e765a6cf93a9e7d516d8796698a0fd358abb73c6627df19f66e"
+):
+    raise SystemExit("instrument is not the reviewed repaired identity")
+repair["raw_capture_resume"] = {
+    "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    "reason": "defer SWE conversion/repository traversal until E8 CPU isolation ends",
+    "resume_script_sha256": hashlib.sha256(resume_script.read_bytes()).hexdigest(),
+    "research_head": research_head,
+    "swe_conversion_deferred": True,
+}
+data["instrument_repair"] = repair
+data["swe_conversion_status"] = "deferred_until_e8_cpu_boundary"
+tmp = identity_path.with_suffix(".tmp")
+tmp.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+tmp.replace(identity_path)
+PY
+
+    RUNNER_SHA=$(sha256sum "$OUT/instrument/v7_quality_gate_runner.py" | awk '{print $1}')
+    WATCHDOG_SHA=$(sha256sum "$OUT/instrument/capture_integrity_watchdog.py" | awk '{print $1}')
+    CONVERTER_SHA=$(sha256sum "$OUT/instrument/convert_sr_to_patch.py" | awk '{print $1}')
+
+    local thinkingcap_dir="$OUT/A3-tc-quality__thinkingcap"
+    local path
+    for path in server.argv server.stdout server.stderr server.launch.json health.json listener.json; do
+        if [[ -e "$thinkingcap_dir/$path" ]]; then
+            test ! -e "$thinkingcap_dir/$path.failed-converter-gate" \
+                || die "preserved converter-gate server evidence already exists: $path"
+            mv "$thinkingcap_dir/$path" "$thinkingcap_dir/$path.failed-converter-gate"
+        fi
+    done
+    for path in swe_oracle.converter.argv swe_oracle.converter.stdout swe_oracle.converter.stderr \
+        swe_oracle.predictions.json swe_oracle.predictions.diagnostics.jsonl \
+        swe_oracle.predictions.diagnostics.summary.json; do
+        if [[ -e "$thinkingcap_dir/$path" ]]; then
+            test ! -e "$thinkingcap_dir/$path.failed-missing-repos" \
+                || die "preserved missing-repos converter evidence already exists: $path"
+            mv "$thinkingcap_dir/$path" "$thinkingcap_dir/$path.failed-missing-repos"
+        fi
+    done
+}
+
 validate_capture() {
     local pq=$1 summary=$2 questions=$3 expected=$4 source_sha=$5 suite=$6 arm=$7
     python3 - "$pq" "$summary" "$questions" "$expected" "$source_sha" "$suite" "$arm" <<'PY'
@@ -581,7 +642,11 @@ run_arm() {
         if [[ -f "$pq" && -f "$summary" && -f "${pq%.jsonl}.live-status.json" ]]; then
             validate_capture "$pq" "$summary" "$question" "$n" "$RUNNER_SHA" "$runner_suite" "$arm"
             if [[ "$suite" == swe_oracle ]]; then
-                convert_swe_capture "$arm_dir" "$pq" "$arm"
+                if [[ "$DEFER_SWE_CONVERSION" == true ]]; then
+                    printf '27b-continuation: deferred SWE conversion for %s until E8 CPU boundary\n' "$arm"
+                else
+                    convert_swe_capture "$arm_dir" "$pq" "$arm"
+                fi
             fi
             printf '27b-continuation: reused validator-clean capture %s/%s\n' "$arm" "$suite"
             continue
@@ -604,7 +669,11 @@ run_arm() {
         fi
         validate_capture "$pq" "$summary" "$question" "$n" "$RUNNER_SHA" "$runner_suite" "$arm"
         if [[ "$suite" == swe_oracle ]]; then
-            convert_swe_capture "$arm_dir" "$pq" "$arm"
+            if [[ "$DEFER_SWE_CONVERSION" == true ]]; then
+                printf '27b-continuation: deferred SWE conversion for %s until E8 CPU boundary\n' "$arm"
+            else
+                convert_swe_capture "$arm_dir" "$pq" "$arm"
+            fi
         fi
     done
     stop_owned_server
@@ -707,7 +776,21 @@ main() {
             date -u +%Y-%m-%dT%H:%M:%SZ >"$OUT/continuation.complete"
             trap - EXIT
             ;;
-        *) die "usage: $0 --execute|--resume-after-converter-fix|--self-test" ;;
+        --resume-raw-capture-only)
+            [[ $# -eq 1 ]] || die "usage: $0 --execute|--resume-after-converter-fix|--resume-raw-capture-only|--self-test"
+            wait_for_prerequisites
+            ! port_listening || die "port $PORT is occupied"
+            DEFER_SWE_CONVERSION=true
+            record_raw_capture_resume
+            trap cleanup EXIT INT TERM
+            run_arm A3-tc-quality__thinkingcap thinkingcap true false
+            run_arm A3-ff-quality__stock_non_mtp stock_non_mtp false false
+            run_arm A3-ff-quality__fable_non_mtp fable_non_mtp false false
+            run_arm A3-ff-embedded-mtp__fable_mtp fable_mtp false true
+            date -u +%Y-%m-%dT%H:%M:%SZ >"$OUT/continuation.complete"
+            trap - EXIT
+            ;;
+        *) die "usage: $0 --execute|--resume-after-converter-fix|--resume-raw-capture-only|--self-test" ;;
     esac
 }
 
