@@ -7457,8 +7457,11 @@ roles:
       architecture: qwen35moe
       license: AGPL-3.0
     artifact_status:
-      download: complete
+      download: deleted
       observed_date: 2026-07-16
+      deleted: 2026-07-26
+      deleted_reason: operator-approved disk cleanup; failed all reviewer slates (RM-2.fast),
+        0 active-registry refs; recorded results in handoffs survive deletion
       mtp_head: absent_in_community_gguf
       file_bytes: 18939313056
       hf_metadata:
@@ -8620,8 +8623,11 @@ roles:
       architecture: qwen35
       mtp_capable: true
     artifact_status:
-      download: present
+      download: deleted
       observed_date: 2026-07-17
+      deleted: 2026-07-26
+      deleted_reason: operator-approved disk cleanup; conversion intermediate, 0 registry/handoff
+        consumers; regenerable from Qwen3.6-27B-MTP source if ever needed
       file_bytes: 54657733760
       provenance: local_artifact_no_hf_sidecar_found
     candidate_roles:
