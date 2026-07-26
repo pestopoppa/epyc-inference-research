@@ -173,3 +173,25 @@ def test_run_suite_same_suite_resume_is_idempotent(tmp_path, monkeypatch):
     assert result["correct"] == 1
     assert result["n_questions"] == 1
     assert rows.read_text().splitlines() == [json.dumps(row)]
+
+
+def test_run_suite_persists_and_scores_full_search_replace_response(tmp_path, monkeypatch):
+    response = "<<<<<<< SEARCH\n" + ("x" * 5000) + "\n=======\ny\n>>>>>>> REPLACE file.py"
+    questions = [{"id": "swe-1", "prompt": "prompt", "expected": "unused", "tier": 1}]
+    monkeypatch.setattr(runner, "load_questions", lambda *args, **kwargs: questions)
+    seen = []
+    monkeypatch.setattr(runner, "score_response", lambda text, *_: seen.append(text) or True)
+    monkeypatch.setattr(
+        runner,
+        "query_server_meta",
+        lambda *args, **kwargs: {
+            "text": response, "reasoning": "", "finish_reason": "stop",
+            "completion_tokens": 1, "prompt_tokens": 1, "decode_tok_s": 1.0, "error": "",
+        },
+    )
+    rows = tmp_path / "swe.jsonl"
+    with rows.open("a") as handle:
+        runner.run_suite("swebench_oracle", "http://unused", n=1, seed=42, per_question_out=handle)
+
+    assert seen == [response]
+    assert json.loads(rows.read_text()) ["response"] == response

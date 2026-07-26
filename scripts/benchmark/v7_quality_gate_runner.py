@@ -357,7 +357,9 @@ def run_suite(
                     "reasoning_chars": len(meta.get("reasoning") or ""),
                     "empty_content_with_reasoning": (
                         not response and bool(meta.get("reasoning"))),
-                    "response": response[-4000:],
+                    # SWE SEARCH/REPLACE conversion is performed from this artifact.
+                    # Truncating it turns a valid model response into a different patch.
+                    "response": response,
                 }) + "\n")
                 per_question_out.flush()
             tok_acc[0] += meta.get("completion_tokens", 0)
