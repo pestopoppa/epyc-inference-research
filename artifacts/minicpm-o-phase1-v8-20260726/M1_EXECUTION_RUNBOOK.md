@@ -158,6 +158,8 @@ candidate_pid=$(<"$RUN_DIR/candidate.pid")
 Before forking, the runner publishes a durable recovery intent that binds the
 exact cgroup, endpoint, artifact paths, and failure cleanup receipt. The child
 then enters the cgroup in the pre-exec hook, before candidate code can fork.
+The canonical launch includes `-lv 4`; v8's default verbosity suppresses the
+model and projector offload lines that the MI210 evidence grammar requires.
 Authority is create-only and binds the leader PID/pidfd identity plus the
 cgroup canonical path, inode, controller facts, populated state, and current
 membership. Any launch-path exception after the fork boundary makes a

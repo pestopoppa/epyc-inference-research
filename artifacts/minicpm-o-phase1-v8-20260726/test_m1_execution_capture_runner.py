@@ -153,6 +153,8 @@ class M1ExecutionCaptureTests(unittest.TestCase):
                     "--mmproj-offload",
                     "--fit",
                     "off",
+                    "-lv",
+                    "4",
                 )
             ),
             listener_inodes=listener_inodes,

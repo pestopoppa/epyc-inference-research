@@ -1288,6 +1288,8 @@ def canonical_candidate_argv(pins: ArmPins, endpoint_host: str, port: int) -> tu
         "--mmproj-offload",
         "--fit",
         "off",
+        "-lv",
+        "4",
     )
 
 
