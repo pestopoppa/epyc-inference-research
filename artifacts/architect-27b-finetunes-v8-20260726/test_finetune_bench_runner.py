@@ -253,6 +253,28 @@ class ContractTests(unittest.TestCase):
         )
         self.assertNotIn("deadline=$((SECONDS + 30))", continuation)
 
+    def test_live_continuation_seals_converter_gold_and_reuses_clean_capture(self):
+        continuation = (
+            ROOT
+            / "live-20260726T1750Z"
+            / "continue_thinkingcap_and_fable.sh"
+        ).read_text()
+        self.assertIn(
+            'cp "$SWEBENCH_VERIFIED_SOURCE" "$OUT/instrument/swebench_verified.json"',
+            continuation,
+        )
+        self.assertIn('"swebench_verified_sha256": sha(swe_gold)', continuation)
+        self.assertIn("--resume-after-converter-fix)", continuation)
+        self.assertIn(
+            'validate_capture "$pq" "$summary" "$question" "$n" "$RUNNER_SHA"',
+            continuation,
+        )
+        self.assertIn(
+            "reuse validator-clean 40/40 ThinkingCap SWE capture; do not redraw",
+            continuation,
+        )
+        self.assertIn('"decode_timing_eligible": False', continuation)
+
 
 if __name__ == "__main__":
     unittest.main()

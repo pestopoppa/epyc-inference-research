@@ -17,6 +17,9 @@ LAGUNA_ABORT_RECEIPT_SHA=471f71b5651169ee06a2fb5c7a18bf0a6a7ecd2a626d95aeaef61a7
 MANIFEST="$RUNROOT/../finetune_bench_manifest.json"
 SERVER=/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server
 WATCHDOG="$REPO/scripts/benchmark/capture_integrity_watchdog.py"
+SWEBENCH_VERIFIED_SOURCE="$REPO/artifacts/architect-code-eval-20260724/swebench_verified.json"
+SWEBENCH_VERIFIED_SHA=b087b5dad72b3e765a6cf93a9e7d516d8796698a0fd358abb73c6627df19f66e
+PRE_REPAIR_IDENTITY_SHA=6212109e18668e6c7f6ec488cbb573af4bea61ef90ec0ba67391578b4b30cbc2
 PORT=18092
 CORES=184-191
 SERVER_PID=""
@@ -214,9 +217,12 @@ prepare_output_dir() {
 }
 
 verify_frozen_inputs() {
+    [[ $(sha256sum "$SWEBENCH_VERIFIED_SOURCE" | awk '{print $1}') == "$SWEBENCH_VERIFIED_SHA" ]] \
+        || die "SWE-bench verified source drift"
     cp "$REPO/scripts/benchmark/v7_quality_gate_runner.py" "$OUT/instrument/v7_quality_gate_runner.py"
     cp "$WATCHDOG" "$OUT/instrument/capture_integrity_watchdog.py"
     cp "$REPO/artifacts/architect-code-eval-20260724/convert_sr_to_patch.py" "$OUT/instrument/convert_sr_to_patch.py"
+    cp "$SWEBENCH_VERIFIED_SOURCE" "$OUT/instrument/swebench_verified.json"
     cp "$REPO/artifacts/architect-code-eval-20260724/questions_swebench_oracle.json" "$OUT/instrument/questions_swe_oracle.json"
     cp "$REPO/artifacts/architect-code-eval-20260724/questions_livecodebench_hard.json" "$OUT/instrument/questions_livecodebench_hard.json"
     RUNNER_SHA=$(sha256sum "$OUT/instrument/v7_quality_gate_runner.py" | awk '{print $1}')
@@ -229,10 +235,10 @@ verify_frozen_inputs() {
         >"$OUT/instrument/fable_non_mtp.gguf_header.txt"
     /mnt/raid0/llm/llama.cpp/build-hip/bin/llama-gguf "$fable_mtp" r n \
         >"$OUT/instrument/fable_mtp.gguf_header.txt"
-    python3 - "$MANIFEST" "$SERVER" "$OUT/instrument/v7_quality_gate_runner.py" "$OUT/instrument/capture_integrity_watchdog.py" "$OUT/instrument/convert_sr_to_patch.py" "$OUT/instrument/questions_swe_oracle.json" "$OUT/instrument/questions_livecodebench_hard.json" "$OUT/instrument/identity.json" "$OUT/instrument/fable_non_mtp.gguf_header.txt" "$OUT/instrument/fable_mtp.gguf_header.txt" "$LAGUNA_VALIDATION" <<'PY'
+    python3 - "$MANIFEST" "$SERVER" "$OUT/instrument/v7_quality_gate_runner.py" "$OUT/instrument/capture_integrity_watchdog.py" "$OUT/instrument/convert_sr_to_patch.py" "$OUT/instrument/swebench_verified.json" "$OUT/instrument/questions_swe_oracle.json" "$OUT/instrument/questions_livecodebench_hard.json" "$OUT/instrument/identity.json" "$OUT/instrument/fable_non_mtp.gguf_header.txt" "$OUT/instrument/fable_mtp.gguf_header.txt" "$LAGUNA_VALIDATION" <<'PY'
 import hashlib, importlib.util, json, sys
 from pathlib import Path
-manifest, server, runner, watchdog, converter, swe_questions, lcb_questions, out, nm_header, mtp_header, laguna_validation = map(Path, sys.argv[1:])
+manifest, server, runner, watchdog, converter, swe_gold, swe_questions, lcb_questions, out, nm_header, mtp_header, laguna_validation = map(Path, sys.argv[1:])
 data = json.loads(manifest.read_text())
 def sha(path):
     h = hashlib.sha256()
@@ -249,8 +255,87 @@ for role, snapshot in (("quality_runner", runner), ("capture_integrity_watchdog"
 for suite, snapshot in (("swe_oracle", swe_questions), ("lcb_hard", lcb_questions)):
     if sha(snapshot) != data["inputs"][suite]["sha256"]:
         raise SystemExit(f"snapshot drift: {suite}")
-identity = {"manifest_sha256": sha(manifest), "server_sha256": sha(server), "runner_sha256": sha(runner), "watchdog_sha256": sha(watchdog), "converter_sha256": sha(converter), "capture_schema_version": data["capture_contract"]["schema_version"], "question_sha256": {"swe_oracle": sha(swe_questions), "lcb_hard": sha(lcb_questions)}, "full_static_witness": witness, "upstream_clean_laguna_validation": {"path": str(laguna_validation), "sha256": sha(laguna_validation), "payload": json.loads(laguna_validation.read_text())}, "models": {name: data["models"][name] for name in ("thinkingcap", "stock_non_mtp", "fable_non_mtp", "fable_mtp")}, "fable_header_contract": "validated_851_base_plus_15_mtp", "fable_header_transcripts": {"non_mtp_sha256": sha(nm_header), "mtp_sha256": sha(mtp_header)}}
+identity = {"manifest_sha256": sha(manifest), "server_sha256": sha(server), "runner_sha256": sha(runner), "watchdog_sha256": sha(watchdog), "converter_sha256": sha(converter), "swebench_verified_sha256": sha(swe_gold), "capture_schema_version": data["capture_contract"]["schema_version"], "question_sha256": {"swe_oracle": sha(swe_questions), "lcb_hard": sha(lcb_questions)}, "full_static_witness": witness, "upstream_clean_laguna_validation": {"path": str(laguna_validation), "sha256": sha(laguna_validation), "payload": json.loads(laguna_validation.read_text())}, "models": {name: data["models"][name] for name in ("thinkingcap", "stock_non_mtp", "fable_non_mtp", "fable_mtp")}, "fable_header_contract": "validated_851_base_plus_15_mtp", "fable_header_transcripts": {"non_mtp_sha256": sha(nm_header), "mtp_sha256": sha(mtp_header)}}
 tmp = out.with_suffix(".tmp"); tmp.write_text(json.dumps(identity, indent=2, sort_keys=True)+"\n"); tmp.replace(out)
+PY
+}
+
+repair_instrument_for_resume() {
+    test -d "$OUT/instrument" || die "resume output has no instrument bundle"
+    test ! -f "$OUT/continuation.complete" || die "continuation is already complete"
+    local identity="$OUT/instrument/identity.json"
+    test -f "$identity" || die "resume instrument identity is missing"
+    [[ $(sha256sum "$identity" | awk '{print $1}') == "$PRE_REPAIR_IDENTITY_SHA" ]] \
+        || die "resume instrument identity is not the reviewed pre-repair identity"
+    [[ $(sha256sum "$SWEBENCH_VERIFIED_SOURCE" | awk '{print $1}') == "$SWEBENCH_VERIFIED_SHA" ]] \
+        || die "SWE-bench verified source drift"
+
+    cp "$SWEBENCH_VERIFIED_SOURCE" "$OUT/instrument/swebench_verified.json"
+    RUNNER_SHA=$(sha256sum "$OUT/instrument/v7_quality_gate_runner.py" | awk '{print $1}')
+    WATCHDOG_SHA=$(sha256sum "$OUT/instrument/capture_integrity_watchdog.py" | awk '{print $1}')
+    CONVERTER_SHA=$(sha256sum "$OUT/instrument/convert_sr_to_patch.py" | awk '{print $1}')
+
+    local thinkingcap_dir="$OUT/A3-tc-quality__thinkingcap"
+    local path
+    for path in server.argv server.stdout server.stderr server.launch.json health.json listener.json; do
+        if [[ -e "$thinkingcap_dir/$path" ]]; then
+            test ! -e "$thinkingcap_dir/$path.pre-resume-swe" \
+                || die "preserved pre-resume server evidence already exists: $path"
+            mv "$thinkingcap_dir/$path" "$thinkingcap_dir/$path.pre-resume-swe"
+        fi
+    done
+    for path in swe_oracle.converter.argv swe_oracle.converter.stdout swe_oracle.converter.stderr; do
+        if [[ -e "$thinkingcap_dir/$path" ]]; then
+            test ! -e "$thinkingcap_dir/$path.failed-missing-gold" \
+                || die "preserved converter failure evidence already exists: $path"
+            mv "$thinkingcap_dir/$path" "$thinkingcap_dir/$path.failed-missing-gold"
+        fi
+    done
+
+    python3 - "$identity" "$OUT/instrument/swebench_verified.json" "$0" \
+        "$PRE_REPAIR_IDENTITY_SHA" "$SWEBENCH_VERIFIED_SHA" \
+        "$(git -C "$REPO" rev-parse HEAD)" <<'PY'
+import hashlib
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+identity_path, gold_path, resume_script = map(Path, sys.argv[1:4])
+pre_identity_sha, expected_gold_sha, research_head = sys.argv[4:7]
+
+def sha(path):
+    h = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+if sha(gold_path) != expected_gold_sha:
+    raise SystemExit("copied SWE-bench verified source hash mismatch")
+data = json.loads(identity_path.read_text())
+data["swebench_verified_sha256"] = expected_gold_sha
+data["instrument_repair"] = {
+    "schema": "27b_continuation_instrument_repair.v1",
+    "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+    "reason": "converter dependency omitted from sealed instrument bundle",
+    "pre_repair_identity_sha256": pre_identity_sha,
+    "resume_script_sha256": sha(resume_script),
+    "research_head": research_head,
+    "resume_policy": "reuse validator-clean 40/40 ThinkingCap SWE capture; do not redraw",
+    "timing_exclusion": {
+        "arm": "A3-tc-quality__thinkingcap",
+        "suite": "swe_oracle",
+        "question_id": "django__django-11239",
+        "reason": "exogenous model hash read overlapped this request",
+        "overlap_utc": ["2026-07-26T22:53:48Z", "2026-07-26T22:54:39Z"],
+        "quality_response_valid": True,
+        "decode_timing_eligible": False,
+    },
+}
+tmp = identity_path.with_suffix(".tmp")
+tmp.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+tmp.replace(identity_path)
 PY
 }
 
@@ -493,6 +578,14 @@ run_arm() {
             question="$OUT/instrument/questions_livecodebench_hard.json"
         fi
         pq="$arm_dir/$suite.sealed.jsonl"; summary="$arm_dir/$suite.summary.json"
+        if [[ -f "$pq" && -f "$summary" && -f "${pq%.jsonl}.live-status.json" ]]; then
+            validate_capture "$pq" "$summary" "$question" "$n" "$RUNNER_SHA" "$runner_suite" "$arm"
+            if [[ "$suite" == swe_oracle ]]; then
+                convert_swe_capture "$arm_dir" "$pq" "$arm"
+            fi
+            printf '27b-continuation: reused validator-clean capture %s/%s\n' "$arm" "$suite"
+            continue
+        fi
         local -a runner=(python3 -B "$OUT/instrument/v7_quality_gate_runner.py" --host 127.0.0.1 --port "$PORT" --output "$summary" --suites "$runner_suite" --n "$n" --limit "$n" --seed 42 --max-tokens "$max" --endpoint chat --kernel production-consolidated-v8 --concurrency 1 --repeats 1 --arm "$arm" --binary "$SERVER" --models "$model" --temperature 0.6 --top-p 0.95 --top-k 20 --questions-in "$question" --per-question-out "$pq")
         [[ "$thinking" == true ]] && runner+=(--enable-thinking) || runner+=(--no-enable-thinking)
         printf '%q ' env PYTHONPATH="$REPO/scripts/benchmark" RUNNER_REQUEST_TIMEOUT_S=3600 taskset -c "$CORES" "${runner[@]}" >"$arm_dir/$suite.evaluator.argv"
@@ -601,7 +694,20 @@ main() {
             date -u +%Y-%m-%dT%H:%M:%SZ >"$OUT/continuation.complete"
             trap - EXIT
             ;;
-        *) die "usage: $0 --execute|--self-test" ;;
+        --resume-after-converter-fix)
+            [[ $# -eq 1 ]] || die "usage: $0 --execute|--resume-after-converter-fix|--self-test"
+            wait_for_prerequisites
+            ! port_listening || die "port $PORT is occupied"
+            repair_instrument_for_resume
+            trap cleanup EXIT INT TERM
+            run_arm A3-tc-quality__thinkingcap thinkingcap true false
+            run_arm A3-ff-quality__stock_non_mtp stock_non_mtp false false
+            run_arm A3-ff-quality__fable_non_mtp fable_non_mtp false false
+            run_arm A3-ff-embedded-mtp__fable_mtp fable_mtp false true
+            date -u +%Y-%m-%dT%H:%M:%SZ >"$OUT/continuation.complete"
+            trap - EXIT
+            ;;
+        *) die "usage: $0 --execute|--resume-after-converter-fix|--self-test" ;;
     esac
 }
 
