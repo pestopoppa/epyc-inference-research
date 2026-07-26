@@ -294,6 +294,12 @@ class ContractTests(unittest.TestCase):
         )
         self.assertIn('"artifact_sha256": artifact_sha256', continuation)
         self.assertIn("archive_incomplete_arm_evidence", continuation)
+        self.assertIn(
+            'test ! -f "$OUT/raw-capture.complete" || die "raw capture is already complete"',
+            continuation,
+        )
+        self.assertIn("validate_swe_conversion_artifacts", continuation)
+        self.assertIn("archive_incomplete_swe_conversion", continuation)
 
 
 if __name__ == "__main__":

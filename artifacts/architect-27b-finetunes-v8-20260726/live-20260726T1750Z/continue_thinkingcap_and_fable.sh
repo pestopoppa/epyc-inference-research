@@ -579,6 +579,56 @@ if summary.get("conversion_status") != expected_status:
 PY
 }
 
+validate_swe_conversion_artifacts() {
+    local arm_dir=$1 pq=$2
+    python3 - "$pq" "$arm_dir/swe_oracle.predictions.json" \
+        "$arm_dir/swe_oracle.predictions.diagnostics.jsonl" \
+        "$arm_dir/swe_oracle.predictions.diagnostics.summary.json" "$RUNNER_SHA" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+pq_path, predictions_path, diagnostics_path, summary_path = map(Path, sys.argv[1:5])
+source_sha = sys.argv[5]
+if any(not path.is_file() for path in (pq_path, predictions_path, diagnostics_path, summary_path)):
+    raise SystemExit(1)
+rows = [json.loads(line) for line in pq_path.read_text().splitlines() if line.strip()]
+predictions = json.loads(predictions_path.read_text())
+diagnostics = [json.loads(line) for line in diagnostics_path.read_text().splitlines() if line.strip()]
+summary = json.loads(summary_path.read_text())
+expected_ids = [row["id"] for row in rows]
+if (
+    len(predictions) != 40
+    or [row.get("instance_id") for row in predictions] != expected_ids
+    or len(diagnostics) != 40
+    or [row.get("instance_id") for row in diagnostics] != expected_ids
+    or not summary.get("scoring_eligible")
+    or not summary.get("prediction_artifact_written")
+    or summary.get("prediction_count") != 40
+    or summary.get("runner_source_sha256") != source_sha
+    or summary.get("artifact_integrity_status") != "verified"
+):
+    raise SystemExit(1)
+PY
+}
+
+archive_incomplete_swe_conversion() {
+    local arm_dir=$1
+    local archive="" path
+    for path in swe_oracle.converter.argv swe_oracle.converter.stdout \
+        swe_oracle.converter.stderr swe_oracle.predictions.json \
+        swe_oracle.predictions.diagnostics.jsonl \
+        swe_oracle.predictions.diagnostics.summary.json; do
+        [[ -e "$arm_dir/$path" ]] || continue
+        if [[ -z "$archive" ]]; then
+            archive="$arm_dir/superseded-conversion-$(date -u +%Y%m%dT%H%M%SZ)"
+            mkdir -p "$archive"
+        fi
+        mv "$arm_dir/$path" "$archive/"
+    done
+    [[ -z "$archive" ]] || printf '27b-continuation: archived incomplete conversion at %s\n' "$archive"
+}
+
 finalize_swe_conversion() {
     test -f "$OUT/raw-capture.complete" || die "raw capture terminal marker is missing"
     test ! -f "$OUT/continuation.complete" || die "continuation is already finalized"
@@ -609,7 +659,13 @@ finalize_swe_conversion() {
             "$arm_dir/lcb_hard.summary.json" \
             "$OUT/instrument/questions_livecodebench_hard.json" 53 "$RUNNER_SHA" \
             livecodebench_hard "$arm"
-        convert_swe_capture "$arm_dir" "$arm_dir/swe_oracle.sealed.jsonl" "$arm"
+        if validate_swe_conversion_artifacts "$arm_dir" \
+            "$arm_dir/swe_oracle.sealed.jsonl"; then
+            printf '27b-continuation: reused validated SWE conversion for %s\n' "$arm"
+        else
+            archive_incomplete_swe_conversion "$arm_dir"
+            convert_swe_capture "$arm_dir" "$arm_dir/swe_oracle.sealed.jsonl" "$arm"
+        fi
     done
 
     python3 - "$OUT/instrument/identity.json" "$OUT" "$repos_source" "$0" \
@@ -929,6 +985,7 @@ main() {
             [[ $# -eq 1 ]] || die "usage: $0 --execute|--resume-after-converter-fix|--resume-raw-capture-only|--finalize-swe-conversion|--self-test"
             wait_for_prerequisites
             ! port_listening || die "port $PORT is occupied"
+            test ! -f "$OUT/raw-capture.complete" || die "raw capture is already complete"
             DEFER_SWE_CONVERSION=true
             record_raw_capture_resume
             trap cleanup EXIT INT TERM
