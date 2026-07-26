@@ -1,0 +1,42 @@
+{
+  "arms": {
+    "A3_27B_dense": {
+      "arm": "A3_27B_dense_v8_matched_laguna_promptfix_3072",
+      "hash_evidence": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/a3-a4-swe-confirmation/A3_27B_dense-port18091/model.sha256",
+      "model": "/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf",
+      "model_sha256": "9408dcb356cc061a05c139e5647cbde0698ff980c6a69f7fc214e9989f86cfa8"
+    },
+    "A4_35B_A3B": {
+      "arm": "A4_35B_A3B_v8_matched_laguna_promptfix_3072",
+      "hash_evidence": "/mnt/raid0/llm/epyc-inference-research/data/kernel-v8-candidate/cpu-prefill-regression/run-20260725T082414Z-v3-live/summary.partial.json#/model_inventory/qwen36_q8/shards/0/sha256",
+      "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+      "model_sha256": "93dd505d5b4d3f6adcef8c3b6b35465f7537379893f80b87b9ddc2baa62ca557"
+    }
+  },
+  "binary": {
+    "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+    "sha256": "112c560f1c978c584a9899539851348a0ce1e05cde458061c281758aff066882"
+  },
+  "execution_gate": "requires verified 27B continuation.complete before --execute",
+  "kernel": {
+    "branch": "production-consolidated-v8",
+    "head": "67a433bf45a8a091d83b4ea0b32ff0735fd51800"
+  },
+  "question_sha256": "4b03ad7703bbf2dbaa1eb91b3313cc3cab2892672db87f6242ffd1d489e76375",
+  "question_source": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/scorer-artifact-rescore-20260726/clean-full40-promptfix-20260726/questions_pinned_40.json",
+  "runner_source_sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e",
+  "sampling": {
+    "concurrency": 1,
+    "enable_thinking": false,
+    "endpoint": "chat",
+    "max_tokens": 3072,
+    "repeats": 1,
+    "seed": 42,
+    "temperature": 0.6,
+    "top_k": 20,
+    "top_p": 0.95
+  },
+  "schema": "a3_a4_matched_promptfix_recapture.v1",
+  "status": "PREPARED_NO_INFERENCE_EXECUTED",
+  "watchdog_source_sha256": "f4bd45b9617ca880a92be506d741038df65d457f0923f07bc3db7091a7303055"
+}
