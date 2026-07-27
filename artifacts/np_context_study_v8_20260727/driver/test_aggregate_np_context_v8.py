@@ -371,7 +371,6 @@ def test_write_is_create_only_or_exact_idempotent(tmp_path, monkeypatch):
     argv = ["aggregate", "--root", str(tmp_path), "--label", surface.name, "--write", str(destination)]
     monkeypatch.setattr("sys.argv", argv)
     assert aggregate.main() == 0
-    original = destination.read_text()
     assert aggregate.main() == 0
     destination.write_text("different\n")
     assert aggregate.main() == 3
@@ -448,11 +447,13 @@ def test_canonical_label_binds_mode_grid_model_and_binary(tmp_path):
     else:
         raise AssertionError("canonical A4 accepted full grid")
 
-    second = tmp_path / "second"; second.mkdir()
+    second = tmp_path / "second"
+    second.mkdir()
     surface = make_surface(second, label="A4_35b_a3b_v8_bridge")
     payload = result(surface.name, 1, 2048)
     payload["meta"].update(models="stale.gguf", binary="stale-server")
-    cell = surface / "np1_L2048"; cell.mkdir()
+    cell = surface / "np1_L2048"
+    cell.mkdir()
     (cell / "results.json").write_text(json.dumps(payload))
     reason = aggregate.validate_cell(surface, 1, 2048)
     assert "canonical model" in reason
