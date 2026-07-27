@@ -180,10 +180,54 @@ for arg in json.load(sys.stdin)['cmd']:
     print(arg)
 ")
 
+# --- A0: CPU-region mutual exclusion -----------------------------------------
+# Until 2026-07-27 this recipe took NO lock, while the orchestrator's dispatch
+# path serializes inference through per-region flocks — so a canonical bench and
+# an orchestrator placement could occupy the same physical cores with nothing
+# preventing it. (The per-run operator-approval clause was the only serializer:
+# a human used as a mutex.) We now acquire the SAME locks the dispatch path
+# uses, for exactly the cores this run pins.
+#
+# The cpu list is derived from the emitted command rather than hardcoded, so it
+# stays correct if the canonical prefix's width ever changes.
+BENCH_CPU_LIST=$(echo "$CMD_JSON" | python3 -c "
+import sys, json
+cmd = json.load(sys.stdin)['cmd']
+try:
+    print(cmd[cmd.index('taskset') + 2])
+except (ValueError, IndexError):
+    print('')
+")
+REGION_LOCK="${REGION_LOCK_BIN:-/mnt/raid0/llm/epyc-orchestrator/scripts/region-lock}"
+LOCK_PREFIX=""
+if [[ "${CANONICAL_SKIP_REGION_LOCK:-0}" == "1" ]]; then
+    echo "WARNING: CANONICAL_SKIP_REGION_LOCK=1 — running WITHOUT CPU-region exclusion." >&2
+    echo "         A concurrent orchestrator placement can poison this measurement." >&2
+else
+    # Fail closed (fabric axiom 3): an unlockable run is refused, never silently
+    # downgraded to the old unprotected behaviour.
+    if [[ -z "$BENCH_CPU_LIST" ]]; then
+        echo "ERROR: could not derive the taskset cpu list from the canonical command." >&2
+        echo "Refusing to run unlocked. Override with CANONICAL_SKIP_REGION_LOCK=1." >&2
+        exit 1
+    fi
+    if [[ ! -x "$REGION_LOCK" ]]; then
+        echo "ERROR: region-lock not found or not executable at $REGION_LOCK" >&2
+        echo "Set REGION_LOCK_BIN, or override with CANONICAL_SKIP_REGION_LOCK=1." >&2
+        exit 1
+    fi
+    LOCK_PREFIX="$REGION_LOCK run --cpu-list $BENCH_CPU_LIST --role bench-canonical --tag canonical:$(basename "$BINARY") --"
+fi
+
 echo "=== Canonical bench command ===" >&2
 echo "Binary:    $BINARY" >&2
 echo "Env:       $ENV_EXPORTS" >&2
 echo "Cmd:       ${CMD_ARGS[*]}" >&2
+if [[ -n "$LOCK_PREFIX" ]]; then
+    echo "Regions:   cpu-list $BENCH_CPU_LIST (held for the run via region-lock)" >&2
+else
+    echo "Regions:   UNLOCKED (CANONICAL_SKIP_REGION_LOCK=1)" >&2
+fi
 if [[ "$USE_PERF" -eq 1 ]]; then
     echo "Perf wrap: $CANONICAL_PERF_EVENTS" >&2
 fi
@@ -207,7 +251,9 @@ if [[ "$USE_PERF" -eq 1 ]]; then
     fi
     # sudo perf stat needs env preserved across the sudo boundary; pass via env(1)
     # AFTER perf's -- (so perf sees the env-prefix, not its own argv).
-    eval "sudo $PERF_BIN stat -e $CANONICAL_PERF_EVENTS -- env $ENV_EXPORTS ${CMD_ARGS[*]@Q}"
+    # region-lock is OUTERMOST so the regions stay held for the whole measured
+    # run, perf wrapper included.
+    eval "$LOCK_PREFIX sudo $PERF_BIN stat -e $CANONICAL_PERF_EVENTS -- env $ENV_EXPORTS ${CMD_ARGS[*]@Q}"
 else
-    eval "env $ENV_EXPORTS ${CMD_ARGS[*]@Q}"
+    eval "$LOCK_PREFIX env $ENV_EXPORTS ${CMD_ARGS[*]@Q}"
 fi
