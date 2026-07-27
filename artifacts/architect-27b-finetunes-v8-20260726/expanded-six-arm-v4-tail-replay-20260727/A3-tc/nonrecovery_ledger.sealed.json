@@ -1,0 +1,151 @@
+{
+  "aggregate": {
+    "empty_patch_row_count": 16,
+    "skipped_block_count": 1
+  },
+  "arm": "A3-tc",
+  "empty_patch_rows": [
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_failure_length_cap",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "model_length_cap",
+      "finish_reason": "length",
+      "instance_id": "django__django-11138"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_failure_length_cap",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "model_length_cap",
+      "finish_reason": "length",
+      "instance_id": "django__django-11149"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_failure_length_cap",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "model_length_cap",
+      "finish_reason": "length",
+      "instance_id": "django__django-11206"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_failure_length_cap",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "model_length_cap",
+      "finish_reason": "length",
+      "instance_id": "django__django-11211"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_failure_length_cap",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "model_length_cap",
+      "finish_reason": "length",
+      "instance_id": "django__django-11292"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_failure_length_cap",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "model_length_cap",
+      "finish_reason": "length",
+      "instance_id": "django__django-11333"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_failure_length_cap",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "model_length_cap",
+      "finish_reason": "length",
+      "instance_id": "django__django-11400"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_failure_length_cap",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "model_length_cap",
+      "finish_reason": "length",
+      "instance_id": "django__django-11477"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_failure_length_cap",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "model_length_cap",
+      "finish_reason": "length",
+      "instance_id": "matplotlib__matplotlib-14623"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_failure_length_cap",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "model_length_cap",
+      "finish_reason": "length",
+      "instance_id": "matplotlib__matplotlib-20488"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_contract_failure",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "all_parseable_blocks_skipped",
+      "finish_reason": "stop",
+      "instance_id": "scikit-learn__scikit-learn-10908"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_failure_length_cap",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "model_length_cap",
+      "finish_reason": "length",
+      "instance_id": "sphinx-doc__sphinx-10435"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_failure_length_cap",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "model_length_cap",
+      "finish_reason": "length",
+      "instance_id": "sphinx-doc__sphinx-10449"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_failure_length_cap",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "model_length_cap",
+      "finish_reason": "length",
+      "instance_id": "sphinx-doc__sphinx-10466"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_failure_length_cap",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "model_length_cap",
+      "finish_reason": "length",
+      "instance_id": "sympy__sympy-11618"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_failure_length_cap",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "model_length_cap",
+      "finish_reason": "length",
+      "instance_id": "sympy__sympy-12419"
+    }
+  ],
+  "schema_version": "epyc.append-27b-v4-nonrecovery-ledger.v1",
+  "skipped_blocks": [
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 0,
+      "classification": "model_contract_failure",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "instance_id": "scikit-learn__scikit-learn-10908",
+      "outcome": "skipped_missing_path",
+      "replace_sha256": "9128df689b8bc037e8c861bdc1a4482f638daf9047fd728047e73c362669e965",
+      "search_sha256": "78a917d9dd286423eaff1894ddb887fb2f40744f26cc10a223e8231ae5eeaed4"
+    }
+  ],
+  "status": "EXHAUSTIVE_PINNED_V4_OUTCOME"
+}

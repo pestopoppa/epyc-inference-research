@@ -1,0 +1,15 @@
+Running 24 instances...
+All instances run.
+Cleaning cached images...
+Removed 2 images.
+Total instances: 40
+Instances submitted: 40
+Instances completed: 24
+Instances incomplete: 0
+Instances resolved: 18
+Instances unresolved: 6
+Instances with empty patches: 16
+Instances with errors: 0
+Unstopped containers: 0
+Unremoved images: 0
+Report written to A3-tc_ThinkingCap_Q8.expanded-six-arm-v4-tail-replay-20260727-a3-tc.json

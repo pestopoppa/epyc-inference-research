@@ -1,0 +1,15 @@
+Running 34 instances...
+All instances run.
+Cleaning cached images...
+Removed 0 images.
+Total instances: 40
+Instances submitted: 40
+Instances completed: 34
+Instances incomplete: 0
+Instances resolved: 15
+Instances unresolved: 19
+Instances with empty patches: 6
+Instances with errors: 0
+Unstopped containers: 0
+Unremoved images: 0
+Report written to A1_122b_iq2.final-4arm-v4-tail-replay-20260727T080703Z-a1.json

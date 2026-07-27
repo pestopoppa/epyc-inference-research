@@ -1,0 +1,52 @@
+{
+  "arms": {
+    "baseline": {
+      "arm_definition": "qwen25vl-cpu-v8",
+      "arm_id": "qwen25vl-worker-v8",
+      "binary_sha256": "a4b667163022aa166ade7c0e00fa4e775b37662e02c10da7642c8c23a4d6b414",
+      "endpoint_or_sidecar": "http://127.0.0.1:8086/v1/chat/completions",
+      "frozen_provenance": {
+        "branch": "production-consolidated-v8",
+        "head": "67a433bf45a8a091d83b4ea0b32ff0735fd51800",
+        "version": "version: 10107 (67a433bf4)\nbuilt with GNU 15.2.0 for Linux x86_64",
+        "worktree_state": "clean"
+      },
+      "launch_record_path": "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/live-20260726T174112Z-O98PrJ/worker-baseline-launch.json",
+      "launch_record_sha256": "a5f6b5133ce77f465561b65d954e502361c7d1a6bb6225878b6f149e8068620c",
+      "mmproj_sha256": "c24a7f5fcfc68286f0a217023b6738e73bea4f11787a43e8238d4bb1b8604cde",
+      "model_sha256": "08b4e59684acb6262e3b127dbaee3bf0d6d29b0f364ac346a18467e9354f9972"
+    },
+    "candidate": {
+      "arm_definition": "minicpm-o45-mi210-v8",
+      "arm_id": "minicpm-o45-mi210-v8",
+      "binary_sha256": "112c560f1c978c584a9899539851348a0ce1e05cde458061c281758aff066882",
+      "endpoint_or_sidecar": "http://127.0.0.1:19086/v1/chat/completions",
+      "frozen_provenance": {
+        "branch": "production-consolidated-v8",
+        "head": "67a433bf45a8a091d83b4ea0b32ff0735fd51800",
+        "version": "version: 10107 (67a433bf4)\nbuilt with GNU 15.2.0 for Linux x86_64",
+        "worktree_state": "clean"
+      },
+      "launch_record_path": "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/live-20260726T174112Z-O98PrJ/worker-candidate-launch.json",
+      "launch_record_sha256": "d74354ac27bedac5856d72e1820ff1f983890a257ad2eeefc044e4be80bb92d8",
+      "mmproj_sha256": "1453678cc4e4fe18de241952962e234f265cb8dda780773526103ab8ba82f421",
+      "model_sha256": "1237a97ee081b8abebc47aa7dad565701e8f5f904cdc92f6723ac4281bbc0932"
+    }
+  },
+  "baseline_pass_rate": 0.625,
+  "candidate_minus_baseline_pp": 12.5,
+  "candidate_pass_rate": 0.75,
+  "limitation": "Observation only; no decision threshold is asserted.",
+  "manifest_sha256": "708bb1778a4e8f6ec7a63dfeeb5e84dc2b83e9592d7d1006de5c031085fb4202",
+  "mcnemar_exact_two_sided_p": 1.0,
+  "n": 8,
+  "paired_2x2": {
+    "baseline_only": 0,
+    "both_pass": 5,
+    "candidate_only": 1,
+    "neither": 2
+  },
+  "protocol_status": "observation_only_unratified",
+  "role": "worker_vision",
+  "schema": "epyc.minicpm.phase1.m1-observation.v1.paired-analysis.v1"
+}

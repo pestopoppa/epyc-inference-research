@@ -20,6 +20,7 @@ WATCHDOG="$REPO/scripts/benchmark/capture_integrity_watchdog.py"
 SWEBENCH_VERIFIED_SOURCE="$REPO/artifacts/architect-code-eval-20260724/swebench_verified.json"
 SWEBENCH_VERIFIED_SHA=b087b5dad72b3e765a6cf93a9e7d516d8796698a0fd358abb73c6627df19f66e
 PRE_REPAIR_IDENTITY_SHA=6212109e18668e6c7f6ec488cbb573af4bea61ef90ec0ba67391578b4b30cbc2
+THINKINGCAP_TERMINAL_RECEIPT="$RUNROOT/thinkingcap-bounded-repair-v1/terminal-calibration-failure.json"
 PORT=18092
 CORES=184-191
 SERVER_PID=""
@@ -369,12 +370,14 @@ raw_capture_resume = {
     "research_head": research_head,
     "swe_conversion_deferred": True,
 }
+
 capture_dir = identity_path.parents[1] / "A3-tc-quality__thinkingcap"
 capture_files = {
     "sealed_jsonl": capture_dir / "swe_oracle.sealed.jsonl",
     "summary": capture_dir / "swe_oracle.summary.json",
     "live_status": capture_dir / "swe_oracle.sealed.live-status.json",
 }
+
 if any(not path.is_file() for path in capture_files.values()):
     raise SystemExit("reused ThinkingCap SWE capture is incomplete")
 raw_capture_resume["reused_capture_sha256"] = {
@@ -412,6 +415,86 @@ PY
             fi
         fi
     done
+}
+
+verify_fable_only_resume_contract() {
+    # This path intentionally does not validate or reuse ThinkingCap captures:
+    # the bounded ladder terminalized that arm. It only proves that the frozen
+    # Fable instrument/model/header contract remains the one already sealed.
+    python3 - "$MANIFEST" "$OUT/instrument/identity.json" \
+        "$OUT/instrument/v7_quality_gate_runner.py" \
+        "$OUT/instrument/capture_integrity_watchdog.py" \
+        "$OUT/instrument/convert_sr_to_patch.py" \
+        "$OUT/instrument/questions_swe_oracle.json" \
+        "$OUT/instrument/questions_livecodebench_hard.json" \
+        "$OUT/instrument/fable_non_mtp.gguf_header.txt" \
+        "$OUT/instrument/fable_mtp.gguf_header.txt" \
+        "$THINKINGCAP_TERMINAL_RECEIPT" "$OUT/A3-tc-quality__thinkingcap" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+(manifest_path, identity_path, runner_path, watchdog_path, converter_path,
+ swe_questions, lcb_questions, non_mtp_header, mtp_header, terminal_receipt,
+ thinkingcap_dir) = map(Path, sys.argv[1:])
+
+def sha(path):
+    h = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+required = (manifest_path, identity_path, runner_path, watchdog_path,
+            converter_path, swe_questions, lcb_questions, non_mtp_header,
+            mtp_header, terminal_receipt)
+if any(not path.is_file() for path in required):
+    raise SystemExit("fable-only resume contract is incomplete")
+
+manifest = json.loads(manifest_path.read_text())
+identity = json.loads(identity_path.read_text())
+receipt = json.loads(terminal_receipt.read_text())
+expected_components = {
+    "runner_sha256": sha(runner_path),
+    "watchdog_sha256": sha(watchdog_path),
+    "converter_sha256": sha(converter_path),
+}
+if (
+    receipt.get("schema") != "thinkingcap_finite_calibration_terminal_failure.v1"
+    or receipt.get("status") != "FINITE_CALIBRATION_EXHAUSTED_NO_VALID_BUDGET"
+    or receipt.get("budgets_tested") != [2048, 1536, 1024, 512]
+    or receipt.get("matched_a3_tc_full_swe_lcb_decision_claim") is not False
+    or receipt.get("matched_a3_tc_full_swe_lcb_status") != "NOT_RUN_AFTER_NO_VALID_CALIBRATION"
+    or receipt.get("role_decision") != "NOT_MADE"
+    or receipt.get("fable_evidence_touched") is not False
+    or receipt.get("prior_unbounded_invalid_evidence", {}).get("path") != str(thinkingcap_dir)
+    or receipt.get("identities", {}).get("manifest", {}).get("sha256") != sha(manifest_path)
+    or receipt.get("identities", {}).get("runner", {}).get("sha256") != expected_components["runner_sha256"]
+    or receipt.get("identities", {}).get("questions", {}).get("sha256") != sha(lcb_questions)
+):
+    raise SystemExit("ThinkingCap terminal-invalid receipt is not the reviewed Fable-only gate")
+
+if (
+    identity.get("manifest_sha256") != sha(manifest_path)
+    or any(identity.get(key) != value for key, value in expected_components.items())
+    or identity.get("question_sha256") != {
+        "swe_oracle": sha(swe_questions), "lcb_hard": sha(lcb_questions)
+    }
+    or identity.get("models") != {
+        name: manifest["models"][name]
+        for name in ("thinkingcap", "stock_non_mtp", "fable_non_mtp", "fable_mtp")
+    }
+    or identity.get("fable_header_contract") != "validated_851_base_plus_15_mtp"
+    or identity.get("fable_header_transcripts") != {
+        "non_mtp_sha256": sha(non_mtp_header), "mtp_sha256": sha(mtp_header)
+    }
+):
+    raise SystemExit("frozen Fable instrument/model/header contract drift")
+PY
+    RUNNER_SHA=$(sha256sum "$OUT/instrument/v7_quality_gate_runner.py" | awk '{print $1}')
+    WATCHDOG_SHA=$(sha256sum "$OUT/instrument/capture_integrity_watchdog.py" | awk '{print $1}')
+    CONVERTER_SHA=$(sha256sum "$OUT/instrument/convert_sr_to_patch.py" | awk '{print $1}')
 }
 
 archive_incomplete_arm_evidence() {
@@ -724,12 +807,70 @@ data["swe_conversion_finalization"] = {
     "swebench_repos_path": str(repos_source.resolve()),
     "artifact_sha256": artifact_sha256,
 }
+
 tmp = identity_path.with_suffix(".tmp")
 tmp.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
 tmp.replace(identity_path)
 PY
     date -u +%Y-%m-%dT%H:%M:%SZ >"$OUT/swe-conversion.complete"
     cp "$OUT/swe-conversion.complete" "$OUT/continuation.complete"
+}
+
+finalize_fable_only_swe_conversion() {
+    test -f "$OUT/raw-capture.complete" || die "raw capture terminal marker is missing"
+    test ! -f "$OUT/fable-only-continuation.complete" || die "Fable-only continuation is already finalized"
+    test ! -f "$OUT/continuation.complete" || die "full continuation is already finalized"
+    verify_fable_only_resume_contract
+    local repos_source="$REPO/artifacts/architect-code-eval-20260724/swebench_repos"
+    local repos_link="$OUT/instrument/swebench_repos"
+    test -d "$repos_source" || die "canonical SWE-bench repository set is missing"
+    if [[ -L "$repos_link" ]]; then
+        [[ $(readlink -f "$repos_link") == "$(readlink -f "$repos_source")" ]] || die "instrument SWE-bench repository link points elsewhere"
+    elif [[ -e "$repos_link" ]]; then
+        die "instrument SWE-bench repository path is not the reviewed link"
+    else
+        ln -s "$repos_source" "$repos_link"
+    fi
+    local arm arm_dir
+    local arms=(A3-ff-quality__stock_non_mtp A3-ff-quality__fable_non_mtp A3-ff-embedded-mtp__fable_mtp)
+    for arm in "${arms[@]}"; do
+        arm_dir="$OUT/$arm"
+        validate_capture "$arm_dir/swe_oracle.sealed.jsonl" "$arm_dir/swe_oracle.summary.json" "$OUT/instrument/questions_swe_oracle.json" 40 "$RUNNER_SHA" swebench_oracle "$arm"
+        validate_capture "$arm_dir/lcb_hard.sealed.jsonl" "$arm_dir/lcb_hard.summary.json" "$OUT/instrument/questions_livecodebench_hard.json" 53 "$RUNNER_SHA" livecodebench_hard "$arm"
+        if validate_swe_conversion_artifacts "$arm_dir" "$arm_dir/swe_oracle.sealed.jsonl"; then
+            printf '27b-continuation: reused validated SWE conversion for %s\n' "$arm"
+        else
+            archive_incomplete_swe_conversion "$arm_dir"
+            convert_swe_capture "$arm_dir" "$arm_dir/swe_oracle.sealed.jsonl" "$arm"
+        fi
+    done
+    python3 - "$OUT" "$repos_source" "$0" "$(git -C "$REPO" rev-parse HEAD)" "$OUT/fable-only-finalization.json" <<'PY'
+import hashlib, json, os, sys
+from datetime import datetime, timezone
+from pathlib import Path
+out, repos_source, script, research_head, receipt = map(Path, sys.argv[1:])
+def sha(path):
+    h = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""): h.update(block)
+    return h.hexdigest()
+arms = ("A3-ff-quality__stock_non_mtp", "A3-ff-quality__fable_non_mtp", "A3-ff-embedded-mtp__fable_mtp")
+files = ("swe_oracle.sealed.jsonl", "swe_oracle.sealed.live-status.json", "swe_oracle.summary.json", "swe_oracle.predictions.json", "swe_oracle.predictions.diagnostics.jsonl", "swe_oracle.predictions.diagnostics.summary.json", "lcb_hard.sealed.jsonl", "lcb_hard.sealed.live-status.json", "lcb_hard.summary.json")
+artifact_sha256 = {}
+for arm in arms:
+    arm_dir = out / arm
+    artifact_sha256[arm] = {}
+    for name in files:
+        path = arm_dir / name
+        if not path.is_file(): raise SystemExit(f"missing final artifact: {arm}/{name}")
+        artifact_sha256[arm][name] = sha(path)
+payload = {"schema": "27b_fable_only_swe_conversion_finalization.v1", "status": "COMPLETE_FABLE_ONLY", "timestamp_utc": datetime.now(timezone.utc).isoformat(), "research_head": research_head, "finalizer_script_sha256": sha(script), "swebench_repos_path": str(repos_source.resolve()), "arms": arms, "stock_non_mtp_role": "Fable non-MTP quality control", "thinkingcap_claim": "NONE_TERMINAL_INVALID_EXCLUDED", "artifact_sha256": artifact_sha256}
+tmp = receipt.with_suffix(receipt.suffix + ".tmp")
+tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+os.replace(tmp, receipt)
+PY
+    date -u +%Y-%m-%dT%H:%M:%SZ >"$OUT/fable-only-swe-conversion.complete"
+    cp "$OUT/fable-only-swe-conversion.complete" "$OUT/fable-only-continuation.complete"
 }
 
 wait_for_live_status() {
@@ -996,12 +1137,31 @@ main() {
             date -u +%Y-%m-%dT%H:%M:%SZ >"$OUT/raw-capture.complete"
             trap - EXIT
             ;;
+        --resume-fable-only-raw-capture)
+            [[ $# -eq 1 ]] || die "usage: $0 --execute|--resume-after-converter-fix|--resume-raw-capture-only|--resume-fable-only-raw-capture|--finalize-swe-conversion|--self-test"
+            wait_for_prerequisites
+            ! port_listening || die "port $PORT is occupied"
+            test ! -f "$OUT/raw-capture.complete" || die "raw capture is already complete"
+            DEFER_SWE_CONVERSION=true
+            verify_fable_only_resume_contract
+            trap cleanup EXIT INT TERM
+            run_arm A3-ff-quality__stock_non_mtp stock_non_mtp false false
+            run_arm A3-ff-quality__fable_non_mtp fable_non_mtp false false
+            run_arm A3-ff-embedded-mtp__fable_mtp fable_mtp false true
+            date -u +%Y-%m-%dT%H:%M:%SZ >"$OUT/raw-capture.complete"
+            trap - EXIT
+            ;;
         --finalize-swe-conversion)
-            [[ $# -eq 1 ]] || die "usage: $0 --execute|--resume-after-converter-fix|--resume-raw-capture-only|--finalize-swe-conversion|--self-test"
+            [[ $# -eq 1 ]] || die "usage: $0 --execute|--resume-after-converter-fix|--resume-raw-capture-only|--resume-fable-only-raw-capture|--finalize-swe-conversion|--finalize-fable-only-swe-conversion|--self-test"
             ! port_listening || die "port $PORT is occupied"
             finalize_swe_conversion
             ;;
-        *) die "usage: $0 --execute|--resume-after-converter-fix|--resume-raw-capture-only|--finalize-swe-conversion|--self-test" ;;
+        --finalize-fable-only-swe-conversion)
+            [[ $# -eq 1 ]] || die "usage: $0 --execute|--resume-after-converter-fix|--resume-raw-capture-only|--resume-fable-only-raw-capture|--finalize-swe-conversion|--finalize-fable-only-swe-conversion|--self-test"
+            ! port_listening || die "port $PORT is occupied"
+            finalize_fable_only_swe_conversion
+            ;;
+        *) die "usage: $0 --execute|--resume-after-converter-fix|--resume-raw-capture-only|--resume-fable-only-raw-capture|--finalize-swe-conversion|--finalize-fable-only-swe-conversion|--self-test" ;;
     esac
 }
 

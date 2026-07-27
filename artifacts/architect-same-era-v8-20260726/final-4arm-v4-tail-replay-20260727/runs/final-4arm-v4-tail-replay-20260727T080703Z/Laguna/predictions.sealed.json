@@ -1,0 +1,202 @@
+[
+  {
+    "instance_id": "django__django-10999",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/django/utils/dateparse.py\n+++ b/django/utils/dateparse.py\n@@ -29,7 +29,7 @@\n standard_duration_re = re.compile(\n     r'^'\n     r'(?:(?P<days>-?\\d+) (days?, )?)?'\n-    r'((?:(?P<hours>-?\\d+):)(?=\\d+:\\d+))?'\n+    r'((?:(?P<hours>-?\\d+):)(?=-?\\d+:-?\\d+))?'\n     r'(?:(?P<minutes>-?\\d+):)?'\n     r'(?P<seconds>-?\\d+)'\n     r'(?:\\.(?P<microseconds>\\d{1,6})\\d{0,6})?'\n"
+  },
+  {
+    "instance_id": "django__django-11066",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/django/contrib/contenttypes/management/__init__.py\n+++ b/django/contrib/contenttypes/management/__init__.py\n@@ -24,7 +24,7 @@\n             content_type.model = new_model\n             try:\n                 with transaction.atomic(using=db):\n-                    content_type.save(update_fields={'model'})\n+                    content_type.save(using=db, update_fields={'model'})\n             except IntegrityError:\n                 # Gracefully fallback if a stale content type causes a\n                 # conflict as remove_stale_contenttypes will take care of\n"
+  },
+  {
+    "instance_id": "django__django-11087",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/django/db/models/deletion.py\n+++ b/django/db/models/deletion.py\n@@ -234,7 +234,7 @@\n         \"\"\"\n         return related.related_model._base_manager.using(self.using).filter(\n             **{\"%s__in\" % related.field.name: objs}\n-        )\n+        ).only('pk')\n \n     def instances_with_model(self):\n         for model, instances in self.data.items():\n"
+  },
+  {
+    "instance_id": "django__django-11095",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/django/contrib/admin/options.py\n+++ b/django/contrib/admin/options.py\n@@ -580,9 +580,12 @@\n     def __str__(self):\n         return \"%s.%s\" % (self.model._meta.app_label, self.__class__.__name__)\n \n+    def get_inlines(self, request, obj=None):\n+        return self.inlines\n+\n     def get_inline_instances(self, request, obj=None):\n         inline_instances = []\n-        for inline_class in self.inlines:\n+        for inline_class in self.get_inlines(request, obj):\n             inline = inline_class(self.model, self.admin_site)\n             if request:\n                 if not (inline.has_view_or_change_permission(request, obj) or\n"
+  },
+  {
+    "instance_id": "django__django-11099",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/django/contrib/auth/validators.py\n+++ b/django/contrib/auth/validators.py\n@@ -7,7 +7,7 @@\n \n @deconstructible\n class ASCIIUsernameValidator(validators.RegexValidator):\n-    regex = r'^[\\w.@+-]+$'\n+    regex = r'\\A[\\w.@+-]+\\Z'\n     message = _(\n         'Enter a valid username. This value may contain only English letters, '\n         'numbers, and @/./+/-/_ characters.'\n@@ -17,7 +17,7 @@\n \n @deconstructible\n class UnicodeUsernameValidator(validators.RegexValidator):\n-    regex = r'^[\\w.@+-]+$'\n+    regex = r'\\A[\\w.@+-]+\\Z'\n     message = _(\n         'Enter a valid username. This value may contain only letters, '\n         'numbers, and @/./+/-/_ characters.'\n"
+  },
+  {
+    "instance_id": "django__django-11119",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/django/template/engine.py\n+++ b/django/template/engine.py\n@@ -160,7 +160,7 @@\n         if isinstance(context, Context):\n             return t.render(context)\n         else:\n-            return t.render(Context(context))\n+            return t.render(Context(context, autoescape=self.autoescape))\n \n     def select_template(self, template_name_list):\n         \"\"\"\n"
+  },
+  {
+    "instance_id": "django__django-11133",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/django/http/response.py\n+++ b/django/http/response.py\n@@ -233,6 +233,9 @@\n             return bytes(value)\n         if isinstance(value, str):\n             return bytes(value.encode(self.charset))\n+        # Handle memoryview and other buffer-protocol objects\n+        if isinstance(value, memoryview):\n+            return bytes(value)\n         # Handle non-string types.\n         return str(value).encode(self.charset)\n \n"
+  },
+  {
+    "instance_id": "django__django-11138",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": ""
+  },
+  {
+    "instance_id": "django__django-11141",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/django/db/migrations/loader.py\n+++ b/django/db/migrations/loader.py\n@@ -84,11 +84,6 @@\n                     continue\n                 raise\n             else:\n-                # Empty directories are namespaces.\n-                # getattr() needed on PY36 and older (replace w/attribute access).\n-                if getattr(module, '__file__', None) is None:\n-                    self.unmigrated_apps.add(app_config.label)\n-                    continue\n                 # Module is not a package (e.g. migrations.py).\n                 if not hasattr(module, '__path__'):\n                     self.unmigrated_apps.add(app_config.label)\n"
+  },
+  {
+    "instance_id": "django__django-11149",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": ""
+  },
+  {
+    "instance_id": "django__django-11163",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/django/forms/models.py\n+++ b/django/forms/models.py\n@@ -83,7 +83,7 @@\n     for f in chain(opts.concrete_fields, opts.private_fields, opts.many_to_many):\n         if not getattr(f, 'editable', False):\n             continue\n-        if fields and f.name not in fields:\n+        if fields is not None and f.name not in fields:\n             continue\n         if exclude and f.name in exclude:\n             continue\n"
+  },
+  {
+    "instance_id": "django__django-11179",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/django/db/models/deletion.py\n+++ b/django/db/models/deletion.py\n@@ -277,6 +277,7 @@\n             if self.can_fast_delete(instance):\n                 with transaction.mark_for_rollback_on_error():\n                     count = sql.DeleteQuery(model).delete_batch([instance.pk], self.using)\n+                instance.pk = None\n                 return count, {model._meta.label: count}\n \n         with transaction.atomic(using=self.using, savepoint=False):\n"
+  },
+  {
+    "instance_id": "django__django-11206",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/django/utils/numberformat.py\n+++ b/django/utils/numberformat.py\n@@ -31,6 +31,10 @@\n         # scientific notation to avoid high memory usage in {:f}'.format().\n         _, digits, exponent = number.as_tuple()\n         if abs(exponent) + len(digits) > 200:\n+            if decimal_pos is not None and exponent <= -decimal_pos - 1:\n+                # The number is too small to be represented with the given\n+                # decimal positions, so it rounds to zero.\n+                return '0' + (decimal_sep + '0' * decimal_pos if decimal_pos else '')\n             number = '{:e}'.format(number)\n             coefficient, exponent = number.split('e')\n             # Format the coefficient.\n"
+  },
+  {
+    "instance_id": "django__django-11211",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": ""
+  },
+  {
+    "instance_id": "django__django-11239",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/django/db/backends/postgresql/client.py\n+++ b/django/db/backends/postgresql/client.py\n@@ -24,6 +24,14 @@\n             args += ['-h', host]\n         if port:\n             args += ['-p', str(port)]\n+        if conn_params.get('sslmode'):\n+            args += ['-d', conn_params['sslmode']]\n+        if conn_params.get('sslrootcert'):\n+            args += ['-r', conn_params['sslrootcert']]\n+        if conn_params.get('sslcert'):\n+            args += ['-c', conn_params['sslcert']]\n+        if conn_params.get('sslkey'):\n+            args += ['-k', conn_params['sslkey']]\n         args += [dbname]\n \n         sigint_handler = signal.getsignal(signal.SIGINT)\n"
+  },
+  {
+    "instance_id": "django__django-11265",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": ""
+  },
+  {
+    "instance_id": "django__django-11276",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/django/utils/html.py\n+++ b/django/utils/html.py\n@@ -3,6 +3,7 @@\n import json\n import re\n from html.parser import HTMLParser\n+from html import escape as _html_escape\n from urllib.parse import (\n     parse_qsl, quote, unquote, urlencode, urlsplit, urlunsplit,\n )\n@@ -43,7 +44,7 @@\n     This may result in double-escaping. If this is a concern, use\n     conditional_escape() instead.\n     \"\"\"\n-    return mark_safe(str(text).translate(_html_escapes))\n+    return mark_safe(_html_escape(str(text)))\n \n \n _js_escapes = {\n"
+  },
+  {
+    "instance_id": "django__django-11292",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/django/core/management/base.py\n+++ b/django/core/management/base.py\n@@ -285,6 +285,10 @@\n         parser.add_argument(\n             '--force-color', action='store_true',\n             help='Force colorization of the command output.',\n+        )\n+        parser.add_argument(\n+            '--skip-checks', action='store_true',\n+            help='Skip the system checks.',\n         )\n         self.add_arguments(parser)\n         return parser\n"
+  },
+  {
+    "instance_id": "django__django-11299",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": ""
+  },
+  {
+    "instance_id": "django__django-11333",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": ""
+  },
+  {
+    "instance_id": "django__django-11400",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/django/contrib/admin/filters.py\n+++ b/django/contrib/admin/filters.py\n@@ -198,6 +198,8 @@\n         related_admin = model_admin.admin_site._registry.get(field.remote_field.model)\n         if related_admin is not None:\n             ordering = related_admin.get_ordering(request)\n+        else:\n+            ordering = field.remote_field.model._meta.ordering\n         return field.get_choices(include_blank=False, ordering=ordering)\n \n     def choices(self, changelist):\n@@ -419,4 +421,4 @@\n class RelatedOnlyFieldListFilter(RelatedFieldListFilter):\n     def field_choices(self, field, request, model_admin):\n         pk_qs = model_admin.get_queryset(request).distinct().values_list('%s__pk' % self.field_path, flat=True)\n-        return field.get_choices(include_blank=False, limit_choices_to={'pk__in': pk_qs})\n+        return field.get_choices(include_blank=False, limit_choices_to={'pk__in': pk_qs}, ordering=field.remote_field.model._meta.ordering)\n"
+  },
+  {
+    "instance_id": "django__django-11433",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/django/forms/models.py\n+++ b/django/forms/models.py\n@@ -45,11 +45,6 @@\n         if fields is not None and f.name not in fields:\n             continue\n         if exclude and f.name in exclude:\n-            continue\n-        # Leave defaults for fields that aren't in POST data, except for\n-        # checkbox inputs because they don't appear in POST data if not checked.\n-        if (f.has_default() and\n-                form[f.name].field.widget.value_omitted_from_data(form.data, form.files, form.add_prefix(f.name))):\n             continue\n         # Defer saving file-type fields until after the other fields, so a\n         # callable upload_to can use the values from other fields.\n"
+  },
+  {
+    "instance_id": "django__django-11451",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/django/contrib/auth/backends.py\n+++ b/django/contrib/auth/backends.py\n@@ -37,6 +37,8 @@\n     \"\"\"\n \n     def authenticate(self, request, username=None, password=None, **kwargs):\n+        if username is None or password is None:\n+            return\n         if username is None:\n             username = kwargs.get(UserModel.USERNAME_FIELD)\n         try:\n"
+  },
+  {
+    "instance_id": "django__django-11477",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": ""
+  },
+  {
+    "instance_id": "matplotlib__matplotlib-13989",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/lib/matplotlib/axes/_axes.py\n+++ b/lib/matplotlib/axes/_axes.py\n@@ -6686,7 +6686,7 @@\n \n         density = bool(density) or bool(normed)\n         if density and not stacked:\n-            hist_kwargs = dict(density=density)\n+            hist_kwargs['density'] = density\n \n         # List to store all the top coordinates of the histograms\n         tops = []\n"
+  },
+  {
+    "instance_id": "matplotlib__matplotlib-14623",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": ""
+  },
+  {
+    "instance_id": "matplotlib__matplotlib-20488",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/lib/matplotlib/image.py\n+++ b/lib/matplotlib/image.py\n@@ -533,8 +533,8 @@\n                 # that may have moved input values in/out of range\n                 s_vmin, s_vmax = vrange\n                 if isinstance(self.norm, mcolors.LogNorm):\n-                    if s_vmin < 0:\n-                        s_vmin = max(s_vmin, np.finfo(scaled_dtype).eps)\n+                    if s_vmin <= 0:\n+                        s_vmin = np.finfo(scaled_dtype).eps\n                 with cbook._setattr_cm(self.norm,\n                                        vmin=s_vmin,\n                                        vmax=s_vmax,\n"
+  },
+  {
+    "instance_id": "matplotlib__matplotlib-20676",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/lib/matplotlib/widgets.py\n+++ b/lib/matplotlib/widgets.py\n@@ -2141,10 +2141,12 @@\n         if self.direction == 'horizontal':\n             trans = ax.get_xaxis_transform()\n             w, h = 0, 1\n+            pos = (ax.get_xdata(), 0)\n         else:\n             trans = ax.get_yaxis_transform()\n             w, h = 1, 0\n-        self._rect = Rectangle((0, 0), w, h,\n+            pos = (0, ax.get_ydata())\n+        self._rect = Rectangle(pos, w, h,\n                                transform=trans,\n                                visible=False,\n                                **self._rectprops)\n"
+  },
+  {
+    "instance_id": "scikit-learn__scikit-learn-10297",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/sklearn/linear_model/ridge.py\n+++ b/sklearn/linear_model/ridge.py\n@@ -1333,10 +1333,11 @@\n     advantage of the multi-variate response support in Ridge.\n     \"\"\"\n     def __init__(self, alphas=(0.1, 1.0, 10.0), fit_intercept=True,\n-                 normalize=False, scoring=None, cv=None, class_weight=None):\n+                 normalize=False, scoring=None, cv=None, class_weight=None,\n+                 store_cv_values=False):\n         super(RidgeClassifierCV, self).__init__(\n             alphas=alphas, fit_intercept=fit_intercept, normalize=normalize,\n-            scoring=scoring, cv=cv)\n+            scoring=scoring, cv=cv, store_cv_values=store_cv_values)\n         self.class_weight = class_weight\n \n     def fit(self, X, y, sample_weight=None):\n"
+  },
+  {
+    "instance_id": "scikit-learn__scikit-learn-10844",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": ""
+  },
+  {
+    "instance_id": "scikit-learn__scikit-learn-10908",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/sklearn/feature_extraction/text.py\n+++ b/sklearn/feature_extraction/text.py\n@@ -993,6 +993,9 @@\n \n     def get_feature_names(self):\n         \"\"\"Array mapping from feature integer indices to feature name\"\"\"\n+        if not hasattr(self, 'vocabulary_'):\n+            self._validate_vocabulary()\n+\n         self._check_vocabulary()\n \n         return [t for t, i in sorted(six.iteritems(self.vocabulary_),\n"
+  },
+  {
+    "instance_id": "scikit-learn__scikit-learn-11310",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": ""
+  },
+  {
+    "instance_id": "sphinx-doc__sphinx-10323",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": ""
+  },
+  {
+    "instance_id": "sphinx-doc__sphinx-10435",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/sphinx/writers/latex.py\n+++ b/sphinx/writers/latex.py\n@@ -1712,7 +1712,7 @@\n         hlcode = hlcode.replace(r'\\begin{Verbatim}[commandchars=\\\\\\{\\}]',\n                                 r'\\sphinxcode{\\sphinxupquote{')\n         # get consistent trailer\n-        hlcode = hlcode.rstrip()[:-14]  # strip \\end{Verbatim}\n+        hlcode = hlcode.strip()[:-14]  # strip \\end{Verbatim}\n         self.body.append(hlcode)\n         self.body.append('}}')\n         raise nodes.SkipNode\n"
+  },
+  {
+    "instance_id": "sphinx-doc__sphinx-10449",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/sphinx/ext/autodoc/typehints.py\n+++ b/sphinx/ext/autodoc/typehints.py\n@@ -29,6 +29,8 @@\n                 if param.annotation is not param.empty:\n                     annotation[param.name] = typing.stringify(param.annotation, mode)\n             if sig.return_annotation is not sig.empty:\n+                if inspect.isclass(obj):\n+                    continue\n                 annotation['return'] = typing.stringify(sig.return_annotation, mode)\n     except (TypeError, ValueError):\n         pass\n"
+  },
+  {
+    "instance_id": "sphinx-doc__sphinx-10466",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/sphinx/builders/gettext.py\n+++ b/sphinx/builders/gettext.py\n@@ -59,7 +59,14 @@\n         for message in self.messages:\n             positions = [(source, line) for source, line, uuid in self.metadata[message]]\n             uuids = [uuid for source, line, uuid in self.metadata[message]]\n-            yield Message(message, positions, uuids)\n+            # Remove duplicate locations while preserving order\n+            seen = set()\n+            unique_positions = []\n+            for pos in positions:\n+                if pos not in seen:\n+                    seen.add(pos)\n+                    unique_positions.append(pos)\n+            yield Message(message, unique_positions, uuids)\n \n \n class MsgOrigin:\n"
+  },
+  {
+    "instance_id": "sympy__sympy-11618",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/sympy/geometry/point.py\n+++ b/sympy/geometry/point.py\n@@ -266,8 +266,9 @@\n         sqrt(x**2 + y**2)\n \n         \"\"\"\n-        return sqrt(sum([(a - b)**2 for a, b in zip(\n-            self.args, p.args if isinstance(p, Point) else p)]))\n+        if isinstance(p, Point):\n+            return sqrt(sum([(a - b)**2 for a, b in zip(self.args, p.args)]))\n+        return sqrt(sum([(a - b)**2 for a, b in zip(self.args, p)]))\n \n     def taxicab_distance(self, p):\n         \"\"\"The Taxicab Distance from self to point p.\n"
+  },
+  {
+    "instance_id": "sympy__sympy-12096",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/sympy/core/function.py\n+++ b/sympy/core/function.py\n@@ -507,7 +507,11 @@\n             func = getattr(mpmath, fname)\n         except (AttributeError, KeyError):\n             try:\n-                return Float(self._imp_(*self.args), prec)\n+                result = self._imp_(*self.args)\n+                if isinstance(result, Expr):\n+                    return result.evalf(prec)\n+                else:\n+                    return Float(result, prec)\n             except (AttributeError, TypeError, ValueError):\n                 return\n \n"
+  },
+  {
+    "instance_id": "sympy__sympy-12419",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/sympy/matrices/expressions/matexpr.py\n+++ b/sympy/matrices/expressions/matexpr.py\n@@ -7,6 +7,7 @@\n from sympy.core.compatibility import range\n from sympy.core.sympify import SympifyError, sympify\n from sympy.functions import conjugate, adjoint\n+from sympy.functions.combinatorial.numbers import KroneckerDelta\n from sympy.matrices import ShapeError\n from sympy.simplify import simplify\n \n@@ -476,10 +477,7 @@\n         return self\n \n     def _entry(self, i, j):\n-        if i == j:\n-            return S.One\n-        else:\n-            return S.Zero\n+        return KroneckerDelta(i, j)\n \n     def _eval_determinant(self):\n         return S.One\n"
+  },
+  {
+    "instance_id": "sympy__sympy-12481",
+    "model_name_or_path": "Laguna_S_2_1_UD_IQ2_M_v8",
+    "model_patch": "--- a/sympy/combinatorics/permutations.py\n+++ b/sympy/combinatorics/permutations.py\n@@ -895,12 +895,8 @@\n         # counting starts from 1.\n \n         temp = flatten(args)\n-        if has_dups(temp):\n-            if is_cycle:\n-                raise ValueError('there were repeated elements; to resolve '\n-                'cycles use Cycle%s.' % ''.join([str(tuple(c)) for c in args]))\n-            else:\n-                raise ValueError('there were repeated elements.')\n+        if has_dups(temp) and not is_cycle:\n+            raise ValueError('there were repeated elements.')\n         temp = set(temp)\n \n         if not is_cycle and \\\n"
+  }
+]

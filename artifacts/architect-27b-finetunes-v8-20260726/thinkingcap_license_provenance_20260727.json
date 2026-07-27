@@ -1,0 +1,68 @@
+{
+  "disposition": "PENDING_POLICY_OR_LEGAL_REVIEW_NO_PERMISSION_INFERENCE",
+  "finding": "The exact GGUF uploader repository has no declared license. The parent finetune and base-model Apache-2.0 declarations are recorded separately and are not inferred to license the GGUF distribution.",
+  "no_inference": true,
+  "repositories": [
+    {
+      "api_response_sha256": "e30cbc283b519d599a0ffc4a72f8aa6b5609faa6a846be00ef796b0e5948d0e7",
+      "api_url": "https://huggingface.co/api/models/bottlecapai/ThinkingCap-Qwen3.6-27B-GGUF",
+      "base_model": "bottlecapai/ThinkingCap-Qwen3.6-27B",
+      "base_model_relation": "quantized",
+      "card_data_license": null,
+      "disabled": false,
+      "gated": false,
+      "id": "bottlecapai/ThinkingCap-Qwen3.6-27B-GGUF",
+      "last_modified": "2026-07-24T13:02:30.000Z",
+      "library_name": "gguf",
+      "page_url": "https://huggingface.co/bottlecapai/ThinkingCap-Qwen3.6-27B-GGUF",
+      "pipeline_tag": "image-text-to-text",
+      "private": false,
+      "repository_sha": "0982db1be5e1e6cf7163ba89d7f63a9f18d2f4f0",
+      "role": "gguf_uploader_distribution"
+    },
+    {
+      "api_response_sha256": "ab985d18f1678ff33eb6ac82bb9a08d7fb7d9d43fcd28bc14fc95abcde01970c",
+      "api_url": "https://huggingface.co/api/models/bottlecapai/ThinkingCap-Qwen3.6-27B",
+      "base_model": "Qwen/Qwen3.6-27B",
+      "base_model_relation": "finetune",
+      "card_data_license": "apache-2.0",
+      "disabled": false,
+      "gated": false,
+      "id": "bottlecapai/ThinkingCap-Qwen3.6-27B",
+      "last_modified": "2026-07-27T12:40:18.000Z",
+      "library_name": "transformers",
+      "page_url": "https://huggingface.co/bottlecapai/ThinkingCap-Qwen3.6-27B",
+      "pipeline_tag": "image-text-to-text",
+      "private": false,
+      "repository_sha": "0c5557fdf61f7485bbf8395144cbb7fb775ff344",
+      "role": "uploader_finetune_parent"
+    },
+    {
+      "api_response_sha256": "cec43dde18158ea0db4742ca5b9542419752c3217d6af3f933720b999b7a549f",
+      "api_url": "https://huggingface.co/api/models/Qwen/Qwen3.6-27B",
+      "base_model": null,
+      "base_model_relation": null,
+      "card_data_license": "apache-2.0",
+      "disabled": false,
+      "gated": false,
+      "id": "Qwen/Qwen3.6-27B",
+      "last_modified": "2026-04-24T02:39:16.000Z",
+      "library_name": "transformers",
+      "license_link": "https://huggingface.co/Qwen/Qwen3.6-27B/blob/main/LICENSE",
+      "page_url": "https://huggingface.co/Qwen/Qwen3.6-27B",
+      "pipeline_tag": "image-text-to-text",
+      "private": false,
+      "repository_sha": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+      "role": "base_model"
+    }
+  ],
+  "retrieved_at_utc": "2026-07-27T13:15:11Z",
+  "schema_version": "epyc.thinkingcap-license-provenance.v1",
+  "subject": {
+    "bytes": 29047082976,
+    "identity_path": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continuation-27b-v8/instrument/identity.json",
+    "identity_sha256": "5fd6f333ef82766efcea3bbfc6e90589511c1e4212b9e5546a2c148401bffd1b",
+    "local_path": "/mnt/raid0/llm/models/ThinkingCap-Qwen3.6-27B-GGUF/ThinkingCap-Qwen3.6-27B-Q8_0.gguf",
+    "sha256": "efcb358ef86f07cf24bfd617a66bb0baa7220e9dd1c31b7d7beacd7b49e67d93"
+  }
+}

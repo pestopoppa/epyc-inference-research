@@ -1,0 +1,17 @@
+{
+  "arm": "A3",
+  "denominator": 40,
+  "empty_patch_failures": 5,
+  "harness_errors": 0,
+  "percent_resolved": 57.5,
+  "quality_provenance": {
+    "current_era_quality_decision_input": true,
+    "quality_transfer_to_v8_eligible": true,
+    "same_era_generation": false,
+    "speed_or_throughput_transfer_claim": false,
+    "transfer_basis": "operator-certified v7-to-v8 kernel Delta 0.0pp exact quality parity"
+  },
+  "report": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/A3/A3_27b_dense.final-4arm-v4-tail-replay-20260727T080703Z-a3.json",
+  "report_sha256": "1348b3615facac100c072b93f643bf927e8d7f3c9695280442e2c18909190117",
+  "resolved": 23
+}

@@ -1,0 +1,82 @@
+{
+  "ranking": [
+    {
+      "arm": "A3",
+      "denominator": 40,
+      "empty_patch_failures": 5,
+      "harness_errors": 0,
+      "percent_resolved": 57.5,
+      "quality_provenance": {
+        "current_era_quality_decision_input": true,
+        "quality_transfer_to_v8_eligible": true,
+        "same_era_generation": false,
+        "speed_or_throughput_transfer_claim": false,
+        "transfer_basis": "operator-certified v7-to-v8 kernel Delta 0.0pp exact quality parity"
+      },
+      "report": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/A3/A3_27b_dense.final-4arm-v4-tail-replay-20260727T080703Z-a3.json",
+      "report_sha256": "1348b3615facac100c072b93f643bf927e8d7f3c9695280442e2c18909190117",
+      "resolved": 23
+    },
+    {
+      "arm": "Laguna",
+      "denominator": 40,
+      "empty_patch_failures": 11,
+      "harness_errors": 0,
+      "percent_resolved": 42.5,
+      "quality_provenance": {
+        "current_era_quality_decision_input": true,
+        "quality_transfer_to_v8_eligible": true,
+        "same_era_generation": true,
+        "speed_or_throughput_transfer_claim": false,
+        "transfer_basis": "v8 same-era terminal Laguna v4 capture"
+      },
+      "report": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/Laguna/Laguna_S_2_1_UD_IQ2_M_v8.final-4arm-v4-tail-replay-20260727T080703Z-laguna.json",
+      "report_sha256": "a13192d3566191d25cbd78cec6c0c611ed1c61cd914d295ee5862b15cf876e20",
+      "resolved": 17
+    },
+    {
+      "arm": "A1",
+      "denominator": 40,
+      "empty_patch_failures": 6,
+      "harness_errors": 0,
+      "percent_resolved": 37.5,
+      "quality_provenance": {
+        "current_era_quality_decision_input": true,
+        "quality_transfer_to_v8_eligible": true,
+        "same_era_generation": false,
+        "speed_or_throughput_transfer_claim": false,
+        "transfer_basis": "operator-certified v7-to-v8 kernel Delta 0.0pp exact quality parity"
+      },
+      "report": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/A1/A1_122b_iq2.final-4arm-v4-tail-replay-20260727T080703Z-a1.json",
+      "report_sha256": "57e92c03e9b44694fa515b5c77b4b6d0e04e30181ebf204807e2bf9da4f9f577",
+      "resolved": 15
+    },
+    {
+      "arm": "A4",
+      "denominator": 40,
+      "empty_patch_failures": 14,
+      "harness_errors": 0,
+      "percent_resolved": 32.5,
+      "quality_provenance": {
+        "current_era_quality_decision_input": true,
+        "quality_transfer_to_v8_eligible": true,
+        "same_era_generation": false,
+        "speed_or_throughput_transfer_claim": false,
+        "transfer_basis": "operator-certified v7-to-v8 kernel Delta 0.0pp exact quality parity"
+      },
+      "report": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/A4/A4_35b_a3b.final-4arm-v4-tail-replay-20260727T080703Z-a4.json",
+      "report_sha256": "f0b830428ac462331b783701e086d3b92c13298ab5a29dfbdc6c85a0bd775e98",
+      "resolved": 13
+    }
+  ],
+  "schema_version": "epyc.final-4arm-v4-tail-replay-table.v1",
+  "scope": "FINAL current-era quality decision input: A1/A3/A4 transfer through certified Delta 0.0pp parity; Laguna is v8 same-era generation. No speed or throughput transfer claim.",
+  "status": "FINAL_FOR_THIS_ERA_PER_OPERATOR_DIRECTIVE",
+  "stopping_rule": {
+    "architect_tier_decision": "If A3 leads or ties at top, the architect-tier quality question is closed; the role choice falls to throughput/residency economics.",
+    "confirmation_policy": "The powered-160 confirmation is shelved unless this corrected table reorders an outcome that changes an actual deployment decision.",
+    "final_table": "final_4arm_table.json",
+    "finality": "FINAL_FOR_THIS_ERA_PER_OPERATOR_DIRECTIVE",
+    "regeneration_policy": "Regenerate only if generation evidence is defective; scorer/converter/extractor defects use deterministic replay of banked outputs."
+  }
+}

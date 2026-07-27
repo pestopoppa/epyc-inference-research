@@ -1,0 +1,104 @@
+{
+  "aggregate": {
+    "diagnostic_skipped_block_count": 1,
+    "empty_patch_row_count": 6,
+    "ledger_skipped_block_count": 1
+  },
+  "arm": "A1",
+  "empty_patch_rows": [
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "model_truncation_empty_patch",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "no_parseable_search_replace_block",
+      "finish_reason": "length",
+      "instance_id": "django__django-11138"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "model_truncation_empty_patch",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "no_parseable_search_replace_block",
+      "finish_reason": "length",
+      "instance_id": "django__django-11211"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "converted",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "no_parseable_search_replace_block",
+      "finish_reason": "stop",
+      "instance_id": "django__django-11265"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "converted",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "no_parseable_search_replace_block",
+      "finish_reason": "stop",
+      "instance_id": "scikit-learn__scikit-learn-10297"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "converted",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "all_parseable_blocks_skipped",
+      "finish_reason": "stop",
+      "instance_id": "sphinx-doc__sphinx-10323"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "converted",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "no_parseable_search_replace_block",
+      "finish_reason": "stop",
+      "instance_id": "sphinx-doc__sphinx-10449"
+    }
+  ],
+  "inputs": {
+    "converter_source": {
+      "sha256": "6bd2302dda3e5139cc6faabcc5639bdcf85b27895f93a9181cbb53dd65749507",
+      "source": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/convert_sr_to_patch.py"
+    },
+    "dataset": {
+      "sha256": "b087b5dad72b3e765a6cf93a9e7d516d8796698a0fd358abb73c6627df19f66e",
+      "source": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/swebench_verified.json"
+    },
+    "diagnostics": {
+      "sha256": "8ccb872fa714aa28df468951139ddc239543c35cc7f13c4e0b6351a3c81e25fb"
+    },
+    "harness_module": {
+      "sha256": "6959f0b4e4eaf979771f529b88e3e9df1daa7fe86bc4291feec2e7d320bf7f2e",
+      "source": "/mnt/raid0/llm/epyc-inference-research/.venv-swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py"
+    },
+    "predictions": {
+      "sha256": "65047a2919d62469ddab05570e8c9b8ca4fcb286fc68ce48f4baf88894771f8c"
+    },
+    "raw_capture": {
+      "sha256": "f4dff35ee646993459f6536e4e8e6db80870a5691980bc158987f433e90c7c33",
+      "source": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/swe_A1_122b_iq2/pq.jsonl"
+    }
+  },
+  "legacy_capture_exception": true,
+  "operator_directive": "2026-07-27 bench closure: deterministic-tail rescoring; no matching broadening",
+  "quality_provenance": {
+    "current_era_quality_decision_input": true,
+    "quality_transfer_to_v8_eligible": true,
+    "same_era_generation": false,
+    "speed_or_throughput_transfer_claim": false,
+    "transfer_basis": "operator-certified v7-to-v8 kernel Delta 0.0pp exact quality parity"
+  },
+  "schema_version": "epyc.final-4arm-v4-tail-replay-nonrecovery-ledger.v1",
+  "skipped_blocks": [
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 0,
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "instance_id": "sphinx-doc__sphinx-10323",
+      "outcome": "skipped_search_not_found",
+      "replace_sha256": "241baf6fd4e4fce155109e4474bbccc0c6d49405ae961ffa49c452ae823730bd",
+      "search_sha256": "d2bf42b17848581b3215baf2be9283d1f7e432eca775a6b6af1c92bcaa9d2aaa"
+    }
+  ],
+  "status": "EXHAUSTIVE_PINNED_V4_OUTCOME"
+}

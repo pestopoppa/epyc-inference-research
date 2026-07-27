@@ -301,6 +301,72 @@ class ContractTests(unittest.TestCase):
         self.assertIn("validate_swe_conversion_artifacts", continuation)
         self.assertIn("archive_incomplete_swe_conversion", continuation)
 
+    def test_fable_only_resume_requires_terminal_invalid_receipt_and_skips_thinkingcap(self):
+        continuation = (
+            ROOT / "live-20260726T1750Z" / "continue_thinkingcap_and_fable.sh"
+        ).read_text()
+        verifier = continuation.split("verify_fable_only_resume_contract() {", 1)[1].split(
+            "archive_incomplete_arm_evidence() {", 1
+        )[0]
+        branch = continuation.split("--resume-fable-only-raw-capture)", 1)[1].split(
+            "--finalize-swe-conversion)", 1
+        )[0]
+        for required in (
+            "thinkingcap_finite_calibration_terminal_failure.v1",
+            "FINITE_CALIBRATION_EXHAUSTED_NO_VALID_BUDGET",
+            "[2048, 1536, 1024, 512]",
+            '"NOT_RUN_AFTER_NO_VALID_CALIBRATION"',
+            '"validated_851_base_plus_15_mtp"',
+            "fable_header_transcripts",
+        ):
+            self.assertIn(required, verifier)
+        self.assertIn("wait_for_prerequisites", branch)
+        self.assertIn('! port_listening || die "port $PORT is occupied"', branch)
+        self.assertIn('test ! -f "$OUT/raw-capture.complete"', branch)
+        self.assertIn("DEFER_SWE_CONVERSION=true", branch)
+        self.assertIn("verify_fable_only_resume_contract", branch)
+        self.assertNotIn("A3-tc-quality__thinkingcap", branch)
+        self.assertIn(
+            "run_arm A3-ff-quality__stock_non_mtp stock_non_mtp false false",
+            branch,
+        )
+        self.assertIn(
+            "run_arm A3-ff-quality__fable_non_mtp fable_non_mtp false false",
+            branch,
+        )
+        self.assertIn(
+            "run_arm A3-ff-embedded-mtp__fable_mtp fable_mtp false true",
+            branch,
+        )
+        self.assertIn('>"$OUT/raw-capture.complete"', branch)
+
+    def test_fable_only_finalizer_excludes_thinkingcap_and_keeps_general_finalizer(self):
+        continuation = (
+            ROOT / "live-20260726T1750Z" / "continue_thinkingcap_and_fable.sh"
+        ).read_text()
+        general = continuation.split("finalize_swe_conversion() {", 1)[1].split(
+            "finalize_fable_only_swe_conversion() {", 1
+        )[0]
+        fable_only = continuation.split("finalize_fable_only_swe_conversion() {", 1)[1].split(
+            "wait_for_live_status() {", 1
+        )[0]
+        branch = continuation.split("--finalize-fable-only-swe-conversion)", 1)[1].split(
+            "*) die", 1
+        )[0]
+        self.assertIn("A3-tc-quality__thinkingcap", general)
+        self.assertIn('cp "$OUT/swe-conversion.complete" "$OUT/continuation.complete"', general)
+        self.assertNotIn("A3-tc-quality__thinkingcap", fable_only)
+        self.assertIn("A3-ff-quality__stock_non_mtp", fable_only)
+        self.assertIn("A3-ff-quality__fable_non_mtp", fable_only)
+        self.assertIn("A3-ff-embedded-mtp__fable_mtp", fable_only)
+        self.assertIn('"stock_non_mtp_role": "Fable non-MTP quality control"', fable_only)
+        self.assertIn('"thinkingcap_claim": "NONE_TERMINAL_INVALID_EXCLUDED"', fable_only)
+        self.assertIn("verify_fable_only_resume_contract", fable_only)
+        self.assertNotIn('>"$OUT/continuation.complete"', fable_only)
+        self.assertNotIn('cp "$OUT/swe-conversion.complete" "$OUT/continuation.complete"', fable_only)
+        self.assertIn('"$OUT/fable-only-continuation.complete"', fable_only)
+        self.assertIn("finalize_fable_only_swe_conversion", branch)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,19 @@
+{
+  "arms": [
+    {
+      "capture_sha256": "95328eafa1dcca4a7d262d147a84f38a9656b725b17d66527f6867c8674394a6",
+      "license_gate": "PENDING_NO_DECLARED_LICENSE",
+      "name": "A3-tc"
+    },
+    {
+      "capture_sha256": "a9f3bf2c65869ef0819416189b2478cfed157dd88bcb4cd62d68d913b034990a",
+      "license_gate": "PENDING_FABLE_ABLITERATION_SCREEN",
+      "name": "A3-ff"
+    }
+  ],
+  "created_at": "2026-07-27T12:52:46.157536+00:00",
+  "frozen_converter_sha256": "6bd2302dda3e5139cc6faabcc5639bdcf85b27895f93a9181cbb53dd65749507",
+  "frozen_table_sha256": "f440680d7a6ae2169b35202627de7889441c530b4976f23fd4140e84be8f2e50",
+  "no_inference": true,
+  "schema_version": "epyc.append-27b-v4-authority.v1"
+}

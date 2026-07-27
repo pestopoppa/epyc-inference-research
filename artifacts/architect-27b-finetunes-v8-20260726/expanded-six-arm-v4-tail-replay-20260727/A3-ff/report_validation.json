@@ -1,0 +1,17 @@
+{
+  "arm": "A3-ff",
+  "denominator": 40,
+  "empty_patch_failures": 5,
+  "harness_errors": 0,
+  "percent_resolved": 47.5,
+  "quality_provenance": {
+    "current_era_quality_decision_input": true,
+    "quality_transfer_to_v8_eligible": true,
+    "same_era_generation": true,
+    "speed_or_throughput_transfer_claim": false,
+    "transfer_basis": "complete v8 banked capture replayed through frozen final-table v4 converter"
+  },
+  "report": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/.expanded-six-arm-v4-tail-replay-20260727.staging-1c4d3e803c114e79aac8bc308ef248aa/A3-ff/A3-ff_Fable_Fusion_Q8_non_MTP.expanded-six-arm-v4-tail-replay-20260727-a3-ff.json",
+  "report_sha256": "67f7d4d9cb76241822e03c1a618c59108f2114c65f92665de2bccde6f58c3547",
+  "resolved": 19
+}

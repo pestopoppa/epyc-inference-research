@@ -1,0 +1,1698 @@
+{
+  "converter_sha256": "6bd2302dda3e5139cc6faabcc5639bdcf85b27895f93a9181cbb53dd65749507",
+  "dataset_sha256": "b087b5dad72b3e765a6cf93a9e7d516d8796698a0fd358abb73c6627df19f66e",
+  "fable_coexistence_post": {
+    "present": true,
+    "processes": [
+      {
+        "allowed_inference_processes": [
+          {
+            "argv": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf --host 127.0.0.1 --port 18092 --metrics --slots --jinja --reasoning on --reasoning-budget -1 --reasoning-format deepseek --device ROCm0 -ngl all -fa on -np 1 -c 49152 -t 8 -tb 8 -b 2048 -ub 2048 -ctk f16 -ctv f16 --spec-type draft-mtp --spec-draft-n-max 1",
+            "cpuset_matches_expected": true,
+            "expected_cpuset": "184-191",
+            "pid": 255033,
+            "thread_affinity": [
+              {
+                "cpuset": "184-191",
+                "tid": "255033"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255038"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255039"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255049"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255052"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255053"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255054"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255055"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255056"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255057"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255058"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255059"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255060"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255061"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255062"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255063"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255064"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255065"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255066"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255067"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255068"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255069"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255070"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255071"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255072"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255073"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255074"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255075"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255076"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255077"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255078"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255079"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255080"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255081"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255082"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255083"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255084"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255085"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255086"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255087"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255088"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255089"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255090"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255091"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255092"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255093"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255094"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255095"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255096"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255097"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255098"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255099"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255100"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255101"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255102"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255103"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255104"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255105"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255106"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255107"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255108"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255109"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255110"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255111"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255112"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255113"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255114"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255115"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255116"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255117"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255118"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255119"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255120"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255121"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255122"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255123"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255124"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255125"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255126"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255127"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255128"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255129"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255130"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255131"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255132"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255133"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255134"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255135"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255136"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255137"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255138"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255139"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255140"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255141"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255142"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255143"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255144"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255145"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255146"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255147"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255148"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255149"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255150"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255151"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255152"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255153"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255154"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255155"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255156"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255157"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255158"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255159"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255160"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255161"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255162"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255163"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255164"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255165"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255166"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255167"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255168"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255169"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255170"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255171"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255172"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255173"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255174"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255175"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255176"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255177"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255178"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255179"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255180"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255181"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255182"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255183"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255184"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255185"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255186"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255187"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255188"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255189"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255190"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255191"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255192"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255193"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255194"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255195"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255196"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255197"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255198"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255199"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255200"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255201"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255202"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255203"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255204"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255205"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255206"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255207"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255208"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255209"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255210"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255211"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255212"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255213"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255214"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255215"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255216"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255217"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255218"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255219"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255220"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255221"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255222"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255223"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255224"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255225"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255226"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255227"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255228"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255229"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255230"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255231"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255232"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255233"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255234"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255235"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255236"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255237"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255238"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255239"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255240"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255241"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255242"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255243"
+              }
+            ]
+          },
+          {
+            "argv": "python3 -B /mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continuation-27b-v8/instrument/v7_quality_gate_runner.py --host 127.0.0.1 --port 18092 --output /mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continuation-27b-v8/A3-ff-embedded-mtp__fable_mtp/lcb_hard.summary.json --suites livecodebench_hard --n 53 --limit 53 --seed 42 --max-tokens 4096 --endpoint chat --kernel production-consolidated-v8 --concurrency 1 --repeats 1 --arm A3-ff-embedded-mtp__fable_mtp --binary /mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server --models /mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf --temperature 0.6 --top-p 0.95 --top-k 20 --questions-in /mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continuation-27b-v8/instrument/questions_livecodebench_hard.json --per-question-out /mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continuation-27b-v8/A3-ff-embedded-mtp__fable_mtp/lcb_hard.sealed.jsonl --no-enable-thinking",
+            "cpuset_matches_expected": true,
+            "expected_cpuset": "184-191",
+            "pid": 302067,
+            "thread_affinity": [
+              {
+                "cpuset": "184-191",
+                "tid": "302067"
+              }
+            ]
+          }
+        ],
+        "controller_argv": "bash /mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continue_thinkingcap_and_fable.sh --resume-fable-only-raw-capture",
+        "controller_pid": 4133862,
+        "controller_ppid": 16447,
+        "scope": "correctness-only coexistence evidence; no timing or throughput claim"
+      }
+    ]
+  },
+  "fable_coexistence_pre": {
+    "present": true,
+    "processes": [
+      {
+        "allowed_inference_processes": [
+          {
+            "argv": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf --host 127.0.0.1 --port 18092 --metrics --slots --jinja --reasoning on --reasoning-budget -1 --reasoning-format deepseek --device ROCm0 -ngl all -fa on -np 1 -c 49152 -t 8 -tb 8 -b 2048 -ub 2048 -ctk f16 -ctv f16 --spec-type draft-mtp --spec-draft-n-max 1",
+            "cpuset_matches_expected": true,
+            "expected_cpuset": "184-191",
+            "pid": 255033,
+            "thread_affinity": [
+              {
+                "cpuset": "184-191",
+                "tid": "255033"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255038"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255039"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255049"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255052"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255053"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255054"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255055"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255056"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255057"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255058"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255059"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255060"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255061"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255062"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255063"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255064"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255065"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255066"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255067"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255068"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255069"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255070"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255071"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255072"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255073"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255074"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255075"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255076"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255077"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255078"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255079"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255080"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255081"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255082"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255083"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255084"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255085"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255086"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255087"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255088"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255089"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255090"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255091"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255092"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255093"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255094"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255095"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255096"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255097"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255098"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255099"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255100"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255101"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255102"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255103"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255104"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255105"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255106"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255107"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255108"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255109"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255110"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255111"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255112"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255113"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255114"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255115"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255116"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255117"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255118"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255119"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255120"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255121"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255122"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255123"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255124"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255125"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255126"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255127"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255128"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255129"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255130"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255131"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255132"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255133"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255134"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255135"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255136"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255137"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255138"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255139"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255140"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255141"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255142"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255143"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255144"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255145"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255146"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255147"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255148"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255149"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255150"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255151"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255152"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255153"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255154"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255155"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255156"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255157"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255158"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255159"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255160"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255161"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255162"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255163"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255164"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255165"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255166"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255167"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255168"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255169"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255170"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255171"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255172"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255173"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255174"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255175"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255176"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255177"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255178"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255179"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255180"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255181"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255182"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255183"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255184"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255185"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255186"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255187"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255188"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255189"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255190"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255191"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255192"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255193"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255194"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255195"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255196"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255197"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255198"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255199"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255200"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255201"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255202"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255203"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255204"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255205"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255206"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255207"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255208"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255209"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255210"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255211"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255212"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255213"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255214"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255215"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255216"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255217"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255218"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255219"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255220"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255221"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255222"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255223"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255224"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255225"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255226"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255227"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255228"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255229"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255230"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255231"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255232"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255233"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255234"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255235"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255236"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255237"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255238"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255239"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255240"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255241"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255242"
+              },
+              {
+                "cpuset": "184-191",
+                "tid": "255243"
+              }
+            ]
+          },
+          {
+            "argv": "python3 -B /mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continuation-27b-v8/instrument/v7_quality_gate_runner.py --host 127.0.0.1 --port 18092 --output /mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continuation-27b-v8/A3-ff-embedded-mtp__fable_mtp/swe_oracle.summary.json --suites swebench_oracle --n 40 --limit 40 --seed 42 --max-tokens 3072 --endpoint chat --kernel production-consolidated-v8 --concurrency 1 --repeats 1 --arm A3-ff-embedded-mtp__fable_mtp --binary /mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server --models /mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf --temperature 0.6 --top-p 0.95 --top-k 20 --questions-in /mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continuation-27b-v8/instrument/questions_swe_oracle.json --per-question-out /mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continuation-27b-v8/A3-ff-embedded-mtp__fable_mtp/swe_oracle.sealed.jsonl --no-enable-thinking",
+            "cpuset_matches_expected": true,
+            "expected_cpuset": "184-191",
+            "pid": 255811,
+            "thread_affinity": [
+              {
+                "cpuset": "184-191",
+                "tid": "255811"
+              }
+            ]
+          }
+        ],
+        "controller_argv": "bash /mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continue_thinkingcap_and_fable.sh --resume-fable-only-raw-capture",
+        "controller_pid": 4133862,
+        "controller_ppid": 16447,
+        "scope": "correctness-only coexistence evidence; no timing or throughput claim"
+      }
+    ]
+  },
+  "git": {
+    "orchestrator": {
+      "head": "64c05ca70d8b655ef30cc03c31cd46e29802a5d9",
+      "path": "/mnt/raid0/llm/epyc-orchestrator",
+      "status": " M docs/guides/e8-quality-baseline-reseed.md\n M orchestration/autopilot_journal_1.jsonl\n M orchestration/instrument_eras.yaml\n M scripts/autopilot/config_applicator.py\n M scripts/autopilot/experiment_journal.py\n M scripts/autopilot/failure_blacklist.yaml\n M scripts/benchmark/run_e8_quality_baseline_reseed.py\n M tests/test_autopilot_review_integration.py\n M tests/unit/test_e8_quality_baseline_reseed.py\n?? orchestration/autopilot_journal_1.tsv\n?? orchestration/autopilot_state.pre-reseed-20260723T124507Z.json\n?? orchestration/repl_memory/kuzu_db/failure_graph\n?? orchestration/repl_memory/kuzu_db/failure_graph.wal\n?? orchestration/repl_memory/kuzu_db/hypothesis_graph\n?? orchestration/repl_memory/kuzu_db/hypothesis_graph.wal\n?? orchestration/reports/ev_baseline_corev2_tier1/\n?? orchestration/reports/ev_baseline_corev2_tier2/\n?? orchestration/reports/ev_baseline_e7_tier1/\n?? orchestration/reports/ev_baseline_e7_tier1_diag/\n?? orchestration/reports/ev_baseline_e7_tier2/\n?? orchestration/reports/eval_batch_serving_activation_20260705T004400Z/\n?? orchestration/reports/eval_batch_serving_activation_20260705T004631Z/\n?? orchestration/reports/eval_batch_serving_evaltower_20260720T150504Z/\n?? orchestration/reports/eval_batch_serving_evaltower_20260720T191550Z/\n?? orchestration/reports/eval_batch_serving_evaltower_20260721T092950Z/\n?? orchestration/reports/eval_batch_serving_evaltower_EV4_20260720T170854Z_hardened/\n?? orchestration/reports/eval_batch_serving_evaltower_EV4_20260720T171947Z_scorerfix/\n?? orchestration/reports/eval_tower_calibration_baseline_HE-R+/\n?? orchestration/reports/eval_tower_math_rebaseline_E7.burned-arms-20260721/\n?? orchestration/reports/eval_tower_math_rebaseline_E7.suspect-4wide-20260721/\n?? orchestration/reports/eval_tower_math_rebaseline_E7/\n?? orchestration/reports/eval_tower_math_rebaseline_E7c/\n?? orchestration/reports/fable5_gate_report_20260704T034225Z.json\n?? orchestration/reports/fable5_gate_report_20260704T034225Z.md\n?? orchestration/reports/fable5_gate_report_20260704T094100Z.json\n?? orchestration/reports/fable5_gate_report_20260704T094100Z.md\n?? orchestration/reports/fable5_gate_report_20260704T115304Z.json\n?? orchestration/reports/fable5_gate_report_20260704T115304Z.md\n?? orchestration/reports/fable5_gate_report_20260705T121458Z.json\n?? orchestration/reports/fable5_gate_report_20260705T121458Z.md\n?? orchestration/reports/fable5_gate_report_20260705T183610Z.json\n?? orchestration/reports/fable5_gate_report_20260705T183610Z.md\n?? orchestration/reports/fable5_gate_report_20260706T164403Z.json\n?? orchestration/reports/fable5_gate_report_20260706T164403Z.md\n?? orchestration/reports/fable5_gate_report_20260706T1715Z.json\n?? orchestration/reports/fable5_gate_report_20260706T1715Z.md\n?? orchestration/reports/fable5_gate_report_20260714T121309Z.json\n?? orchestration/reports/fable5_gate_report_20260714T121309Z.md\n?? orchestration/reports/j2j3_single_worker_migration_probe.jsonl\n?? orchestration/reports/pdf_fastpath_probe_hybrid_sidecar_20260706T185800Z.json\n?? orchestration/reports/pdf_fastpath_probe_hybrid_sidecar_20260706T185800Z.md\n?? orchestration/reports/pdf_fastpath_probe_hybrid_sidecar_20260706T190000Z.json\n?? orchestration/reports/pdf_fastpath_probe_hybrid_sidecar_20260706T190000Z.md\n?? orchestration/reports/r3_current_arm_rebaseline_20260723/\n?? orchestration/reports/r3_current_arm_rebaseline_corev2_20260723/\n?? orchestration/reports/ri10_canary_sample_report_20260704T034225Z.json\n?? orchestration/reports/ri10_canary_sample_report_20260704T094100Z.json\n?? orchestration/reports/vl_truth_slice_20260723/\n?? orchestration/reports/w8_promotion_trajectory_20260704T034225Z.json\n?? orchestration/reports/w8_promotion_trajectory_20260704T034225Z.md\n?? orchestration/reports/w8_promotion_trajectory_20260704T094100Z.json\n?? orchestration/reports/w8_promotion_trajectory_20260704T094100Z.md\n?? orchestration/reports/w8_promotion_trajectory_20260706T164403Z.json\n?? orchestration/reports/w8_promotion_trajectory_20260706T164403Z.md\n?? orchestration/reports/w8_promotion_trajectory_20260706T1715Z.json\n?? orchestration/reports/w8_promotion_trajectory_20260706T1715Z.md\n"
+    },
+    "research": {
+      "head": "a1e8ec3ff745dacbce4220bb305975635f4384d5",
+      "path": "/mnt/raid0/llm/epyc-inference-research",
+      "status": " M artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continue_thinkingcap_and_fable.sh\n M artifacts/architect-27b-finetunes-v8-20260726/test_finetune_bench_runner.py\n M benchmarks/results/index.jsonl\n M scripts/benchmark/laguna_q4_cpu_bench_runner.py\n M scripts/benchmark/test_laguna_q4_cpu_bench_runner.py\n?? A1_122b_iq2.swe-eval-A1.json\n?? A3_27b_dense.swe-eval-A3.json\n?? A4_35b_a3b.swe-eval-A4.json\n?? Laguna_S_2_1_UD_IQ2_M_v8_base.laguna-swe-oracle-v8-20260726.json\n?? artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/A3-tc-quality__thinkingcap/\n?? artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/A3-tc-thinkingcap.driver.log\n?? artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continuation-27b-v8.launch.log\n?? artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continuation-27b-v8.superseded-incomplete-20260726T223354Z/\n?? artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continuation-27b-v8.superseded-v3-aborted-20260726T220000Z/\n?? artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continuation-27b-v8/\n?? artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continuation-launch-v2.log\n?? artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continuation-launch.log\n?? artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continuation-resume-v5.log\n?? artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/fable-only-cpu-clean-official-swe/\n?? artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/repair_thinkingcap_lcb.sh\n?? artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/run_live_arm.sh\n?? artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/tc-lcb-repair-live-20260727/\n?? artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/thinkingcap-bounded-repair-v1/\n?? artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/transition_thinkingcap_lcb.sh\n?? artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/transition_thinkingcap_lcb_resumed.sh\n?? artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/validate_thinkingcap_lcb_repair.py\n?? artifacts/architect-bench-gpu-20260720/\n?? artifacts/architect-bench-sidecar-20260720/\n?? artifacts/architect-code-eval-20260724/\n?? artifacts/architect-laguna-iq2-v8-20260726/a3-a4-swe-confirmation/A3_27B_dense-port18091/server.stderr\n?? artifacts/architect-laguna-iq2-v8-20260726/a3-a4-swe-confirmation/static_preflight_blocked_20260726T173226Z.socket_fallback.txt\n?? artifacts/architect-laguna-iq2-v8-20260726/a3-a4-swe-confirmation/static_preflight_blocked_20260726T173226Z.socket_fallback_v2.txt\n?? artifacts/architect-laguna-iq2-v8-20260726/a3-a4-swe-confirmation/static_preflight_blocked_20260726T173226Z.txt\n?? artifacts/architect-laguna-iq2-v8-20260726/attempt-01-race/server.stderr\n?? artifacts/architect-laguna-iq2-v8-20260726/attempt-02-port18089/model_metadata.txt\n?? artifacts/architect-laguna-iq2-v8-20260726/attempt-02-port18089/server.stderr\n?? artifacts/architect-laguna-iq2-v8-20260726/lcb-hard-port18090/server.stderr\n?? artifacts/architect-laguna-iq2-v8-20260726/scorer-artifact-rescore-20260726/PROPOSED_RAW_RECAPTURE_RUNBOOK.md\n?? artifacts/architect-laguna-iq2-v8-20260726/scorer-artifact-rescore-20260726/clean-full40-20260726/\n?? artifacts/architect-laguna-iq2-v8-20260726/scorer-artifact-rescore-20260726/clean-full40-promptfix-20260726/\n?? artifacts/architect-laguna-iq2-v8-20260726/scorer-artifact-rescore-20260726/current_live_path.txt\n?? artifacts/architect-laguna-iq2-v8-20260726/scorer-artifact-rescore-20260726/empty_patch_rerun_manifest.json\n?? artifacts/architect-laguna-iq2-v8-20260726/scorer-artifact-rescore-20260726/live-20260726T193048Z/\n?? artifacts/architect-laguna-iq2-v8-20260726/server.stderr\n?? artifacts/architect-same-era-v8-20260726/\n?? artifacts/laguna-q4-cpu-v8-20260726/\n?? artifacts/minicpm-o-phase1-v8-20260726/live-20260726T165042Z-ahHOxR/\n?? artifacts/minicpm-o-phase1-v8-20260726/live-20260726T170141Z-zoIaHn/\n?? artifacts/minicpm-o-phase1-v8-20260726/live-20260726T173619Z-22SkYI/\n?? artifacts/minicpm-o-phase1-v8-20260726/live-20260726T174112Z-O98PrJ/\n?? artifacts/np_context_study_20260723/\n?? benchmarks/prompts/pool_rebuild_a3_20260721/\n?? benchmarks/results/eval/seeding_20260704_093120.jsonl\n?? benchmarks/results/eval/seeding_20260704_093523.jsonl\n?? benchmarks/results/eval/seeding_20260704_094658.jsonl\n?? benchmarks/results/eval/seeding_a9_suite_instruction_precision_architect_general_coder_escalation_20260704T093118Z.json\n?? benchmarks/results/eval/seeding_a9_suite_instruction_precision_architect_general_coder_escalation_20260704T100210Z.json\n?? benchmarks/results/eval/seeding_a9_suite_instruction_precision_architect_general_frontdoor_20260704T093118Z.json\n?? benchmarks/results/eval/seeding_a9_suite_instruction_precision_architect_general_frontdoor_20260704T100210Z.json\n?? benchmarks/results/runs/20260628_034411/\n?? benchmarks/results/runs/20260628_034820/\n?? benchmarks/results/runs/longcot_mini_re4_20260720T234821Z/\n?? benchmarks/results/runs/longcot_mini_re4_grammar_20260721T013833Z/\n?? benchmarks/results/runs/longcot_mini_re4_stack_20260721T011903Z/\n?? data/architect_model_selection_bench/\n?? data/axa1_fast_architect_residency/\n?? data/batched_decode/e1-pbench3-20260618T215308Z/\n?? data/batched_decode/e1-pbench3-20260706T1529Z/\n?? data/batched_decode/e1-pbench3-dryrun-20260706T1525Z/\n?? data/bonsai_current_v7/bonsai27_q1_cpu_context_currenthead_20260719T012841Z/\n?? data/bonsai_current_v7/bonsai27_q1_cpu_context_currenthead_clean_20260719T013309Z/\n?? data/bonsai_current_v7/bonsai27_q1_cpu_context_k24cpu_clean_20260719T013427Z/\n?? data/bonsai_current_v7/bonsai27_q1_cpu_prompt_control_n6_20260718T200059Z/\n?? data/bonsai_current_v7/bonsai27_q1_cpu_prompt_repair_20260718T191220Z/\n?? data/bonsai_current_v7/bonsai27_q1_mi210_llama_bench_20260718T150243Z/command.sh\n?? data/bonsai_current_v7/bonsai27_q1_mi210_llama_bench_20260718T150243Z/exit_code.txt\n?? data/bonsai_current_v7/bonsai27_q1_mi210_llama_bench_20260718T150243Z/llama_bench_stderr.txt\n?? data/bonsai_current_v7/bonsai27_q1_mi210_llama_bench_20260718T150243Z/llama_bench_stdout.txt\n?? data/bonsai_current_v7/bonsai27_q1_mi210_llama_bench_20260718T150243Z/meta.txt\n?? data/bonsai_current_v7/bonsai27_q1_mi210_llama_bench_20260718T150243Z/post_pgrep.txt\n?? data/bonsai_current_v7/bonsai27_q1_mi210_llama_bench_20260718T150243Z/post_rocm_smi.txt\n?? data/bonsai_current_v7/bonsai27_q1_mi210_llama_bench_20260718T150243Z/pre_pgrep.txt\n?? data/bonsai_current_v7/bonsai27_q1_mi210_llama_bench_20260718T150243Z/pre_rocm_smi.txt\n?? data/bonsai_current_v7/ternary_bonsai_q2_g64_mi210_context_currentv7_20260719T012728Z/\n?? data/bonsai_current_v7/ternary_bonsai_q2_g64_mi210_llama_bench_20260718T150707Z/command.sh\n?? data/bonsai_current_v7/ternary_bonsai_q2_g64_mi210_llama_bench_20260718T150707Z/exit_code.txt\n?? data/bonsai_current_v7/ternary_bonsai_q2_g64_mi210_llama_bench_20260718T150707Z/llama_bench_stderr.txt\n?? data/bonsai_current_v7/ternary_bonsai_q2_g64_mi210_llama_bench_20260718T150707Z/llama_bench_stdout.txt\n?? data/bonsai_current_v7/ternary_bonsai_q2_g64_mi210_llama_bench_20260718T150707Z/meta.txt\n?? data/bonsai_current_v7/ternary_bonsai_q2_g64_mi210_llama_bench_20260718T150707Z/post_pgrep.txt\n?? data/bonsai_current_v7/ternary_bonsai_q2_g64_mi210_llama_bench_20260718T150707Z/post_rocm_smi.txt\n?? data/bonsai_current_v7/ternary_bonsai_q2_g64_mi210_llama_bench_20260718T150707Z/pre_pgrep.txt\n?? data/bonsai_current_v7/ternary_bonsai_q2_g64_mi210_llama_bench_20260718T150707Z/pre_rocm_smi.txt\n?? data/bonsai_current_v7/ternary_bonsai_q2_layout_contract_20260718Tcodex.json\n?? data/cpu-laguna-dflash-observation/\n?? data/cpu-model-characterization/20260719_cpu_lane_bonsai8b/\n?? data/cpu-model-characterization/20260719_cpu_lane_qwable_iq4xs_currentv7_context/\n?? data/cpu-model-characterization/20260719_cpu_lane_qwable_iq4xs_currentv7_context_cpuonly/\n?? data/cpu-model-characterization/20260719_cpu_lane_qwen3_4b_instruct_2507_bf16_managed/\n?? data/cpu-model-characterization/20260719_cpu_lane_qwen3_4b_instruct_2507_q8/\n?? data/cpu-model-characterization/20260719_cpu_lane_qwen3_4b_instruct_2507_q8_managed/\n?? data/cpu-model-characterization/20260719_cpu_lane_qwen3_4b_thinking_2507_q8/\n?? data/cpu-model-characterization/20260719_cpu_lane_qwen3_4b_thinking_2507_q8_k24cpu_clean/\n?? data/cpu-model-characterization/20260719_cpu_lane_ternary_bonsai_q2_g64/\n?? data/cpu_no_inference/glm52_tensor_contract_20260719T002942Z/contract.json\n?? data/cpu_no_inference/glm52_tensor_contract_20260719T002942Z/postflight.txt\n?? data/cpu_no_inference/glm52_tensor_contract_20260719T002942Z/preflight.txt\n?? data/cpu_no_inference/glm52_tensor_contract_20260719T002942Z/validator_stderr.txt\n?? data/cpu_no_inference/glm52_tensor_contract_20260719T002942Z/validator_stdout.txt\n?? data/cpu_no_inference/qwen35_27b_mtp_tensor_contract_20260719T002258Z/\n?? data/cpu_no_inference/qwen35_27b_mtp_tensor_contract_20260719T002324Z/\n?? data/cpu_no_inference/qwen35_27b_mtp_tensor_contract_20260719T002352Z/contract.json\n?? data/cpu_no_inference/qwen35_27b_mtp_tensor_contract_20260719T002352Z/postflight.txt\n?? data/cpu_no_inference/qwen35_27b_mtp_tensor_contract_20260719T002352Z/preflight.txt\n?? data/cpu_no_inference/qwen35_27b_mtp_tensor_contract_20260719T002352Z/validator_stderr.txt\n?? data/cpu_no_inference/qwen35_27b_mtp_tensor_contract_20260719T002352Z/validator_stdout.txt\n?? data/cpu_prefill_compute/20260719T014801Z_qwen35_122b_iq2_cpu_prefill/bench_stdout_stderr.log\n?? data/cpu_prefill_compute/20260719T014801Z_qwen35_122b_iq2_cpu_prefill/post_process_check.txt\n?? data/cpu_prefill_compute/20260719T014801Z_qwen35_122b_iq2_cpu_prefill/pre_process_check.txt\n?? data/cpu_prefill_compute/20260719T014801Z_qwen35_122b_iq2_cpu_prefill/run_metadata.txt\n?? data/cpu_prefill_compute/20260719T014801Z_qwen35_122b_iq2_cpu_prefill/summary_extract.txt\n?? data/cpu_prefill_compute/b7-pc0-prefill-20260719T082226Z-experimental-cpu/\n?? data/cpu_prefill_compute/b7-pc0-prefill-20260719T083103Z-strict-cpu/\n?? data/cpu_prefill_compute/b7-pc0-prefill-cpu-only-20260718T174148Z/\n?? data/cpu_prefill_compute/b7-pc0-prefill-cpu-only-20260718T204820Z-main/\n?? data/cpu_prefill_compute/b7-pc0-prefill-experimental-20260719T083513Z-codex/\n?? data/cpu_prefill_compute/pc0-op2-20260719T225343Z/\n?? data/cpu_prefill_compute/pc4b-qwen35-trace-20260719T234651Z/trace/architect_p8192_n1.results.json\n?? data/cpu_prefill_compute/pc4b-qwen35-trace-verbose-20260719T235218Z/trace/architect_p8192_n1.results.json\n?? data/cpu_prefill_compute/pc4c-qwen35-subtrace-20260720T001959Z/cleanup/\n?? data/cpu_prefill_compute/pc4c-qwen35-subtrace-20260720T001959Z/commands/\n?? data/cpu_prefill_compute/pc4c-qwen35-subtrace-20260720T001959Z/preflight/\n?? data/cpu_prefill_compute/pc4c-qwen35-subtrace-20260720T001959Z/trace/\n?? data/cpu_prefill_compute/pc4e-qwen35-ffn-subtrace-20260720T003822Z/cleanup/\n?? data/cpu_prefill_compute/pc4e-qwen35-ffn-subtrace-20260720T003822Z/commands/\n?? data/cpu_prefill_compute/pc4e-qwen35-ffn-subtrace-20260720T003822Z/preflight/\n?? data/cpu_prefill_compute/pc4e-qwen35-ffn-subtrace-20260720T003822Z/trace/\n?? data/cpu_prefill_compute/pc4f-qwen35-routed-moe-subtrace-20260720T004730Z/cleanup/\n?? data/cpu_prefill_compute/pc4f-qwen35-routed-moe-subtrace-20260720T004730Z/commands/\n?? data/cpu_prefill_compute/pc4f-qwen35-routed-moe-subtrace-20260720T004730Z/preflight/\n?? data/cpu_prefill_compute/pc4f-qwen35-routed-moe-subtrace-20260720T004730Z/trace/\n?? data/cpu_prefill_compute/pc4g-qwen35moe-compact-aggregation-p8192-20260720T010334Z/binary_path.txt\n?? data/cpu_prefill_compute/pc4g-qwen35moe-compact-aggregation-p8192-20260720T010334Z/compact/\n?? data/cpu_prefill_compute/pc4g-qwen35moe-compact-aggregation-p8192-20260720T010334Z/default/\n?? data/cpu_prefill_compute/pc4g-qwen35moe-compact-aggregation-p8192-20260720T010334Z/llama_status.txt\n?? data/cpu_prefill_compute/pc4g-qwen35moe-compact-aggregation-p8192-20260720T010334Z/model_path.txt\n?? data/cpu_prefill_compute/pc4g-qwen35moe-compact-aggregation-p8192-20260720T010334Z/post_pgrep.txt\n?? data/cpu_prefill_compute/pc4g-qwen35moe-compact-aggregation-p8192-20260720T010334Z/post_rocm_smi.txt\n?? data/cpu_prefill_compute/pc4g-qwen35moe-compact-aggregation-p8192-20260720T010334Z/pre_pgrep.txt\n?? data/cpu_prefill_compute/pc4g-qwen35moe-compact-aggregation-p8192-20260720T010334Z/pre_rocm_smi.txt\n?? data/cpu_prefill_compute/pc4g-qwen35moe-compact-aggregation-simple-smoke-20260720T010239Z/\n?? data/cpu_prefill_compute/pc4g-qwen35moe-compact-aggregation-smoke-20260720T005914Z/\n?? data/cpu_prefill_compute/pc4g-qwen35moe-compact-aggregation-smoke-20260720T005945Z/\n?? data/cpu_prefill_compute/pc4g-qwen35moe-compact-aggregation-smoke-20260720T010028Z/\n?? data/cpu_prefill_compute/pc4g-qwen35moe-compact-aggregation-smoke-20260720T010130Z/\n?? data/cpu_prefill_compute/pc4h-qwen35moe-router-weights-perf-20260720T011655Z/bench.json\n?? data/cpu_prefill_compute/pc4h-qwen35moe-router-weights-perf-20260720T011655Z/bench_stderr.txt\n?? data/cpu_prefill_compute/pc4h-qwen35moe-router-weights-perf-20260720T011655Z/binary_path.txt\n?? data/cpu_prefill_compute/pc4h-qwen35moe-router-weights-perf-20260720T011655Z/llama_status.txt\n?? data/cpu_prefill_compute/pc4h-qwen35moe-router-weights-perf-20260720T011655Z/model_path.txt\n?? data/cpu_prefill_compute/pc4h-qwen35moe-router-weights-perf-20260720T011655Z/perf_report_children_symbol.txt\n?? data/cpu_prefill_compute/pc4h-qwen35moe-router-weights-perf-20260720T011655Z/perf_report_nochildren_symbol.txt\n?? data/cpu_prefill_compute/pc4h-qwen35moe-router-weights-perf-20260720T011655Z/post_pgrep.txt\n?? data/cpu_prefill_compute/pc4h-qwen35moe-router-weights-perf-20260720T011655Z/post_rocm_smi.txt\n?? data/cpu_prefill_compute/pc4h-qwen35moe-router-weights-perf-20260720T011655Z/pre_pgrep.txt\n?? data/cpu_prefill_compute/pc4h-qwen35moe-router-weights-perf-20260720T011655Z/pre_rocm_smi.txt\n?? data/cpu_prefill_compute/pc4j-qwen35moe-cpu-node-barrier-trace-20260720T015248Z/bench.json\n?? data/cpu_prefill_compute/pc4k-qwen35moe-concat-dim0-rows-ab-20260720T021127Z/clean_concat_dim0_rows/bench.json\n?? data/cpu_prefill_compute/pc4k-qwen35moe-concat-dim0-rows-ab-20260720T021127Z/clean_default/bench.json\n?? data/cpu_prefill_compute/pc4k-qwen35moe-concat-dim0-rows-ab-20260720T021127Z/concat_dim0_rows/bench.json\n?? data/cpu_prefill_compute/pc4k-qwen35moe-concat-dim0-rows-ab-20260720T021127Z/default/bench.json\n?? data/cpu_prefill_compute/pc4l-qwen35moe-concat-dim0-repeat-20260720T023955Z/pg_concat_dim0_rows/bench.json\n?? data/cpu_prefill_compute/pc4l-qwen35moe-concat-dim0-repeat-20260720T023955Z/pg_default/bench.json\n?? data/cpu_prefill_compute/pc4l-qwen35moe-concat-dim0-repeat-20260720T023955Z/repeat_concat_dim0_rows/bench.json\n?? data/cpu_prefill_compute/pc4l-qwen35moe-concat-dim0-repeat-20260720T023955Z/repeat_default/bench.json\n?? data/cpu_prefill_compute/pc4o-clean-93d945885-20260720T083636Z/\n?? data/cpu_prefill_compute/pc4o-clean-93d945885-20260720T083838Z/pg_concat_dim0_rows/bench.json\n?? data/cpu_prefill_compute/pc4o-clean-93d945885-20260720T083838Z/pg_default/bench.json\n?? data/cpu_prefill_compute/pc4o-clean-93d945885-20260720T083838Z/repeat_concat_dim0_rows/bench.json\n?? data/cpu_prefill_compute/pc4o-clean-93d945885-20260720T083838Z/repeat_default/bench.json\n?? data/dr3_frontdoor_opportunity_cost/dr3_frontdoor_opportunity_cost_20260720T074826Z_dryrun/\n?? data/gemma4_iq4_residency/\n?? data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/\n?? data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/logs/\n?? data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/\n?? data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/logs/\n?? data/glm52_native_mtp_ab/direct-nextn-probe-20260719T194435Z/\n?? data/glm52_native_mtp_ab/gdb-nextn-probe-20260719T194105Z/\n?? data/glm52_native_mtp_ab/glm52-native-mtp-draft-long-retry-20260719T194556Z/\n?? data/glm52_native_mtp_ab/glm52-native-mtp-draft-retry-ibatch-20260719T193506Z/\n?? data/glm52_native_mtp_ab/glm52-native-mtp-draft-retry-sse-comment-20260719T193244Z/\n?? data/glm52_native_mtp_ab/glm52-native-mtp-draft-retry-sse5-20260719T193012Z/\n?? data/glm52_native_mtp_ab/glm52_mtp_dryrun_20260719T185813Z/\n?? data/glm52_native_mtp_ab/manual-stream-probe-20260719T1938Z/\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_00710c9c18cd10fb.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_0110087826d99378.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_0342d6ad25d55619.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_0735945503ef9330.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_08cafcb6483d8389.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_09584d0209952576.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_0b5adcf2e8a30f49.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_0c6318021a8a500b.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_0e31e881b1af8ab5.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_0e49d06ddc8f2635.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_0f20280ccef865cb.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_10070430d41b73e9.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_12dedf2f36029e2c.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_15640c98528c9b69.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_1600ca8239e2f6e0.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_1a3868334fafed91.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_1a64c956e9fceeda.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_200003ca11cb7699.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_20e3c97d771762dd.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_24fbdf7de1c6fa44.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_28cdbe123c730a18.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_29de0af708959323.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_2b42feb6f862f419.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_2e9396c28dc04eb8.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_2eb65dfe50dac98c.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_318082712c259a61.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_3333a13b02e7c9cd.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_35a755fe7fe25141.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_35b5f9732a95648f.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_36fcfb9bb595e6a0.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_3a9386520926c69a.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_3b5fea1f6bbf15c9.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_3b9731be33a917ac.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_464e0b86870b3bb4.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_4dffb979a7dbe93a.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_4f41428972bf8d1c.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_4f7f5d3cefab8e82.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_580d7a6264a6c05e.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_615c2809e29a09cb.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_688c6c72adbf5dbb.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_6adc4394b44ef7fb.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_6cec38ff57a31ab2.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_7c65bc29012e3519.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_8b2bcb5a21222c99.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_92c85c457f389108.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_d7b88900c121adf7.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_e5e8deb707c24d37.request.json\n?? data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/artifacts/nearmiss-v1_c-crab_ffbb86d418484744.request.json\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-dryrun-20260718Tcodex/\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-n6-20260718Tcodex/artifacts/\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-n6-20260718Tcodex/decisions.jsonl\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-n6-20260718Tcodex/plan.json\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-n6-20260718Tcodex/progress.jsonl\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-n6-20260718Tcodex/run_manifest.json\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-n6-20260718Tcodex/summary.json\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v4-n6-20260718Tcodex/artifacts/\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v4-n6-20260718Tcodex/decisions.jsonl\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v4-n6-20260718Tcodex/plan.json\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v4-n6-20260718Tcodex/progress.jsonl\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v4-n6-20260718Tcodex/run_manifest.json\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v4-n6-20260718Tcodex/summary.json\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v5-notes-dryrun-20260718Tcodex/\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v5-notes-dryrun2-20260718Tcodex/\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v5-notes-dryrun3-20260718Tcodex/\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v5-notes-n12-dryrun-20260718Tcodex/\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v5-notes-n6-20260718Tcodex/artifacts/\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v5-notes-n6-20260718Tcodex/decisions.jsonl\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v5-notes-n6-20260718Tcodex/plan.json\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v5-notes-n6-20260718Tcodex/progress.jsonl\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v5-notes-n6-20260718Tcodex/run_manifest.json\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v5-notes-n6-20260718Tcodex/summary.json\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patchdiff-negative-evidence-dryrun-20260718Tcodex/\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patchdiff-negative-evidence-v3b-dryrun-20260718Tcodex/\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patchdiff-negative-evidence-v3b-n4-20260718Tcodex/\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patchdiff-negative-evidence-v3c-n4-20260718Tcodex/artifacts/\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patchdiff-negative-evidence-v3c-n4-20260718Tcodex/decisions.jsonl\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patchdiff-negative-evidence-v3c-n4-20260718Tcodex/plan.json\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patchdiff-negative-evidence-v3c-n4-20260718Tcodex/progress.jsonl\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patchdiff-negative-evidence-v3c-n4-20260718Tcodex/run_manifest.json\n?? data/glm52_reviewer_corpus_direct/glm52-ccrab-patchdiff-negative-evidence-v3c-n4-20260718Tcodex/summary.json\n?? data/glm52_reviewer_corpus_direct/glm52-gc4b-accept-plus-hardneg-dryrun-20260719Tcodex/\n?? data/glm52_reviewer_corpus_direct/glm52-gc4b-accept-plus-hardneg-p-rev1-dryrun-20260719T132419Z/\n?? data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-negative-evidence-20260718Tcodex/\n?? data/glm52_reviewer_corpus_direct/glm52-nearmiss-multioracle-balanced-dryrun-20260718Tcodex/\n?? data/glm52_reviewer_corpus_direct/glm52-seeded-debugbench-substring-multioracle-dryrun-20260718Tcodex/\n?? data/glm52_reviewer_corpus_direct/glm52-seeded-debugbench-substring-multioracle-guard-dryrun-20260718Tcodex/\n?? data/glm52_reviewer_corpus_direct/glm52-seeded-debugbench-substring-multioracle-n12-20260718Tcodex/artifacts/\n?? data/glm52_reviewer_corpus_direct/glm52-seeded-debugbench-substring-multioracle-n12-20260718Tcodex/decisions.jsonl\n?? data/glm52_reviewer_corpus_direct/glm52-seeded-debugbench-substring-multioracle-n12-20260718Tcodex/plan.json\n?? data/glm52_reviewer_corpus_direct/glm52-seeded-debugbench-substring-multioracle-n12-20260718Tcodex/progress.jsonl\n?? data/glm52_reviewer_corpus_direct/glm52-seeded-debugbench-substring-multioracle-n12-20260718Tcodex/run_manifest.json\n?? data/glm52_reviewer_corpus_direct/glm52-seeded-debugbench-substring-multioracle-n12-20260718Tcodex/summary.json\n?? data/gpu-mi210/axa2_32k_prefill_qwen35_122b_v1_f16k_q4v_b1024_ub256_20260719T065925Z/\n?? data/gpu-mi210/bonsai27-q1-defaultkv-v7-context-20260718T225648Z/llama_bench_stdout.json\n?? data/gpu-mi210/bonsai27-q1-kv-q4-v7-context-20260718T224733Z/llama_bench_stdout.json\n?? data/gpu-mi210/ernie-image-turbo-hip-1024-diagnostic-20260719T022900Z/\n?? data/gpu-mi210/ernie-image-turbo-hip-content-audit-896-20260719T023455Z/\n?? data/gpu-mi210/ernie-image-turbo-hip-content-audit-896-full-20260719T023541Z/\n?? data/gpu-mi210/ernie-image-turbo-hip-content-audit-896-full-uv-20260719T023630Z/\n?? data/gpu-mi210/ernie-image-turbo-hip-resolution-sweep-20260719T022342Z/server.pid\n?? data/gpu-mi210/ernie-image-turbo-hip-resolution-sweep-20260719T022342Z/server.stderr\n?? data/gpu-mi210/ernie-image-turbo-hip-resolution-sweep-20260719T022342Z/server.stdout\n?? data/gpu-mi210/ernie-image-turbo-hip-resolution-threshold-20260719T023145Z/\n?? data/gpu-mi210/ernie-image-turbo-hip-smoke-20260719T021843Z/\n?? data/gpu-mi210/ernie-image-turbo-hip-smoke-detached-20260719T022010Z/post_request_1024_rocm_smi.txt\n?? data/gpu-mi210/ernie-image-turbo-hip-smoke-detached-20260719T022010Z/post_request_rocm_smi.txt\n?? data/gpu-mi210/ernie-image-turbo-hip-smoke-detached-20260719T022010Z/pre_processes.txt\n?? data/gpu-mi210/ernie-image-turbo-hip-smoke-detached-20260719T022010Z/pre_rocm_smi.txt\n?? data/gpu-mi210/ernie-image-turbo-hip-smoke-detached-20260719T022010Z/ready_rocm_smi.txt\n?? data/gpu-mi210/ernie-image-turbo-hip-smoke-detached-20260719T022010Z/server.pid\n?? data/gpu-mi210/ernie-image-turbo-hip-smoke-detached-20260719T022010Z/server.stderr\n?? data/gpu-mi210/ernie-image-turbo-hip-smoke-detached-20260719T022010Z/server.stdout\n?? data/gpu-mi210/ernie-image-turbo-hip-smoke-detached-20260719T022010Z/server_ps_after_request.txt\n?? data/gpu-mi210/ernie-image-turbo-hip-smoke-detached-20260719T022010Z/server_ps_after_request_1024.txt\n?? data/gpu-mi210/ernie-image-turbo-hip-smoke-detached-20260719T022010Z/server_ps_ready.txt\n?? data/gpu-mi210/ernie-image-turbo-hip-smoke-no-convdirect-20260719T022241Z/pre_rocm_smi.txt\n?? data/gpu-mi210/ernie-image-turbo-hip-smoke-no-convdirect-20260719T022241Z/server.pid\n?? data/gpu-mi210/ernie-image-turbo-hip-smoke-no-convdirect-20260719T022241Z/server.stderr\n?? data/gpu-mi210/ernie-image-turbo-hip-smoke-no-convdirect-20260719T022241Z/server.stdout\n?? data/gpu-mi210/k35_qwen3vl8_mi210_default_image_currentv7_20260719T042531Z/runs/vision_candidate_mi210_qwen3vl8b_q4_default_image/server.stderr\n?? data/gpu-mi210/k35_worker_vision_qwen25vl_mi210_quality_throughput_20260719T041924Z/\n?? data/gpu-mi210/laguna-iq2-dflash-candidate-smoke/\n?? data/gpu-mi210/laguna-iq2-dflash-v8-exact-tip/\n?? data/gpu-mi210/laguna-iq2-kv-sweep-exact-tip/\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/after_health_rocm_smi.txt\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/after_requests_rocm_smi.txt\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/cleanup_verification.json\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/final_llama_processes.txt\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/final_rocm_smi.txt\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/health_probe.json\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/ocrbench_digit.content.md\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/ocrbench_digit.response.json\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/odl_science_page.content.md\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/odl_science_page.response.json\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/odl_table_page.content.md\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/odl_table_page.response.json\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/post_llama_processes.txt\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/post_ps_all.txt\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/post_rocm_smi.txt\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/pre_llama_processes.txt\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/pre_ps_all.txt\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/pre_rocm_smi.txt\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/preflight_guard.json\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/server.pid\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/server.stderr\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/server.stdout\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/server_ps_after_cleanup.txt\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/server_ps_after_health.txt\n?? data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/server_ps_after_requests.txt\n?? data/gpu-mi210/nemotron-nano-9b-bf16-v7-context-20260718T230833Z/llama_bench_stdout.json\n?? data/gpu-mi210/nemotron-nano-9b-q8-kvq8-v7-context-20260718T231115Z/llama_bench_stdout.json\n?? data/gpu-mi210/nemotron-nano-9b-q8-v7-context-20260718T230602Z/llama_bench_stdout.json\n?? data/gpu-mi210/paddleocr_vl_16_textonly_mi210_currentv7_20260719T055027Z/\n?? data/gpu-mi210/qwen3_4b_instruct_2507_bf16_mi210_llama_bench_20260719Tmain/\n?? data/gpu-mi210/qwen3_4b_instruct_2507_bf16_mi210_verifier_grammar_slice_20260719Tmain/\n?? data/gpu-mi210/qwen3_4b_instruct_2507_mi210_grammar_probe_20260719T030427Z/\n?? data/gpu-mi210/qwen3_4b_instruct_2507_mi210_server_smoke_20260719T025859Z/\n?? data/gpu-mi210/qwen3_4b_instruct_2507_mi210_verifier_grammar_slice24_20260719T033317Z/\n?? data/gpu-mi210/qwen3_4b_instruct_2507_mi210_verifier_grammar_slice_20260719T030635Z/\n?? data/gpu-mi210/qwen3_4b_instruct_2507_mi210_verifier_repair_probe_20260719T033440Z/\n?? data/gpu-mi210/qwen3_4b_instruct_2507_mi210_verifier_slice_20260719T030226Z/\n?? data/gpu-mi210/qwen3_4b_instruct_2507_prompt_policy_probe_20260719T040156Z/server.stderr\n?? data/gpu-mi210/qwen3_4b_instruct_2507_q8_mi210_llama_bench_20260719Tmain/\n?? data/gpu-mi210/qwen3_4b_instruct_2507_q8_mi210_verifier_grammar_broad_20260719T032955Z/\n?? data/gpu-mi210/qwen3_4b_thinking_2507_mi210_server_smoke_20260719T025740Z/\n?? data/gpu-mi210/qwen3_4b_thinking_2507_mi210_smoke_20260719T025423Z/\n?? data/gpu-mi210/qwen3_4b_thinking_2507_q8_mi210_context_currentv7_20260719Tmain/\n?? data/gpu-mi210/qwen3next-80b-iq2m-2026-07-05/\n?? data/gpu-mi210/qwen3next-80b-iq2m-currentv7-gpu-context-20260718T233943Z/artifact_files.txt\n?? data/gpu-mi210/qwen3next-80b-iq2m-currentv7-gpu-context-20260718T233943Z/llama_bench_stderr.txt\n?? data/gpu-mi210/qwen3next-80b-iq2m-currentv7-gpu-context-20260718T233943Z/llama_bench_stdout.json\n?? data/gpu-mi210/qwen3next-80b-iq2m-currentv7-gpu-context-20260718T233943Z/post_pgrep.txt\n?? data/gpu-mi210/qwen3next-80b-iq2m-currentv7-gpu-context-20260718T233943Z/post_rocm_smi.txt\n?? data/gpu-mi210/qwen3next-80b-iq2m-currentv7-gpu-context-20260718T233943Z/pre_pgrep.txt\n?? data/gpu-mi210/qwen3next-80b-iq2m-currentv7-gpu-context-20260718T233943Z/pre_rocm_smi.txt\n?? data/gpu-mi210/qwen3next-80b-iq2m-sourcehead-v7-gpu-context-20260718T234756Z/\n?? data/gpu-mi210/qwen3next-80b-iq2m-sourcehead-v7-gpu-context-clean-20260718T235036Z/llama_bench_stderr.txt\n?? data/gpu-mi210/qwen3next-80b-iq2m-sourcehead-v7-gpu-context-clean-20260718T235036Z/llama_bench_stdout.json\n?? data/gpu-mi210/qwen3next_80b_iq2m_mi210_broader_role_quality_probe_20260719T034859Z/server.stderr\n?? data/gpu-mi210/qwen3next_80b_iq2m_mi210_code_review_strict_if_probe_20260719T034502Z/server.stderr\n?? data/gpu-mi210/qwen3next_80b_iq2m_mi210_quality_slice24_20260719T034007Z/\n?? data/gpu-mi210/qwen3next_80b_iq2m_mi210_quality_slice_20260719T033645Z/\n?? data/hy3_current_v7/\n?? data/k11_gemma4_determinism/dryrun_probe/\n?? data/k11_gemma4_determinism/k11_cpu_device_surface_dryrun_20260718Tcodex/commands.sh\n?? data/k11_gemma4_determinism/k11_freeform_mtp_np4_n3_currentv7_sharedcpu_20260718T233511Z/logs/\n?? data/k11_gemma4_determinism/k11_freeform_mtp_np4_n3_currentv7_sharedcpu_20260718T233511Z/responses/\n?? data/k11_gemma4_determinism/k11_freeform_mtp_np4_n3_currentv7_sharedcpu_20260718T233511Z/runs/\n?? data/k11_gemma4_determinism/k11_freeform_nospec_np4_n3_currentv7_sharedcpu_20260718T233619Z/logs/\n?? data/k11_gemma4_determinism/k11_freeform_nospec_np4_n3_currentv7_sharedcpu_20260718T233619Z/responses/\n?? data/k11_gemma4_determinism/k11_freeform_nospec_np4_n3_currentv7_sharedcpu_20260718T233619Z/runs/\n?? data/k11_gemma4_determinism/k11_gemma4_long_determinism_20260718Tcodex/\n?? data/k11_gemma4_determinism/k11_gemma4_long_mtp_np1_20260718Tcodex/\n?? data/k11_gemma4_determinism/k11_gemma4_long_mtp_np4_n10_20260718Tcodex/\n?? data/k11_gemma4_determinism/k11_gemma4_long_mtp_np4_n10_backend_off_current_20260718T142614Z/commands.sh\n?? data/k11_gemma4_determinism/k11_gemma4_long_mtp_np4_n10_backend_off_current_20260718T142614Z/logs/\n?? data/k11_gemma4_determinism/k11_gemma4_long_mtp_np4_n10_backend_off_current_20260718T142614Z/responses/\n?? data/k11_gemma4_determinism/k11_gemma4_long_mtp_np4_n10_backend_off_current_20260718T142614Z/runs/\n?? data/k11_gemma4_determinism/k11_gemma4_long_mtp_np4_n10_default_backend_current_20260718T142203Z/commands.sh\n?? data/k11_gemma4_determinism/k11_gemma4_long_mtp_np4_n10_default_backend_current_20260718T142203Z/logs/\n?? data/k11_gemma4_determinism/k11_gemma4_long_mtp_np4_n10_default_backend_current_20260718T142203Z/responses/\n?? data/k11_gemma4_determinism/k11_gemma4_long_mtp_np4_n10_default_backend_current_20260718T142203Z/runs/\n?? data/k11_gemma4_determinism/k11_gemma4_long_mtp_np4_n6_default_backend_20260718T142021Z/commands.sh\n?? data/k11_gemma4_determinism/k11_gemma4_long_mtp_np4_n6_default_backend_20260718T142021Z/logs/\n?? data/k11_gemma4_determinism/k11_gemma4_long_mtp_np4_n6_default_backend_20260718T142021Z/responses/\n?? data/k11_gemma4_determinism/k11_gemma4_long_mtp_np4_n6_default_backend_20260718T142021Z/runs/\n?? data/k11_gemma4_determinism/k11_gemma4_long_mtp_np4_n6_draft_backend_off_20260718T141719Z/commands.sh\n?? data/k11_gemma4_determinism/k11_gemma4_long_mtp_np4_n6_draft_backend_off_20260718T141719Z/logs/\n?? data/k11_gemma4_determinism/k11_gemma4_long_mtp_np4_n6_draft_backend_off_20260718T141719Z/responses/\n?? data/k11_gemma4_determinism/k11_gemma4_long_mtp_np4_n6_draft_backend_off_20260718T141719Z/runs/\n?? data/k11_gemma4_determinism/k11_gemma4_long_mtp_np4_scored_20260718Tcodex/\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_cpu_device_none_np4_n10_20260718T143903Z/k11_cpu_nospec_report.md\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_cpu_device_none_np4_n10_20260718T143903Z/post_pgrep.txt\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_cpu_device_none_np4_n10_20260718T143903Z/post_rocm_smi.txt\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_cpu_device_none_np4_n10_20260718T143903Z/pre_pgrep.txt\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_cpu_device_none_np4_n10_20260718T143903Z/pre_rocm_smi.txt\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_cpu_device_none_np4_n10_20260718T143903Z/run_01/\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_cpu_device_none_np4_n10_20260718T143903Z/run_02/\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_cpu_device_none_np4_n10_20260718T143903Z/run_03/\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_cpu_device_none_np4_n10_20260718T143903Z/run_04/\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_cpu_device_none_np4_n10_20260718T143903Z/run_05/\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_cpu_device_none_np4_n10_20260718T143903Z/run_06/\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_cpu_device_none_np4_n10_20260718T143903Z/run_07/\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_cpu_device_none_np4_n10_20260718T143903Z/run_08/\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_cpu_device_none_np4_n10_20260718T143903Z/run_09/\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_cpu_device_none_np4_n10_20260718T143903Z/run_10/\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_np1_20260718Tcodex/\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_np4_20260718Tcodex/\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_np4_n10_current_20260718T143112Z/commands.sh\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_np4_n10_current_20260718T143112Z/logs/\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_np4_n10_current_20260718T143112Z/responses/\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_np4_n10_current_20260718T143112Z/runs/\n?? data/k11_gemma4_determinism/k11_gemma4_long_nospec_np4_repeat_20260718Tcodex/\n?? data/k11_gemma4_determinism/k11_gemma4_mi210_modes_20260719T004400Z/logs/\n?? data/k11_gemma4_determinism/k11_gemma4_mi210_modes_20260719T004400Z/post_pgrep.txt\n?? data/k11_gemma4_determinism/k11_gemma4_mi210_modes_20260719T004400Z/pre_pgrep.txt\n?? data/k11_gemma4_determinism/k11_gemma4_mi210_modes_20260719T004400Z/responses/\n?? data/k11_gemma4_determinism/k11_gemma4_mi210_modes_20260719T004400Z/runs/\n?? data/k11_gemma4_determinism/k11_gemma4_mi210_prompt_diverse_20260719T004626Z/logs/\n?? data/k11_gemma4_determinism/k11_gemma4_mi210_prompt_diverse_20260719T004626Z/post_draft_mtp_pgrep.txt\n?? data/k11_gemma4_determinism/k11_gemma4_mi210_prompt_diverse_20260719T004626Z/post_ngram_mod_draft_mtp_pgrep.txt\n?? data/k11_gemma4_determinism/k11_gemma4_mi210_prompt_diverse_20260719T004626Z/post_no_spec_pgrep.txt\n?? data/k11_gemma4_determinism/k11_gemma4_mi210_prompt_diverse_20260719T004626Z/post_pgrep.txt\n?? data/k11_gemma4_determinism/k11_gemma4_mi210_prompt_diverse_20260719T004626Z/pre_pgrep.txt\n?? data/k11_gemma4_determinism/k11_gemma4_mi210_prompt_diverse_20260719T004626Z/responses/\n?? data/k11_gemma4_determinism/k11_gemma4_mi210_prompt_diverse_20260719T004626Z/run_prompt_diverse.py\n?? data/k11_gemma4_determinism/k11_gemma4_mi210_prompt_diverse_20260719T004626Z/runs/\n?? data/k11_gemma4_determinism/k11_gemma4_mi210_prompt_diverse_20260719T004626Z/summary.json\n?? data/k11_gemma4_determinism/k11_long_nospec_explicit_greedy_np4_n10_20260718Tcodex/commands.sh\n?? data/k11_gemma4_determinism/k11_long_nospec_explicit_greedy_np4_n10_20260718Tcodex/logs/\n?? data/k11_gemma4_determinism/k11_long_nospec_explicit_greedy_np4_n10_20260718Tcodex/plan.json\n?? data/k11_gemma4_determinism/k11_long_nospec_explicit_greedy_np4_n10_20260718Tcodex/responses/\n?? data/k11_gemma4_determinism/k11_long_nospec_explicit_greedy_np4_n10_20260718Tcodex/runs/\n?? data/k11_gemma4_determinism/k11_long_nospec_explicit_greedy_np4_n10_20260718Tcodex/summary.json\n?? data/k11_gemma4_determinism/k11_long_nospec_explicit_greedy_stop_np4_n10_20260718Tcodex/commands.sh\n?? data/k11_gemma4_determinism/k11_long_nospec_explicit_greedy_stop_np4_n10_20260718Tcodex/logs/\n?? data/k11_gemma4_determinism/k11_long_nospec_explicit_greedy_stop_np4_n10_20260718Tcodex/plan.json\n?? data/k11_gemma4_determinism/k11_long_nospec_explicit_greedy_stop_np4_n10_20260718Tcodex/responses/\n?? data/k11_gemma4_determinism/k11_long_nospec_explicit_greedy_stop_np4_n10_20260718Tcodex/runs/\n?? data/k11_gemma4_determinism/k11_long_nospec_explicit_greedy_stop_np4_n10_20260718Tcodex/summary.json\n?? data/k11_gemma4_determinism/k11_mtp_stop512_np4_n2_20260718T174832Z/\n?? data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_presampling_trace_corrected_20260720T115334Z/logs/\n?? data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_presampling_trace_corrected_20260720T115334Z/responses/\n?? data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_presampling_trace_fa_off_20260720T120133Z/logs/\n?? data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_presampling_trace_fa_off_20260720T120133Z/responses/\n?? data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_presampling_trace_graphs_off_20260720T115655Z/logs/\n?? data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_presampling_trace_graphs_off_20260720T115655Z/responses/\n?? data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/logs/\n?? data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/responses/\n?? data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/runs/\n?? data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/token_traces/\n?? data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_mtp_n10_clean_20260720T093339Z/commands.sh\n?? data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_mtp_n10_clean_20260720T093339Z/logs/\n?? data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_mtp_n10_clean_20260720T093339Z/plan.json\n?? data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_mtp_n10_clean_20260720T093339Z/responses/\n?? data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_mtp_n10_clean_20260720T093339Z/runs/\n?? data/k11_gemma4_determinism/k11_natural_freeform_ud_iq4xs_mtp_n10_clean_20260720T093527Z/commands.sh\n?? data/k11_gemma4_determinism/k11_natural_freeform_ud_iq4xs_mtp_n10_clean_20260720T093527Z/logs/\n?? data/k11_gemma4_determinism/k11_natural_freeform_ud_iq4xs_mtp_n10_clean_20260720T093527Z/plan.json\n?? data/k11_gemma4_determinism/k11_natural_freeform_ud_iq4xs_mtp_n10_clean_20260720T093527Z/responses/\n?? data/k11_gemma4_determinism/k11_natural_freeform_ud_iq4xs_mtp_n10_clean_20260720T093527Z/runs/\n?? data/k11_gemma4_determinism/k11_sampler_diagnostic_dryrun_20260718Tcodex/\n?? data/k11_gemma4_determinism/k11_schema_word_array_dryrun_20260718Tcodex/\n?? data/k11_gemma4_determinism/k11_schema_word_array_mtp_np4_n10_20260718Tcodex/commands.sh\n?? data/k11_gemma4_determinism/k11_schema_word_array_mtp_np4_n10_20260718Tcodex/logs/\n?? data/k11_gemma4_determinism/k11_schema_word_array_mtp_np4_n10_20260718Tcodex/plan.json\n?? data/k11_gemma4_determinism/k11_schema_word_array_mtp_np4_n10_20260718Tcodex/responses/\n?? data/k11_gemma4_determinism/k11_schema_word_array_mtp_np4_n10_20260718Tcodex/runs/\n?? data/k11_gemma4_determinism/k11_schema_word_array_mtp_np4_n10_20260718Tcodex/summary.json\n?? data/k11_gemma4_determinism/k11_schema_word_array_nospec_np4_n10_20260718Tcodex/commands.sh\n?? data/k11_gemma4_determinism/k11_schema_word_array_nospec_np4_n10_20260718Tcodex/logs/\n?? data/k11_gemma4_determinism/k11_schema_word_array_nospec_np4_n10_20260718Tcodex/plan.json\n?? data/k11_gemma4_determinism/k11_schema_word_array_nospec_np4_n10_20260718Tcodex/responses/\n?? data/k11_gemma4_determinism/k11_schema_word_array_nospec_np4_n10_20260718Tcodex/runs/\n?? data/k11_gemma4_determinism/k11_schema_word_array_nospec_np4_n10_20260718Tcodex/summary.json\n?? data/k11_gemma4_determinism/k11_schema_word_array_ud_iq4xs_mtp_np4_n10_currentv7_20260719Tmain/\n?? data/k11_gemma4_determinism/k11_schema_word_array_ud_iq4xs_mtp_np4_n10_currentv7_20260719Tmain_1024/\n?? data/k11_gemma4_determinism/k11_schema_word_array_ud_iq4xs_mtp_np4_n2_currentv7_20260719T000822Z/logs/\n?? data/k11_gemma4_determinism/k11_schema_word_array_ud_iq4xs_mtp_np4_n2_currentv7_20260719T000822Z/provenance.txt\n?? data/k11_gemma4_determinism/k11_schema_word_array_ud_iq4xs_mtp_np4_n2_currentv7_20260719T000822Z/responses/\n?? data/k11_gemma4_determinism/k11_schema_word_array_ud_iq4xs_mtp_np4_n2_currentv7_20260719T000822Z/runs/\n?? data/k11_gemma4_determinism/k11_stop_end_mtp_np4_n3_currentv7_sharedcpu_20260718T233707Z/logs/\n?? data/k11_gemma4_determinism/k11_stop_end_mtp_np4_n3_currentv7_sharedcpu_20260718T233707Z/responses/\n?? data/k11_gemma4_determinism/k11_stop_end_mtp_np4_n3_currentv7_sharedcpu_20260718T233707Z/runs/\n?? data/k11_gemma4_determinism/k11_wordstop_sampler_diagnostic_dryrun_20260718Tcodex/\n?? data/k28_gdn_perf/k28-qwen35moe-gpu-trace-20260720T111511Z/\n?? data/k28_gdn_perf/k28-qwen35moe-gpu-trace-pinned-20260720T111731Z/\n?? data/k34_cpu_host_throughput_drift/k34_worker_general_cpu_composed_spec_20260718T181013Z/\n?? data/k35_minicpm_service_matrix/\n?? data/k35_stack_context_matrix/architect_general_context_curve_20260718Tcodex/runs/\n?? data/k35_stack_context_matrix/architect_general_context_curve_20260718Tcodex/summary.json\n?? data/k35_stack_context_matrix/cpu_backlog_frontdoor_cpu_ctx2048_20260718T1918Z/\n?? data/k35_stack_context_matrix/dryrun_cpu_frontdoor_ctx2048/\n?? data/k35_stack_context_matrix/dryrun_worker_general_32k_env_check_20260718T194726Z/\n?? data/k35_stack_context_matrix/frontdoor_context_edges_20260718Tcodex/runs/\n?? data/k35_stack_context_matrix/frontdoor_context_edges_20260718Tcodex/summary.json\n?? data/k35_stack_context_matrix/frontdoor_context_edges_20260718Tcodex_dryrun/\n?? data/k35_stack_context_matrix/frontdoor_gpu_native_mtp_ctx16k_1024tok_20260718T175718Z/\n?? data/k35_stack_context_matrix/frontdoor_gpu_native_mtp_ctx16k_20260718T173718Z/\n?? data/k35_stack_context_matrix/frontdoor_gpu_native_mtp_ctx16k_20260718T173750Z/\n?? data/k35_stack_context_matrix/frontdoor_gpu_native_mtp_ctx32k_20260718T1723Z/\n?? data/k35_stack_context_matrix/ingest_long_context_curve_20260718Tcodex/runs/\n?? data/k35_stack_context_matrix/ingest_long_context_curve_20260718Tcodex/summary.json\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005150Z/\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/after_frontdoor_solo_cleanup.ps.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/after_frontdoor_solo_cleanup.rocm_smi.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/after_gemma_solo_cleanup.ps.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/after_gemma_solo_cleanup.rocm_smi.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/after_preferred_cleanup.ps.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/after_preferred_cleanup.rocm_smi.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/cleanup_frontdoor_solo_87452.ps\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/cleanup_gemma_solo_87769.ps\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/cleanup_preferred_frontdoor_88038.ps\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/cleanup_preferred_gemma_88279.ps\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/experimental_head.stderr.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/final.ps.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/frontdoor.launch.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/frontdoor.server.stderr\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/frontdoor.server.stdout\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/frontdoor_solo.content.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/frontdoor_solo.request.json\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/frontdoor_solo.response.json\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/frontdoor_solo_after_request.frontdoor.87452.proc_status.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/frontdoor_solo_after_request.frontdoor.87452.ps_detail.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/frontdoor_solo_after_request.frontdoor.87452.smaps_rollup.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/frontdoor_solo_after_request.ps.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/frontdoor_solo_after_request.rocm_smi.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/frontdoor_solo_loaded.frontdoor.87452.proc_status.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/frontdoor_solo_loaded.frontdoor.87452.ps_detail.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/frontdoor_solo_loaded.frontdoor.87452.smaps_rollup.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/frontdoor_solo_loaded.ps.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/frontdoor_solo_loaded.rocm_smi.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/gemma.launch.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/gemma.server.stderr\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/gemma.server.stdout\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/gemma_solo.content.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/gemma_solo.request.json\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/gemma_solo.response.json\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/gemma_solo_after_request.gemma.87769.proc_status.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/gemma_solo_after_request.gemma.87769.ps_detail.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/gemma_solo_after_request.gemma.87769.smaps_rollup.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/gemma_solo_after_request.ps.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/gemma_solo_after_request.rocm_smi.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/gemma_solo_loaded.gemma.87769.proc_status.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/gemma_solo_loaded.gemma.87769.ps_detail.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/gemma_solo_loaded.gemma.87769.smaps_rollup.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/gemma_solo_loaded.ps.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/gemma_solo_loaded.rocm_smi.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_after_concurrent.frontdoor.88038.proc_status.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_after_concurrent.frontdoor.88038.ps_detail.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_after_concurrent.frontdoor.88038.smaps_rollup.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_after_concurrent.gemma.88279.proc_status.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_after_concurrent.gemma.88279.ps_detail.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_after_concurrent.gemma.88279.smaps_rollup.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_after_concurrent.ps.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_both_loaded.frontdoor.88038.proc_status.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_both_loaded.frontdoor.88038.ps_detail.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_both_loaded.frontdoor.88038.smaps_rollup.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_both_loaded.gemma.88279.proc_status.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_both_loaded.gemma.88279.ps_detail.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_both_loaded.gemma.88279.smaps_rollup.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_both_loaded.ps.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_fit_status.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_frontdoor_concurrent.content.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_frontdoor_concurrent.request.json\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_frontdoor_concurrent.response.json\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_frontdoor_loaded.frontdoor.88038.proc_status.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_frontdoor_loaded.frontdoor.88038.ps_detail.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_frontdoor_loaded.frontdoor.88038.smaps_rollup.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_frontdoor_loaded.ps.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_frontdoor_loaded.rocm_smi.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_frontdoor_warm.content.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_frontdoor_warm.quality.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_frontdoor_warm.request.json\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_frontdoor_warm.response.json\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_frontdoor_warm.timed.json\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_gemma_concurrent.content.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_gemma_concurrent.request.json\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_gemma_concurrent.response.json\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_gemma_warm.content.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_gemma_warm.quality.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_gemma_warm.request.json\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_gemma_warm.response.json\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preferred_gemma_warm.timed.json\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/preflight_active_llama.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/run.log\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/server_version.stderr.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/server_version.stdout.txt\n?? data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z/summary.json\n?? data/k35_stack_context_matrix/k35_vision_mi210_minicpm_o45_full_20260718T213231Z/\n?? data/k35_stack_context_matrix/k35_vision_minicpm_mi210_20260718T155711Z/commands.sh\n?? data/k35_stack_context_matrix/k35_vision_minicpm_mi210_20260718T155711Z/guard_state.json\n?? data/k35_stack_context_matrix/k35_vision_minicpm_mi210_20260718T155711Z/runs/\n?? data/k35_stack_context_matrix/k35_worker_vision_qwen25vl_mi210_20260718T231931Z/\n?? data/k35_stack_context_matrix/k35_worker_vision_qwen25vl_mi210_20260718T234133Z/\n?? data/k35_stack_context_matrix/k35_worker_vision_qwen25vl_mi210_20260718T234408Z/\n?? data/k35_stack_context_matrix/tmp_frontdoor_cpu_probe_20260718T184320Z/\n?? data/k35_stack_context_matrix/tmp_frontdoor_cpu_probe_20260718T185020Z/\n?? data/k35_stack_context_matrix/tmp_frontdoor_cpu_probe_20260718T185500Z/\n?? data/k35_stack_context_matrix/worker_general_32k_clean_20260718T194218Z/\n?? data/k35_stack_context_matrix/worker_general_32k_clean_20260718T194243Z/\n?? data/k35_stack_context_matrix/worker_general_32k_clean_20260718T210009Z_cpu_sidecar/\n?? data/k35_stack_context_matrix/worker_general_32k_clean_20260718T210055Z_main_cpu/\n?? data/k35_stack_context_matrix/worker_general_32k_clean_20260718T212651Z_codex_cpu_hidden/\n?? data/k35_stack_context_matrix/worker_general_32k_clean_no_kfd_monitor_20260718T195136Z/\n?? data/k35_stack_context_matrix/worker_general_32k_clean_retry_20260718T194807Z/\n?? data/k35_stack_context_matrix/worker_general_context_curve_20260718Tcodex/runs/\n?? data/k35_stack_context_matrix/worker_general_context_curve_20260718Tcodex/summary.json\n?? data/k35_stack_context_matrix/worker_general_cpu_ctx32768_20260718Tcodex/\n?? data/k35_stack_context_matrix/worker_general_cpu_ctx32768_20260718Tcodex_run2/\n?? data/k35_stack_context_matrix/worker_general_cpu_ctx32768_provisional_overlap_20260718T1735Z/\n?? data/k35_vision_matrix/k35_qwen3vl8_default_image_mi210_20260718T233324Z/\n?? data/k35_vision_matrix/k35_qwen3vl8_default_image_mi210_20260718T233324Z_run2/\n?? data/k35_vision_matrix/k35_qwen3vl8_mi210_reasoning_off_default_image_20260719T024903Z/\n?? data/k35_vision_matrix/k35_worker_vision_qwen25vl_mi210_fallback_20260718T233701Z/\n?? data/k35_vision_matrix/k35_worker_vs_escalation_mi210_longdecode_20260719T004016Z/vision_escalation_candidate_minicpm_o45_mi210.server.stderr\n?? data/k35_vision_matrix/k35_worker_vs_escalation_mi210_longdecode_20260719T004016Z/worker_vision_safe_qwen25vl_mi210.server.stderr\n?? data/k35_vision_matrix/qwen3vl8b_mi210_chart_repair_probe_20260719T040606Z/\n?? data/kernel-v8-candidate/cpu-prefill-regression/host-attestation-20260724T215810Z.json\n?? data/kernel-v8-candidate/cpu-prefill-regression/host-attestation-20260724T221114Z.json\n?? data/kernel-v8-candidate/cpu-prefill-regression/host-attestation-20260725T082352Z-v3.json\n?? data/kernel-v8-candidate/cpu-prefill-regression/host-attestation-20260725T082414Z-v3.json\n?? data/kernel-v8-candidate/cpu-prefill-regression/host-attestation-20260725T141156Z-waive-q8-v3.json\n?? data/kernel-v8-candidate/cpu-prefill-regression/host-attestation-20260725T142157Z-waive-q8-v3-swapoff.json\n?? data/kernel-v8-candidate/cpu-prefill-regression/host-attestation-20260725T143502Z-waive-q8-v3-overlapfix-swapoff.json\n?? data/kernel-v8-candidate/cpu-prefill-regression/host-attestation-20260725T150933Z-waive-q8-v3-kfd-fenced-swapoff.json\n?? data/kernel-v8-candidate/cpu-prefill-regression/launcher-20260725T082414Z-v3-live.exit\n?? data/kernel-v8-candidate/cpu-prefill-regression/launcher-20260725T082414Z-v3-live.log\n?? data/kernel-v8-candidate/cpu-prefill-regression/launcher-20260725T082414Z-v3-live.meta\n?? data/kernel-v8-candidate/cpu-prefill-regression/run-20260724T215824Z/\n?? data/kernel-v8-candidate/cpu-prefill-regression/run-20260724T221128Z/\n?? data/kernel-v8-candidate/cpu-prefill-regression/run-20260725T082249Z-v3-dryrun/\n?? data/kernel-v8-candidate/cpu-prefill-regression/run-20260725T082352Z-v3-live/\n?? data/kernel-v8-candidate/cpu-prefill-regression/run-20260725T082414Z-v3-live/\n?? data/kernel-v8-candidate/cpu-prefill-regression/run-20260725T141157Z-v3-waive-q8-live/\n?? data/kernel-v8-candidate/cpu-prefill-regression/run-20260725T142157Z-v3-waive-q8-swapoff/\n?? data/kernel-v8-candidate/cpu-prefill-regression/run-20260725T143502Z-v3-waive-q8-overlapfix-swapoff/\n?? data/kernel-v8-candidate/cpu-prefill-regression/run-20260725T150933Z-v3-waive-q8-kfd-fenced-swapoff/\n?? data/kernel-v8-candidate/exact-tip-build/\n?? data/kernel-v8-candidate/exact-tip-engineering-verification/\n?? data/kernel-v8-candidate/final-coherence-smoke/\n?? data/kernel-v8-candidate/final-focused/\n?? data/kernel-v8-candidate/focused-post-p0/\n?? data/kernel-v8-candidate/iqk-real-model-correctness/\n?? data/kernel-v8-candidate/laguna-cpu-dflash-exact-tip/\n?? data/kernel-v8-candidate/laguna-iq2-dflash-discriminator-20260724T162637Z/\n?? data/kernel-v8-candidate/laguna-iq2-mi210-dflash-smoke-20260724T161354Z/\n?? data/kernel-v8-candidate/laguna-iq2-mi210-dflash-smoke-reasonoff-20260724T161717Z/\n?? data/kernel-v8-candidate/laguna-q4-cpu-smoke-20260724T160934Z/\n?? data/kernel-v8-candidate/lightning-indexer-v7-v8-baseline/\n?? data/kernel-v8-candidate/lightning-indexer-v7-v8-isolated/\n?? data/kernel-v8-candidate/pre-final-audit-evidence/\n?? data/kernel-v8-candidate/quality-gate/run-20260725T202850Z-both-mode/\n?? data/kernel-v8-candidate/quality-gate/run-20260725T204305Z-both-mode-fixed/\n?? data/kernel-v8-candidate/quality-gate/run-20260725T204355Z-qualityfix-both-mode/\n?? data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/historical-unpinned-v7-worker-general-baseline.json\n?? data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/historical-unpinned-v7-worker-general-baseline.sha256\n?? data/kernel-v8-candidate/quality-gate/run-20260725T204443Z-fullcontract-both-mode/v7-architect-general.server.log\n?? data/kernel-v8-candidate/qwen36-mi210-native-mtp-smoke-20260724T164125Z/\n?? data/kernel-v8-candidate/qwen36-mi210-native-mtp-smoke-prep-20260724T163909Z/\n?? data/kernel-v8-candidate/sanitize-final/\n?? data/kernel-v8-candidate/zen5-iqk-gemv-ab/\n?? data/kv_admission_cpu_v7/\n?? data/model_admission_throughput/nemotron-nano-q8-cpu-context-currentv7-20260719T012716Z/\n?? data/model_admission_throughput/nemotron-nano-q8-mi210-1024tok-ed4091266-20260719T005657Z/bench_post_pgrep.txt\n?? data/model_admission_throughput/nemotron-nano-q8-mi210-1024tok-ed4091266-20260719T005657Z/bench_post_rocm_smi_vram.txt\n?? data/model_admission_throughput/nemotron-nano-q8-mi210-1024tok-ed4091266-20260719T005657Z/bench_pre_pgrep.txt\n?? data/model_admission_throughput/nemotron-nano-q8-mi210-1024tok-ed4091266-20260719T005657Z/bench_pre_rocm_smi_showpids.txt\n?? data/model_admission_throughput/nemotron-nano-q8-mi210-1024tok-ed4091266-20260719T005657Z/bench_pre_rocm_smi_vram.txt\n?? data/model_admission_throughput/nemotron-nano-q8-mi210-1024tok-ed4091266-20260719T005657Z/command.txt\n?? data/model_admission_throughput/nemotron-nano-q8-mi210-1024tok-ed4091266-20260719T005657Z/llama_cpp_experimental_status.txt\n?? data/model_admission_throughput/nemotron-nano-q8-mi210-1024tok-ed4091266-20260719T005657Z/logs/\n?? data/model_admission_throughput/nemotron-nano-q8-mi210-1024tok-ed4091266-20260719T005657Z/plan.json\n?? data/model_admission_throughput/nemotron-nano-q8-mi210-1024tok-ed4091266-20260719T005657Z/post_pgrep.txt\n?? data/model_admission_throughput/nemotron-nano-q8-mi210-1024tok-ed4091266-20260719T005657Z/pre_pgrep.txt\n?? data/model_admission_throughput/nemotron-nano-q8-mi210-1024tok-ed4091266-20260719T005657Z/pre_rocm_smi_showpids.txt\n?? data/model_admission_throughput/nemotron-nano-q8-mi210-1024tok-ed4091266-20260719T005657Z/research_status.txt\n?? data/model_admission_throughput/nemotron-nano-q8-mi210-1024tok-ed4091266-20260719T005657Z/responses/\n?? data/model_admission_throughput/nemotron-nano-q8-mi210-1024tok-ed4091266-20260719T005657Z/runner_stderr.outer.txt\n?? data/model_admission_throughput/nemotron-nano-q8-mi210-1024tok-ed4091266-20260719T005657Z/summary.json\n?? data/model_admission_throughput/qwable_q8_mi210_llama_bench_20260718T215807Z/\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_architect_mi210_20260719T002013Z/\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_architect_mi210_20260719T002332Z/\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_architect_mi210_20260719T002502Z/postflight_ps.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_architect_mi210_20260719T002502Z/postflight_rocm_smi.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_architect_mi210_20260719T002502Z/preflight_ps.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_architect_mi210_20260719T002502Z/preflight_rocm_smi.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_architect_mi210_20260719T002502Z/records.json\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_architect_mi210_20260719T002502Z/run_slice.py\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_architect_mi210_20260719T002502Z/run_state.json\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_architect_mi210_20260719T002502Z/server.log\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/final_exact_inference_processes.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/final_llama_bench_actual_pgrep.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/final_llama_server_actual_pgrep.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/final_llama_server_pgrep.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/final_ps.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/final_rocm_smi.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/final_rocm_smi_actual.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/finish_utc.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/health_auto.err\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/health_auto.json\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/health_off.err\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/health_off.json\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/post_mode_auto_ps.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/post_mode_auto_rocm_smi.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/post_mode_off_ps.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/post_mode_off_rocm_smi.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/preflight_ps.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/preflight_rocm_smi.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/prompt_json_arch_review.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/prompt_json_rollout_plan.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/prompt_json_security.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/prompt_plan_review.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/response_auto_json_arch_review.json\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/response_auto_json_rollout_plan.json\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/response_auto_json_security.json\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/response_auto_plan_review.json\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/response_off_json_arch_review.json\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/response_off_json_rollout_plan.json\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/response_off_json_security.json\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/response_off_plan_review.json\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/run_ab.sh\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/server_auto.log\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/server_auto_pid.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/server_off.log\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/server_off_pid.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/start_utc.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/time_auto_json_arch_review.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/time_auto_json_rollout_plan.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/time_auto_json_security.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/time_auto_plan_review.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/time_off_json_arch_review.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/time_off_json_rollout_plan.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/time_off_json_security.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/time_off_plan_review.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2m_mi210_mtp_compare_20260719T003551Z/draft-mtp/\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2m_mi210_mtp_compare_20260719T003551Z/final_process_check.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2m_mi210_mtp_compare_20260719T003551Z/gpu_after.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2m_mi210_mtp_compare_20260719T003551Z/gpu_before.txt\n?? data/model_admission_throughput/qwen35_122b_a10b_ud_iq2m_mi210_mtp_compare_20260719T003551Z/none/\n?? data/model_admission_throughput/qwen35_122b_iq2m_long_mtp_ab_20260719T013500Z/\n?? data/model_admission_throughput/qwen35_122b_iq2m_long_mtp_ab_local_20260719T013555Z/draft_mtp/\n?? data/model_admission_throughput/qwen35_122b_iq2m_long_mtp_ab_local_20260719T013555Z/spec_none/\n?? data/model_admission_throughput/qwen35_122b_iq2m_long_ngram_mtp_local_20260719T013814Z/response.json\n?? data/model_admission_throughput/qwen35_122b_iq2m_long_ngram_mtp_local_20260719T013814Z/rocm_after.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_long_ngram_mtp_local_20260719T013814Z/server.log\n?? data/model_admission_throughput/qwen35_122b_iq2m_long_ngram_mtp_local_20260719T013814Z/server.stderr\n?? data/model_admission_throughput/qwen35_122b_iq2m_long_ngram_mtp_local_20260719T013814Z/server.stdout\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_context_20260719T001712Z/llama_bench_stderr.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_context_20260719T001712Z/llama_bench_stdout.json\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_context_20260719T001712Z/manual_cleanup_check.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_context_20260719T001712Z/meta.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_context_20260719T001712Z/pre_pgrep.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_context_20260719T001712Z/pre_rocm_smi.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_context_20260719T001712Z/wrapper_pid.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001352Z/\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/cleanup_status.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/curl_meta.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/curl_stderr.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/final_post_llama_server_comm_clean.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/final_post_llama_server_pgrep_clean.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/final_post_qwen_llama_server_pgrep.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/final_post_rocm-smi_showpids.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/final_post_rocm-smi_showpids_clean.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/health_ready.err\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/health_ready.json\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/meta.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/pre_cleanup_rocm-smi_showpids.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/pre_pgrep.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/pre_rocm-smi_showpids.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/preflight_gpu_busy.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/request.json\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/response.json\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/score.json\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/server_command.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/server_pid.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/server_stderr.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/server_stdout.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z/status.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_mixed_ngram_mtp_ab_local_20260719T013943Z/ngram_mod_draft_mtp/\n?? data/model_admission_throughput/qwen35_122b_iq2m_mixed_ngram_mtp_ab_local_20260719T013943Z/spec_none/\n?? data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/code_sketch.response.json\n?? data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/compare_options.response.json\n?? data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/exact_word_count.response.json\n?? data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/health.json\n?? data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/numbered_plan.response.json\n?? data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/preflight_processes.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/repeated_word_control.response.json\n?? data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/risk_list.response.json\n?? data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/rocm_postcheck_cli.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/rocm_preflight.txt\n?? data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/run_broad_probe.py\n?? data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/server.log\n?? data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/server.stderr\n?? data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/server.stdout\n?? data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/server_pid.json\n?? data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/short_review.response.json\n?? data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/strict_json.response.json\n?? data/nemotron/cpu-v7-nemotron-nano-9b-q8_0-20260718T155831Z/command.txt\n?? data/nemotron/cpu-v7-nemotron-nano-9b-q8_0-20260718T155831Z/end_utc.txt\n?? data/nemotron/cpu-v7-nemotron-nano-9b-q8_0-20260718T155831Z/postflight.txt\n?? data/nemotron/cpu-v7-nemotron-nano-9b-q8_0-20260718T155831Z/preflight.txt\n?? data/nemotron/cpu-v7-nemotron-nano-9b-q8_0-20260718T155831Z/start_utc.txt\n?? data/nemotron/cpu-v7-nemotron-nano-9b-q8_0-20260718T155831Z/stderr.txt\n?? data/nemotron/cpu-v7-nemotron-nano-9b-q8_0-20260718T155831Z/stdout.txt\n?? data/nemotron/nemotron-nano-9b-q8-cpu-sourcehead-v7-context-20260718T235237Z/cleanup_status.txt\n?? data/nemotron/nemotron-nano-9b-q8-cpu-sourcehead-v7-context-20260718T235237Z/command.txt\n?? data/nemotron/nemotron-nano-9b-q8-cpu-sourcehead-v7-context-20260718T235237Z/exit_code.txt\n?? data/nemotron/nemotron-nano-9b-q8-cpu-sourcehead-v7-context-20260718T235237Z/meta.txt\n?? data/nemotron/nemotron-nano-9b-q8-cpu-sourcehead-v7-context-20260718T235237Z/post_pgrep.txt\n?? data/nemotron/nemotron-nano-9b-q8-cpu-sourcehead-v7-context-20260718T235237Z/post_rocm-smi.txt\n?? data/nemotron/nemotron-nano-9b-q8-cpu-sourcehead-v7-context-20260718T235237Z/pre_pgrep.txt\n?? data/nemotron/nemotron-nano-9b-q8-cpu-sourcehead-v7-context-20260718T235237Z/pre_rocm-smi.txt\n?? data/nemotron/nemotron-nano-9b-q8-cpu-sourcehead-v7-context-20260718T235237Z/raw_stderr.txt\n?? data/nemotron/nemotron-nano-9b-q8-cpu-sourcehead-v7-context-20260718T235237Z/raw_stdout.json\n?? data/nemotron/nemotron-nano-9b-q8-cpu-sourcehead-v7-context-20260718T235237Z/run_pid.txt\n?? data/nemotron/nemotron-nano-9b-q8-cpu-v7-context-20260718T231825Z/artifact_files.txt\n?? data/nemotron/nemotron-nano-9b-q8-cpu-v7-context-20260718T231825Z/artifact_path.txt\n?? data/nemotron/nemotron-nano-9b-q8-cpu-v7-context-20260718T231825Z/input_stat.txt\n?? data/nemotron/nemotron-nano-9b-q8-cpu-v7-context-20260718T231825Z/ldd.txt\n?? data/nemotron/nemotron-nano-9b-q8-cpu-v7-context-20260718T231825Z/llama_bench_help.txt\n?? data/nemotron/nemotron-nano-9b-q8-cpu-v7-context-20260718T231825Z/llama_bench_stderr.txt\n?? data/nemotron/nemotron-nano-9b-q8-cpu-v7-context-20260718T231825Z/llama_bench_stdout.json\n?? data/nemotron/nemotron-nano-9b-q8-cpu-v7-context-20260718T231825Z/llama_cpp_experimental_status.txt\n?? data/nemotron/nemotron-nano-9b-q8-cpu-v7-context-20260718T231825Z/pre_pgrep_llama.txt\n?? data/nemotron/nemotron-nano-9b-q8-cpu-v7-context-20260718T231825Z/pre_rocm_smi_showpids.txt\n?? data/nemotron/nemotron-nano-9b-q8-cpu-v7-context-20260718T231825Z/research_status.txt\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/command.sh\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/command_32k.sh\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/device_list.txt\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/device_list_experimental.txt\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/exit_code.txt\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/exit_code_32k.txt\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/exit_code_retry.txt\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/exit_code_retry_32k.txt\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/final_cleanup_recheck_20260718Tpost_cpu_qwable.txt\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/final_rocm_smi.txt\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/ldd_experimental.txt\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/llama_bench.json\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/llama_bench.stderr.txt\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/llama_bench_retry.json\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/llama_bench_retry.stderr.txt\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/llama_bench_retry_32k.json\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/llama_bench_retry_32k.stderr.txt\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/meta.txt\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/post_ps.txt\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/post_retry_ps.txt\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/post_retry_rocm_smi.txt\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/post_rocm_smi.txt\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/pre_ps.txt\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/pre_retry_rocm_smi.txt\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/pre_rocm_smi.txt\n?? data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/sha256.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145541Z/command.sh\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145541Z/exit_code.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145541Z/llama_bench_stderr.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145541Z/llama_bench_stdout.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145541Z/meta.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145541Z/post_pgrep.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145541Z/post_rocm_smi.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145541Z/pre_pgrep.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145541Z/pre_rocm_smi.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145612Z/command.sh\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145612Z/command_32k.sh\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145612Z/exit_code.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145612Z/exit_code_32k.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145612Z/llama_bench_32k_stderr.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145612Z/llama_bench_32k_stdout.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145612Z/llama_bench_stderr.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145612Z/llama_bench_stdout.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145612Z/meta.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145612Z/post_32k_pgrep.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145612Z/post_32k_rocm_smi.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145612Z/post_pgrep.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145612Z/post_rocm_smi.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145612Z/pre_32k_pgrep.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145612Z/pre_32k_rocm_smi.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145612Z/pre_pgrep.txt\n?? data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145612Z/pre_rocm_smi.txt\n?? data/nemotron_diffusion_cpu_v7/\n?? data/nemotron_diffusion_stock_v7/content_control_mi210_20260718T191331Z/\n?? data/nemotron_diffusion_stock_v7/content_control_repair_mi210_20260719T020119Z/\n?? data/nemotron_diffusion_stock_v7/content_control_repair_sourcehead_mi210_20260719T020722Z/copy_one_line/stderr.txt\n?? data/nemotron_diffusion_stock_v7/content_control_repair_sourcehead_mi210_20260719T020722Z/copy_one_line/stdout.txt\n?? data/nemotron_diffusion_stock_v7/content_control_repair_sourcehead_mi210_20260719T020722Z/json_schema_const/stderr.txt\n?? data/nemotron_diffusion_stock_v7/content_control_repair_sourcehead_mi210_20260719T020722Z/json_schema_const/stdout.txt\n?? data/nemotron_diffusion_stock_v7/content_control_repair_sourcehead_mi210_20260719T020722Z/strict_prompt_exact_grammar/stderr.txt\n?? data/nemotron_diffusion_stock_v7/content_control_repair_sourcehead_mi210_20260719T020722Z/strict_prompt_exact_grammar/stdout.txt\n?? data/nemotron_diffusion_stock_v7/content_control_repair_sourcehead_mi210_20260719T020722Z/strict_prompt_unconstrained/stderr.txt\n?? data/nemotron_diffusion_stock_v7/content_control_repair_sourcehead_mi210_20260719T020722Z/strict_prompt_unconstrained/stdout.txt\n?? data/nemotron_diffusion_stock_v7/cpu_dream_fix_20260718T170001Z/\n?? data/nemotron_diffusion_stock_v7/cpu_dream_fix_clean_local_20260718T171131Z/\n?? data/nemotron_diffusion_stock_v7/cpu_dream_fix_local2_20260718T165915Z/\n?? data/nemotron_diffusion_stock_v7/cpu_dream_fix_local_20260718T165832Z/\n?? data/nemotron_diffusion_stock_v7/mi210_cli_dream_fix_local_20260718T170018Z/\n?? data/nemotron_diffusion_stock_v7/mi210_dream_fix_20260718T170009Z/\n?? data/nemotron_diffusion_stock_v7/mi210_dream_fix_20260718T170344Z/\n?? data/nemotron_diffusion_stock_v7/mi210_dream_fix_local_20260718T165819Z/\n?? data/nemotron_nano_task_quality/bf16-nosystem-clean-mi210-512tok-current-v7-20260718T154109Z/logs/\n?? data/nemotron_nano_task_quality/bf16-nosystem-clean-mi210-512tok-current-v7-20260718T154109Z/responses/\n?? data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-current-v7-20260718T155941Z/logs/\n?? data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-current-v7-20260718T155941Z/responses/\n?? data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-sourcehead-v7-20260718T235945Z/\n?? data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-sourcehead-v7-20260719T000109Z/logs/\n?? data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-sourcehead-v7-20260719T000109Z/responses/\n?? data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-512tok-current-v7-20260718T1525Z/logs/\n?? data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-512tok-current-v7-20260718T1525Z/responses/\n?? data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-current-v7-20260718T1520Z/logs/\n?? data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-current-v7-20260718T1520Z/responses/\n?? data/nemotron_nano_task_quality/deepseek-nosystem-mi210-1024tok-resource-shared-20260718T232730Z/\n?? data/nemotron_nano_task_quality/nemotron_nano_q8_mi210_broad24_deepseek_nosystem_20260719T033826Z/server.stderr\n?? data/nemotron_nano_task_quality/nemotron_q8_mi210_current_v7_smoke_20260718T215712Z/\n?? data/ngram_gpu_smoke_20260718T221549Z/ngram_cache.server.log\n?? data/ngram_gpu_smoke_20260718T221549Z/ngram_simple.server.log\n?? data/ngram_gpu_smoke_20260718T221549Z/spec_off.server.log\n?? data/ngram_mtp_combined_quality/\n?? data/op2_canonical_bench_window/op2-20260719-guarded/\n?? data/op2_canonical_bench_window/op2-20260719-live-filtered/\n?? data/op2_canonical_bench_window/op2-20260719-live-preflight/\n?? data/op2_canonical_bench_window/op2-20260719-live-sequenced/\n?? data/op2_canonical_bench_window/op2-canonical-bench-window-20260719-live/\n?? data/op2_canonical_bench_window/op2-canonical-bench-window-20260719-live2/\n?? data/op2_canonical_bench_window/op2-canonical-bench-window-20260719-live3/\n?? data/op2_canonical_bench_window/op2-canonical-bench-window-20260719-live4/\n?? data/preflight/2026-05-06_121155.json\n?? data/preflight/2026-05-06_140631.json\n?? data/preflight/2026-05-06_140641.json\n?? data/preflight/2026-05-06_153216.json\n?? data/preflight/2026-05-06_153240.json\n?? data/preflight/2026-05-06_153251.json\n?? data/preflight/2026-05-06_153556.json\n?? data/preflight/2026-05-06_161147.json\n?? data/preflight/2026-05-06_181246.json\n?? data/preflight/2026-05-08_013315.json\n?? data/preflight/2026-05-08_014754.json\n?? data/preflight/2026-05-08_102619.json\n?? data/preflight/2026-05-08_115808.json\n?? data/preflight/2026-05-08_135531.json\n?? data/preflight/2026-05-08_203322.json\n?? data/preflight/2026-05-08_203511.json\n?? data/preflight/2026-05-08_211235.json\n?? data/preflight/2026-05-08_212004.json\n?? data/preflight/2026-05-08_221317.json\n?? data/preflight/2026-05-08_222939.json\n?? data/preflight/2026-05-08_222949.json\n?? data/preflight/2026-05-08_224938.json\n?? data/preflight/2026-06-18_231011.json\n?? data/preflight/2026-06-18_231436.json\n?? data/preflight/2026-06-19_020814.json\n?? data/preflight/2026-06-19_093027.json\n?? data/preflight/2026-06-19_114822.json\n?? data/preflight/2026-06-19_140726.json\n?? data/preflight/2026-06-19_140823.json\n?? data/preflight/2026-06-19_141151.json\n?? data/preflight/2026-06-19_142425.json\n?? data/preflight/2026-06-28_034411.json\n?? data/qwable_cpu_scaffold_cost/\n?? data/qwable_reasoning_economics/codex_verifier_selector_followup_20260718T1918Z/\n?? data/qwable_reasoning_economics/qwable_gpu_verifier_selector_iq4_expanded_20260718T180138Z/\n?? data/qwable_reasoning_economics/qwable_gpu_verifier_selector_iq4_expanded_20260718T180205Z/\n?? data/qwable_reasoning_economics/qwable_gpu_verifier_selector_iq4_expanded_20260718T181022Z/\n?? data/qwable_reasoning_economics/qwable_replay_probe_plan_20260718T235322Z/\n?? data/qwable_reasoning_economics/qwable_schema_sourcehead_repeat_20260719T000517Z/logs/\n?? data/qwable_reasoning_economics/qwable_schema_sourcehead_repeat_20260719T000517Z/responses/\n?? data/qwable_reasoning_economics/qwable_schema_sourcehead_repeat_20260719T000517Z/results/\n?? data/qwable_reasoning_economics/qwable_task_quality_20260718T160400Z/logs/\n?? data/qwable_reasoning_economics/qwable_task_quality_20260718T160400Z/responses/\n?? data/qwable_reasoning_economics/qwable_task_quality_20260718T160400Z/results/\n?? data/qwable_reasoning_economics/qwable_verifier_replay_known_misses_sourcehead_20260718T235425Z/logs/\n?? data/qwable_reasoning_economics/qwable_verifier_replay_known_misses_sourcehead_20260718T235425Z/replay_responses/\n?? data/qwable_reasoning_economics/verifier_selector_extracted_answer_gpu_20260718T1851Z_limit6/\n?? data/qwable_reasoning_economics/verifier_selector_extracted_answer_gpu_20260718Tpostpatch_limit2/\n?? data/qwable_reasoning_economics/verifier_selector_no_solve_first_gpu_20260718Tcapcontrol_limit6/\n?? data/qwable_reasoning_economics/verifier_selector_no_verifier_thinking_gpu_20260718Tcapcontrol_limit6/\n?? data/qwable_reasoning_economics/verifier_selector_qwable_iq4_qwen35b_n3_limit2_20260718Tfixed/\n?? data/qwable_reasoning_economics/verifier_selector_qwable_iq4_qwen35b_n3_limit2_20260718Tworker/\n?? data/qwable_reasoning_economics/verifier_selector_qwable_iq4_qwen35b_n5_limit6_20260718Theadroom/\n?? data/qwable_reasoning_economics/verifier_selector_replay_full96_20260718T203101Z/\n?? data/qwable_reasoning_economics/verifier_selector_replay_known_misses_20260718T_main/\n?? data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_20260718T191709Z/\n?? data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_start12_20260718T192418Z/\n?? data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_start24_20260718T193035Z/\n?? data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_start48_20260718T194032Z/\n?? data/qwable_reasoning_economics/verifier_selector_tuning_gpu_20260718Tlimit2/\n?? data/qwable_v1/mi210_probe_20260718T144518Z/\n?? data/qwable_v1/qwable_iq4xs_cpu_v7_llama_bench_20260718T155234Z/artifact_files.txt\n?? data/qwable_v1/qwable_iq4xs_cpu_v7_llama_bench_20260718T155234Z/command.sh\n?? data/qwable_v1/qwable_iq4xs_cpu_v7_llama_bench_20260718T155234Z/duration_seconds.txt\n?? data/qwable_v1/qwable_iq4xs_cpu_v7_llama_bench_20260718T155234Z/exit_code.txt\n?? data/qwable_v1/qwable_iq4xs_cpu_v7_llama_bench_20260718T155234Z/final_kfd_process_check.txt\n?? data/qwable_v1/qwable_iq4xs_cpu_v7_llama_bench_20260718T155234Z/llama_bench_stderr.txt\n?? data/qwable_v1/qwable_iq4xs_cpu_v7_llama_bench_20260718T155234Z/llama_bench_stdout.txt\n?? data/qwable_v1/qwable_iq4xs_cpu_v7_llama_bench_20260718T155234Z/postflight.txt\n?? data/qwable_v1/qwable_iq4xs_cpu_v7_llama_bench_20260718T155234Z/preflight.txt\n?? data/qwable_v1/qwable_iq4xs_mi210_context_ed4091266_20260719T010412Z/\n?? data/qwable_v1/qwable_iq4xs_mi210_context_ed4091266_20260719T010502Z/post_llama_processes.txt\n?? data/qwable_v1/qwable_iq4xs_mi210_context_ed4091266_20260719T010502Z/pre_llama_processes.txt\n?? data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z/command.sh\n?? data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z/command_32k.sh\n?? data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z/exit_code.txt\n?? data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z/exit_code_32k.txt\n?? data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z/llama_bench_32k_stderr.txt\n?? data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z/llama_bench_32k_stdout.txt\n?? data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z/llama_bench_stderr.txt\n?? data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z/llama_bench_stdout.txt\n?? data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z/meta.txt\n?? data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z/post_32k_pgrep.txt\n?? data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z/post_32k_rocm_smi.txt\n?? data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z/post_pgrep.txt\n?? data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z/post_rocm_smi.txt\n?? data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z/pre_32k_pgrep.txt\n?? data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z/pre_32k_rocm_smi.txt\n?? data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z/pre_pgrep.txt\n?? data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z/pre_rocm_smi.txt\n?? data/qwable_v1/qwable_iq4xs_mi210_pp16384_20260718T1730Z/\n?? data/qwable_v1/qwable_q8_cpu_v7_context_20260718T222832Z/\n?? data/qwable_v1/qwable_q8_cpu_v7_context_currenthead_20260719T010411Z/artifact_path.txt\n?? data/qwable_v1/qwable_q8_cpu_v7_context_currenthead_20260719T010411Z/binary_path.txt\n?? data/qwable_v1/qwable_q8_cpu_v7_context_currenthead_20260719T010411Z/binary_stat.txt\n?? data/qwable_v1/qwable_q8_cpu_v7_context_currenthead_20260719T010411Z/end_utc.txt\n?? data/qwable_v1/qwable_q8_cpu_v7_context_currenthead_20260719T010411Z/ldd.txt\n?? data/qwable_v1/qwable_q8_cpu_v7_context_currenthead_20260719T010411Z/llama_bench_stdout.json\n?? data/qwable_v1/qwable_q8_cpu_v7_context_currenthead_20260719T010411Z/llama_cpp_experimental_status.txt\n?? data/qwable_v1/qwable_q8_cpu_v7_context_currenthead_20260719T010411Z/lscpu.txt\n?? data/qwable_v1/qwable_q8_cpu_v7_context_currenthead_20260719T010411Z/model_path.txt\n?? data/qwable_v1/qwable_q8_cpu_v7_context_currenthead_20260719T010411Z/nproc.txt\n?? data/qwable_v1/qwable_q8_cpu_v7_context_currenthead_20260719T010411Z/post_process_check.txt\n?? data/qwable_v1/qwable_q8_cpu_v7_context_currenthead_20260719T010411Z/pre_process_check.txt\n?? data/qwable_v1/qwable_q8_cpu_v7_context_currenthead_20260719T010411Z/pre_rocm_smi_showpids.txt\n?? data/qwable_v1/qwable_q8_cpu_v7_context_currenthead_20260719T010411Z/research_head.txt\n?? data/qwable_v1/qwable_q8_cpu_v7_context_currenthead_20260719T010411Z/research_status.txt\n?? data/qwable_v1/qwable_q8_cpu_v7_context_currenthead_20260719T010411Z/start_utc.txt\n?? data/qwable_v1/qwable_q8_cpu_v7_context_run2_20260718T223330Z/\n?? data/qwable_v1/qwable_q8_cpu_v7_context_run2_20260718T224956Z/llama_bench_stdout.json\n?? data/qwable_v1/qwable_q8_cpu_v7_context_run2_20260718T224956Z/metrics.compact.json\n?? data/qwable_v1/qwable_q8_mi210_context_ed4091266_20260719T010751Z/final_llama_processes.txt\n?? data/qwable_v1/qwable_q8_mi210_context_ed4091266_20260719T010751Z/post_llama_processes.txt\n?? data/qwable_v1/qwable_q8_mi210_context_ed4091266_20260719T010751Z/pre_llama_processes.txt\n?? data/qwable_v1/qwable_q8_mi210_llama_bench_20260718T145119Z/command.sh\n?? data/qwable_v1/qwable_q8_mi210_llama_bench_20260718T145119Z/command_32k.sh\n?? data/qwable_v1/qwable_q8_mi210_llama_bench_20260718T145119Z/exit_code.txt\n?? data/qwable_v1/qwable_q8_mi210_llama_bench_20260718T145119Z/exit_code_32k.txt\n?? data/qwable_v1/qwable_q8_mi210_llama_bench_20260718T145119Z/llama_bench_32k_stderr.txt\n?? data/qwable_v1/qwable_q8_mi210_llama_bench_20260718T145119Z/llama_bench_32k_stdout.txt\n?? data/qwable_v1/qwable_q8_mi210_llama_bench_20260718T145119Z/llama_bench_stderr.txt\n?? data/qwable_v1/qwable_q8_mi210_llama_bench_20260718T145119Z/llama_bench_stdout.txt\n?? data/qwable_v1/qwable_q8_mi210_llama_bench_20260718T145119Z/meta.txt\n?? data/qwable_v1/qwable_q8_mi210_llama_bench_20260718T145119Z/post_32k_pgrep.txt\n?? data/qwable_v1/qwable_q8_mi210_llama_bench_20260718T145119Z/post_32k_rocm_smi.txt\n?? data/qwable_v1/qwable_q8_mi210_llama_bench_20260718T145119Z/post_pgrep.txt\n?? data/qwable_v1/qwable_q8_mi210_llama_bench_20260718T145119Z/post_rocm_smi.txt\n?? data/qwable_v1/qwable_q8_mi210_llama_bench_20260718T145119Z/pre_32k_pgrep.txt\n?? data/qwable_v1/qwable_q8_mi210_llama_bench_20260718T145119Z/pre_32k_rocm_smi.txt\n?? data/qwable_v1/qwable_q8_mi210_llama_bench_20260718T145119Z/pre_pgrep.txt\n?? data/qwable_v1/qwable_q8_mi210_llama_bench_20260718T145119Z/pre_rocm_smi.txt\n?? data/qwen35_9b_mtp/qwen35_9b_mtp_longoutput_currentv7_20260719T051816Z/\n?? data/research/2026-05-19-rao-redel-step2-ab-force-delegate/\n?? data/research/2026-05-19-rao-redel-step2-ab/\n?? data/research/2026-05-19-xmas-cheap-kill-v2-maxtok4k/\n?? data/research/2026-05-19-xmas-cheap-kill/\n?? data/research/2026-05-20-architect-deprecation-probe/\n?? data/research/2026-05-20-dmem-locomo-smoke/\n?? data/research/2026-05-20-stack-simplification-probe-nothink/\n?? data/research/2026-06-16-xmas-reasoning-smoke-082042/\n?? data/reviewer_model_ablations/rm2-fast-b-qwable-iq4xs-ccrab-p-rev1-20260719T162712Z/artifacts/\n?? data/reviewer_model_ablations/rm2-fast-b-qwable-iq4xs-ccrab-p-rev1-20260719T162712Z/logs/\n?? data/reviewer_model_ablations/rm2-fast-b-qwable-iq4xs-ccrab-p-rev1-20260719T162712Z/summary.json\n?? data/reviewer_model_ablations/rm2-fast-b-qwen36-27b-q8-plus-qwable-iq4xs-scaffold-ccrab-p-rev1-20260719T162958Z/artifacts/\n?? data/reviewer_model_ablations/rm2-fast-b-qwen36-27b-q8-plus-qwable-iq4xs-scaffold-ccrab-p-rev1-20260719T162958Z/logs/\n?? data/reviewer_model_ablations/rm2-fast-b-qwen36-27b-q8-plus-qwable-iq4xs-scaffold-ccrab-p-rev1-20260719T162958Z/summary.json\n?? data/reviewer_model_ablations/rm2-fast-qwen36-27b-q8-ccrab-p-rev1-20260719T162109Z/artifacts/\n?? data/reviewer_model_ablations/rm2-fast-qwen36-27b-q8-ccrab-p-rev1-20260719T162109Z/logs/\n?? data/reviewer_model_ablations/rm2-fast-qwen36-27b-q8-ccrab-p-rev1-20260719T162109Z/summary.json\n?? data/reviewer_model_ablations/rm2-next-a0-objective-floor-ccrab-p-rev1-20260719T205208Z/\n?? data/reviewer_model_ablations/rm2-next-a1-architect-statusquo-ccrab-p-rev1-20260719T210513Z/\n?? data/reviewer_model_ablations/rm2-next-a1-architect-statusquo-ccrab-p-rev1-dryrun-20260719T205239Z/\n?? data/reviewer_model_ablations/rm2-next-a3-qwen35-122b-iq2-ccrab-p-rev1-20260719T204709Z/\n?? data/reviewer_model_ablations/rm2-next-a3-qwen35-122b-iq2-ccrab-p-rev1-20260719T204845Z/\n?? data/specdec_frontdoor_alpha/20260614_054820/\n?? data/specdec_frontdoor_alpha/n5_retest_20260627T114449Z/\n?? data/specdec_frontdoor_alpha/n5_retest_20260627T114623Z/\n?? data/specdec_frontdoor_alpha/n5_retest_20260627T114705Z/\n?? data/specdec_frontdoor_alpha/n5_retest_20260627T114706Z/\n?? data/specdec_frontdoor_alpha/n5_retest_20260716T175253Z_preflight/\n?? data/specdec_frontdoor_alpha/n5_retest_20260716T175622Z_preflight/\n?? data/specdec_frontdoor_alpha/n5_retest_20260719T013113Z/\n?? data/specdec_frontdoor_alpha/n5_retest_20260719T013137Z/\n?? data/specdec_frontdoor_alpha/n5_retest_flag_surface_check_20260716T180302Z/\n?? data/specdec_frontdoor_alpha/n5_retest_v7_execute_20260716T185348Z/\n?? data/specdec_frontdoor_alpha/n5_retest_v7_execute_20260716T185642Z/\n?? data/specdec_frontdoor_alpha/n5_retest_v7_execute_20260716T185947Z/\n?? data/specdec_frontdoor_alpha/n5_retest_v7_semantic_preflight_20260716T180626Z/\n?? data/specdec_frontdoor_alpha/n5_retest_v7_semantic_preflight_20260716T180801Z/\n?? data/specdec_frontdoor_alpha/n5_retest_v7_semantic_preflight_20260716T181836Z/\n?? data/specdec_frontdoor_alpha/n5_retest_v7_semantic_preflight_20260716T185142Z/\n?? data/specdec_frontdoor_alpha/n5_retest_v7_semantic_preflight_20260716T190732Z/\n?? data/streaming_llm_v7/\n?? data/streamingllm_floor/streamingllm_qwable_iq4_cpu_sweep_20260720Tdry/\n?? data/streamingllm_floor/streamingllm_qwable_iq4_cpu_sweep_20260720Tlive/\n?? data/streamingllm_floor/streamingllm_qwable_iq4_cpu_sweep_reasonoff_20260720Tlive/\n?? data/streamingllm_floor/streamingllm_qwen06_completion_cpu_floor_20260718T2200Z/\n?? data/streamingllm_floor/streamingllm_qwen06_cpu_floor_20260718T215438Z/\n?? data/t5_gemma_worker_draft_depth/\n?? data/ternary_q2_g64_quality_gate/ternary_q2_g64_mi210_short_instruction_current_v7_20260718T151711Z/\n?? data/v7_final_cutover_smoke/nonvision_20260719T183333Z/\n?? data/v7_final_cutover_smoke/vision_20260719T184131Z/\n?? data/v7_final_cutover_smoke/vision_20260719T184344Z/runs/vision_candidate_mi210_minicpm_o45_q4/server.stderr\n?? data/v7_final_cutover_smoke/vision_20260719T184344Z/runs/vision_escalation_cpu_qwen25vl_alias/server.stderr\n?? data/v7_final_cutover_smoke/vision_20260719T184344Z/runs/worker_vision_cpu_qwen25vl/server.stderr\n?? gold.gold-slice-20260724.json\n?? gold.gold-smoke-20260724.json\n?? gold.gold-smoke-django-20260724.json\n?? logs/\n?? scripts/benchmark/tests/test_thinkingcap_lcb_repair.py\n?? scripts/research/architect_deprecation_probe.py\n?? scripts/research/rao_redel_step2_ab.py\n?? scripts/research/stack_simplification_probe.py\n?? scripts/research/xmas_cheap_kill.py\n?? test_images/\n"
+    },
+    "root": {
+      "head": "94161c892eb1cbaee3ea9f93b7069517eea1eeda",
+      "path": "/mnt/raid0/llm/epyc-root",
+      "status": " M artifacts/operator/e8_quality_baseline_op_bundle_20260726.md\n M artifacts/operator/prepare_e8_quality_baseline_reseed_20260726.sh\n M dashboard/static/handoffs.html\n M handoffs/active/architect-model-selection-bench.md\n M handoffs/active/autopilot-control-plane-integration.md\n M handoffs/active/autopilot-decision-plane-audit-2026-07-22.md\n M handoffs/active/eval-tower-loop-robustness-audit-2026-07-20.md\n M handoffs/active/laguna-s21-cpu-port.md\n M handoffs/active/loops-and-dashboards-audit-2026-07-05.md\n D llama.log\n M logs/.current_session\n M logs/agent_audit.log\n D main.log\n M research/intake_index.yaml\n M scripts/handoffs/build_handoff_timeline.py\n M tests/test_e8_quality_baseline_reseed_prepare.py\n M tests/test_handoff_parser.py\n M tests/test_handoff_timeline.py\n?? .devcontainer/Dockerfile.orig\n?? .research-session.json\n?? artifacts/autopilot/\n?? artifacts/intake-scratch/\n?? artifacts/llama-refresh-20260724T135832Z/\n?? artifacts/operator/.e8-autopilot-quality-fence.lock\n?? artifacts/operator/.e8-empty-frontier-bootstrap.lock\n?? artifacts/operator/.v8-cutover.lock\n?? artifacts/operator/.v8-era-fence.lock\n?? artifacts/operator/.v8-final-freeze.lock\n?? artifacts/operator/amend_e8_quality_source_protocol_20260726.sh\n?? artifacts/operator/apply_e8_quality_baseline_state.py\n?? artifacts/operator/apply_e8_quality_baseline_state_20260726.sh\n?? artifacts/operator/e8-autopilot-quality-fence-20260726/\n?? artifacts/operator/e8-empty-frontier-bootstrap-20260726/\n?? artifacts/operator/e8_quality_baseline_state_apply_integrity_20260726.json\n?? artifacts/operator/e8_quality_pool_regenerator.py\n?? artifacts/operator/e8_quality_source_amendment.py\n?? artifacts/operator/e8_quality_source_protocol_amendment_20260726.md\n?? artifacts/operator/e8_quality_source_protocol_amendment_manifest_20260726.json\n?? artifacts/operator/minicpm_o_m2_tts_path_b_decision_20260726.md\n?? artifacts/operator/ratify_e8_autopilot_quality_fence_20260726.json\n?? artifacts/operator/ratify_e8_empty_frontier_bootstrap_20260726.json\n?? artifacts/operator/ratify_e8_quality_baseline_protocol_20260726.sh\n?? artifacts/operator/ratify_pbench_prefill_sustained_window.sh\n?? artifacts/operator/terminalize_e8_speed_frontier.py\n?? artifacts/operator/terminalize_e8_speed_frontier_20260727.sh\n?? artifacts/ratify_cpu_bench_build_identity_erratum_20260724.sh\n?? artifacts/ratify_cpu_prefill_protocol_20260724.sh\n?? cache/\n?? coordination/inference-batch/attestations/20260725T131822.json\n?? coordination/inference-batch/bundles/EV-11/run_batch_entry_execute_20260721T221739Z.json\n?? iq2_arch_eval.py\n?? iq2_arch_results.jsonl\n?? iq2_parity_eval.py\n?? iq2_parity_results.jsonl\n?? logs/hub_supervisor.out\n?? logs/hub_supervisor.pid\n?? logs/hub_supervisor_hub.pid\n?? opencode.json\n?? progress/2026-07/2026-07-26-autopilot.md\n?? progress/2026-07/2026-07-27-autopilot.md\n?? q4_architect_verdicts.json\n?? tests/test_e8_quality_baseline_state_apply.py\n?? tests/test_e8_quality_source_protocol_amendment.py\n?? tests/test_e8_speed_frontier_terminalization.py\n"
+    }
+  },
+  "no_inference": true,
+  "operator_directive": "2026-07-27 bench closure",
+  "quality_provenance": {
+    "A1": {
+      "current_era_quality_decision_input": true,
+      "quality_transfer_to_v8_eligible": true,
+      "same_era_generation": false,
+      "speed_or_throughput_transfer_claim": false,
+      "transfer_basis": "operator-certified v7-to-v8 kernel Delta 0.0pp exact quality parity"
+    },
+    "A3": {
+      "current_era_quality_decision_input": true,
+      "quality_transfer_to_v8_eligible": true,
+      "same_era_generation": false,
+      "speed_or_throughput_transfer_claim": false,
+      "transfer_basis": "operator-certified v7-to-v8 kernel Delta 0.0pp exact quality parity"
+    },
+    "A4": {
+      "current_era_quality_decision_input": true,
+      "quality_transfer_to_v8_eligible": true,
+      "same_era_generation": false,
+      "speed_or_throughput_transfer_claim": false,
+      "transfer_basis": "operator-certified v7-to-v8 kernel Delta 0.0pp exact quality parity"
+    },
+    "Laguna": {
+      "current_era_quality_decision_input": true,
+      "quality_transfer_to_v8_eligible": true,
+      "same_era_generation": true,
+      "speed_or_throughput_transfer_claim": false,
+      "transfer_basis": "v8 same-era terminal Laguna v4 capture"
+    }
+  },
+  "questions_sha256": "f82a5191274048f2fdf432df7a0ebf4017ad982b954d6aa075326a1302df1c3c",
+  "replay_source_sha256": "e2be01ee7965d0c3261b21ee00fd3169ec98b38bc9b2ebb6e9e1eebba4ff916e",
+  "run_id": "final-4arm-v4-tail-replay-20260727T080703Z",
+  "schema_version": "epyc.final-4arm-v4-tail-replay.v1",
+  "stopping_rule": {
+    "architect_tier_decision": "If A3 leads or ties at top, the architect-tier quality question is closed; the role choice falls to throughput/residency economics.",
+    "confirmation_policy": "The powered-160 confirmation is shelved unless this corrected table reorders an outcome that changes an actual deployment decision.",
+    "final_table": "final_4arm_table.json",
+    "finality": "FINAL_FOR_THIS_ERA_PER_OPERATOR_DIRECTIVE",
+    "regeneration_policy": "Regenerate only if generation evidence is defective; scorer/converter/extractor defects use deterministic replay of banked outputs."
+  }
+}

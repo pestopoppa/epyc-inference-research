@@ -2,9 +2,10 @@
 """Fail-closed Laguna Q4_K_M CPU quality campaign.
 
 Dry-run is the default and never loads a model. Execution requires a new
-timestamped output directory, a released E8 CPU window, exact production
-runtime reconciliation, and then runs SWE raw generation -> official
-SWE-bench_Verified scoring -> LCB code execution on fresh owned sidecars.
+timestamped output directory and exact production runtime reconciliation,
+then runs SWE raw generation -> official SWE-bench_Verified scoring -> LCB
+code execution on fresh owned sidecars. The architect instrument is explicitly
+decoupled from the AutoPilot E8 quality-baseline chain.
 """
 
 from __future__ import annotations
@@ -33,7 +34,6 @@ LLAMA_ROOT = Path("/mnt/raid0/llm/llama.cpp")
 BINARY = LLAMA_ROOT / "build/bin/llama-server"
 MODEL = Path("/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/laguna-s-2.1-Q4_K_M.gguf")
 RUNTIME_FACTS = Path("/mnt/raid0/llm/tmp/orchestrator_runtime_facts.json")
-STATE = ORCHESTRATOR_ROOT / "orchestration/autopilot_state.json"
 SWE_QUESTIONS = (
     RESEARCH_ROOT / "artifacts/architect-code-eval-20260724/questions_swebench_oracle.json"
 )
@@ -61,11 +61,13 @@ EXPECTED_BINARY_SHA256 = "a4b667163022aa166ade7c0e00fa4e775b37662e02c10da7642c8c
 EXPECTED_MODEL_SHA256 = "7da520c5f44bc3c79d4eeebfd1151ba7114c5d7568e72a995638417093c5753f"
 EXPECTED_SWE_SHA256 = "f82a5191274048f2fdf432df7a0ebf4017ad982b954d6aa075326a1302df1c3c"
 EXPECTED_LCB_SHA256 = "d51e56f601e3d153910d086b35c6aea94f4d903bab0427c8a49ffe895a6287c4"
-EXPECTED_CONVERTER_SHA256 = "ad13519ac6d56d36e6e29938b10fb500440f01780375692f2105a5c4d08202e0"
+# v4 sealed, arm-neutral SEARCH/REPLACE converter.  The prior v3 pin predates
+# the format-tolerant rescore and deliberately fails closed rather than using it.
+EXPECTED_CONVERTER_SHA256 = "06a6530570af470cb76999ceb629fa5d280a26469ec75d7bb3e6a980f2c20b9f"
 EXPECTED_SWEBENCH_PYTHON_SHA256 = "9544d2a29138833e6177d45dbc57468d37710b5080c901fbb579d53f251cdd6f"
-EXPECTED_RUNTIME_FACTS_SHA256 = "dd7b3a7afd03ee20b5a00ea812d71e28548cd0104be9178c476d70e926a52f98"
 EXPECTED_UV_SHA256 = "0c7b00d4f2c10d0bf66b26e4f432388d7782e1071d913f921eae0b8e35cb3c80"
-EXPECTED_RAW_EVALUATOR_SHA256 = "18bf1577b531eabde978973aa62b9443a8a4ec9382928f71b5c658c15d2a8125"
+# v4 lossless-capture runner sealed with the format-tolerant converter above.
+EXPECTED_RAW_EVALUATOR_SHA256 = "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e"
 EXPECTED_ANSWER_SCORING_SHA256 = "2253e6b1d378e7a929299ebee55ebb7e553a9ec24f2c489504cf2aaef24aabea"
 EXPECTED_CODE_EXEC_SCORER_SHA256 = "12b8c9408d4b2f606929e37316c3f1c3d8f6252925dfb7bf6bdea541c3ef23cc"
 EXPECTED_SWEBENCH_TREE_SHA256 = "f60e756fd46da88cb9640d5c5e1a4df6476e7b72ab49161f16ce4b493e589608"
@@ -202,7 +204,7 @@ SUITES = (
     {
         "name": "swe_oracle",
         "external_name": "swebench_oracle",
-        "port": 18092,
+        "port": 18094,
         "context": 49152,
         "questions": SWE_QUESTIONS,
         "ids": SWE_IDS,
@@ -212,7 +214,7 @@ SUITES = (
     {
         "name": "lcb_hard",
         "external_name": "livecodebench_hard",
-        "port": 18093,
+        "port": 18095,
         "context": 8192,
         "questions": LCB_QUESTIONS,
         "ids": LCB_IDS,
@@ -221,6 +223,7 @@ SUITES = (
     },
 )
 MEM_AVAILABLE_MIN_KIB = 100 * 1024 * 1024
+BENCH_CPUSET = frozenset(range(96))
 RAW_EVALUATOR_TIMEOUT_S = 172800
 OFFICIAL_SWE_TIMEOUT_S = 86400
 CONVERTER_TIMEOUT_S = 1800
@@ -349,6 +352,23 @@ def server_argv(suite: dict[str, Any]) -> list[str]:
     ]
 
 
+def numa_prewarm_argv() -> list[str]:
+    """Read the target once through the benchmark's interleaved CPU placement."""
+    return [
+        str(TASKSET),
+        "-c",
+        "0-95",
+        str(NUMACTL),
+        "--interleave=all",
+        "dd",
+        f"if={MODEL}",
+        "of=/dev/null",
+        "bs=64M",
+        "iflag=fullblock",
+        "status=none",
+    ]
+
+
 def question_contract(suite: dict[str, Any]) -> dict[str, Any]:
     path = Path(suite["questions"])
     actual_sha = sha256(path)
@@ -456,6 +476,73 @@ def proc_cmdline(pid: int, proc_root: Path = Path("/proc")) -> list[str]:
     return [part.decode() for part in raw.split(b"\0") if part]
 
 
+def cpu_list(value: str) -> set[int]:
+    """Parse Linux Cpus_allowed_list syntax without accepting malformed affinity."""
+    cpus: set[int] = set()
+    for item in value.split(","):
+        if not re.fullmatch(r"\d+(?:-\d+)?", item):
+            raise RuntimeError(f"invalid Cpus_allowed_list: {value!r}")
+        start_text, separator, end_text = item.partition("-")
+        start = int(start_text)
+        end = int(end_text) if separator else start
+        if end < start:
+            raise RuntimeError(f"descending Cpus_allowed_list range: {value!r}")
+        cpus.update(range(start, end + 1))
+    if not cpus:
+        raise RuntimeError("empty Cpus_allowed_list")
+    return cpus
+
+
+def proc_cpu_allowed_list(pid: int, proc_root: Path = Path("/proc")) -> str:
+    return status_cpu_allowed_list(proc_root / str(pid) / "status")
+
+
+def status_cpu_allowed_list(status_path: Path) -> str:
+    for line in status_path.read_text().splitlines():
+        if line.startswith("Cpus_allowed_list:"):
+            value = line.split(":", 1)[1].strip()
+            cpu_list(value)
+            return value
+    raise RuntimeError(f"{status_path} lacks Cpus_allowed_list")
+
+
+def proc_thread_cpu_allowed_lists(
+    pid: int, proc_root: Path = Path("/proc")
+) -> list[dict[str, Any]]:
+    """Capture one stable all-thread affinity snapshot, failing closed on churn."""
+    task_dir = proc_root / str(pid) / "task"
+    try:
+        before = sorted(entry.name for entry in task_dir.iterdir() if entry.name.isdigit())
+        if not before:
+            raise RuntimeError(f"accelerated sidecar {pid} has no task entries")
+        rows = [
+            {"tid": int(tid), "cpus_allowed_list": status_cpu_allowed_list(task_dir / tid / "status")}
+            for tid in before
+        ]
+        after = sorted(entry.name for entry in task_dir.iterdir() if entry.name.isdigit())
+    except FileNotFoundError as exc:
+        raise RuntimeError(f"accelerated sidecar {pid} thread set changed during affinity capture") from exc
+    if before != after:
+        raise RuntimeError(f"accelerated sidecar {pid} thread set changed during affinity capture")
+    return rows
+
+
+def path_stat_identity(path: Path) -> dict[str, Any]:
+    resolved = path.resolve(strict=True)
+    stat = resolved.stat()
+    descriptor = {
+        "path": str(resolved),
+        "device": stat.st_dev,
+        "inode": stat.st_ino,
+        "bytes": stat.st_size,
+        "mtime_ns": stat.st_mtime_ns,
+    }
+    descriptor["identity_sha256"] = hashlib.sha256(
+        json.dumps(descriptor, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return descriptor
+
+
 def flag_value(argv: list[str], names: tuple[str, ...]) -> str | None:
     for index, value in enumerate(argv):
         if value in names and index + 1 < len(argv):
@@ -509,6 +596,10 @@ def live_llama_rows(proc_root: Path = Path("/proc")) -> list[dict[str, Any]]:
                     "model": model,
                     "exe": exe,
                     "listener_owned": listener_owned(pid, port, proc_root),
+                    "argv_sha256": hashlib.sha256(
+                        b"\0".join(value.encode() for value in argv)
+                    ).hexdigest(),
+                    "cpus_allowed_list": proc_cpu_allowed_list(pid, proc_root),
                 }
             )
         except FileNotFoundError:
@@ -521,6 +612,17 @@ def live_llama_rows(proc_root: Path = Path("/proc")) -> list[dict[str, Any]]:
 
 
 def runtime_authorizations(facts: dict[str, Any]) -> set[tuple[int, int, str]]:
+    runtime_stack = facts.get("runtime_stack")
+    selected_ports = runtime_stack.get("selected_ports") if isinstance(runtime_stack, dict) else None
+    if (
+        facts.get("schema") != "epyc.orchestrator.runtime_facts"
+        or not isinstance(runtime_stack, dict)
+        or runtime_stack.get("stack_numa_mode") != "both"
+        or not isinstance(selected_ports, list)
+        or len(selected_ports) != len(EXPECTED_PRODUCTION_PORTS)
+        or set(selected_ports) != set(EXPECTED_PRODUCTION_PORTS)
+    ):
+        raise RuntimeError("runtime facts do not attest the 24-port both-mode v8 lineup")
     state = facts.get("state")
     if not isinstance(state, dict):
         raise RuntimeError("runtime facts state is missing")
@@ -557,9 +659,7 @@ def runtime_guard(
     facts: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload = facts if facts is not None else read_json(RUNTIME_FACTS)
-    facts_hash = sha256(RUNTIME_FACTS) if facts is None else EXPECTED_RUNTIME_FACTS_SHA256
-    if facts_hash != EXPECTED_RUNTIME_FACTS_SHA256:
-        raise RuntimeError("runtime facts SHA changed")
+    facts_hash = sha256(RUNTIME_FACTS) if facts is None else "in-memory-test-fixture"
     generated_at = payload.get("generated_at")
     if not isinstance(generated_at, str) or not generated_at:
         raise RuntimeError("runtime facts generated_at is absent")
@@ -578,7 +678,59 @@ def runtime_guard(
             or row["exe"] != str(BINARY.resolve(strict=True))
         ):
             raise RuntimeError("owned candidate identity changed")
-    production_live = [row for row in live if row["pid"] not in owned]
+    # The standing campaign grant allows GPU inference in parallel.  A live HIP
+    # server is recorded as external accelerated work, while any extra process
+    # using the frozen CPU production binary remains a continuity failure.
+    accelerated_exe = str((LLAMA_ROOT / "build-hip/bin/llama-server").resolve())
+    external_accelerated = []
+    for row in live:
+        if row["pid"] in owned or row.get("exe") != accelerated_exe:
+            continue
+        if row["port"] in EXPECTED_PRODUCTION_PORTS or row.get("listener_owned") is not True:
+            continue
+        affinity = row.get("cpus_allowed_list")
+        argv_sha256 = row.get("argv_sha256")
+        if not isinstance(affinity, str) or not isinstance(argv_sha256, str):
+            raise RuntimeError("accelerated sidecar identity is incomplete")
+        thread_affinity = row.get("thread_cpu_allowed_lists")
+        if not isinstance(thread_affinity, list):
+            thread_affinity = proc_thread_cpu_allowed_lists(int(row["pid"]))
+        if not thread_affinity or not all(
+            isinstance(item, dict)
+            and isinstance(item.get("tid"), int)
+            and isinstance(item.get("cpus_allowed_list"), str)
+            for item in thread_affinity
+        ):
+            raise RuntimeError("accelerated sidecar thread affinity is incomplete")
+        thread_union: set[int] = set()
+        for item in thread_affinity:
+            thread_union.update(cpu_list(str(item["cpus_allowed_list"])))
+        overlap = sorted(thread_union & BENCH_CPUSET)
+        if overlap:
+            raise RuntimeError(
+                f"accelerated sidecar {row['pid']} overlaps CPU bench cores: {overlap}"
+            )
+        model_identity = path_stat_identity(Path(str(row["model"])))
+        executable_identity = path_stat_identity(Path(str(row["exe"])))
+        external_accelerated.append(
+            {
+                "pid": row["pid"],
+                "port": row["port"],
+                "listener_owned": True,
+                "cpus_allowed_list": affinity,
+                "thread_cpu_allowed_lists": thread_affinity,
+                "thread_cpu_union": sorted(thread_union),
+                "argv_sha256": argv_sha256,
+                "model_identity": model_identity,
+                "executable_identity": executable_identity,
+            }
+        )
+    production_live = [
+        row for row in live
+        if row["pid"] not in owned and row["pid"] not in {
+            candidate["pid"] for candidate in external_accelerated
+        }
+    ]
     live_set = {(row["pid"], row["port"], row["model"]) for row in production_live}
     invalid = [
         row
@@ -599,48 +751,8 @@ def runtime_guard(
         "generated_at": generated_at,
         "authorized_live_rows": production_live,
         "owned_sidecars": candidate_rows,
+        "external_accelerated_rows": external_accelerated,
     }
-
-
-def computed_numeric_trials() -> int:
-    code = """import json, sys
-sys.path.insert(0, 'scripts/autopilot')
-from autopilot import _frontier_rerun_completed_numeric_trials
-from experiment_journal import ExperimentJournal
-state=json.load(open('orchestration/autopilot_state.json', encoding='utf-8'))
-print(_frontier_rerun_completed_numeric_trials(state.get('frontier_rerun_required') or {}, ExperimentJournal()))
-"""
-    try:
-        result = subprocess.run(
-            [str(ORCHESTRATOR_ROOT / ".venv/bin/python"), "-c", code],
-            cwd=ORCHESTRATOR_ROOT,
-            text=True,
-            capture_output=True,
-            check=True,
-        )
-        return int(result.stdout.strip())
-    except (OSError, ValueError, subprocess.CalledProcessError) as exc:
-        raise RuntimeError(f"cannot compute authoritative E8 numeric trial count: {exc}") from exc
-
-
-def e8_release(state: dict[str, Any], completed: int) -> dict[str, Any]:
-    marker = state.get("frontier_rerun_required")
-    quality = state.get("e8_quality_rebaseline")
-    eras = state.get("active_instrument_eras")
-    baseline = state.get("baseline_state")
-    required = marker.get("required") if isinstance(marker, dict) else None
-    reasons: list[str] = []
-    if completed < 16:
-        reasons.append("fewer than 16 E8 numeric trials")
-    if required is not False:
-        reasons.append("frontier rerun remains required")
-    if not isinstance(eras, dict) or eras.get("eval_quality") != "E8":
-        reasons.append("active eval_quality era is not E8")
-    if not isinstance(baseline, dict) or baseline.get("eval_quality_era") != "E8":
-        reasons.append("baseline eval_quality era is not E8")
-    if not isinstance(quality, dict) or quality.get("status") not in {"closed", "applied"}:
-        reasons.append("E8 quality rebaseline hold remains open")
-    return {"released": not reasons, "reasons": reasons, "completed_numeric_trials": completed}
 
 
 def live_autopilot(proc_root: Path = Path("/proc")) -> list[dict[str, Any]]:
@@ -661,8 +773,6 @@ def live_autopilot(proc_root: Path = Path("/proc")) -> list[dict[str, Any]]:
 
 
 def execution_gates() -> dict[str, Any]:
-    state = read_json(STATE)
-    release = e8_release(state, computed_numeric_trials())
     memory = mem_available_kib()
     with OWNED_SIDECARS_LOCK:
         owned_ports = {row["port"] for row in OWNED_SIDECARS.values()}
@@ -678,7 +788,7 @@ def execution_gates() -> dict[str, Any]:
         runtime = {"error": repr(exc)}
         runtime_error = str(exc)
     autopilot = live_autopilot()
-    failures = list(release["reasons"])
+    failures: list[str] = []
     if memory < MEM_AVAILABLE_MIN_KIB:
         failures.append("MemAvailable below 100 GiB")
     if not all(ports.values()):
@@ -690,7 +800,10 @@ def execution_gates() -> dict[str, Any]:
     return {
         "passed": not failures,
         "failures": failures,
-        "e8": release,
+        "campaign_boundary": {
+            "architect_bench_decoupled_from_e8_quality": True,
+            "operator_directive_date": "2026-07-27",
+        },
         "mem_available_kib": memory,
         "min_mem_available_kib": MEM_AVAILABLE_MIN_KIB,
         "ports_free": ports,
@@ -865,6 +978,10 @@ def prepare(
         "gates": execution_gates(),
         "environment": clean_env(),
         "explicitly_omits": ["KMP_BLOCKTIME"],
+        "throughput_posture": {
+            "status": "observation_only",
+            "reason": "GPU sidecars may coexist under disjoint CPU affinity; raw per-row throughput is not a quality or role decision surface.",
+        },
         "timeouts_s": {
             "raw_evaluator": RAW_EVALUATOR_TIMEOUT_S,
             "converter": CONVERTER_TIMEOUT_S,
@@ -1030,6 +1147,38 @@ def wait_ready(
     raise RuntimeError(f"sidecar readiness timed out on {suite['port']}")
 
 
+def numa_prewarm(output_dir: Path, suite: dict[str, Any]) -> dict[str, Any]:
+    """Persist a fail-closed model-cache warmup before each fresh sidecar launch."""
+    argv = numa_prewarm_argv()
+    started_at = utc_now()
+    try:
+        result = subprocess.run(
+            argv,
+            env=clean_env(),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    except OSError as exc:
+        raise RuntimeError(f"{suite['name']} NUMA prewarm could not start: {exc}") from exc
+    evidence = {
+        "suite": suite["name"],
+        "started_at": started_at,
+        "finished_at": utc_now(),
+        "argv": argv,
+        "returncode": result.returncode,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "model": str(MODEL),
+        "model_bytes": MODEL.stat().st_size,
+        "placement": {"taskset": "0-95", "numa_policy": "interleave=all"},
+    }
+    write_json(output_dir / f"{suite['name']}.numa_prewarm.json", evidence)
+    if result.returncode:
+        raise RuntimeError(f"{suite['name']} NUMA prewarm failed: {evidence}")
+    return evidence
+
+
 def evaluator_argv(suite: dict[str, Any], output_dir: Path) -> list[str]:
     return [
         str(UV),
@@ -1128,6 +1277,13 @@ def run_raw_suite(
     if not gate["passed"]:
         raise RuntimeError(f"pre-{suite['name']} execution gates failed: {gate['failures']}")
     verify_model_identity()
+    prewarm = numa_prewarm(output_dir, suite)
+    post_prewarm_gate = execution_gates()
+    if not post_prewarm_gate["passed"]:
+        raise RuntimeError(
+            f"post-{suite['name']}-prewarm execution gates failed: "
+            f"{post_prewarm_gate['failures']}"
+        )
     stderr = (output_dir / f"{suite['name']}.server.stderr").open("w")
     with OWNED_SIDECARS_LOCK:
         if OWNED_SIDECARS:
@@ -1162,9 +1318,12 @@ def run_raw_suite(
         runtime["model_postrun"] = verify_model_identity()
         return {
             "suite": suite["name"],
+            "numa_prewarm": prewarm,
+            "post_prewarm_gates": post_prewarm_gate,
             "evaluator_argv": command,
             "runtime_identity": runtime,
             "raw_artifacts": artifacts,
+            "throughput_decision_use": "forbidden_observation_only",
         }
     finally:
         with OWNED_SIDECARS_LOCK:
@@ -1507,6 +1666,7 @@ def main(argv: list[str] | None = None) -> int:
             "lcb_code_execution": lcb["raw_artifacts"],
             "raw_swe_generation": swe_raw["raw_artifacts"],
             "raw_swe_accuracy_decision_use": "forbidden",
+            "throughput_decision_use": "forbidden_observation_only",
             "swe_pipeline": swe_official,
         }
         write_json(args.output_dir / "summary.json", summary)

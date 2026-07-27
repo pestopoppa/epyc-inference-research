@@ -22,7 +22,7 @@ GGUF_SHA256 = "270c815922554f4535389852d69dc9db51737e5c10a731391583d52bca6c2fae"
 COMPONENT_BINDINGS = {
     "quality_runner": ("/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/v7_quality_gate_runner.py", "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e"),
     "capture_integrity_watchdog": ("/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/capture_integrity_watchdog.py", "f4bd45b9617ca880a92be506d741038df65d457f0923f07bc3db7091a7303055"),
-    "swe_converter": ("/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/convert_sr_to_patch.py", "6bd2302dda3e5139cc6faabcc5639bdcf85b27895f93a9181cbb53dd65749507"),
+    "swe_converter": ("/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/convert_sr_to_patch.py", "06a6530570af470cb76999ceb629fa5d280a26469ec75d7bb3e6a980f2c20b9f"),
     "lcb_scorer": ("/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/code_exec_scorer.py", "12b8c9408d4b2f606929e37316c3f1c3d8f6252925dfb7bf6bdea541c3ef23cc"),
     "swe_harness_python": ("/mnt/raid0/llm/epyc-inference-research/.venv-swebench/bin/python", "9544d2a29138833e6177d45dbc57468d37710b5080c901fbb579d53f251cdd6f"),
     "swe_harness_module_path": ("/mnt/raid0/llm/epyc-inference-research/.venv-swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py", "6959f0b4e4eaf979771f529b88e3e9df1daa7fe86bc4291feec2e7d320bf7f2e"),

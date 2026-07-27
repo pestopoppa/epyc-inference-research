@@ -1,0 +1,123 @@
+{
+  "aggregate": {
+    "empty_patch_row_count": 5,
+    "skipped_block_count": 7
+  },
+  "arm": "A3-ff",
+  "empty_patch_rows": [
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_failure_length_cap",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "model_length_cap",
+      "finish_reason": "length",
+      "instance_id": "django__django-11138"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_contract_failure",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "all_parseable_blocks_skipped",
+      "finish_reason": "stop",
+      "instance_id": "django__django-11292"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_contract_failure",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "all_parseable_blocks_skipped",
+      "finish_reason": "stop",
+      "instance_id": "django__django-11477"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_contract_failure",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "applied_blocks_produced_no_diff",
+      "finish_reason": "stop",
+      "instance_id": "matplotlib__matplotlib-14623"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_failure_length_cap",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "model_length_cap",
+      "finish_reason": "length",
+      "instance_id": "sympy__sympy-12419"
+    }
+  ],
+  "schema_version": "epyc.append-27b-v4-nonrecovery-ledger.v1",
+  "skipped_blocks": [
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 0,
+      "classification": "model_contract_failure",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "instance_id": "django__django-11292",
+      "outcome": "skipped_path_normalization_rejected_generic_placeholder",
+      "replace_sha256": "139e153c0f059416db056375b84b58d345ed5a1b154bca016cd098d3d17fdc45",
+      "search_sha256": "74629f4e6e0bcda73a4a6c5cb3dab1f340f45d28be7cf5cf4c602cce6e63be40"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 0,
+      "classification": "model_contract_failure",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "instance_id": "django__django-11477",
+      "outcome": "skipped_search_not_found",
+      "replace_sha256": "b2d5c37734be423eb44ad9de44ab3c6abc172f7501253f50a58adab694c1e5e0",
+      "search_sha256": "94a95de2fbc4f4fbcb3df05d9710a1a92a3dd9e887310bfe27af0ebfebfe62ea"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 2,
+      "classification": "model_contract_failure",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "instance_id": "matplotlib__matplotlib-14623",
+      "outcome": "skipped_search_not_found",
+      "replace_sha256": "4cc9d118ca26987de7a37afdad5c318f2241186732eca9094dc4e427a3bea712",
+      "search_sha256": "2513b32fedff3568039694ea3c3644ba97ef1ca8c7241ffd229535338023acc2"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 3,
+      "classification": "model_contract_failure",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "instance_id": "matplotlib__matplotlib-14623",
+      "outcome": "skipped_search_not_found",
+      "replace_sha256": "f0a012de201e705322b4173173aad51e749be681e46723a381c6ebe9aa3588bb",
+      "search_sha256": "eef2aabcd60a2e19fcf54eeeffd0cd55149f63efd5c087ab5e81362c96bdb230"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 3,
+      "classification": "model_contract_failure",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "instance_id": "scikit-learn__scikit-learn-10297",
+      "outcome": "skipped_search_not_found",
+      "replace_sha256": "bba99e445908a931d7acaed301e0e2e7fd6ed166c6e2c6d75bc7b1b42783b898",
+      "search_sha256": "5a5b34908612f1f745867d49f3659527cf32f148a006169738967d0d0584825e"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 1,
+      "classification": "model_contract_failure",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "instance_id": "sphinx-doc__sphinx-10323",
+      "outcome": "skipped_search_not_found",
+      "replace_sha256": "84bb22b14bfeb0fe6c22672e89da2b8ae1099fd79f177be67cf952d30a9a16e8",
+      "search_sha256": "790f3d65dfbfb3fcd92895f7fdc0e197f3cf648dc1c2bbff7bc5743f134fa0b4"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 2,
+      "classification": "model_contract_failure",
+      "disposition": "preserve_frozen_v4_outcome_no_match_broadening",
+      "instance_id": "sphinx-doc__sphinx-10323",
+      "outcome": "skipped_search_not_found",
+      "replace_sha256": "d0d70808894a57ba18b86f702e0a9d26aad6aa89b0f23be1cb013696a8e3fa43",
+      "search_sha256": "0fa2f5eb9a12b0044937cb1c314b415acea3a0c5ea547a904ab6cda5b1360367"
+    }
+  ],
+  "status": "EXHAUSTIVE_PINNED_V4_OUTCOME"
+}

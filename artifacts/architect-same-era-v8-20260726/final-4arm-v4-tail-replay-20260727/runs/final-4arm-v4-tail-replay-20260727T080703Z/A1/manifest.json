@@ -1,0 +1,101 @@
+{
+  "arm": "A1",
+  "counts": {
+    "blocks_applied": 35,
+    "blocks_skipped": 1,
+    "empty_patch_count": 6,
+    "length_rows_forced_empty": 2
+  },
+  "operator_directive_provenance": {
+    "classification": "legacy_banked_tail_accepted_only_for_final_historical_era_table",
+    "directive_date": "2026-07-27",
+    "length_finish_reason_forced_empty": true,
+    "matching_semantics": "pinned_v4_exact_then_trailing_whitespace_then_unique_indent_only",
+    "no_generation_or_inference": true,
+    "quality_provenance": {
+      "current_era_quality_decision_input": true,
+      "quality_transfer_to_v8_eligible": true,
+      "same_era_generation": false,
+      "speed_or_throughput_transfer_claim": false,
+      "transfer_basis": "operator-certified v7-to-v8 kernel Delta 0.0pp exact quality parity"
+    },
+    "stopping_rule": {
+      "architect_tier_decision": "If A3 leads or ties at top, the architect-tier quality question is closed; the role choice falls to throughput/residency economics.",
+      "confirmation_policy": "The powered-160 confirmation is shelved unless this corrected table reorders an outcome that changes an actual deployment decision.",
+      "final_table": "final_4arm_table.json",
+      "finality": "FINAL_FOR_THIS_ERA_PER_OPERATOR_DIRECTIVE",
+      "regeneration_policy": "Regenerate only if generation evidence is defective; scorer/converter/extractor defects use deterministic replay of banked outputs."
+    }
+  },
+  "requested_ids": [
+    "django__django-10999",
+    "django__django-11066",
+    "django__django-11087",
+    "django__django-11095",
+    "django__django-11099",
+    "django__django-11119",
+    "django__django-11133",
+    "django__django-11138",
+    "django__django-11141",
+    "django__django-11149",
+    "django__django-11163",
+    "django__django-11179",
+    "django__django-11206",
+    "django__django-11211",
+    "django__django-11239",
+    "django__django-11265",
+    "django__django-11276",
+    "django__django-11292",
+    "django__django-11299",
+    "django__django-11333",
+    "django__django-11400",
+    "django__django-11433",
+    "django__django-11451",
+    "django__django-11477",
+    "matplotlib__matplotlib-13989",
+    "matplotlib__matplotlib-14623",
+    "matplotlib__matplotlib-20488",
+    "matplotlib__matplotlib-20676",
+    "scikit-learn__scikit-learn-10297",
+    "scikit-learn__scikit-learn-10844",
+    "scikit-learn__scikit-learn-10908",
+    "scikit-learn__scikit-learn-11310",
+    "sphinx-doc__sphinx-10323",
+    "sphinx-doc__sphinx-10435",
+    "sphinx-doc__sphinx-10449",
+    "sphinx-doc__sphinx-10466",
+    "sympy__sympy-11618",
+    "sympy__sympy-12096",
+    "sympy__sympy-12419",
+    "sympy__sympy-12481"
+  ],
+  "schema_version": "epyc.final-4arm-v4-tail-replay-arm.v1",
+  "sealed": {
+    "converter_source": {
+      "sha256": "6bd2302dda3e5139cc6faabcc5639bdcf85b27895f93a9181cbb53dd65749507",
+      "source": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/convert_sr_to_patch.py"
+    },
+    "dataset": {
+      "sha256": "b087b5dad72b3e765a6cf93a9e7d516d8796698a0fd358abb73c6627df19f66e",
+      "source": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/swebench_verified.json"
+    },
+    "diagnostics": {
+      "sha256": "8ccb872fa714aa28df468951139ddc239543c35cc7f13c4e0b6351a3c81e25fb"
+    },
+    "harness_module": {
+      "sha256": "6959f0b4e4eaf979771f529b88e3e9df1daa7fe86bc4291feec2e7d320bf7f2e",
+      "source": "/mnt/raid0/llm/epyc-inference-research/.venv-swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py"
+    },
+    "nonrecovery_ledger": {
+      "sha256": "b9817ec662f538aab6d36164a053947e3bddbbf3dcb7b5785602f72694f05f99"
+    },
+    "predictions": {
+      "sha256": "65047a2919d62469ddab05570e8c9b8ca4fcb286fc68ce48f4baf88894771f8c"
+    },
+    "raw_capture": {
+      "sha256": "f4dff35ee646993459f6536e4e8e6db80870a5691980bc158987f433e90c7c33",
+      "source": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/swe_A1_122b_iq2/pq.jsonl"
+    }
+  },
+  "status": "READY_FOR_OFFICIAL_SCORING"
+}

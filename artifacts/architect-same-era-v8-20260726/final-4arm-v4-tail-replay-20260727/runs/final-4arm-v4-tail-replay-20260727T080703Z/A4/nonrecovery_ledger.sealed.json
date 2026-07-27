@@ -1,0 +1,249 @@
+{
+  "aggregate": {
+    "diagnostic_skipped_block_count": 10,
+    "empty_patch_row_count": 14,
+    "ledger_skipped_block_count": 10
+  },
+  "arm": "A4",
+  "empty_patch_rows": [
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "converted",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "all_parseable_blocks_skipped",
+      "finish_reason": "stop",
+      "instance_id": "django__django-11087"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "converted",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "all_parseable_blocks_skipped",
+      "finish_reason": "stop",
+      "instance_id": "django__django-11095"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "model_truncation_empty_patch",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "no_parseable_search_replace_block",
+      "finish_reason": "length",
+      "instance_id": "django__django-11138"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "model_truncation_empty_patch",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "no_parseable_search_replace_block",
+      "finish_reason": "length",
+      "instance_id": "matplotlib__matplotlib-14623"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "converted",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "all_parseable_blocks_skipped",
+      "finish_reason": "stop",
+      "instance_id": "scikit-learn__scikit-learn-10297"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "converted",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "all_parseable_blocks_skipped",
+      "finish_reason": "stop",
+      "instance_id": "scikit-learn__scikit-learn-10844"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "converted",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "all_parseable_blocks_skipped",
+      "finish_reason": "stop",
+      "instance_id": "scikit-learn__scikit-learn-10908"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "converted",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "all_parseable_blocks_skipped",
+      "finish_reason": "stop",
+      "instance_id": "scikit-learn__scikit-learn-11310"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "model_truncation_empty_patch",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "no_parseable_search_replace_block",
+      "finish_reason": "length",
+      "instance_id": "sphinx-doc__sphinx-10323"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "converted",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "all_parseable_blocks_skipped",
+      "finish_reason": "stop",
+      "instance_id": "sphinx-doc__sphinx-10435"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "converted",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "all_parseable_blocks_skipped",
+      "finish_reason": "stop",
+      "instance_id": "sphinx-doc__sphinx-10449"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "converted",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "all_parseable_blocks_skipped",
+      "finish_reason": "stop",
+      "instance_id": "sympy__sympy-11618"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "model_truncation_empty_patch",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "no_parseable_search_replace_block",
+      "finish_reason": "length",
+      "instance_id": "sympy__sympy-12096"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "converted",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "all_parseable_blocks_skipped",
+      "finish_reason": "stop",
+      "instance_id": "sympy__sympy-12419"
+    }
+  ],
+  "inputs": {
+    "converter_source": {
+      "sha256": "6bd2302dda3e5139cc6faabcc5639bdcf85b27895f93a9181cbb53dd65749507",
+      "source": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/convert_sr_to_patch.py"
+    },
+    "dataset": {
+      "sha256": "b087b5dad72b3e765a6cf93a9e7d516d8796698a0fd358abb73c6627df19f66e",
+      "source": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/swebench_verified.json"
+    },
+    "diagnostics": {
+      "sha256": "2833a5921d5b0769412d122476f6970226d5e54c37affe86ab0816858ab364c0"
+    },
+    "harness_module": {
+      "sha256": "6959f0b4e4eaf979771f529b88e3e9df1daa7fe86bc4291feec2e7d320bf7f2e",
+      "source": "/mnt/raid0/llm/epyc-inference-research/.venv-swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py"
+    },
+    "predictions": {
+      "sha256": "f7a165e592f905dd1d9211e502c021d86a9228ca0cc936c4af50577b8062b545"
+    },
+    "raw_capture": {
+      "sha256": "548fe5b396e98f7b84a64746e1a3c8af12ecec559d92a63edae0b9c1852a629c",
+      "source": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/swe_A4_35b_a3b/pq.jsonl"
+    }
+  },
+  "legacy_capture_exception": true,
+  "operator_directive": "2026-07-27 bench closure: deterministic-tail rescoring; no matching broadening",
+  "quality_provenance": {
+    "current_era_quality_decision_input": true,
+    "quality_transfer_to_v8_eligible": true,
+    "same_era_generation": false,
+    "speed_or_throughput_transfer_claim": false,
+    "transfer_basis": "operator-certified v7-to-v8 kernel Delta 0.0pp exact quality parity"
+  },
+  "schema_version": "epyc.final-4arm-v4-tail-replay-nonrecovery-ledger.v1",
+  "skipped_blocks": [
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 0,
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "instance_id": "django__django-11087",
+      "outcome": "skipped_path_normalization_rejected_generic_placeholder",
+      "replace_sha256": "646ebb246799c851ce656567cbc8f93a580d0290cdb8151f21ba0dbde7762502",
+      "search_sha256": "0d10791815d87cdf5845f8c39d7b8663879d56c92c21e66dced6ee668a3d3c6e"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 0,
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "instance_id": "django__django-11095",
+      "outcome": "skipped_missing_path",
+      "replace_sha256": "8941ed152e1f75535ed0880bd5db5110ea571d0aca2009f746486e4604340570",
+      "search_sha256": "495f3552e30042a0aa5784c458a21d01d3ff86f7c42f4345345fd603e25c3979"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 0,
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "instance_id": "scikit-learn__scikit-learn-10297",
+      "outcome": "skipped_missing_path",
+      "replace_sha256": "74045dc4de0e074d2f4aa75e6c94a29603b2cfed61888c31cc3f21ca2a728e54",
+      "search_sha256": "7884f3ce7e0e9877718c7e842b82d1881d37bb7a3bddcdfe052b4b3718eb491a"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 0,
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "instance_id": "scikit-learn__scikit-learn-10844",
+      "outcome": "skipped_missing_path",
+      "replace_sha256": "271a6dd13d9ffc8aa6e2f8b49cf735e782a5f85696c48ebc96f9b697eb12b812",
+      "search_sha256": "d88f9c8d22a35820ef14ec05c0af20b49e3821fd7b8d7cf50e1991b10cfe826b"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 0,
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "instance_id": "scikit-learn__scikit-learn-10908",
+      "outcome": "skipped_missing_path",
+      "replace_sha256": "cf2a1a56dec0b39ab24eee6de349d8355464431efd6c36d34bb3d61820dca38b",
+      "search_sha256": "78a917d9dd286423eaff1894ddb887fb2f40744f26cc10a223e8231ae5eeaed4"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 0,
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "instance_id": "scikit-learn__scikit-learn-11310",
+      "outcome": "skipped_search_not_found",
+      "replace_sha256": "b63ca33d095b88ba3bc1b6c2b7b40c834217f6d0daf7471e364472394a49a2c9",
+      "search_sha256": "770f71f4da8aecc4f8ccbc8fe2a677ac6d95ee4c3d065d3d04e274efacc02d77"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 0,
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "instance_id": "sphinx-doc__sphinx-10435",
+      "outcome": "skipped_path_normalization_rejected_generic_placeholder",
+      "replace_sha256": "90eb18524bb4fab6a17fd6cdbd64084e4df16174b6f6d8f8d31962018f6c4e29",
+      "search_sha256": "cf3decc1b91af2295992ca926612263facb0310931cd10d8cdce18afbbdba634"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 0,
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "instance_id": "sphinx-doc__sphinx-10449",
+      "outcome": "skipped_path_normalization_rejected_generic_placeholder",
+      "replace_sha256": "a035ba88e9cd64579937d7f8d1b50ff30af9f080a2db529dca5ef0d9ddfc11ae",
+      "search_sha256": "b21f22b14aa7a236f136dc0171173e8f238ad2a8e543bc9bdde5e2cc7cb0e883"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 0,
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "instance_id": "sympy__sympy-11618",
+      "outcome": "skipped_path_normalization_rejected_generic_placeholder",
+      "replace_sha256": "49cde84596a7ce6c2057a8ef10c7d8123dc83aea42c27b6261c3fe58379a29b6",
+      "search_sha256": "e63ded97de3a295944344c709a3a39cbd2edfd965cbdf46e79f1b8cc7b609ac2"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 0,
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "instance_id": "sympy__sympy-12419",
+      "outcome": "skipped_missing_path",
+      "replace_sha256": "9798e5e6adcc61d8ba014670d906c1d714675eb19d461c0bb8cf24b811b76819",
+      "search_sha256": "b67b2914535c1dece2289e9e674d56c8ae8457272aebd0597b38948991bd1fce"
+    }
+  ],
+  "status": "EXHAUSTIVE_PINNED_V4_OUTCOME"
+}

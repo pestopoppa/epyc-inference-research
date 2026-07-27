@@ -1064,7 +1064,7 @@ questions:
     expected: "256"
     scoring_method: exact_match
     scoring_config:
-      extract_pattern: "\\d+"
+      extract_pattern: '(\d+)'
 
   - id: needle_040
     tier: 3

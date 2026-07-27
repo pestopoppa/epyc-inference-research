@@ -1,0 +1,52 @@
+{
+  "arms": {
+    "baseline": {
+      "arm_definition": "qwen25vl-cpu-v8",
+      "arm_id": "qwen25vl-escalation-v8",
+      "binary_sha256": "a4b667163022aa166ade7c0e00fa4e775b37662e02c10da7642c8c23a4d6b414",
+      "endpoint_or_sidecar": "http://127.0.0.1:8087/v1/chat/completions",
+      "frozen_provenance": {
+        "branch": "production-consolidated-v8",
+        "head": "67a433bf45a8a091d83b4ea0b32ff0735fd51800",
+        "version": "version: 10107 (67a433bf4)\nbuilt with GNU 15.2.0 for Linux x86_64",
+        "worktree_state": "clean"
+      },
+      "launch_record_path": "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/live-20260726T174112Z-O98PrJ/escalation-baseline-launch.json",
+      "launch_record_sha256": "ab9c850bf98ad4fd88de8bf8d2fa9b1ed006d2c2825cbc635b752e12accaa6c3",
+      "mmproj_sha256": "c24a7f5fcfc68286f0a217023b6738e73bea4f11787a43e8238d4bb1b8604cde",
+      "model_sha256": "08b4e59684acb6262e3b127dbaee3bf0d6d29b0f364ac346a18467e9354f9972"
+    },
+    "candidate": {
+      "arm_definition": "minicpm-o45-mi210-v8",
+      "arm_id": "minicpm-o45-mi210-v8",
+      "binary_sha256": "112c560f1c978c584a9899539851348a0ce1e05cde458061c281758aff066882",
+      "endpoint_or_sidecar": "http://127.0.0.1:19086/v1/chat/completions",
+      "frozen_provenance": {
+        "branch": "production-consolidated-v8",
+        "head": "67a433bf45a8a091d83b4ea0b32ff0735fd51800",
+        "version": "version: 10107 (67a433bf4)\nbuilt with GNU 15.2.0 for Linux x86_64",
+        "worktree_state": "clean"
+      },
+      "launch_record_path": "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/live-20260726T174112Z-O98PrJ/escalation-candidate-launch.json",
+      "launch_record_sha256": "8979f2a7aa395cc56beaabd74d048c02331f43ac74fdb8fbb610a691e4a64d65",
+      "mmproj_sha256": "1453678cc4e4fe18de241952962e234f265cb8dda780773526103ab8ba82f421",
+      "model_sha256": "1237a97ee081b8abebc47aa7dad565701e8f5f904cdc92f6723ac4281bbc0932"
+    }
+  },
+  "baseline_pass_rate": 0.6,
+  "candidate_minus_baseline_pp": 10.0,
+  "candidate_pass_rate": 0.7,
+  "limitation": "Observation only; no decision threshold is asserted.",
+  "manifest_sha256": "284fa851eca3f7696b8428a871dc182e5e9f45d8a06ab2a0a82e54bce082dbbc",
+  "mcnemar_exact_two_sided_p": 1.0,
+  "n": 10,
+  "paired_2x2": {
+    "baseline_only": 0,
+    "both_pass": 6,
+    "candidate_only": 1,
+    "neither": 3
+  },
+  "protocol_status": "observation_only_unratified",
+  "role": "vision_escalation",
+  "schema": "epyc.minicpm.phase1.m1-observation.v1.paired-analysis.v1"
+}

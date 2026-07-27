@@ -1,0 +1,126 @@
+{
+  "arms": {
+    "fable_mtp": {
+      "counts": {
+        "applied": 42,
+        "empty": 4,
+        "length_forced_empty": 1,
+        "skipped": 4
+      },
+      "diagnostics_sha256": "28a36689b16b7ff6b78176235243ffa3bc2e655318ac2d69f93957d9e2eb7160",
+      "nonrecovery_ledger_sha256": "01deb092c7e2190a69613e9a9044642e54bb4902f6954b585484fb7a93e17290",
+      "predictions_sha256": "8821aa4f23c88aa35840e03db262a6c09ec07bbe77f8ab09aa362df8f28faf97",
+      "raw_capture_sha256": "fb2e265b0189e46c42040f7420ac97bdcf53cc467601fab77c955da1bb02aaa3"
+    },
+    "fable_non_mtp": {
+      "counts": {
+        "applied": 46,
+        "empty": 5,
+        "length_forced_empty": 2,
+        "skipped": 7
+      },
+      "diagnostics_sha256": "c3205e5b7ff1ad382abdc2f5fb36ae3551f1800b1965a70f8f01875d224a15ce",
+      "nonrecovery_ledger_sha256": "60c5df08744bb754b918a17ebcc005ddb15158fa2c226ec99b03e0e79b121c55",
+      "predictions_sha256": "8a95cc5493a39b480174a2969cf31a44cf8951c285c109ea0a6a5ccda1d4a6b0",
+      "raw_capture_sha256": "a9f3bf2c65869ef0819416189b2478cfed157dd88bcb4cd62d68d913b034990a"
+    },
+    "stock_non_mtp": {
+      "counts": {
+        "applied": 40,
+        "empty": 5,
+        "length_forced_empty": 3,
+        "skipped": 3
+      },
+      "diagnostics_sha256": "f9f2d9ec90761e3079aba3b71f436edf20f89d3555697a6d1ae081fe74565b3b",
+      "nonrecovery_ledger_sha256": "9b1e212d043cd07476506b534bdc454169b4b655e825cef354a3f666aa67ffe1",
+      "predictions_sha256": "e6e8c61098c0fbf0254cf024b12f976db9ab359d937f690c46ed949b322ba73e",
+      "raw_capture_sha256": "8872966aa162f39587735490927940bd571042ab6a5644c1af7bac2a41354c3a"
+    }
+  },
+  "authority": {
+    "capture_identity.json": {
+      "sha256": "5fd6f333ef82766efcea3bbfc6e90589511c1e4212b9e5546a2c148401bffd1b",
+      "source": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continuation-27b-v8/instrument/identity.json"
+    },
+    "capture_runner.py": {
+      "sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e",
+      "source": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continuation-27b-v8/instrument/v7_quality_gate_runner.py"
+    },
+    "converter.py": {
+      "sha256": "06a6530570af470cb76999ceb629fa5d280a26469ec75d7bb3e6a980f2c20b9f",
+      "source": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/convert_sr_to_patch.py"
+    },
+    "questions_swebench_oracle.json": {
+      "sha256": "f82a5191274048f2fdf432df7a0ebf4017ad982b954d6aa075326a1302df1c3c",
+      "source": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/questions_swebench_oracle.json"
+    },
+    "seal_fable_swe_tail.py": {
+      "sha256": "47527cabc3fd0cc138993294ee033cc487841c286862f61ce097f5790c75d210",
+      "source": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/seal_fable_swe_tail.py"
+    },
+    "swebench_harness.py": {
+      "sha256": "6959f0b4e4eaf979771f529b88e3e9df1daa7fe86bc4291feec2e7d320bf7f2e",
+      "source": "/mnt/raid0/llm/epyc-inference-research/.venv-swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py"
+    },
+    "swebench_verified.json": {
+      "sha256": "b087b5dad72b3e765a6cf93a9e7d516d8796698a0fd358abb73c6627df19f66e",
+      "source": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/swebench_verified.json"
+    }
+  },
+  "capture_schema_version": "v7_quality_gate_capture.v4",
+  "conversion_policy": "force finish_reason=length empty; retain safely applied patches; classify skips and stop/no-parseable rows as model contract failures",
+  "current_converter_sha256": "06a6530570af470cb76999ceb629fa5d280a26469ec75d7bb3e6a980f2c20b9f",
+  "hashes_json_sha256": "0bb87a821c736489f06faf4c3e7e07c5caf7ec2250844bf98d02e826e6182dff",
+  "no_inference_or_docker": true,
+  "observational_provenance": {
+    "research_head": "a1e8ec3ff745dacbce4220bb305975635f4384d5",
+    "sealed_at_utc": "2026-07-27T09:43:35.533793+00:00"
+  },
+  "publish_policy": "output directory is rechecked immediately before Linux renameat2(RENAME_NOREPLACE), which atomically refuses an existing destination",
+  "requested_ids": [
+    "django__django-10999",
+    "django__django-11066",
+    "django__django-11087",
+    "django__django-11095",
+    "django__django-11099",
+    "django__django-11119",
+    "django__django-11133",
+    "django__django-11138",
+    "django__django-11141",
+    "django__django-11149",
+    "django__django-11163",
+    "django__django-11179",
+    "django__django-11206",
+    "django__django-11211",
+    "django__django-11239",
+    "django__django-11265",
+    "django__django-11276",
+    "django__django-11292",
+    "django__django-11299",
+    "django__django-11333",
+    "django__django-11400",
+    "django__django-11433",
+    "django__django-11451",
+    "django__django-11477",
+    "matplotlib__matplotlib-13989",
+    "matplotlib__matplotlib-14623",
+    "matplotlib__matplotlib-20488",
+    "matplotlib__matplotlib-20676",
+    "scikit-learn__scikit-learn-10297",
+    "scikit-learn__scikit-learn-10844",
+    "scikit-learn__scikit-learn-10908",
+    "scikit-learn__scikit-learn-11310",
+    "sphinx-doc__sphinx-10323",
+    "sphinx-doc__sphinx-10435",
+    "sphinx-doc__sphinx-10449",
+    "sphinx-doc__sphinx-10466",
+    "sympy__sympy-11618",
+    "sympy__sympy-12096",
+    "sympy__sympy-12419",
+    "sympy__sympy-12481"
+  ],
+  "runner_sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e",
+  "schema_version": "epyc.fable-v4-swe-tail-sealer.v1",
+  "scope": "stock_non_mtp, fable_non_mtp, fable_mtp only",
+  "status": "SEALED_FOR_OFFICIAL_SCORING"
+}

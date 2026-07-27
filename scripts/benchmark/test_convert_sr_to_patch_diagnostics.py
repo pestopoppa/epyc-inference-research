@@ -51,6 +51,14 @@ BANKED_ARMS = (
     ),
 )
 
+FINAL_REPLAY_ROOT = (
+    RESEARCH_ROOT
+    / "artifacts/architect-same-era-v8-20260726"
+    / "final-4arm-v4-tail-replay-20260727"
+    / "runs/final-4arm-v4-tail-replay-20260727T080703Z"
+)
+FINAL_REPLAY_ARMS = ("A1", "A3", "A4", "Laguna")
+
 
 def load_converter():
     spec = importlib.util.spec_from_file_location("convert_sr_to_patch_diagnostics", CONVERTER)
@@ -347,6 +355,47 @@ class ConverterDiagnosticsTests(unittest.TestCase):
         self.assertIn("a/sympy/matrices/expressions/matexpr.py", patch)
         self.assertEqual(blocks[0]["path_normalization"]["outcome"], "normalized")
 
+    def test_path_repo_root_wrapper_recovers_only_missing_literal_path(self):
+        self.converter.show = lambda _repo, _commit, path: {
+            "sympy/matrices/expressions/matexpr.py": "old\n",
+        }.get(path)
+        self.converter.pinned_repo_paths = lambda _repo, _commit: (
+            "sympy/matrices/expressions/matexpr.py",
+        )
+        blocks = []
+        patch, applied, skipped = self.converter.apply_blocks(
+            self.converter.rows["demo__one"],
+            "<<<<<<< SEARCH\nold\n=======\nnew\n"
+            ">>>>>>> REPLACE path/sympy/matrices/expressions/matexpr.py",
+            blocks,
+        )
+
+        self.assertEqual((applied, skipped), (1, 0))
+        self.assertIn("a/sympy/matrices/expressions/matexpr.py", patch)
+        self.assertEqual(blocks[0]["path_normalization"], {
+            "wrapper": "path/", "candidate": "sympy/matrices/expressions/matexpr.py",
+            "match_status": "unique_exact", "outcome": "normalized",
+        })
+
+    def test_path_wrapper_never_rewrites_a_real_pinned_path(self):
+        self.converter.show = lambda _repo, _commit, path: {
+            "path/pkg.py": "old\n",
+            "pkg.py": "wrong\n",
+        }.get(path)
+        self.converter.pinned_repo_paths = lambda _repo, _commit: ("path/pkg.py", "pkg.py")
+        blocks = []
+        patch, applied, skipped = self.converter.apply_blocks(
+            self.converter.rows["demo__one"],
+            "<<<<<<< SEARCH\nold\n=======\nnew\n>>>>>>> REPLACE path/pkg.py",
+            blocks,
+        )
+
+        self.assertEqual((applied, skipped), (1, 0))
+        self.assertIn("a/path/pkg.py", patch)
+        self.assertEqual(blocks[0]["path_normalization"], {
+            "outcome": "not_requested", "candidate": None,
+        })
+
     def test_generic_path_to_file_placeholder_is_rejected(self):
         blocks = []
         patch, applied, skipped = self.converter.apply_blocks(
@@ -447,6 +496,31 @@ class ConverterDiagnosticsTests(unittest.TestCase):
                 self.assertFalse(out.exists())
                 self.assertFalse(summary["prediction_artifact_written"])
                 self.assertEqual(summary["artifact_integrity_status"], "fail_closed")
+
+    def test_repaired_converter_preserves_final_four_arm_predictions_byte_exactly(self):
+        converter = load_converter()
+        for label in FINAL_REPLAY_ARMS:
+            with self.subTest(arm=label):
+                arm_dir = FINAL_REPLAY_ROOT / label
+                source_rows = [
+                    json.loads(line)
+                    for line in (arm_dir / "raw_capture.sealed.jsonl").read_text().splitlines()
+                    if line.strip()
+                ]
+                expected = prediction_map(arm_dir / "predictions.sealed.json")
+                observed = {}
+                for row in source_rows:
+                    if row.get("finish_reason") == "length":
+                        patch = ""
+                    else:
+                        patch, _applied, _skipped = converter.apply_blocks(
+                            converter.rows[row["id"]],
+                            row.get("response", ""),
+                            [],
+                        )
+                    observed[row["id"]] = patch
+
+                self.assertEqual(observed, expected)
 
 
 if __name__ == "__main__":

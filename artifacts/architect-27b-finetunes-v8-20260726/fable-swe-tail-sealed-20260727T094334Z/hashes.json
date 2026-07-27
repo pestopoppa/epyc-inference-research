@@ -1,0 +1,24 @@
+{
+  "files": {
+    "authority/capture_identity.json": "5fd6f333ef82766efcea3bbfc6e90589511c1e4212b9e5546a2c148401bffd1b",
+    "authority/capture_runner.py": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e",
+    "authority/converter.py": "06a6530570af470cb76999ceb629fa5d280a26469ec75d7bb3e6a980f2c20b9f",
+    "authority/questions_swebench_oracle.json": "f82a5191274048f2fdf432df7a0ebf4017ad982b954d6aa075326a1302df1c3c",
+    "authority/seal_fable_swe_tail.py": "47527cabc3fd0cc138993294ee033cc487841c286862f61ce097f5790c75d210",
+    "authority/swebench_harness.py": "6959f0b4e4eaf979771f529b88e3e9df1daa7fe86bc4291feec2e7d320bf7f2e",
+    "authority/swebench_verified.json": "b087b5dad72b3e765a6cf93a9e7d516d8796698a0fd358abb73c6627df19f66e",
+    "fable_mtp/conversion_diagnostics.sealed.jsonl": "28a36689b16b7ff6b78176235243ffa3bc2e655318ac2d69f93957d9e2eb7160",
+    "fable_mtp/nonrecovery_ledger.sealed.json": "01deb092c7e2190a69613e9a9044642e54bb4902f6954b585484fb7a93e17290",
+    "fable_mtp/predictions.sealed.json": "8821aa4f23c88aa35840e03db262a6c09ec07bbe77f8ab09aa362df8f28faf97",
+    "fable_mtp/raw_capture.sealed.jsonl": "fb2e265b0189e46c42040f7420ac97bdcf53cc467601fab77c955da1bb02aaa3",
+    "fable_non_mtp/conversion_diagnostics.sealed.jsonl": "c3205e5b7ff1ad382abdc2f5fb36ae3551f1800b1965a70f8f01875d224a15ce",
+    "fable_non_mtp/nonrecovery_ledger.sealed.json": "60c5df08744bb754b918a17ebcc005ddb15158fa2c226ec99b03e0e79b121c55",
+    "fable_non_mtp/predictions.sealed.json": "8a95cc5493a39b480174a2969cf31a44cf8951c285c109ea0a6a5ccda1d4a6b0",
+    "fable_non_mtp/raw_capture.sealed.jsonl": "a9f3bf2c65869ef0819416189b2478cfed157dd88bcb4cd62d68d913b034990a",
+    "stock_non_mtp/conversion_diagnostics.sealed.jsonl": "f9f2d9ec90761e3079aba3b71f436edf20f89d3555697a6d1ae081fe74565b3b",
+    "stock_non_mtp/nonrecovery_ledger.sealed.json": "9b1e212d043cd07476506b534bdc454169b4b655e825cef354a3f666aa67ffe1",
+    "stock_non_mtp/predictions.sealed.json": "e6e8c61098c0fbf0254cf024b12f976db9ab359d937f690c46ed949b322ba73e",
+    "stock_non_mtp/raw_capture.sealed.jsonl": "8872966aa162f39587735490927940bd571042ab6a5644c1af7bac2a41354c3a"
+  },
+  "schema_version": "epyc.fable-v4-swe-tail-hashes.v1"
+}

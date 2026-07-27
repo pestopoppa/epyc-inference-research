@@ -1,0 +1,151 @@
+{
+  "capture_schema_version": "v7_quality_gate_capture.v4",
+  "converter_sha256": "6bd2302dda3e5139cc6faabcc5639bdcf85b27895f93a9181cbb53dd65749507",
+  "fable_header_contract": "validated_851_base_plus_15_mtp",
+  "fable_header_transcripts": {
+    "mtp_sha256": "fa3f3cba296759d31657ecd8628a6926ba9d6fc9a35ff1ba399ab337157dfed8",
+    "non_mtp_sha256": "8b0221044c0e27fa6650d2629c7264cfd5883da9e7505c92830d0b55175a177e"
+  },
+  "full_static_witness": {
+    "binary_sha256": "112c560f1c978c584a9899539851348a0ce1e05cde458061c281758aff066882",
+    "capture_contract": {
+      "converter_sha256": "6bd2302dda3e5139cc6faabcc5639bdcf85b27895f93a9181cbb53dd65749507",
+      "quality_runner_sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e",
+      "schema_version": "v7_quality_gate_capture.v4",
+      "watchdog_sha256": "f4bd45b9617ca880a92be506d741038df65d457f0923f07bc3db7091a7303055"
+    },
+    "components": {
+      "capture_integrity_watchdog": {
+        "path": "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/capture_integrity_watchdog.py",
+        "sha256": "f4bd45b9617ca880a92be506d741038df65d457f0923f07bc3db7091a7303055"
+      },
+      "lcb_scorer": {
+        "path": "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/code_exec_scorer.py",
+        "sha256": "12b8c9408d4b2f606929e37316c3f1c3d8f6252925dfb7bf6bdea541c3ef23cc"
+      },
+      "quality_runner": {
+        "path": "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/v7_quality_gate_runner.py",
+        "sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e"
+      },
+      "swe_converter": {
+        "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/convert_sr_to_patch.py",
+        "sha256": "6bd2302dda3e5139cc6faabcc5639bdcf85b27895f93a9181cbb53dd65749507"
+      },
+      "swe_harness_module_path": {
+        "path": "/mnt/raid0/llm/epyc-inference-research/.venv-swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py",
+        "sha256": "6959f0b4e4eaf979771f529b88e3e9df1daa7fe86bc4291feec2e7d320bf7f2e"
+      },
+      "swe_harness_python": {
+        "path": "/mnt/raid0/llm/epyc-inference-research/.venv-swebench/bin/python",
+        "sha256": "9544d2a29138833e6177d45dbc57468d37710b5080c901fbb579d53f251cdd6f"
+      }
+    },
+    "manifest_sha256": "dab6b5ac7548cb36b9bade443a2a1dcc3a5b377e87add9429da1918be8f8d9ae",
+    "prerequisites": {
+      "clean_laguna_full40": {
+        "base": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/scorer-artifact-rescore-20260726/clean-full40-promptfix-20260726",
+        "capture_schema_version": "v7_quality_gate_capture.v4",
+        "expected_arm": "Laguna_S_2_1_UD_IQ2_M_v8_clean_full40_promptfix_3072",
+        "question_source_sha256": "4b03ad7703bbf2dbaa1eb91b3313cc3cab2892672db87f6242ffd1d489e76375",
+        "rows": 40,
+        "runner_source_sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e",
+        "status": "VALID",
+        "supersession_abort_receipt": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/scorer-artifact-rescore-20260726/clean-full40-promptfix-20260726/BASE_DIAGNOSTIC_SUPERSESSION_ABORT_RECEIPT.json",
+        "supersession_abort_receipt_sha256": "471f71b5651169ee06a2fb5c7a18bf0a6a7ecd2a626d95aeaef61a79554a282d",
+        "validation_file": "capture.validation.json",
+        "validator": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/scorer-artifact-rescore-20260726/clean-full40-promptfix-20260726/validate_clean_full40_capture.py",
+        "validator_sha256": "511e77db440022596728d4887467e855c11b4fe7b076cd0a6de3d2f866085124"
+      },
+      "clean_laguna_gate_binding": {
+        "base": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/scorer-artifact-rescore-20260726/clean-full40-promptfix-20260726",
+        "expected_arm": "Laguna_S_2_1_UD_IQ2_M_v8_clean_full40_promptfix_3072",
+        "question_source_sha256": "4b03ad7703bbf2dbaa1eb91b3313cc3cab2892672db87f6242ffd1d489e76375",
+        "supersession_abort_receipt_sha256": "471f71b5651169ee06a2fb5c7a18bf0a6a7ecd2a626d95aeaef61a79554a282d",
+        "validator_sha256": "511e77db440022596728d4887467e855c11b4fe7b076cd0a6de3d2f866085124"
+      },
+      "clean_laguna_validation": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/scorer-artifact-rescore-20260726/clean-full40-promptfix-20260726/run-20260726T220759Z/capture.validation.json",
+      "ready": true,
+      "required_markers": {
+        "same_era_raw_runs_complete": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-same-era-v8-20260726/live-20260726T201413Z/same_era_raw_runs.complete"
+      },
+      "satisfied": {
+        "clean_laguna_full40_valid": true,
+        "same_era_raw_runs_complete": true
+      }
+    },
+    "runtime_identity": {
+      "container_runtime": "Docker version 29.1.3, build 29.1.3-0ubuntu3~25.10.1",
+      "swebench_python": "3.12.13 (main, Jun 23 2026, 15:18:55) [Clang 22.1.3 ]\n4.1.0"
+    }
+  },
+  "instrument_repair": {
+    "pre_repair_identity_sha256": "6212109e18668e6c7f6ec488cbb573af4bea61ef90ec0ba67391578b4b30cbc2",
+    "raw_capture_resume": {
+      "reason": "defer SWE conversion/repository traversal until E8 CPU isolation ends",
+      "research_head": "380b46e965f509def296b8bedc34235f6281bc62",
+      "resume_script_sha256": "59ef1db2d64bd84e8ae4672107bda2b9186bdfba0e1a5b27620f6aa2bdab3023",
+      "swe_conversion_deferred": true,
+      "timestamp_utc": "2026-07-26T23:40:07.729256+00:00"
+    },
+    "reason": "converter dependency omitted from sealed instrument bundle",
+    "research_head": "503d33e3bee7fd8072bde036312278a0398842ea",
+    "resume_policy": "reuse validator-clean 40/40 ThinkingCap SWE capture; do not redraw",
+    "resume_script_sha256": "70e723f222fec86168ca417784797ac90f2df9c6491c6ebddea8c8349907062a",
+    "schema": "27b_continuation_instrument_repair.v1",
+    "timestamp_utc": "2026-07-26T23:37:42.181944+00:00",
+    "timing_exclusion": {
+      "arm": "A3-tc-quality__thinkingcap",
+      "decode_timing_eligible": false,
+      "overlap_utc": [
+        "2026-07-26T22:53:48Z",
+        "2026-07-26T22:54:39Z"
+      ],
+      "quality_response_valid": true,
+      "question_id": "django__django-11239",
+      "reason": "exogenous model hash read overlapped this request",
+      "suite": "swe_oracle"
+    }
+  },
+  "manifest_sha256": "dab6b5ac7548cb36b9bade443a2a1dcc3a5b377e87add9429da1918be8f8d9ae",
+  "models": {
+    "fable_mtp": {
+      "bytes": 30239022560,
+      "path": "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf",
+      "sha256": "041c175f03b76adb70077ba470258f6b916ec4f5f066077377ef96396c3dd1d0"
+    },
+    "fable_non_mtp": {
+      "bytes": 29787701792,
+      "path": "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-Q8_0.gguf",
+      "sha256": "2fff409d4a22e0cb11fb0ecfafed1c669b9808f7e6bc499036c6e85297f14f4d"
+    },
+    "stock_non_mtp": {
+      "bytes": 28665067072,
+      "path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-27B-Q8_0.gguf",
+      "sha256": "5927dc06c2b19f732fb6e2a6546dff4c130b552f2ab5f91feb3daafe43897b2a"
+    },
+    "thinkingcap": {
+      "bytes": 29047082976,
+      "path": "/mnt/raid0/llm/models/ThinkingCap-Qwen3.6-27B-GGUF/ThinkingCap-Qwen3.6-27B-Q8_0.gguf",
+      "sha256": "efcb358ef86f07cf24bfd617a66bb0baa7220e9dd1c31b7d7beacd7b49e67d93"
+    }
+  },
+  "question_sha256": {
+    "lcb_hard": "d51e56f601e3d153910d086b35c6aea94f4d903bab0427c8a49ffe895a6287c4",
+    "swe_oracle": "f82a5191274048f2fdf432df7a0ebf4017ad982b954d6aa075326a1302df1c3c"
+  },
+  "runner_sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e",
+  "server_sha256": "112c560f1c978c584a9899539851348a0ce1e05cde458061c281758aff066882",
+  "swe_conversion_status": "deferred_until_e8_cpu_boundary",
+  "swebench_verified_sha256": "b087b5dad72b3e765a6cf93a9e7d516d8796698a0fd358abb73c6627df19f66e",
+  "upstream_clean_laguna_validation": {
+    "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/scorer-artifact-rescore-20260726/clean-full40-promptfix-20260726/run-20260726T220759Z/capture.validation.json",
+    "payload": {
+      "capture_schema_version": "v7_quality_gate_capture.v4",
+      "rows": 40,
+      "runner_source_sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e",
+      "status": "VALID"
+    },
+    "sha256": "7c09a98a487033d1a6b07c477d31b95e1e17a78995fdd74f11d583cf4636c586"
+  },
+  "watchdog_sha256": "f4bd45b9617ca880a92be506d741038df65d457f0923f07bc3db7091a7303055"
+}

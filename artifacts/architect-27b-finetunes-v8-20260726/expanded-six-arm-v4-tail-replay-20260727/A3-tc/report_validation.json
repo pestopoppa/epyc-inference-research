@@ -1,0 +1,17 @@
+{
+  "arm": "A3-tc",
+  "denominator": 40,
+  "empty_patch_failures": 16,
+  "harness_errors": 0,
+  "percent_resolved": 45.0,
+  "quality_provenance": {
+    "current_era_quality_decision_input": true,
+    "quality_transfer_to_v8_eligible": true,
+    "same_era_generation": true,
+    "speed_or_throughput_transfer_claim": false,
+    "transfer_basis": "complete v8 banked capture replayed through frozen final-table v4 converter"
+  },
+  "report": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/.expanded-six-arm-v4-tail-replay-20260727.staging-1c4d3e803c114e79aac8bc308ef248aa/A3-tc/A3-tc_ThinkingCap_Q8.expanded-six-arm-v4-tail-replay-20260727-a3-tc.json",
+  "report_sha256": "fa75a0d9b40ebfd0e8ecf670ab5a6faecee4431821a31990841ff7c9640af39a",
+  "resolved": 18
+}

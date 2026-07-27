@@ -1,0 +1,142 @@
+{
+  "decision_use": "No lineup, registry, or deployment decision may use this artifact as a gate.",
+  "fixtures": [
+    {
+      "accepted_answers": [
+        "FRIEND"
+      ],
+      "case_id": "vl_ocr_0001",
+      "image": "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0001.png",
+      "image_sha256": "5735b6779982f9aaed3eb98f416230bcacc1b91924a6ec4d77f483ee393a643a",
+      "prompt": "what is written in the image?\nReply with only the answer, with no explanation.",
+      "scoring": "normalized_exact_accepted_alternative",
+      "source_dataset": "OCRBench",
+      "source_prompt": "what is written in the image?",
+      "source_suite": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/debug/vl.yaml",
+      "source_suite_sha256": "a627f4267824a66529167c76c56b9d810f266daa2d5facf5d9f4dbbbc02491d1"
+    },
+    {
+      "accepted_answers": [
+        "1056"
+      ],
+      "case_id": "vl_ocr_0201",
+      "image": "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0201.png",
+      "image_sha256": "06e2cdb9feed15e7fe0fd7754b53c3d12178850d4c1ed1e6df8e333885653056",
+      "prompt": "what is the number in the image?\nReply with only the answer, with no explanation.",
+      "scoring": "normalized_exact_accepted_alternative",
+      "source_dataset": "OCRBench",
+      "source_prompt": "what is the number in the image?",
+      "source_suite": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/debug/vl.yaml",
+      "source_suite_sha256": "a627f4267824a66529167c76c56b9d810f266daa2d5facf5d9f4dbbbc02491d1"
+    },
+    {
+      "accepted_answers": [
+        "76961"
+      ],
+      "case_id": "vl_ocr_0247",
+      "image": "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0247.png",
+      "image_sha256": "c2168add03e70e21734e1cd7982460208c76913d5233bca98c901eab5b15c75f",
+      "prompt": "what is the number in the image?\nReply with only the answer, with no explanation.",
+      "scoring": "normalized_exact_accepted_alternative",
+      "source_dataset": "OCRBench",
+      "source_prompt": "what is the number in the image?",
+      "source_suite": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/debug/vl.yaml",
+      "source_suite_sha256": "a627f4267824a66529167c76c56b9d810f266daa2d5facf5d9f4dbbbc02491d1"
+    },
+    {
+      "accepted_answers": [
+        "31000"
+      ],
+      "case_id": "vl_ocr_0248",
+      "image": "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0248.png",
+      "image_sha256": "b2178753e771ce0ed6e222687febac7eef8197e483979941e5f878508da6c55d",
+      "prompt": "what is the number in the image?\nReply with only the answer, with no explanation.",
+      "scoring": "normalized_exact_accepted_alternative",
+      "source_dataset": "OCRBench",
+      "source_prompt": "what is the number in the image?",
+      "source_suite": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/debug/vl.yaml",
+      "source_suite_sha256": "a627f4267824a66529167c76c56b9d810f266daa2d5facf5d9f4dbbbc02491d1"
+    },
+    {
+      "accepted_answers": [
+        "29"
+      ],
+      "case_id": "vl_chart_test_1311",
+      "image": "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_1311.png",
+      "image_sha256": "802f1db82f5762b36c8896d89b41e6c8b6af8fd6315db11c7b482d89087f5d3b",
+      "prompt": "What percentage of parents base the amount of pocket money on their child's age?\nReply with only the answer, with no explanation.",
+      "scoring": "normalized_exact_accepted_alternative",
+      "source_dataset": "ChartQA",
+      "source_prompt": "What percentage of parents base the amount of pocket money on their child's age?",
+      "source_suite": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/debug/vl.yaml",
+      "source_suite_sha256": "a627f4267824a66529167c76c56b9d810f266daa2d5facf5d9f4dbbbc02491d1"
+    },
+    {
+      "accepted_answers": [
+        "5230"
+      ],
+      "case_id": "vl_chart_test_1315",
+      "image": "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_1315.png",
+      "image_sha256": "36b631d944f24470eb91b53e5ce839cb15c4969dbdb7250cd4de2b012581db3b",
+      "prompt": "How many metric tons of CO2 were emitted from coal combustion in 1971?\nReply with only the answer, with no explanation.",
+      "scoring": "normalized_exact_accepted_alternative",
+      "source_dataset": "ChartQA",
+      "source_prompt": "How many metric tons of CO2 were emitted from coal combustion in 1971?",
+      "source_suite": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/debug/vl.yaml",
+      "source_suite_sha256": "a627f4267824a66529167c76c56b9d810f266daa2d5facf5d9f4dbbbc02491d1"
+    },
+    {
+      "accepted_answers": [
+        "Netherlands"
+      ],
+      "case_id": "vl_chart_test_1441",
+      "image": "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_1441.png",
+      "image_sha256": "90218c064ef1a3e8ea82546ce99df54c216261aa9f53bd3de10e0c95f3e02235",
+      "prompt": "What was the main source of petroleum products for the UK in 2019?\nReply with only the answer, with no explanation.",
+      "scoring": "normalized_exact_accepted_alternative",
+      "source_dataset": "ChartQA",
+      "source_prompt": "What was the main source of petroleum products for the UK in 2019?",
+      "source_suite": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/debug/vl.yaml",
+      "source_suite_sha256": "a627f4267824a66529167c76c56b9d810f266daa2d5facf5d9f4dbbbc02491d1"
+    },
+    {
+      "accepted_answers": [
+        "517"
+      ],
+      "case_id": "vl_chart_test_2114",
+      "image": "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_2114.png",
+      "image_sha256": "596b28d5700428b762d393f45ac1a3133b64c593d829e199d59ff75759905e1e",
+      "prompt": "How many new scooters were registered in April 2020?\nReply with only the answer, with no explanation.",
+      "scoring": "normalized_exact_accepted_alternative",
+      "source_dataset": "ChartQA",
+      "source_prompt": "How many new scooters were registered in April 2020?",
+      "source_suite": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/debug/vl.yaml",
+      "source_suite_sha256": "a627f4267824a66529167c76c56b9d810f266daa2d5facf5d9f4dbbbc02491d1"
+    }
+  ],
+  "limitations": [
+    "No source-backed spatial-reasoning fixture is included in the local corpus.",
+    "This is a narrow local OCR/chart screen, not a broad role-quality certification.",
+    "Both arms must use the exact manifest prompt, image bytes, seed, temperature, and max_tokens."
+  ],
+  "protocol_status": "observation_only_unratified",
+  "role": "worker_vision",
+  "run_contract": {
+    "max_tokens": 32,
+    "required_record_fields": [
+      "case_id",
+      "raw_content",
+      "model_sha256",
+      "mmproj_sha256",
+      "binary_sha256",
+      "endpoint_or_sidecar",
+      "started_at",
+      "finished_at",
+      "request_parameters"
+    ],
+    "response_format": "plain short answer",
+    "seed": 35,
+    "temperature": 0
+  },
+  "schema": "epyc.minicpm.phase1.m1-observation.v1"
+}

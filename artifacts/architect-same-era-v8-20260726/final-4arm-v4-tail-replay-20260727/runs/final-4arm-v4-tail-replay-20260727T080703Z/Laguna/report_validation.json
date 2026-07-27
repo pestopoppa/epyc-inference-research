@@ -1,0 +1,17 @@
+{
+  "arm": "Laguna",
+  "denominator": 40,
+  "empty_patch_failures": 11,
+  "harness_errors": 0,
+  "percent_resolved": 42.5,
+  "quality_provenance": {
+    "current_era_quality_decision_input": true,
+    "quality_transfer_to_v8_eligible": true,
+    "same_era_generation": true,
+    "speed_or_throughput_transfer_claim": false,
+    "transfer_basis": "v8 same-era terminal Laguna v4 capture"
+  },
+  "report": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/Laguna/Laguna_S_2_1_UD_IQ2_M_v8.final-4arm-v4-tail-replay-20260727T080703Z-laguna.json",
+  "report_sha256": "a13192d3566191d25cbd78cec6c0c611ed1c61cd914d295ee5862b15cf876e20",
+  "resolved": 17
+}

@@ -1750,7 +1750,7 @@ questions:
   expected: '256'
   scoring_method: exact_match
   scoring_config:
-    extract_pattern: \d+
+    extract_pattern: '(\d+)'
   source_suite: long_context
   source_question_id: needle_039
   real_task_id: chat-50b23b5f

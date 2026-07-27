@@ -1,0 +1,86 @@
+{
+  "authority": {
+    "final_table": {
+      "path": "../runs/final-4arm-v4-tail-replay-20260727T080703Z/final_4arm_table.json",
+      "sha256": "f440680d7a6ae2169b35202627de7889441c530b4976f23fd4140e84be8f2e50",
+      "status": "FINAL_FOR_THIS_ERA_PER_OPERATOR_DIRECTIVE"
+    },
+    "package_finalization": {
+      "path": "../runs/final-4arm-v4-tail-replay-20260727T080703Z/finalization.sha256",
+      "verified_entries": 678
+    }
+  },
+  "created_at_utc": "2026-07-27T13:52:00Z",
+  "disposition_rule": "The final pinned-v4 converter and official FAIL_TO_PASS reports are authoritative. No matching broadening, model-output rewriting, or test-verdict relaxation is permitted. Earlier arm reports are superseded comparison inputs only.",
+  "flips": [
+    {
+      "arm": "Laguna",
+      "final_nonrecovery_ledger": {
+        "path": "../runs/final-4arm-v4-tail-replay-20260727T080703Z/Laguna/nonrecovery_ledger.sealed.json",
+        "sha256": "46f4a1a878ffc634f18f1a04fb30d27d7833434c28649f44e497a39b50b9a667"
+      },
+      "final_report": {
+        "path": "../runs/final-4arm-v4-tail-replay-20260727T080703Z/Laguna/Laguna_S_2_1_UD_IQ2_M_v8.final-4arm-v4-tail-replay-20260727T080703Z-laguna.json",
+        "resolved": 17,
+        "sha256": "a13192d3566191d25cbd78cec6c0c611ed1c61cd914d295ee5862b15cf876e20"
+      },
+      "gained_resolved_instances": [
+        "django__django-11095",
+        "django__django-11206",
+        "sympy__sympy-12481"
+      ],
+      "lost_resolved_instances": [
+        {
+          "final_disposition": "model_truncation_empty_patch:no_parseable_search_replace_block",
+          "instance_id": "django__django-11299"
+        },
+        {
+          "final_disposition": "model_truncation_empty_patch:no_parseable_search_replace_block",
+          "instance_id": "django__django-11477"
+        },
+        {
+          "final_disposition": "converted_empty_patch:all_parseable_blocks_skipped; path normalization rejected a generic placeholder",
+          "instance_id": "scikit-learn__scikit-learn-11310"
+        },
+        {
+          "final_disposition": "nonempty pinned-v4 patch failed official FAIL_TO_PASS; later model alternatives were not recovered after the first exact application",
+          "instance_id": "sympy__sympy-11618"
+        }
+      ],
+      "net_resolved_delta": -1,
+      "superseded_report": {
+        "path": "../../../../Laguna_S_2_1_UD_IQ2_M_v8_base.laguna-swe-oracle-v8-20260726.json",
+        "resolved": 18,
+        "sha256": "64bf40808b9f374f4aa6c75a7f8f830223dfe1d3390c38fa5ec034ac9be65f90"
+      }
+    },
+    {
+      "arm": "A4",
+      "final_nonrecovery_ledger": {
+        "path": "../runs/final-4arm-v4-tail-replay-20260727T080703Z/A4/nonrecovery_ledger.sealed.json",
+        "sha256": "26fd15685a121267cf30e8b50c4cf14a944e38cad12ecd498ce1b17322e4887c"
+      },
+      "final_report": {
+        "path": "../runs/final-4arm-v4-tail-replay-20260727T080703Z/A4/A4_35b_a3b.final-4arm-v4-tail-replay-20260727T080703Z-a4.json",
+        "resolved": 13,
+        "sha256": "f0b830428ac462331b783701e086d3b92c13298ab5a29dfbdc6c85a0bd775e98"
+      },
+      "gained_resolved_instances": [],
+      "lost_resolved_instances": [
+        {
+          "final_disposition": "model_truncation_empty_patch:no_parseable_search_replace_block",
+          "instance_id": "matplotlib__matplotlib-14623"
+        }
+      ],
+      "net_resolved_delta": -1,
+      "superseded_report": {
+        "path": "../../../../A4_35b_a3b.swe-eval-A4.json",
+        "resolved": 14,
+        "sha256": "6e027a69b67574356d96f534e941da255b7ca9908ffe9136ea98e27c8ee7f650"
+      }
+    }
+  ],
+  "schema_version": "epyc.final-4arm-v4-score-flip-disposition.v1",
+  "scope": "Metadata-only publication record. It does not modify the sealed final table, converter outputs, predictions, official reports, or test verdicts.",
+  "status": "FINAL_METADATA_ONLY"
+}

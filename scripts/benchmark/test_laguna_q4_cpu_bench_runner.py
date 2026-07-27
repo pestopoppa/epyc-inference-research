@@ -40,17 +40,16 @@ sys.path.insert(0, str(Path(__file__).parent))
 import laguna_q4_cpu_bench_runner as runner
 
 
-def released_state() -> dict[str, object]:
-    return {
-        "active_instrument_eras": {"eval_quality": "E8"},
-        "baseline_state": {"eval_quality_era": "E8"},
-        "e8_quality_rebaseline": {"status": "closed"},
-        "frontier_rerun_required": {"required": False},
-    }
-
-
 def production_runtime_fixture() -> tuple[dict[str, object], list[dict[str, object]]]:
-    facts: dict[str, object] = {"generated_at": "x", "state": {}}
+    facts: dict[str, object] = {
+        "schema": "epyc.orchestrator.runtime_facts",
+        "generated_at": "x",
+        "runtime_stack": {
+            "stack_numa_mode": "both",
+            "selected_ports": list(runner.EXPECTED_PRODUCTION_PORTS),
+        },
+        "state": {},
+    }
     live: list[dict[str, object]] = []
     state = facts["state"]
     assert isinstance(state, dict)
@@ -104,8 +103,8 @@ def official_report() -> dict[str, object]:
 
 def test_fixed_protocol_context_kv_environment_and_official_harness() -> None:
     swe, lcb = runner.SUITES
-    assert (swe["context"], swe["port"], swe["max_tokens"]) == (49152, 18092, 3072)
-    assert (lcb["context"], lcb["port"], lcb["max_tokens"]) == (8192, 18093, 4096)
+    assert (swe["context"], swe["port"], swe["max_tokens"]) == (49152, 18094, 3072)
+    assert (lcb["context"], lcb["port"], lcb["max_tokens"]) == (8192, 18095, 4096)
     for suite in runner.SUITES:
         argv = runner.server_argv(suite)
         assert argv[:6] == [
@@ -134,6 +133,42 @@ def test_fixed_protocol_context_kv_environment_and_official_harness() -> None:
     assert official[official.index("--instance_ids") + 1 : official.index("--max_workers")] == list(
         runner.SWE_IDS
     )
+    assert runner.numa_prewarm_argv()[:6] == [
+        str(runner.TASKSET), "-c", "0-95", str(runner.NUMACTL), "--interleave=all", "dd"
+    ]
+    assert runner.BENCH_CPUSET == frozenset(range(96))
+
+
+def test_numa_prewarm_records_interleaved_full_model_read(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: list[tuple[list[str], dict[str, object]]] = []
+
+    def fake_run(argv: list[str], **kwargs: object) -> SimpleNamespace:
+        calls.append((argv, kwargs))
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+    evidence = runner.numa_prewarm(tmp_path, runner.SUITES[0])
+    assert calls == [(runner.numa_prewarm_argv(), {
+        "env": runner.clean_env(), "text": True, "capture_output": True, "check": False,
+    })]
+    assert evidence["placement"] == {"taskset": "0-95", "numa_policy": "interleave=all"}
+    assert json.loads((tmp_path / "swe_oracle.numa_prewarm.json").read_text())["returncode"] == 0
+
+
+def test_numa_prewarm_fails_closed_and_persists_stderr(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        runner.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=9, stdout="", stderr="dd failed"),
+    )
+    with pytest.raises(RuntimeError, match="NUMA prewarm failed"):
+        runner.numa_prewarm(tmp_path, runner.SUITES[1])
+    evidence = json.loads((tmp_path / "lcb_hard.numa_prewarm.json").read_text())
+    assert evidence["returncode"] == 9 and evidence["stderr"] == "dd failed"
 
 
 def test_question_contracts_pin_hash_and_exact_ordered_ids() -> None:
@@ -167,6 +202,58 @@ def test_runtime_facts_authorize_exact_server_pid_port_and_resolved_model() -> N
         runner.runtime_guard(live_rows=live, facts=facts)
 
 
+def test_runtime_guard_allows_only_accelerated_external_sidecars() -> None:
+    facts, live = production_runtime_fixture()
+    hip = str((runner.LLAMA_ROOT / "build-hip/bin/llama-server").resolve())
+    live.append({
+        "pid": 999, "port": 18092, "model": str(runner.MODEL), "exe": hip,
+        "listener_owned": True, "argv_sha256": "a" * 64, "cpus_allowed_list": "184-191",
+        "thread_cpu_allowed_lists": [{"tid": 999, "cpus_allowed_list": "184-191"}],
+    })
+    evidence = runner.runtime_guard(live_rows=live, facts=facts)
+    assert evidence["external_accelerated_rows"][0]["cpus_allowed_list"] == "184-191"
+    assert evidence["external_accelerated_rows"][0]["argv_sha256"] == "a" * 64
+    live[-1]["listener_owned"] = False
+    with pytest.raises(RuntimeError, match="unknown or misbound"):
+        runner.runtime_guard(live_rows=live, facts=facts)
+
+
+def test_runtime_guard_rejects_accelerated_sidecar_on_bench_cores() -> None:
+    facts, live = production_runtime_fixture()
+    live.append({
+        "pid": 999, "port": 18092, "model": str(runner.MODEL),
+        "exe": str((runner.LLAMA_ROOT / "build-hip/bin/llama-server").resolve()),
+        "listener_owned": True, "argv_sha256": "b" * 64, "cpus_allowed_list": "64-127",
+        "thread_cpu_allowed_lists": [{"tid": 999, "cpus_allowed_list": "64-127"}],
+    })
+    with pytest.raises(RuntimeError, match="overlaps CPU bench cores"):
+        runner.runtime_guard(live_rows=live, facts=facts)
+
+
+def test_runtime_guard_rejects_hidden_worker_overlap_under_disjoint_leader() -> None:
+    facts, live = production_runtime_fixture()
+    live.append({
+        "pid": 999, "port": 18092, "model": str(runner.MODEL),
+        "exe": str((runner.LLAMA_ROOT / "build-hip/bin/llama-server").resolve()),
+        "listener_owned": True, "argv_sha256": "c" * 64, "cpus_allowed_list": "184-191",
+        "thread_cpu_allowed_lists": [
+            {"tid": 999, "cpus_allowed_list": "184-191"},
+            {"tid": 1000, "cpus_allowed_list": "64-95"},
+        ],
+    })
+    with pytest.raises(RuntimeError, match="overlaps CPU bench cores"):
+        runner.runtime_guard(live_rows=live, facts=facts)
+
+
+def test_runtime_guard_requires_the_both_mode_24_port_contract() -> None:
+    facts, live = production_runtime_fixture()
+    runtime_stack = facts["runtime_stack"]
+    assert isinstance(runtime_stack, dict)
+    runtime_stack["stack_numa_mode"] = "quarter"
+    with pytest.raises(RuntimeError, match="24-port both-mode"):
+        runner.runtime_guard(live_rows=live, facts=facts)
+
+
 def test_live_process_capture_requires_actual_listener_owner(
     tmp_path: Path,
 ) -> None:
@@ -178,6 +265,7 @@ def test_live_process_capture_requires_actual_listener_owner(
     (process / "cmdline").write_bytes(
         b"llama-server\0--port\0" + b"18092\0-m\0/models/laguna.gguf\0"
     )
+    (process / "status").write_text("Name:\tllama-server\nCpus_allowed_list:\t184-191\n")
     (process / "exe").symlink_to(runner.BINARY)
     (process / "fd/9").symlink_to("socket:[77]")
     header = "sl local_address rem_address st tx_queue rx_queue tr tm retr uid timeout inode\n"
@@ -192,6 +280,12 @@ def test_live_process_capture_requires_actual_listener_owner(
             "model": "/models/laguna.gguf",
             "exe": str(runner.BINARY.resolve()),
             "listener_owned": True,
+            "argv_sha256": runner.hashlib.sha256(
+                b"\0".join(
+                    [b"llama-server", b"--port", b"18092", b"-m", b"/models/laguna.gguf"]
+                )
+            ).hexdigest(),
+            "cpus_allowed_list": "184-191",
         }
     ]
     (process / "fd/9").unlink()
@@ -247,31 +341,19 @@ def test_owned_executable_is_bound_to_preflight_content(tmp_path: Path) -> None:
         runner.target_executable_identity(123, static, tmp_path / "proc")
 
 
-def test_e8_release_requires_every_boundary_condition() -> None:
-    assert runner.e8_release(released_state(), 16)["released"] is True
-    mutations = (
-        lambda state: state["frontier_rerun_required"].update(required=True),
-        lambda state: state["e8_quality_rebaseline"].update(status="hold_open"),
-        lambda state: state["baseline_state"].update(eval_quality_era="E7"),
-        lambda state: state["active_instrument_eras"].update(eval_quality="E7"),
-    )
-    for mutate in mutations:
-        state = released_state()
-        mutate(state)
-        assert runner.e8_release(state, 16)["released"] is False
-    assert runner.e8_release(released_state(), 15)["released"] is False
-
-
 def test_execution_gates_include_runtime_autopilot_memory_and_ports(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(runner, "read_json", lambda _: released_state())
-    monkeypatch.setattr(runner, "computed_numeric_trials", lambda: 16)
     monkeypatch.setattr(runner, "mem_available_kib", lambda: runner.MEM_AVAILABLE_MIN_KIB)
     monkeypatch.setattr(runner, "port_free", lambda _: True)
     monkeypatch.setattr(runner, "runtime_guard", lambda: {"exact": True})
     monkeypatch.setattr(runner, "live_autopilot", lambda: [])
-    assert runner.execution_gates()["passed"] is True
+    gates = runner.execution_gates()
+    assert gates["passed"] is True
+    assert gates["campaign_boundary"] == {
+        "architect_bench_decoupled_from_e8_quality": True,
+        "operator_directive_date": "2026-07-27",
+    }
     monkeypatch.setattr(runner, "live_autopilot", lambda: [{"pid": 9}])
     assert "AutoPilot supervisor or child is live" in runner.execution_gates()["failures"]
     monkeypatch.setattr(runner, "live_autopilot", lambda: [])
@@ -284,7 +366,7 @@ def test_prepare_is_inference_free_refuses_overwrite_and_requires_fresh_execute_
 ) -> None:
     monkeypatch.setattr(runner, "validate_static", lambda _: {"identity": "ok"})
     monkeypatch.setattr(
-        runner, "execution_gates", lambda: {"passed": False, "failures": ["E8 hold"]}
+        runner, "execution_gates", lambda: {"passed": False, "failures": ["runtime busy"]}
     )
     monkeypatch.setattr(
         runner,
@@ -378,6 +460,7 @@ def test_raw_evaluator_timeout_still_cleans_owned_process(
 
     monkeypatch.setattr(runner, "execution_gates", lambda: {"passed": True, "failures": []})
     monkeypatch.setattr(runner, "verify_model_identity", lambda: {"model": "pinned"})
+    monkeypatch.setattr(runner, "numa_prewarm", lambda *_args: {"prewarm": "ok"})
     monkeypatch.setattr(runner.subprocess, "Popen", lambda *args, **kwargs: Process())
     monkeypatch.setattr(runner, "wait_ready", lambda *args, **kwargs: {"mapped": True})
     monkeypatch.setattr(

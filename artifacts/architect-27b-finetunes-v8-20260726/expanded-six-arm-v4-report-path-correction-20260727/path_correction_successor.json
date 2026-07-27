@@ -1,0 +1,129 @@
+{
+  "correction": "A3-tc and A3-ff report paths changed from stale staging absolutes to package-relative paths; all rows, scores, report hashes, and non-path metadata are unchanged.",
+  "original_package": {
+    "finalization_sha256": "c7112a218ec3cddb8a6e56a0c5b3edcc4ef715a7becd67214f483edea75d5364",
+    "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/expanded-six-arm-v4-tail-replay-20260727",
+    "table_sha256": "a5081b84645b089e0989d81bb148682f7c54d2c0ff0da03fcc7ba7e816a4724b"
+  },
+  "rows": [
+    {
+      "arm": "A3",
+      "denominator": 40,
+      "empty_patch_failures": 5,
+      "harness_errors": 0,
+      "percent_resolved": 57.5,
+      "quality_provenance": {
+        "current_era_quality_decision_input": true,
+        "quality_transfer_to_v8_eligible": true,
+        "same_era_generation": false,
+        "speed_or_throughput_transfer_claim": false,
+        "transfer_basis": "operator-certified v7-to-v8 kernel Delta 0.0pp exact quality parity"
+      },
+      "report": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/A3/A3_27b_dense.final-4arm-v4-tail-replay-20260727T080703Z-a3.json",
+      "report_sha256": "1348b3615facac100c072b93f643bf927e8d7f3c9695280442e2c18909190117",
+      "resolved": 23
+    },
+    {
+      "arm": "Laguna",
+      "denominator": 40,
+      "empty_patch_failures": 11,
+      "harness_errors": 0,
+      "percent_resolved": 42.5,
+      "quality_provenance": {
+        "current_era_quality_decision_input": true,
+        "quality_transfer_to_v8_eligible": true,
+        "same_era_generation": true,
+        "speed_or_throughput_transfer_claim": false,
+        "transfer_basis": "v8 same-era terminal Laguna v4 capture"
+      },
+      "report": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/Laguna/Laguna_S_2_1_UD_IQ2_M_v8.final-4arm-v4-tail-replay-20260727T080703Z-laguna.json",
+      "report_sha256": "a13192d3566191d25cbd78cec6c0c611ed1c61cd914d295ee5862b15cf876e20",
+      "resolved": 17
+    },
+    {
+      "arm": "A1",
+      "denominator": 40,
+      "empty_patch_failures": 6,
+      "harness_errors": 0,
+      "percent_resolved": 37.5,
+      "quality_provenance": {
+        "current_era_quality_decision_input": true,
+        "quality_transfer_to_v8_eligible": true,
+        "same_era_generation": false,
+        "speed_or_throughput_transfer_claim": false,
+        "transfer_basis": "operator-certified v7-to-v8 kernel Delta 0.0pp exact quality parity"
+      },
+      "report": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/A1/A1_122b_iq2.final-4arm-v4-tail-replay-20260727T080703Z-a1.json",
+      "report_sha256": "57e92c03e9b44694fa515b5c77b4b6d0e04e30181ebf204807e2bf9da4f9f577",
+      "resolved": 15
+    },
+    {
+      "arm": "A4",
+      "denominator": 40,
+      "empty_patch_failures": 14,
+      "harness_errors": 0,
+      "percent_resolved": 32.5,
+      "quality_provenance": {
+        "current_era_quality_decision_input": true,
+        "quality_transfer_to_v8_eligible": true,
+        "same_era_generation": false,
+        "speed_or_throughput_transfer_claim": false,
+        "transfer_basis": "operator-certified v7-to-v8 kernel Delta 0.0pp exact quality parity"
+      },
+      "report": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/A4/A4_35b_a3b.final-4arm-v4-tail-replay-20260727T080703Z-a4.json",
+      "report_sha256": "f0b830428ac462331b783701e086d3b92c13298ab5a29dfbdc6c85a0bd775e98",
+      "resolved": 13
+    },
+    {
+      "arm": "A3-tc",
+      "denominator": 40,
+      "empty_patch_failures": 16,
+      "harness_errors": 0,
+      "percent_resolved": 45.0,
+      "quality_provenance": {
+        "current_era_quality_decision_input": true,
+        "quality_transfer_to_v8_eligible": true,
+        "same_era_generation": true,
+        "speed_or_throughput_transfer_claim": false,
+        "transfer_basis": "complete v8 banked capture replayed through frozen final-table v4 converter"
+      },
+      "report": "A3-tc/A3-tc_ThinkingCap_Q8.expanded-six-arm-v4-tail-replay-20260727-a3-tc.json",
+      "report_sha256": "fa75a0d9b40ebfd0e8ecf670ab5a6faecee4431821a31990841ff7c9640af39a",
+      "resolved": 18
+    },
+    {
+      "arm": "A3-ff",
+      "denominator": 40,
+      "empty_patch_failures": 5,
+      "harness_errors": 0,
+      "percent_resolved": 47.5,
+      "quality_provenance": {
+        "current_era_quality_decision_input": true,
+        "quality_transfer_to_v8_eligible": true,
+        "same_era_generation": true,
+        "speed_or_throughput_transfer_claim": false,
+        "transfer_basis": "complete v8 banked capture replayed through frozen final-table v4 converter"
+      },
+      "report": "A3-ff/A3-ff_Fable_Fusion_Q8_non_MTP.expanded-six-arm-v4-tail-replay-20260727-a3-ff.json",
+      "report_sha256": "67f7d4d9cb76241822e03c1a618c59108f2114c65f92665de2bccde6f58c3547",
+      "resolved": 19
+    }
+  ],
+  "schema_version": "epyc.expanded-six-arm-v4-report-path-correction.v1",
+  "source_table_metadata": {
+    "frozen_four_arm_authority": {
+      "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/final_4arm_table.json",
+      "sha256": "f440680d7a6ae2169b35202627de7889441c530b4976f23fd4140e84be8f2e50",
+      "status": "FINAL_FOR_THIS_ERA_PER_OPERATOR_DIRECTIVE"
+    },
+    "license_gate_status": {
+      "A3-ff": "PENDING_FABLE_ABLITERATION_SCREEN",
+      "A3-tc": "PENDING_NO_DECLARED_LICENSE"
+    },
+    "mtp_disposition": "A3-ff embedded-MTP remains a separate probe and is absent from this table.",
+    "schema_version": "epyc.expanded-six-arm-v4-authority-table.v1",
+    "scope": "Six-row deterministic comparison. Frozen ranking is preserved; appended rows are not a deployment or role decision.",
+    "status": "APPEND_ONLY_SUCCESSOR_NO_ROLE_DECISION"
+  },
+  "status": "FINALIZED_METADATA_ONLY_NO_EVAL_NO_INFERENCE"
+}

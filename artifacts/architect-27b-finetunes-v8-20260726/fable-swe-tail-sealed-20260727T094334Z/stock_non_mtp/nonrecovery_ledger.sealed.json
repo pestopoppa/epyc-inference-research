@@ -1,0 +1,84 @@
+{
+  "aggregate": {
+    "empty_patch_row_count": 5,
+    "skipped_block_count": 3
+  },
+  "arm": "stock_non_mtp",
+  "empty_patch_rows": [
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_contract_failure",
+      "disposition": "preserve_pinned_current_converter_outcome_no_match_broadening",
+      "empty_patch_reason": "all_parseable_blocks_skipped",
+      "finish_reason": "stop",
+      "instance_id": "django__django-11087"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_length_contract_failure",
+      "disposition": "preserve_pinned_current_converter_outcome_no_match_broadening",
+      "empty_patch_reason": "length_forced_empty",
+      "finish_reason": "length",
+      "instance_id": "django__django-11138"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_length_contract_failure",
+      "disposition": "preserve_pinned_current_converter_outcome_no_match_broadening",
+      "empty_patch_reason": "length_forced_empty",
+      "finish_reason": "length",
+      "instance_id": "django__django-11211"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_length_contract_failure",
+      "disposition": "preserve_pinned_current_converter_outcome_no_match_broadening",
+      "empty_patch_reason": "length_forced_empty",
+      "finish_reason": "length",
+      "instance_id": "matplotlib__matplotlib-20676"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "classification": "model_contract_failure",
+      "disposition": "preserve_pinned_current_converter_outcome_no_match_broadening",
+      "empty_patch_reason": "all_parseable_blocks_skipped",
+      "finish_reason": "stop",
+      "instance_id": "sphinx-doc__sphinx-10435"
+    }
+  ],
+  "schema_version": "epyc.fable-v4-swe-tail-nonrecovery-ledger.v1",
+  "scope": "2026-07-26 Fable campaign only; no generic converter exception",
+  "skipped_blocks": [
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 0,
+      "classification": "model_contract_failure",
+      "disposition": "preserve_pinned_current_converter_outcome_no_match_broadening",
+      "instance_id": "django__django-11087",
+      "outcome": "skipped_missing_path",
+      "replace_sha256": "3a38e998280c4e5291e109533736a90db683a41eb1309293af1dc2c5d671e600",
+      "search_sha256": "0d10791815d87cdf5845f8c39d7b8663879d56c92c21e66dced6ee668a3d3c6e"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 1,
+      "classification": "model_contract_failure",
+      "disposition": "preserve_pinned_current_converter_outcome_no_match_broadening",
+      "instance_id": "django__django-11477",
+      "outcome": "skipped_search_not_found",
+      "replace_sha256": "075be9f6fac524f11a518eae8b9b4d56489772103ec9dc4a1b95151797cc22e3",
+      "search_sha256": "58df19ad827a3f5b7938922a7a22fbc94d370f928898090c575c4514303acc36"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 0,
+      "classification": "model_contract_failure",
+      "disposition": "preserve_pinned_current_converter_outcome_no_match_broadening",
+      "instance_id": "sphinx-doc__sphinx-10435",
+      "outcome": "skipped_missing_path",
+      "replace_sha256": "e797ba788faa5ec50ef23314312018298784cf064031d66e6d6d7f895b763ba4",
+      "search_sha256": "37f6c90703df17f3f09d02dec33fce4c9c85b354149ad96c9ba4f7acafecddf7"
+    }
+  ],
+  "status": "EXHAUSTIVE_MODEL_CONTRACT_FAILURES"
+}
