@@ -1,0 +1,207 @@
+{
+  "aggregate": {
+    "diagnostic_skipped_block_count": 8,
+    "empty_patch_row_count": 11,
+    "ledger_skipped_block_count": 8
+  },
+  "arm": "Laguna_Q4",
+  "empty_patch_rows": [
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "model_truncation_empty_patch",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "no_parseable_search_replace_block",
+      "finish_reason": "length",
+      "instance_id": "django__django-11138"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "model_truncation_empty_patch",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "no_parseable_search_replace_block",
+      "finish_reason": "length",
+      "instance_id": "django__django-11163"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "model_truncation_empty_patch",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "no_parseable_search_replace_block",
+      "finish_reason": "length",
+      "instance_id": "django__django-11211"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "model_truncation_empty_patch",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "no_parseable_search_replace_block",
+      "finish_reason": "length",
+      "instance_id": "django__django-11477"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "model_truncation_empty_patch",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "no_parseable_search_replace_block",
+      "finish_reason": "length",
+      "instance_id": "matplotlib__matplotlib-14623"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "model_truncation_empty_patch",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "no_parseable_search_replace_block",
+      "finish_reason": "length",
+      "instance_id": "matplotlib__matplotlib-20488"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "model_truncation_empty_patch",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "no_parseable_search_replace_block",
+      "finish_reason": "length",
+      "instance_id": "matplotlib__matplotlib-20676"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "converted",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "applied_blocks_produced_no_diff",
+      "finish_reason": "stop",
+      "instance_id": "scikit-learn__scikit-learn-10844"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "model_truncation_empty_patch",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "no_parseable_search_replace_block",
+      "finish_reason": "length",
+      "instance_id": "scikit-learn__scikit-learn-11310"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "model_truncation_empty_patch",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "no_parseable_search_replace_block",
+      "finish_reason": "length",
+      "instance_id": "sphinx-doc__sphinx-10435"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "conversion_disposition": "model_truncation_empty_patch",
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "empty_patch_reason": "no_parseable_search_replace_block",
+      "finish_reason": "length",
+      "instance_id": "sympy__sympy-12481"
+    }
+  ],
+  "inputs": {
+    "converter_source": {
+      "sha256": "6bd2302dda3e5139cc6faabcc5639bdcf85b27895f93a9181cbb53dd65749507",
+      "source": "/mnt/raid0/llm/epyc-inference-research/artifacts/laguna-q4-cpu-v8-20260726/laguna-q4-swe-v4-tail-replay-20260727T165223Z/convert_sr_to_patch.py"
+    },
+    "dataset": {
+      "sha256": "b087b5dad72b3e765a6cf93a9e7d516d8796698a0fd358abb73c6627df19f66e",
+      "source": "/mnt/raid0/llm/epyc-inference-research/artifacts/laguna-q4-cpu-v8-20260726/laguna-q4-swe-v4-tail-replay-20260727T165223Z/swebench_verified.json"
+    },
+    "diagnostics": {
+      "sha256": "170e937973ae97d576b6d56d13fc52bffc8ad0af1f7c0731b5787fca7b348718"
+    },
+    "harness_module": {
+      "sha256": "6959f0b4e4eaf979771f529b88e3e9df1daa7fe86bc4291feec2e7d320bf7f2e",
+      "source": "/mnt/raid0/llm/epyc-inference-research/.venv-swebench/lib/python3.12/site-packages/swebench/harness/run_evaluation.py"
+    },
+    "predictions": {
+      "sha256": "2f00df14ba99d4aeb8112692f8c3c68c965ebbea3c93fc458da81684208db30d"
+    },
+    "raw_capture": {
+      "sha256": "f1cf70130573d5936571d333291dade44f213990bfe44f388c825aa9932a31dc",
+      "source": "/mnt/raid0/llm/epyc-inference-research/artifacts/laguna-q4-cpu-v8-20260726/laguna-q4-swe-v4-tail-replay-20260727T165223Z/swe_oracle.per_question.jsonl"
+    }
+  },
+  "legacy_capture_exception": false,
+  "operator_directive": "2026-07-27 bench closure: deterministic-tail rescoring; no matching broadening",
+  "quality_provenance": {
+    "current_era_quality_decision_input": true,
+    "quality_transfer_to_v8_eligible": true,
+    "same_era_generation": true,
+    "speed_or_throughput_transfer_claim": false,
+    "transfer_basis": "v8 same-era terminal Laguna v4 capture"
+  },
+  "schema_version": "epyc.final-4arm-v4-tail-replay-nonrecovery-ledger.v1",
+  "skipped_blocks": [
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 1,
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "instance_id": "django__django-11206",
+      "outcome": "skipped_search_not_found",
+      "replace_sha256": "76f37e82e53512acf466056306f96772aecb5ccaa4d54cab884705f304126568",
+      "search_sha256": "0ede204a244bb1954e24304cd81aca7858d279462b57bb0ebd34203f44e5cc29"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 2,
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "instance_id": "django__django-11206",
+      "outcome": "skipped_search_not_found",
+      "replace_sha256": "1fa76b229d7c548ccad963c8abfd356fae6696bafe9f47012b15a4df7ac226e2",
+      "search_sha256": "7088f6f07f7ad6b253249424a4efb1f175e8183568f892a7043e3522b078b656"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 3,
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "instance_id": "django__django-11333",
+      "outcome": "skipped_search_not_found",
+      "replace_sha256": "5625352af5602d02f98c027dd9657e8bd1101be944a2922b34c410dd71891f5a",
+      "search_sha256": "996c607f7b0dcaa634b6d1cff2a61272617020c24fcb39b1de690ba8aa7b8478"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 4,
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "instance_id": "django__django-11333",
+      "outcome": "skipped_search_not_found",
+      "replace_sha256": "15f15c3a945500339c5ee163a438d618ca38080b7ed674a03d1ccb352f6d2841",
+      "search_sha256": "cd7a082936b86e0abd8c0225a41e4d1cc751a432c9a34f8bcd6a51d0155c45a9"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 5,
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "instance_id": "django__django-11333",
+      "outcome": "skipped_search_not_found",
+      "replace_sha256": "099a382387aa5480e84da823cd6fb793476987459ac5b1ab14264d92a1890638",
+      "search_sha256": "4b0ce927d7603690738d3e362378ec3f6699f01e0fe4ff6db025909a59208331"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 1,
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "instance_id": "sphinx-doc__sphinx-10323",
+      "outcome": "skipped_search_not_found",
+      "replace_sha256": "059e7c60c8d7ebf17751524693a595f77c3d17bb036d08bcb1b6fcece8d3362b",
+      "search_sha256": "92542e8019bf2fa8efc71e62df316a571531aea497e20444bc8147a5801ab680"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 1,
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "instance_id": "sympy__sympy-11618",
+      "outcome": "skipped_search_not_found",
+      "replace_sha256": "cdeb4b93f9371d4d59cf4082cc131d495fcc3ab7d7228a3ece2724784203836e",
+      "search_sha256": "e63ded97de3a295944344c709a3a39cbd2edfd965cbdf46e79f1b8cc7b609ac2"
+    },
+    {
+      "additional_recovery_attempted": false,
+      "block_index": 2,
+      "disposition": "preserve_pinned_v4_outcome_no_match_broadening",
+      "instance_id": "sympy__sympy-11618",
+      "outcome": "skipped_search_not_found",
+      "replace_sha256": "cdeb4b93f9371d4d59cf4082cc131d495fcc3ab7d7228a3ece2724784203836e",
+      "search_sha256": "e63ded97de3a295944344c709a3a39cbd2edfd965cbdf46e79f1b8cc7b609ac2"
+    }
+  ],
+  "status": "EXHAUSTIVE_PINNED_V4_OUTCOME"
+}

@@ -1,0 +1,69 @@
+{
+  "disposition": {
+    "additional_q4_quality_or_lcb_inference": "STOP_BY_CURRENT_SCREEN_ONLY",
+    "cpu_performance_config_discovery": "DEFER_UNLESS_A_CONCRETE_CPU_ROLE_DECISION_REQUIRES_IT",
+    "lineup_or_registry_action": "NONE",
+    "reason": "The paired n=40 screen does not resolve a quant-axis difference; it is not an equivalence or absence-of-difference proof."
+  },
+  "iq2": {
+    "empty_patches": 11,
+    "harness_errors": 0,
+    "manifest_sha256": "2f05978d5ecd312dce9928a8db6c44949e97a597cb6a1439ba8e876c3bb350d4",
+    "official_report_sha256": "a13192d3566191d25cbd78cec6c0c611ed1c61cd914d295ee5862b15cf876e20",
+    "percent": 42.5,
+    "resolved": 17,
+    "sealed_source_sha256": {
+      "converter_source": "6bd2302dda3e5139cc6faabcc5639bdcf85b27895f93a9181cbb53dd65749507",
+      "dataset": "b087b5dad72b3e765a6cf93a9e7d516d8796698a0fd358abb73c6627df19f66e",
+      "nonrecovery_ledger": "46f4a1a878ffc634f18f1a04fb30d27d7833434c28649f44e497a39b50b9a667",
+      "predictions": "db28a49583bb0c1ac41808d4dbaa33ea316e60051aee77e5b510ebd52f46bd6d",
+      "raw_capture": "a2ce92399d87c8f5f15b285ad27eca3cf0328f1b80eec1fec81933ed782cd81a"
+    }
+  },
+  "paired_read": {
+    "discordant_n": 10,
+    "exact_binomial_two_sided_p": 0.75390625,
+    "interpretation": "This n=40 screen does not resolve a quant-axis quality difference.",
+    "iq2_only": [
+      "django__django-11163",
+      "django__django-11206",
+      "matplotlib__matplotlib-20488",
+      "sympy__sympy-12481"
+    ],
+    "overlap": 13,
+    "q4_only": [
+      "django__django-11299",
+      "django__django-11333",
+      "django__django-11451",
+      "sphinx-doc__sphinx-10323",
+      "sphinx-doc__sphinx-10449",
+      "sympy__sympy-12419"
+    ]
+  },
+  "protocol": {
+    "additional_inference": false,
+    "converter": "pinned v4 exact, trailing-whitespace, then unique-indent matching",
+    "fixed_denominator": 40,
+    "generation_reused": true,
+    "scorer": "official SWE-bench FAIL_TO_PASS",
+    "suite": "swebench_oracle",
+    "test_verdict_relaxed": false
+  },
+  "q4": {
+    "empty_patches": 11,
+    "harness_errors": 0,
+    "manifest_sha256": "0a81815e2b08aa96e05fe87381257585e86f77ef089cf1a9bce923d8fdc82a2c",
+    "official_report_sha256": "0e6c0121202ec762ecce1888a799df73057b4441e94930b6d6350a97a316a13c",
+    "percent": 47.5,
+    "resolved": 19,
+    "sealed_source_sha256": {
+      "converter_source": "6bd2302dda3e5139cc6faabcc5639bdcf85b27895f93a9181cbb53dd65749507",
+      "dataset": "b087b5dad72b3e765a6cf93a9e7d516d8796698a0fd358abb73c6627df19f66e",
+      "nonrecovery_ledger": "befae2ae52b5fef3c8d7bab9a875672cd0fa2512608854dac0f8509880380e86",
+      "predictions": "2f00df14ba99d4aeb8112692f8c3c68c965ebbea3c93fc458da81684208db30d",
+      "raw_capture": "f1cf70130573d5936571d333291dade44f213990bfe44f388c825aa9932a31dc"
+    }
+  },
+  "schema": "epyc.laguna_q4_vs_iq2_paired_quality_read.v2",
+  "status": "OBSERVATION_GRADE_DETERMINISTIC_TAIL_REPLAY"
+}
