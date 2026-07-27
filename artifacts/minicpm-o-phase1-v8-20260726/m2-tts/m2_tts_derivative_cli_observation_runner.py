@@ -10,6 +10,7 @@ affinity.
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import json
 import os
@@ -74,6 +75,8 @@ ASSETS = (
 )
 
 REMOVED_ENVIRONMENT = (
+    "LD_PRELOAD",
+    "LD_AUDIT",
     "LD_LIBRARY_PATH",
     "OMNI_VOC_DEVICE",
     "MTMD_BACKEND_DEVICE",
@@ -136,9 +139,9 @@ def validate_source(root: Path) -> dict[str, Any]:
     tag = git(root, "rev-parse", f"{PINNED_TAG}^{{commit}}").stdout.strip()
     if head != PINNED_COMMIT or tag != PINNED_COMMIT:
         raise RuntimeError("derivative checkout or pinned tag does not resolve to the required commit")
-    tracked_status = git(root, "status", "--porcelain", "--untracked-files=no").stdout
-    if tracked_status:
-        raise RuntimeError("derivative checkout has tracked modifications")
+    status = git(root, "status", "--porcelain").stdout
+    if status:
+        raise RuntimeError("derivative checkout is not completely clean")
     symbolic = git(root, "symbolic-ref", "-q", "HEAD", check=False)
     if symbolic.returncode == 0:
         raise RuntimeError("derivative checkout must remain detached")
@@ -148,7 +151,7 @@ def validate_source(root: Path) -> dict[str, Any]:
         "tag": PINNED_TAG,
         "tag_commit": tag,
         "detached": True,
-        "tracked_clean": True,
+        "clean": True,
     }
 
 
@@ -177,11 +180,10 @@ def validate_runtime() -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, 
     binary = bind(BINARY["path"], BINARY["sha256"], "llama_omni_cli")
     if not os.access(BINARY["path"], os.X_OK):
         raise RuntimeError(f"pinned CLI is not executable: {BINARY['path']}")
-    clean_environment = dict(os.environ)
-    clean_environment.pop("LD_LIBRARY_PATH", None)
-    command = ["env", "-u", "LD_LIBRARY_PATH", "ldd", str(BINARY["path"].resolve())]
+    clean_environment, environment_policy = sanitized_environment()
+    command = ["ldd", str(BINARY["path"].resolve())]
     result = subprocess.run(
-        ["ldd", str(BINARY["path"].resolve())],
+        command,
         env=clean_environment,
         text=True,
         capture_output=True,
@@ -198,6 +200,7 @@ def validate_runtime() -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, 
         "argv": command,
         "exit_status": result.returncode,
         "stdout": result.stdout,
+        "environment_policy": environment_policy,
         "resolved_custom_libraries": resolutions,
     }
 
@@ -379,13 +382,165 @@ def runtime_identity() -> dict[str, Any]:
     }
 
 
-def child_runtime_identity(pid: int) -> dict[str, Any]:
+def process_group_identity(pid: int) -> dict[str, int]:
+    process = read_process_stat(Path(f"/proc/{pid}/stat"))
+    if process["pid"] != pid or process["process_group_id"] != pid or process["session_id"] != pid:
+        raise RuntimeError("CLI did not establish the expected owned process group and session")
+    return process
+
+
+def child_runtime_identity(
+    pid: int,
+    process: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    process = process if process is not None else process_group_identity(pid)
     values: dict[str, str] = {}
     for line in Path(f"/proc/{pid}/status").read_text(errors="replace").splitlines():
         if line.startswith(("Cpus_allowed_list:", "Mems_allowed_list:")):
             key, value = line.split(":", 1)
             values[key.lower()] = value.strip()
-    return {"pid": pid, **values}
+    return {
+        "pid": pid,
+        "process_group_id": process["process_group_id"],
+        "session_id": process["session_id"],
+        "start_time_ticks": process["start_time_ticks"],
+        **values,
+    }
+
+
+def enable_child_subreaper() -> None:
+    pr_set_child_subreaper = 36
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.prctl(pr_set_child_subreaper, 1, 0, 0, 0) != 0:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error))
+
+
+def read_process_stat(path: Path) -> dict[str, int]:
+    raw = path.read_text()
+    closing = raw.rfind(")")
+    if closing < 0:
+        raise RuntimeError(f"malformed process stat: {path}")
+    pid = int(raw[: raw.index(" ")])
+    fields = raw[closing + 2 :].split()
+    if len(fields) < 20:
+        raise RuntimeError(f"short process stat: {path}")
+    return {
+        "pid": pid,
+        "process_group_id": int(fields[2]),
+        "session_id": int(fields[3]),
+        "start_time_ticks": int(fields[19]),
+    }
+
+
+def list_owned_process_group(
+    process_group_id: int,
+    leader_start_time_ticks: int,
+) -> list[dict[str, int]]:
+    members: list[dict[str, int]] = []
+    for candidate in Path("/proc").iterdir():
+        if not candidate.name.isdigit():
+            continue
+        try:
+            process = read_process_stat(candidate / "stat")
+        except (FileNotFoundError, PermissionError, ProcessLookupError):
+            continue
+        if process["process_group_id"] != process_group_id:
+            continue
+        if process["session_id"] != process_group_id:
+            raise RuntimeError("process-group identifier was reused by an unrelated session")
+        if process["start_time_ticks"] < leader_start_time_ticks:
+            raise RuntimeError("process-group member predates the owned CLI session")
+        if (
+            process["pid"] == process_group_id
+            and process["start_time_ticks"] != leader_start_time_ticks
+        ):
+            raise RuntimeError("process-group leader identifier was reused")
+        members.append(process)
+    return sorted(members, key=lambda item: item["pid"])
+
+
+def signal_processes(members: list[dict[str, int]], signal_number: int) -> list[int]:
+    signalled: list[int] = []
+    if not hasattr(os, "pidfd_open") or not hasattr(signal, "pidfd_send_signal"):
+        raise RuntimeError("pidfd process cleanup is unavailable")
+    for member in members:
+        try:
+            descriptor = os.pidfd_open(member["pid"])
+        except ProcessLookupError:
+            continue
+        try:
+            try:
+                current = read_process_stat(Path(f"/proc/{member['pid']}/stat"))
+            except FileNotFoundError:
+                continue
+            if current != member:
+                raise RuntimeError(
+                    f"PID {member['pid']} changed identity before process-group cleanup"
+                )
+            signal.pidfd_send_signal(descriptor, signal_number)
+            signalled.append(member["pid"])
+        except ProcessLookupError:
+            pass
+        finally:
+            os.close(descriptor)
+    return signalled
+
+
+def reap_process_group(process_group_id: int) -> list[int]:
+    reaped: list[int] = []
+    while True:
+        try:
+            pid, _ = os.waitpid(-process_group_id, os.WNOHANG)
+        except ChildProcessError:
+            break
+        if pid == 0:
+            break
+        reaped.append(pid)
+    return reaped
+
+
+def drain_owned_process_group(
+    process_group_id: int,
+    leader_start_time_ticks: int,
+    timeout_seconds: float = 10.0,
+) -> dict[str, Any]:
+    report: dict[str, Any] = {
+        "process_group_id": process_group_id,
+        "leader_start_time_ticks": leader_start_time_ticks,
+        "survivors_detected": False,
+        "sigterm_targets": [],
+        "sigkill_targets": [],
+        "reaped_pids": [],
+        "verified_empty": False,
+    }
+    report["reaped_pids"].extend(reap_process_group(process_group_id))
+    members = list_owned_process_group(process_group_id, leader_start_time_ticks)
+    if not members:
+        report["verified_empty"] = True
+        return report
+
+    report["survivors_detected"] = True
+    report["sigterm_targets"] = signal_processes(members, signal.SIGTERM)
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        report["reaped_pids"].extend(reap_process_group(process_group_id))
+        members = list_owned_process_group(process_group_id, leader_start_time_ticks)
+        if not members:
+            report["verified_empty"] = True
+            return report
+        time.sleep(0.05)
+
+    report["sigkill_targets"] = signal_processes(members, signal.SIGKILL)
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        report["reaped_pids"].extend(reap_process_group(process_group_id))
+        members = list_owned_process_group(process_group_id, leader_start_time_ticks)
+        if not members:
+            report["verified_empty"] = True
+            return report
+        time.sleep(0.05)
+    raise RuntimeError(f"owned process group {process_group_id} is not empty after SIGKILL")
 
 
 def stop_process(process: subprocess.Popen[Any]) -> None:
@@ -430,6 +585,22 @@ def publish_json(path: Path, value: dict[str, Any]) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def open_log(path: Path) -> Any:
+    return path.open("xb")
+
+
+def available_file_binding(path: Path) -> dict[str, Any]:
+    result: dict[str, Any] = {"path": str(path.resolve()), "present": False}
+    try:
+        result["present"] = path.is_file()
+        if result["present"]:
+            result["sha256"] = digest(path)
+            result["bytes"] = path.stat().st_size
+    except (OSError, RuntimeError, ValueError) as exc:
+        result["binding_error"] = f"{type(exc).__name__}: {exc}"
+    return result
+
+
 def execute(observation_directory: Path, timeout_seconds: float) -> dict[str, Any]:
     source = validate_source(OMNI_ROOT)
     binary, libraries, ldd = validate_runtime()
@@ -437,50 +608,107 @@ def execute(observation_directory: Path, timeout_seconds: float) -> dict[str, An
     if observation_directory.exists() or not observation_directory.parent.is_dir():
         raise RuntimeError("observation directory must not exist and its parent must exist")
 
-    observation_directory.mkdir(mode=0o700)
     run_directory = observation_directory / "run"
     stdout_path = observation_directory / "stdout.log"
     stderr_path = observation_directory / "stderr.log"
     argv = build_argv(observation_directory)
     environment, environment_policy = sanitized_environment()
-    identity = runtime_identity()
     started_at = now()
     started_ns = time.monotonic_ns()
+    observation_directory.mkdir(mode=0o700)
     process: subprocess.Popen[Any] | None = None
+    process_group: dict[str, int] | None = None
+    process_group_pidfd: int | None = None
+    identity: dict[str, Any] | None = None
+    child_identity: dict[str, Any] | None = None
+    process_group_cleanup: dict[str, Any] | None = None
     timed_out = False
+    errors: list[str] = []
 
-    with stdout_path.open("xb") as stdout, stderr_path.open("xb") as stderr:
-        process = subprocess.Popen(
-            argv,
-            cwd=OMNI_ROOT,
-            env=environment,
-            stdout=stdout,
-            stderr=stderr,
-            start_new_session=True,
-        )
-        try:
-            child_identity = child_runtime_identity(process.pid)
+    try:
+        enable_child_subreaper()
+        identity = runtime_identity()
+        with open_log(stdout_path) as stdout, open_log(stderr_path) as stderr:
+            process = subprocess.Popen(
+                argv,
+                cwd=OMNI_ROOT,
+                env=environment,
+                stdout=stdout,
+                stderr=stderr,
+                start_new_session=True,
+            )
             try:
-                process.wait(timeout=timeout_seconds)
-            except subprocess.TimeoutExpired:
-                timed_out = True
-                stop_process(process)
-        finally:
-            if process.poll() is None:
-                stop_process(process)
+                if not hasattr(os, "pidfd_open"):
+                    raise RuntimeError("pidfd process ownership is unavailable")
+                process_group_pidfd = os.pidfd_open(process.pid)
+                process_group = process_group_identity(process.pid)
+                child_identity = child_runtime_identity(process.pid, process_group)
+                try:
+                    process.wait(timeout=timeout_seconds)
+                except subprocess.TimeoutExpired:
+                    timed_out = True
+                    errors.append(f"CLI exceeded timeout of {timeout_seconds} seconds")
+            except BaseException as exc:
+                errors.append(f"{type(exc).__name__}: {exc}")
+            finally:
+                try:
+                    if process.poll() is None:
+                        stop_process(process)
+                except BaseException as exc:
+                    errors.append(f"parent cleanup failed: {type(exc).__name__}: {exc}")
+                try:
+                    if process_group is None or process_group_pidfd is None:
+                        raise RuntimeError(
+                            "CLI process-group ownership was not established; refusing group cleanup"
+                        )
+                    process_group_cleanup = drain_owned_process_group(
+                        process.pid,
+                        process_group["start_time_ticks"],
+                    )
+                    if process_group_cleanup["survivors_detected"]:
+                        errors.append("CLI left surviving descendants after parent exit")
+                except BaseException as exc:
+                    errors.append(f"process-group cleanup failed: {type(exc).__name__}: {exc}")
+    except BaseException as exc:
+        errors.append(f"{type(exc).__name__}: {exc}")
+    finally:
+        if process is not None and process_group_cleanup is None:
+            try:
+                if process.poll() is None:
+                    stop_process(process)
+            except BaseException as exc:
+                errors.append(f"fallback parent cleanup failed: {type(exc).__name__}: {exc}")
+            try:
+                if process_group is None or process_group_pidfd is None:
+                    raise RuntimeError(
+                        "CLI process-group ownership was not established; refusing group cleanup"
+                    )
+                process_group_cleanup = drain_owned_process_group(
+                    process.pid,
+                    process_group["start_time_ticks"],
+                )
+                if process_group_cleanup["survivors_detected"]:
+                    errors.append("CLI left surviving descendants after parent exit")
+            except BaseException as exc:
+                errors.append(f"fallback process-group cleanup failed: {type(exc).__name__}: {exc}")
+        if process_group_pidfd is not None:
+            try:
+                os.close(process_group_pidfd)
+            except OSError as exc:
+                errors.append(f"pidfd close failed: {type(exc).__name__}: {exc}")
 
     finished_ns = time.monotonic_ns()
     finished_at = now()
-    errors: list[str] = []
     validation: dict[str, Any] | None = None
-    if timed_out:
-        errors.append(f"CLI exceeded timeout of {timeout_seconds} seconds")
-    if process.returncode != 0:
+    if process is not None and process.returncode != 0:
         errors.append(f"CLI exited with status {process.returncode}")
-    try:
-        validation = validate_run_directory(run_directory)
-    except (OSError, RuntimeError, ValueError) as exc:
-        errors.append(str(exc))
+    if process is None:
+        errors.append("CLI process did not start")
+    else:
+        try:
+            validation = validate_run_directory(run_directory)
+        except (OSError, RuntimeError, ValueError) as exc:
+            errors.append(str(exc))
 
     try:
         if validate_source(OMNI_ROOT) != source:
@@ -505,12 +733,12 @@ def execute(observation_directory: Path, timeout_seconds: float) -> dict[str, An
         "captured_at": finished_at,
         "source": source,
         "runner": {
-            "path": str(Path(__file__).resolve()),
-            "sha256": digest(Path(__file__)),
+            **available_file_binding(Path(__file__)),
         },
         "runtime": {
             "identity": identity,
             "child_identity": child_identity,
+            "process_group_cleanup": process_group_cleanup,
             "binary": binary,
             "libraries": libraries,
             "clean_ldd": ldd,
@@ -522,19 +750,11 @@ def execute(observation_directory: Path, timeout_seconds: float) -> dict[str, An
             "started_at": started_at,
             "finished_at": finished_at,
             "duration_seconds": (finished_ns - started_ns) / 1_000_000_000,
-            "pid": process.pid,
-            "exit_status": process.returncode,
+            "pid": process.pid if process is not None else None,
+            "exit_status": process.returncode if process is not None else None,
             "timed_out": timed_out,
-            "stdout": {
-                "path": str(stdout_path.resolve()),
-                "sha256": digest(stdout_path),
-                "bytes": stdout_path.stat().st_size,
-            },
-            "stderr": {
-                "path": str(stderr_path.resolve()),
-                "sha256": digest(stderr_path),
-                "bytes": stderr_path.stat().st_size,
-            },
+            "stdout": available_file_binding(stdout_path),
+            "stderr": available_file_binding(stderr_path),
         },
         "validation": {
             "success": not errors,
