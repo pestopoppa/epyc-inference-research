@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
-"""Fail-closed, observation-only capture for the deferred MiniCPM-o TTS probe."""
+"""Sealed, CPU-only MiniCPM-o Path-B TTS observation.
+
+This intentionally drives only the HTTP contract implemented at the pinned
+llama.cpp-omni source revision.  It is not a serving integration or quality
+evaluation: a successful record proves only that the pinned local process
+wrote a structurally valid WAV.
+"""
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
 import os
-import re
+import shutil
 import signal
+import socket
 import struct
 import subprocess
 import sys
@@ -16,9 +23,13 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 HERE = Path(__file__).parent
-LDD_PATH = re.compile(r"(?:=>\s+)?(?P<path>/\S+)")
+RECOVERY_RUN_NAME = "20260727T170914Z"
+RECOVERY_SERVER_PID = 1381206
+RECOVERY_SERVER_PORT = 56463
 
 
 def now() -> str:
@@ -27,14 +38,10 @@ def now() -> str:
 
 def digest(path: Path) -> str:
     h = hashlib.sha256()
-    with path.open("rb") as f:
-        for block in iter(lambda: f.read(1024 * 1024), b""):
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
             h.update(block)
     return h.hexdigest()
-
-
-def json_digest(value: Any) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -44,52 +51,30 @@ def read_json(path: Path) -> dict[str, Any]:
     return value
 
 
-def fsync_dir(path: Path) -> None:
-    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        os.fsync(fd)
-    finally:
-        os.close(fd)
-
-
-def publish_json_create(path: Path, value: dict[str, Any]) -> None:
-    """Durably publish JSON once; link(), unlike replace(), cannot overwrite."""
+def publish_json(path: Path, value: dict[str, Any]) -> None:
     if path.exists():
         raise RuntimeError(f"refusing to overwrite published artifact: {path}")
     tmp = path.parent / f".{path.name}.{uuid.uuid4().hex}.tmp"
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    try:
-        encoded = (json.dumps(value, sort_keys=True, indent=2) + "\n").encode()
-        offset = 0
-        while offset < len(encoded):
-            written = os.write(fd, encoded[offset:])
-            if written <= 0:
-                raise OSError("short write while publishing JSON")
-            offset += written
-        os.fsync(fd)
-    finally:
-        os.close(fd)
+    with tmp.open("xb") as stream:
+        stream.write((json.dumps(value, indent=2, sort_keys=True) + "\n").encode())
+        stream.flush()
+        os.fsync(stream.fileno())
     try:
         os.link(tmp, path)
-        fsync_dir(path.parent)
+        directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
     except FileExistsError as exc:
         raise RuntimeError(f"refusing to overwrite published artifact: {path}") from exc
     finally:
         tmp.unlink(missing_ok=True)
 
 
-def create_run_dir(path: Path) -> None:
-    if path.exists():
-        raise RuntimeError(f"run directory already exists: {path}")
-    if not path.parent.is_dir():
-        raise RuntimeError(f"run directory parent is absent: {path.parent}")
-    path.mkdir(mode=0o700)
-    fsync_dir(path.parent)
-
-
-def git(root: Path, *args: str, allowed: tuple[int, ...] = (0,)) -> str:
+def git(root: Path, *args: str) -> str:
     result = subprocess.run(["git", "-C", str(root), *args], text=True, capture_output=True)
-    if result.returncode not in allowed:
+    if result.returncode:
         raise RuntimeError(f"git {' '.join(args)} failed: {result.stderr.strip()}")
     return result.stdout.strip()
 
@@ -99,63 +84,29 @@ def validate_source(manifest: dict[str, Any], root: Path) -> Path:
     if root.resolve() != Path(upstream["checkout"]).resolve():
         raise RuntimeError("omni root does not match manifest")
     if git(root, "rev-parse", "HEAD") != upstream["commit"]:
-        raise RuntimeError("omni checkout is not at pinned feat/web-demo commit")
+        raise RuntimeError("omni checkout is not at the pinned commit")
     if git(root, "status", "--porcelain"):
         raise RuntimeError("omni checkout is dirty")
-    if upstream["required_detached_head"] and git(root, "symbolic-ref", "-q", "HEAD", allowed=(0, 1)):
+    if subprocess.run(["git", "-C", str(root), "symbolic-ref", "-q", "HEAD"], capture_output=True).returncode == 0:
         raise RuntimeError("omni checkout must be detached")
     binary = root / upstream["binary_relative_path"]
     if not binary.is_file() or not os.access(binary, os.X_OK):
-        raise RuntimeError(f"pinned runtime binary unavailable: {binary}")
+        raise RuntimeError(f"pinned server binary unavailable: {binary}")
+    for relative in upstream["source_relative_paths"]:
+        if not (root / relative).is_file():
+            raise RuntimeError(f"required pinned source unavailable: {relative}")
     return binary
 
 
 def validate_artifacts(manifest: dict[str, Any]) -> list[dict[str, str]]:
-    found = []
+    found: list[dict[str, str]] = []
     for item in manifest["artifacts"]:
         path = Path(item["path"])
-        if not path.is_file() or digest(path) != item["sha256"]:
+        actual = digest(path) if path.is_file() else None
+        if actual != item["sha256"]:
             raise RuntimeError(f"artifact digest mismatch or missing: {path}")
-        found.append({"path": str(path), "sha256": item["sha256"]})
+        found.append({"path": str(path.resolve()), "sha256": actual})
     return found
-
-
-def ldd_stdout(binary: Path) -> str:
-    result = subprocess.run(["ldd", str(binary)], text=True, capture_output=True)
-    if result.returncode != 0 or "not found" in result.stdout:
-        raise RuntimeError(f"ldd failed or unresolved dependency: {result.stderr}{result.stdout}")
-    return result.stdout
-
-
-def runtime_lock(binary: Path) -> dict[str, Any]:
-    output = ldd_stdout(binary)
-    libraries = []
-    for match in LDD_PATH.finditer(output):
-        path = Path(match.group("path")).resolve(strict=True)
-        if not path.is_file():
-            raise RuntimeError(f"ldd returned non-file: {path}")
-        binding = {"path": str(path), "sha256": digest(path)}
-        if binding not in libraries:
-            libraries.append(binding)
-    if not libraries:
-        raise RuntimeError("ldd yielded no absolute dynamic libraries")
-    return {"schema_version": 2, "created_at": now(), "binary": str(binary.resolve()), "binary_sha256": digest(binary), "ldd_stdout_sha256": hashlib.sha256(output.encode()).hexdigest(), "libraries": libraries}
-
-
-def validate_lock(lock: dict[str, Any], binary: Path) -> None:
-    if Path(lock.get("binary", "")).resolve() != binary.resolve():
-        raise RuntimeError("runtime lock binary differs")
-    if lock.get("binary_sha256") != digest(binary):
-        raise RuntimeError("runtime binary changed after lock")
-    if lock.get("ldd_stdout_sha256") != hashlib.sha256(ldd_stdout(binary).encode()).hexdigest():
-        raise RuntimeError("ldd output changed after runtime lock")
-    libraries = lock.get("libraries")
-    if not isinstance(libraries, list) or not libraries:
-        raise RuntimeError("runtime lock lacks dynamic-library bindings")
-    for item in libraries:
-        path = Path(item["path"]).resolve(strict=True)
-        if not path.is_absolute() or digest(path) != item["sha256"]:
-            raise RuntimeError(f"runtime library changed after lock: {path}")
 
 
 def inspect_wav(path: Path, policy: dict[str, Any]) -> dict[str, Any]:
@@ -164,234 +115,281 @@ def inspect_wav(path: Path, policy: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError("output is not a RIFF/WAVE file")
     if struct.unpack_from("<I", raw, 4)[0] != len(raw) - 8:
         raise RuntimeError("RIFF size does not match file size")
-    offset, fmt, data_size = 12, None, None
+    offset, fmt, data_bytes = 12, None, None
     while offset < len(raw):
         if offset + 8 > len(raw):
             raise RuntimeError("truncated WAV chunk header")
         tag, size = raw[offset:offset + 4], struct.unpack_from("<I", raw, offset + 4)[0]
         body, end = offset + 8, offset + 8 + size
         if end > len(raw):
-            raise RuntimeError("truncated or overlapping WAV chunk")
+            raise RuntimeError("truncated WAV chunk")
         if tag == b"fmt ":
             if fmt is not None or size < 16:
                 raise RuntimeError("duplicate or short WAV fmt chunk")
             fmt = struct.unpack_from("<HHIIHH", raw, body)
         elif tag == b"data":
-            if data_size is not None:
+            if data_bytes is not None:
                 raise RuntimeError("duplicate WAV data chunk")
-            data_size = size
+            data_bytes = size
         offset = end + (size & 1)
-        if offset > len(raw):
-            raise RuntimeError("truncated WAV padding")
-    if fmt is None or data_size is None:
+    if fmt is None or data_bytes is None:
         raise RuntimeError("WAV lacks fmt or data chunk")
     audio_format, channels, sample_rate, byte_rate, block_align, bits = fmt
     expected_align = channels * bits // 8
     if (audio_format not in (1, 3) or channels not in policy["allowed_channels"] or
             sample_rate not in policy["allowed_sample_rates_hz"] or bits not in policy["allowed_bits_per_sample"] or
-            block_align != expected_align or byte_rate != sample_rate * block_align or data_size == 0 or data_size % block_align):
+            block_align != expected_align or byte_rate != sample_rate * block_align or
+            data_bytes == 0 or data_bytes % block_align):
         raise RuntimeError("WAV format or data alignment violates acceptance policy")
-    duration = data_size / byte_rate
+    duration = data_bytes / byte_rate
     if duration < policy["min_duration_seconds"]:
         raise RuntimeError("WAV is too short to prove audio output")
-    return {"path": str(path.resolve()), "sha256": digest(path), "bytes": len(raw), "audio_format": audio_format, "channels": channels, "sample_rate_hz": sample_rate, "bits_per_sample": bits, "block_align": block_align, "data_bytes": data_size, "duration_seconds": duration}
+    return {"path": str(path.resolve()), "sha256": digest(path), "bytes": len(raw),
+            "audio_format": audio_format, "channels": channels, "sample_rate_hz": sample_rate,
+            "bits_per_sample": bits, "data_bytes": data_bytes, "duration_seconds": duration}
 
 
-def start_ticks(pid: int) -> int | None:
+def request_json(url: str, body: dict[str, Any], timeout: float = 300.0) -> dict[str, Any]:
+    data = json.dumps(body, sort_keys=True).encode()
+    request = Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
     try:
-        return int(Path(f"/proc/{pid}/stat").read_text().split()[21])
-    except (FileNotFoundError, IndexError, ValueError):
-        return None
+        with urlopen(request, timeout=timeout) as response:
+            value = json.loads(response.read())
+    except HTTPError as exc:
+        raise RuntimeError(f"HTTP {exc.code} at {url}: {exc.read().decode(errors='replace')}") from exc
+    except URLError as exc:
+        raise RuntimeError(f"HTTP unavailable at {url}: {exc}") from exc
+    if not isinstance(value, dict) or value.get("success") is not True:
+        raise RuntimeError(f"endpoint did not acknowledge success at {url}: {value}")
+    return value
 
 
-def terminate_owned(proc: subprocess.Popen[Any], expected_ticks: int | None, pidfd: int | None) -> dict[str, Any]:
-    """Terminate only the child process group we created, then verify it is gone."""
-    pid = proc.pid
-    if expected_ticks is not None and start_ticks(pid) not in (expected_ticks, None):
-        raise RuntimeError("refusing to signal reused PID")
-    def group_alive() -> bool:
+def wait_ready(base: str, deadline: float) -> None:
+    while time.monotonic() < deadline:
         try:
-            os.killpg(pid, 0)
-            return True
-        except ProcessLookupError:
-            return False
+            with urlopen(f"{base}/health", timeout=2) as response:
+                if response.status == 200:
+                    return
+        except (HTTPError, URLError, TimeoutError):
+            pass
+        time.sleep(0.25)
+    raise RuntimeError("server did not become healthy before timeout")
 
-    termination = {"sigterm_sent": False, "sigkill_sent": False, "verified_dead": False}
-    if group_alive():
-        os.killpg(pid, signal.SIGTERM)
-        termination["sigterm_sent"] = True
-    deadline = time.monotonic() + 10
-    while group_alive() and time.monotonic() < deadline:
+
+def reserve_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def verify_port_released(port: int) -> bool:
+    """Prove no listener remains without mistaking normal TCP TIME_WAIT for one."""
+    port_hex = f"{port:04X}"
+    for table in (Path("/proc/net/tcp"), Path("/proc/net/tcp6")):
+        for line in table.read_text().splitlines()[1:]:
+            fields = line.split()
+            if len(fields) >= 4 and fields[1].endswith(f":{port_hex}") and fields[3] == "0A":
+                raise RuntimeError(f"owned server port {port} still has a TCP listener")
+    return True
+
+
+def process_group_alive(pgid: int) -> bool:
+    try:
+        os.killpg(pgid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+
+
+def stop_process(process: subprocess.Popen[Any]) -> dict[str, Any]:
+    result = {"sigterm_sent": False, "sigkill_sent": False, "verified_dead": False}
+    if process.poll() is None and process_group_alive(process.pid):
+        os.killpg(process.pid, signal.SIGTERM)
+        result["sigterm_sent"] = True
+    if process.poll() is None:
+        try:
+            process.wait(timeout=20)
+        except subprocess.TimeoutExpired:
+            if process_group_alive(process.pid):
+                os.killpg(process.pid, signal.SIGKILL)
+                result["sigkill_sent"] = True
+            process.wait(timeout=20)
+    else:
+        process.wait()
+    deadline = time.monotonic() + 20
+    while process_group_alive(process.pid) and time.monotonic() < deadline:
         time.sleep(0.05)
-    if group_alive():
-        os.killpg(pid, signal.SIGKILL)
-        termination["sigkill_sent"] = True
-        deadline = time.monotonic() + 10
-        while group_alive() and time.monotonic() < deadline:
+    if process_group_alive(process.pid):
+        os.killpg(process.pid, signal.SIGKILL)
+        result["sigkill_sent"] = True
+        deadline = time.monotonic() + 20
+        while process_group_alive(process.pid) and time.monotonic() < deadline:
             time.sleep(0.05)
-    if group_alive():
-        raise RuntimeError("owned process group survived SIGKILL")
-    termination["verified_dead"] = True
-    return termination
+    if process_group_alive(process.pid):
+        raise RuntimeError("owned server process group survived SIGKILL")
+    if process.poll() is None:
+        raise RuntimeError("owned server survived cleanup")
+    result["verified_dead"] = True
+    return result
 
 
-def owned_run(argv: list[str], output: Path, timeout: float, log: Path) -> dict[str, Any]:
-    if not argv or not Path(argv[0]).is_absolute() or not Path(argv[0]).is_file():
-        raise RuntimeError("argv[0] must be an existing absolute executable")
-    if output.exists() or log.exists():
-        raise RuntimeError("refusing to overwrite output or log")
-    with log.open("xb") as stream:
-        started_at = now()
-        proc = subprocess.Popen(argv, stdout=stream, stderr=subprocess.STDOUT, start_new_session=True)
-        ticks = start_ticks(proc.pid)
-        try:
-            pidfd = os.pidfd_open(proc.pid) if hasattr(os, "pidfd_open") else None
-        except ProcessLookupError:
-            pidfd = None
-        if ticks is None:
-            try:
-                terminate_owned(proc, None, pidfd)
-            finally:
-                if pidfd is not None:
-                    os.close(pidfd)
-            raise RuntimeError("cannot prove owned process start ticks")
-        try:
-            result = proc.wait(timeout=timeout)
-        except BaseException:
-            terminate_owned(proc, ticks, pidfd)
-            raise
-        finally:
-            if pidfd is not None:
-                os.close(pidfd)
-        if result != 0:
-            termination = terminate_owned(proc, ticks, None)
-            raise RuntimeError(f"owned process exited {result}")
-        termination = terminate_owned(proc, ticks, None)
-        return {"pid": proc.pid, "pgid": proc.pid, "start_ticks": ticks,
-                "pidfd_available": pidfd is not None, "started_at": started_at,
-                "finished_at": now(), "rc": result, "termination": termination}
+def atomic_copy(source: Path, destination: Path) -> None:
+    if destination.exists():
+        raise RuntimeError(f"refusing to overwrite output: {destination}")
+    tmp = destination.parent / f".{destination.name}.{uuid.uuid4().hex}.tmp"
+    with source.open("rb") as incoming, tmp.open("xb") as outgoing:
+        shutil.copyfileobj(incoming, outgoing, 1024 * 1024)
+        outgoing.flush()
+        os.fsync(outgoing.fileno())
+    os.replace(tmp, destination)
 
 
-def interface_contract(manifest: dict[str, Any], argv_path: Path, output: Path) -> tuple[list[str], dict[str, Any]]:
-    declaration = manifest["interface_contract"]
-    if declaration["state"] != "approved" or not declaration.get("path") or not declaration.get("sha256"):
-        raise RuntimeError("interface contract is blocked; captured source/help-derived schema is required")
-    contract_path = Path(declaration["path"])
-    if digest(contract_path) != declaration["sha256"]:
-        raise RuntimeError("interface contract hash mismatch")
-    contract = read_json(contract_path)
-    if contract.get("state") != "approved" or not contract.get("help_capture_sha256") or not contract.get("source_evidence_sha256"):
-        raise RuntimeError("interface contract lacks captured help/source evidence")
-    prompt = Path(contract.get("prompt_input", {}).get("path", ""))
-    if not prompt.is_file() or digest(prompt) != contract["prompt_input"].get("sha256"):
-        raise RuntimeError("prompt/input artifact is missing or changed")
-    raw_argv = argv_path.read_bytes(); argv = json.loads(raw_argv)
-    if hashlib.sha256(raw_argv).hexdigest() != contract.get("argv_json_sha256"):
-        raise RuntimeError("argv JSON is not the interface-contract artifact")
-    template = contract.get("argv_template")
-    if not isinstance(argv, list) or not isinstance(template, list):
-        raise RuntimeError("interface contract argv schema is invalid")
-    expected = [str(x).replace("{prompt_input}", str(prompt)).replace("{output_wav}", str(output)) for x in template]
-    if argv != expected:
-        raise RuntimeError("argv does not exactly match approved interface contract")
-    return argv, {"path": str(prompt.resolve()), "sha256": digest(prompt), "contract_path": str(contract_path.resolve()), "contract_sha256": declaration["sha256"], "argv_json_sha256": hashlib.sha256(raw_argv).hexdigest()}
+def wait_for_audio(output_dir: Path, timeout: float) -> tuple[Path, Path]:
+    done = output_dir / "round_000" / "tts_wav" / "generation_done.flag"
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        wavs = sorted(done.parent.glob("*.wav"))
+        if done.is_file() and wavs:
+            return done, wavs[-1]
+        time.sleep(0.1)
+    raise RuntimeError("generation_done.flag and generated WAV did not appear before timeout")
 
 
-def command_init_run(args: argparse.Namespace) -> None:
-    run_dir = Path(args.run_dir)
-    create_run_dir(run_dir)
-    publish_json_create(run_dir / "run_init.json", {"schema_version": 1, "created_at": now(), "run_dir": str(run_dir.resolve())})
+def bind(path: Path) -> dict[str, str]:
+    if not path.is_file():
+        raise RuntimeError(f"required recovery artifact is absent: {path}")
+    return {"path": str(path.resolve()), "sha256": digest(path)}
 
 
-def command_prepare_lock(args: argparse.Namespace) -> None:
-    run_dir, manifest = Path(args.run_dir), read_json(Path(args.manifest))
-    if not (run_dir / "run_init.json").is_file():
-        raise RuntimeError("run directory was not create-only initialized")
-    binary = validate_source(manifest, Path(args.omni_root)); validate_artifacts(manifest)
-    publish_json_create(run_dir / "runtime_lock.json", runtime_lock(binary))
+def recovery_log_evidence(log: Path) -> dict[str, Any]:
+    lines = log.read_text(errors="replace").splitlines()
+    endpoint_matches = {
+        endpoint: [line for line in lines if f"POST /v1/stream/{endpoint}" in line and " 200" in line]
+        for endpoint in ("omni_init", "prefill", "decode")
+    }
+    if any(len(matches) != 1 for matches in endpoint_matches.values()):
+        raise RuntimeError("recovery log does not contain exactly one HTTP-200 acknowledgement per endpoint")
+    decoded = [line for line in lines if "LLM->TTS: text='The MiniCPM audio path is working.'" in line]
+    if len(decoded) != 1:
+        raise RuntimeError("recovery log does not contain exactly one expected decoded-text record")
+    timings = [line for line in lines if "T2W线程: wav_" in line and "audio" in line and "RTF=" in line]
+    if len(timings) != 3:
+        raise RuntimeError("recovery log does not contain exactly three WAV timing records")
+    return {"log": bind(log), "endpoint_http_200": endpoint_matches, "decoded_text": decoded[0], "wav_timing_rows": timings}
 
 
-def command_run(args: argparse.Namespace) -> None:
-    if not args.ack_observation_only:
-        raise RuntimeError("--ack-observation-only is required")
-    run_dir, manifest_path = Path(args.run_dir), Path(args.manifest)
-    if not run_dir.is_dir(): raise RuntimeError("run directory is absent")
-    manifest = read_json(manifest_path); binary = validate_source(manifest, Path(args.omni_root)); artifacts = validate_artifacts(manifest)
-    if not (run_dir / "run_init.json").is_file(): raise RuntimeError("run directory was not create-only initialized")
-    lock = read_json(run_dir / "runtime_lock.json"); validate_lock(lock, binary)
-    output, log, capture = run_dir / "output.wav", run_dir / "runner.log", run_dir / "capture.json"
-    argv, input_binding = interface_contract(manifest, run_dir / "argv.json", output)
-    if Path(argv[0]).resolve() != binary.resolve(): raise RuntimeError("argv must launch locked binary")
-    if capture.exists(): raise RuntimeError("capture already published")
-    execution = owned_run(argv, output, args.timeout_seconds, log)
-    validate_lock(lock, binary)
-    if validate_artifacts(manifest) != artifacts:
-        raise RuntimeError("pinned model artifacts changed during execution")
+def recover_existing(args: argparse.Namespace) -> None:
+    """Seal the one failed-cleanup run without rerunning inference."""
+    manifest_path, run_dir, root = Path(args.manifest), Path(args.run_dir), Path(args.omni_root)
+    if run_dir.name != RECOVERY_RUN_NAME or run_dir.parent.resolve() != (HERE / "runs").resolve():
+        raise RuntimeError("recovery is bound only to the reviewed 20260727T170914Z run directory")
+    capture = run_dir / "capture.json"
+    if capture.exists():
+        raise RuntimeError("recovery refuses an already captured run")
+    manifest = read_json(manifest_path)
+    binary = validate_source(manifest, root)
+    artifacts = validate_artifacts(manifest)
+    output_dir = run_dir / "server-output" / "round_000" / "tts_wav"
+    done = output_dir / "generation_done.flag"
+    output = run_dir / "output.wav"
+    source_wavs = [output_dir / f"wav_{index}.wav" for index in range(3)]
+    if any(not item.is_file() for item in source_wavs) or len(list(output_dir.glob("wav_*.wav"))) != 3:
+        raise RuntimeError("recovery requires exactly wav_0.wav through wav_2.wav")
+    if not done.is_file():
+        raise RuntimeError("recovery requires generation_done.flag")
     audio = inspect_wav(output, manifest["audio_acceptance"])
-    publish_json_create(capture, {"schema_version": 3, "classification": "observation-only", "captured_at": now(), "claim_policy": manifest["claim_policy"], "manifest": {"path": str(manifest_path.resolve()), "sha256": digest(manifest_path)}, "runner": {"path": str(Path(__file__).resolve()), "sha256": digest(Path(__file__))}, "upstream": manifest["upstream"], "artifacts": artifacts, "runtime_lock": lock, "input": input_binding, "argv": {"argv": argv, "path": str((run_dir / "argv.json").resolve()), "sha256": digest(run_dir / "argv.json")}, "execution": execution, "output_path": str(output.resolve()), "log": {"path": str(log.resolve()), "sha256": digest(log)}, "audio": audio})
+    source_audio = [inspect_wav(item, manifest["audio_acceptance"]) for item in source_wavs]
+    if audio["sha256"] != source_audio[-1]["sha256"]:
+        raise RuntimeError("published output.wav does not match final source WAV")
+    if Path(f"/proc/{RECOVERY_SERVER_PID}").exists() or process_group_alive(RECOVERY_SERVER_PID):
+        raise RuntimeError("recovery server PID or process group is still alive")
+    verify_port_released(RECOVERY_SERVER_PORT)
+    log_evidence = recovery_log_evidence(run_dir / "server.log")
+    source_bindings = [{"path": str((root / p).resolve()), "sha256": digest(root / p)} for p in manifest["upstream"]["source_relative_paths"]]
+    publish_json(capture, {"schema_version": 4, "classification": "observation-only-recovered-after-runner-cleanup-defect",
+        "captured_at": now(), "claim_policy": manifest["claim_policy"],
+        "recovery_reason": "The original server completed and emitted WAVs, but the runner's process-group cleanup check did not reap the already-exited group leader before testing group liveness, so capture publication failed. No inference was regenerated.",
+        "manifest": bind(manifest_path), "recovery_runner": bind(Path(__file__)), "upstream": manifest["upstream"],
+        "runtime_binary": bind(binary), "source_bindings": source_bindings, "artifacts": artifacts,
+        "execution_cleanup": {"server_pid": RECOVERY_SERVER_PID, "server_pgid": RECOVERY_SERVER_PID,
+            "port": RECOVERY_SERVER_PORT, "pid_absent": True, "process_group_absent": True, "port_has_no_listener": True},
+        "server_log_evidence": log_evidence, "generation_done_flag": bind(done),
+        "source_wavs": source_audio, "audio": audio})
 
 
-def capture_bound_audio(run_dir: Path, wav_path: Path, manifest_path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
-    capture_path = run_dir / "capture.json"
-    if not capture_path.is_file():
-        raise RuntimeError("capture.json is required before WAV inspection")
-    capture = read_json(capture_path)
-    expected = (run_dir / "output.wav").resolve()
-    actual = wav_path.resolve()
-    if capture.get("schema_version") != 3 or capture.get("classification") != "observation-only":
-        raise RuntimeError("capture schema or classification is not authoritative")
-    if actual != expected or capture.get("output_path") != str(expected):
-        raise RuntimeError("inspection WAV must be this run's output.wav")
-    manifest = capture.get("manifest")
-    if not isinstance(manifest, dict) or manifest.get("path") != str(manifest_path.resolve()) or manifest.get("sha256") != digest(manifest_path):
-        raise RuntimeError("capture manifest does not bind this inspection")
-    runner = capture.get("runner")
-    if not isinstance(runner, dict) or runner.get("path") != str(Path(__file__).resolve()) or runner.get("sha256") != digest(Path(__file__)):
-        raise RuntimeError("capture runner identity does not match current runner")
-    execution = capture.get("execution")
-    if (not isinstance(execution, dict) or execution.get("rc") != 0 or
-            not isinstance(execution.get("start_ticks"), int) or execution["start_ticks"] <= 0 or
-            not isinstance(execution.get("termination"), dict) or execution["termination"].get("verified_dead") is not True):
-        raise RuntimeError("capture execution lifecycle is not a verified successful owned run")
-    argv = capture.get("argv")
-    argv_path = (run_dir / "argv.json").resolve()
-    if (not isinstance(argv, dict) or not isinstance(argv.get("argv"), list) or
-            argv.get("path") != str(argv_path) or not argv_path.is_file() or
-            argv.get("sha256") != digest(argv_path) or argv["argv"] != json.loads(argv_path.read_text())):
-        raise RuntimeError("capture argv path, hash, or exact argv does not bind this run")
-    log = capture.get("log")
-    log_path = (run_dir / "runner.log").resolve()
-    if not isinstance(log, dict) or log.get("path") != str(log_path) or not log_path.is_file() or log.get("sha256") != digest(log_path):
-        raise RuntimeError("capture log path or hash does not bind this run")
-    audio = capture.get("audio")
-    if not isinstance(audio, dict) or audio.get("path") != str(expected) or audio.get("sha256") != digest(actual):
-        raise RuntimeError("capture audio path or hash does not bind inspected WAV")
-    return capture, {"path": str(capture_path.resolve()), "sha256": digest(capture_path)}
-
-
-def command_inspect_wav(args: argparse.Namespace) -> None:
-    run_dir, manifest = Path(args.run_dir), read_json(Path(args.manifest))
-    target = run_dir / "inspection.json"
-    if not run_dir.is_dir(): raise RuntimeError("run directory is absent")
-    manifest_path = Path(args.manifest)
-    capture, capture_binding = capture_bound_audio(run_dir, Path(args.wav), manifest_path)
-    audio = inspect_wav(Path(args.wav), manifest["audio_acceptance"])
-    if audio["sha256"] != capture["audio"]["sha256"]:
-        raise RuntimeError("WAV changed after capture publication")
-    publish_json_create(target, {"schema_version": 3, "classification": "observation-only", "inspected_at": now(), "mechanical_outcome": "audio-output-proven", "quality_score": None, "manifest_sha256": digest(manifest_path), "capture": capture_binding, "audio": audio})
+def run(args: argparse.Namespace) -> None:
+    manifest_path, run_dir, root = Path(args.manifest), Path(args.run_dir), Path(args.omni_root)
+    if run_dir.exists() or not run_dir.parent.is_dir():
+        raise RuntimeError("run directory must not already exist and its parent must exist")
+    manifest = read_json(manifest_path)
+    binary = validate_source(manifest, root)
+    binary_binding = {"path": str(binary.resolve()), "sha256": digest(binary)}
+    artifacts = validate_artifacts(manifest)
+    run_dir.mkdir(mode=0o700)
+    output_dir, output, log = run_dir / "server-output", run_dir / "output.wav", run_dir / "server.log"
+    output_dir.mkdir()
+    port, base = reserve_port(), None
+    argv = [str(binary.resolve()), "--host", "127.0.0.1", "--port", str(port), "--model",
+            manifest["config"]["model"], "-ngl", "0", "--ctx-size", str(manifest["config"]["ctx_size"]),
+            "--threads", str(manifest["config"]["threads"]), "--no-mmap"]
+    environment = {"PATH": os.environ["PATH"], "LD_LIBRARY_PATH": str(binary.parent.resolve())}
+    started = now()
+    process: subprocess.Popen[Any] | None = None
+    try:
+        with log.open("xb") as stream:
+            process = subprocess.Popen(argv, cwd=root, env=environment, stdout=stream, stderr=subprocess.STDOUT,
+                                       start_new_session=True)
+            base = f"http://127.0.0.1:{port}"
+            wait_ready(base, time.monotonic() + args.startup_timeout_seconds)
+            init = request_json(f"{base}/v1/stream/omni_init", {
+                "media_type": manifest["config"]["media_type"], "use_tts": True, "duplex_mode": False,
+                "model_dir": str(Path(manifest["config"]["model"]).parent),
+                "tts_bin_dir": manifest["config"]["tts_bin_dir"], "tts_gpu_layers": 0,
+                "token2wav_device": "cpu", "output_dir": str(output_dir.resolve()),
+                "voice_audio": manifest["config"]["default_ref_audio"], "n_predict": manifest["config"]["n_predict"],
+            }, args.request_timeout_seconds)
+            prefill = request_json(f"{base}/v1/stream/prefill", {"cnt": 1, "text": manifest["config"]["text"]}, args.request_timeout_seconds)
+            decode = request_json(f"{base}/v1/stream/decode", {"debug_dir": str(output_dir.resolve()), "stream": False, "round_idx": 0}, args.request_timeout_seconds)
+            done, generated = wait_for_audio(output_dir, args.generation_timeout_seconds)
+            atomic_copy(generated, output)
+        termination = stop_process(process)
+        port_released = verify_port_released(port)
+        if digest(binary) != binary_binding["sha256"]:
+            raise RuntimeError("pinned server binary changed during execution")
+        if validate_artifacts(manifest) != artifacts:
+            raise RuntimeError("pinned model artifacts changed during execution")
+        audio = inspect_wav(output, manifest["audio_acceptance"])
+        source_bindings = [{"path": str((root / p).resolve()), "sha256": digest(root / p)} for p in manifest["upstream"]["source_relative_paths"]]
+        publish_json(run_dir / "capture.json", {"schema_version": 4, "classification": "observation-only", "captured_at": now(),
+            "claim_policy": manifest["claim_policy"], "manifest": {"path": str(manifest_path.resolve()), "sha256": digest(manifest_path)},
+            "runner": {"path": str(Path(__file__).resolve()), "sha256": digest(Path(__file__))}, "upstream": manifest["upstream"],
+            "runtime_binary": binary_binding,
+            "source_bindings": source_bindings, "artifacts": artifacts, "execution": {"started_at": started, "finished_at": now(), "pid": process.pid, "port": port, "argv": argv, "environment": environment, "termination": termination, "port_released": port_released},
+            "requests": {"init": init, "prefill": prefill, "decode": decode}, "generation_done_flag": {"path": str(done.resolve()), "sha256": digest(done)},
+            "generated_source_wav": {"path": str(generated.resolve()), "sha256": digest(generated)}, "audio": audio})
+    except BaseException:
+        if process is not None:
+            stop_process(process)
+        raise
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(); p.add_argument("--manifest", default=str(HERE / "m2_tts_manifest.json")); p.add_argument("--omni-root", required=True)
-    sub = p.add_subparsers(required=True)
-    init = sub.add_parser("init-run"); init.add_argument("--run-dir", required=True); init.set_defaults(func=command_init_run)
-    lock = sub.add_parser("prepare-runtime-lock"); lock.add_argument("--run-dir", required=True); lock.set_defaults(func=command_prepare_lock)
-    run = sub.add_parser("run"); run.add_argument("--run-dir", required=True); run.add_argument("--timeout-seconds", type=float, default=300); run.add_argument("--ack-observation-only", action="store_true"); run.set_defaults(func=command_run)
-    inspect = sub.add_parser("inspect-wav"); inspect.add_argument("--run-dir", required=True); inspect.add_argument("--wav", required=True); inspect.set_defaults(func=command_inspect_wav)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--manifest", default=str(HERE / "m2_tts_manifest.json"))
+    parser.add_argument("--omni-root", required=True)
+    parser.add_argument("--run-dir", required=True)
+    parser.add_argument("--startup-timeout-seconds", type=float, default=180.0)
+    parser.add_argument("--request-timeout-seconds", type=float, default=600.0)
+    parser.add_argument("--generation-timeout-seconds", type=float, default=600.0)
+    parser.add_argument("--recover-existing", action="store_true")
     try:
-        args = p.parse_args(); args.func(args); return 0
-    except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as exc:
-        print(f"FAIL-CLOSED: {exc}", file=sys.stderr); return 2
+        args = parser.parse_args()
+        (recover_existing if args.recover_existing else run)(args)
+        return 0
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
+        print(f"FAIL-CLOSED: {exc}", file=sys.stderr)
+        return 2
 
 
-if __name__ == "__main__": raise SystemExit(main())
+if __name__ == "__main__":
+    raise SystemExit(main())

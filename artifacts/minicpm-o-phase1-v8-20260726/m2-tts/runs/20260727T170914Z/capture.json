@@ -1,0 +1,166 @@
+{
+  "artifacts": [
+    {
+      "path": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf",
+      "sha256": "1237a97ee081b8abebc47aa7dad565701e8f5f904cdc92f6723ac4281bbc0932"
+    },
+    {
+      "path": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/audio/MiniCPM-o-4_5-audio-F16.gguf",
+      "sha256": "d5b188ac7feaf98e17175c3f9bd14bf269301bfd187439fdaa3e3a494fc32ef7"
+    },
+    {
+      "path": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/tts/MiniCPM-o-4_5-projector-F16.gguf",
+      "sha256": "4b1b5b377358a5e594a304ff6ea5d52df606a9ba7d886c4299d232f0c67dd1fd"
+    },
+    {
+      "path": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/tts/MiniCPM-o-4_5-tts-F16.gguf",
+      "sha256": "c7be3748a863dd6966ae7eed42600b7f41ca67affb03729ff245247f0e5ea088"
+    },
+    {
+      "path": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/token2wav-gguf/encoder.gguf",
+      "sha256": "7f8d265da594eaf5e1de2db8f5f1867dbcb0bb75ef5878fadf2952347116f4d0"
+    },
+    {
+      "path": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/token2wav-gguf/flow_extra.gguf",
+      "sha256": "c67611aa7d02500fe395a7798bf0bfdfb55c74d37ba93934ca74d82b4e63f78d"
+    },
+    {
+      "path": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/token2wav-gguf/flow_matching.gguf",
+      "sha256": "eda6069f3edeb5dd3a87fbf2aedb2ddd1b46f3273926c4fcf09b24476a39cab8"
+    },
+    {
+      "path": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/token2wav-gguf/hifigan2.gguf",
+      "sha256": "1b8b3bf5d8d3066aeee4324fdcdd41aefce170d0ee907645858de408d82835c2"
+    },
+    {
+      "path": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/token2wav-gguf/prompt_cache.gguf",
+      "sha256": "81fe6f541ebe0b67db06a1e395df928da47991dc9637c2cf47d6c59d5b979f2c"
+    },
+    {
+      "path": "/mnt/raid0/llm/llama.cpp-omni-experimental/tools/omni/assets/default_ref_audio/default_ref_audio.wav",
+      "sha256": "cb8f06ba5080cdf548969138881fb8ad8b04e2516108f4e08ba0363b68b613ea"
+    }
+  ],
+  "audio": {
+    "audio_format": 1,
+    "bits_per_sample": 16,
+    "bytes": 32684,
+    "channels": 1,
+    "data_bytes": 32640,
+    "duration_seconds": 0.68,
+    "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/m2-tts/runs/20260727T170914Z/output.wav",
+    "sample_rate_hz": 24000,
+    "sha256": "9032de1ccc74d850cd25d47d9605c68354d77510c51f3d4c04191f10adcca9e3"
+  },
+  "captured_at": "2026-07-27T17:14:51.918278Z",
+  "claim_policy": "A successful run proves only that this pinned local CPU-only runtime wrote a structurally valid WAV. It does not establish intelligibility, quality, latency, MI210 behavior, or suitability for a lineup decision.",
+  "classification": "observation-only-recovered-after-runner-cleanup-defect",
+  "execution_cleanup": {
+    "pid_absent": true,
+    "port": 56463,
+    "port_has_no_listener": true,
+    "process_group_absent": true,
+    "server_pgid": 1381206,
+    "server_pid": 1381206
+  },
+  "generation_done_flag": {
+    "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/m2-tts/runs/20260727T170914Z/server-output/round_000/tts_wav/generation_done.flag",
+    "sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3"
+  },
+  "manifest": {
+    "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/m2-tts/m2_tts_manifest.json",
+    "sha256": "0e5506199e4e8d581af842edadd353deee53d9c2cc2aa473fc302ad1a815a191"
+  },
+  "recovery_reason": "The original server completed and emitted WAVs, but the runner's process-group cleanup check did not reap the already-exited group leader before testing group liveness, so capture publication failed. No inference was regenerated.",
+  "recovery_runner": {
+    "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/m2-tts/m2_tts_observation_runner.py",
+    "sha256": "74e5f4272ae232f02b2677dc502102a9769b61a339ebc948376f3d6520883564"
+  },
+  "runtime_binary": {
+    "path": "/mnt/raid0/llm/llama.cpp-omni-experimental/build-cpu/bin/llama-server",
+    "sha256": "92d66107fde2979dad90d063d4d493f25bf930f9d98bd0daa7989d7fb654e278"
+  },
+  "schema_version": 4,
+  "server_log_evidence": {
+    "decoded_text": "17:09:24.412 LLM->TTS: text='The MiniCPM audio path is working.', n_tokens=9, hidden_size=36864, n_embd=4096, token_ids=[785 19643 7123 44 7699 1815 374 3238 13]",
+    "endpoint_http_200": {
+      "decode": [
+        "srv  log_server_r: request: POST /v1/stream/decode 127.0.0.1 200"
+      ],
+      "omni_init": [
+        "srv  log_server_r: request: POST /v1/stream/omni_init 127.0.0.1 200"
+      ],
+      "prefill": [
+        "srv  log_server_r: request: POST /v1/stream/prefill 127.0.0.1 200"
+      ]
+    },
+    "log": {
+      "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/m2-tts/runs/20260727T170914Z/server.log",
+      "sha256": "197b53bff97f1f91f9bf14c1cd29f1494a4b3685e5db4670d663d754c90ea190"
+    },
+    "wav_timing_rows": [
+      "17:09:27.824 T2W\u7ebf\u7a0b: wav_0.wav | 0.84s audio | 1999.4ms inference | RTF=2.38 | t=5713ms",
+      "17:09:29.647 T2W\u7ebf\u7a0b: wav_1.wav | 1.00s audio | 1822.9ms inference | RTF=1.82 | t=7536ms",
+      "17:09:31.325 T2W\u7ebf\u7a0b: wav_2.wav | 0.68s audio | 1678.1ms inference | RTF=2.47 | t=9214ms"
+    ]
+  },
+  "source_bindings": [
+    {
+      "path": "/mnt/raid0/llm/llama.cpp-omni-experimental/tools/server/server.cpp",
+      "sha256": "21d19bf9c4433cdc7db6115a0d6227cf87a4021b5de9beb29d8bc108035a2ece"
+    },
+    {
+      "path": "/mnt/raid0/llm/llama.cpp-omni-experimental/tools/omni/omni.cpp",
+      "sha256": "53bd49f80c2086cb6b6ec0b504684d987763d818ac5e1e29680be45e98478fbd"
+    },
+    {
+      "path": "/mnt/raid0/llm/llama.cpp-omni-experimental/README.md",
+      "sha256": "b2397bb3cb5f6b826fe7a47fc333ca44865319099def95c42a3e171d108e2dba"
+    }
+  ],
+  "source_wavs": [
+    {
+      "audio_format": 1,
+      "bits_per_sample": 16,
+      "bytes": 40364,
+      "channels": 1,
+      "data_bytes": 40320,
+      "duration_seconds": 0.84,
+      "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/m2-tts/runs/20260727T170914Z/server-output/round_000/tts_wav/wav_0.wav",
+      "sample_rate_hz": 24000,
+      "sha256": "fe4dc70c19d6143ee4f2a4ce45668da31c00a3035bebbb4db8504f87575b11bb"
+    },
+    {
+      "audio_format": 1,
+      "bits_per_sample": 16,
+      "bytes": 48044,
+      "channels": 1,
+      "data_bytes": 48000,
+      "duration_seconds": 1.0,
+      "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/m2-tts/runs/20260727T170914Z/server-output/round_000/tts_wav/wav_1.wav",
+      "sample_rate_hz": 24000,
+      "sha256": "09a4f2d2fcf3ec92aac08535c386d7ccf9def0ff76afe163ddc8f275952534ca"
+    },
+    {
+      "audio_format": 1,
+      "bits_per_sample": 16,
+      "bytes": 32684,
+      "channels": 1,
+      "data_bytes": 32640,
+      "duration_seconds": 0.68,
+      "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/m2-tts/runs/20260727T170914Z/server-output/round_000/tts_wav/wav_2.wav",
+      "sample_rate_hz": 24000,
+      "sha256": "9032de1ccc74d850cd25d47d9605c68354d77510c51f3d4c04191f10adcca9e3"
+    }
+  ],
+  "upstream": {
+    "binary_relative_path": "build-cpu/bin/llama-server",
+    "checkout": "/mnt/raid0/llm/llama.cpp-omni-experimental",
+    "commit": "5202b7b2f4d11f50b9f996161e7a2f8b8571b890",
+    "source_relative_paths": [
+      "tools/server/server.cpp",
+      "tools/omni/omni.cpp",
+      "README.md"
+    ]
+  }
+}
