@@ -22,6 +22,32 @@ TC_CACHE="$ART/driver/thinkingcap_identity_cache.json"
 V8_HEAD=67a433bf45a8a091d83b4ea0b32ff0735fd51800
 V8_BINARY_SHA=112c560f1c978c584a9899539851348a0ce1e05cde458061c281758aff066882
 
+ensure_grid_contract() { # append-only migration for pre-v2 provenance
+  local provenance=$base/provenance.txt expected existing_count
+  case "$grid" in
+    full) expected=cartesian24_v2 ;;
+    a4_bridge) expected=a4_bridge11_v1 ;;
+    *) echo "unsupported grid contract: $grid" >&2; return 1 ;;
+  esac
+  existing_count=$(grep -c '^grid_contract=' "$provenance" || true)
+  if (( existing_count == 0 )); then
+    if [[ "$grid" == full ]]; then
+      printf '%s\n' \
+        'grid_contract=cartesian24_v2' \
+        'prior_shape=triangular18' \
+        'new_contract=cartesian24_v2' \
+        'operator_directive=2026-07-27 cartesian full-grid expansion' \
+        'extension_containment=new_cells_use_hard_cgroup-v2_cpuset_184-191;per-cell-proofs-remain-authoritative' \
+        >> "$provenance"
+    else
+      printf 'grid_contract=%s\n' "$expected" >> "$provenance"
+    fi
+  elif (( existing_count != 1 )) || ! grep -qx "grid_contract=$expected" "$provenance"; then
+    echo "conflicting grid contract in $provenance" >&2
+    return 1
+  fi
+}
+
 if [[ ${1:-} == --self-test ]]; then
   set -u
   cell_local_smoke() {
@@ -30,6 +56,26 @@ if [[ ${1:-} == --self-test ]]; then
     [[ "$ctx" == 2048 && "$d" == np1_L2048 ]]
   }
   cell_local_smoke 1 2048
+  self_test_root=$(mktemp -d)
+  # shellcheck disable=SC2317 # Invoked by the EXIT trap below.
+  cleanup_self_test() {
+    local status=$?
+    unlink "$base/provenance.txt" 2>/dev/null || :
+    rmdir "$base" 2>/dev/null || :
+    rmdir "$self_test_root" 2>/dev/null || :
+    exit "$status"
+  }
+  trap cleanup_self_test EXIT
+  base=$self_test_root/full; grid=full
+  mkdir -p "$base"
+  printf 'mode=full grid=full mtp_depth=0 thinking=false\n' > "$base/provenance.txt"
+  ensure_grid_contract
+  ensure_grid_contract
+  [[ $(grep -c '^grid_contract=' "$base/provenance.txt") == 1 ]]
+  grep -qx 'prior_shape=triangular18' "$base/provenance.txt"
+  grep -qx 'new_contract=cartesian24_v2' "$base/provenance.txt"
+  grep -qx 'operator_directive=2026-07-27 cartesian full-grid expansion' "$base/provenance.txt"
+  grep -qx 'extension_containment=new_cells_use_hard_cgroup-v2_cpuset_184-191;per-cell-proofs-remain-authoritative' "$base/provenance.txt"
   printf 'RUN_MODEL_BLOCK_SELF_TEST_OK\n'
   exit 0
 fi
@@ -120,14 +166,20 @@ enter_sidecar_cpuset() {
 enter_sidecar_cpuset
 
 if [[ ! -e "$base/provenance.txt" ]]; then
+case "$grid" in
+  full) grid_contract=cartesian24_v2 ;;
+  a4_bridge) grid_contract=a4_bridge11_v1 ;;
+esac
 printf '%s\n' \
   'instrument=canonical np_context_study_20260723 TB-6 continuation' \
   'kernel=production-consolidated-v8 67a433bf45a8a091d83b4ea0b32ff0735fd51800' \
   'server-load-semantics=one contiguous model block; static -np/-c requires reload per cell' \
   'quality=SWE-oracle40 then LCB-hard53 before throughput grid' \
   "mode=$mode grid=$grid mtp_depth=$mtp_n thinking=$thinking" \
+  "grid_contract=$grid_contract" \
   'affinity=hard cgroup-v2 cpuset 184-191 (disjoint from concurrent CPU instruments)' > "$base/provenance.txt"
 fi
+ensure_grid_contract
 
 pid=''
 stop_server() {
@@ -193,13 +245,13 @@ launch() { # dir np ctx extra...
   pid=$!; echo "$pid" > "$d/server.pid"
   [[ $(<"/proc/$pid/cgroup") == "0::/${SIDE_CGROUP##*/}" ]] || {
     echo "GPU server did not inherit the hard cpuset cgroup" >&2
-    return 1
+    return 2
   }
   local deadline=$(( $(date +%s) + 600 ))
   while (( $(date +%s) < deadline )); do
     kill -0 "$pid" 2>/dev/null || { tail -n 80 "$d/server.stderr"; return 1; }
     if curl -sf "http://127.0.0.1:$PORT/health" 2>/dev/null | grep -qi ok; then
-      fence_threads "$d" || return 1
+      fence_threads "$d" || return 2
       return 0
     fi
     sleep 3
@@ -252,7 +304,30 @@ cell() { # np length
   fi
   local spec=()
   (( mtp_n > 0 )) && spec=(--spec-type draft-mtp --spec-draft-n-max "$mtp_n")
-  launch "$d" "$np" "$ctx" --reasoning off "${spec[@]}"
+  local launch_status
+  if launch "$d" "$np" "$ctx" --reasoning off "${spec[@]}"; then
+    :
+  else
+    launch_status=$?
+    stop_server
+    if (( launch_status != 1 )); then
+      echo "server launch failed outside startup capacity detection: $d" >&2
+      return 1
+    fi
+    local capacity_signature
+    capacity_signature=$(capacity_start_signature "$d/server.stderr" || true)
+    if [[ -z "$capacity_signature" ]]; then
+      echo "server failed to start without a recognized capacity signature: $d" >&2
+      return 1
+    fi
+    printf 'SKIP capacity_start signature=%s stderr_sha256=%s server_argv_sha256=%s requested_np=%s requested_L=%s requested_ctx=%s\n' \
+      "$capacity_signature" "$(sha256sum "$d/server.stderr" | awk '{print $1}')" \
+      "$(sha256sum "$d/server.argv" | awk '{print $1}')" "$np" "$L" "$ctx" > "$d/skip.txt"
+    python3 "$VALIDATOR" --root "$ART" --validate-cell "$label" "$np" "$L" >/dev/null || {
+      echo "capacity-start skip failed exact validation: $d" >&2; return 1;
+    }
+    return 0
+  fi
   local nslot vram
   nslot=$(grep -oiP 'n_ctx_per_seq\s*=\s*\K[0-9]+|n_ctx_slot\s*=\s*\K[0-9]+' "$d/server.stderr" | tail -1 || true)
   vram=$(( $(rocm-smi --showmeminfo vram 2>/dev/null | grep -oiP 'used.*?:\s*\K[0-9]+' | head -1 || echo 0) / 1073741824 ))
@@ -272,15 +347,29 @@ cell() { # np length
   python3 "$VALIDATOR" --root "$ART" --validate-cell "$label" "$np" "$L" >/dev/null
 }
 
+capacity_start_signature() { # server.stderr
+  local stderr=$1
+  [[ -f "$stderr" ]] || return 1
+  if grep -qiE '\bhipErrorOutOfMemory\b' "$stderr"; then
+    printf '%s\n' hip_error_out_of_memory
+  elif grep -qiE 'failed to allocate .*\b(HIP|ROCm|VRAM|GPU|device|KV|buffer)\b' "$stderr"; then
+    printf '%s\n' allocation_failure
+  elif grep -qiE '\b(HIP|ROCm)\b.*\b(out of memory|memory allocation)\b' "$stderr"; then
+    printf '%s\n' rocm_memory_allocation_failure
+  else
+    return 1
+  fi
+}
+
 if [[ "$mode" == full ]]; then
   run_quality swebench_oracle 40 3072 "$PIN_SWE"
   run_quality livecodebench_hard 53 4096 "$PIN_LCB"
 fi
 for np in 1 2 4 8 16 32; do cell "$np" 2048; done
 if [[ "$grid" == full ]]; then
-  for np in 1 2 4 8 16; do cell "$np" 8192; done
-  for np in 1 2 4 8; do cell "$np" 16384; done
-  for np in 1 2 4; do cell "$np" 32768; done
+  for L in 8192 16384 32768; do
+    for np in 1 2 4 8 16 32; do cell "$np" "$L"; done
+  done
 else
   for np in 1 2 4 8 16; do cell "$np" 8192; done
 fi

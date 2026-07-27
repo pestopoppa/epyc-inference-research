@@ -12,10 +12,12 @@ so and all requested surfaces are terminal.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
 import re
+import shlex
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -25,13 +27,32 @@ from typing import Any
 
 FULL_GRID = {
     2048: (1, 2, 4, 8, 16, 32),
-    8192: (1, 2, 4, 8, 16),
-    16384: (1, 2, 4, 8),
-    32768: (1, 2, 4),
+    8192: (1, 2, 4, 8, 16, 32),
+    16384: (1, 2, 4, 8, 16, 32),
+    32768: (1, 2, 4, 8, 16, 32),
 }
 A4_BRIDGE_GRID = {2048: (1, 2, 4, 8, 16, 32), 8192: (1, 2, 4, 8, 16)}
+GRID_CONTRACTS = {"full": "cartesian24_v2", "a4_bridge": "a4_bridge11_v1"}
 PROVENANCE_RE = re.compile(r"^mode=(?P<mode>\S+) grid=(?P<grid>\S+)\b", re.MULTILINE)
-SKIP_RE = re.compile(r"^SKIP n_ctx_slot=(?P<nctx>\d+) vram=(?P<vram>\d+)G requested_L=(?P<length>\d+)\n?$")
+MTP_DEPTH_RE = re.compile(r"\bmtp_depth=(?P<mtp_depth>\d+)\b")
+GRID_CONTRACT_LINE_RE = re.compile(r"^grid_contract=(?P<contract>\S+)$", re.MULTILINE)
+GRID_CONTRACT_ANY_RE = re.compile(r"^grid_contract=.*$", re.MULTILINE)
+RESOURCE_SKIP_RE = re.compile(r"^SKIP n_ctx_slot=(?P<nctx>\d+) vram=(?P<vram>\d+)G requested_L=(?P<length>\d+)\n?$")
+CAPACITY_START_SKIP_RE = re.compile(
+    r"^SKIP capacity_start signature=(?P<signature>[a-z0-9_]+) "
+    r"stderr_sha256=(?P<stderr_sha256>[0-9a-f]{64}) "
+    r"server_argv_sha256=(?P<argv_sha256>[0-9a-f]{64}) requested_np=(?P<np>\d+) "
+    r"requested_L=(?P<length>\d+) requested_ctx=(?P<context>\d+)\n?$"
+)
+CAPACITY_START_SIGNATURES = {
+    "hip_error_out_of_memory": re.compile(r"\bhipErrorOutOfMemory\b", re.IGNORECASE),
+    "allocation_failure": re.compile(
+        r"failed to allocate .*\b(HIP|ROCm|VRAM|GPU|device|KV|buffer)\b", re.IGNORECASE
+    ),
+    "rocm_memory_allocation_failure": re.compile(
+        r"\b(HIP|ROCm)\b.*\b(out of memory|memory allocation)\b", re.IGNORECASE
+    ),
+}
 COMPLETE_RE = re.compile(r"^COMPLETE \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\n$")
 CANONICAL_LABELS = (
     "A3_tc_thinkingcap_q8",
@@ -51,6 +72,13 @@ CANONICAL_SURFACE_BINDINGS = {
     "A3_ff_fable_mtp_q8": ("full", "full", "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf"),
     "Laguna_ud_iq2_gpu_dflash_off": ("throughput_only", "full", "/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/Laguna-S-2.1-UD-IQ2_M.gguf"),
     "A4_35b_a3b_v8_bridge": ("throughput_only", "a4_bridge", "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf"),
+}
+CANONICAL_MTP_DEPTHS = {
+    "A3_tc_thinkingcap_q8": 4,
+    "A3_ff_fable_non_mtp_q8": 0,
+    "A3_ff_fable_mtp_q8": 1,
+    "Laguna_ud_iq2_gpu_dflash_off": 0,
+    "A4_35b_a3b_v8_bridge": 4,
 }
 
 
@@ -123,6 +151,7 @@ class SurfaceSpec:
     label: str
     mode: str
     grid: str
+    mtp_depth: int
     cells: tuple[tuple[int, int], ...]
 
 
@@ -140,16 +169,31 @@ def load_spec(base: Path) -> SurfaceSpec:
     provenance = base / "provenance.txt"
     if not provenance.is_file():
         raise ValueError("missing provenance.txt")
-    match = PROVENANCE_RE.search(provenance.read_text())
+    provenance_text = provenance.read_text()
+    match = PROVENANCE_RE.search(provenance_text)
     if not match:
         raise ValueError("provenance has no mode/grid declaration")
     mode, grid = match.group("mode"), match.group("grid")
     if mode not in {"full", "throughput_only"}:
         raise ValueError(f"unsupported mode {mode!r}")
+    contract_lines = GRID_CONTRACT_ANY_RE.findall(provenance_text)
+    if len(contract_lines) != 1:
+        raise ValueError("provenance must contain exactly one grid_contract line")
+    contract_match = GRID_CONTRACT_LINE_RE.fullmatch(contract_lines[0])
+    expected_contract = GRID_CONTRACTS.get(grid)
+    if contract_match is None or contract_match.group("contract") != expected_contract:
+        raise ValueError(f"grid_contract is not canonical {expected_contract!r}")
     binding = CANONICAL_SURFACE_BINDINGS.get(base.name)
     if binding and (mode, grid) != binding[:2]:
         raise ValueError(f"canonical {base.name} requires mode/grid {binding[:2]!r}")
-    return SurfaceSpec(base.name, mode, grid, required_cells(grid))
+    mtp_match = MTP_DEPTH_RE.search(provenance_text)
+    if not mtp_match:
+        raise ValueError("provenance has no mtp_depth declaration")
+    mtp_depth = int(mtp_match.group("mtp_depth"))
+    expected_mtp_depth = CANONICAL_MTP_DEPTHS.get(base.name)
+    if expected_mtp_depth is not None and mtp_depth != expected_mtp_depth:
+        raise ValueError(f"canonical {base.name} requires mtp_depth {expected_mtp_depth}")
+    return SurfaceSpec(base.name, mode, grid, mtp_depth, required_cells(grid))
 
 
 def finite_number(value: Any) -> bool:
@@ -201,19 +245,109 @@ def validate_result(path: Path, label: str, np: int, length: int) -> tuple[dict[
     return throughput, None
 
 
-def validate_skip(path: Path, length: int) -> tuple[str | None, str | None]:
+def validate_skip(path: Path, label: str, mtp_depth: int, np: int, length: int) -> tuple[str | None, str | None]:
     try:
         text = path.read_text()
     except OSError as exc:
         return None, f"unreadable skip.txt: {exc}"
-    match = SKIP_RE.fullmatch(text)
-    if not match:
-        return None, "skip.txt does not match canonical capacity-skip grammar"
-    nctx, vram, requested = (int(match.group(name)) for name in ("nctx", "vram", "length"))
-    if requested != length:
-        return None, f"skip requested_L is not {length}"
-    if nctx >= length and vram <= 61:
-        return None, "skip has neither insufficient slot context nor VRAM overflow"
+    resource_match = RESOURCE_SKIP_RE.fullmatch(text)
+    if resource_match:
+        nctx, vram, requested = (int(resource_match.group(name)) for name in ("nctx", "vram", "length"))
+        if requested != length:
+            return None, f"skip requested_L is not {length}"
+        if nctx >= length and vram <= 61:
+            return None, "skip has neither insufficient slot context nor VRAM overflow"
+        return text.strip(), None
+
+    capacity_match = CAPACITY_START_SKIP_RE.fullmatch(text)
+    if not capacity_match:
+        return None, "skip.txt does not match a canonical resource or capacity-start skip grammar"
+    requested_np, requested_length, requested_context = (
+        int(capacity_match.group(name)) for name in ("np", "length", "context")
+    )
+    if (requested_np, requested_length) != (np, length):
+        return None, "capacity-start skip request does not bind this cell"
+    if requested_context != np * length:
+        return None, "capacity-start skip requested_ctx is not requested_np * requested_L"
+    if requested_context < 262144:
+        return None, "capacity-start skip is only valid for a newly scheduled >=262144 context cell"
+    signature = capacity_match.group("signature")
+    pattern = CAPACITY_START_SIGNATURES.get(signature)
+    if pattern is None:
+        return None, "capacity-start skip has an unrecognized allocation signature"
+    stderr = path.with_name("server.stderr")
+    try:
+        stderr_bytes = stderr.read_bytes()
+    except OSError as exc:
+        return None, f"capacity-start skip has unreadable server.stderr: {exc}"
+    actual_hash = hashlib.sha256(stderr_bytes).hexdigest()
+    if actual_hash != capacity_match.group("stderr_sha256"):
+        return None, "capacity-start skip server.stderr SHA-256 mismatch"
+    if not pattern.search(stderr_bytes.decode("utf-8", errors="replace")):
+        return None, "capacity-start skip signature is absent from server.stderr"
+    argv = path.with_name("server.argv")
+    try:
+        argv_bytes = argv.read_bytes()
+    except OSError as exc:
+        return None, f"capacity-start skip has unreadable server.argv: {exc}"
+    if hashlib.sha256(argv_bytes).hexdigest() != capacity_match.group("argv_sha256"):
+        return None, "capacity-start skip server.argv SHA-256 mismatch"
+    try:
+        command = shlex.split(argv_bytes.decode("utf-8"), posix=True)
+    except ValueError as exc:
+        return None, f"capacity-start skip has unparsable server.argv: {exc}"
+    prefix = (
+        "env", "GGML_IQK=1", "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp/build-hip/bin",
+        "taskset", "-c", "184-191", V8_BINARY,
+    )
+    if tuple(command[:len(prefix)]) != prefix:
+        return None, "capacity-start skip server.argv does not use canonical v8 launch prefix"
+    server_args = command[len(prefix):]
+    expected_options = {
+        "--host": "127.0.0.1",
+        "--port": "18072",
+        "-np": str(np),
+        "-c": str(np * length),
+        "-t": "8",
+        "-tb": "8",
+        "-b": "2048",
+        "-ub": "2048",
+        "-ctk": "f16",
+        "-ctv": "f16",
+        "--device": "ROCm0",
+        "-ngl": "all",
+        "-fa": "on",
+        "--reasoning": "off",
+    }
+    binding = CANONICAL_SURFACE_BINDINGS.get(label)
+    if binding is None:
+        return None, "capacity-start skip label is not a canonical surface"
+    expected_options["-m"] = binding[2]
+    for option, expected in expected_options.items():
+        positions = [index for index, value in enumerate(server_args) if value == option]
+        if len(positions) != 1 or positions[0] + 1 >= len(server_args):
+            return None, f"capacity-start skip server.argv has missing or duplicate {option}"
+        if server_args[positions[0] + 1] != expected:
+            if option == "-m":
+                return None, "capacity-start skip server.argv -m is not canonical model"
+            return None, f"capacity-start skip server.argv {option} is not {expected!r}"
+    for flag in ("--metrics", "--slots", "--jinja"):
+        if server_args.count(flag) != 1:
+            return None, f"capacity-start skip server.argv has missing or duplicate {flag}"
+    expected_mtp_depth = CANONICAL_MTP_DEPTHS[label]
+    if mtp_depth != expected_mtp_depth:
+        return None, "capacity-start skip provenance mtp_depth is not canonical"
+    mtp_flags = ("--spec-type", "--spec-draft-n-max")
+    if mtp_depth == 0:
+        if any(flag in server_args for flag in mtp_flags):
+            return None, "capacity-start skip server.argv has MTP flags for mtp_depth 0"
+    else:
+        for flag, expected in (("--spec-type", "draft-mtp"), ("--spec-draft-n-max", str(mtp_depth))):
+            positions = [index for index, value in enumerate(server_args) if value == flag]
+            if len(positions) != 1 or positions[0] + 1 >= len(server_args):
+                return None, f"capacity-start skip server.argv has missing or duplicate {flag}"
+            if server_args[positions[0] + 1] != expected:
+                return None, f"capacity-start skip server.argv {flag} is not {expected!r}"
     return text.strip(), None
 
 
@@ -275,7 +409,7 @@ def inspect_surface(base: Path) -> dict[str, Any]:
             else:
                 row.update(state="measured", throughput=throughput)
         elif skip.is_file():
-            reason, error = validate_skip(skip, length)
+            reason, error = validate_skip(skip, spec.label, spec.mtp_depth, np, length)
             if error:
                 row.update(state="invalid", reason=error)
                 terminal = False
@@ -319,7 +453,7 @@ def validate_cell(base: Path, np: int, length: int) -> str | None:
         _, reason = validate_result(result, spec.label, np, length)
         return reason
     if skip.exists():
-        _, reason = validate_skip(skip, length)
+        _, reason = validate_skip(skip, spec.label, spec.mtp_depth, np, length)
         return reason
     return "cell has no terminal disposition"
 
