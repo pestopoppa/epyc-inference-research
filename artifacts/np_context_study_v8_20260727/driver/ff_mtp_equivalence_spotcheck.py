@@ -11,8 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
-import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -29,6 +28,7 @@ PORT = 18072
 CORES = "184-191"
 V8_HEAD = "67a433bf45a8a091d83b4ea0b32ff0735fd51800"
 V8_BINARY_SHA = "112c560f1c978c584a9899539851348a0ce1e05cde458061c281758aff066882"
+PREPARED_MANIFEST_SHA = "e29fd6a0536c21ada180fcc929ba5b10da6fe498693abb9bf97459f374a2e7da"
 MODELS = {
     "non_mtp": {
         "label": "A3_ff_fable_non_mtp_q8",
@@ -62,14 +62,15 @@ class SpotCheckError(RuntimeError):
 
 
 def sha256_file(path: Path) -> str:
-    return hashlib.file_digest(path.open("rb"), "sha256").hexdigest()
+    with path.open("rb") as handle:
+        return hashlib.file_digest(handle, "sha256").hexdigest()
 
 
 def write_json(path: Path, value: Any) -> None:
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
 
 
-def http_json(path: str, body: dict[str, Any], timeout: int = REQUEST_TIMEOUT_S) -> dict[str, Any]:
+def post_raw(path: str, body: dict[str, Any], timeout: int = REQUEST_TIMEOUT_S) -> bytes:
     req = urllib.request.Request(
         f"http://127.0.0.1:{PORT}{path}",
         data=json.dumps(body).encode(),
@@ -78,12 +79,27 @@ def http_json(path: str, body: dict[str, Any], timeout: int = REQUEST_TIMEOUT_S)
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as response:
-            value = json.loads(response.read())
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+            return response.read()
+    except (urllib.error.URLError, TimeoutError) as exc:
         raise SpotCheckError(f"{path} request failed: {exc}") from exc
+
+
+def decode_object(raw: bytes, source: str) -> dict[str, Any]:
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SpotCheckError(f"{source} returned invalid JSON: {exc}") from exc
     if not isinstance(value, dict):
-        raise SpotCheckError(f"{path} did not return an object")
+        raise SpotCheckError(f"{source} did not return an object")
     return value
+
+
+def get_json(path: str, timeout: int = 10) -> dict[str, Any]:
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{PORT}{path}", timeout=timeout) as response:
+            return decode_object(response.read(), path)
+    except urllib.error.URLError as exc:
+        raise SpotCheckError(f"{path} request failed: {exc}") from exc
 
 
 def request_body(prompt: str) -> dict[str, Any]:
@@ -113,26 +129,32 @@ def extract_content(response: dict[str, Any]) -> str:
     return content
 
 
-def token_ids(content: str) -> list[int]:
-    response = http_json("/tokenize", {"content": content})
+def token_ids(response: dict[str, Any]) -> list[int]:
     tokens = response.get("tokens")
     if not isinstance(tokens, list) or not tokens or not all(isinstance(x, int) for x in tokens):
         raise SpotCheckError("/tokenize returned no non-empty integer token list")
     return tokens
 
 
-def collect_arm(name: str, output: Path) -> list[dict[str, Any]]:
+def collect_arm(name: str, output: Path, process: subprocess.Popen[str]) -> list[dict[str, Any]]:
     rows = []
     arm_dir = output / name
     raw_dir = arm_dir / "raw"
     raw_dir.mkdir(parents=True)
     for index, prompt in enumerate(PROMPTS, start=1):
         body = request_body(prompt)
-        response = http_json("/v1/chat/completions", body)
+        assert_server_identity(process=process, name=name)
+        write_json(raw_dir / f"{index:02d}.chat.request.json", body)
+        raw_response = post_raw("/v1/chat/completions", body)
+        (raw_dir / f"{index:02d}.chat.response.raw.json").write_bytes(raw_response)
+        response = decode_object(raw_response, "/v1/chat/completions")
         content = extract_content(response)
-        tokens = token_ids(content)
-        write_json(raw_dir / f"{index:02d}.request.json", body)
-        write_json(raw_dir / f"{index:02d}.response.json", response)
+        tokenize_body = {"content": content}
+        assert_server_identity(process=process, name=name)
+        write_json(raw_dir / f"{index:02d}.tokenize.request.json", tokenize_body)
+        raw_tokens = post_raw("/tokenize", tokenize_body)
+        (raw_dir / f"{index:02d}.tokenize.response.raw.json").write_bytes(raw_tokens)
+        tokens = token_ids(decode_object(raw_tokens, "/tokenize"))
         row = {
             "index": index,
             "prompt": prompt,
@@ -164,8 +186,6 @@ def compare_captures(non_mtp: list[dict[str, Any]], mtp: list[dict[str, Any]]) -
                 "mtp_content_sha256": right["content_sha256"],
             })
     result = {"prompt_count": len(PROMPTS), "exact_equivalent": not mismatches, "mismatches": mismatches}
-    if mismatches:
-        raise SpotCheckError(f"MTP equivalence failed for {len(mismatches)} prompt(s)")
     return result
 
 
@@ -180,7 +200,10 @@ def validate_runtime_identity() -> dict[str, Any]:
         raise SpotCheckError("llama.cpp production commit drift")
     if not BIN.is_file() or sha256_file(BIN) != V8_BINARY_SHA:
         raise SpotCheckError("llama-server binary identity drift")
-    manifest = json.loads((ART / "prefill_to_depth_rag.prepared.json").read_text())
+    manifest_path = ART / "prefill_to_depth_rag.prepared.json"
+    if sha256_file(manifest_path) != PREPARED_MANIFEST_SHA:
+        raise SpotCheckError("prepared identity manifest hash drift")
+    manifest = json.loads(manifest_path.read_text())
     by_path = {row["path"]: row for row in manifest["models"]}
     for name, model in MODELS.items():
         path = Path(model["path"])
@@ -196,7 +219,7 @@ def validate_runtime_identity() -> dict[str, Any]:
     return {"kernel_commit": V8_HEAD, "binary_sha256": V8_BINARY_SHA, "model_contract": "851-base-plus-15-mtp"}
 
 
-def launch(name: str, output: Path) -> subprocess.Popen[str]:
+def launch(name: str, output: Path) -> tuple[subprocess.Popen[str], Any, Any]:
     model = MODELS[name]
     arm_dir = output / name
     arm_dir.mkdir(parents=True)
@@ -211,10 +234,19 @@ def launch(name: str, output: Path) -> subprocess.Popen[str]:
     stdout = (arm_dir / "server.stdout").open("w")
     process = subprocess.Popen(argv, stdout=stdout, stderr=stderr, text=True)
     (arm_dir / "server.pid").write_text(f"{process.pid}\n")
-    return process
+    return process, stdout, stderr
 
 
-def wait_healthy(process: subprocess.Popen[str], arm_dir: Path) -> None:
+def assert_server_identity(process: subprocess.Popen[str], name: str) -> None:
+    if process.poll() is not None:
+        raise SpotCheckError(f"{name} server is not alive: exit {process.returncode}")
+    props = get_json("/props")
+    model_path = props.get("model_path")
+    if model_path != MODELS[name]["path"]:
+        raise SpotCheckError(f"{name} /props model_path mismatch: {model_path!r}")
+
+
+def wait_healthy(process: subprocess.Popen[str], arm_dir: Path, name: str) -> None:
     deadline = time.monotonic() + 600
     while time.monotonic() < deadline:
         if process.poll() is not None:
@@ -222,6 +254,7 @@ def wait_healthy(process: subprocess.Popen[str], arm_dir: Path) -> None:
         try:
             with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/health", timeout=5) as response:
                 if response.status == 200 and b"ok" in response.read().lower():
+                    assert_server_identity(process, name)
                     return
         except urllib.error.URLError:
             pass
@@ -229,7 +262,7 @@ def wait_healthy(process: subprocess.Popen[str], arm_dir: Path) -> None:
     raise SpotCheckError(f"server health timeout; see {arm_dir / 'server.stderr'}")
 
 
-def stop(process: subprocess.Popen[str]) -> None:
+def stop(process: subprocess.Popen[str], stdout: Any, stderr: Any) -> None:
     if process.poll() is None:
         process.terminate()
         try:
@@ -237,14 +270,19 @@ def stop(process: subprocess.Popen[str]) -> None:
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=10)
+    if process.poll() is None:
+        raise SpotCheckError("server remained alive after termination")
+    stdout.close()
+    stderr.close()
 
 
 def port_is_free() -> bool:
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/health", timeout=2):
-            return False
-    except urllib.error.URLError:
-        return True
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.bind(("127.0.0.1", PORT))
+    except OSError:
+        return False
+    return True
 
 
 def main() -> int:
@@ -271,14 +309,16 @@ def main() -> int:
     captures: dict[str, list[dict[str, Any]]] = {}
     try:
         for name in ("non_mtp", "mtp"):
-            process = launch(name, args.output)
+            process, stdout, stderr = launch(name, args.output)
             try:
-                wait_healthy(process, args.output / name)
-                captures[name] = collect_arm(name, args.output)
+                wait_healthy(process, args.output / name, name)
+                captures[name] = collect_arm(name, args.output, process)
             finally:
-                stop(process)
+                stop(process, stdout, stderr)
         comparison = compare_captures(captures["non_mtp"], captures["mtp"])
         write_json(args.output / "comparison.json", comparison)
+        if not comparison["exact_equivalent"]:
+            raise SpotCheckError(f"MTP equivalence failed for {len(comparison['mismatches'])} prompt(s)")
         (args.output / "PASS").write_text("exact content and retokenized output IDs match\n")
         return 0
     except Exception as exc:
