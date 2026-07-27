@@ -1,0 +1,156 @@
+{
+  "claim_boundary": [
+    "ASR agreement with the known generation text is an automated intelligibility signal only.",
+    "This is not MOS, voice-quality, latency, production-readiness, or lineup evidence."
+  ],
+  "classification": "observation_only_cpu_asr_intelligibility_probe",
+  "expected_generation_text": "The MiniCPM audio path is working.",
+  "generated_at_utc": "2026-07-27T17:37:55.533429Z",
+  "model": {
+    "compute_type": "int8",
+    "config_sha256": "b0253ea6c0d3bea6b1e19e91a02acfd3b53f4467362efcb5a3e6b16c9b3a9b7e",
+    "model_bin_sha256": "e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da",
+    "network_disabled_by_design": true,
+    "path": "/mnt/raid0/llm/cache/huggingface/hub/models--mobiuslabsgmbh--faster-whisper-large-v3-turbo/snapshots/0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf"
+  },
+  "runtime": {
+    "argv": [
+      "/mnt/raid0/llm/pace-env/bin/python",
+      "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/m2-tts/m2_tts_intelligibility_probe.py",
+      "--run-dir",
+      "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/m2-tts/runs/20260727T170914Z",
+      "--model-path",
+      "/mnt/raid0/llm/cache/huggingface/hub/models--mobiuslabsgmbh--faster-whisper-large-v3-turbo/snapshots/0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf",
+      "--output-dir",
+      "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/m2-tts/asr-observation-20260727T173748Z",
+      "--threads",
+      "64"
+    ],
+    "cpu_only": true,
+    "gpu_environment": {
+      "CUDA_VISIBLE_DEVICES": "",
+      "HIP_VISIBLE_DEVICES": "",
+      "ROCR_VISIBLE_DEVICES": ""
+    },
+    "platform": "Linux-6.14.0-37-generic-x86_64-with-glibc2.42",
+    "python": "/mnt/raid0/llm/pace-env/bin/python",
+    "python_version": "3.13.7 (main, Mar  3 2026, 12:19:54) [GCC 15.2.0]",
+    "threads": 64
+  },
+  "schema_version": 1,
+  "source_run": "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/m2-tts/runs/20260727T170914Z",
+  "transcriptions": {
+    "concatenated_pcm.wav": {
+      "duration_seconds": 2.52,
+      "input": "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/m2-tts/asr-observation-20260727T173748Z/concatenated_pcm.wav",
+      "input_sha256": "5b418cc94738f442f2ed15caf93b961b45b15f8e173d94238ab69112831b8439",
+      "language": "en",
+      "language_probability": 1,
+      "load_seconds": 0.7328287690179422,
+      "segments": [
+        {
+          "end": 2.56,
+          "start": 0.0,
+          "text": "The mini CPM audio path is working."
+        }
+      ],
+      "text": "The mini CPM audio path is working.",
+      "transcription_seconds": 0.9804822009755298
+    },
+    "wav_0.wav": {
+      "duration_seconds": 0.84,
+      "input": "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/m2-tts/runs/20260727T170914Z/server-output/round_000/tts_wav/wav_0.wav",
+      "input_sha256": "fe4dc70c19d6143ee4f2a4ce45668da31c00a3035bebbb4db8504f87575b11bb",
+      "language": "en",
+      "language_probability": 1,
+      "load_seconds": 1.0941028809756972,
+      "segments": [
+        {
+          "end": 1.0,
+          "start": 0.0,
+          "text": "The mini-CPU"
+        }
+      ],
+      "text": "The mini-CPU",
+      "transcription_seconds": 0.9563873219885863
+    },
+    "wav_1.wav": {
+      "duration_seconds": 1.0,
+      "input": "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/m2-tts/runs/20260727T170914Z/server-output/round_000/tts_wav/wav_1.wav",
+      "input_sha256": "09a4f2d2fcf3ec92aac08535c386d7ccf9def0ff76afe163ddc8f275952534ca",
+      "language": "en",
+      "language_probability": 1,
+      "load_seconds": 0.783109585987404,
+      "segments": [
+        {
+          "end": 1.0,
+          "start": 0.0,
+          "text": "APM audio passed."
+        }
+      ],
+      "text": "APM audio passed.",
+      "transcription_seconds": 0.8901326740160584
+    },
+    "wav_2.wav": {
+      "duration_seconds": 0.68,
+      "input": "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/m2-tts/runs/20260727T170914Z/server-output/round_000/tts_wav/wav_2.wav",
+      "input_sha256": "9032de1ccc74d850cd25d47d9605c68354d77510c51f3d4c04191f10adcca9e3",
+      "language": "en",
+      "language_probability": 1,
+      "load_seconds": 0.7540302769630216,
+      "segments": [
+        {
+          "end": 1.0,
+          "start": 0.0,
+          "text": "is working."
+        }
+      ],
+      "text": "is working.",
+      "transcription_seconds": 0.9985657889628783
+    }
+  },
+  "wav_validation": {
+    "combined": {
+      "channels": 1,
+      "duration_seconds": 2.52,
+      "frames": 60480,
+      "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/m2-tts/asr-observation-20260727T173748Z/concatenated_pcm.wav",
+      "payload_sha256": "4b21d6175b95d59b65b605dc30dafc37596077c6c1c116038d7e8a5fee20802b",
+      "sample_rate_hz": 24000,
+      "sample_width_bytes": 2,
+      "sha256": "5b418cc94738f442f2ed15caf93b961b45b15f8e173d94238ab69112831b8439"
+    },
+    "inputs": [
+      {
+        "channels": 1,
+        "duration_seconds": 0.84,
+        "frames": 20160,
+        "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/m2-tts/runs/20260727T170914Z/server-output/round_000/tts_wav/wav_0.wav",
+        "payload_sha256": "d962bcefef3a638149a808e76e726d8cf70ac16bead04ca73481aeb15661eca5",
+        "sample_rate_hz": 24000,
+        "sample_width_bytes": 2,
+        "sha256": "fe4dc70c19d6143ee4f2a4ce45668da31c00a3035bebbb4db8504f87575b11bb"
+      },
+      {
+        "channels": 1,
+        "duration_seconds": 1.0,
+        "frames": 24000,
+        "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/m2-tts/runs/20260727T170914Z/server-output/round_000/tts_wav/wav_1.wav",
+        "payload_sha256": "e9ca7812a3ce742fb743edd52fae15b241b94510e5b2eb2e8ae38f5043805608",
+        "sample_rate_hz": 24000,
+        "sample_width_bytes": 2,
+        "sha256": "09a4f2d2fcf3ec92aac08535c386d7ccf9def0ff76afe163ddc8f275952534ca"
+      },
+      {
+        "channels": 1,
+        "duration_seconds": 0.68,
+        "frames": 16320,
+        "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/m2-tts/runs/20260727T170914Z/server-output/round_000/tts_wav/wav_2.wav",
+        "payload_sha256": "2af1d019dc8b18872fbceb2d01c6d3adf6ee1557a26161ba91a677435cf31648",
+        "sample_rate_hz": 24000,
+        "sample_width_bytes": 2,
+        "sha256": "9032de1ccc74d850cd25d47d9605c68354d77510c51f3d4c04191f10adcca9e3"
+      }
+    ]
+  }
+}
