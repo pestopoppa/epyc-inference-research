@@ -118,10 +118,10 @@ def main() -> None:
     taxonomy = []
     for item in sorted(tc_empty):
         row = rows["A3-tc"][item]
-        diag = next(r for r in read_jsonl(SIX / "A3-tc" / "conversion_diagnostics.sealed.jsonl") if r["id"] == item)
+        diag = next(r for r in read_jsonl(SIX / "A3-tc" / "conversion_diagnostics.sealed.jsonl") if r["instance_id"] == item)
         if row.get("truncated") or row.get("finish_reason") == "length":
             category = "truncated_mid_think_or_before_patch"
-        elif diag.get("strict_block_count", 0) == 0 and diag.get("skipped_block_count", 0) > 0:
+        elif diag.get("applied_block_count", 0) == 0 and diag.get("skipped_block_count", 0) > 0:
             category = "converter_format_or_path_miss"
         elif not (row.get("reasoning") or row.get("response")):
             category = "declined_or_empty"
@@ -135,11 +135,18 @@ def main() -> None:
             "truncated": bool(row.get("truncated")),
             "response_chars": len(row.get("response") or ""),
             "reasoning_chars": len(row.get("reasoning") or ""),
-            "strict_block_count": diag.get("strict_block_count"),
+            "parseable_block_count": diag.get("parseable_block_count"),
             "skipped_block_count": diag.get("skipped_block_count"),
-            "skipped_reasons": diag.get("skipped_reasons", []),
+            "skipped_reasons": [block.get("outcome") for block in diag.get("blocks", []) if block.get("outcome", "").startswith("skipped_")],
         })
-    taxonomy_counts = {category: sum(row["category"] == category for row in taxonomy) for category in sorted({row["category"] for row in taxonomy})}
+    taxonomy_counts = {
+        "declined_or_empty": 0,
+        "truncated_mid_think_or_before_patch": 0,
+        "converter_format_or_path_miss": 0,
+        "unclassified_nonempty_no_patch": 0,
+    }
+    for row in taxonomy:
+        taxonomy_counts[row["category"]] += 1
 
     economics = {}
     for arm in arms:
