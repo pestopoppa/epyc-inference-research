@@ -139,7 +139,7 @@ def validate_source(root: Path) -> dict[str, Any]:
     tag = git(root, "rev-parse", f"{PINNED_TAG}^{{commit}}").stdout.strip()
     if head != PINNED_COMMIT or tag != PINNED_COMMIT:
         raise RuntimeError("derivative checkout or pinned tag does not resolve to the required commit")
-    status = git(root, "status", "--porcelain").stdout
+    status = git(root, "status", "--porcelain", "--untracked-files=all").stdout
     if status:
         raise RuntimeError("derivative checkout is not completely clean")
     symbolic = git(root, "symbolic-ref", "-q", "HEAD", check=False)
@@ -427,17 +427,15 @@ def read_process_stat(path: Path) -> dict[str, int]:
         raise RuntimeError(f"short process stat: {path}")
     return {
         "pid": pid,
+        "parent_pid": int(fields[1]),
         "process_group_id": int(fields[2]),
         "session_id": int(fields[3]),
         "start_time_ticks": int(fields[19]),
     }
 
 
-def list_owned_process_group(
-    process_group_id: int,
-    leader_start_time_ticks: int,
-) -> list[dict[str, int]]:
-    members: list[dict[str, int]] = []
+def list_direct_children(parent_pid: int) -> list[dict[str, int]]:
+    children: list[dict[str, int]] = []
     for candidate in Path("/proc").iterdir():
         if not candidate.name.isdigit():
             continue
@@ -445,23 +443,16 @@ def list_owned_process_group(
             process = read_process_stat(candidate / "stat")
         except (FileNotFoundError, PermissionError, ProcessLookupError):
             continue
-        if process["process_group_id"] != process_group_id:
-            continue
-        if process["session_id"] != process_group_id:
-            raise RuntimeError("process-group identifier was reused by an unrelated session")
-        if process["start_time_ticks"] < leader_start_time_ticks:
-            raise RuntimeError("process-group member predates the owned CLI session")
-        if (
-            process["pid"] == process_group_id
-            and process["start_time_ticks"] != leader_start_time_ticks
-        ):
-            raise RuntimeError("process-group leader identifier was reused")
-        members.append(process)
-    return sorted(members, key=lambda item: item["pid"])
+        if process["parent_pid"] == parent_pid:
+            children.append(process)
+    return sorted(children, key=lambda item: (item["start_time_ticks"], item["pid"]))
 
 
-def signal_processes(members: list[dict[str, int]], signal_number: int) -> list[int]:
-    signalled: list[int] = []
+def signal_processes(
+    members: list[dict[str, int]],
+    signal_number: int,
+) -> list[dict[str, int]]:
+    signalled: list[dict[str, int]] = []
     if not hasattr(os, "pidfd_open") or not hasattr(signal, "pidfd_send_signal"):
         raise RuntimeError("pidfd process cleanup is unavailable")
     for member in members:
@@ -476,10 +467,10 @@ def signal_processes(members: list[dict[str, int]], signal_number: int) -> list[
                 continue
             if current != member:
                 raise RuntimeError(
-                    f"PID {member['pid']} changed identity before process-group cleanup"
+                    f"PID {member['pid']} changed identity before descendant cleanup"
                 )
             signal.pidfd_send_signal(descriptor, signal_number)
-            signalled.append(member["pid"])
+            signalled.append(member)
         except ProcessLookupError:
             pass
         finally:
@@ -487,68 +478,89 @@ def signal_processes(members: list[dict[str, int]], signal_number: int) -> list[
     return signalled
 
 
-def reap_process_group(process_group_id: int) -> list[int]:
-    reaped: list[int] = []
-    while True:
+def reap_direct_children(parent_pid: int) -> list[dict[str, int]]:
+    reaped: list[dict[str, int]] = []
+    for child in list_direct_children(parent_pid):
         try:
-            pid, _ = os.waitpid(-process_group_id, os.WNOHANG)
+            pid, wait_status = os.waitpid(child["pid"], os.WNOHANG)
         except ChildProcessError:
-            break
+            continue
         if pid == 0:
-            break
-        reaped.append(pid)
+            continue
+        reaped.append({**child, "wait_status": wait_status})
     return reaped
 
 
-def drain_owned_process_group(
-    process_group_id: int,
-    leader_start_time_ticks: int,
+def descendant_key(process: dict[str, int]) -> tuple[int, int]:
+    return process["pid"], process["start_time_ticks"]
+
+
+def drain_owned_descendants(
+    owner_pid: int,
     timeout_seconds: float = 10.0,
 ) -> dict[str, Any]:
     report: dict[str, Any] = {
-        "process_group_id": process_group_id,
-        "leader_start_time_ticks": leader_start_time_ticks,
+        "owner_pid": owner_pid,
+        "ownership": (
+            "all children adopted by the dedicated subreaper after an empty "
+            "pre-launch child baseline"
+        ),
         "survivors_detected": False,
         "sigterm_targets": [],
         "sigkill_targets": [],
-        "reaped_pids": [],
+        "reaped_descendants": [],
         "verified_empty": False,
     }
-    report["reaped_pids"].extend(reap_process_group(process_group_id))
-    members = list_owned_process_group(process_group_id, leader_start_time_ticks)
+    report["reaped_descendants"].extend(reap_direct_children(owner_pid))
+    members = list_direct_children(owner_pid)
     if not members:
         report["verified_empty"] = True
         return report
 
     report["survivors_detected"] = True
-    report["sigterm_targets"] = signal_processes(members, signal.SIGTERM)
-    deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
-        report["reaped_pids"].extend(reap_process_group(process_group_id))
-        members = list_owned_process_group(process_group_id, leader_start_time_ticks)
-        if not members:
-            report["verified_empty"] = True
-            return report
-        time.sleep(0.05)
+    for signal_number, target_key in (
+        (signal.SIGTERM, "sigterm_targets"),
+        (signal.SIGKILL, "sigkill_targets"),
+    ):
+        recorded: set[tuple[int, int]] = set()
+        deadline = time.monotonic() + timeout_seconds
+        while True:
+            report["reaped_descendants"].extend(reap_direct_children(owner_pid))
+            members = list_direct_children(owner_pid)
+            if not members:
+                report["verified_empty"] = True
+                return report
+            newly_signalled = signal_processes(members, signal_number)
+            for member in newly_signalled:
+                key = descendant_key(member)
+                if key not in recorded:
+                    report[target_key].append(member)
+                    recorded.add(key)
+            if time.monotonic() >= deadline:
+                break
+            time.sleep(0.05)
+    raise RuntimeError("owned descendants remain after SIGKILL")
 
-    report["sigkill_targets"] = signal_processes(members, signal.SIGKILL)
-    deadline = time.monotonic() + timeout_seconds
-    while time.monotonic() < deadline:
-        report["reaped_pids"].extend(reap_process_group(process_group_id))
-        members = list_owned_process_group(process_group_id, leader_start_time_ticks)
-        if not members:
-            report["verified_empty"] = True
-            return report
-        time.sleep(0.05)
-    raise RuntimeError(f"owned process group {process_group_id} is not empty after SIGKILL")
 
-
-def stop_process(process: subprocess.Popen[Any]) -> None:
+def stop_process(
+    process: subprocess.Popen[Any],
+    leader_pidfd: int | None = None,
+) -> None:
     if process.poll() is not None:
         process.wait()
         return
+
+    def signal_leader(signal_number: int) -> None:
+        if leader_pidfd is not None:
+            signal.pidfd_send_signal(leader_pidfd, signal_number)
+            return
+        identity = read_process_stat(Path(f"/proc/{process.pid}/stat"))
+        if identity["pid"] != process.pid or identity["parent_pid"] != os.getpid():
+            raise RuntimeError("refusing to signal a CLI leader with uncertain ownership")
+        os.kill(process.pid, signal_number)
+
     try:
-        os.killpg(process.pid, signal.SIGTERM)
+        signal_leader(signal.SIGTERM)
     except ProcessLookupError:
         process.wait(timeout=10)
         return
@@ -556,7 +568,7 @@ def stop_process(process: subprocess.Popen[Any]) -> None:
         process.wait(timeout=10)
     except subprocess.TimeoutExpired:
         try:
-            os.killpg(process.pid, signal.SIGKILL)
+            signal_leader(signal.SIGKILL)
         except ProcessLookupError:
             pass
         process.wait(timeout=10)
@@ -618,15 +630,25 @@ def execute(observation_directory: Path, timeout_seconds: float) -> dict[str, An
     observation_directory.mkdir(mode=0o700)
     process: subprocess.Popen[Any] | None = None
     process_group: dict[str, int] | None = None
-    process_group_pidfd: int | None = None
+    leader_pidfd: int | None = None
+    subreaper_enabled = False
+    ownership_baseline_verified = False
+    preexisting_children: list[dict[str, int]] | None = None
     identity: dict[str, Any] | None = None
     child_identity: dict[str, Any] | None = None
-    process_group_cleanup: dict[str, Any] | None = None
+    descendant_cleanup: dict[str, Any] | None = None
     timed_out = False
     errors: list[str] = []
 
     try:
         enable_child_subreaper()
+        subreaper_enabled = True
+        preexisting_children = list_direct_children(os.getpid())
+        if preexisting_children:
+            raise RuntimeError(
+                "runner has pre-existing children; descendant ownership is ambiguous"
+            )
+        ownership_baseline_verified = True
         identity = runtime_identity()
         with open_log(stdout_path) as stdout, open_log(stderr_path) as stderr:
             process = subprocess.Popen(
@@ -640,7 +662,7 @@ def execute(observation_directory: Path, timeout_seconds: float) -> dict[str, An
             try:
                 if not hasattr(os, "pidfd_open"):
                     raise RuntimeError("pidfd process ownership is unavailable")
-                process_group_pidfd = os.pidfd_open(process.pid)
+                leader_pidfd = os.pidfd_open(process.pid)
                 process_group = process_group_identity(process.pid)
                 child_identity = child_runtime_identity(process.pid, process_group)
                 try:
@@ -653,47 +675,41 @@ def execute(observation_directory: Path, timeout_seconds: float) -> dict[str, An
             finally:
                 try:
                     if process.poll() is None:
-                        stop_process(process)
+                        stop_process(process, leader_pidfd)
                 except BaseException as exc:
                     errors.append(f"parent cleanup failed: {type(exc).__name__}: {exc}")
                 try:
-                    if process_group is None or process_group_pidfd is None:
+                    if not ownership_baseline_verified:
                         raise RuntimeError(
-                            "CLI process-group ownership was not established; refusing group cleanup"
+                            "descendant ownership baseline was not established"
                         )
-                    process_group_cleanup = drain_owned_process_group(
-                        process.pid,
-                        process_group["start_time_ticks"],
-                    )
-                    if process_group_cleanup["survivors_detected"]:
+                    descendant_cleanup = drain_owned_descendants(os.getpid())
+                    if descendant_cleanup["survivors_detected"]:
                         errors.append("CLI left surviving descendants after parent exit")
                 except BaseException as exc:
-                    errors.append(f"process-group cleanup failed: {type(exc).__name__}: {exc}")
+                    errors.append(f"descendant cleanup failed: {type(exc).__name__}: {exc}")
     except BaseException as exc:
         errors.append(f"{type(exc).__name__}: {exc}")
     finally:
-        if process is not None and process_group_cleanup is None:
+        if process is not None and descendant_cleanup is None:
             try:
                 if process.poll() is None:
-                    stop_process(process)
+                    stop_process(process, leader_pidfd)
             except BaseException as exc:
                 errors.append(f"fallback parent cleanup failed: {type(exc).__name__}: {exc}")
             try:
-                if process_group is None or process_group_pidfd is None:
+                if not ownership_baseline_verified:
                     raise RuntimeError(
-                        "CLI process-group ownership was not established; refusing group cleanup"
+                        "descendant ownership baseline was not established"
                     )
-                process_group_cleanup = drain_owned_process_group(
-                    process.pid,
-                    process_group["start_time_ticks"],
-                )
-                if process_group_cleanup["survivors_detected"]:
+                descendant_cleanup = drain_owned_descendants(os.getpid())
+                if descendant_cleanup["survivors_detected"]:
                     errors.append("CLI left surviving descendants after parent exit")
             except BaseException as exc:
-                errors.append(f"fallback process-group cleanup failed: {type(exc).__name__}: {exc}")
-        if process_group_pidfd is not None:
+                errors.append(f"fallback descendant cleanup failed: {type(exc).__name__}: {exc}")
+        if leader_pidfd is not None:
             try:
-                os.close(process_group_pidfd)
+                os.close(leader_pidfd)
             except OSError as exc:
                 errors.append(f"pidfd close failed: {type(exc).__name__}: {exc}")
 
@@ -738,7 +754,12 @@ def execute(observation_directory: Path, timeout_seconds: float) -> dict[str, An
         "runtime": {
             "identity": identity,
             "child_identity": child_identity,
-            "process_group_cleanup": process_group_cleanup,
+            "descendant_ownership": {
+                "subreaper_enabled": subreaper_enabled,
+                "baseline_verified": ownership_baseline_verified,
+                "preexisting_children": preexisting_children,
+            },
+            "descendant_cleanup": descendant_cleanup,
             "binary": binary,
             "libraries": libraries,
             "clean_ldd": ldd,

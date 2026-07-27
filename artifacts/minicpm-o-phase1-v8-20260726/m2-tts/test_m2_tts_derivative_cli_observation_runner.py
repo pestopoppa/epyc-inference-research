@@ -77,6 +77,7 @@ class TestDerivativeCliObservationRunner(unittest.TestCase):
         stack.enter_context(mock.patch.object(runner, "validate_assets", return_value=[]))
         stack.enter_context(mock.patch.object(runner, "bind", side_effect=binding))
         stack.enter_context(mock.patch.object(runner, "enable_child_subreaper"))
+        stack.enter_context(mock.patch.object(runner, "list_direct_children", return_value=[]))
         return source
 
     def test_contract_constants_are_exact(self):
@@ -205,7 +206,30 @@ class TestDerivativeCliObservationRunner(unittest.TestCase):
         self.assertEqual(source["tag_commit"], runner.PINNED_COMMIT)
         self.assertTrue(source["detached"])
         self.assertTrue(source["clean"])
-        git.assert_any_call(runner.OMNI_ROOT, "status", "--porcelain")
+        self.assertEqual(
+            git.call_args_list,
+            [
+                mock.call(runner.OMNI_ROOT, "rev-parse", "HEAD"),
+                mock.call(
+                    runner.OMNI_ROOT,
+                    "rev-parse",
+                    f"{runner.PINNED_TAG}^{{commit}}",
+                ),
+                mock.call(
+                    runner.OMNI_ROOT,
+                    "status",
+                    "--porcelain",
+                    "--untracked-files=all",
+                ),
+                mock.call(
+                    runner.OMNI_ROOT,
+                    "symbolic-ref",
+                    "-q",
+                    "HEAD",
+                    check=False,
+                ),
+            ],
+        )
 
         wrong_head = list(responses)
         wrong_head[0] = completed([], 0, "wrong\n", "")
@@ -272,57 +296,60 @@ class TestDerivativeCliObservationRunner(unittest.TestCase):
         process = mock.MagicMock()
         process.pid = 1234
         process.poll.side_effect = [None, 0]
-        with mock.patch.object(runner.os, "killpg") as killpg:
-            runner.stop_process(process)
-        killpg.assert_called_once_with(1234, runner.signal.SIGTERM)
+        with mock.patch.object(runner.signal, "pidfd_send_signal") as pidfd_send_signal:
+            runner.stop_process(process, leader_pidfd=9)
+        pidfd_send_signal.assert_called_once_with(9, runner.signal.SIGTERM)
         process.wait.assert_called_once_with(timeout=10)
 
-    def test_process_group_drain_proves_clean_group(self):
+    def test_descendant_drain_proves_clean_child_baseline(self):
         with (
-            mock.patch.object(runner, "reap_process_group", return_value=[]) as reap,
-            mock.patch.object(runner, "list_owned_process_group", return_value=[]),
+            mock.patch.object(runner, "reap_direct_children", return_value=[]) as reap,
+            mock.patch.object(runner, "list_direct_children", return_value=[]),
             mock.patch.object(runner, "signal_processes") as signal_processes,
         ):
-            report = runner.drain_owned_process_group(1234, 100)
+            report = runner.drain_owned_descendants(1234)
         self.assertTrue(report["verified_empty"])
         self.assertFalse(report["survivors_detected"])
         reap.assert_called_once_with(1234)
         signal_processes.assert_not_called()
 
-    def test_process_group_drain_terminates_reaps_and_proves_survivor_gone(self):
+    def test_descendant_drain_terminates_reaps_and_proves_survivor_gone(self):
         member = {
             "pid": 2345,
+            "parent_pid": 1234,
             "process_group_id": 1234,
             "session_id": 1234,
             "start_time_ticks": 101,
         }
+        reaped = {**member, "wait_status": 0}
         with (
             mock.patch.object(
                 runner,
-                "reap_process_group",
-                side_effect=[[], [2345]],
+                "reap_direct_children",
+                side_effect=[[], [], [reaped]],
             ),
             mock.patch.object(
                 runner,
-                "list_owned_process_group",
-                side_effect=[[member], []],
+                "list_direct_children",
+                side_effect=[[member], [member], []],
             ),
             mock.patch.object(
                 runner,
                 "signal_processes",
-                return_value=[2345],
+                return_value=[member],
             ) as signal_processes,
         ):
-            report = runner.drain_owned_process_group(1234, 100)
+            report = runner.drain_owned_descendants(1234)
         self.assertTrue(report["verified_empty"])
         self.assertTrue(report["survivors_detected"])
-        self.assertEqual(report["sigterm_targets"], [2345])
-        self.assertEqual(report["reaped_pids"], [2345])
+        self.assertEqual(report["sigterm_targets"], [member])
+        self.assertEqual(report["reaped_descendants"], [reaped])
         signal_processes.assert_called_once_with([member], runner.signal.SIGTERM)
 
     def test_signal_processes_rejects_pid_identity_change(self):
         member = {
             "pid": 2345,
+            "parent_pid": 1234,
             "process_group_id": 1234,
             "session_id": 1234,
             "start_time_ticks": 101,
@@ -360,6 +387,33 @@ class TestDerivativeCliObservationRunner(unittest.TestCase):
         self.assertIsNone(record["runtime"]["identity"])
         self.assertFalse(record["execution"]["stdout"]["present"])
         self.assertFalse(record["execution"]["stderr"]["present"])
+
+    def test_subreaper_failure_seals_disabled_ownership_state(self):
+        with tempfile.TemporaryDirectory() as raw, contextlib.ExitStack() as stack:
+            observation = Path(raw) / "observation"
+            self.enter_execution_preflight(stack)
+            stack.enter_context(
+                mock.patch.object(
+                    runner,
+                    "enable_child_subreaper",
+                    side_effect=OSError("subreaper setup failed"),
+                )
+            )
+            with self.assertRaisesRegex(RuntimeError, "sealed details"):
+                runner.execute(observation, 1)
+
+            record = json.loads((observation / "observation.json").read_text())
+        ownership = record["runtime"]["descendant_ownership"]
+        self.assertFalse(record["validation"]["success"])
+        self.assertFalse(ownership["subreaper_enabled"])
+        self.assertFalse(ownership["baseline_verified"])
+        self.assertIsNone(ownership["preexisting_children"])
+        self.assertTrue(
+            any(
+                "subreaper setup failed" in error
+                for error in record["validation"]["errors"]
+            )
+        )
 
     def test_log_open_failure_seals_manifest(self):
         with tempfile.TemporaryDirectory() as raw, contextlib.ExitStack() as stack:
@@ -411,17 +465,18 @@ class TestDerivativeCliObservationRunner(unittest.TestCase):
         process.poll.return_value = None
         group = {
             "pid": 4321,
+            "parent_pid": os.getpid(),
             "process_group_id": 4321,
             "session_id": 4321,
             "start_time_ticks": 100,
         }
         cleanup = {
-            "process_group_id": 4321,
-            "leader_start_time_ticks": 100,
+            "owner_pid": os.getpid(),
+            "ownership": "mocked",
             "survivors_detected": False,
             "sigterm_targets": [],
             "sigkill_targets": [],
-            "reaped_pids": [],
+            "reaped_descendants": [],
             "verified_empty": True,
         }
 
@@ -451,7 +506,7 @@ class TestDerivativeCliObservationRunner(unittest.TestCase):
                 mock.patch.object(runner, "stop_process", side_effect=stop)
             )
             drain = stack.enter_context(
-                mock.patch.object(runner, "drain_owned_process_group", return_value=cleanup)
+                mock.patch.object(runner, "drain_owned_descendants", return_value=cleanup)
             )
             stack.enter_context(mock.patch.object(runner.os, "close"))
 
@@ -459,12 +514,80 @@ class TestDerivativeCliObservationRunner(unittest.TestCase):
                 runner.execute(observation, 1)
             record = json.loads((observation / "observation.json").read_text())
 
-        stop_process.assert_called_once_with(process)
-        drain.assert_called_once_with(4321, 100)
-        self.assertTrue(record["runtime"]["process_group_cleanup"]["verified_empty"])
+        stop_process.assert_called_once_with(process, 8)
+        drain.assert_called_once_with(os.getpid())
+        self.assertTrue(record["runtime"]["descendant_cleanup"]["verified_empty"])
         self.assertTrue(
             any("child identity failed" in error for error in record["validation"]["errors"])
         )
+
+    def test_escaped_descendant_is_pidfd_terminated_reaped_and_verified_absent(self):
+        self.assertEqual(runner.list_direct_children(os.getpid()), [])
+        runner.enable_child_subreaper()
+        helper_code = """
+import os
+import time
+
+child = os.fork()
+if child:
+    time.sleep(0.25)
+    os._exit(0)
+os.setsid()
+print(os.getpid(), flush=True)
+time.sleep(30)
+"""
+        helper = runner.subprocess.Popen(
+            ["/usr/bin/python3", "-c", helper_code],
+            stdout=runner.subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+        escaped_pidfd = None
+        escaped_pid = None
+        try:
+            leader = runner.process_group_identity(helper.pid)
+            assert helper.stdout is not None
+            escaped_pid = int(helper.stdout.readline().strip())
+            escaped_pidfd = os.pidfd_open(escaped_pid)
+            escaped = runner.read_process_stat(Path(f"/proc/{escaped_pid}/stat"))
+            self.assertEqual(escaped["process_group_id"], escaped_pid)
+            self.assertEqual(escaped["session_id"], escaped_pid)
+            self.assertNotEqual(escaped["process_group_id"], leader["process_group_id"])
+
+            helper.wait(timeout=2)
+            report = runner.drain_owned_descendants(os.getpid(), timeout_seconds=1)
+
+            self.assertTrue(report["survivors_detected"])
+            self.assertTrue(report["verified_empty"])
+            self.assertTrue(
+                any(
+                    target["pid"] == escaped_pid
+                    for target in report["sigterm_targets"]
+                )
+            )
+            self.assertEqual(runner.list_direct_children(os.getpid()), [])
+            with self.assertRaises(ProcessLookupError):
+                runner.signal.pidfd_send_signal(escaped_pidfd, 0)
+        finally:
+            if helper.poll() is None:
+                helper.kill()
+                helper.wait(timeout=2)
+            if helper.stdout is not None:
+                helper.stdout.close()
+            if escaped_pidfd is not None:
+                try:
+                    runner.signal.pidfd_send_signal(
+                        escaped_pidfd,
+                        runner.signal.SIGKILL,
+                    )
+                except ProcessLookupError:
+                    pass
+                os.close(escaped_pidfd)
+            if escaped_pid is not None:
+                try:
+                    os.waitpid(escaped_pid, 0)
+                except ChildProcessError:
+                    pass
 
 
 if __name__ == "__main__":
