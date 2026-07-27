@@ -348,6 +348,18 @@ def test_default_labels_exclude_quarantined_surface_names():
     )
 
 
+def test_fable_mtp_canonical_surface_is_throughput_only(tmp_path):
+    surface = make_surface(
+        tmp_path,
+        grid="full",
+        label="A3_ff_fable_mtp_q8",
+        mode="throughput_only",
+        mtp_depth=1,
+    )
+    spec = aggregate.load_spec(surface)
+    assert (spec.mode, spec.grid) == ("throughput_only", "full")
+
+
 def test_result_requires_full_evidence_binding_and_skip_requires_canonical_reason(tmp_path):
     surface = make_surface(tmp_path)
     fill(surface)

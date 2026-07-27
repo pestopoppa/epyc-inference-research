@@ -69,7 +69,7 @@ V8_BINARY = "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server"
 CANONICAL_SURFACE_BINDINGS = {
     "A3_tc_thinkingcap_q8": ("full", "full", "/mnt/raid0/llm/models/ThinkingCap-Qwen3.6-27B-GGUF/ThinkingCap-Qwen3.6-27B-Q8_0.gguf"),
     "A3_ff_fable_non_mtp_q8": ("full", "full", "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-Q8_0.gguf"),
-    "A3_ff_fable_mtp_q8": ("full", "full", "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf"),
+    "A3_ff_fable_mtp_q8": ("throughput_only", "full", "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf"),
     "Laguna_ud_iq2_gpu_dflash_off": ("throughput_only", "full", "/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/Laguna-S-2.1-UD-IQ2_M.gguf"),
     "A4_35b_a3b_v8_bridge": ("throughput_only", "a4_bridge", "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf"),
 }
