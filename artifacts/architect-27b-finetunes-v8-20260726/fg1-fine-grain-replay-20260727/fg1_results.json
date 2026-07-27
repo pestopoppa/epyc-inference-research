@@ -1,615 +1,663 @@
 {
- "ff_mtp_trio": {
-  "fable_mtp": {
-   "correct_flag_count": 0,
-   "median_completion_tokens": 233.5,
-   "median_decode_tok_s": 28.545,
-   "n": 40,
-   "total_completion_tokens": 18310,
-   "truncated_rows": 1
+  "fable_mtp_pair": {
+    "fable_mtp": {
+      "lcb53_aggregate_decode_tok_s": 26.6,
+      "lcb53_correct": 19,
+      "lcb53_truncated": 15,
+      "swe40_median_completion_tokens": 233.5,
+      "swe40_resolved": 20,
+      "swe40_total_completion_tokens": 18310
+    },
+    "fable_non_mtp": {
+      "lcb53_aggregate_decode_tok_s": 27.0,
+      "lcb53_correct": 25,
+      "lcb53_truncated": 9,
+      "swe40_median_completion_tokens": 237.5,
+      "swe40_resolved": 19,
+      "swe40_total_completion_tokens": 20570
+    },
+    "mcnemar": [
+      {
+        "discordant_n": 3,
+        "exact_binomial_p_two_sided": 1.0,
+        "only_fable_mtp": [
+          "django__django-11149",
+          "sphinx-doc__sphinx-10323"
+        ],
+        "only_fable_non_mtp": [
+          "django__django-11239"
+        ],
+        "pair": "fable_non_mtp vs fable_mtp"
+      },
+      {
+        "discordant_n": 5,
+        "exact_binomial_p_two_sided": 1.0,
+        "only_fable_non_mtp": [
+          "django__django-11095",
+          "scikit-learn__scikit-learn-10844"
+        ],
+        "only_stock_non_mtp": [
+          "django__django-11292",
+          "matplotlib__matplotlib-14623",
+          "sphinx-doc__sphinx-10323"
+        ],
+        "pair": "stock_non_mtp vs fable_non_mtp"
+      }
+    ],
+    "stock_non_mtp": {
+      "lcb53_aggregate_decode_tok_s": 27.1,
+      "lcb53_correct": 28,
+      "lcb53_truncated": 6,
+      "swe40_median_completion_tokens": 397.5,
+      "swe40_resolved": 20,
+      "swe40_total_completion_tokens": 37395
+    },
+    "swe40_overlap": {
+      "fable_mtp": {
+        "fable_mtp": 20,
+        "fable_non_mtp": 18,
+        "stock_non_mtp": 17
+      },
+      "fable_non_mtp": {
+        "fable_mtp": 18,
+        "fable_non_mtp": 19,
+        "stock_non_mtp": 17
+      },
+      "stock_non_mtp": {
+        "fable_mtp": 17,
+        "fable_non_mtp": 17,
+        "stock_non_mtp": 20
+      }
+    }
   },
-  "fable_non_mtp": {
-   "correct_flag_count": 0,
-   "median_completion_tokens": 237.5,
-   "median_decode_tok_s": 28.865000000000002,
-   "n": 40,
-   "total_completion_tokens": 20570,
-   "truncated_rows": 2
+  "limitations": [
+    "SWE tokens/solved is a banked one-pass observation, not the pending equal-effort LCB instrument.",
+    "The MTP trio is a separate diagnostic and is not part of the six-arm authority table.",
+    "No inference, rescoring, lineup, registry, or production-kernel action occurred."
+  ],
+  "protocol": "FG-1; deterministic replay of sealed artifacts only",
+  "schema_version": "epyc.architect-fg1-deterministic-replay.v2",
+  "sealed_sources": [
+    {
+      "path": "artifacts/architect-27b-finetunes-v8-20260726/expanded-six-arm-v4-tail-replay-20260727/A3-ff/A3-ff_Fable_Fusion_Q8_non_MTP.expanded-six-arm-v4-tail-replay-20260727-a3-ff.json",
+      "sha256": "67f7d4d9cb76241822e03c1a618c59108f2114c65f92665de2bccde6f58c3547"
+    },
+    {
+      "path": "artifacts/architect-27b-finetunes-v8-20260726/expanded-six-arm-v4-tail-replay-20260727/A3-ff/nonrecovery_ledger.sealed.json",
+      "sha256": "645d526fdcc231c08efa3dfd1c6b027f396a6d03d20750602e56ea14f02cb1be"
+    },
+    {
+      "path": "artifacts/architect-27b-finetunes-v8-20260726/expanded-six-arm-v4-tail-replay-20260727/A3-ff/raw_capture.sealed.jsonl",
+      "sha256": "a9f3bf2c65869ef0819416189b2478cfed157dd88bcb4cd62d68d913b034990a"
+    },
+    {
+      "path": "artifacts/architect-27b-finetunes-v8-20260726/expanded-six-arm-v4-tail-replay-20260727/A3-tc/A3-tc_ThinkingCap_Q8.expanded-six-arm-v4-tail-replay-20260727-a3-tc.json",
+      "sha256": "fa75a0d9b40ebfd0e8ecf670ab5a6faecee4431821a31990841ff7c9640af39a"
+    },
+    {
+      "path": "artifacts/architect-27b-finetunes-v8-20260726/expanded-six-arm-v4-tail-replay-20260727/A3-tc/conversion_diagnostics.sealed.jsonl",
+      "sha256": "b53dea815dd158d514bc59f91f062e7698b6216d9547ddae2ce5674ada160b83"
+    },
+    {
+      "path": "artifacts/architect-27b-finetunes-v8-20260726/expanded-six-arm-v4-tail-replay-20260727/A3-tc/nonrecovery_ledger.sealed.json",
+      "sha256": "73cb8211c385bddbadbea6578bd6dbb173c413d2790a2b1961a19d4e45f0b4f7"
+    },
+    {
+      "path": "artifacts/architect-27b-finetunes-v8-20260726/expanded-six-arm-v4-tail-replay-20260727/A3-tc/raw_capture.sealed.jsonl",
+      "sha256": "95328eafa1dcca4a7d262d147a84f38a9656b725b17d66527f6867c8674394a6"
+    },
+    {
+      "path": "artifacts/architect-27b-finetunes-v8-20260726/fable-swe-tail-sealed-20260727T094334Z/fable_mtp/raw_capture.sealed.jsonl",
+      "sha256": "fb2e265b0189e46c42040f7420ac97bdcf53cc467601fab77c955da1bb02aaa3"
+    },
+    {
+      "path": "artifacts/architect-27b-finetunes-v8-20260726/fable-swe-tail-sealed-20260727T094334Z/fable_non_mtp/raw_capture.sealed.jsonl",
+      "sha256": "a9f3bf2c65869ef0819416189b2478cfed157dd88bcb4cd62d68d913b034990a"
+    },
+    {
+      "path": "artifacts/architect-27b-finetunes-v8-20260726/fable-swe-tail-sealed-20260727T094334Z/stock_non_mtp/raw_capture.sealed.jsonl",
+      "sha256": "8872966aa162f39587735490927940bd571042ab6a5644c1af7bac2a41354c3a"
+    },
+    {
+      "path": "artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continuation-27b-v8/A3-ff-embedded-mtp__fable_mtp/lcb_hard.summary.json",
+      "sha256": "2097a2b3029da6186f9c83ca6563e81d8557713b83b4ac0296ab92e97dd9b248"
+    },
+    {
+      "path": "artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continuation-27b-v8/A3-ff-quality__fable_non_mtp/lcb_hard.summary.json",
+      "sha256": "c4a907a9e51bd19c28b22d2f2c02c1a6164a73b92661fbdee486c1ddcd590394"
+    },
+    {
+      "path": "artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/continuation-27b-v8/A3-ff-quality__stock_non_mtp/lcb_hard.summary.json",
+      "sha256": "d014c2249b8ac61b0c26b132697353382276cb85082b918ca27b61c444fe7552"
+    },
+    {
+      "path": "artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/fable-only-cpu-clean-official-swe/runs/fable-only-v8-cpu-clean-20260727T095334Z/fable_mtp/fable_mtp.fable-only-v8-cpu-clean-20260727T095334Z-fable_mtp.json",
+      "sha256": "3521e71dfa9789584f8aed8faec26611bb4edce15da7fea15a7782d3e30bd476"
+    },
+    {
+      "path": "artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/fable-only-cpu-clean-official-swe/runs/fable-only-v8-cpu-clean-20260727T095334Z/fable_non_mtp/fable_non_mtp.fable-only-v8-cpu-clean-20260727T095334Z-fable_non_mtp.json",
+      "sha256": "67f7d4d9cb76241822e03c1a618c59108f2114c65f92665de2bccde6f58c3547"
+    },
+    {
+      "path": "artifacts/architect-27b-finetunes-v8-20260726/live-20260726T1750Z/fable-only-cpu-clean-official-swe/runs/fable-only-v8-cpu-clean-20260727T095334Z/stock_non_mtp/stock_non_mtp.fable-only-v8-cpu-clean-20260727T095334Z-stock_non_mtp.json",
+      "sha256": "48e86ad4e6e93e676e400dafdda8ae20e5706a963899b29b942f6e55e5888b93"
+    },
+    {
+      "path": "artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/A1/A1_122b_iq2.final-4arm-v4-tail-replay-20260727T080703Z-a1.json",
+      "sha256": "57e92c03e9b44694fa515b5c77b4b6d0e04e30181ebf204807e2bf9da4f9f577"
+    },
+    {
+      "path": "artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/A1/nonrecovery_ledger.sealed.json",
+      "sha256": "b9817ec662f538aab6d36164a053947e3bddbbf3dcb7b5785602f72694f05f99"
+    },
+    {
+      "path": "artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/A1/raw_capture.sealed.jsonl",
+      "sha256": "f4dff35ee646993459f6536e4e8e6db80870a5691980bc158987f433e90c7c33"
+    },
+    {
+      "path": "artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/A3/A3_27b_dense.final-4arm-v4-tail-replay-20260727T080703Z-a3.json",
+      "sha256": "1348b3615facac100c072b93f643bf927e8d7f3c9695280442e2c18909190117"
+    },
+    {
+      "path": "artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/A3/nonrecovery_ledger.sealed.json",
+      "sha256": "52016b76cc7f7f069b69c3b6e73d4780245843fd84bf633c8838de5bedd4aa3a"
+    },
+    {
+      "path": "artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/A3/raw_capture.sealed.jsonl",
+      "sha256": "1fa07aff0ae46b1300104b87a3ea96daaaa8dda9c9a028dd6e22b1879effc3c2"
+    },
+    {
+      "path": "artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/A4/A4_35b_a3b.final-4arm-v4-tail-replay-20260727T080703Z-a4.json",
+      "sha256": "f0b830428ac462331b783701e086d3b92c13298ab5a29dfbdc6c85a0bd775e98"
+    },
+    {
+      "path": "artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/A4/nonrecovery_ledger.sealed.json",
+      "sha256": "26fd15685a121267cf30e8b50c4cf14a944e38cad12ecd498ce1b17322e4887c"
+    },
+    {
+      "path": "artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/A4/raw_capture.sealed.jsonl",
+      "sha256": "548fe5b396e98f7b84a64746e1a3c8af12ecec559d92a63edae0b9c1852a629c"
+    },
+    {
+      "path": "artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/Laguna/Laguna_S_2_1_UD_IQ2_M_v8.final-4arm-v4-tail-replay-20260727T080703Z-laguna.json",
+      "sha256": "a13192d3566191d25cbd78cec6c0c611ed1c61cd914d295ee5862b15cf876e20"
+    },
+    {
+      "path": "artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/Laguna/nonrecovery_ledger.sealed.json",
+      "sha256": "46f4a1a878ffc634f18f1a04fb30d27d7833434c28649f44e497a39b50b9a667"
+    },
+    {
+      "path": "artifacts/architect-same-era-v8-20260726/final-4arm-v4-tail-replay-20260727/runs/final-4arm-v4-tail-replay-20260727T080703Z/Laguna/raw_capture.sealed.jsonl",
+      "sha256": "a2ce92399d87c8f5f15b285ad27eca3cf0328f1b80eec1fec81933ed782cd81a"
+    }
+  ],
+  "status": "OBSERVATION_GRADE_ZERO_INFERENCE",
+  "swe40": {
+    "laguna_route_specialist_read": {
+      "overlap_A3": 17,
+      "overlap_A4": 12,
+      "unique_vs_A3": [],
+      "unique_vs_A3_union_A4": [],
+      "unique_vs_A4": [
+        "django__django-11095",
+        "django__django-11206",
+        "scikit-learn__scikit-learn-10297",
+        "scikit-learn__scikit-learn-10908",
+        "sympy__sympy-12096"
+      ]
+    },
+    "mcnemar_discordants": [
+      {
+        "discordant_n": 11,
+        "exact_binomial_p_two_sided": 0.226562,
+        "only_A3": [
+          "django__django-11206",
+          "django__django-11292",
+          "django__django-11477",
+          "matplotlib__matplotlib-20488",
+          "scikit-learn__scikit-learn-10908",
+          "sphinx-doc__sphinx-10449",
+          "sphinx-doc__sphinx-10466",
+          "sympy__sympy-12419"
+        ],
+        "only_A3-tc": [
+          "django__django-11239",
+          "scikit-learn__scikit-learn-10844",
+          "scikit-learn__scikit-learn-11310"
+        ],
+        "pair": "A3-tc vs A3"
+      },
+      {
+        "discordant_n": 8,
+        "exact_binomial_p_two_sided": 0.289062,
+        "only_A3": [
+          "django__django-11292",
+          "django__django-11477",
+          "scikit-learn__scikit-learn-10908",
+          "sphinx-doc__sphinx-10323",
+          "sphinx-doc__sphinx-10449",
+          "sympy__sympy-12419"
+        ],
+        "only_A3-ff": [
+          "django__django-11239",
+          "scikit-learn__scikit-learn-10844"
+        ],
+        "pair": "A3-ff vs A3"
+      },
+      {
+        "discordant_n": 6,
+        "exact_binomial_p_two_sided": 0.03125,
+        "only_A3": [
+          "django__django-11299",
+          "django__django-11451",
+          "django__django-11477",
+          "sphinx-doc__sphinx-10323",
+          "sphinx-doc__sphinx-10449",
+          "sympy__sympy-12419"
+        ],
+        "only_Laguna": [],
+        "pair": "Laguna vs A3"
+      },
+      {
+        "discordant_n": 6,
+        "exact_binomial_p_two_sided": 0.21875,
+        "only_A4": [
+          "django__django-11299"
+        ],
+        "only_Laguna": [
+          "django__django-11095",
+          "django__django-11206",
+          "scikit-learn__scikit-learn-10297",
+          "scikit-learn__scikit-learn-10908",
+          "sympy__sympy-12096"
+        ],
+        "pair": "Laguna vs A4"
+      }
+    ],
+    "pairwise_solve_overlap": {
+      "A1": {
+        "A1": 15,
+        "A3": 13,
+        "A3-ff": 14,
+        "A3-tc": 12,
+        "A4": 10,
+        "Laguna": 12
+      },
+      "A3": {
+        "A1": 13,
+        "A3": 23,
+        "A3-ff": 17,
+        "A3-tc": 15,
+        "A4": 13,
+        "Laguna": 17
+      },
+      "A3-ff": {
+        "A1": 14,
+        "A3": 17,
+        "A3-ff": 19,
+        "A3-tc": 16,
+        "A4": 12,
+        "Laguna": 15
+      },
+      "A3-tc": {
+        "A1": 12,
+        "A3": 15,
+        "A3-ff": 16,
+        "A3-tc": 18,
+        "A4": 10,
+        "Laguna": 12
+      },
+      "A4": {
+        "A1": 10,
+        "A3": 13,
+        "A3-ff": 12,
+        "A3-tc": 10,
+        "A4": 13,
+        "Laguna": 12
+      },
+      "Laguna": {
+        "A1": 12,
+        "A3": 17,
+        "A3-ff": 15,
+        "A3-tc": 12,
+        "A4": 12,
+        "Laguna": 17
+      }
+    },
+    "unique_solves_against_other_five": {
+      "A1": [],
+      "A3": [
+        "django__django-11477",
+        "sphinx-doc__sphinx-10449",
+        "sympy__sympy-12419"
+      ],
+      "A3-ff": [],
+      "A3-tc": [
+        "scikit-learn__scikit-learn-11310"
+      ],
+      "A4": [],
+      "Laguna": []
+    },
+    "unsolved_by_all_six": [
+      "django__django-10999",
+      "django__django-11087",
+      "django__django-11138",
+      "django__django-11141",
+      "django__django-11149",
+      "django__django-11211",
+      "django__django-11265",
+      "django__django-11333",
+      "django__django-11400",
+      "django__django-11433",
+      "matplotlib__matplotlib-14623",
+      "matplotlib__matplotlib-20676",
+      "sphinx-doc__sphinx-10435",
+      "sympy__sympy-11618"
+    ]
   },
-  "stock_non_mtp": {
-   "correct_flag_count": 0,
-   "median_completion_tokens": 397.5,
-   "median_decode_tok_s": 29.265,
-   "n": 40,
-   "total_completion_tokens": 37395,
-   "truncated_rows": 3
+  "thinkingcap_empty_patch_taxonomy": {
+    "attempts": 24,
+    "cap_truncated_partial_response_rows": [
+      "django__django-11400",
+      "django__django-11477",
+      "sphinx-doc__sphinx-10466"
+    ],
+    "cap_truncated_rows": 15,
+    "cap_truncated_zero_response_rows": [
+      "django__django-11138",
+      "django__django-11149",
+      "django__django-11206",
+      "django__django-11211",
+      "django__django-11292",
+      "django__django-11333",
+      "matplotlib__matplotlib-14623",
+      "matplotlib__matplotlib-20488",
+      "sphinx-doc__sphinx-10435",
+      "sphinx-doc__sphinx-10449",
+      "sympy__sympy-11618",
+      "sympy__sympy-12419"
+    ],
+    "counts": {
+      "cap_truncated_thinking_mode_generation": 15,
+      "converter_format_or_path_miss": 1,
+      "declined_or_empty": 0,
+      "unclassified_nonempty_no_patch": 0
+    },
+    "official_resolved": 18,
+    "precision_on_attempts": 0.75,
+    "rows": [
+      {
+        "category": "cap_truncated_thinking_mode_generation",
+        "completion_tokens": 3072,
+        "finish_reason": "length",
+        "id": "django__django-11138",
+        "parseable_block_count": 0,
+        "reasoning_chars": 12091,
+        "response_chars": 0,
+        "skipped_block_count": 0,
+        "skipped_reasons": [],
+        "truncated": true
+      },
+      {
+        "category": "cap_truncated_thinking_mode_generation",
+        "completion_tokens": 3072,
+        "finish_reason": "length",
+        "id": "django__django-11149",
+        "parseable_block_count": 0,
+        "reasoning_chars": 13685,
+        "response_chars": 0,
+        "skipped_block_count": 0,
+        "skipped_reasons": [],
+        "truncated": true
+      },
+      {
+        "category": "cap_truncated_thinking_mode_generation",
+        "completion_tokens": 3072,
+        "finish_reason": "length",
+        "id": "django__django-11206",
+        "parseable_block_count": 0,
+        "reasoning_chars": 11664,
+        "response_chars": 0,
+        "skipped_block_count": 0,
+        "skipped_reasons": [],
+        "truncated": true
+      },
+      {
+        "category": "cap_truncated_thinking_mode_generation",
+        "completion_tokens": 3072,
+        "finish_reason": "length",
+        "id": "django__django-11211",
+        "parseable_block_count": 0,
+        "reasoning_chars": 12067,
+        "response_chars": 0,
+        "skipped_block_count": 0,
+        "skipped_reasons": [],
+        "truncated": true
+      },
+      {
+        "category": "cap_truncated_thinking_mode_generation",
+        "completion_tokens": 3072,
+        "finish_reason": "length",
+        "id": "django__django-11292",
+        "parseable_block_count": 0,
+        "reasoning_chars": 12300,
+        "response_chars": 0,
+        "skipped_block_count": 0,
+        "skipped_reasons": [],
+        "truncated": true
+      },
+      {
+        "category": "cap_truncated_thinking_mode_generation",
+        "completion_tokens": 3072,
+        "finish_reason": "length",
+        "id": "django__django-11333",
+        "parseable_block_count": 0,
+        "reasoning_chars": 11586,
+        "response_chars": 0,
+        "skipped_block_count": 0,
+        "skipped_reasons": [],
+        "truncated": true
+      },
+      {
+        "category": "cap_truncated_thinking_mode_generation",
+        "completion_tokens": 3072,
+        "finish_reason": "length",
+        "id": "django__django-11400",
+        "parseable_block_count": 0,
+        "reasoning_chars": 12988,
+        "response_chars": 93,
+        "skipped_block_count": 0,
+        "skipped_reasons": [],
+        "truncated": true
+      },
+      {
+        "category": "cap_truncated_thinking_mode_generation",
+        "completion_tokens": 3072,
+        "finish_reason": "length",
+        "id": "django__django-11477",
+        "parseable_block_count": 0,
+        "reasoning_chars": 11186,
+        "response_chars": 518,
+        "skipped_block_count": 0,
+        "skipped_reasons": [],
+        "truncated": true
+      },
+      {
+        "category": "cap_truncated_thinking_mode_generation",
+        "completion_tokens": 3072,
+        "finish_reason": "length",
+        "id": "matplotlib__matplotlib-14623",
+        "parseable_block_count": 0,
+        "reasoning_chars": 11549,
+        "response_chars": 0,
+        "skipped_block_count": 0,
+        "skipped_reasons": [],
+        "truncated": true
+      },
+      {
+        "category": "cap_truncated_thinking_mode_generation",
+        "completion_tokens": 3072,
+        "finish_reason": "length",
+        "id": "matplotlib__matplotlib-20488",
+        "parseable_block_count": 0,
+        "reasoning_chars": 11009,
+        "response_chars": 0,
+        "skipped_block_count": 0,
+        "skipped_reasons": [],
+        "truncated": true
+      },
+      {
+        "category": "converter_format_or_path_miss",
+        "completion_tokens": 1738,
+        "finish_reason": "stop",
+        "id": "scikit-learn__scikit-learn-10908",
+        "parseable_block_count": 1,
+        "reasoning_chars": 6704,
+        "response_chars": 657,
+        "skipped_block_count": 1,
+        "skipped_reasons": [
+          "skipped_missing_path"
+        ],
+        "truncated": false
+      },
+      {
+        "category": "cap_truncated_thinking_mode_generation",
+        "completion_tokens": 3072,
+        "finish_reason": "length",
+        "id": "sphinx-doc__sphinx-10435",
+        "parseable_block_count": 0,
+        "reasoning_chars": 10216,
+        "response_chars": 0,
+        "skipped_block_count": 0,
+        "skipped_reasons": [],
+        "truncated": true
+      },
+      {
+        "category": "cap_truncated_thinking_mode_generation",
+        "completion_tokens": 3072,
+        "finish_reason": "length",
+        "id": "sphinx-doc__sphinx-10449",
+        "parseable_block_count": 0,
+        "reasoning_chars": 11682,
+        "response_chars": 0,
+        "skipped_block_count": 0,
+        "skipped_reasons": [],
+        "truncated": true
+      },
+      {
+        "category": "cap_truncated_thinking_mode_generation",
+        "completion_tokens": 3072,
+        "finish_reason": "length",
+        "id": "sphinx-doc__sphinx-10466",
+        "parseable_block_count": 0,
+        "reasoning_chars": 12109,
+        "response_chars": 40,
+        "skipped_block_count": 0,
+        "skipped_reasons": [],
+        "truncated": true
+      },
+      {
+        "category": "cap_truncated_thinking_mode_generation",
+        "completion_tokens": 3072,
+        "finish_reason": "length",
+        "id": "sympy__sympy-11618",
+        "parseable_block_count": 0,
+        "reasoning_chars": 10825,
+        "response_chars": 0,
+        "skipped_block_count": 0,
+        "skipped_reasons": [],
+        "truncated": true
+      },
+      {
+        "category": "cap_truncated_thinking_mode_generation",
+        "completion_tokens": 3072,
+        "finish_reason": "length",
+        "id": "sympy__sympy-12419",
+        "parseable_block_count": 0,
+        "reasoning_chars": 9992,
+        "response_chars": 0,
+        "skipped_block_count": 0,
+        "skipped_reasons": [],
+        "truncated": true
+      }
+    ]
+  },
+  "tokens_per_solved": {
+    "A1": {
+      "empty_patches": 6,
+      "official_resolved": 15,
+      "swe40_completion_tokens_median": 323.5,
+      "swe40_completion_tokens_total": 23667,
+      "swe40_tokens_per_official_resolve": 1577.8,
+      "truncated_rows": 2
+    },
+    "A3": {
+      "empty_patches": 5,
+      "official_resolved": 23,
+      "swe40_completion_tokens_median": 424.5,
+      "swe40_completion_tokens_total": 34650,
+      "swe40_tokens_per_official_resolve": 1506.5,
+      "truncated_rows": 5
+    },
+    "A3-ff": {
+      "empty_patches": 5,
+      "official_resolved": 19,
+      "swe40_completion_tokens_median": 237.5,
+      "swe40_completion_tokens_total": 20570,
+      "swe40_tokens_per_official_resolve": 1082.6,
+      "truncated_rows": 2
+    },
+    "A3-tc": {
+      "empty_patches": 16,
+      "official_resolved": 18,
+      "swe40_completion_tokens_median": 2406.5,
+      "swe40_completion_tokens_total": 90380,
+      "swe40_tokens_per_official_resolve": 5021.1,
+      "truncated_rows": 15
+    },
+    "A4": {
+      "empty_patches": 14,
+      "official_resolved": 13,
+      "swe40_completion_tokens_median": 355.5,
+      "swe40_completion_tokens_total": 34036,
+      "swe40_tokens_per_official_resolve": 2618.2,
+      "truncated_rows": 4
+    },
+    "Laguna": {
+      "empty_patches": 11,
+      "official_resolved": 17,
+      "swe40_completion_tokens_median": 291.0,
+      "swe40_completion_tokens_total": 41956,
+      "swe40_tokens_per_official_resolve": 2468.0,
+      "truncated_rows": 9
+    },
+    "paired_reads": {
+      "A3-ff_vs_A3": {
+        "resolved_delta": -4,
+        "tokens_per_resolve_ratio": 0.719
+      },
+      "A3-tc_vs_A3": {
+        "resolved_delta": -5,
+        "tokens_per_resolve_ratio": 3.333
+      }
+    }
+  },
+  "validation": {
+    "a4_decode_p10": 81.82,
+    "a4_decode_p90": 114.82,
+    "a4_decode_percentile_method": "higher: sorted zero-based ceil(q * (n - 1))",
+    "all_six_harness_errors": 0,
+    "all_six_share_exact_ids": true,
+    "six_arms": [
+      "A1",
+      "A3",
+      "A4",
+      "Laguna",
+      "A3-tc",
+      "A3-ff"
+    ],
+    "swe_denominator": 40,
+    "trio_lcb_denominator": 53,
+    "trio_lcb_harness_errors": 0
   }
- },
- "laguna_unique_vs_A3_union_A4": [],
- "mcnemar_discordants": [
-  {
-   "discordant_n": 11,
-   "exact_binomial_p_two_sided": 0.2266,
-   "only_A3": [
-    "django__django-11206",
-    "django__django-11292",
-    "django__django-11477",
-    "matplotlib__matplotlib-20488",
-    "scikit-learn__scikit-learn-10908",
-    "sphinx-doc__sphinx-10449",
-    "sphinx-doc__sphinx-10466",
-    "sympy__sympy-12419"
-   ],
-   "only_A3-tc": [
-    "django__django-11239",
-    "scikit-learn__scikit-learn-10844",
-    "scikit-learn__scikit-learn-11310"
-   ],
-   "pair": "A3-tc vs A3"
-  },
-  {
-   "discordant_n": 8,
-   "exact_binomial_p_two_sided": 0.2891,
-   "only_A3": [
-    "django__django-11292",
-    "django__django-11477",
-    "scikit-learn__scikit-learn-10908",
-    "sphinx-doc__sphinx-10323",
-    "sphinx-doc__sphinx-10449",
-    "sympy__sympy-12419"
-   ],
-   "only_A3-ff": [
-    "django__django-11239",
-    "scikit-learn__scikit-learn-10844"
-   ],
-   "pair": "A3-ff vs A3"
-  },
-  {
-   "discordant_n": 6,
-   "exact_binomial_p_two_sided": 0.0312,
-   "only_A3": [
-    "django__django-11299",
-    "django__django-11451",
-    "django__django-11477",
-    "sphinx-doc__sphinx-10323",
-    "sphinx-doc__sphinx-10449",
-    "sympy__sympy-12419"
-   ],
-   "only_Laguna": [],
-   "pair": "Laguna vs A3"
-  },
-  {
-   "discordant_n": 6,
-   "exact_binomial_p_two_sided": 0.2188,
-   "only_A4": [
-    "django__django-11299"
-   ],
-   "only_Laguna": [
-    "django__django-11095",
-    "django__django-11206",
-    "scikit-learn__scikit-learn-10297",
-    "scikit-learn__scikit-learn-10908",
-    "sympy__sympy-12096"
-   ],
-   "pair": "Laguna vs A4"
-  }
- ],
- "pairwise_overlap": {
-  "A1": {
-   "A1": 15,
-   "A3": 13,
-   "A3-ff": 14,
-   "A3-tc": 12,
-   "A4": 10,
-   "Laguna": 12
-  },
-  "A3": {
-   "A1": 13,
-   "A3": 23,
-   "A3-ff": 17,
-   "A3-tc": 15,
-   "A4": 13,
-   "Laguna": 17
-  },
-  "A3-ff": {
-   "A1": 14,
-   "A3": 17,
-   "A3-ff": 19,
-   "A3-tc": 16,
-   "A4": 12,
-   "Laguna": 15
-  },
-  "A3-tc": {
-   "A1": 12,
-   "A3": 15,
-   "A3-ff": 16,
-   "A3-tc": 18,
-   "A4": 10,
-   "Laguna": 12
-  },
-  "A4": {
-   "A1": 10,
-   "A3": 13,
-   "A3-ff": 12,
-   "A3-tc": 10,
-   "A4": 13,
-   "Laguna": 12
-  },
-  "Laguna": {
-   "A1": 12,
-   "A3": 17,
-   "A3-ff": 15,
-   "A3-tc": 12,
-   "A4": 12,
-   "Laguna": 17
-  }
- },
- "protocol_note": "FG-1 deterministic replay over sealed v4 artifacts; zero inference; observation-grade fine-grain read (per MEASUREMENT_POLICY deterministic-replay rule). Sources: final-4arm-v4-tail-replay-20260727T080703Z + expanded-six-arm-v4-tail-replay-20260727 + fable-swe-tail-sealed-20260727T094334Z.",
- "solve_matrix": {
-  "django__django-10999": [],
-  "django__django-11066": [
-   "A3",
-   "A3-ff",
-   "A3-tc",
-   "Laguna",
-   "A1",
-   "A4"
-  ],
-  "django__django-11087": [],
-  "django__django-11095": [
-   "A3",
-   "A3-ff",
-   "A3-tc",
-   "Laguna",
-   "A1"
-  ],
-  "django__django-11099": [
-   "A3",
-   "A3-ff",
-   "A3-tc",
-   "Laguna",
-   "A1",
-   "A4"
-  ],
-  "django__django-11119": [
-   "A3",
-   "A3-ff",
-   "A3-tc",
-   "Laguna",
-   "A1",
-   "A4"
-  ],
-  "django__django-11133": [
-   "A3",
-   "A3-ff",
-   "A3-tc",
-   "Laguna",
-   "A1",
-   "A4"
-  ],
-  "django__django-11138": [],
-  "django__django-11141": [],
-  "django__django-11149": [],
-  "django__django-11163": [
-   "A3",
-   "A3-ff",
-   "A3-tc",
-   "Laguna",
-   "A1",
-   "A4"
-  ],
-  "django__django-11179": [
-   "A3",
-   "A3-ff",
-   "A3-tc",
-   "Laguna",
-   "A4"
-  ],
-  "django__django-11206": [
-   "A3",
-   "A3-ff",
-   "Laguna"
-  ],
-  "django__django-11211": [],
-  "django__django-11239": [
-   "A3-ff",
-   "A3-tc",
-   "A1"
-  ],
-  "django__django-11265": [],
-  "django__django-11276": [
-   "A3",
-   "A3-ff",
-   "A3-tc",
-   "Laguna",
-   "A1",
-   "A4"
-  ],
-  "django__django-11292": [
-   "A3",
-   "Laguna",
-   "A1",
-   "A4"
-  ],
-  "django__django-11299": [
-   "A3",
-   "A3-ff",
-   "A3-tc",
-   "A4"
-  ],
-  "django__django-11333": [],
-  "django__django-11400": [],
-  "django__django-11433": [],
-  "django__django-11451": [
-   "A3",
-   "A3-ff",
-   "A3-tc",
-   "A1"
-  ],
-  "django__django-11477": [
-   "A3"
-  ],
-  "matplotlib__matplotlib-13989": [
-   "A3",
-   "A3-ff",
-   "A3-tc",
-   "Laguna",
-   "A4"
-  ],
-  "matplotlib__matplotlib-14623": [],
-  "matplotlib__matplotlib-20488": [
-   "A3",
-   "A3-ff",
-   "Laguna",
-   "A1",
-   "A4"
-  ],
-  "matplotlib__matplotlib-20676": [],
-  "scikit-learn__scikit-learn-10297": [
-   "A3",
-   "A3-ff",
-   "A3-tc",
-   "Laguna"
-  ],
-  "scikit-learn__scikit-learn-10844": [
-   "A3-ff",
-   "A3-tc",
-   "A1"
-  ],
-  "scikit-learn__scikit-learn-10908": [
-   "A3",
-   "Laguna"
-  ],
-  "scikit-learn__scikit-learn-11310": [
-   "A3-tc"
-  ],
-  "sphinx-doc__sphinx-10323": [
-   "A3",
-   "A3-tc"
-  ],
-  "sphinx-doc__sphinx-10435": [],
-  "sphinx-doc__sphinx-10449": [
-   "A3"
-  ],
-  "sphinx-doc__sphinx-10466": [
-   "A3",
-   "A3-ff",
-   "Laguna",
-   "A1",
-   "A4"
-  ],
-  "sympy__sympy-11618": [],
-  "sympy__sympy-12096": [
-   "A3",
-   "A3-ff",
-   "A3-tc",
-   "Laguna",
-   "A1"
-  ],
-  "sympy__sympy-12419": [
-   "A3"
-  ],
-  "sympy__sympy-12481": [
-   "A3",
-   "A3-ff",
-   "A3-tc",
-   "Laguna",
-   "A1",
-   "A4"
-  ]
- },
- "tc_empty_taxonomy_counts": {
-  "sr_blocks_failed_to_apply": 1,
-  "truncated_at_cap": 15
- },
- "tc_empty_taxonomy_rows": [
-  {
-   "applied_block_count": 0,
-   "block_outcomes": [],
-   "category": "truncated_at_cap",
-   "completion_tokens": 3072,
-   "finish_reason": "length",
-   "has_sr_markers": false,
-   "id": "django__django-11138",
-   "reasoning_chars": 12091,
-   "response_chars": 0,
-   "truncated": true
-  },
-  {
-   "applied_block_count": 0,
-   "block_outcomes": [],
-   "category": "truncated_at_cap",
-   "completion_tokens": 3072,
-   "finish_reason": "length",
-   "has_sr_markers": false,
-   "id": "django__django-11149",
-   "reasoning_chars": 13685,
-   "response_chars": 0,
-   "truncated": true
-  },
-  {
-   "applied_block_count": 0,
-   "block_outcomes": [],
-   "category": "truncated_at_cap",
-   "completion_tokens": 3072,
-   "finish_reason": "length",
-   "has_sr_markers": false,
-   "id": "django__django-11206",
-   "reasoning_chars": 11664,
-   "response_chars": 0,
-   "truncated": true
-  },
-  {
-   "applied_block_count": 0,
-   "block_outcomes": [],
-   "category": "truncated_at_cap",
-   "completion_tokens": 3072,
-   "finish_reason": "length",
-   "has_sr_markers": false,
-   "id": "django__django-11211",
-   "reasoning_chars": 12067,
-   "response_chars": 0,
-   "truncated": true
-  },
-  {
-   "applied_block_count": 0,
-   "block_outcomes": [],
-   "category": "truncated_at_cap",
-   "completion_tokens": 3072,
-   "finish_reason": "length",
-   "has_sr_markers": false,
-   "id": "django__django-11292",
-   "reasoning_chars": 12300,
-   "response_chars": 0,
-   "truncated": true
-  },
-  {
-   "applied_block_count": 0,
-   "block_outcomes": [],
-   "category": "truncated_at_cap",
-   "completion_tokens": 3072,
-   "finish_reason": "length",
-   "has_sr_markers": false,
-   "id": "django__django-11333",
-   "reasoning_chars": 11586,
-   "response_chars": 0,
-   "truncated": true
-  },
-  {
-   "applied_block_count": 0,
-   "block_outcomes": [],
-   "category": "truncated_at_cap",
-   "completion_tokens": 3072,
-   "finish_reason": "length",
-   "has_sr_markers": false,
-   "id": "django__django-11400",
-   "reasoning_chars": 12988,
-   "response_chars": 93,
-   "truncated": true
-  },
-  {
-   "applied_block_count": 0,
-   "block_outcomes": [],
-   "category": "truncated_at_cap",
-   "completion_tokens": 3072,
-   "finish_reason": "length",
-   "has_sr_markers": true,
-   "id": "django__django-11477",
-   "reasoning_chars": 11186,
-   "response_chars": 518,
-   "truncated": true
-  },
-  {
-   "applied_block_count": 0,
-   "block_outcomes": [],
-   "category": "truncated_at_cap",
-   "completion_tokens": 3072,
-   "finish_reason": "length",
-   "has_sr_markers": false,
-   "id": "matplotlib__matplotlib-14623",
-   "reasoning_chars": 11549,
-   "response_chars": 0,
-   "truncated": true
-  },
-  {
-   "applied_block_count": 0,
-   "block_outcomes": [],
-   "category": "truncated_at_cap",
-   "completion_tokens": 3072,
-   "finish_reason": "length",
-   "has_sr_markers": false,
-   "id": "matplotlib__matplotlib-20488",
-   "reasoning_chars": 11009,
-   "response_chars": 0,
-   "truncated": true
-  },
-  {
-   "applied_block_count": 0,
-   "block_outcomes": [
-    "skipped_missing_path"
-   ],
-   "category": "sr_blocks_failed_to_apply",
-   "completion_tokens": 1738,
-   "finish_reason": "stop",
-   "has_sr_markers": true,
-   "id": "scikit-learn__scikit-learn-10908",
-   "reasoning_chars": 6704,
-   "response_chars": 657,
-   "truncated": false
-  },
-  {
-   "applied_block_count": 0,
-   "block_outcomes": [],
-   "category": "truncated_at_cap",
-   "completion_tokens": 3072,
-   "finish_reason": "length",
-   "has_sr_markers": false,
-   "id": "sphinx-doc__sphinx-10435",
-   "reasoning_chars": 10216,
-   "response_chars": 0,
-   "truncated": true
-  },
-  {
-   "applied_block_count": 0,
-   "block_outcomes": [],
-   "category": "truncated_at_cap",
-   "completion_tokens": 3072,
-   "finish_reason": "length",
-   "has_sr_markers": false,
-   "id": "sphinx-doc__sphinx-10449",
-   "reasoning_chars": 11682,
-   "response_chars": 0,
-   "truncated": true
-  },
-  {
-   "applied_block_count": 0,
-   "block_outcomes": [],
-   "category": "truncated_at_cap",
-   "completion_tokens": 3072,
-   "finish_reason": "length",
-   "has_sr_markers": true,
-   "id": "sphinx-doc__sphinx-10466",
-   "reasoning_chars": 12109,
-   "response_chars": 40,
-   "truncated": true
-  },
-  {
-   "applied_block_count": 0,
-   "block_outcomes": [],
-   "category": "truncated_at_cap",
-   "completion_tokens": 3072,
-   "finish_reason": "length",
-   "has_sr_markers": false,
-   "id": "sympy__sympy-11618",
-   "reasoning_chars": 10825,
-   "response_chars": 0,
-   "truncated": true
-  },
-  {
-   "applied_block_count": 0,
-   "block_outcomes": [],
-   "category": "truncated_at_cap",
-   "completion_tokens": 3072,
-   "finish_reason": "length",
-   "has_sr_markers": false,
-   "id": "sympy__sympy-12419",
-   "reasoning_chars": 9992,
-   "response_chars": 0,
-   "truncated": true
-  }
- ],
- "token_economics": {
-  "A1": {
-   "empty_patches": 6,
-   "mean_completion_tokens": 591.7,
-   "median_completion_tokens": 323.5,
-   "median_reasoning_chars": 0.0,
-   "resolved": 15,
-   "tokens_per_solved": 1577.8,
-   "total_completion_tokens": 23667,
-   "truncated_rows": 2
-  },
-  "A3": {
-   "empty_patches": 5,
-   "mean_completion_tokens": 866.2,
-   "median_completion_tokens": 424.5,
-   "median_reasoning_chars": 0.0,
-   "resolved": 23,
-   "tokens_per_solved": 1506.5,
-   "total_completion_tokens": 34650,
-   "truncated_rows": 5
-  },
-  "A3-ff": {
-   "empty_patches": 5,
-   "mean_completion_tokens": 514.2,
-   "median_completion_tokens": 237.5,
-   "median_reasoning_chars": 0.0,
-   "resolved": 19,
-   "tokens_per_solved": 1082.6,
-   "total_completion_tokens": 20570,
-   "truncated_rows": 2
-  },
-  "A3-tc": {
-   "attempts": 24,
-   "empty_patches": 16,
-   "mean_completion_tokens": 2259.5,
-   "median_completion_tokens": 2406.5,
-   "median_reasoning_chars": 8670.0,
-   "precision_on_attempts": 0.75,
-   "resolved": 18,
-   "tokens_per_solved": 5021.1,
-   "total_completion_tokens": 90380,
-   "truncated_rows": 15
-  },
-  "A4": {
-   "empty_patches": 14,
-   "mean_completion_tokens": 850.9,
-   "median_completion_tokens": 355.5,
-   "median_reasoning_chars": 0.0,
-   "resolved": 13,
-   "tokens_per_solved": 2618.2,
-   "total_completion_tokens": 34036,
-   "truncated_rows": 4
-  },
-  "Laguna": {
-   "empty_patches": 11,
-   "mean_completion_tokens": 1048.9,
-   "median_completion_tokens": 291.0,
-   "median_reasoning_chars": 0.0,
-   "resolved": 17,
-   "tokens_per_solved": 2468.0,
-   "total_completion_tokens": 41956,
-   "truncated_rows": 9
-  }
- },
- "unique_solves": {
-  "A1": [],
-  "A3": [
-   "django__django-11477",
-   "sphinx-doc__sphinx-10449",
-   "sympy__sympy-12419"
-  ],
-  "A3-ff": [],
-  "A3-tc": [
-   "scikit-learn__scikit-learn-11310"
-  ],
-  "A4": [],
-  "Laguna": []
- },
- "unsolved_by_all_six": [
-  "django__django-10999",
-  "django__django-11087",
-  "django__django-11138",
-  "django__django-11141",
-  "django__django-11149",
-  "django__django-11211",
-  "django__django-11265",
-  "django__django-11333",
-  "django__django-11400",
-  "django__django-11433",
-  "matplotlib__matplotlib-14623",
-  "matplotlib__matplotlib-20676",
-  "sphinx-doc__sphinx-10435",
-  "sympy__sympy-11618"
- ]
 }
