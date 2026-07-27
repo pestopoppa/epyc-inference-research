@@ -1,0 +1,183 @@
+{
+  "fg2": {
+    "cap_truncation_count": 8,
+    "classification_counts": {
+      "format_spiral": 5,
+      "genuine_long_reasoning": 2,
+      "repetition_loop": 1
+    },
+    "exhaustive_disjoint": true,
+    "model_neutral_remediation_candidates": [
+      {
+        "candidate": "loop-control sampler",
+        "targets": [
+          "repetition_loop"
+        ],
+        "validation_cell": "the one loop-labelled LCB item, fixed seed and cap"
+      },
+      {
+        "candidate": "repetition penalty",
+        "targets": [
+          "repetition_loop",
+          "format_spiral"
+        ],
+        "validation_cell": "the six loop/format items, compare completion/valid-answer rate at unchanged cap"
+      },
+      {
+        "candidate": "answer-contract prompt",
+        "targets": [
+          "format_spiral"
+        ],
+        "validation_cell": "the five format-spiral items, demand one final code block and no draft restarts"
+      },
+      {
+        "candidate": "cap policy",
+        "targets": [
+          "genuine_long_reasoning"
+        ],
+        "validation_cell": "the two genuine-long items only, larger cap with unchanged sampler"
+      }
+    ],
+    "rows": [
+      {
+        "classification": "format_spiral",
+        "classification_basis": "The output alternates incomplete code/prose candidates or puts analysis inside a code block, then reaches the cap without a final answer.",
+        "complete_fence_count": 0,
+        "completion_tokens": 4096,
+        "fence_delimiter_count": 1,
+        "finish_reason": "length",
+        "instance_id": "lcb_abc341_f",
+        "repeated_120_char_window_max": 2,
+        "response_chars": 14075,
+        "response_sha256": "998885030ec481ec78497c409501e872b9549a65b508dd420e13c044fb65439c",
+        "tail_excerpt": "ns from vertices u where W[u] > W[v] and there is an edge (u, v). # But this doesn't account for the constraint on the sum of W. # Alternatively, perhaps the answer is simply the sum of A[i] for all vertices, plus the sum over edges (u, v) where W[u] > W[v] of"
+      },
+      {
+        "classification": "format_spiral",
+        "classification_basis": "The output alternates incomplete code/prose candidates or puts analysis inside a code block, then reaches the cap without a final answer.",
+        "complete_fence_count": 2,
+        "completion_tokens": 4096,
+        "fence_delimiter_count": 5,
+        "finish_reason": "length",
+        "instance_id": "lcb_abc331_d",
+        "repeated_120_char_window_max": 3,
+        "response_chars": 13671,
+        "response_sha256": "44744cb75383e041a90df465b42ea2f6a3699dd1775b0678562282fb542f6cae",
+        "tail_excerpt": "ck else 0 x_hi = x_end_rem if x_block == x_end_block else N - 1 y_lo = y_start_rem if y_block == y_start_block else 0 y_hi = y_end_rem if y_block == y_end_block else N - 1 if x_lo <= x_hi and y_lo <= y_hi: total += sum_rect(x_lo, y_lo, x_hi, y_hi) return total"
+      },
+      {
+        "classification": "format_spiral",
+        "classification_basis": "The output alternates incomplete code/prose candidates or puts analysis inside a code block, then reaches the cap without a final answer.",
+        "complete_fence_count": 2,
+        "completion_tokens": 4096,
+        "fence_delimiter_count": 4,
+        "finish_reason": "length",
+        "instance_id": "lcb_abc331_e",
+        "repeated_120_char_window_max": 3,
+        "response_chars": 14705,
+        "response_sha256": "14009e2965ae1a8f046e5a6d4d511330c265432fbe5259c2a4808121023cdf35",
+        "tail_excerpt": " best approach is to check the top K elements of a and top K elements of b, where K is a reasonable number like 200 or 300. Let me test this approach with the sample inputs. Sample Input 1: Top 2 elements of a: (2,1), (1,2) Top 3 elements of b: (30,2), (20,3),"
+      },
+      {
+        "classification": "format_spiral",
+        "classification_basis": "The output alternates incomplete code/prose candidates or puts analysis inside a code block, then reaches the cap without a final answer.",
+        "complete_fence_count": 0,
+        "completion_tokens": 4096,
+        "fence_delimiter_count": 1,
+        "finish_reason": "length",
+        "instance_id": "lcb_abc323_e",
+        "repeated_120_char_window_max": 2,
+        "response_chars": 10417,
+        "response_sha256": "2dbe740b5d5ac5dc7e6596b07ca9324f0d747560f81e9737d8779b609296e1c2",
+        "tail_excerpt": "r t > 0: # start[k][t - T_k] = 1/N if t - T_k = 0 (i.e., t = T_k) # start[k][t - T_k] = S[t - T_k]/N if t - T_k > 0 (i.e., t > T_k) # # So S[t] = sum_{k: t >= T_k} start[k][t - T_k] # = sum_{k: t = T_k} 1/N + sum_{k: t > T_k} S[t - T_k]/N # = (1/N) * [count(k:"
+      },
+      {
+        "classification": "repetition_loop",
+        "classification_basis": "A 120-character window occurs 21 times; the tail revisits the same abandoned data-structure plan.",
+        "complete_fence_count": 0,
+        "completion_tokens": 4096,
+        "fence_delimiter_count": 1,
+        "finish_reason": "length",
+        "instance_id": "lcb_abc320_e",
+        "repeated_120_char_window_max": 21,
+        "response_chars": 16745,
+        "response_sha256": "e405f75450412cde2da8d7222c52978b22bc196d62b123709c8cdb6781b5da48",
+        "tail_excerpt": " use a binary indexed tree or segment tree. # But implementing this is complex. Let's try a simpler approach. # Let's use a list to track the next available time for each person. # For each event, we iterate through the list to find the first available person."
+      },
+      {
+        "classification": "genuine_long_reasoning",
+        "classification_basis": "No repeated 120-character window above five occurrences and no multi-candidate output-format restart; the cap occurs during continuing derivation.",
+        "complete_fence_count": 1,
+        "completion_tokens": 4096,
+        "fence_delimiter_count": 2,
+        "finish_reason": "length",
+        "instance_id": "lcb_abc318_e",
+        "repeated_120_char_window_max": 1,
+        "response_chars": 13232,
+        "response_sha256": "d126ee332328c521c4455c60c62dd829b73f0de53c5941e4d2be3ea8144e8f3d",
+        "tail_excerpt": "pair is (pj - pi - 1) - (j - i - 1) = (pj - pi - 1 - j + i + 1) = (pj - pi - j + i) = (pj - j) - (pi - i). Wait, that's interesting. Let me verify: Suppose pi is the i-th element in pos_x, and pj is the j-th element. Then, between pi and pj, there are (j - i -"
+      },
+      {
+        "classification": "genuine_long_reasoning",
+        "classification_basis": "No repeated 120-character window above five occurrences and no multi-candidate output-format restart; the cap occurs during continuing derivation.",
+        "complete_fence_count": 0,
+        "completion_tokens": 4096,
+        "fence_delimiter_count": 1,
+        "finish_reason": "length",
+        "instance_id": "lcb_abc314_f",
+        "repeated_120_char_window_max": 5,
+        "response_chars": 15332,
+        "response_sha256": "67d085899fa66d125dc093758940228841ab8cd18e684adf53282d5cd491b56e",
+        "tail_excerpt": " their team winning. # The player's team changes over time as teams merge. # Let's model each player's expected value as: # E_i = sum_{matches where player i's team is involved} prob_i # Where prob_i is the probability of player i's team winning in that match."
+      },
+      {
+        "classification": "format_spiral",
+        "classification_basis": "The output alternates incomplete code/prose candidates or puts analysis inside a code block, then reaches the cap without a final answer.",
+        "complete_fence_count": 1,
+        "completion_tokens": 4096,
+        "fence_delimiter_count": 2,
+        "finish_reason": "length",
+        "instance_id": "lcb_abc308_f",
+        "repeated_120_char_window_max": 1,
+        "response_chars": 12420,
+        "response_sha256": "23907f5296b37ad515a39d6fbbf096d2b7db61ba5d892acc8a74d93892892921",
+        "tail_excerpt": "=4). That would be worse. Alternatively, maybe we can assign coupon 4 to a different item. Wait, coupon 4 has L=8. So it can only be used on items with price >=8. The only item with price >=8 is 9. But if we assign coupon 4 to 9, then coupon 3 can't be used on"
+      }
+    ],
+    "source_row_count": 53,
+    "validation_scope": "Focused discordant-item cells only; no full-suite run and no claim until a post-campaign inference validation is scored."
+  },
+  "fg3_independent_audit": {
+    "committed_fg3_state": "root commit 27bc4ffc proves argv asymmetry and stages the exact FF-argv/no-think validation; this report does not duplicate it.",
+    "counts": {
+      "diagnostic_empty_patches": 16,
+      "diagnostic_model_length_cap": 15,
+      "diagnostic_path_converter_miss": 1,
+      "ledger_empty_patch_rows": 16,
+      "ledger_skipped_blocks": 1,
+      "raw_empty_final_answer_channel_with_reasoning": 12,
+      "raw_model_length_cap_truncations": 15,
+      "sealed_diagnostic_rows": 40,
+      "sealed_raw_rows": 40
+    },
+    "path_converter_miss": {
+      "block_outcome": "skipped_missing_path",
+      "finish_reason": "stop",
+      "instance_id": "scikit-learn__scikit-learn-10908",
+      "parseable_block_count": 1,
+      "response_sha256": "c2d228c738f02eecc9d183be9c7023659bbe8c595a0a2ff8e3c63be0db497c7d",
+      "skipped_block_count": 1
+    },
+    "status": "independent_audit_passed; no new FG-3 artifact or run designed here"
+  },
+  "method": "deterministic inspection of sealed banked outputs; zero inference",
+  "schema_version": "fg2-fg3-sealed-classification.v1",
+  "source_hashes": {
+    "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/expanded-six-arm-v4-tail-replay-20260727/A3-tc/conversion_diagnostics.sealed.jsonl": "b53dea815dd158d514bc59f91f062e7698b6216d9547ddae2ce5674ada160b83",
+    "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/expanded-six-arm-v4-tail-replay-20260727/A3-tc/nonrecovery_ledger.sealed.json": "73cb8211c385bddbadbea6578bd6dbb173c413d2790a2b1961a19d4e45f0b4f7",
+    "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/expanded-six-arm-v4-tail-replay-20260727/A3-tc/raw_capture.sealed.jsonl": "95328eafa1dcca4a7d262d147a84f38a9656b725b17d66527f6867c8674394a6",
+    "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/fg1-fine-grain-replay-20260727/fg1_results.json": "a55f48f8240cc900b740a0b2444cb438f6b01f798fc513e7ab568128375c0f2c",
+    "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/lcb-hard-port18090/pq.jsonl": "551f00632e1e20f9fee9a44bfeb4ee1c65276293a9116259b2d307b28d931fa7",
+    "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/lcb-hard-port18090/runner.json": "d42b5892dea0b006931eb59cef3bc23283ac6073b5de27bed4069aea40194802"
+  }
+}
