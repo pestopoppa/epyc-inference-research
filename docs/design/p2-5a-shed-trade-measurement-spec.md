@@ -301,11 +301,23 @@ decision is not only *"is the net positive under stress"* but *"how much of prod
 actually under qualifying stress"*. Class 3 is dormant outside stress, so expected benefit is
 `net_gain × stress_duty_cycle`. A +15% gain during stress that occurs 3% of the time is a ~0.5%
 overall improvement bought with a permanent admission class — almost certainly not worth it.
-**The stress duty cycle is measured nowhere today.** Proposed handling: derive it from existing
-production telemetry (a read-only analysis, no inference, no window) *before* the run is scheduled,
-and require **stress duty cycle ≥ 15%** as the third condition. If the duty cycle turns out to be
-small, that closes class 3 **without spending the multi-hour window at all** — which would be the
-cheapest possible resolution and is the reason to do it first.
+**The stress duty cycle is measured nowhere today.** Proposed: require **stress duty cycle ≥ 15%**
+as the third condition, derived from production telemetry by read-only analysis (no inference, no
+window). If the duty cycle is small, that closes class 3 **without spending the multi-hour window
+at all** — the cheapest possible resolution.
+
+> **But this analysis is NOT runnable yet either, and the reason matters.** Checked 2026-07-28:
+> AutoPilot is **not running** (no process; last journal activity `2026-07-27T08:23:07Z`), because
+> its resume is gated on the E8 baseline signature (program P1-3 → P0-1). AutoPilot is the system's
+> representative production load generator. Measuring "fraction of wall time under qualifying
+> stress" against a quiescent host would sample the pause, not production, and return a
+> near-zero duty cycle — which would **wrongly close class 3** on an artifact.
+>
+> So the duty-cycle analysis inherits a gate of its own: it must run over a window in which
+> production load is actually representative, i.e. **after AutoPilot resumes (P1-3)**. It remains
+> the cheapest of the three conditions to evaluate and should still be evaluated *first among them*
+> — just not before there is load to measure. A duty cycle computed over a paused window is an
+> observation about the pause.
 
 ### 10.2 Stress levels — PROPOSED, UNRESOLVED
 
