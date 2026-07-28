@@ -47,6 +47,8 @@ class TestDerivativeCliObservationRunner(unittest.TestCase):
             "commit": runner.PINNED_COMMIT,
             "tag": runner.PINNED_TAG,
             "tag_commit": runner.PINNED_COMMIT,
+            "provenance": runner.PINNED_PROVENANCE,
+            "rationale": runner.PINNED_RATIONALE,
             "detached": True,
             "clean": True,
         }
@@ -84,16 +86,31 @@ class TestDerivativeCliObservationRunner(unittest.TestCase):
         self.assertEqual(runner.TEXT, "The MiniCPM audio path is working.")
         self.assertEqual(
             runner.PINNED_COMMIT,
-            "c86781a93fa07b396ec3613fb79e7a22ab30d8f8",
+            "0a73b24e9244795b2b7052ed583023d91cc8df71",
         )
         self.assertEqual(
             runner.PINNED_TAG,
-            "minicpm-o-m2-path-b-derivative-20260727",
+            "minicpm-o-m2-path-b-derivative-v2-20260728",
         )
         self.assertEqual(
             runner.BINARY["sha256"],
-            "b182ed5b2c0f27ffac497817cd1ce0828d7df0835afc413cfa43768543002587",
+            "623253e5cbf56751854eb5b479974ec9e974fa75ad0d404ebc3f460fcf169b81",
         )
+        self.assertEqual(
+            runner.LIBRARIES,
+            {
+                "libomni.so": "c1217166aa625b6704d1f2d35f92e066495977c90c526ea89d45cf450f8dac33",
+                "libllama.so": "c790f0ef20f4d8fabe7dbe3a2b0e8c3115b251d3271fd1d028ddcd88320edfa1",
+                "libggml.so": "6353908edcc82b52843bb9323c63f0151913a5d30902f743a59fbcd4364e80a3",
+                "libggml-cpu.so": "82fbf9830aa5b58329ebb1336a47474ec7b0fee9fdd19f851fc013f30cdf0d12",
+                "libggml-base.so": "d6f801685af9b2a7a003d39a487e563c98c9108224ccafa14bbc2a37aa84f4f9",
+            },
+        )
+        self.assertEqual(
+            runner.PINNED_PROVENANCE["superseded_observation"],
+            "derivative-cli-observation-20260728T032451Z-2447247",
+        )
+        self.assertIn("failed", runner.PINNED_RATIONALE)
 
     def test_plan_is_pure_and_contains_exact_cpu_cli(self):
         with mock.patch.object(runner, "digest", side_effect=AssertionError("hashed")), \
@@ -108,6 +125,10 @@ class TestDerivativeCliObservationRunner(unittest.TestCase):
         self.assertIn("--projector", argv)
         self.assertIn("--ref-audio", argv)
         self.assertFalse(plan["will_execute"])
+        self.assertEqual(plan["source"]["commit"], runner.PINNED_COMMIT)
+        self.assertEqual(plan["source"]["tag"], runner.PINNED_TAG)
+        self.assertEqual(plan["source"]["provenance"], runner.PINNED_PROVENANCE)
+        self.assertEqual(plan["source"]["rationale"], runner.PINNED_RATIONALE)
 
     def test_main_plan_does_not_require_observation_directory(self):
         output = io.StringIO()
@@ -204,6 +225,8 @@ class TestDerivativeCliObservationRunner(unittest.TestCase):
             source = runner.validate_source(runner.OMNI_ROOT)
         self.assertEqual(source["commit"], runner.PINNED_COMMIT)
         self.assertEqual(source["tag_commit"], runner.PINNED_COMMIT)
+        self.assertEqual(source["provenance"], runner.PINNED_PROVENANCE)
+        self.assertEqual(source["rationale"], runner.PINNED_RATIONALE)
         self.assertTrue(source["detached"])
         self.assertTrue(source["clean"])
         self.assertEqual(
