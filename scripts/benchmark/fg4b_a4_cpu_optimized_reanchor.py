@@ -18,12 +18,15 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import shutil
 import statistics
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
+import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -43,16 +46,27 @@ PORT = 19080
 CTX = 32768
 UBATCH = 8192
 THREADS = 96
-REPS = 3
+REPS = 5
 N_PREDICT = 512
 WARMUP_TOKENS = 64
+WARMUP_CONSECUTIVE = 3
+WARMUP_MAX_ATTEMPTS = 8
+WARMUP_RELATIVE_TOLERANCE = 0.05
+PROTOCOL_ID = "FG-4b/A4-CPU-optimized-server-v1"
+PROTOCOL_ATTESTATION_SCHEMA = "epyc.fg4b_a4_cpu_optimized_server_protocol_review.v1"
 EXPECTED_LLAMA_BRANCH = "production-consolidated-v8"
 EXPECTED_LLAMA_COMMIT = "67a433bf45a8a091d83b4ea0b32ff0735fd51800"
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "artifacts/architect-27b-finetunes-v8-20260726"
 
 sys.path.insert(0, str(REPO_ROOT / "scripts/lib"))
 sys.path.insert(0, str(BENCHMARK_DIR))
-from canonical_recipe import CANONICAL_OMP_ENV, assert_canonical_env, build_canonical_env  # noqa: E402
+from canonical_recipe import (  # noqa: E402
+    CANONICAL_OMP_ENV,
+    EXPECTED_LIBS_V6_IQK,
+    assert_binary_resolves_correctly,
+    assert_canonical_env,
+    build_canonical_env,
+)
 from server_np_sweep import (  # noqa: E402
     collect_attestation,
     ensure_clean_runtime,
@@ -87,6 +101,84 @@ def sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def protocol_contract() -> dict[str, Any]:
+    """Exact contract that the human-reviewed protocol receipt must bind."""
+    return {
+        "protocol_id": PROTOCOL_ID,
+        "metric": "llama-server timings.predicted_per_second",
+        "metric_direction": "higher_is_better",
+        "model": str(MODEL),
+        "binary": str(LLAMA_SERVER),
+        "cpu_list": CPU_LIST,
+        "physical_regions": list(PHYSICAL_REGIONS),
+        "threads": THREADS,
+        "ctx": CTX,
+        "ubatch": UBATCH,
+        "np": 1,
+        "native_mtp_draft_max": 4,
+        "n_predict": N_PREDICT,
+        "ignore_eos": True,
+        "measured_reps": REPS,
+        "aggregation": ["median", "median_absolute_deviation"],
+        "warmup": {
+            "tokens": WARMUP_TOKENS,
+            "consecutive_samples": WARMUP_CONSECUTIVE,
+            "relative_tolerance": WARMUP_RELATIVE_TOLERANCE,
+            "max_attempts": WARMUP_MAX_ATTEMPTS,
+        },
+    }
+
+
+def validate_protocol_attestation(path: Path) -> dict[str, Any]:
+    """Validate a human-reviewed receipt against this exact instrument."""
+    if not path.is_file():
+        raise ReanchorRefusal(f"reviewed protocol attestation not found: {path}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ReanchorRefusal("reviewed protocol attestation is not valid JSON") from exc
+    if not isinstance(payload, dict):
+        raise ReanchorRefusal("reviewed protocol attestation must be an object")
+    if payload.get("schema") != PROTOCOL_ATTESTATION_SCHEMA:
+        raise ReanchorRefusal("reviewed protocol attestation schema mismatch")
+    if payload.get("status") != "ratified":
+        raise ReanchorRefusal("optimized-server protocol is not ratified")
+    if payload.get("protocol_id") != PROTOCOL_ID:
+        raise ReanchorRefusal("reviewed protocol_id mismatch")
+    if payload.get("contract") != protocol_contract():
+        raise ReanchorRefusal("reviewed protocol contract does not exactly match the runner")
+    current_instrument_hash = sha256(Path(__file__).resolve())
+    if payload.get("instrument_sha256") != current_instrument_hash:
+        raise ReanchorRefusal("reviewed protocol receipt does not bind this exact instrument hash")
+    amendment = payload.get("human_amendment")
+    if not isinstance(amendment, dict):
+        raise ReanchorRefusal("reviewed protocol receipt lacks human_amendment")
+    amendment_path = Path(str(amendment.get("path") or ""))
+    amendment_hash = str(amendment.get("sha256") or "")
+    if (
+        not amendment_path.is_absolute()
+        or not amendment_path.is_file()
+        or len(amendment_hash) != 64
+        or sha256(amendment_path) != amendment_hash
+    ):
+        raise ReanchorRefusal("human amendment path/hash is absent or mismatched")
+    reviewed_at = payload.get("reviewed_at")
+    if not isinstance(reviewed_at, str):
+        raise ReanchorRefusal("reviewed protocol receipt lacks reviewed_at")
+    try:
+        reviewed = datetime.fromisoformat(reviewed_at)
+    except ValueError as exc:
+        raise ReanchorRefusal("reviewed_at is not an ISO datetime") from exc
+    if reviewed.tzinfo is None:
+        raise ReanchorRefusal("reviewed_at must include a timezone")
+    if not str(payload.get("reviewer") or "").strip():
+        raise ReanchorRefusal("reviewed protocol receipt lacks reviewer attribution")
+    return payload | {
+        "receipt_path": str(path.resolve()),
+        "receipt_sha256": sha256(path),
+    }
 
 
 def build_server_command(*, port: int = PORT) -> list[str]:
@@ -131,16 +223,74 @@ def _region_status() -> list[dict[str, Any]]:
     return payload
 
 
-def verify_held_footprint() -> list[dict[str, Any]]:
-    """Require locks for q0,q1, the actual physical footprint of CPU_LIST."""
+def ancestor_pids(pid: int | None = None) -> set[int]:
+    """Return the current process and its Linux ancestor chain."""
+    current = os.getpid() if pid is None else pid
+    result: set[int] = set()
+    while current > 0 and current not in result:
+        result.add(current)
+        try:
+            fields = Path(f"/proc/{current}/stat").read_text(encoding="utf-8").split()
+            current = int(fields[3])
+        except (OSError, ValueError, IndexError):
+            break
+    return result
+
+
+def verify_held_footprint(
+    *,
+    claim_tag: str,
+    claim_role: str = "bench",
+) -> list[dict[str, Any]]:
+    """Prove q0,q1 are held by this runner's region-lock ancestor."""
+    if not claim_tag.strip():
+        raise ReanchorRefusal("--region-claim-tag must be non-empty")
     rows = _region_status()
-    held = {str(row.get("region")) for row in rows if row.get("global_held") is True}
-    missing = sorted(set(PHYSICAL_REGIONS) - held)
-    if missing:
+    by_region = {
+        str(row.get("region")): row
+        for row in rows
+        if isinstance(row, dict) and isinstance(row.get("region"), str)
+    }
+    if set(by_region) != {"q0", "q1", "q2", "q3"}:
+        raise ReanchorRefusal("region-lock status does not contain q0..q3 exactly once")
+    ancestors = ancestor_pids()
+    owner_pids: set[int] = set()
+    for region in PHYSICAL_REGIONS:
+        row = by_region[region]
+        if row.get("global_held") is not True:
+            raise ReanchorRefusal(
+                "execution requires region-lock coverage for the actual A4 CPU "
+                f"footprint {list(PHYSICAL_REGIONS)}; {region} is not held. "
+                "A q2-only claim is not resource protection."
+            )
+        holders = row.get("holders")
+        if not isinstance(holders, list):
+            raise ReanchorRefusal(f"{region} has no attributable lock holder")
+        matches = [
+            holder
+            for holder in holders
+            if isinstance(holder, dict)
+            and holder.get("role") == claim_role
+            and holder.get("request_tag") == claim_tag
+            and set(holder.get("regions") or []) == set(PHYSICAL_REGIONS)
+        ]
+        if len(matches) != 1:
+            raise ReanchorRefusal(
+                f"{region} is not held by exactly one {claim_role!r}/{claim_tag!r} "
+                f"holder covering {list(PHYSICAL_REGIONS)}"
+            )
+        try:
+            holder_pid = int(matches[0]["pid"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ReanchorRefusal(f"{region} holder has no valid PID") from exc
+        if holder_pid not in ancestors:
+            raise ReanchorRefusal(
+                f"{region} holder pid {holder_pid} is not in this runner's ancestor chain"
+            )
+        owner_pids.add(holder_pid)
+    if len(owner_pids) != 1:
         raise ReanchorRefusal(
-            "execution requires region-lock coverage for the actual A4 CPU footprint "
-            f"{list(PHYSICAL_REGIONS)}; missing {missing}. Run via `region-lock run "
-            f"--cpu-list {CPU_LIST} --role bench -- ...`, not a q2-only claim."
+            f"q0 and q1 are attributed to different holder PIDs: {sorted(owner_pids)}"
         )
     return rows
 
@@ -191,11 +341,17 @@ def completion_payload(n_predict: int) -> dict[str, Any]:
         "seed": 42,
         "stream": False,
         "cache_prompt": False,
+        "ignore_eos": True,
         "chat_template_kwargs": {"enable_thinking": False},
     }
 
 
-def parse_sample(response: dict[str, Any], ordinal: int) -> DecodeSample:
+def parse_sample(
+    response: dict[str, Any],
+    ordinal: int,
+    *,
+    expected_tokens: int = N_PREDICT,
+) -> DecodeSample:
     timings = response.get("timings")
     if not isinstance(timings, dict):
         raise ReanchorRefusal("response lacks timings")
@@ -208,13 +364,66 @@ def parse_sample(response: dict[str, Any], ordinal: int) -> DecodeSample:
         message = choices[0].get("message")
         if isinstance(message, dict):
             text = str(message.get("content") or "")
-    if predicted_n < N_PREDICT:
+    if predicted_n != expected_tokens:
         raise ReanchorRefusal(
-            f"long-decode sample {ordinal} ended at {predicted_n} tokens; expected {N_PREDICT}"
+            f"decode sample {ordinal} returned {predicted_n} tokens; "
+            f"expected exactly {expected_tokens}"
         )
     if predicted_tps <= 0:
         raise ReanchorRefusal(f"long-decode sample {ordinal} has no positive predicted_per_second")
     return DecodeSample(ordinal, predicted_n, predicted_tps, prompt_n, len(text), dict(timings))
+
+
+def warmup_is_stable(samples: list[DecodeSample]) -> bool:
+    if len(samples) < WARMUP_CONSECUTIVE:
+        return False
+    values = [
+        sample.predicted_per_second
+        for sample in samples[-WARMUP_CONSECUTIVE:]
+    ]
+    center = statistics.median(values)
+    return center > 0 and (max(values) - min(values)) / center <= WARMUP_RELATIVE_TOLERANCE
+
+
+def collect_warmup_samples(
+    request: Any,
+) -> list[DecodeSample]:
+    samples: list[DecodeSample] = []
+    for ordinal in range(1, WARMUP_MAX_ATTEMPTS + 1):
+        response = request(completion_payload(WARMUP_TOKENS))
+        samples.append(
+            parse_sample(
+                response,
+                ordinal,
+                expected_tokens=WARMUP_TOKENS,
+            )
+        )
+        if warmup_is_stable(samples):
+            return samples
+    raise ReanchorRefusal(
+        f"warmup failed to reach {WARMUP_CONSECUTIVE} consecutive positive "
+        f"samples within {WARMUP_RELATIVE_TOLERANCE:.0%} after "
+        f"{WARMUP_MAX_ATTEMPTS} attempts"
+    )
+
+
+def expected_affinity() -> set[int]:
+    result: set[int] = set()
+    for part in CPU_LIST.split(","):
+        start, end = (part.split("-", 1) + [part])[:2]
+        result.update(range(int(start), int(end) + 1))
+    return result
+
+
+def verify_live_affinity(pid: int) -> list[int]:
+    actual = set(os.sched_getaffinity(pid))
+    expected = expected_affinity()
+    if actual != expected:
+        raise ReanchorRefusal(
+            f"live llama-server pid {pid} affinity mismatch: "
+            f"expected {sorted(expected)}, got {sorted(actual)}"
+        )
+    return sorted(actual)
 
 
 def _run_identity() -> dict[str, Any]:
@@ -224,11 +433,20 @@ def _run_identity() -> dict[str, Any]:
         raise ReanchorRefusal(
             f"frozen-v8 identity mismatch: branch={branch!r} commit={commit!r}"
         )
+    env = build_env()
+    assert_binary_resolves_correctly(
+        str(LLAMA_SERVER),
+        EXPECTED_LIBS_V6_IQK,
+        env=env,
+    )
     return {
         "llama_branch": branch.strip(), "llama_commit": commit.strip(),
         "binary_sha256": sha256(LLAMA_SERVER), "model_sha256": sha256(MODEL),
         "instrument_sha256": sha256(Path(__file__).resolve()),
         "binary_version": run_capture([str(LLAMA_SERVER), "--version"]),
+        "binary_realpath": str(LLAMA_SERVER.resolve(strict=True)),
+        "expected_binary_realpath": str(LLAMA_SERVER),
+        "expected_shared_libraries": list(EXPECTED_LIBS_V6_IQK),
         "research_commit": run_capture(["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"]),
     }
 
@@ -239,7 +457,15 @@ def proposal(evidence: dict[str, Any]) -> dict[str, Any]:
         "schema": "epyc.registry_patch_proposal.v1",
         "mode": "proposal_only",
         "must_not_apply_automatically": True,
-        "metric_semantics": "llama-server timings.predicted_per_second; mean of three 512-token, single-request, warmed production-shaped decodes",
+        "apply_eligibility": (
+            "review_required"
+            if evidence.get("decision_grade") is True
+            else "candidate_protocol_pending_ratification"
+        ),
+        "metric_semantics": (
+            "llama-server timings.predicted_per_second; median and MAD of five "
+            "exact 512-token, single-request, stability-warmed production-shaped decodes"
+        ),
         "not_comparable_to": ["llama-bench tg512", "P-BENCH-3 short task-rate"],
         "intended_registry_field_targets": [
             "roles.frontdoor.performance.baseline_tps",
@@ -252,83 +478,245 @@ def proposal(evidence: dict[str, Any]) -> dict[str, Any]:
 
 def dry_run_payload(args: argparse.Namespace) -> dict[str, Any]:
     return {
-        "mode": "dry_run", "server_command": build_server_command(port=args.port),
+        "mode": "dry_run",
+        "protocol_status": "candidate_protocol_pending_ratification",
+        "decision_grade": False,
+        "server_command": build_server_command(port=args.port),
         "env": {key: build_env()[key] for key in sorted((*CANONICAL_OMP_ENV, "KMP_BLOCKTIME", "GGML_IQK_Q8_0"))},
         "required_regions": list(PHYSICAL_REGIONS), "reps": REPS,
         "n_predict": N_PREDICT, "metric": "timings.predicted_per_second",
+        "protocol_contract": protocol_contract(),
         "registry_mutation": False,
+        "proposal_apply_eligible": False,
     }
+
+
+def write_json(path: Path, payload: Any) -> None:
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+
+def write_content_hash_manifest(staging: Path) -> Path:
+    manifest_path = staging / "content-hashes.json"
+    records = []
+    for path in sorted(staging.rglob("*")):
+        if path.is_file() and path != manifest_path and path.name != "COMPLETE":
+            records.append(
+                {
+                    "path": str(path.relative_to(staging)),
+                    "sha256": sha256(path),
+                    "size_bytes": path.stat().st_size,
+                }
+            )
+    write_json(
+        manifest_path,
+        {
+            "schema": "epyc.content_hash_manifest.v1",
+            "files": records,
+        },
+    )
+    return manifest_path
+
+
+def atomic_publish(staging: Path, output: Path) -> None:
+    """Rename a complete staged directory or remove it on publish failure."""
+    if output.exists():
+        raise ReanchorRefusal(f"terminal output already exists: {output}")
+    try:
+        os.replace(staging, output)
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
 
 
 def execute(args: argparse.Namespace) -> Path:
     if not args.i_have_operator_grant:
         raise ReanchorRefusal("--execute requires --i-have-operator-grant")
+    if args.reviewed_protocol_attestation is None:
+        raise ReanchorRefusal(
+            "--execute requires --reviewed-protocol-attestation; "
+            "candidate protocol remains pending human ratification"
+        )
+    if not args.region_claim_tag:
+        raise ReanchorRefusal("--execute requires --region-claim-tag")
     if not LLAMA_SERVER.is_file() or not MODEL.is_file():
         raise ReanchorRefusal("frozen-v8 llama-server or A4 model is missing")
-    region_before = verify_held_footprint()
+    protocol_attestation = validate_protocol_attestation(
+        args.reviewed_protocol_attestation
+    )
+    region_before = verify_held_footprint(
+        claim_tag=args.region_claim_tag,
+        claim_role=args.region_claim_role,
+    )
     ensure_clean_runtime()
     attestation = collect_attestation()
     warnings = host_health_warnings(attestation)
     if warnings:
         raise ReanchorRefusal("host-health preconditions failed: " + "; ".join(warnings))
     identity = _run_identity()
-    output = args.output_root / args.run_id
-    output.mkdir(parents=True, exist_ok=False)
+    output_root = args.output_root.resolve()
+    output_root.mkdir(parents=True, exist_ok=True)
+    output = output_root / args.run_id
+    if output.exists():
+        raise ReanchorRefusal(f"terminal output already exists: {output}")
+    staging = output_root / f".{args.run_id}.staging-{uuid.uuid4().hex}"
+    staging.mkdir(parents=False, exist_ok=False)
     command = build_server_command(port=args.port)
     env = build_env()
-    (output / "server-command.json").write_text(json.dumps(command, indent=2) + "\n")
+    write_json(staging / "server-command.json", command)
     proc = None
     samples: list[DecodeSample] = []
+    warmup_samples: list[DecodeSample] = []
     teardown: dict[str, Any] | None = None
     try:
-        proc = start_server(command, env, output / "server.log")
-        wait_for_health(args.port, args.startup_timeout)
-        _http_json(f"http://127.0.0.1:{args.port}/v1/chat/completions", completion_payload(WARMUP_TOKENS), args.request_timeout)
-        for ordinal in range(1, REPS + 1):
-            response = _http_json(f"http://127.0.0.1:{args.port}/v1/chat/completions", completion_payload(N_PREDICT), args.request_timeout)
-            sample = parse_sample(response, ordinal)
-            samples.append(sample)
-            (output / f"response-{ordinal}.json").write_text(json.dumps(response, indent=2, sort_keys=True) + "\n")
-    finally:
-        if proc is not None:
-            teardown = stop_server(proc)
-    region_after = _region_status()
-    if len(samples) != REPS:
-        raise ReanchorRefusal("incomplete long-decode sample set")
-    values = [sample.predicted_per_second for sample in samples]
-    evidence = {
-        "schema": "epyc.fg4b_a4_cpu_optimized_server_evidence.v1",
-        "created_at": utc_now(), "protocol_id": "FG-4b/A4-CPU-optimized-server-v1",
-        "metric": "llama-server timings.predicted_per_second",
-        "metric_semantics": "mean server-reported decode tokens/s across three warmed, fixed 512-token, np=1 chat completions",
-        "mean_tokens_per_second": statistics.mean(values),
-        "spread_tokens_per_second": statistics.pstdev(values),
-        "samples": [asdict(sample) for sample in samples],
-        "top_serving_spec": {"cpu_list": CPU_LIST, "threads": THREADS, "ctx": CTX, "ubatch": UBATCH, "np": 1, "native_mtp_draft_max": 4, "numactl": "none", "reasoning": "off"},
-        "topology_derivation": {
-            "source": "/mnt/raid0/llm/epyc-orchestrator/src/runtime/instance_topology.py",
-            "cpu_list": CPU_LIST,
-            "physical_regions": list(PHYSICAL_REGIONS),
-            "rule": "hyper-thread siblings are stripped before mapping physical cores to atomic regions",
-        },
-        "runtime_identity": identity, "host_attestation": attestation,
-        "environment": {
-            key: env[key]
-            for key in sorted((*CANONICAL_OMP_ENV, "KMP_BLOCKTIME", "GGML_IQK_Q8_0"))
-        },
-        "region_status_before": region_before, "region_status_after": region_after,
-        "teardown": teardown, "decision_grade": True, "proposal_only": True,
-    }
-    (output / "evidence.json").write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n")
-    (output / "registry-patch-proposal.json").write_text(json.dumps(proposal(evidence), indent=2, sort_keys=True) + "\n")
-    (output / "COMPLETE").write_text("")
-    return output
+        try:
+            proc = start_server(command, env, staging / "server.log")
+            wait_for_health(args.port, args.startup_timeout)
+            live_affinity = verify_live_affinity(proc.pid)
+
+            def request(payload: dict[str, Any]) -> dict[str, Any]:
+                return _http_json(
+                    f"http://127.0.0.1:{args.port}/v1/chat/completions",
+                    payload,
+                    args.request_timeout,
+                )
+
+            warmup_responses: list[dict[str, Any]] = []
+
+            def warmup_request(payload: dict[str, Any]) -> dict[str, Any]:
+                response = request(payload)
+                warmup_responses.append(response)
+                return response
+
+            warmup_samples = collect_warmup_samples(warmup_request)
+            for ordinal, response in enumerate(warmup_responses, start=1):
+                write_json(staging / f"warmup-response-{ordinal}.json", response)
+            for ordinal in range(1, REPS + 1):
+                response = request(completion_payload(N_PREDICT))
+                sample = parse_sample(response, ordinal)
+                samples.append(sample)
+                write_json(staging / f"response-{ordinal}.json", response)
+        finally:
+            if proc is not None:
+                teardown = stop_server(proc)
+
+        region_after = verify_held_footprint(
+            claim_tag=args.region_claim_tag,
+            claim_role=args.region_claim_role,
+        )
+        if len(samples) != REPS:
+            raise ReanchorRefusal("incomplete long-decode sample set")
+        values = [sample.predicted_per_second for sample in samples]
+        median_tps = statistics.median(values)
+        mad_tps = statistics.median(
+            [abs(value - median_tps) for value in values]
+        )
+        evidence = {
+            "schema": "epyc.fg4b_a4_cpu_optimized_server_evidence.v2",
+            "created_at": utc_now(),
+            "protocol_id": PROTOCOL_ID,
+            "protocol_status": "ratified_receipt_validated",
+            "protocol_attestation": protocol_attestation,
+            "metric": "llama-server timings.predicted_per_second",
+            "metric_direction": "higher_is_better",
+            "metric_semantics": (
+                "median and MAD of five server-reported decode tokens/s samples "
+                "from exact 512-token, np=1 chat completions after stability warmup"
+            ),
+            "median_tokens_per_second": median_tps,
+            "median_absolute_deviation_tokens_per_second": mad_tps,
+            "mean_tokens_per_second_observation": statistics.mean(values),
+            "samples": [asdict(sample) for sample in samples],
+            "warmup": {
+                "disposition": "cold_samples_excluded_until_stable",
+                "stable": True,
+                "attempts": len(warmup_samples),
+                "contract": protocol_contract()["warmup"],
+                "samples": [asdict(sample) for sample in warmup_samples],
+            },
+            "top_serving_spec": {
+                "cpu_list": CPU_LIST,
+                "live_affinity": live_affinity,
+                "threads": THREADS,
+                "ctx": CTX,
+                "ubatch": UBATCH,
+                "np": 1,
+                "native_mtp_draft_max": 4,
+                "numactl": "none",
+                "reasoning": "off",
+                "ignore_eos": True,
+            },
+            "topology_derivation": {
+                "source": (
+                    "/mnt/raid0/llm/epyc-orchestrator/src/runtime/"
+                    "instance_topology.py"
+                ),
+                "cpu_list": CPU_LIST,
+                "physical_regions": list(PHYSICAL_REGIONS),
+                "rule": (
+                    "hyper-thread siblings are stripped before mapping "
+                    "physical cores to atomic regions"
+                ),
+            },
+            "runtime_identity": identity,
+            "host_attestation": attestation,
+            "cold_warm_disposition": {
+                "cold_start_samples_used_in_metric": False,
+                "measurement_started_after_stability_gate": True,
+                "host_uptime_seconds": attestation.get("uptime_seconds"),
+                "scaling_governors": attestation.get("scaling_governors"),
+                "numa_balancing": attestation.get("numa_balancing"),
+            },
+            "environment": {
+                key: env[key]
+                for key in sorted(
+                    (*CANONICAL_OMP_ENV, "KMP_BLOCKTIME", "GGML_IQK_Q8_0")
+                )
+            },
+            "region_claim": {
+                "tag": args.region_claim_tag,
+                "role": args.region_claim_role,
+                "regions": list(PHYSICAL_REGIONS),
+                "status_before": region_before,
+                "status_after": region_after,
+            },
+            "teardown": teardown,
+            "decision_grade": True,
+            "proposal_only": True,
+        }
+        write_json(staging / "evidence.json", evidence)
+        write_json(staging / "registry-patch-proposal.json", proposal(evidence))
+        write_content_hash_manifest(staging)
+        (staging / "COMPLETE").write_text("", encoding="utf-8")
+        atomic_publish(staging, output)
+        return output
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true", help="run inference; default is dry-run")
     parser.add_argument("--i-have-operator-grant", action="store_true")
+    parser.add_argument(
+        "--reviewed-protocol-attestation",
+        type=Path,
+        default=None,
+        help="human-reviewed receipt binding the exact protocol and instrument hash",
+    )
+    parser.add_argument(
+        "--region-claim-tag",
+        default=None,
+        help="exact tag passed to the enclosing region-lock invocation",
+    )
+    parser.add_argument(
+        "--region-claim-role",
+        default="bench",
+        help="exact role passed to the enclosing region-lock invocation",
+    )
     parser.add_argument("--run-id", default=f"fg4b-a4-cpu-optimized-server-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}")
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT)
     parser.add_argument("--port", type=int, default=PORT)
