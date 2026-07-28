@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -22,7 +23,9 @@ def write_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
         f"protocol_id={importer.EXPECTED_PROTOCOL}",
         f"metric={importer.EXPECTED_METRIC}",
         "n_gen=512", "reps=2", f"model={importer.EXPECTED_MODEL}",
-        "started_at=2026-07-28T09:00:00+00:00", "research_commit=abc", "llama_commit=def",
+        "started_at=2026-07-28T09:00:00+00:00",
+        "research_commit=" + subprocess.check_output(["git", "-C", str(importer.PROJECT_ROOT), "rev-parse", "HEAD"], text=True).strip(),
+        f"llama_commit={importer.EXPECTED_LLAMA_COMMIT}",
         "llama_branch=production-consolidated-v8", f"binary={importer.EXPECTED_BINARY}", "binary_version_exit_code=1",
         "finished_at=2026-07-28T10:00:00+00:00", "exit_code=0", "",
     )))
@@ -33,6 +36,7 @@ def write_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
         importer.EXPECTED_CANONICAL_RECIPE_SHA256 + f"  {importer.PROJECT_ROOT}/scripts/lib/canonical_recipe.py\n"
     )
     (artifact / "binary-version.txt").write_text(f"usage: {importer.EXPECTED_BINARY} [options]\n")
+    (artifact / "binary-ldd.txt").write_text("libc.so.6 => /lib/libc.so.6\n/lib64/ld-linux-x86-64.so.2\n")
     (artifact / "launcher.log").write_text(
         "FG-4b A4 CPU re-anchor watcher started: 2026-07-28T09:00:00+00:00\n"
         f"Evidence directory: {artifact.resolve()}\n"
@@ -113,7 +117,19 @@ def test_refuses_registry_without_patch_parent(tmp_path: Path) -> None:
     payload = yaml.safe_load(research.read_text())
     del payload["roles"]["frontdoor"]["performance"]
     research.write_text(yaml.safe_dump(payload))
-    with pytest.raises(importer.EvidenceError, match="lacks server_mode.frontdoor.model_path"):
+    with pytest.raises(importer.EvidenceError, match="lacks roles.frontdoor.performance"):
+        importer.import_evidence(artifact, research, orchestrator)
+
+
+def test_refuses_unresolved_ldd_and_invalid_commit_provenance(tmp_path: Path) -> None:
+    artifact, research, orchestrator = write_fixture(tmp_path)
+    (artifact / "binary-ldd.txt").write_text("libc.so.6 => not found\n")
+    with pytest.raises(importer.EvidenceError, match="resolved libc and dynamic-loader evidence"):
+        importer.import_evidence(artifact, research, orchestrator)
+    artifact, research, orchestrator = write_fixture(tmp_path / "commit")
+    provenance = (artifact / "provenance.txt").read_text().replace("research_commit=" + subprocess.check_output(["git", "-C", str(importer.PROJECT_ROOT), "rev-parse", "HEAD"], text=True).strip(), "research_commit=" + "0" * 40)
+    (artifact / "provenance.txt").write_text(provenance)
+    with pytest.raises(importer.EvidenceError, match="does not exist"):
         importer.import_evidence(artifact, research, orchestrator)
 
 

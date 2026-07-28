@@ -12,6 +12,7 @@ import argparse
 import json
 import re
 import shlex
+import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import datetime
@@ -30,6 +31,7 @@ EXPECTED_MODEL_SHA256 = "c1283d8b80c3e38b2735ddbc9766d3b3126f44d6c484be419d4e101
 EXPECTED_BENCH_CANONICAL_SHA256 = "68e7c738fa0e7da407574f750fc2fadaa385aacd990af581ed19a225ef1b3655"
 EXPECTED_CANONICAL_RECIPE_SHA256 = "c6d37ef99a8c291266c8ab8f7b7bb4789837b05e077f56d2e5be6eb6595574d3"
 EXPECTED_LLAMA_BRANCH = "production-consolidated-v8"
+EXPECTED_LLAMA_COMMIT = "67a433bf45a8a091d83b4ea0b32ff0735fd51800"
 EXPECTED_OLD_BASELINE_TPS = 24.3
 EXPECTED_OLD_BENCHMARK_DATE = "2026-05-04"
 REGISTRY_TARGETS = (
@@ -49,6 +51,7 @@ REQUIRED_FILES = (
     "model.sha256",
     "instrument.sha256",
     "binary-version.txt",
+    "binary-ldd.txt",
     "launcher.log",
     "bench.log",
 )
@@ -132,6 +135,18 @@ def _parse_provenance(directory: Path) -> dict[str, str]:
             raise EvidenceError(f"missing provenance {key!r}")
     if result["llama_branch"] != EXPECTED_LLAMA_BRANCH:
         raise EvidenceError(f"provenance llama_branch must be {EXPECTED_LLAMA_BRANCH!r}")
+    if result["llama_commit"] != EXPECTED_LLAMA_COMMIT:
+        raise EvidenceError(f"provenance llama_commit must be frozen v8 {EXPECTED_LLAMA_COMMIT}")
+    if not re.fullmatch(r"[0-9a-f]{40}", result["research_commit"]):
+        raise EvidenceError("provenance research_commit must be a full 40-hex commit")
+    resolved = subprocess.run(
+        ["git", "-C", str(PROJECT_ROOT), "rev-parse", "--verify", f"{result['research_commit']}^{{commit}}"],
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if resolved.returncode != 0:
+        raise EvidenceError("provenance research_commit does not exist in the research repository")
     if "T" not in result["started_at"] or "T" not in result["finished_at"]:
         raise EvidenceError("started_at and finished_at must be full ISO datetimes")
     try:
@@ -224,6 +239,9 @@ def _validate_launcher_attestations(directory: Path) -> None:
     version = _read_required(directory, "binary-version.txt")
     if f"usage: {EXPECTED_BINARY}" not in version:
         raise EvidenceError("binary-version.txt does not attest the canonical binary")
+    ldd = _read_required(directory, "binary-ldd.txt")
+    if not ldd.strip() or "libc.so" not in ldd or "ld-linux" not in ldd or "not found" in ldd.lower():
+        raise EvidenceError("binary-ldd.txt lacks resolved libc and dynamic-loader evidence")
 
 
 def _validate_registry(path: Path) -> dict[str, Any]:
@@ -234,6 +252,9 @@ def _validate_registry(path: Path) -> dict[str, Any]:
     try:
         role = payload["roles"]["frontdoor"]
         performance = role["performance"]
+    except (KeyError, TypeError) as exc:
+        raise EvidenceError(f"registry lacks roles.frontdoor.performance: {path}") from exc
+    try:
         frontdoor = payload["server_mode"]["frontdoor"]
         if role["model"]["path"] != EXPECTED_MODEL or frontdoor["model_path"] != EXPECTED_MODEL:
             raise EvidenceError(f"registry frontdoor model_path does not match FG-4b model: {path}")
