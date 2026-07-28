@@ -1,0 +1,181 @@
+{
+  "schema_version": "p3_bakeoff_manifest.v1",
+  "created_utc": "2026-07-28T16:02:22.857243+00:00",
+  "program": {
+    "authority": "epyc-root/handoffs/active/gpu-serving-tie-in-program.md (P3-1, D1-D10)",
+    "lane_spec": "epyc-orchestrator/docs/gpu-shadow-lane.md",
+    "spec": "docs/design/p3-shadow-bakeoff-spec.md"
+  },
+  "invariants": {
+    "eval_path_only": "All traffic is eval-path, forced-role; NEVER live /chat (D3).",
+    "not_authorized": "This bake-off authorizes NO lineup change. The registry stays frozen; coder_escalation stays A4-bound until P3-3 operator three-gates sign-off (D3). Results feed the P3-2 tenancy decision package only.",
+    "servers": "The harness NEVER launches servers; lane is brought up via the operator-gated Steps 0-7 choreography."
+  },
+  "arms": {
+    "stock27b": {
+      "label": "stock-27B",
+      "model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-27B-Q8_0.gguf",
+      "expected_bytes": 28665067072,
+      "sha256": "5927dc06c2b19f732fb6e2a6546dff4c130b552f2ab5f91feb3daafe43897b2a",
+      "serving": "gpu_shadow_lane port 18100 (shadow role coder_escalation_shadow)",
+      "role_in_bakeoff": "incumbent-architecture tenant candidate"
+    },
+    "ff27b": {
+      "label": "Fable-Fusion-27B",
+      "model_path": "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-Q8_0.gguf",
+      "expected_bytes": 29787701792,
+      "sha256": "2fff409d4a22e0cb11fb0ecfafed1c669b9808f7e6bc499036c6e85297f14f4d",
+      "serving": "gpu_shadow_lane port 18100 (tenant swap, State-B' choreography)",
+      "role_in_bakeoff": "challenger tenant (D7: retained as bake-off alternative)"
+    },
+    "a4_control": {
+      "label": "A4-35B-A3B (control)",
+      "model_path": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+      "expected_bytes": 37801097504,
+      "sha256": "c1283d8b80c3e38b2735ddbc9766d3b3126f44d6c484be419d4e101d09a76131",
+      "serving": "sequential GPU bench window only (37.8GB; co-residency with the phase-2 tenant set impossible) -- P3-1",
+      "role_in_bakeoff": "production coder_escalation incumbent (A4), control arm"
+    }
+  },
+  "duties": {
+    "coder": {
+      "description": "Escalation-shaped SWE-flavored tasks at production sampling (no-think). Two pinned suites, scored separately.",
+      "suites": {
+        "swebench_oracle": {
+          "questions_file": {
+            "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/questions_swebench_oracle.json",
+            "sha256": "f82a5191274048f2fdf432df7a0ebf4017ad982b954d6aa075326a1302df1c3c"
+          },
+          "n": 40,
+          "ids_sha256": "5243713dd302142f10e840f1c8519bbe6fe4b78c03952115e50fb20c7cadbf6c",
+          "max_tokens": 3072,
+          "request_timeout_s": 3600,
+          "sampling": {
+            "endpoint": "chat",
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "seed": 42,
+            "enable_thinking": false,
+            "repeats": 1,
+            "concurrency": 1
+          },
+          "scorer": {
+            "id": "swebench-verified-harness+convert_sr_to_patch",
+            "converter": {
+              "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/convert_sr_to_patch.py",
+              "sha256": "06a6530570af470cb76999ceb629fa5d280a26469ec75d7bb3e6a980f2c20b9f"
+            },
+            "harness": ".venv-swebench swebench harness via swebench_cpuset_adapter (cpuset 112-119); report resolved_ids is authoritative",
+            "deferred": true
+          },
+          "hard_core_tag": {
+            "source": {
+              "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/fg1-fine-grain-replay-20260727/fg1_results.json",
+              "sha256": "7776c106810d48ab63de512b575091012b861849425383d6052ebbad0fa2bcfb"
+            },
+            "extraction": "swe40.unsolved_by_all_six (14/40 unsolved by all six FG-1 arms)",
+            "ids": [
+              "django__django-10999",
+              "django__django-11087",
+              "django__django-11138",
+              "django__django-11141",
+              "django__django-11149",
+              "django__django-11211",
+              "django__django-11265",
+              "django__django-11333",
+              "django__django-11400",
+              "django__django-11433",
+              "matplotlib__matplotlib-14623",
+              "matplotlib__matplotlib-20676",
+              "sphinx-doc__sphinx-10435",
+              "sympy__sympy-11618"
+            ],
+            "analysis": "descriptive subset only, never a gate"
+          }
+        },
+        "livecodebench_hard": {
+          "questions_file": {
+            "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/questions_livecodebench_hard.json",
+            "sha256": "d51e56f601e3d153910d086b35c6aea94f4d903bab0427c8a49ffe895a6287c4"
+          },
+          "n": 53,
+          "ids_sha256": "c179f4412241296960403e16f733443f8709eda16bc4426b50dc8ed0435f3b12",
+          "max_tokens": 4096,
+          "request_timeout_s": 1800,
+          "sampling": {
+            "endpoint": "chat",
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "seed": 42,
+            "enable_thinking": false,
+            "repeats": 1,
+            "concurrency": 1
+          },
+          "scorer": {
+            "id": "answer_scoring.code_execution (executable pass@1, scored at capture; offline re-scorable from captures)",
+            "runner_sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e",
+            "deferred": false
+          }
+        }
+      }
+    },
+    "cocritic": {
+      "description": "Typed-verdict review duty: [candidate solution + typed review request] -> ReviewDecision-shaped verdict, scored against executable-oracle gold labels.",
+      "suite": "p3_cocritic_v1",
+      "tasks_file": {
+        "path": "artifacts/p3-shadow-bakeoff-20260728/manifest/critic_tasks_v1.json",
+        "sha256": "d97692840da23a316c0277f76522c7081650679787bb0caff4fa126d6c63537c"
+      },
+      "n": 120,
+      "prevalence": {
+        "known_correct": 60,
+        "known_wrong": 60
+      },
+      "max_tokens": 1024,
+      "request_timeout_s": 1800,
+      "sampling": {
+        "endpoint": "chat",
+        "temperature": 0.6,
+        "top_p": 0.95,
+        "top_k": 20,
+        "seed": 42,
+        "enable_thinking": false,
+        "repeats": 1,
+        "concurrency": 1
+      },
+      "decision_vocabulary": "epyc-orchestrator/orchestration/review_decision.schema.json (approve/reject/reject_to_empty/request_changes/request_evidence/abstain/escalate)",
+      "scorer": {
+        "id": "p3_bakeoff_critic_score.v1",
+        "source": {
+          "path": "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/p3_bakeoff_critic_score.py",
+          "sha256": "d65892fb3d1e0f93f4951b80d01f9c3bad341bf1b1c8b1bc1c41f00f03a265a6"
+        },
+        "deferred": true
+      }
+    }
+  },
+  "capture": {
+    "runner": {
+      "path": "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/v7_quality_gate_runner.py",
+      "sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e"
+    },
+    "capture_schema_version": "v7_quality_gate_capture.v4",
+    "per_question_incremental": true
+  },
+  "statistical_plan": {
+    "primary": "paired per-question comparison per duty+suite; exact two-sided McNemar on discordant pairs",
+    "n": {
+      "swebench_oracle": 40,
+      "livecodebench_hard": 53,
+      "p3_cocritic_v1": 120
+    },
+    "mde_note": {
+      "swebench_oracle": "n=40: at an assumed discordant rate of 0.20 (FG-1 measured FF-vs-stock 8/40), MDE ~= 0.20 accuracy difference (alpha=.05, power=.8). Small quality gaps are NOT resolvable at this n; quality ties are decided on token-efficiency + latency in the P3-2 package.",
+      "livecodebench_hard": "n=53: at discordant rate 0.25, MDE ~= 0.19.",
+      "p3_cocritic_v1": "n=120: at discordant rate 0.25, MDE ~= 0.13 on verdict accuracy; FA/FR reported with Cohen's kappa + prevalence disclosure (intake-876), abstention estimand declared."
+    },
+    "secondary": "token economics (median completion tokens, tokens/solved) as paired per-question observations; decode telemetry is observation-grade only"
+  }
+}
