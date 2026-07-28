@@ -4,6 +4,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -96,7 +97,10 @@ def test_long_decode_rejects_short_or_missing_timing() -> None:
     response = {"timings": {"predicted_n": 513, "predicted_per_second": 12.0}}
     with pytest.raises(runner.ReanchorRefusal, match="returned 513"):
         runner.parse_sample(response, 1)
-    response = {"timings": {"predicted_n": 512, "predicted_per_second": 0.0}}
+    response = {
+        "timings": {"predicted_n": 512, "predicted_per_second": 0.0},
+        "choices": [{"finish_reason": "length"}],
+    }
     with pytest.raises(runner.ReanchorRefusal, match="no positive"):
         runner.parse_sample(response, 1)
 
@@ -110,7 +114,7 @@ def test_execute_refuses_without_explicit_window_grant() -> None:
 def test_long_decode_accepts_server_timing() -> None:
     response = {
         "timings": {"predicted_n": 512, "predicted_per_second": 42.5, "prompt_n": 18},
-        "choices": [{"message": {"content": "x" * 10}}],
+        "choices": [{"finish_reason": "length", "message": {"content": "x" * 10}}],
     }
     sample = runner.parse_sample(response, 1)
     assert sample.predicted_per_second == 42.5
@@ -127,7 +131,8 @@ def test_warmup_requires_three_stable_exact_samples() -> None:
                 "predicted_n": runner.WARMUP_TOKENS,
                 "predicted_per_second": next(speeds),
                 "prompt_n": 10,
-            }
+            },
+            "choices": [{"finish_reason": "length"}],
         }
 
     samples = runner.collect_warmup_samples(request)
@@ -145,7 +150,8 @@ def test_warmup_refuses_unstable_or_short_response() -> None:
             "timings": {
                 "predicted_n": runner.WARMUP_TOKENS,
                 "predicted_per_second": 10.0 if ordinal % 2 else 20.0,
-            }
+            },
+            "choices": [{"finish_reason": "length"}],
         }
 
     with pytest.raises(runner.ReanchorRefusal, match="warmup failed"):
@@ -153,9 +159,19 @@ def test_warmup_refuses_unstable_or_short_response() -> None:
     with pytest.raises(runner.ReanchorRefusal, match="expected exactly 64"):
         runner.collect_warmup_samples(
             lambda _payload: {
-                "timings": {"predicted_n": 63, "predicted_per_second": 10.0}
+                "timings": {"predicted_n": 63, "predicted_per_second": 10.0},
+                "choices": [{"finish_reason": "length"}],
             }
         )
+
+
+def test_finish_reason_must_be_length() -> None:
+    response = {
+        "timings": {"predicted_n": 512, "predicted_per_second": 42.5},
+        "choices": [{"finish_reason": "stop"}],
+    }
+    with pytest.raises(runner.ReanchorRefusal, match="finish_reason='stop'"):
+        runner.parse_sample(response, 1)
 
 
 def test_live_affinity_must_match_exactly(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -204,6 +220,88 @@ def test_atomic_publish_failure_removes_partial_stage(
         runner.atomic_publish(staging, output)
     assert not staging.exists()
     assert not output.exists()
+
+
+def test_atomic_publish_fsyncs_files_and_parent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    staging = tmp_path / ".staging"
+    staging.mkdir()
+    (staging / "evidence.json").write_text("{}")
+    (staging / "COMPLETE").write_text("")
+    output = tmp_path / "terminal"
+    real_fsync = os.fsync
+    calls: list[int] = []
+
+    def recording_fsync(fd: int) -> None:
+        calls.append(fd)
+        real_fsync(fd)
+
+    monkeypatch.setattr(os, "fsync", recording_fsync)
+    runner.atomic_publish(staging, output)
+    assert output.is_dir()
+    assert (output / "COMPLETE").is_file()
+    assert len(calls) >= 5  # two files, staging dir, parent before + after rename
+
+
+def test_cold_cache_preparation_success_and_refusal(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        runner,
+        "host_memory_numa_snapshot",
+        lambda: {"captured_at": "2026-07-28T17:00:00+00:00", "meminfo": "ok", "numa_balancing": "0"},
+    )
+    results = iter((SimpleNamespace(returncode=0, stdout=""), SimpleNamespace(returncode=0, stdout="3\n")))
+    monkeypatch.setattr(runner.subprocess, "run", lambda *_args, **_kwargs: next(results))
+    record = runner.prepare_cold_cache()
+    assert record["sync"]["returncode"] == 0
+    assert record["drop_caches"]["returncode"] == 0
+
+    results = iter((SimpleNamespace(returncode=0, stdout=""), SimpleNamespace(returncode=1, stdout="denied")))
+    monkeypatch.setattr(runner.subprocess, "run", lambda *_args, **_kwargs: next(results))
+    with pytest.raises(runner.ReanchorRefusal, match="drop_caches=3 unavailable"):
+        runner.prepare_cold_cache()
+
+    calls = 0
+
+    def failed_sync(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        return SimpleNamespace(returncode=1, stdout="sync failed")
+
+    monkeypatch.setattr(runner.subprocess, "run", failed_sync)
+    with pytest.raises(runner.ReanchorRefusal, match="sync failed"):
+        runner.prepare_cold_cache()
+    assert calls == 1
+
+
+def test_exclusive_server_rejects_competitor_and_checks_affinity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(runner, "process_tree_pids", lambda _pid: {10, 11})
+    monkeypatch.setattr(
+        runner,
+        "find_llama_processes",
+        lambda: [{"pid": "10", "args": "llama-server"}, {"pid": "99", "args": "llama-server"}],
+    )
+    monkeypatch.setattr(runner, "verify_live_affinity", lambda _pid: [0])
+    with pytest.raises(runner.ReanchorRefusal, match="competing inference"):
+        runner.verify_exclusive_server(10)
+
+    calls: list[int] = []
+    monkeypatch.setattr(
+        runner,
+        "find_llama_processes",
+        lambda: [{"pid": "10", "args": "llama-server"}],
+    )
+    monkeypatch.setattr(
+        runner,
+        "verify_live_affinity",
+        lambda pid: calls.append(pid) or [0],
+    )
+    runner.verify_exclusive_server(10)
+    runner.verify_exclusive_server(10)
+    assert calls == [10, 10]
 
 
 def test_content_hash_manifest_excludes_itself_and_complete(tmp_path: Path) -> None:

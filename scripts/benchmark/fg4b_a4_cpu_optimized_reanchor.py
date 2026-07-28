@@ -70,6 +70,7 @@ from canonical_recipe import (  # noqa: E402
 from server_np_sweep import (  # noqa: E402
     collect_attestation,
     ensure_clean_runtime,
+    find_llama_processes,
     host_health_warnings,
     run_capture,
     start_server,
@@ -88,6 +89,7 @@ class DecodeSample:
     predicted_per_second: float
     prompt_n: int
     response_chars: int
+    finish_reason: str
     timings: dict[str, Any]
 
 
@@ -120,6 +122,7 @@ def protocol_contract() -> dict[str, Any]:
         "native_mtp_draft_max": 4,
         "n_predict": N_PREDICT,
         "ignore_eos": True,
+        "required_finish_reason": "length",
         "measured_reps": REPS,
         "aggregation": ["median", "median_absolute_deviation"],
         "warmup": {
@@ -128,6 +131,17 @@ def protocol_contract() -> dict[str, Any]:
             "relative_tolerance": WARMUP_RELATIVE_TOLERANCE,
             "max_attempts": WARMUP_MAX_ATTEMPTS,
         },
+        "cold_cache_preparation": {
+            "sync": True,
+            "drop_caches": 3,
+            "after_clean_host_gate": True,
+            "before_server_start": True,
+        },
+        "per_request_witness": {
+            "exclusive_inference_process_tree": True,
+            "exact_live_affinity": CPU_LIST,
+        },
+        "durable_publish": "fsync_files_and_staging_dir_then_parent_before_and_after_atomic_rename",
     }
 
 
@@ -205,6 +219,71 @@ def build_env() -> dict[str, str]:
     if env.get("KMP_BLOCKTIME") != "10" or env.get("GGML_IQK_Q8_0") != "1":
         raise ReanchorRefusal("canonical serving environment is incomplete")
     return env
+
+
+def host_memory_numa_snapshot() -> dict[str, Any]:
+    meminfo = Path("/proc/meminfo").read_text(encoding="utf-8")
+    numa_path = Path("/proc/sys/kernel/numa_balancing")
+    return {
+        "captured_at": utc_now(),
+        "meminfo": meminfo,
+        "numa_balancing": (
+            numa_path.read_text(encoding="utf-8").strip()
+            if numa_path.is_file()
+            else None
+        ),
+    }
+
+
+def prepare_cold_cache() -> dict[str, Any]:
+    """Synchronize storage and drop page cache, failing closed."""
+    before = host_memory_numa_snapshot()
+    sync_command = ["sync"]
+    sync_result = subprocess.run(
+        sync_command,
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=120,
+    )
+    if sync_result.returncode != 0:
+        raise ReanchorRefusal(
+            f"sync failed during cold-cache preparation: {sync_result.stdout.strip()}"
+        )
+    drop_command = ["sudo", "-n", "tee", "/proc/sys/vm/drop_caches"]
+    drop_result = subprocess.run(
+        drop_command,
+        check=False,
+        text=True,
+        input="3\n",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=30,
+    )
+    record = {
+        "started_at": before["captured_at"],
+        "finished_at": utc_now(),
+        "sync": {
+            "command": sync_command,
+            "returncode": sync_result.returncode,
+            "output": sync_result.stdout,
+        },
+        "drop_caches": {
+            "command": drop_command,
+            "input": "3",
+            "returncode": drop_result.returncode,
+            "output": drop_result.stdout,
+        },
+        "before": before,
+        "after": host_memory_numa_snapshot(),
+    }
+    if drop_result.returncode != 0:
+        raise ReanchorRefusal(
+            "drop_caches=3 unavailable; refusing measurement: "
+            + drop_result.stdout.strip()
+        )
+    return record
 
 
 def _region_status() -> list[dict[str, Any]]:
@@ -360,7 +439,9 @@ def parse_sample(
     prompt_n = int(timings.get("prompt_n") or 0)
     choices = response.get("choices")
     text = ""
+    finish_reason = ""
     if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+        finish_reason = str(choices[0].get("finish_reason") or "")
         message = choices[0].get("message")
         if isinstance(message, dict):
             text = str(message.get("content") or "")
@@ -369,9 +450,21 @@ def parse_sample(
             f"decode sample {ordinal} returned {predicted_n} tokens; "
             f"expected exactly {expected_tokens}"
         )
+    if finish_reason != "length":
+        raise ReanchorRefusal(
+            f"decode sample {ordinal} finish_reason={finish_reason!r}; expected 'length'"
+        )
     if predicted_tps <= 0:
         raise ReanchorRefusal(f"long-decode sample {ordinal} has no positive predicted_per_second")
-    return DecodeSample(ordinal, predicted_n, predicted_tps, prompt_n, len(text), dict(timings))
+    return DecodeSample(
+        ordinal,
+        predicted_n,
+        predicted_tps,
+        prompt_n,
+        len(text),
+        finish_reason,
+        dict(timings),
+    )
 
 
 def warmup_is_stable(samples: list[DecodeSample]) -> bool:
@@ -424,6 +517,56 @@ def verify_live_affinity(pid: int) -> list[int]:
             f"expected {sorted(expected)}, got {sorted(actual)}"
         )
     return sorted(actual)
+
+
+def process_tree_pids(root_pid: int) -> set[int]:
+    result = {root_pid}
+    proc = subprocess.run(
+        ["ps", "-eo", "pid=,ppid="],
+        check=False,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=30,
+    )
+    if proc.returncode:
+        raise ReanchorRefusal("cannot enumerate server process tree")
+    pairs: list[tuple[int, int]] = []
+    for line in proc.stdout.splitlines():
+        fields = line.split()
+        if len(fields) == 2 and all(field.isdigit() for field in fields):
+            pairs.append((int(fields[0]), int(fields[1])))
+    changed = True
+    while changed:
+        changed = False
+        for pid, parent in pairs:
+            if parent in result and pid not in result:
+                result.add(pid)
+                changed = True
+    return result
+
+
+def verify_exclusive_server(pid: int) -> dict[str, Any]:
+    allowed = process_tree_pids(pid)
+    processes = find_llama_processes()
+    try:
+        inference_pids = {int(row["pid"]) for row in processes}
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ReanchorRefusal("live inference process inventory is malformed") from exc
+    if pid not in inference_pids:
+        raise ReanchorRefusal(f"expected llama-server pid {pid} is absent")
+    competitors = sorted(inference_pids - allowed)
+    if competitors:
+        raise ReanchorRefusal(
+            f"competing inference processes detected before request: {competitors}"
+        )
+    return {
+        "captured_at": utc_now(),
+        "server_pid": pid,
+        "allowed_process_tree_pids": sorted(allowed),
+        "live_inference_processes": processes,
+        "live_affinity": verify_live_affinity(pid),
+    }
 
 
 def _run_identity() -> dict[str, Any]:
@@ -521,11 +664,26 @@ def write_content_hash_manifest(staging: Path) -> Path:
 
 
 def atomic_publish(staging: Path, output: Path) -> None:
-    """Rename a complete staged directory or remove it on publish failure."""
+    """Durably rename a complete staged directory or remove it on failure."""
     if output.exists():
         raise ReanchorRefusal(f"terminal output already exists: {output}")
     try:
-        os.replace(staging, output)
+        for path in sorted(staging.rglob("*")):
+            if path.is_file():
+                with path.open("rb") as handle:
+                    os.fsync(handle.fileno())
+        staging_fd = os.open(staging, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(staging_fd)
+        finally:
+            os.close(staging_fd)
+        parent_fd = os.open(staging.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(parent_fd)
+            os.replace(staging, output)
+            os.fsync(parent_fd)
+        finally:
+            os.close(parent_fd)
     except Exception:
         shutil.rmtree(staging, ignore_errors=True)
         raise
@@ -556,6 +714,7 @@ def execute(args: argparse.Namespace) -> Path:
     if warnings:
         raise ReanchorRefusal("host-health preconditions failed: " + "; ".join(warnings))
     identity = _run_identity()
+    cache_preparation = prepare_cold_cache()
     output_root = args.output_root.resolve()
     output_root.mkdir(parents=True, exist_ok=True)
     output = output_root / args.run_id
@@ -569,6 +728,7 @@ def execute(args: argparse.Namespace) -> Path:
     proc = None
     samples: list[DecodeSample] = []
     warmup_samples: list[DecodeSample] = []
+    request_witnesses: list[dict[str, Any]] = []
     teardown: dict[str, Any] | None = None
     try:
         try:
@@ -577,6 +737,7 @@ def execute(args: argparse.Namespace) -> Path:
             live_affinity = verify_live_affinity(proc.pid)
 
             def request(payload: dict[str, Any]) -> dict[str, Any]:
+                request_witnesses.append(verify_exclusive_server(proc.pid))
                 return _http_json(
                     f"http://127.0.0.1:{args.port}/v1/chat/completions",
                     payload,
@@ -635,6 +796,7 @@ def execute(args: argparse.Namespace) -> Path:
                 "attempts": len(warmup_samples),
                 "contract": protocol_contract()["warmup"],
                 "samples": [asdict(sample) for sample in warmup_samples],
+                "request_witnesses": request_witnesses[:len(warmup_samples)],
             },
             "top_serving_spec": {
                 "cpu_list": CPU_LIST,
@@ -662,6 +824,8 @@ def execute(args: argparse.Namespace) -> Path:
             },
             "runtime_identity": identity,
             "host_attestation": attestation,
+            "cold_cache_preparation": cache_preparation,
+            "measured_request_witnesses": request_witnesses[len(warmup_samples):],
             "cold_warm_disposition": {
                 "cold_start_samples_used_in_metric": False,
                 "measurement_started_after_stability_gate": True,
