@@ -14,7 +14,7 @@ import re
 import shlex
 import sys
 from dataclasses import dataclass
-from datetime import date
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +25,17 @@ EXPECTED_MODEL = "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf"
 EXPECTED_BINARY = "/mnt/raid0/llm/llama.cpp/build/bin/llama-bench"
 EXPECTED_PROTOCOL = "bench_canonical.sh/canonical_recipe.py"
 EXPECTED_METRIC = "llama-bench tg512 tokens_per_second"
-REGISTRY_TARGET = "server_mode.frontdoor.canonical_benchmark_observations.fg4b_a4_cpu_reanchor_20260728"
+EXPECTED_BINARY_SHA256 = "68e1d37c200ffc9d9a0bcfa4bc6985475486600a20331e6524323d393ba5edd1"
+EXPECTED_MODEL_SHA256 = "c1283d8b80c3e38b2735ddbc9766d3b3126f44d6c484be419d4e101d09a76131"
+EXPECTED_BENCH_CANONICAL_SHA256 = "68e7c738fa0e7da407574f750fc2fadaa385aacd990af581ed19a225ef1b3655"
+EXPECTED_CANONICAL_RECIPE_SHA256 = "c6d37ef99a8c291266c8ab8f7b7bb4789837b05e077f56d2e5be6eb6595574d3"
+EXPECTED_LLAMA_BRANCH = "production-consolidated-v8"
+EXPECTED_OLD_BASELINE_TPS = 24.3
+EXPECTED_OLD_BENCHMARK_DATE = "2026-05-04"
+REGISTRY_TARGETS = (
+    "roles.frontdoor.performance.baseline_tps",
+    "roles.frontdoor.performance.benchmark_date",
+)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_RESEARCH_REGISTRY = PROJECT_ROOT / "orchestration/model_registry.yaml"
 DEFAULT_ORCHESTRATOR_REGISTRY = Path("/mnt/raid0/llm/epyc-orchestrator/orchestration/model_registry.yaml")
@@ -43,10 +53,8 @@ REQUIRED_FILES = (
     "bench.log",
 )
 SHA256_LINE = re.compile(r"^([0-9a-f]{64})  (.+)$")
-TG512_LINE = re.compile(
-    r"^\|.*?\|\s*[^|]+\|\s*0\s*\|\s*96\s*\|\s*0\s*\|\s*none\s*"
-    r"\|\s*tg512\s*\|\s*([0-9]+(?:\.[0-9]+)?)\s*±\s*([0-9]+(?:\.[0-9]+)?)\s*\|\s*$"
-)
+CPU_TG512_HEADER = ("model", "size", "params", "backend", "threads", "fa", "mmap", "test", "t/s")
+TPS_VALUE = re.compile(r"^([0-9]+(?:\.[0-9]+)?)\s*±\s*([0-9]+(?:\.[0-9]+)?)$")
 
 
 class EvidenceError(ValueError):
@@ -122,10 +130,19 @@ def _parse_provenance(directory: Path) -> dict[str, str]:
     for key in ("started_at", "finished_at", "research_commit", "llama_commit", "llama_branch"):
         if not result.get(key):
             raise EvidenceError(f"missing provenance {key!r}")
+    if result["llama_branch"] != EXPECTED_LLAMA_BRANCH:
+        raise EvidenceError(f"provenance llama_branch must be {EXPECTED_LLAMA_BRANCH!r}")
+    if "T" not in result["started_at"] or "T" not in result["finished_at"]:
+        raise EvidenceError("started_at and finished_at must be full ISO datetimes")
     try:
-        date.fromisoformat(result["finished_at"][:10])
+        started_at = datetime.fromisoformat(result["started_at"])
+        finished_at = datetime.fromisoformat(result["finished_at"])
     except ValueError as exc:
-        raise EvidenceError("finished_at must begin with an ISO date") from exc
+        raise EvidenceError("started_at and finished_at must be full ISO datetimes") from exc
+    if started_at.tzinfo is None or finished_at.tzinfo is None:
+        raise EvidenceError("started_at and finished_at must include timezones")
+    if finished_at < started_at:
+        raise EvidenceError("finished_at must not precede started_at")
     return result
 
 
@@ -134,19 +151,29 @@ def _validate_region_status(directory: Path, name: str) -> None:
         payload = json.loads(_read_required(directory, name))
     except json.JSONDecodeError as exc:
         raise EvidenceError(f"invalid JSON in {name}") from exc
-    if not isinstance(payload, list) or not payload:
-        raise EvidenceError(f"{name} must be a non-empty region-status list")
+    if not isinstance(payload, list):
+        raise EvidenceError(f"{name} must be a region-status list")
+    regions: list[str] = []
     for row in payload:
-        if not isinstance(row, dict) or not isinstance(row.get("global_held"), bool):
+        if not isinstance(row, dict) or not isinstance(row.get("region"), str) or not isinstance(row.get("global_held"), bool):
             raise EvidenceError(f"{name} has no valid global_held records")
+        regions.append(row["region"])
         if row["global_held"]:
             raise EvidenceError(f"{name} records a held CPU region")
+    if sorted(regions) != ["q0", "q1", "q2", "q3"] or len(set(regions)) != 4:
+        raise EvidenceError(f"{name} must contain q0, q1, q2, and q3 exactly once")
 
 
 def _option_value(tokens: list[str], option: str, expected: str) -> None:
     positions = [index for index, value in enumerate(tokens) if value == option]
     if len(positions) != 1 or positions[0] + 1 >= len(tokens) or tokens[positions[0] + 1] != expected:
         raise EvidenceError(f"canonical command requires {option} {expected}")
+
+
+def _table_cells(line: str) -> list[str] | None:
+    if not line.startswith("|") or not line.endswith("|"):
+        return None
+    return [cell.strip() for cell in line[1:-1].split("|")]
 
 
 def _validate_bench_log(directory: Path) -> Metric:
@@ -162,7 +189,7 @@ def _validate_bench_log(directory: Path) -> Metric:
     prefix = ["taskset", "-c", "0-95", "numactl", "--interleave=all", EXPECTED_BINARY]
     if tokens[: len(prefix)] != prefix:
         raise EvidenceError("canonical command must start with taskset 0-95 then numactl --interleave=all and the canonical binary")
-    for option, expected in (("-t", "96"), ("-p", "0"), ("-n", "512"), ("-r", "2"), ("-fa", "1"), ("-mmp", "0")):
+    for option, expected in (("-m", EXPECTED_MODEL), ("-t", "96"), ("-p", "0"), ("-n", "512"), ("-r", "2"), ("-fa", "1"), ("-mmp", "0")):
         _option_value(tokens, option, expected)
     try:
         env = dict(item.split("=", 1) for item in shlex.split(env_lines[0]))
@@ -171,11 +198,19 @@ def _validate_bench_log(directory: Path) -> Metric:
     if env.get("GGML_IQK") != "1" or env.get("GGML_IQK_Q8_0") != "1":
         raise EvidenceError("canonical environment requires GGML_IQK=1 and GGML_IQK_Q8_0=1")
 
-    rows = [TG512_LINE.fullmatch(line) for line in log.splitlines()]
-    matched = [row for row in rows if row is not None]
+    table_rows = [cells for line in log.splitlines() if (cells := _table_cells(line)) is not None]
+    headers = [row for row in table_rows if tuple(row) == CPU_TG512_HEADER]
+    if len(headers) != 1:
+        raise EvidenceError("bench.log must contain exactly the current CPU tg512 table header")
+    header_index = table_rows.index(headers[0])
+    candidates = table_rows[header_index + 1:]
+    matched = [row for row in candidates if len(row) == len(CPU_TG512_HEADER) and row[3] == "CPU" and row[4] == "96" and row[5] == "1" and row[6] == "0" and row[7] == "tg512"]
     if len(matched) != 1:
         raise EvidenceError("bench.log must contain exactly one successful CPU tg512 row")
-    return Metric(float(matched[0].group(1)), float(matched[0].group(2)))
+    value = TPS_VALUE.fullmatch(matched[0][8])
+    if value is None:
+        raise EvidenceError("CPU tg512 t/s field must contain mean ± spread")
+    return Metric(float(value.group(1)), float(value.group(2)))
 
 
 def _validate_launcher_attestations(directory: Path) -> None:
@@ -197,12 +232,47 @@ def _validate_registry(path: Path) -> dict[str, Any]:
     except (OSError, yaml.YAMLError) as exc:
         raise EvidenceError(f"cannot parse registry: {path}") from exc
     try:
+        role = payload["roles"]["frontdoor"]
+        performance = role["performance"]
         frontdoor = payload["server_mode"]["frontdoor"]
-        if frontdoor["model_path"] != EXPECTED_MODEL:
+        if role["model"]["path"] != EXPECTED_MODEL or frontdoor["model_path"] != EXPECTED_MODEL:
             raise EvidenceError(f"registry frontdoor model_path does not match FG-4b model: {path}")
+        if performance["baseline_tps"] != EXPECTED_OLD_BASELINE_TPS or str(performance["benchmark_date"]) != EXPECTED_OLD_BENCHMARK_DATE:
+            raise EvidenceError(f"registry lacks the reviewed FG-4b target state: {path}")
     except (KeyError, TypeError) as exc:
         raise EvidenceError(f"registry lacks server_mode.frontdoor.model_path: {path}") from exc
     return payload
+
+
+def _sha256(path: Path) -> str:
+    import hashlib
+
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _validate_reviewed_digests(directory: Path) -> tuple[str, str, dict[str, str]]:
+    binary_digest = _parse_sha256_file(directory, "binary.sha256", EXPECTED_BINARY)[EXPECTED_BINARY]
+    model_digest = _parse_sha256_file(directory, "model.sha256", EXPECTED_MODEL)[EXPECTED_MODEL]
+    instrument_digests = _parse_sha256_file(directory, "instrument.sha256")
+    expected_instruments = {
+        str(PROJECT_ROOT / "scripts/benchmark/bench_canonical.sh"): EXPECTED_BENCH_CANONICAL_SHA256,
+        str(PROJECT_ROOT / "scripts/lib/canonical_recipe.py"): EXPECTED_CANONICAL_RECIPE_SHA256,
+    }
+    if binary_digest != EXPECTED_BINARY_SHA256 or model_digest != EXPECTED_MODEL_SHA256 or instrument_digests != expected_instruments:
+        raise EvidenceError("artifact digest records do not match reviewed FG-4b identities")
+    current = {
+        Path(EXPECTED_BINARY): EXPECTED_BINARY_SHA256,
+        PROJECT_ROOT / "scripts/benchmark/bench_canonical.sh": EXPECTED_BENCH_CANONICAL_SHA256,
+        PROJECT_ROOT / "scripts/lib/canonical_recipe.py": EXPECTED_CANONICAL_RECIPE_SHA256,
+    }
+    for path, expected in current.items():
+        if not path.is_file() or _sha256(path) != expected:
+            raise EvidenceError(f"current reviewed input hash does not match: {path}")
+    return binary_digest, model_digest, instrument_digests
 
 
 def import_evidence(directory: Path, research_registry: Path, orchestrator_registry: Path) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -212,15 +282,7 @@ def import_evidence(directory: Path, research_registry: Path, orchestrator_regis
     _validate_region_status(directory, "region-status-before.json")
     _validate_region_status(directory, "region-status-after.json")
     provenance = _parse_provenance(directory)
-    binary_digest = _parse_sha256_file(directory, "binary.sha256", EXPECTED_BINARY)[EXPECTED_BINARY]
-    model_digest = _parse_sha256_file(directory, "model.sha256", EXPECTED_MODEL)[EXPECTED_MODEL]
-    instrument_digests = _parse_sha256_file(directory, "instrument.sha256")
-    expected_instruments = {
-        str(PROJECT_ROOT / "scripts/benchmark/bench_canonical.sh"),
-        str(PROJECT_ROOT / "scripts/lib/canonical_recipe.py"),
-    }
-    if set(instrument_digests) != expected_instruments:
-        raise EvidenceError("instrument.sha256 must attest exactly bench_canonical.sh and canonical_recipe.py")
+    binary_digest, model_digest, instrument_digests = _validate_reviewed_digests(directory)
     _validate_launcher_attestations(directory)
     metric = _validate_bench_log(directory)
     _validate_registry(research_registry)
@@ -232,7 +294,7 @@ def import_evidence(directory: Path, research_registry: Path, orchestrator_regis
         "protocol_id": provenance["protocol_id"],
         "n": 512,
         "reps": 2,
-        "date": provenance["finished_at"][:10],
+        "date": datetime.fromisoformat(provenance["finished_at"]).date().isoformat(),
         "artifact": str(directory),
         "model": {"path": EXPECTED_MODEL, "sha256": model_digest},
         "binary": {"path": EXPECTED_BINARY, "sha256": binary_digest, "version_attestation": "binary-version.txt"},
@@ -258,29 +320,36 @@ def import_evidence(directory: Path, research_registry: Path, orchestrator_regis
         "must_not_apply_automatically": True,
         "source_registry": str(research_registry.resolve()),
         "mirror_registry_checked": str(orchestrator_registry.resolve()),
-        "intended_registry_field_targets": [REGISTRY_TARGET],
+        "intended_registry_field_targets": list(REGISTRY_TARGETS),
         "preconditions": {
             "source_target_model_path": EXPECTED_MODEL,
-            "operation_is_observation_addition": True,
-            "do_not_modify_live_throughput": True,
+            "reviewed_old_baseline_tps": EXPECTED_OLD_BASELINE_TPS,
+            "reviewed_old_benchmark_date": EXPECTED_OLD_BENCHMARK_DATE,
+            "do_not_modify": ["roles.frontdoor.performance.optimized_tps", "server_mode.frontdoor.throughput"],
         },
-        "json_patch": [{
-            "op": "add",
-            "path": "/server_mode/frontdoor/canonical_benchmark_observations/fg4b_a4_cpu_reanchor_20260728",
-            "value": evidence,
-        }],
+        "mirror_regeneration": "After review applies this source patch, regenerate the orchestrator mirror with stack_change_pipeline; this importer never invokes it.",
+        "json_patch": [
+            {"op": "test", "path": "/roles/frontdoor/performance/baseline_tps", "value": EXPECTED_OLD_BASELINE_TPS},
+            {"op": "replace", "path": "/roles/frontdoor/performance/baseline_tps", "value": metric.mean_tokens_per_second},
+            {"op": "test", "path": "/roles/frontdoor/performance/benchmark_date", "value": EXPECTED_OLD_BENCHMARK_DATE},
+            {"op": "replace", "path": "/roles/frontdoor/performance/benchmark_date", "value": evidence["date"]},
+        ],
     }
     return evidence, proposal
 
 
-def _write_json(path: Path, payload: dict[str, Any], artifact: Path, registry_paths: set[Path]) -> None:
+def _validate_output_path(path: Path, artifact: Path, registry_paths: set[Path]) -> Path:
     resolved = path.resolve()
     if resolved == artifact or artifact in resolved.parents:
         raise EvidenceError("refusing to write output inside the input artifact directory")
     if resolved in registry_paths:
         raise EvidenceError("refusing to write a registry path")
-    resolved.parent.mkdir(parents=True, exist_ok=True)
-    resolved.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return resolved
+
+
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -298,8 +367,13 @@ def main(argv: list[str] | None = None) -> int:
     try:
         evidence, proposal = import_evidence(args.artifact_dir, args.research_registry, args.orchestrator_registry)
         registry_paths = {args.research_registry.resolve(), args.orchestrator_registry.resolve()}
-        _write_json(args.evidence_out, evidence, args.artifact_dir.resolve(), registry_paths)
-        _write_json(args.proposal_out, proposal, args.artifact_dir.resolve(), registry_paths)
+        artifact = args.artifact_dir.resolve()
+        evidence_out = _validate_output_path(args.evidence_out, artifact, registry_paths)
+        proposal_out = _validate_output_path(args.proposal_out, artifact, registry_paths)
+        if evidence_out == proposal_out:
+            raise EvidenceError("evidence and proposal output paths must differ")
+        _write_json(evidence_out, evidence)
+        _write_json(proposal_out, proposal)
     except EvidenceError as exc:
         print(f"FG-4b evidence import refused: {exc}", file=sys.stderr)
         return 2
