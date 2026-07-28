@@ -10,7 +10,7 @@
   },
   "limitations": [
     "W0 is non-decision-grade and used the 64-token scout cap.",
-    "The required per-question offline_scores.jsonl producer is absent, so these reads have no observational correctness gate.",
+    "SUPERSEDED-IN-SAME-COMMIT (terminalized 2026-07-28 by the coordinating session per bus finding e5-stage-b-plan-integrity): the per-question offline_scores.jsonl producer EXISTS (scripts/benchmark/e5_w0_offline_score.py, committed efd0980c alongside this plan) and its scores are banked for all four W0 runs (2,967 rows; rules regenerated from them). Remaining true caveats: scores are observation-grade (W0 scout protocol), and gemma W0 correctness rows are unusable (43/43 parse failures in all 10 cells — reasoning-only output under the 64-token scout cap); the response-capture fail-close gate committed in efd0980c prevents this in W2+, so gemma correctness reads begin at W2.",
     "This plan is a launch selection, not an amendment to the frozen grid or measurement policy."
   ],
   "windows": {
