@@ -29,8 +29,22 @@ from typing import Any
 
 HERE = Path(__file__).resolve().parent
 OMNI_ROOT = Path("/mnt/raid0/llm/llama.cpp-omni-experimental")
-PINNED_COMMIT = "c86781a93fa07b396ec3613fb79e7a22ab30d8f8"
-PINNED_TAG = "minicpm-o-m2-path-b-derivative-20260727"
+PINNED_COMMIT = "0a73b24e9244795b2b7052ed583023d91cc8df71"
+PINNED_TAG = "minicpm-o-m2-path-b-derivative-v2-20260728"
+PINNED_PROVENANCE = {
+    "derivative": "MiniCPM-o M-2 Path-B immutable v2",
+    "supersedes_commit": "c86781a93fa07b396ec3613fb79e7a22ab30d8f8",
+    "supersedes_tag": "minicpm-o-m2-path-b-derivative-20260727",
+    "superseded_observation": (
+        "derivative-cli-observation-20260728T032451Z-2447247"
+    ),
+}
+PINNED_RATIONALE = (
+    "The prior c86781a observation failed with CLI exit status 1 and no output.wav. "
+    "This runner is bound to the separately tagged immutable v2 derivative so a "
+    "new observation must use a fresh directory and cannot relabel or reuse that "
+    "failed artifact."
+)
 TEXT = "The MiniCPM audio path is working."
 CLAIM_POLICY = (
     "A successful run proves only that this pinned local CPU-only derivative CLI "
@@ -40,14 +54,14 @@ CLAIM_POLICY = (
 
 BINARY = {
     "path": OMNI_ROOT / "build-cpu/bin/llama-omni-cli",
-    "sha256": "b182ed5b2c0f27ffac497817cd1ce0828d7df0835afc413cfa43768543002587",
+    "sha256": "623253e5cbf56751854eb5b479974ec9e974fa75ad0d404ebc3f460fcf169b81",
 }
 LIBRARIES = {
-    "libomni.so": "e4cd1c7be9dee48b88862d6e836a68116f36459d74164246fdd78ede9e9b714c",
+    "libomni.so": "c1217166aa625b6704d1f2d35f92e066495977c90c526ea89d45cf450f8dac33",
     "libllama.so": "c790f0ef20f4d8fabe7dbe3a2b0e8c3115b251d3271fd1d028ddcd88320edfa1",
     "libggml.so": "6353908edcc82b52843bb9323c63f0151913a5d30902f743a59fbcd4364e80a3",
     "libggml-cpu.so": "82fbf9830aa5b58329ebb1336a47474ec7b0fee9fdd19f851fc013f30cdf0d12",
-    "libggml-base.so": "1dbf0a1eed41fc404be9bb71150a8f8873ad64e313215a223c7ba983b427771b",
+    "libggml-base.so": "d6f801685af9b2a7a003d39a487e563c98c9108224ccafa14bbc2a37aa84f4f9",
 }
 
 MODEL_ROOT = Path("/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf")
@@ -150,6 +164,8 @@ def validate_source(root: Path) -> dict[str, Any]:
         "commit": head,
         "tag": PINNED_TAG,
         "tag_commit": tag,
+        "provenance": PINNED_PROVENANCE,
+        "rationale": PINNED_RATIONALE,
         "detached": True,
         "clean": True,
     }
@@ -246,6 +262,8 @@ def make_plan(observation_directory: Path) -> dict[str, Any]:
             "checkout": str(OMNI_ROOT),
             "commit": PINNED_COMMIT,
             "tag": PINNED_TAG,
+            "provenance": PINNED_PROVENANCE,
+            "rationale": PINNED_RATIONALE,
         },
         "argv": build_argv(observation_directory),
         "environment_policy": policy,
