@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import json
 import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 import pytest
@@ -55,6 +56,7 @@ def make_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[replay
     _write(tmp_path / paths["authority_finalization"], "sealed\n")
     _write(tmp_path / paths["authority_ids"], "".join(json.dumps({"id": instance_id}) + "\n" for instance_id in ids))
     _write(tmp_path / paths["harness"], "# pinned harness\n")
+    _write(tmp_path / "authority/docker_build.py", "# pinned docker build\n")
     _write(tmp_path / paths["dataset"], json.dumps([{"instance_id": instance_id, "repo": "repo/project", "base_commit": "deadbeef"} for instance_id in ids]))
     converter = """import json\nfrom pathlib import Path\nrows = {row['instance_id']: row for row in json.loads((Path(__file__).parent / 'swebench_verified.json').read_text())}\ndef apply_blocks(_row, response, blocks):\n    blocks.append({'block_index': 0, 'outcome': 'applied', 'search_sha256': 'a' * 64, 'replace_sha256': 'b' * 64})\n    return response, 1, 0\ndef row_diagnostic(row, patch, blocks, _runner):\n    return {'instance_id': row['id'], 'finish_reason': row['finish_reason'], 'empty_patch': not bool(patch), 'blocks': blocks, 'scoring_eligible': True}\n"""
     _write(tmp_path / paths["converter"], converter)
@@ -62,6 +64,7 @@ def make_inputs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[replay
     monkeypatch.setattr(replay, "EXPECTED", expected)
     monkeypatch.setattr(replay, "CANONICAL_REPOS_REL", "mirror")
     monkeypatch.setattr(replay, "installed_harness", lambda: tmp_path / "authority/harness.py")
+    monkeypatch.setattr(replay, "installed_docker_build", lambda: tmp_path / "authority/docker_build.py")
     monkeypatch.setattr(replay, "validate_repo_mirror", lambda _inputs, _ids: None)
     return replay.Inputs(tmp_path), ids
 
@@ -79,7 +82,9 @@ def test_preflight_binds_only_complete_nothink_capture(tmp_path: Path, monkeypat
 def test_execute_seals_full_fingerprints_nonrecovery_report_and_immutable_ledger(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     inputs, ids = make_inputs(tmp_path, monkeypatch)
 
-    def fake_official(arm: Path, expected_ids: list[str], _run_id: str) -> None:
+    def fake_official(
+        arm: Path, expected_ids: list[str], _run_id: str, _adapter: Path, _adapter_sha256: str,
+    ) -> None:
         predictions = json.loads((arm / "predictions.sealed.json").read_text())
         empty = [row["instance_id"] for row in predictions if not row["model_patch"]]
         completed = [item for item in expected_ids if item not in empty]
@@ -107,6 +112,9 @@ def test_execute_seals_full_fingerprints_nonrecovery_report_and_immutable_ledger
     assert ledger["aggregate"]["empty_patch_row_count"] == 1
     manifest = json.loads((output / "A3-tc-nothink/manifest.json").read_text())
     assert manifest["sealer"]["sealed_path"] == "../replay_tc_nothink_v4.sealed.py"
+    assert manifest["cpu_isolation"]["cpuset_cpus"] == "112-119"
+    assert manifest["cpu_isolation"]["atomic_create"] is True
+    assert manifest["cpu_isolation"]["original_pinned_harness"]["docker_build"]["installed_sha256"] == _sha(tmp_path / "authority/docker_build.py")
     assert result["sealer"]["sealed_path"] == "replay_tc_nothink_v4.sealed.py"
     sealer = output / "replay_tc_nothink_v4.sealed.py"
     sealer.write_text(sealer.read_text() + "# tampered\n")
@@ -134,3 +142,36 @@ def test_report_validation_rejects_empty_patch_partition_drift(tmp_path: Path, m
     (report_dir / "official.json").write_text(json.dumps(report))
     with pytest.raises(replay.ReplayError, match="partition is invalid"):
         replay.validate_report(arm, ids)
+
+
+def test_official_runner_binds_the_sealed_adapter_and_exact_cpuset_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    arm = tmp_path / "arm"
+    arm.mkdir()
+    adapter = tmp_path / "adapter.py"
+    adapter.write_text("# sealed adapter\n")
+    captured: dict[str, object] = {}
+
+    def fake_run(command: list[str], **kwargs: object) -> SimpleNamespace:
+        captured["command"] = command
+        captured.update(kwargs)
+        return SimpleNamespace(returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(replay.subprocess, "run", fake_run)
+    monkeypatch.setattr(replay, "installed_harness", lambda: Path("/pinned/run_evaluation.py"))
+    monkeypatch.setattr(replay, "installed_docker_build", lambda: Path("/pinned/docker_build.py"))
+    replay.run_official(arm, ["one"], "run", adapter, _sha(adapter))
+    assert captured["command"][:6] == [
+        "/usr/bin/taskset", "-c", "112-119", str(replay.SWEBENCH_PYTHON), str(adapter), "--dataset_name",
+    ]
+    assert captured["env"][replay.CPUSET_ENV] == "112-119"
+    assert (arm / "command.txt").read_text().startswith("SWEBENCH_EVAL_CPUSET=112-119 ")
+
+
+def test_official_runner_rejects_adapter_drift_before_docker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    arm = tmp_path / "arm"
+    arm.mkdir()
+    adapter = tmp_path / "adapter.py"
+    adapter.write_text("# sealed adapter\n")
+    monkeypatch.setattr(replay.subprocess, "run", lambda *_args, **_kwargs: pytest.fail("must not start Docker"))
+    with pytest.raises(replay.ReplayError, match="adapter is unavailable or drifted"):
+        replay.run_official(arm, ["one"], "run", adapter, "0" * 64)

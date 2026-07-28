@@ -73,6 +73,11 @@ EXPECTED: dict[str, tuple[str, str]] = {
 }
 SWEBENCH_PYTHON = Path("/mnt/raid0/llm/epyc-inference-research/.venv-swebench/bin/python")
 CANONICAL_REPOS_REL = "artifacts/architect-code-eval-20260724/swebench_repos"
+CPUSET_ENV = "SWEBENCH_EVAL_CPUSET"
+CANONICAL_CPUSET = "112-119"
+ADAPTER_SOURCE = Path(__file__).with_name("swebench_cpuset_adapter.py")
+DOCKER_BUILD_SOURCE = Path("/mnt/raid0/llm/epyc-inference-research/.venv-swebench/lib/python3.12/site-packages/swebench/harness/docker_build.py")
+DOCKER_BUILD_SHA256 = "5278842b60a7d38256f95f93c915dc84de2b8b4f286e9baae1b19280f768e484"
 
 
 class ReplayError(RuntimeError):
@@ -169,6 +174,21 @@ def installed_harness() -> Path:
     return path
 
 
+def installed_docker_build() -> Path:
+    if not SWEBENCH_PYTHON.is_file():
+        fail("pinned SWE-bench interpreter is unavailable")
+    result = subprocess.run(
+        [str(SWEBENCH_PYTHON), "-c", "import inspect,swebench.harness.docker_build as m; print(inspect.getsourcefile(m))"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    path = Path(result.stdout.strip())
+    if result.returncode or path != DOCKER_BUILD_SOURCE or not path.is_file() or sha256(path) != DOCKER_BUILD_SHA256:
+        fail("installed SWE-bench docker_build SHA-256 drifted")
+    return path
+
+
 def validate_repo_mirror(inputs: Inputs, ids: list[str]) -> None:
     dataset = {row.get("instance_id"): row for row in json.loads(inputs.path("dataset").read_text())}
     mirror = inputs.root / CANONICAL_REPOS_REL
@@ -187,6 +207,7 @@ def preflight(inputs: Inputs) -> None:
     ids = authority_ids(inputs)
     validate_capture(inputs, ids)
     installed_harness()
+    installed_docker_build()
     validate_repo_mirror(inputs, ids)
     print(json.dumps({"status": "PRECHECK_OK", "arm": CAPTURE_ARM, "no_inference": True, "denominator": len(ids)}, sort_keys=True))
 
@@ -270,6 +291,9 @@ def seal(
     converter: types.ModuleType,
     sealer: Path,
     sealer_source: Path,
+    adapter_source: Path,
+    harness_source: Path,
+    docker_build_source: Path,
 ) -> Path:
     arm = stage / "A3-tc-nothink"
     arm.mkdir()
@@ -281,6 +305,10 @@ def seal(
         shutil.copyfile(inputs.path(key), destination)
         if sha256(destination) != inputs.digest(key):
             fail(f"sealed copy mismatch: {key}")
+    adapter = stage / "swebench_cpuset_adapter.sealed.py"
+    shutil.copyfile(adapter_source, adapter)
+    if sha256(adapter) != sha256(adapter_source):
+        fail("sealed CPU-isolation adapter hash mismatch")
     predictions, diagnostics, counts = convert(rows, converter)
     if len(predictions) != 40 or [row["instance_id"] for row in predictions] != ids:
         fail("prediction denominator/order drifted")
@@ -301,6 +329,29 @@ def seal(
             "source": str(sealer_source),
             "sealed_path": str(Path("..") / sealer.name),
             "sha256": sha256(sealer),
+        },
+        "cpu_isolation": {
+            "environment_variable": CPUSET_ENV,
+            "cpuset_cpus": CANONICAL_CPUSET,
+            "atomic_create": True,
+            "inspect_before_start": True,
+            "original_pinned_harness": {
+                "run_evaluation": {
+                    "frozen_authority_source": EXPECTED["harness"][0],
+                    "frozen_authority_sha256": inputs.digest("harness"),
+                    "installed_source": str(harness_source),
+                    "installed_sha256": sha256(harness_source),
+                },
+                "docker_build": {
+                    "installed_source": str(docker_build_source),
+                    "installed_sha256": sha256(docker_build_source),
+                },
+            },
+            "adapter": {
+                "source": str(adapter_source),
+                "sealed_path": str(Path("..") / adapter.name),
+                "sha256": sha256(adapter),
+            },
         },
         "sealed": {path.name: sha256(path) for path in sorted(arm.iterdir()) if path.is_file()},
     })
@@ -327,19 +378,34 @@ def revalidate_sealed_arm(stage: Path, arm: Path, ids: list[str]) -> None:
     if [row.get("instance_id") for row in diagnostics] != ids:
         fail("sealed diagnostics denominator/order drifted")
     validate_ledger(diagnostics, json.loads((arm / "nonrecovery_ledger.sealed.json").read_text()))
+    isolation = manifest.get("cpu_isolation")
+    if not isinstance(isolation, dict) or isolation.get("cpuset_cpus") != CANONICAL_CPUSET:
+        fail("sealed manifest lacks the canonical CPU-isolation contract")
+    adapter = isolation.get("adapter")
+    if not isinstance(adapter, dict) or not isinstance(adapter.get("sealed_path"), str) or not isinstance(adapter.get("sha256"), str):
+        fail("sealed manifest lacks CPU-isolation adapter provenance")
+    adapter_path = (arm / adapter["sealed_path"]).resolve()
+    if not adapter_path.is_file() or stage not in adapter_path.parents or sha256(adapter_path) != adapter["sha256"]:
+        fail("sealed CPU-isolation adapter drifted during official scoring")
 
 
-def evaluation_command(arm: Path, ids: list[str], run_id: str) -> list[str]:
-    return ["/usr/bin/taskset", "-c", "112-119", str(SWEBENCH_PYTHON), "-m", "swebench.harness.run_evaluation",
+def evaluation_command(arm: Path, ids: list[str], run_id: str, adapter: Path) -> list[str]:
+    return ["/usr/bin/taskset", "-c", CANONICAL_CPUSET, str(SWEBENCH_PYTHON), str(adapter),
             "--dataset_name", str(arm / "swebench_verified.sealed.json"), "--predictions_path", str(arm / "predictions.sealed.json"),
             "--instance_ids", *ids, "--max_workers", "8", "--timeout", "1800", "--cache_level", "env", "--run_id", run_id,
             "--report_dir", str(arm / "report")]
 
 
-def run_official(arm: Path, ids: list[str], run_id: str) -> None:
-    command = evaluation_command(arm, ids, run_id)
-    result = subprocess.run(command, text=True, capture_output=True, cwd=arm, check=False)
-    (arm / "command.txt").write_text(" ".join(command) + "\n")
+def run_official(arm: Path, ids: list[str], run_id: str, adapter: Path, adapter_sha256: str) -> None:
+    if not adapter.is_file() or sha256(adapter) != adapter_sha256:
+        fail("sealed CPU-isolation adapter is unavailable or drifted")
+    installed_harness()
+    installed_docker_build()
+    environment = os.environ.copy()
+    environment[CPUSET_ENV] = CANONICAL_CPUSET
+    command = evaluation_command(arm, ids, run_id, adapter)
+    result = subprocess.run(command, text=True, capture_output=True, cwd=arm, env=environment, check=False)
+    (arm / "command.txt").write_text(f"{CPUSET_ENV}={CANONICAL_CPUSET} " + " ".join(command) + "\n")
     (arm / "stdout.log").write_text(result.stdout)
     (arm / "stderr.log").write_text(result.stderr)
     (arm / "exit_code").write_text(f"{result.returncode}\n")
@@ -415,14 +481,36 @@ def execute(inputs: Inputs, output: Path) -> None:
         try:
             write_json(stage / "state.json", {"status": "STAGING_NOT_FINAL", "target": str(output), "created_at": datetime.now(UTC).isoformat()})
             sealer_source = Path(__file__).resolve()
+            adapter_source = ADAPTER_SOURCE.resolve()
+            if not adapter_source.is_file():
+                fail("CPU-isolation adapter source is unavailable")
             sealer = stage / "replay_tc_nothink_v4.sealed.py"
             shutil.copyfile(sealer_source, sealer)
             if sha256(sealer) != sha256(sealer_source):
                 fail("sealed sealer source hash mismatch")
             rows = validate_capture(inputs, ids)
             converter = stage_converter(stage, inputs)
-            arm = seal(stage, inputs, ids, rows, converter, sealer, sealer_source)
-            run_official(arm, ids, output.name)
+            harness_source = installed_harness()
+            docker_build_source = installed_docker_build()
+            arm = seal(
+                stage,
+                inputs,
+                ids,
+                rows,
+                converter,
+                sealer,
+                sealer_source,
+                adapter_source,
+                harness_source,
+                docker_build_source,
+            )
+            run_official(
+                arm,
+                ids,
+                output.name,
+                stage / "swebench_cpuset_adapter.sealed.py",
+                sha256(adapter_source),
+            )
             revalidate_sealed_arm(stage, arm, ids)
             verify_inputs(inputs)
             validate_capture(inputs, ids)
