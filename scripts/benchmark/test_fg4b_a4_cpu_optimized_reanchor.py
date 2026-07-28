@@ -245,6 +245,32 @@ def test_atomic_publish_fsyncs_files_and_parent(
     assert len(calls) >= 5  # two files, staging dir, parent before + after rename
 
 
+def test_atomic_publish_removes_output_when_post_rename_fsync_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    staging = tmp_path / ".staging"
+    staging.mkdir()
+    (staging / "evidence.json").write_text("{}")
+    (staging / "COMPLETE").write_text("")
+    output = tmp_path / "terminal"
+    real_fsync = os.fsync
+    calls = 0
+
+    def fail_second_parent_fsync(fd: int) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 5:
+            raise OSError("post-rename fsync failed")
+        real_fsync(fd)
+
+    monkeypatch.setattr(os, "fsync", fail_second_parent_fsync)
+    with pytest.raises(OSError, match="post-rename fsync failed"):
+        runner.atomic_publish(staging, output)
+    assert not staging.exists()
+    assert not output.exists()
+
+
 def test_cold_cache_preparation_success_and_refusal(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         runner,
@@ -314,9 +340,22 @@ def test_content_hash_manifest_excludes_itself_and_complete(tmp_path: Path) -> N
 
 def test_proposal_is_evidence_bound_and_non_applying() -> None:
     evidence = {"mean_tokens_per_second": 42.0, "runtime_identity": {"llama_commit": runner.EXPECTED_LLAMA_COMMIT}}
-    result = runner.proposal(evidence)
+    result = runner.proposal(evidence, evidence_file_sha256="a" * 64)
     assert result["mode"] == "proposal_only"
     assert result["must_not_apply_automatically"] is True
     assert result["apply_eligibility"] == "candidate_protocol_pending_ratification"
     assert "llama-bench tg512" in result["not_comparable_to"]
     assert len(result["evidence_sha256"]) == 64
+
+
+def test_proposal_hash_matches_exact_written_evidence_bytes(tmp_path: Path) -> None:
+    evidence = {
+        "mean_tokens_per_second": 42.0,
+        "runtime_identity": {"llama_commit": runner.EXPECTED_LLAMA_COMMIT},
+    }
+    evidence_path = tmp_path / "evidence.json"
+    runner.write_json(evidence_path, evidence)
+    exact_hash = runner.sha256(evidence_path)
+    result = runner.proposal(evidence, evidence_file_sha256=exact_hash)
+    assert result["evidence_sha256"] == runner.sha256(evidence_path)
+    assert result["evidence_hash_semantics"] == "exact_written_evidence_json_bytes"

@@ -594,7 +594,11 @@ def _run_identity() -> dict[str, Any]:
     }
 
 
-def proposal(evidence: dict[str, Any]) -> dict[str, Any]:
+def proposal(
+    evidence: dict[str, Any],
+    *,
+    evidence_file_sha256: str,
+) -> dict[str, Any]:
     """Return a non-applying registry proposal; no registry path is opened."""
     return {
         "schema": "epyc.registry_patch_proposal.v1",
@@ -614,7 +618,8 @@ def proposal(evidence: dict[str, Any]) -> dict[str, Any]:
             "roles.frontdoor.performance.baseline_tps",
             "roles.frontdoor.performance.benchmark_date",
         ],
-        "evidence_sha256": hashlib.sha256(json.dumps(evidence, sort_keys=True).encode()).hexdigest(),
+        "evidence_sha256": evidence_file_sha256,
+        "evidence_hash_semantics": "exact_written_evidence_json_bytes",
         "requires_human_review": True,
     }
 
@@ -667,6 +672,8 @@ def atomic_publish(staging: Path, output: Path) -> None:
     """Durably rename a complete staged directory or remove it on failure."""
     if output.exists():
         raise ReanchorRefusal(f"terminal output already exists: {output}")
+    published = False
+    parent_fd: int | None = None
     try:
         for path in sorted(staging.rglob("*")):
             if path.is_file():
@@ -678,15 +685,26 @@ def atomic_publish(staging: Path, output: Path) -> None:
         finally:
             os.close(staging_fd)
         parent_fd = os.open(staging.parent, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(parent_fd)
-            os.replace(staging, output)
-            os.fsync(parent_fd)
-        finally:
-            os.close(parent_fd)
-    except Exception:
-        shutil.rmtree(staging, ignore_errors=True)
+        os.fsync(parent_fd)
+        os.replace(staging, output)
+        published = True
+        os.fsync(parent_fd)
+    except Exception as publish_error:
+        cleanup_target = output if published else staging
+        shutil.rmtree(cleanup_target, ignore_errors=True)
+        if cleanup_target.exists():
+            raise ReanchorRefusal(
+                f"publish failed and cleanup could not remove {cleanup_target}"
+            ) from publish_error
+        if parent_fd is not None:
+            try:
+                os.fsync(parent_fd)
+            except OSError:
+                pass
         raise
+    finally:
+        if parent_fd is not None:
+            os.close(parent_fd)
 
 
 def execute(args: argparse.Namespace) -> Path:
@@ -769,6 +787,12 @@ def execute(args: argparse.Namespace) -> Path:
         )
         if len(samples) != REPS:
             raise ReanchorRefusal("incomplete long-decode sample set")
+        expected_witnesses = len(warmup_samples) + REPS
+        if len(request_witnesses) != expected_witnesses:
+            raise ReanchorRefusal(
+                f"request witness count {len(request_witnesses)} does not match "
+                f"warmups+measured {expected_witnesses}"
+            )
         values = [sample.predicted_per_second for sample in samples]
         median_tps = statistics.median(values)
         mad_tps = statistics.median(
@@ -850,8 +874,15 @@ def execute(args: argparse.Namespace) -> Path:
             "decision_grade": True,
             "proposal_only": True,
         }
-        write_json(staging / "evidence.json", evidence)
-        write_json(staging / "registry-patch-proposal.json", proposal(evidence))
+        evidence_path = staging / "evidence.json"
+        write_json(evidence_path, evidence)
+        write_json(
+            staging / "registry-patch-proposal.json",
+            proposal(
+                evidence,
+                evidence_file_sha256=sha256(evidence_path),
+            ),
+        )
         write_content_hash_manifest(staging)
         (staging / "COMPLETE").write_text("", encoding="utf-8")
         atomic_publish(staging, output)
