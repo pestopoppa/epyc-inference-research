@@ -1,7 +1,9 @@
 # P2-5a — Shed-trade measurement spec (DESIGN ONLY; not runnable yet)
 
 **Status**: DESIGN. **Nothing here has been run.** No inference was performed producing this
-document, and the protocol it proposes is **not yet ratified** — see §8.
+document. `P-SHED-1` was **RATIFIED by the operator 2026-07-28** (§8); registration against
+`MEASUREMENT.md` is a human-only path and is the operator's to execute — this session has not
+touched that file. Two decision-rule inputs remain **UNRESOLVED** (§10).
 **Filed**: 2026-07-28 by `claude-gpu-lane`.
 **Owning handoff**: [`epyc-root/handoffs/active/gpu-serving-tie-in-program.md`](../../../epyc-root/handoffs/active/gpu-serving-tie-in-program.md) task **P2-5a**.
 **Motivating analysis**: `epyc-orchestrator/docs/gpu-shadow-lane.md` §3.4 (D1 admission class 3).
@@ -196,7 +198,8 @@ null from being re-litigated as "needs more data" once someone has already built
 ## 6. What makes this decision-grade vs observation-grade
 
 **Observation-grade** (informs design, gates nothing) if *any* of:
-- P-SHED-1 is not yet ratified into `MEASUREMENT.md` (§8) — **this is today's state**;
+- P-SHED-1's registration has not yet been executed against `MEASUREMENT.md` by the operator
+  (the design is ratified, §8);
 - run on any non-production-named kernel (P-GPU-1 provenance rule);
 - any P-GPU-1 mandatory field missing (hardware state before AND after, host interference
   declaration, binary/model identity, run recipe, result grammar, attestation);
@@ -221,7 +224,7 @@ applies unchanged.
 | G1 | **`q3` must be free** | **BLOCKED.** `region-lock status` shows `q3` **HELD** by `bench-e8-quality` (`e8-v5-r2-cadencefix-20260728T160917Z`) — deadline-bearing E8 work; re-verified still held at 2026-07-28T17:0xZ. The lane's host threads need exactly that region. Reclaim is quiesce-and-drain at the holder's own boundary, **never forced** (fabric axiom 4) |
 | G2 | **Host-health tier satisfied** | Measured 2026-07-28: uptime **4d 3h** (booted 2026-07-24T13:51Z), so P-BENCH-1's **≤1wk tier** applies today — `drop_caches` + NUMA-interleave re-warm, *not* a reboot. That tier lapses **~2026-07-31**, after which P-BENCH-1 requires a reboot. The program schedules this work **post-reboot** regardless (Phase 1), which also satisfies the tier by construction. Host reboots are **operator-only**. Practical consequence: do not attempt to squeeze this into the pre-07-31 window — the campaign is multi-hour (§9) and the window is already spoken for by deadline-bearing E8/E5 |
 | G3 | **Lane activated** | Requires the operator-gated Steps 0–7 (`docs/gpu-shadow-lane.md` §7). The registry is FROZEN (D3); activation is a registry change plus the choreography, and it needs G1 as a precondition |
-| G4 | **P-SHED-1 ratified** | `MEASUREMENT.md` is a **human-amendment-only trust boundary**. Until the operator amends it, every number this spec produces is observation-grade regardless of execution quality |
+| G4 | **P-SHED-1 ratified** | **CLEARED 2026-07-28** — operator ratified (§8). Registration against `MEASUREMENT.md` is a human-only path and is being packaged for the operator; this session has not touched that file. Note the two §10 values are still unresolved: they do not block the measurement, they block turning it into a verdict |
 | G5 | **Operator run grant + quiet window** | Benchmarks run only via codified recipes with operator approval; no AutoPilot or EvalTower batch in flight |
 | G6 | **Region claims acquired** | `q3` + GPU device claims held for the run's duration (§4.6) |
 
@@ -230,21 +233,30 @@ independent and can be resolved at any time, including before the hardware is fr
 
 ---
 
-## 8. P-SHED-1 is a PROPOSAL, not a protocol
+## 8. P-SHED-1 — RATIFIED by the operator 2026-07-28
 
 There is **no existing protocol for a cross-device contention trade**. P-BENCH-2 covers CPU
 multi-instance aggregate, P-BENCH-3 covers batched slot decode, P-GPU-1 covers GPU throughput —
 none covers *"work moved between devices, where the mover consumes the resource it is relieving"*.
-That gap is real and this spec is shaped to fill it.
+That gap was real; `P-SHED-1` fills it as a composite protocol (P-BENCH-2 for the CPU half +
+P-GPU-1 for the GPU half + the paired whole-system design of §3, on the P-SPEED-OBJ `task_rate`
+axis).
 
-**It cannot fill it unilaterally.** `MEASUREMENT.md` is human-amendment-only; agents read it and
-never write it. This document therefore **proposes** `P-SHED-1` as a composite protocol
-(P-BENCH-2 for the CPU half + P-GPU-1 for the GPU half + the paired whole-system design of §3, on
-the P-SPEED-OBJ `task_rate` axis), and asks the operator to ratify it as an appended amendment if
-they judge the design sound. Ratification is a decision package for the operator, not an action
-this session takes.
+**Status: the operator has RATIFIED P-SHED-1** (program task P2-5b, 2026-07-28). A pre-validated
+ratification command is being packaged for the operator to execute against `MEASUREMENT.md`.
 
-Until then: this spec is a design artifact. Any run performed under it yields observations.
+**Registration remains a human-only path.** `MEASUREMENT.md` is a human-amendment-only trust
+boundary: agents read it and never write it. This session has NOT edited it and will not. Ratifying
+the design and registering the protocol text are two different acts — the first has happened, the
+second is the operator's to execute.
+
+**Consequence for run planning.** Ratification removes the *protocol* obstacle (previously G4), so a
+run executed under this spec can be decision-grade — provided every other §6 condition holds. It
+does not remove any hardware gate: §7's G1/G2/G3/G5/G6 stand unchanged.
+
+**Two inputs this protocol needs are still UNRESOLVED — see §10.** They are not blockers on the
+protocol's validity; they are values the *decision rule* consumes. Running without them produces a
+sound measurement that cannot be turned into a build/don't-build verdict.
 
 ---
 
@@ -259,11 +271,70 @@ multi-hour quiet-window campaign, not an afternoon — which is itself an argume
 
 ---
 
-## 10. Open questions for the operator
+## 10. UNRESOLVED inputs — recommended values below are PROPOSALS, not settled
 
-1. **Complexity threshold** — what net gain justifies building an admission class, a flag, a
-   telemetry surface and a failure mode? Without a number, a marginal positive becomes a debate.
-2. **Stress levels** — is "saturating + 0.5× saturating" the right pair, or does the real trigger
-   regime sit elsewhere?
-3. **Ratify P-SHED-1?** (§8) — or fold this under an existing protocol the operator considers
-   adequate, accepting that no current protocol covers the cross-device case.
+> **Status, stated plainly:** P-SHED-1 is ratified (§8), but these two inputs were **not separately
+> answered**. The values below are this session's *recommendations*, recorded so the run can be
+> planned against something concrete and so the operator has a specific proposal to accept or
+> reject. **They are NOT settled and must not be cited as decided.** A run may proceed without
+> them — the measurement is sound either way — but the §5.3 decision rule cannot be evaluated
+> until §10.1 is fixed, and §10.2 determines which operating points the run must cover, so
+> deferring it past run-planning would mean re-running.
+
+### 10.1 Complexity threshold — PROPOSED, UNRESOLVED
+
+*What net gain justifies an admission class, a flag, a telemetry surface and a failure mode?*
+
+**Proposed: build class 3 only if ALL THREE hold.**
+
+1. **Statistically resolvable** — `net_task_rate` ≥ **+10%** of A0's total. Rationale: standing rate
+   noise is CV ≈ 9.1%, so a smaller gain is not reliably observable *in production* even if the
+   controlled measurement resolves it. A mechanism whose benefit cannot be seen once deployed
+   cannot be operated, tuned, or defended later.
+2. **Not an artifact of one operating point** — the gain holds at **both** stress levels (§10.2),
+   not only the saturating one. A trade that exists only at a single knife-edge is a trigger
+   condition too narrow to justify permanent mechanism.
+3. **Time-weighted benefit is material** — see the gap below.
+
+**A gap this session found while proposing the threshold, and did not have data to close.** The
+decision is not only *"is the net positive under stress"* but *"how much of production wall time is
+actually under qualifying stress"*. Class 3 is dormant outside stress, so expected benefit is
+`net_gain × stress_duty_cycle`. A +15% gain during stress that occurs 3% of the time is a ~0.5%
+overall improvement bought with a permanent admission class — almost certainly not worth it.
+**The stress duty cycle is measured nowhere today.** Proposed handling: derive it from existing
+production telemetry (a read-only analysis, no inference, no window) *before* the run is scheduled,
+and require **stress duty cycle ≥ 15%** as the third condition. If the duty cycle turns out to be
+small, that closes class 3 **without spending the multi-hour window at all** — which would be the
+cheapest possible resolution and is the reason to do it first.
+
+### 10.2 Stress levels — PROPOSED, UNRESOLVED
+
+*Is "saturating + 0.5× saturating" the right pair, or does the trigger regime sit elsewhere?*
+
+**Proposed: keep the two-level bracket, add a conditional third level, and define "saturating"
+operationally rather than by assertion.**
+
+- **Define saturation, do not assume it.** "Saturating" = the concurrent-request depth at which the
+  CPU fleet's `task_rate` stops rising (the knee). This must come from a short **calibration sweep
+  that is part of the run** (it is inference, so it inherits every §7 gate) — not from a guessed
+  request depth. A stress level asserted rather than located would make every arm's "under stress"
+  label unfalsifiable.
+- **Why two levels bracket the answer.** At 0.5× saturating there is spare CPU capacity, so
+  shedding is *expected* to lose: it takes q3 cores from a system that is not starved. At 1.0× it
+  may win. The pair therefore brackets the sign change rather than measuring one point and
+  generalising.
+- **The crossover is the actually-useful number.** If the sign flips between the two levels, then
+  the crossover **is class 3's admission trigger** — the stress level above which shedding pays.
+  Proposed: add **0.75× saturating** *only if* the sign flips, so a third level is paid for only
+  when it buys the trigger threshold. If the sign does not flip, the bracket already answers the
+  question and the third level is waste.
+
+### 10.3 What is now settled vs open
+
+| Item | State |
+|---|---|
+| P-SHED-1 as a protocol | **RATIFIED** (§8); registration is the operator's human-only execution |
+| Measurement design (arms, controls, metric, reps, pre-registration) | Settled by this spec |
+| Complexity threshold (§10.1) | **UNRESOLVED** — proposal above; also surfaces the unmeasured stress duty cycle |
+| Stress levels (§10.2) | **UNRESOLVED** — proposal above |
+| Run execution | **BLOCKED** on §7 G1/G2/G3/G5/G6 (q3, host tier, activation, grant, claims) |
