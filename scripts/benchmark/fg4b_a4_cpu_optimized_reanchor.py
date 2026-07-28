@@ -39,6 +39,7 @@ ORCHESTRATOR_ROOT = Path("/mnt/raid0/llm/epyc-orchestrator")
 REGION_LOCK = ORCHESTRATOR_ROOT / "scripts/region-lock"
 LLAMA_ROOT = Path("/mnt/raid0/llm/llama.cpp")
 LLAMA_SERVER = LLAMA_ROOT / "build/bin/llama-server"
+GIT = Path("/usr/bin/git")
 MODEL = Path("/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf")
 CPU_LIST = "0-47,96-143"
 PHYSICAL_REGIONS = ("q0", "q1")
@@ -108,7 +109,7 @@ def sha256(path: Path) -> str:
 def _git_output(*args: str) -> str:
     """Read a required Git identity value from this runner's worktree."""
     result = subprocess.run(
-        ["git", "-C", str(REPO_ROOT), *args],
+        [str(GIT), "-C", str(REPO_ROOT), *args],
         text=True,
         capture_output=True,
         check=False,
@@ -621,8 +622,8 @@ def verify_exclusive_server(pid: int) -> dict[str, Any]:
 
 
 def _run_identity() -> dict[str, Any]:
-    branch = run_capture(["git", "-C", str(LLAMA_ROOT), "branch", "--show-current"])
-    commit = run_capture(["git", "-C", str(LLAMA_ROOT), "rev-parse", "HEAD"])
+    branch = run_capture([str(GIT), "-C", str(LLAMA_ROOT), "branch", "--show-current"])
+    commit = run_capture([str(GIT), "-C", str(LLAMA_ROOT), "rev-parse", "HEAD"])
     if branch.strip() != EXPECTED_LLAMA_BRANCH or commit.strip() != EXPECTED_LLAMA_COMMIT:
         raise ReanchorRefusal(
             f"frozen-v8 identity mismatch: branch={branch!r} commit={commit!r}"
@@ -641,7 +642,7 @@ def _run_identity() -> dict[str, Any]:
         "binary_realpath": str(LLAMA_SERVER.resolve(strict=True)),
         "expected_binary_realpath": str(LLAMA_SERVER),
         "expected_shared_libraries": list(EXPECTED_LIBS_V6_IQK),
-        "research_commit": run_capture(["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"]),
+        "research_commit": run_capture([str(GIT), "-C", str(REPO_ROOT), "rev-parse", "HEAD"]),
     }
 
 

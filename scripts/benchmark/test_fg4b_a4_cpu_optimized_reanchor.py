@@ -12,6 +12,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 import fg4b_a4_cpu_optimized_reanchor as runner
 
 
+def test_git_identity_uses_absolute_trusted_binary() -> None:
+    assert runner.GIT == Path("/usr/bin/git")
+    assert runner.GIT.is_file()
+
+
 def test_command_is_production_shaped_and_rejects_legacy_bench_shape() -> None:
     command = runner.build_server_command()
     assert command[:3] == ["taskset", "-c", runner.CPU_LIST]
