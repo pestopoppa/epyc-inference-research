@@ -1,0 +1,325 @@
+{
+  "R1": {
+    "anchors": {
+      "C1@1": "qwen36_q8_0-C1-np1-scout",
+      "C3@1": "qwen36_q8_0-C3-np1-scout"
+    },
+    "c1_whole_machine": false,
+    "iso_t_pairs": [
+      {
+        "cells": {
+          "qwen36_q8_0-C1b-np4-scout": 830.77,
+          "qwen36_q8_0-C3-np2-scout": 1504.569
+        },
+        "margin": 0.4478,
+        "metric_basis": {
+          "qwen36_q8_0-C1b-np4-scout": "trimmed",
+          "qwen36_q8_0-C3-np2-scout": "trimmed"
+        },
+        "mixed_metric_basis": false,
+        "pair": "whole-machine T=8: C1b@4 vs C3@2",
+        "status": "winner",
+        "winner": "qwen36_q8_0-C3-np2-scout",
+        "winner_config": "C3"
+      },
+      {
+        "cells": {
+          "qwen36_q8_0-C1b-np8-scout": 584.16,
+          "qwen36_q8_0-C3-np4-scout": 1057.704
+        },
+        "margin": 0.4477,
+        "metric_basis": {
+          "qwen36_q8_0-C1b-np8-scout": "trimmed",
+          "qwen36_q8_0-C3-np4-scout": "trimmed"
+        },
+        "mixed_metric_basis": false,
+        "pair": "whole-machine T=16: C1b@8 vs C3@4",
+        "status": "winner",
+        "winner": "qwen36_q8_0-C3-np4-scout",
+        "winner_config": "C3"
+      },
+      {
+        "cells": {
+          "qwen36_q8_0-C1b-np16-scout": 1153.988,
+          "qwen36_q8_0-C3-np8-scout": 1774.434
+        },
+        "margin": 0.3497,
+        "metric_basis": {
+          "qwen36_q8_0-C1b-np16-scout": "raw_fallback",
+          "qwen36_q8_0-C3-np8-scout": "raw_fallback"
+        },
+        "mixed_metric_basis": false,
+        "pair": "whole-machine T=32: C1b@16 vs C3@8",
+        "status": "winner",
+        "winner": "qwen36_q8_0-C3-np8-scout",
+        "winner_config": "C3"
+      },
+      {
+        "cells": {
+          "qwen36_q8_0-C1-np16-scout": 729.966,
+          "qwen36_q8_0-C2-np8-scout": 868.932
+        },
+        "margin": 0.1599,
+        "metric_basis": {
+          "qwen36_q8_0-C1-np16-scout": "trimmed",
+          "qwen36_q8_0-C2-np8-scout": "trimmed"
+        },
+        "mixed_metric_basis": false,
+        "pair": "half-machine T=16: C1@16 vs C2@8",
+        "status": "winner",
+        "winner": "qwen36_q8_0-C2-np8-scout",
+        "winner_config": "C2"
+      },
+      {
+        "cells": {
+          "qwen36_q8_0-C1-np32-scout": 1584.685,
+          "qwen36_q8_0-C2-np16-scout": 1706.73
+        },
+        "margin": 0.0715,
+        "metric_basis": {
+          "qwen36_q8_0-C1-np32-scout": "raw_fallback",
+          "qwen36_q8_0-C2-np16-scout": "raw_fallback"
+        },
+        "mixed_metric_basis": false,
+        "note": "margin < 10%: tie \u2014 prefer status-quo quarters (C3)",
+        "pair": "half-machine T=32: C1@32 vs C2@16",
+        "preferred": "C3",
+        "status": "tie"
+      }
+    ],
+    "k_star_roofline_flip": null,
+    "rule": "R1 crossover: iso-T winner needs >= 10% aggregate tasks/hour margin; smaller = tie -> prefer status-quo quarters (C3)",
+    "scaling_pairs": [
+      {
+        "c1_tasks_per_hour": 1389.971,
+        "c1b_over_c1": 0.598,
+        "c1b_tasks_per_hour": 830.77,
+        "k": 4,
+        "metric_basis": {
+          "qwen36_q8_0-C1-np4-scout": "trimmed",
+          "qwen36_q8_0-C1b-np4-scout": "trimmed"
+        },
+        "mixed_metric_basis": false,
+        "status": "ok"
+      },
+      {
+        "c1_tasks_per_hour": 1261.118,
+        "c1b_over_c1": 0.463,
+        "c1b_tasks_per_hour": 584.16,
+        "k": 8,
+        "metric_basis": {
+          "qwen36_q8_0-C1-np8-scout": "trimmed",
+          "qwen36_q8_0-C1b-np8-scout": "trimmed"
+        },
+        "mixed_metric_basis": false,
+        "status": "ok"
+      }
+    ]
+  },
+  "R2": {
+    "models": {
+      "qwen36_q8_0+Q8_0": {
+        "holder_cell": "qwen36_q8_0-C2-np2-scout",
+        "k1_baseline": {
+          "cell_id": "qwen36_q8_0-C3-np1-scout",
+          "note": null,
+          "proxy": false
+        },
+        "lanes_real": true,
+        "metric_basis": {
+          "qwen36_q8_0-C2-np2-scout": "trimmed",
+          "qwen36_q8_0-C3-np1-scout": "trimmed",
+          "qwen36_q8_0-C3-np8-scout": "raw_fallback"
+        },
+        "mixed_metric_basis": true,
+        "pareto": [
+          {
+            "aggregate_basis": "raw_fallback",
+            "aggregate_tasks_per_hour": 1774.434,
+            "cell_id": "qwen36_q8_0-C3-np8-scout",
+            "p95_latency_ms": 82222.66172408126
+          },
+          {
+            "aggregate_basis": "trimmed",
+            "aggregate_tasks_per_hour": 1622.674,
+            "cell_id": "qwen36_q8_0-C2-np2-scout",
+            "p95_latency_ms": 19106.671198038384
+          },
+          {
+            "aggregate_basis": "trimmed",
+            "aggregate_tasks_per_hour": 1548.55,
+            "cell_id": "qwen36_q8_0-C2-np1-scout",
+            "p95_latency_ms": 10904.60218093358
+          },
+          {
+            "aggregate_basis": "trimmed",
+            "aggregate_tasks_per_hour": 1485.977,
+            "cell_id": "qwen36_q8_0-C1-np2-scout",
+            "p95_latency_ms": 9298.254652880132
+          },
+          {
+            "aggregate_basis": "trimmed",
+            "aggregate_tasks_per_hour": 1368.132,
+            "cell_id": "qwen36_q8_0-C1-np1-scout",
+            "p95_latency_ms": 4985.511929029599
+          }
+        ],
+        "peak_cell": "qwen36_q8_0-C3-np8-scout",
+        "peak_p95_over_k1": 4.499,
+        "sla_violated_at_peak": true
+      }
+    },
+    "rule": "R2 lanes: lanes are real iff the peak-aggregate cell's p95 exceeds 3x that config's K=1 p95 (or 60s absolute) while some lower-K cell holds >= 70% of peak within SLA"
+  },
+  "R3": {
+    "reason": "no --current-arm-baseline supplied; refusing to price the eval lane until a FRESH current-arm baseline row (v7 + core_v2 + WP-12 fleet layer) is measured",
+    "rule": "R3 eval-lane pricing (audit C2): the pre-v7 E2 rows (2.258/10.970 wall-min/eval) are demoted-to-prior and never gate",
+    "status": "refused"
+  },
+  "R4": [
+    {
+      "ctx_kv_config": {
+        "ctx": 8192,
+        "kv": {
+          "flash_attn": true,
+          "kv_unified": false,
+          "type_k": "q8_0",
+          "type_v": "q8_0"
+        },
+        "per_stream_ctx": 2048
+      },
+      "kv_unified_attestation": {
+        "qwen36_q8_0-C1-np1-scout": false,
+        "qwen36_q8_0-C1-np16-scout": false,
+        "qwen36_q8_0-C1-np16-scout-kvu": true,
+        "qwen36_q8_0-C1-np2-scout": false,
+        "qwen36_q8_0-C1-np32-scout": false,
+        "qwen36_q8_0-C1-np4-scout": false,
+        "qwen36_q8_0-C1-np8-scout": false,
+        "qwen36_q8_0-C1b-np1-scout": false,
+        "qwen36_q8_0-C1b-np16-scout": false,
+        "qwen36_q8_0-C1b-np2-scout": false,
+        "qwen36_q8_0-C1b-np4-scout": false,
+        "qwen36_q8_0-C1b-np8-scout": false,
+        "qwen36_q8_0-C2-np1-scout": false,
+        "qwen36_q8_0-C2-np16-scout": false,
+        "qwen36_q8_0-C2-np2-scout": false,
+        "qwen36_q8_0-C2-np4-scout": false,
+        "qwen36_q8_0-C2-np8-scout": false,
+        "qwen36_q8_0-C3-np1-scout": false,
+        "qwen36_q8_0-C3-np2-scout": false,
+        "qwen36_q8_0-C3-np4-scout": false,
+        "qwen36_q8_0-C3-np8-scout": false
+      },
+      "mixed_metric_basis": true,
+      "model_key": "qwen36_q8_0",
+      "numa_splitting_potential": {
+        "C1b_over_C1_at_np4": 0.598,
+        "C1b_over_C1_at_np8": 0.463
+      },
+      "per_shape_np_optimum": {
+        "C1": {
+          "aggregate_basis": "raw_fallback",
+          "aggregate_tasks_per_hour": 1584.685,
+          "np": 32,
+          "p95_latency_ms": 97085.45791404322
+        },
+        "C1b": {
+          "aggregate_basis": "raw_fallback",
+          "aggregate_tasks_per_hour": 1153.988,
+          "np": 16,
+          "p95_latency_ms": 134088.6199339293
+        },
+        "C2": {
+          "aggregate_basis": "raw_fallback",
+          "aggregate_tasks_per_hour": 1706.73,
+          "np": 16,
+          "p95_latency_ms": 89799.3236980401
+        },
+        "C3": {
+          "aggregate_basis": "raw_fallback",
+          "aggregate_tasks_per_hour": 1774.434,
+          "np": 8,
+          "p95_latency_ms": 82222.66172408126
+        }
+      },
+      "quant": "Q8_0",
+      "recommended": {
+        "aggregate_basis": "trimmed",
+        "aggregate_tasks_per_hour": 1622.674,
+        "config_id": "C2",
+        "np": 2,
+        "p95_latency_ms": 19106.671198038384,
+        "rule": "smallest-latency cell achieving >= 90% of peak aggregate"
+      },
+      "solo_shape": {
+        "aggregate_tasks_per_hour": 1368.132,
+        "cell_id": "qwen36_q8_0-C1-np1-scout",
+        "config_id": "C1"
+      },
+      "spec_recipe": {
+        "accept_rates_per_cell": {
+          "qwen36_q8_0-C1-np1-scout": 0.8370927318295739,
+          "qwen36_q8_0-C1-np16-scout": 0.6032786885245902,
+          "qwen36_q8_0-C1-np16-scout-kvu": 0.6742532005689901,
+          "qwen36_q8_0-C1-np2-scout": 0.8130612244897959,
+          "qwen36_q8_0-C1-np32-scout": 0.5913185913185913,
+          "qwen36_q8_0-C1-np4-scout": 0.7415902140672783,
+          "qwen36_q8_0-C1-np8-scout": 0.7036764705882353,
+          "qwen36_q8_0-C1b-np1-scout": 0.8370927318295739,
+          "qwen36_q8_0-C1b-np16-scout": 0.6384720327421555,
+          "qwen36_q8_0-C1b-np2-scout": 0.827671913835957,
+          "qwen36_q8_0-C1b-np4-scout": 0.7354056103108415,
+          "qwen36_q8_0-C1b-np8-scout": 0.6546212647671994,
+          "qwen36_q8_0-C2-np1-scout": 0.8334721065778518,
+          "qwen36_q8_0-C2-np16-scout": 0.6683168316831684,
+          "qwen36_q8_0-C2-np2-scout": 0.8143908421913328,
+          "qwen36_q8_0-C2-np4-scout": 0.7714061272584446,
+          "qwen36_q8_0-C2-np8-scout": 0.5908505154639175,
+          "qwen36_q8_0-C3-np1-scout": 0.8370927318295739,
+          "qwen36_q8_0-C3-np2-scout": 0.8087876322213181,
+          "qwen36_q8_0-C3-np4-scout": 0.7152366863905325,
+          "qwen36_q8_0-C3-np8-scout": 0.6315440689198144
+        },
+        "draft_accept_rate": 0.8143908421913328,
+        "spec_dec": {
+          "device_draft": "none",
+          "disabled_reason": null,
+          "draft_max": 4,
+          "draft_min": null,
+          "draft_model_path": null,
+          "draft_p_min": null,
+          "draft_p_split": 0,
+          "enabled": true,
+          "ngram_mod": null,
+          "record_accept_rate": true,
+          "spec_type": "draft-mtp",
+          "threads_draft": null
+        }
+      }
+    }
+  ],
+  "caveats": [
+    "E5 K=1 cells are NOT byte-comparable to E1 rows (different -c convention: E5 uses -c max(8192, per_stream_ctx*np), E1 used fixed -c 32768) \u2014 direction cross-check only.",
+    "aggregate tasks/hour falls back from trimmed to raw when the steady-state window is empty (structural at high K: the 43-prompt closed loop leaves few second-round requests); raw includes ramp+drain and systematically understates steady throughput \u2014 every R1/R2/R4 comparison records the per-cell metric basis and flags mixed-basis pairs (review F3)"
+  ],
+  "created_at": "2026-07-28T14:55:12.765622+00:00",
+  "degraded_cells": [],
+  "protocol_id": "P-BENCH-3",
+  "scout_probes": {
+    "dense_c1_shape_pairs": [],
+    "kvu_split_pairs": [
+      {
+        "delta_fraction": 0.089,
+        "escalate_to_operator": true,
+        "kvu_cell": "qwen36_q8_0-C1-np16-scout-kvu",
+        "kvu_tasks_per_hour": 794.929,
+        "mixed_metric_basis": false,
+        "note": ">=5% split-vs-unified delta: escalate a Stage-B split-vs-unified arm to the operator (protocol decision 1)",
+        "split_cell": "qwen36_q8_0-C1-np16-scout",
+        "split_tasks_per_hour": 729.966,
+        "status": "ok"
+      }
+    ]
+  }
+}

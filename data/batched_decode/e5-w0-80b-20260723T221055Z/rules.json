@@ -1,0 +1,271 @@
+{
+  "R1": {
+    "anchors": {
+      "C1@1": "qwen3_next_80b-C1-np1-scout",
+      "C3@1": "qwen3_next_80b-C3-np1-scout"
+    },
+    "c1_whole_machine": false,
+    "iso_t_pairs": [
+      {
+        "cells": {
+          "qwen3_next_80b-C1b-np4-scout": 1546.74,
+          "qwen3_next_80b-C3-np2-scout": 1873.434
+        },
+        "margin": 0.1744,
+        "metric_basis": {
+          "qwen3_next_80b-C1b-np4-scout": "trimmed",
+          "qwen3_next_80b-C3-np2-scout": "trimmed"
+        },
+        "mixed_metric_basis": false,
+        "pair": "whole-machine T=8: C1b@4 vs C3@2",
+        "status": "winner",
+        "winner": "qwen3_next_80b-C3-np2-scout",
+        "winner_config": "C3"
+      },
+      {
+        "cells": {
+          "qwen3_next_80b-C1b-np8-scout": 1198.187,
+          "qwen3_next_80b-C3-np4-scout": 1627.694
+        },
+        "margin": 0.2639,
+        "metric_basis": {
+          "qwen3_next_80b-C1b-np8-scout": "trimmed",
+          "qwen3_next_80b-C3-np4-scout": "trimmed"
+        },
+        "mixed_metric_basis": false,
+        "pair": "whole-machine T=16: C1b@8 vs C3@4",
+        "status": "winner",
+        "winner": "qwen3_next_80b-C3-np4-scout",
+        "winner_config": "C3"
+      },
+      {
+        "cells": {
+          "qwen3_next_80b-C1b-np16-scout": 1904.617,
+          "qwen3_next_80b-C3-np8-scout": 2385.676
+        },
+        "margin": 0.2016,
+        "metric_basis": {
+          "qwen3_next_80b-C1b-np16-scout": "raw_fallback",
+          "qwen3_next_80b-C3-np8-scout": "raw_fallback"
+        },
+        "mixed_metric_basis": false,
+        "pair": "whole-machine T=32: C1b@16 vs C3@8",
+        "status": "winner",
+        "winner": "qwen3_next_80b-C3-np8-scout",
+        "winner_config": "C3"
+      },
+      {
+        "pair": "half-machine T=16: C1@16 vs C2@8",
+        "status": "insufficient_data"
+      },
+      {
+        "pair": "half-machine T=32: C1@32 vs C2@16",
+        "status": "insufficient_data"
+      }
+    ],
+    "k_star_roofline_flip": null,
+    "rule": "R1 crossover: iso-T winner needs >= 10% aggregate tasks/hour margin; smaller = tie -> prefer status-quo quarters (C3)",
+    "scaling_pairs": [
+      {
+        "c1_tasks_per_hour": 1421.434,
+        "c1b_over_c1": 1.088,
+        "c1b_tasks_per_hour": 1546.74,
+        "k": 4,
+        "metric_basis": {
+          "qwen3_next_80b-C1-np4-scout": "trimmed",
+          "qwen3_next_80b-C1b-np4-scout": "trimmed"
+        },
+        "mixed_metric_basis": false,
+        "status": "ok"
+      },
+      {
+        "c1_tasks_per_hour": 1318.378,
+        "c1b_over_c1": 0.909,
+        "c1b_tasks_per_hour": 1198.187,
+        "k": 8,
+        "metric_basis": {
+          "qwen3_next_80b-C1-np8-scout": "trimmed",
+          "qwen3_next_80b-C1b-np8-scout": "trimmed"
+        },
+        "mixed_metric_basis": false,
+        "status": "ok"
+      }
+    ]
+  },
+  "R2": {
+    "models": {
+      "qwen3_next_80b+Q4_K_M": {
+        "holder_cell": "qwen3_next_80b-C3-np2-scout",
+        "k1_baseline": {
+          "cell_id": "qwen3_next_80b-C3-np1-scout",
+          "note": null,
+          "proxy": false
+        },
+        "lanes_real": true,
+        "metric_basis": {
+          "qwen3_next_80b-C3-np1-scout": "trimmed",
+          "qwen3_next_80b-C3-np2-scout": "trimmed",
+          "qwen3_next_80b-C3-np8-scout": "raw_fallback"
+        },
+        "mixed_metric_basis": true,
+        "pareto": [
+          {
+            "aggregate_basis": "raw_fallback",
+            "aggregate_tasks_per_hour": 2385.676,
+            "cell_id": "qwen3_next_80b-C3-np8-scout",
+            "p95_latency_ms": 62328.75909493305
+          },
+          {
+            "aggregate_basis": "trimmed",
+            "aggregate_tasks_per_hour": 1873.434,
+            "cell_id": "qwen3_next_80b-C3-np2-scout",
+            "p95_latency_ms": 22696.103415917605
+          },
+          {
+            "aggregate_basis": "trimmed",
+            "aggregate_tasks_per_hour": 1795.27,
+            "cell_id": "qwen3_next_80b-C3-np1-scout",
+            "p95_latency_ms": 17485.90520210564
+          },
+          {
+            "aggregate_basis": "trimmed",
+            "aggregate_tasks_per_hour": 1449.155,
+            "cell_id": "qwen3_next_80b-C1-np2-scout",
+            "p95_latency_ms": 11207.920531043783
+          },
+          {
+            "aggregate_basis": "trimmed",
+            "aggregate_tasks_per_hour": 1175.317,
+            "cell_id": "qwen3_next_80b-C1-np1-scout",
+            "p95_latency_ms": 6315.104531124234
+          }
+        ],
+        "peak_cell": "qwen3_next_80b-C3-np8-scout",
+        "peak_p95_over_k1": 3.565,
+        "sla_violated_at_peak": true
+      }
+    },
+    "rule": "R2 lanes: lanes are real iff the peak-aggregate cell's p95 exceeds 3x that config's K=1 p95 (or 60s absolute) while some lower-K cell holds >= 70% of peak within SLA"
+  },
+  "R3": {
+    "reason": "no --current-arm-baseline supplied; refusing to price the eval lane until a FRESH current-arm baseline row (v7 + core_v2 + WP-12 fleet layer) is measured",
+    "rule": "R3 eval-lane pricing (audit C2): the pre-v7 E2 rows (2.258/10.970 wall-min/eval) are demoted-to-prior and never gate",
+    "status": "refused"
+  },
+  "R4": [
+    {
+      "ctx_kv_config": {
+        "ctx": 16384,
+        "kv": {
+          "flash_attn": true,
+          "kv_unified": false,
+          "type_k": "q8_0",
+          "type_v": "q8_0"
+        },
+        "per_stream_ctx": 2048
+      },
+      "kv_unified_attestation": {
+        "qwen3_next_80b-C1-np1-scout": false,
+        "qwen3_next_80b-C1-np16-scout": false,
+        "qwen3_next_80b-C1-np2-scout": false,
+        "qwen3_next_80b-C1-np32-scout": false,
+        "qwen3_next_80b-C1-np4-scout": false,
+        "qwen3_next_80b-C1-np8-scout": false,
+        "qwen3_next_80b-C1b-np1-scout": false,
+        "qwen3_next_80b-C1b-np16-scout": false,
+        "qwen3_next_80b-C1b-np2-scout": false,
+        "qwen3_next_80b-C1b-np4-scout": false,
+        "qwen3_next_80b-C1b-np8-scout": false,
+        "qwen3_next_80b-C3-np1-scout": false,
+        "qwen3_next_80b-C3-np2-scout": false,
+        "qwen3_next_80b-C3-np4-scout": false,
+        "qwen3_next_80b-C3-np8-scout": false
+      },
+      "mixed_metric_basis": true,
+      "model_key": "qwen3_next_80b",
+      "numa_splitting_potential": {
+        "C1b_over_C1_at_np4": 1.088,
+        "C1b_over_C1_at_np8": 0.909
+      },
+      "per_shape_np_optimum": {
+        "C1": {
+          "aggregate_basis": "raw_fallback",
+          "aggregate_tasks_per_hour": 1556.163,
+          "np": 32,
+          "p95_latency_ms": 99004.19291504659
+        },
+        "C1b": {
+          "aggregate_basis": "raw_fallback",
+          "aggregate_tasks_per_hour": 1904.617,
+          "np": 16,
+          "p95_latency_ms": 81234.08149997704
+        },
+        "C3": {
+          "aggregate_basis": "raw_fallback",
+          "aggregate_tasks_per_hour": 2385.676,
+          "np": 8,
+          "p95_latency_ms": 62328.75909493305
+        }
+      },
+      "quant": "Q4_K_M",
+      "recommended": {
+        "aggregate_basis": "raw_fallback",
+        "aggregate_tasks_per_hour": 2385.676,
+        "config_id": "C3",
+        "np": 8,
+        "p95_latency_ms": 62328.75909493305,
+        "rule": "smallest-latency cell achieving >= 90% of peak aggregate"
+      },
+      "solo_shape": {
+        "aggregate_tasks_per_hour": 1175.317,
+        "cell_id": "qwen3_next_80b-C1-np1-scout",
+        "config_id": "C1"
+      },
+      "spec_recipe": {
+        "accept_rates_per_cell": {
+          "qwen3_next_80b-C1-np1-scout": null,
+          "qwen3_next_80b-C1-np16-scout": null,
+          "qwen3_next_80b-C1-np2-scout": null,
+          "qwen3_next_80b-C1-np32-scout": null,
+          "qwen3_next_80b-C1-np4-scout": null,
+          "qwen3_next_80b-C1-np8-scout": null,
+          "qwen3_next_80b-C1b-np1-scout": null,
+          "qwen3_next_80b-C1b-np16-scout": null,
+          "qwen3_next_80b-C1b-np2-scout": null,
+          "qwen3_next_80b-C1b-np4-scout": null,
+          "qwen3_next_80b-C1b-np8-scout": null,
+          "qwen3_next_80b-C3-np1-scout": null,
+          "qwen3_next_80b-C3-np2-scout": null,
+          "qwen3_next_80b-C3-np4-scout": null,
+          "qwen3_next_80b-C3-np8-scout": null
+        },
+        "draft_accept_rate": null,
+        "spec_dec": {
+          "device_draft": "none",
+          "disabled_reason": "ssm_hybrid_no_speculation: SSM/MoE-hybrid arch has no working speculation path (registry quirk qwen3_next_80b) \u2014 spec-off IS the top production recipe for this arm, not a wedge fallback",
+          "draft_max": null,
+          "draft_min": null,
+          "draft_model_path": null,
+          "draft_p_min": null,
+          "draft_p_split": null,
+          "enabled": false,
+          "ngram_mod": null,
+          "record_accept_rate": false,
+          "spec_type": null,
+          "threads_draft": null
+        }
+      }
+    }
+  ],
+  "caveats": [
+    "E5 K=1 cells are NOT byte-comparable to E1 rows (different -c convention: E5 uses -c max(8192, per_stream_ctx*np), E1 used fixed -c 32768) \u2014 direction cross-check only.",
+    "aggregate tasks/hour falls back from trimmed to raw when the steady-state window is empty (structural at high K: the 43-prompt closed loop leaves few second-round requests); raw includes ramp+drain and systematically understates steady throughput \u2014 every R1/R2/R4 comparison records the per-cell metric basis and flags mixed-basis pairs (review F3)"
+  ],
+  "created_at": "2026-07-28T14:55:13.006348+00:00",
+  "degraded_cells": [],
+  "protocol_id": "P-BENCH-3",
+  "scout_probes": {
+    "dense_c1_shape_pairs": [],
+    "kvu_split_pairs": []
+  }
+}

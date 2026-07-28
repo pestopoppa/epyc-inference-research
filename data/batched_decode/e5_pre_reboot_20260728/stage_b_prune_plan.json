@@ -1,0 +1,96 @@
+{
+  "artifact_type": "e5_stage_b_prune_plan",
+  "generated_at": "2026-07-28T14:55:00Z",
+  "scope": "read-only derivative of frozen e5_manifests; it does not replace or mutate pre-registered manifests",
+  "source_runs": {
+    "W0_qwen": "data/batched_decode/e5-w0-qwen36-nothink-20260723T194901Z/rules.json",
+    "W0_gemma": "data/batched_decode/e5-w0-gemma-20260723T203422Z/rules.json",
+    "W0_dense": "data/batched_decode/e5-w0-dense-20260723T204720Z/rules.json",
+    "W0_ingest": "data/batched_decode/e5-w0-80b-20260723T221055Z/rules.json"
+  },
+  "limitations": [
+    "W0 is non-decision-grade and used the 64-token scout cap.",
+    "The required per-question offline_scores.jsonl producer is absent, so these reads have no observational correctness gate.",
+    "This plan is a launch selection, not an amendment to the frozen grid or measurement policy."
+  ],
+  "windows": {
+    "W1": {
+      "model_key": "qwen36_q8_0",
+      "prune": [
+        "qwen36_q8_0-C1b-np4",
+        "qwen36_q8_0-C1b-np8",
+        "qwen36_q8_0-C1b-np16"
+      ],
+      "prune_rationale": "W0 whole-machine C3 wins by 44.78%, 44.77%, and 34.97% at T=8/16/32; C1b/C1 is 0.598 at K=4 and 0.463 at K=8, reproducing the documented half-pair collapse.",
+      "run": [
+        "qwen36_q8_0-C1-np1",
+        "qwen36_q8_0-C1-np4",
+        "qwen36_q8_0-C1-np8",
+        "qwen36_q8_0-C1-np16",
+        "qwen36_q8_0-C1-np32",
+        "qwen36_q8_0-C2-np8",
+        "qwen36_q8_0-C2-np16",
+        "qwen36_q8_0-C3-np1",
+        "qwen36_q8_0-C3-np2",
+        "qwen36_q8_0-C3-np4",
+        "qwen36_q8_0-C3-np8"
+      ],
+      "conditional_operator_cell": "qwen36_q8_0-C1-np16-kvu (generated paired counterpart to the retained split-KV qwen36_q8_0-C1-np16; do not generate or run without the KV decision)"
+    },
+    "W2": {
+      "model_key": "gemma4_26b_a4b_q4km_mtp",
+      "prune": [],
+      "run": [
+        "gemma4_26b_a4b_q4km_mtp-C1-np1",
+        "gemma4_26b_a4b_q4km_mtp-C1-np8",
+        "gemma4_26b_a4b_q4km_mtp-C1-np16",
+        "gemma4_26b_a4b_q4km_mtp-C1-np32",
+        "gemma4_26b_a4b_q4km_mtp-C3-np1",
+        "gemma4_26b_a4b_q4km_mtp-C3-np2",
+        "gemma4_26b_a4b_q4km_mtp-C3-np4",
+        "gemma4_26b_a4b_q4km_mtp-C3-np8"
+      ],
+      "rationale": "Retain the full-vs-quarter family for clean 256-token confirmation despite W0 C3 wins of 36.24%-43.77%."
+    },
+    "W3": {
+      "model_key": "qwen36_27b_q8",
+      "prune": [],
+      "run": [
+        "qwen36_27b_q8-C1-np1",
+        "qwen36_27b_q8-C1-np4",
+        "qwen36_27b_q8-C1-np8",
+        "qwen36_27b_q8-C1-np16",
+        "qwen36_27b_q8-C1-np32",
+        "qwen36_27b_q8-C1b-np4",
+        "qwen36_27b_q8-C1b-np8",
+        "qwen36_27b_q8-C1b-np16",
+        "qwen36_27b_q8-C2-np8",
+        "qwen36_27b_q8-C2-np16",
+        "qwen36_27b_q8-C3-np1",
+        "qwen36_27b_q8-C3-np2",
+        "qwen36_27b_q8-C3-np4",
+        "qwen36_27b_q8-C3-np8"
+      ],
+      "rationale": "Dense C1 remains the already-registered half0 shape; W0 C1b@16 vs C3@8 used mixed metric bases, so no additional prune is sound."
+    },
+    "W4": {
+      "model_key": "qwen3_next_80b",
+      "prune": [],
+      "run": [
+        "qwen3_next_80b-C1-np1",
+        "qwen3_next_80b-C1-np4",
+        "qwen3_next_80b-C1-np8",
+        "qwen3_next_80b-C1-np16",
+        "qwen3_next_80b-C1-np32",
+        "qwen3_next_80b-C1b-np4",
+        "qwen3_next_80b-C1b-np8",
+        "qwen3_next_80b-C1b-np16",
+        "qwen3_next_80b-C3-np1",
+        "qwen3_next_80b-C3-np2",
+        "qwen3_next_80b-C3-np4",
+        "qwen3_next_80b-C3-np8"
+      ],
+      "rationale": "Keep the ingest whole-machine family: W0 favors C3 by 17.44%-26.39%, but the 256-token clean confirmation remains the operator-scheduled W4 purpose."
+    }
+  }
+}

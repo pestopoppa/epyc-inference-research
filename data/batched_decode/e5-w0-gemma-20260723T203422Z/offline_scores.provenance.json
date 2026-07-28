@@ -1,0 +1,53 @@
+{
+  "artifact_type": "e5_w0_offline_scores_observation_grade",
+  "contract": {
+    "fields": [
+      "cell_id",
+      "qid",
+      "parse_ok",
+      "repetition_loop"
+    ],
+    "row_count": 430
+  },
+  "coverage": {
+    "cells": 10,
+    "expected_rows": 430,
+    "qids": 43
+  },
+  "garbage_gate_observation": {
+    "max_parse_failures_per_cell": 2,
+    "parse_failures_by_cell": {
+      "gemma4_26b_a4b_q4km_mtp-C1-np1-scout": 43,
+      "gemma4_26b_a4b_q4km_mtp-C1-np16-scout": 43,
+      "gemma4_26b_a4b_q4km_mtp-C1-np2-scout": 43,
+      "gemma4_26b_a4b_q4km_mtp-C1-np32-scout": 43,
+      "gemma4_26b_a4b_q4km_mtp-C1-np4-scout": 43,
+      "gemma4_26b_a4b_q4km_mtp-C1-np8-scout": 43,
+      "gemma4_26b_a4b_q4km_mtp-C3-np1-scout": 43,
+      "gemma4_26b_a4b_q4km_mtp-C3-np2-scout": 43,
+      "gemma4_26b_a4b_q4km_mtp-C3-np4-scout": 43,
+      "gemma4_26b_a4b_q4km_mtp-C3-np8-scout": 43
+    },
+    "repetition_flags_by_cell": {},
+    "repetition_loop_threshold": 0.4
+  },
+  "hashes": {
+    "anomaly_py": "bed0ef6997514f062c41de227a99e4f10ab927b367d0037e7f86d0354862dc39",
+    "anomaly_signals_yaml": "7c8a66b2725a5301feb5392dfa269edc4d5307092dfbb71485b2725f30bda0d0",
+    "cells_jsonl": "6387a7bb35cc323e74fce9f5dab715f3d29da80a55da8d5182412d429133ca84",
+    "debug_scorer_py": "90b2fe1f9d756ae584f2c4e9bffc0be3f244712828706e154e8ad41c047d475a",
+    "offline_scores_jsonl": "03ad48b1c593e484d858a578c13c08377c1395876c6b0a91f29e6c3755a9ab01",
+    "question_pool_jsonl": "6e976c26c706ad18b44cecce9cd7b65370dbe6f01c5310a5b498430fee77a366",
+    "responses_jsonl": "e2952da11023bf1766a0d2d514df5c2e8c3fd9f769175c40bb55d9116d9a7a9b",
+    "selected_prompts_jsonl": "284f7fc005b73ab05688713bfec0e72303f5558ff81607773d6f5d0622ef0e44"
+  },
+  "methods": {
+    "code_execution": 60,
+    "exact_match": 50,
+    "f1": 60,
+    "multiple_choice": 190,
+    "programmatic": 10,
+    "substring": 60
+  },
+  "run_dir": "data/batched_decode/e5-w0-gemma-20260723T203422Z"
+}

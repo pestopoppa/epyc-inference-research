@@ -869,6 +869,7 @@ class StreamRequestRecord:
     http_status: int | None = None
     error: str = ""
     response_text: str = ""
+    reasoning_text: str = ""
     timings: dict[str, Any] = field(default_factory=dict)
 
 
@@ -941,6 +942,36 @@ def parse_sse_line(line: str) -> dict[str, Any] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+def stream_chunk_text(chunk: dict[str, Any]) -> tuple[str, str]:
+    """Return answer and reasoning deltas from llama.cpp stream schemas."""
+    content = chunk.get("content")
+    reasoning = chunk.get("reasoning_content")
+    choices = chunk.get("choices")
+    if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+        delta = choices[0].get("delta")
+        if isinstance(delta, dict):
+            if content is None:
+                content = delta.get("content")
+            if reasoning is None:
+                reasoning = delta.get("reasoning_content")
+    return (
+        str(content) if content else "",
+        str(reasoning) if reasoning else "",
+    )
+
+
+def response_capture_error(
+    *, status: int | None, predicted_tokens: int, response_text: str
+) -> str:
+    """Reject a generated response whose answer channel was not captured."""
+    if status == 200 and predicted_tokens > 0 and not response_text.strip():
+        return (
+            "response_capture_missing_answer_text: HTTP 200 with "
+            f"predicted_n={predicted_tokens}, but no answer-text SSE delta"
+        )
+    return ""
+
+
 def send_streaming_completion(
     *,
     cell: Cell,
@@ -991,6 +1022,7 @@ def send_streaming_completion(
     start = time.perf_counter()
     first_token: float | None = None
     text_parts: list[str] = []
+    reasoning_parts: list[str] = []
     timings: dict[str, Any] = {}
     status: int | None = None
     error = ""
@@ -1002,22 +1034,26 @@ def send_streaming_completion(
                     chunk = parse_sse_line(line)
                     if chunk is None:
                         continue
-                    content = chunk.get("content")
-                    if content is None:
-                        # OpenAI-compat chat stream shape: choices[0].delta.content
-                        choices = chunk.get("choices")
-                        if isinstance(choices, list) and choices:
-                            delta = choices[0].get("delta") or {}
-                            content = delta.get("content")
+                    content, reasoning = stream_chunk_text(chunk)
                     if content:
                         if first_token is None:
                             first_token = time.perf_counter()
-                        text_parts.append(str(content))
+                        text_parts.append(content)
+                    if reasoning:
+                        reasoning_parts.append(reasoning)
                     if isinstance(chunk.get("timings"), dict):
                         timings = chunk["timings"]
         success = status == 200
         if not success:
             error = f"HTTP {status}"
+        else:
+            error = response_capture_error(
+                status=status,
+                predicted_tokens=int(timings.get("predicted_n") or 0),
+                response_text="".join(text_parts),
+            )
+            if error:
+                success = False
     except Exception as exc:  # noqa: BLE001 — recorded per-request, run continues
         success = False
         error = str(exc)
@@ -1047,6 +1083,7 @@ def send_streaming_completion(
         http_status=status,
         error=error,
         response_text="".join(text_parts),
+        reasoning_text="".join(reasoning_parts),
         timings=dict(timings),
     )
 
@@ -1117,6 +1154,7 @@ def summarize_cell(
     cell_host_warnings: list[str] | None = None,
     throttle_check: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    trimmed = trimmed_aggregate(records)
     successes = [record for record in records if record.success]
     latencies = [record.latency_ms for record in successes]
     ttfts = [record.ttft_ms for record in successes if record.ttft_ms is not None]
@@ -1155,8 +1193,29 @@ def summarize_cell(
     throttle_warnings = list((throttle_check or {}).get("warnings") or [])
     gate_warnings = list(host_warnings) + list(cell_host_warnings or []) + throttle_warnings
     hard_gates_passed = bool(affinity.get("live_affinity_verified")) and not gate_warnings
+    trimmed_window_ready = bool(
+        trimmed["steady_count"] > 0 and trimmed["tasks_per_hour_trimmed"] > 0
+    )
+    decision_grade_blockers: list[str] = []
+    if cell.decision_grade_intent and not trimmed_window_ready:
+        decision_grade_blockers.append(
+            "empty_trimmed_window: raw ramp+drain fallback is observation-only"
+        )
+    capture_failures = [
+        record
+        for record in records
+        if record.error.startswith("response_capture_missing_answer_text:")
+    ]
+    if cell.decision_grade_intent and capture_failures:
+        decision_grade_blockers.append(
+            f"response_capture_failure: {len(capture_failures)} generated response(s) "
+            "lacked answer-text SSE deltas"
+        )
     decision_grade = (
-        cell.decision_grade_intent and hard_gates_passed and not run_overrides_active
+        cell.decision_grade_intent
+        and hard_gates_passed
+        and not run_overrides_active
+        and not decision_grade_blockers
     )
     return {
         "timestamp": utc_now(),
@@ -1189,7 +1248,7 @@ def summarize_cell(
         "error_rate": ((total - success_count) / total) if total else 1.0,
         "wall_seconds": wall_s,
         "tasks_per_hour_raw": (success_count / wall_s * 3600.0) if wall_s > 0 else 0.0,
-        **trimmed_aggregate(records),
+        **trimmed,
         "aggregate_predicted_tps": (total_predicted / wall_s) if wall_s > 0 else 0.0,
         "predicted_tokens_total": total_predicted,
         "prompt_tokens_total": total_prompt,
@@ -1205,6 +1264,9 @@ def summarize_cell(
         "stage_b_families": cell.manifest.get("stage_b_families"),
         "host_health_warnings_at_cell": list(cell_host_warnings or []),
         "throttle_check": throttle_check,
+        "trimmed_window_ready": trimmed_window_ready,
+        "response_capture_failure_count": len(capture_failures),
+        "decision_grade_blockers": decision_grade_blockers,
         "decision_grade_intent": cell.decision_grade_intent,
         "decision_grade": decision_grade,
         "cell_error": None,
@@ -1410,6 +1472,7 @@ def run_cell_execute(
             with write_lock:
                 meta = asdict(record)
                 response_text = meta.pop("response_text", "")
+                reasoning_text = meta.pop("reasoning_text", "")
                 requests_fh.write(json.dumps(meta, sort_keys=True) + "\n")
                 requests_fh.flush()
                 responses_fh.write(
@@ -1420,6 +1483,7 @@ def run_cell_execute(
                             "instance_port": record.instance_port,
                             "stream": record.stream_id,
                             "response_text": response_text,
+                            "reasoning_text": reasoning_text,
                             "timings": record.timings,
                             "http_status": record.http_status,
                         },
@@ -1659,9 +1723,8 @@ def cmd_sweep(args: argparse.Namespace) -> int:
             raise FileNotFoundError(
                 f"{cell.cell_id}: model file not found: {cell.model_path}"
             )
-    coexist_allowed_at_start: list[str] = []
     if not args.skip_clean_check:
-        coexist_allowed_at_start = ensure_clean_runtime_allowing(
+        ensure_clean_runtime_allowing(
             getattr(args, "coexist_allow_pattern", None)
         )
 

@@ -1,0 +1,75 @@
+{
+  "R1": {
+    "anchors": {
+      "C1@1": null,
+      "C3@1": null
+    },
+    "c1_whole_machine": false,
+    "iso_t_pairs": [
+      {
+        "pair": "whole-machine T=8: C1b@4 vs C3@2",
+        "status": "insufficient_data"
+      },
+      {
+        "pair": "whole-machine T=16: C1b@8 vs C3@4",
+        "status": "insufficient_data"
+      },
+      {
+        "pair": "whole-machine T=32: C1b@16 vs C3@8",
+        "status": "insufficient_data"
+      },
+      {
+        "pair": "half-machine T=16: C1@16 vs C2@8",
+        "status": "insufficient_data"
+      },
+      {
+        "pair": "half-machine T=32: C1@32 vs C2@16",
+        "status": "insufficient_data"
+      }
+    ],
+    "k_star_roofline_flip": null,
+    "rule": "R1 crossover: iso-T winner needs >= 10% aggregate tasks/hour margin; smaller = tie -> prefer status-quo quarters (C3)",
+    "scaling_pairs": [
+      {
+        "k": 4,
+        "status": "insufficient_data"
+      },
+      {
+        "k": 8,
+        "status": "insufficient_data"
+      }
+    ]
+  },
+  "R2": {
+    "models": {},
+    "rule": "R2 lanes: lanes are real iff the peak-aggregate cell's p95 exceeds 3x that config's K=1 p95 (or 60s absolute) while some lower-K cell holds >= 70% of peak within SLA"
+  },
+  "R3": {
+    "reason": "no --current-arm-baseline supplied; refusing to price the eval lane until a FRESH current-arm baseline row (v7 + core_v2 + WP-12 fleet layer) is measured",
+    "rule": "R3 eval-lane pricing (audit C2): the pre-v7 E2 rows (2.258/10.970 wall-min/eval) are demoted-to-prior and never gate",
+    "status": "refused"
+  },
+  "R4": [],
+  "caveats": [
+    "E5 K=1 cells are NOT byte-comparable to E1 rows (different -c convention: E5 uses -c max(8192, per_stream_ctx*np), E1 used fixed -c 32768) \u2014 direction cross-check only.",
+    "aggregate tasks/hour falls back from trimmed to raw when the steady-state window is empty (structural at high K: the 43-prompt closed loop leaves few second-round requests); raw includes ramp+drain and systematically understates steady throughput \u2014 every R1/R2/R4 comparison records the per-cell metric basis and flags mixed-basis pairs (review F3)"
+  ],
+  "created_at": "2026-07-28T14:55:12.844157+00:00",
+  "degraded_cells": [
+    "gemma4_26b_a4b_q4km_mtp-C1-np1-scout",
+    "gemma4_26b_a4b_q4km_mtp-C1-np16-scout",
+    "gemma4_26b_a4b_q4km_mtp-C1-np2-scout",
+    "gemma4_26b_a4b_q4km_mtp-C1-np32-scout",
+    "gemma4_26b_a4b_q4km_mtp-C1-np4-scout",
+    "gemma4_26b_a4b_q4km_mtp-C1-np8-scout",
+    "gemma4_26b_a4b_q4km_mtp-C3-np1-scout",
+    "gemma4_26b_a4b_q4km_mtp-C3-np2-scout",
+    "gemma4_26b_a4b_q4km_mtp-C3-np4-scout",
+    "gemma4_26b_a4b_q4km_mtp-C3-np8-scout"
+  ],
+  "protocol_id": "P-BENCH-3",
+  "scout_probes": {
+    "dense_c1_shape_pairs": [],
+    "kvu_split_pairs": []
+  }
+}

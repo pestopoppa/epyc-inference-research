@@ -911,6 +911,30 @@ def test_trimmed_aggregate_math():
     assert sns.trimmed_aggregate([])["tasks_per_hour_trimmed"] == 0.0
 
 
+def test_empty_trimmed_window_demotes_decision_grade_cell(tmp_path):
+    cell = load_cell(tmp_path)
+    records = [
+        sns.StreamRequestRecord(
+            cell_id=cell.cell_id, qid=f"q{index}", suite="s", request_index=index,
+            stream_id=index, instance_port=19080, success=True, start_s=0.0,
+            first_token_s=0.1, end_s=1.0, ttft_ms=100.0, latency_ms=1000.0,
+            predicted_tokens=1, prompt_tokens=1, predicted_tps=1.0,
+        )
+        for index in range(4)
+    ]
+    row = sns.summarize_cell(
+        cell=cell, records=records, wall_s=2.0, env={"GGML_IQK": "1"},
+        instance_pids={19080: 1}, affinity={"live_affinity_verified": True},
+        run_overrides_active=False, host_warnings=[], throttle_check={"warnings": []},
+    )
+    assert row["tasks_per_hour_trimmed"] == 0.0
+    assert row["trimmed_window_ready"] is False
+    assert row["decision_grade"] is False
+    assert row["decision_grade_blockers"] == [
+        "empty_trimmed_window: raw ramp+drain fallback is observation-only"
+    ]
+
+
 def test_percentile_math():
     values = [float(value) for value in range(1, 101)]
     assert sns.percentile(values, 0.50) == 50.0
@@ -927,6 +951,41 @@ def test_parse_sse_line():
     assert sns.parse_sse_line("data: [DONE]") is None
     assert sns.parse_sse_line(": keepalive") is None
     assert sns.parse_sse_line("") is None
+
+
+def test_gemma_reasoning_only_chat_stream_fails_closed_without_answer_text(tmp_path):
+    # llama.cpp OpenAI-compatible streaming schema. This is the W0 Gemma
+    # survivor shape: generated tokens arrive in reasoning_content, but no
+    # answer-text delta appears before the scout cap.
+    chunk = {
+        "choices": [{"delta": {"reasoning_content": "Let me work this out."}}]
+    }
+    assert sns.stream_chunk_text(chunk) == ("", "Let me work this out.")
+    error = sns.response_capture_error(
+        status=200, predicted_tokens=64, response_text=""
+    )
+    assert error.startswith("response_capture_missing_answer_text:")
+
+    cell = load_cell(tmp_path)
+    record = sns.StreamRequestRecord(
+        cell_id=cell.cell_id, qid="gemma-reasoning-only", suite="s", request_index=0,
+        stream_id=0, instance_port=19080, success=False, start_s=0.0,
+        first_token_s=None, end_s=1.0, ttft_ms=None, latency_ms=1000.0,
+        predicted_tokens=64, prompt_tokens=100, predicted_tps=30.0,
+        http_status=200, error=error, response_text="",
+        reasoning_text="Let me work this out.", timings={"predicted_n": 64},
+    )
+    row = sns.summarize_cell(
+        cell=cell, records=[record], wall_s=1.0, env={"GGML_IQK": "1"},
+        instance_pids={19080: 1}, affinity={"live_affinity_verified": True},
+        run_overrides_active=False, host_warnings=[], throttle_check={"warnings": []},
+    )
+    assert row["response_capture_failure_count"] == 1
+    assert row["decision_grade"] is False
+    assert row["decision_grade_blockers"] == [
+        "empty_trimmed_window: raw ramp+drain fallback is observation-only",
+        "response_capture_failure: 1 generated response(s) lacked answer-text SSE deltas",
+    ]
 
 
 # ---------------------------------------------------------------------------
