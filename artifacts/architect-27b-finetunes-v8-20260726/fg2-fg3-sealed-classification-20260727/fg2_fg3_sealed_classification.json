@@ -176,7 +176,7 @@
     "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/expanded-six-arm-v4-tail-replay-20260727/A3-tc/conversion_diagnostics.sealed.jsonl": "b53dea815dd158d514bc59f91f062e7698b6216d9547ddae2ce5674ada160b83",
     "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/expanded-six-arm-v4-tail-replay-20260727/A3-tc/nonrecovery_ledger.sealed.json": "73cb8211c385bddbadbea6578bd6dbb173c413d2790a2b1961a19d4e45f0b4f7",
     "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/expanded-six-arm-v4-tail-replay-20260727/A3-tc/raw_capture.sealed.jsonl": "95328eafa1dcca4a7d262d147a84f38a9656b725b17d66527f6867c8674394a6",
-    "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/fg1-fine-grain-replay-20260727/fg1_results.json": "a55f48f8240cc900b740a0b2444cb438f6b01f798fc513e7ab568128375c0f2c",
+    "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-27b-finetunes-v8-20260726/fg1-fine-grain-replay-20260727/fg1_results.json": "7776c106810d48ab63de512b575091012b861849425383d6052ebbad0fa2bcfb",
     "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/lcb-hard-port18090/pq.jsonl": "551f00632e1e20f9fee9a44bfeb4ee1c65276293a9116259b2d307b28d931fa7",
     "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-laguna-iq2-v8-20260726/lcb-hard-port18090/runner.json": "d42b5892dea0b006931eb59cef3bc23283ac6073b5de27bed4069aea40194802"
   }
