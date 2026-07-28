@@ -105,6 +105,44 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _git_output(*args: str) -> str:
+    """Read a required Git identity value from this runner's worktree."""
+    result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), *args],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ReanchorRefusal(
+            "cannot establish authoritative runner Git identity: "
+            + result.stderr.strip()
+        )
+    return result.stdout.strip()
+
+
+def instrument_identity() -> dict[str, str]:
+    """Return the clean, tracked source identity which a receipt must bind."""
+    status = _git_output("status", "--porcelain", "--untracked-files=all")
+    if status:
+        raise ReanchorRefusal("authoritative runner worktree is dirty")
+    repository = _git_output("remote", "get-url", "origin")
+    commit = _git_output("rev-parse", "HEAD")
+    tree = _git_output("rev-parse", "HEAD^{tree}")
+    try:
+        path = Path(__file__).resolve().relative_to(REPO_ROOT.resolve()).as_posix()
+    except ValueError as exc:
+        raise ReanchorRefusal("authoritative runner is outside its Git worktree") from exc
+    _git_output("ls-files", "--error-unmatch", "--", path)
+    return {
+        "repository": repository,
+        "repository_commit": commit,
+        "repository_tree": tree,
+        "path": path,
+        "sha256": sha256(Path(__file__).resolve()),
+    }
+
+
 def protocol_contract() -> dict[str, Any]:
     """Exact contract that the human-reviewed protocol receipt must bind."""
     return {
@@ -163,9 +201,22 @@ def validate_protocol_attestation(path: Path) -> dict[str, Any]:
         raise ReanchorRefusal("reviewed protocol_id mismatch")
     if payload.get("contract") != protocol_contract():
         raise ReanchorRefusal("reviewed protocol contract does not exactly match the runner")
-    current_instrument_hash = sha256(Path(__file__).resolve())
-    if payload.get("instrument_sha256") != current_instrument_hash:
+    identity = instrument_identity()
+    if payload.get("instrument_sha256") != identity["sha256"]:
         raise ReanchorRefusal("reviewed protocol receipt does not bind this exact instrument hash")
+    instrument = payload.get("instrument")
+    if not isinstance(instrument, dict):
+        raise ReanchorRefusal("reviewed protocol receipt lacks instrument identity")
+    required_identity = {
+        "repository": identity["repository"],
+        "repository_commit": identity["repository_commit"],
+        "repository_tree": identity["repository_tree"],
+        "path": identity["path"],
+    }
+    if any(not isinstance(instrument.get(key), str) for key in required_identity):
+        raise ReanchorRefusal("reviewed protocol receipt has incomplete instrument identity")
+    if {key: instrument[key] for key in required_identity} != required_identity:
+        raise ReanchorRefusal("reviewed protocol receipt instrument identity mismatch")
     amendment = payload.get("human_amendment")
     if not isinstance(amendment, dict):
         raise ReanchorRefusal("reviewed protocol receipt lacks human_amendment")

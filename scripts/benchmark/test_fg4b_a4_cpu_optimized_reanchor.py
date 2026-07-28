@@ -186,12 +186,19 @@ def test_protocol_receipt_binds_contract_instrument_and_amendment(tmp_path: Path
     amendment = tmp_path / "MEASUREMENT-amendment.md"
     amendment.write_text("human reviewed protocol\n")
     receipt = tmp_path / "receipt.json"
+    identity = runner.instrument_identity()
     receipt.write_text(json.dumps({
         "schema": runner.PROTOCOL_ATTESTATION_SCHEMA,
         "status": "ratified",
         "protocol_id": runner.PROTOCOL_ID,
         "contract": runner.protocol_contract(),
-        "instrument_sha256": runner.sha256(Path(runner.__file__)),
+        "instrument_sha256": identity["sha256"],
+        "instrument": {
+            "repository": identity["repository"],
+            "repository_commit": identity["repository_commit"],
+            "repository_tree": identity["repository_tree"],
+            "path": identity["path"],
+        },
         "human_amendment": {
             "path": str(amendment),
             "sha256": runner.sha256(amendment),
@@ -204,6 +211,72 @@ def test_protocol_receipt_binds_contract_instrument_and_amendment(tmp_path: Path
     payload["instrument_sha256"] = "0" * 64
     receipt.write_text(json.dumps(payload))
     with pytest.raises(runner.ReanchorRefusal, match="exact instrument hash"):
+        runner.validate_protocol_attestation(receipt)
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["repository", "repository_commit", "repository_tree", "path"],
+)
+def test_protocol_receipt_requires_every_instrument_identity_field(
+    tmp_path: Path,
+    field: str,
+) -> None:
+    amendment = tmp_path / "MEASUREMENT-amendment.md"
+    amendment.write_text("human reviewed protocol\n")
+    identity = runner.instrument_identity()
+    receipt = tmp_path / "receipt.json"
+    receipt.write_text(json.dumps({
+        "schema": runner.PROTOCOL_ATTESTATION_SCHEMA,
+        "status": "ratified",
+        "protocol_id": runner.PROTOCOL_ID,
+        "contract": runner.protocol_contract(),
+        "instrument_sha256": identity["sha256"],
+        "instrument": {
+            key: value for key, value in identity.items() if key != "sha256" and key != field
+        },
+        "human_amendment": {
+            "path": str(amendment),
+            "sha256": runner.sha256(amendment),
+        },
+        "reviewed_at": "2026-07-28T17:00:00+00:00",
+        "reviewer": "operator",
+    }))
+    with pytest.raises(runner.ReanchorRefusal, match="incomplete instrument identity"):
+        runner.validate_protocol_attestation(receipt)
+
+
+def test_protocol_receipt_rejects_dirty_authoritative_runner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    amendment = tmp_path / "MEASUREMENT-amendment.md"
+    amendment.write_text("human reviewed protocol\n")
+    identity = runner.instrument_identity()
+    receipt = tmp_path / "receipt.json"
+    receipt.write_text(json.dumps({
+        "schema": runner.PROTOCOL_ATTESTATION_SCHEMA,
+        "status": "ratified",
+        "protocol_id": runner.PROTOCOL_ID,
+        "contract": runner.protocol_contract(),
+        "instrument_sha256": identity["sha256"],
+        "instrument": {key: value for key, value in identity.items() if key != "sha256"},
+        "human_amendment": {
+            "path": str(amendment),
+            "sha256": runner.sha256(amendment),
+        },
+        "reviewed_at": "2026-07-28T17:00:00+00:00",
+        "reviewer": "operator",
+    }))
+    original_git_output = runner._git_output
+
+    def dirty_git_output(*args: str) -> str:
+        if args[:1] == ("status",):
+            return " M scripts/benchmark/fg4b_a4_cpu_optimized_reanchor.py"
+        return original_git_output(*args)
+
+    monkeypatch.setattr(runner, "_git_output", dirty_git_output)
+    with pytest.raises(runner.ReanchorRefusal, match="worktree is dirty"):
         runner.validate_protocol_attestation(receipt)
 
 
