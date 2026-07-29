@@ -67,7 +67,7 @@ a feature reversal instead of a decision.
 | GPU lane tenant | `orchestration/gpu_shadow_lane_tenancy.yaml` | tenant id, path, bytes, sha256, launch mode, `draft_n_max` |
 | Lane serving shape | `serving_shape` block, ceiling-validated by `load_serving_shape()` | np × per-slot ctx; must be inside the np_ceiling table (P2-3d enforces) |
 | Kernel | production-consolidated-v8 `67a433bf4`, binary `10107` | **Production-named kernel required** (P-GPU-1 provenance rule) |
-| q3 co-tenant set | `gpu_shadow_lane_stage0.py recert` | The generated set, not a hand-list: frontdoor 8380, worker_general 8382 + 8072, ingest 8485, vision_escalation 8087, architect_general 8083 |
+| q3 co-tenant state, per arm | `gpu_shadow_lane_stage0.py recert` + arm manifest | The generated role/port set, not a hand-list, with a distinct declared state for every arm: frontdoor 8380, worker_general 8382 + 8072, ingest 8485, vision_escalation 8087, architect_general 8083. Each row records `running`, `resident_idle`, or `stopped`, plus PID/endpoint when present, CPU mask, NUMA memory policy, loaded model identity, and mlock/residency evidence before and after the block. |
 | Contention matrix | `orchestration/contention_matrix.yaml` | Certified fresh for the current topology hash |
 | Stress definition | §4.2 | The stress level is an INPUT, not an emergent property |
 
@@ -85,6 +85,28 @@ frozen corpus.
 | **A2 — shed active** | stress load minus the shed fraction *f* | resident, serving the shed fraction *f* | Total `task_rate` under shedding. **A2 − A0 is the answer** |
 | **A3 — GPU reference, CPU quiesced** | quiesced (declared) | resident, serving the shed fraction | The un-contended GPU ceiling, so the GPU-side contention tax (A2's GPU half vs A3) is visible rather than assumed |
 
+### 3.1 Co-tenant state and A1 reporting are per-role evidence
+
+The arm manifest must enumerate the state of **every q3 co-tenant above for every
+arm**. A generic "q3 co-tenant set" is insufficient: an arm can otherwise hide a
+stopped service, an unloaded model, or a different memory-residency shape behind a
+single fleet label. The record is a declared input, verified before and after each
+block; any mismatch or undeclared process/lifecycle change invalidates the block.
+
+For A1, archive task completion rate, request-completion/error counts, and p50/p95
+latency **for each CPU role as well as the total**. Report
+`residency_tax_<role> = task_rate_<role>(A1) - task_rate_<role>(A0)` alongside the
+aggregate `residency_tax`. This makes the A1 control reusable as the evidence for a
+future SMT carve-out: it reveals which physical-core co-tenant absorbs the cost
+instead of hiding that distribution in an aggregate. These per-role diagnostics do
+not change the primary A2-minus-A0 decision metric.
+
+This declaration does not settle the separate P2-5h corpus-scope question. In
+particular, a deliberately stopped `architect_general` must remain visible in the
+manifest; its duty loss cannot be treated as zero merely because the frozen
+worker-class corpus does not invoke it. That pricing/corpus repair remains required
+before a class-3 verdict.
+
 **Primary quantity:** `net_task_rate = task_rate_total(A2) − task_rate_total(A0)`, higher-better,
 where `task_rate_total` counts tasks completed on **both** devices in the same wall window.
 
@@ -97,7 +119,7 @@ where `task_rate_total` counts tasks completed on **both** devices in the same w
 - `cpu_displacement = task_rate_cpu(A2) − task_rate_cpu(A0)` — expected < 0 by construction (fewer
   tasks *and* fewer effective cores); reported so the net's composition is legible.
 
-### 3.1 Shed fraction is swept, not assumed
+### 3.2 Shed fraction is swept, not assumed
 
 *f* ∈ {0.25, 0.50, 1.00} at minimum. **The optimum may be interior** — a small shed may pay for
 itself while a full shed does not, because the residency tax is paid once but the CPU displacement
@@ -162,6 +184,7 @@ Every decision-gating number carries `(metric, protocol-id, n/reps, date, attest
 |---|---|---|
 | `net_task_rate` | higher-better | `shed net +N tasks/eval-wall-h at f=0.5, stress=sat [P-SHED-1, n=10, YYYY-MM-DD, attest <ref>]` |
 | `residency_tax` | higher-better (≤0 expected) | `lane residency tax −N tasks/h [P-SHED-1, n=10, YYYY-MM-DD, attest <ref>]` |
+| `residency_tax_<role>` | diagnostic; higher-better (≤0 expected) | one row for every q3 co-tenant, with A0/A1 lifecycle state cited from the arm manifest |
 | `gpu_contention_tax` | higher-better (≤0 expected) | as above |
 | per-stream p50/p95 latency | lower-better | required by P-BENCH-3 for any batched-slot claim; reported per side |
 | decode t/s per side | higher-better | **telemetry only** — never a decision row (§1.1) |
