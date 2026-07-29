@@ -2160,11 +2160,19 @@ def _pair_verdict(
         right["cell_id"]: aggregate_basis(right),
     }
     entry["mixed_metric_basis"] = aggregate_basis(left) != aggregate_basis(right)
+    entry["decision_grade"] = bool(left.get("decision_grade")) and bool(
+        right.get("decision_grade")
+    )
     if entry["mixed_metric_basis"]:
         entry["basis_note"] = (
             "mixed metric basis (trimmed vs raw_fallback): raw includes "
             "ramp+drain and understates steady-state — verdict caveated, "
             "not decision-grade (review F3)"
+        )
+    if not entry["decision_grade"]:
+        entry["grade_note"] = (
+            "one or more cells are observation-only; verdict caveated, "
+            "not decision-grade"
         )
     if left_rate <= 0 and right_rate <= 0:
         entry["status"] = "insufficient_data"
@@ -2174,7 +2182,15 @@ def _pair_verdict(
     entry["margin"] = round(margin, 4)
     if margin >= R1_MARGIN:
         winner = left if left_rate > right_rate else right
-        entry["status"] = "winner"
+        # A mixed basis or an observation-only member makes the comparison
+        # observational only. Keep the calculated winner for review, but make
+        # the machine-readable consumer key explicitly caveated so it cannot
+        # be treated as a decision-grade R1 verdict by accident.
+        entry["status"] = (
+            "winner_caveated"
+            if entry["mixed_metric_basis"] or not entry["decision_grade"]
+            else "winner"
+        )
         entry["winner"] = winner["cell_id"]
         entry["winner_config"] = winner["config_id"]
     else:

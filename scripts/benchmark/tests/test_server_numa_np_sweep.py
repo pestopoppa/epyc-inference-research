@@ -1438,6 +1438,8 @@ def test_summarizer_mixed_metric_basis_flagged():
     )
     pair = sns._pair_verdict(left, right, label="x", prefer_on_tie="C3")
     assert pair["mixed_metric_basis"] is True
+    assert pair["status"] == "winner_caveated"
+    assert pair["winner_config"] == "C1b"
     assert pair["metric_basis"][right["cell_id"]] == "raw_fallback"
     assert pair["metric_basis"][left["cell_id"]] == "trimmed"
     assert "caveated" in pair["basis_note"]
@@ -1445,7 +1447,26 @@ def test_summarizer_mixed_metric_basis_flagged():
         left, summary_row("C3", 2, 100.0, 15000.0), label="y", prefer_on_tie="C3"
     )
     assert same["mixed_metric_basis"] is False
+    assert same["status"] == "winner"
     assert "basis_note" not in same
+    observation_pair = sns._pair_verdict(
+        summary_row(
+            "C1", 32, 120.0, 30000.0,
+            decision_grade=False,
+            tasks_per_hour_trimmed=0.0,
+        ),
+        summary_row(
+            "C2", 16, 100.0, 30000.0,
+            decision_grade=False,
+            tasks_per_hour_trimmed=0.0,
+        ),
+        label="observation-only",
+        prefer_on_tie="C2",
+    )
+    assert observation_pair["mixed_metric_basis"] is False
+    assert observation_pair["decision_grade"] is False
+    assert observation_pair["status"] == "winner_caveated"
+    assert "observation-only" in observation_pair["grade_note"]
 
 
 def test_summarizer_r2_k1_proxy_baseline():
