@@ -294,7 +294,39 @@ def host_health_warnings(attestation: dict[str, Any]) -> list[str]:
     return warnings
 
 
+LLAMA_BINARY_NAMES = frozenset({"llama-server", "llama-bench", "llama-cli"})
+
+
+def _executable_basename(pid: str) -> str | None:
+    """Resolve a pid to the basename of the binary it is ACTUALLY running.
+
+    /proc/<pid>/exe is the authoritative answer and is what makes this
+    cpuset-of-processes check correct in both directions:
+      * a real cell instance launched as `taskset -c … numactl … llama-server`
+        has argv[0] == "taskset", but taskset/numactl exec INTO llama-server,
+        so exe resolves to llama-server and it is still caught;
+      * an agent shell whose command line merely MENTIONS llama-server (a bus
+        relay quoting the binary name, a grep, an editor) resolves to zsh/bash
+        and is correctly ignored.
+    Returns None when the link is unreadable (foreign uid, or the process
+    exited between ps and this read).
+    """
+    try:
+        return os.path.basename(os.readlink(f"/proc/{pid}/exe"))
+    except OSError:
+        return None
+
+
 def find_llama_processes() -> list[dict[str, str]]:
+    """Live llama-family processes, identified by EXECUTABLE, never by cmdline.
+
+    Matching the whole `ps args` string was a false-positive generator: on
+    2026-07-29 a coordinator bus relay whose message text quoted
+    "llama-server" put that string into a zsh command line and tripped the
+    P-BENCH-3 clean-runtime gate, refusing an E5 Stage-B launch on an
+    otherwise-empty host. The same matcher backs the PER-CELL host-health
+    gate, so the same accident mid-run would have failed a cell outright.
+    """
     rows: list[dict[str, str]] = []
     ps = run_capture(["ps", "-eo", "pid=,args="])
     for line in ps.splitlines():
@@ -304,7 +336,18 @@ def find_llama_processes() -> list[dict[str, str]]:
         pid, _, args = stripped.partition(" ")
         if "earlyoom" in args:
             continue
-        if re.search(r"(^|/)(llama-server|llama-bench|llama-cli)(\s|$)", args):
+        exe = _executable_basename(pid)
+        if exe is not None:
+            if exe in LLAMA_BINARY_NAMES:
+                rows.append({"pid": pid, "args": args})
+            continue
+        # Unreadable /proc/<pid>/exe: fall back to argv[0] only. Deliberately
+        # NOT the full arg string — a cmdline that merely mentions the binary
+        # is the exact false positive this function exists to avoid. A wrapper
+        # (taskset/numactl) whose exe we cannot read is not attributable to us
+        # anyway, since our own children are always readable.
+        argv0 = args.split(" ", 1)[0]
+        if os.path.basename(argv0) in LLAMA_BINARY_NAMES:
             rows.append({"pid": pid, "args": args})
     return rows
 
