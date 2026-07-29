@@ -258,6 +258,11 @@ def _run_question(
         "endpoint": endpoint,
         "prompt_mode": prompt_mode,
         "force_solution_grammar": force_solution_grammar,
+        # This runner does not request completion probabilities, so it must
+        # never fabricate a numeric confidence for downstream calibration.
+        "confidence": None,
+        "confidence_is_real": False,
+        "confidence_source": "not_collected",
     }
     try:
         data = _http_json(url, payload, timeout_s=timeout_s)
@@ -293,6 +298,13 @@ def _run_question(
                 "elapsed_s": time.time() - start,
                 "tokens_per_second": None,
                 "error": str(exc),
+                # A transport/decoder failure is an infra observation, not a
+                # wrong answer.  The deterministic scorer consumes this
+                # explicit exclusion rather than treating its empty response
+                # as a scored failure (REL-1).
+                "error_type": "infra_error",
+                "excluded_from_scoring": True,
+                "exclusion_reason": "infra_error",
             }
         )
     return question.id, row
@@ -354,6 +366,11 @@ def _run_question_two_phase(
         "prompt_mode": PROMPT_MODE_STANDARD,
         "two_phase": True,
         "reasoning_budget": reasoning_budget,
+        # Two-phase RE-4 requests do not ask llama-server for probabilities.
+        # Keep the absence explicit and fail closed for calibration consumers.
+        "confidence": None,
+        "confidence_is_real": False,
+        "confidence_source": "not_collected",
     }
     try:
         # ── Phase 1: free CoT, no grammar ─────────────────────────────────────
@@ -444,6 +461,9 @@ def _run_question_two_phase(
                 "total_tokens": 0,
                 "phase2_used": False,
                 "text1_len": 0,
+                "error_type": "infra_error",
+                "excluded_from_scoring": True,
+                "exclusion_reason": "infra_error",
             }
         )
     return question.id, row

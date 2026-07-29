@@ -8,6 +8,8 @@ import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest.mock import patch
+from urllib.error import URLError
 
 _TESTS_DIR = Path(__file__).resolve().parent
 _BENCHMARK_DIR = _TESTS_DIR.parent
@@ -176,6 +178,41 @@ class TestLongCoTMiniStackRunner(unittest.TestCase):
             self.assertEqual(set(rows), {"longcot_mini_a", "longcot_mini_b"})
             self.assertTrue(all(r["success"] for r in rows.values()))
             self.assertTrue(all("solution = ok" in r["response"] for r in rows.values()))
+            self.assertTrue(all(r["confidence"] is None for r in rows.values()))
+            self.assertTrue(all(r["confidence_is_real"] is False for r in rows.values()))
+            self.assertTrue(all(r["confidence_source"] == "not_collected" for r in rows.values()))
+
+    def test_infra_failure_is_honestly_null_and_excluded(self):
+        question = runner.Question(
+            id="longcot_mini_failure",
+            tier=1,
+            name="failure",
+            prompt="Prompt failure",
+            expected='"ok"',
+            scoring=[],
+        )
+        with patch.object(runner, "_http_json", side_effect=URLError("offline")):
+            qid, row = runner._run_question(
+                host="127.0.0.1",
+                port=1,
+                role="frontdoor",
+                question=question,
+                max_tokens=32,
+                temperature=0.6,
+                timeout_s=5,
+                endpoint="chat",
+                disable_thinking=True,
+                prompt_mode=runner.PROMPT_MODE_STANDARD,
+                force_solution_grammar=False,
+            )
+        self.assertEqual(qid, question.id)
+        self.assertFalse(row["success"])
+        self.assertIsNone(row["confidence"])
+        self.assertFalse(row["confidence_is_real"])
+        self.assertEqual(row["confidence_source"], "not_collected")
+        self.assertEqual(row["error_type"], "infra_error")
+        self.assertTrue(row["excluded_from_scoring"])
+        self.assertEqual(row["exclusion_reason"], "infra_error")
 
     def test_concise_solution_prompt_mode_adds_answer_contract(self):
         server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
@@ -316,6 +353,9 @@ class TestLongCoTMiniTwoPhase(unittest.TestCase):
             self.assertEqual(row["final_answer_tokens"], 5)
             self.assertEqual(row["total_tokens"], 105)
             self.assertEqual(row["completion_tokens"], 105)
+            self.assertIsNone(row["confidence"])
+            self.assertFalse(row["confidence_is_real"])
+            self.assertEqual(row["confidence_source"], "not_collected")
             # The deterministic scorer anchors on the forced last-marker line.
             scored = lcm_adapter.score_structural(row["response"], 42)
             self.assertTrue(scored["correct"])

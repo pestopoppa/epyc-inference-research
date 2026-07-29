@@ -224,6 +224,37 @@ class TestEdgeCases(unittest.TestCase):
         self.assertEqual(scored["summary"]["scorable_rows"], 1)
         self.assertEqual(scored["summary"]["scorable_correct"], 1)
 
+    def test_infra_error_row_is_excluded_from_quality_denominator(self):
+        rows = [
+            (
+                "longcot_mini_chem_ok",
+                {
+                    "response": "",
+                    "success": False,
+                    "error": "offline",
+                    "error_type": "infra_error",
+                    "excluded_from_scoring": True,
+                    "exclusion_reason": "infra_error",
+                },
+            )
+        ]
+        scored = slr.score_run_payload(rows, self.prompts)
+        self.assertEqual(scored["summary"]["infra_error_rows"], 1)
+        self.assertEqual(scored["summary"]["scorable_rows"], 0)
+        self.assertEqual(scored["summary"]["scorable_correct"], 0)
+        self.assertEqual(scored["summary"]["missing_from_prompt_index"], 0)
+        self.assertEqual(
+            scored["per_question"],
+            [
+                {
+                    "question_id": "longcot_mini_chem_ok",
+                    "excluded": True,
+                    "exclusion_reason": "infra_error",
+                    "error": "offline",
+                }
+            ],
+        )
+
 
 class TestMarkdownAndCLI(unittest.TestCase):
     def setUp(self):

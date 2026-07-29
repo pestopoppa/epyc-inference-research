@@ -182,6 +182,7 @@ def score_run_payload(
     canary_leaks = 0            # across ALL rows (scorable + unscorable)
     canary_leaks_scorable = 0   # leaks on scorable rows (invalidate readings)
     unscorable = 0
+    infra_error_rows = 0
     # leak-excluded ("clean") accuracy over scorable rows
     clean_total = 0
     clean_correct = 0
@@ -190,6 +191,20 @@ def score_run_payload(
     per_domain: dict[str, dict[str, int]] = {}
 
     for qid, row in rows:
+        # The runner persists infra failures incrementally for resume/audit
+        # purposes.  They are not model answers and therefore never belong in
+        # the quality denominator (REL-1).
+        if row.get("excluded_from_scoring") is True:
+            infra_error_rows += 1
+            per_question.append(
+                {
+                    "question_id": qid,
+                    "excluded": True,
+                    "exclusion_reason": row.get("exclusion_reason") or "infra_error",
+                    "error": row.get("error"),
+                }
+            )
+            continue
         prompt_dict = _resolve_prompt(qid, row, prompt_index)
         if prompt_dict is None:
             missing.append(qid)
@@ -269,6 +284,7 @@ def score_run_payload(
         "canary_leak_count": canary_leaks,
         "canary_leaks_on_scorable_rows": canary_leaks_scorable,
         "unscorable_logic_rows": unscorable,
+        "infra_error_rows": infra_error_rows,
         "missing_from_prompt_index": len(missing),
     }
 
@@ -295,6 +311,7 @@ def render_markdown(scored: dict[str, Any], run_path: Path) -> str:
         f"- Model role: `{s.get('model_role')}`",
         f"- Config: `{s.get('config_name')}`",
         f"- Scorable rows: {s['scorable_rows']}",
+        f"- Infra-error rows excluded from scoring: {s['infra_error_rows']}",
         f"- Overall accuracy: {s['overall_accuracy']:.4f} "
         f"({s['scorable_correct']}/{s['scorable_rows']})",
         f"- Overall accuracy (excluding canary-leaked rows): "
