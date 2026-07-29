@@ -242,7 +242,7 @@ def test_run_requests_rows_are_summarizable(monkeypatch) -> None:
     assert len(rows) == 2
     assert {row["model_id"] for row in rows} == {"frontdoor", "worker_general"}
     assert rows[0]["domain"] == "math"
-    summary = xmas_sweep.summarize_results(rows)
+    summary = xmas_sweep.summarize_results(rows, require_complete=False)
     assert summary["cell_winners"]["math:solve"] == "frontdoor"
 
 
