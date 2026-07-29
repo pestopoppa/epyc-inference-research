@@ -1,0 +1,38 @@
+{
+  "choices": [
+    {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+        "content": "Deterministic CPU inference measurement represents a rigorous methodology for quantifying the performance of artificial intelligence models during the execution phase on central processing units. Unlike training, which involves massive parallelism and stochastic gradient descent, inference is often characterized by sequential dependencies, memory-bound operations, and the need for low-latency responses in production environments.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1785322964,
+  "id": "chatcmpl-9mHc08bimf8i3rjyWiSFEv5K53uFOCdd",
+  "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10107-67a433bf4",
+  "timings": {
+    "cache_n": 0,
+    "draft_n": 106,
+    "draft_n_accepted": 35,
+    "predicted_ms": 5036.709,
+    "predicted_n": 64,
+    "predicted_per_second": 12.706709877421943,
+    "predicted_per_token_ms": 78.698578125,
+    "prompt_ms": 554.708,
+    "prompt_n": 34,
+    "prompt_per_second": 61.293509377906936,
+    "prompt_per_token_ms": 16.314941176470587
+  },
+  "usage": {
+    "completion_tokens": 64,
+    "prompt_tokens": 34,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 98
+  }
+}
