@@ -18,6 +18,12 @@ from typing import Any
 
 import yaml
 
+BENCHMARK_DIR = Path(__file__).resolve().parents[1] / "benchmark"
+if str(BENCHMARK_DIR) not in sys.path:
+    sys.path.insert(0, str(BENCHMARK_DIR))
+
+from answer_scoring import extract_letter_answer
+
 XMAS_DOMAINS: tuple[str, ...] = (
     "math",
     "code",
@@ -374,8 +380,7 @@ def score_response(request: dict[str, Any], answer: str) -> tuple[bool, str]:
         letter = expected.upper()
         if not letter or letter not in "ABCD":
             return False, "scoring_error"
-        pattern = rf"(?:^|[\s\(\[\*]){letter}(?:[\s\)\]\*\.\,\:]|$)"
-        return bool(re.search(pattern, extracted.upper())), ""
+        return extract_letter_answer(extracted) == letter, ""
     if source_method in {"exact_match", "substring", "f1"}:
         return normalized_expected in normalized_answer, ""
     return normalized_expected in normalized_answer, ""

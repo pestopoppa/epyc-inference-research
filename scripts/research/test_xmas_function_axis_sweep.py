@@ -190,6 +190,16 @@ def test_score_response_handles_source_binary_and_plan_cells() -> None:
         "",
     )
 
+    multiple_choice_request = {
+        "scoring_family": "source_auto",
+        "source_scoring_method": "multiple_choice",
+        "expected": "C",
+    }
+    assert xmas_sweep.score_response(
+        multiple_choice_request,
+        "I considered B while reasoning.\n<answer>C</answer>",
+    ) == (True, "")
+
     verify_request = {
         "scoring_family": "binary_validity",
         "expected": "valid",
