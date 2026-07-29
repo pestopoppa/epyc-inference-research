@@ -16,6 +16,12 @@ def test_extract_vote_key_multiple_choice_takes_last_explicit_answer():
     assert smk.extract_vote_key(answer, question) == "C"
 
 
+def test_extract_vote_key_multiple_choice_uses_canonical_final_line_fallback():
+    question = {"scoring_method": "multiple_choice"}
+    answer = "I considered B while reasoning.\nC"
+    assert smk.extract_vote_key(answer, question) == "C"
+
+
 def test_extract_vote_key_exact_match_uses_boxed_answer():
     question = {"scoring_method": "exact_match", "scoring_config": {}}
     assert smk.extract_vote_key("Therefore \\boxed{42}.", question) == "42"

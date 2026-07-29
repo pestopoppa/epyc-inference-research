@@ -23,6 +23,7 @@ DEFAULT_OUTPUT_ROOT = PROJECT_ROOT / "data" / "benchmarks" / "short_mk_voting"
 sys.path.insert(0, str(BENCHMARK_DIR))
 
 from debug_scorer import score_answer
+from answer_scoring import extract_letter_answer
 from question_pool import load_pool, sample_from_pool
 
 
@@ -63,30 +64,15 @@ def _extract_by_pattern(answer: str, pattern: str) -> str | None:
     return match.group(1 if match.groups() else 0).strip()
 
 
-def _extract_multiple_choice(answer: str) -> str:
-    patterns = [
-        r"(?:answer|choice|option)\s*(?:is|:)\s*\(?([A-H])\)?(?![a-zA-Z])",
-        r"^\s*\(?([A-H])\)?\s*$",
-        r"\*\*([A-H])\*\*",
-        r"\b([A-H])\b",
-    ]
-    for pattern in patterns:
-        matches = re.findall(pattern, answer, flags=re.IGNORECASE | re.MULTILINE)
-        if matches:
-            return str(matches[-1]).upper()
-    match = re.match(r"\s*\(?([A-H])\)?\s*[.:\-\n]", answer)
-    if match:
-        return match.group(1).upper()
-    return ""
-
-
 def extract_vote_key(answer: str, question: dict[str, Any]) -> str:
     clean = strip_think_blocks(answer)
     method = question.get("scoring_method", "exact_match")
     config = question.get("scoring_config") or {}
 
     if method == "multiple_choice":
-        return _extract_multiple_choice(clean)
+        # Reuse the canonical bare-letter-safe extractor.  Vote keys must use
+        # the same final-answer interpretation as objective scoring.
+        return extract_letter_answer(clean)
 
     if method == "exact_match":
         patterns = [
