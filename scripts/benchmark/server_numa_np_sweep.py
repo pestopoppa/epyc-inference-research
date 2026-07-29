@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import re
 import json
 import os
@@ -44,7 +45,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from queue import Empty, Queue
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 _BENCHMARK_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _BENCHMARK_DIR.parents[1]
@@ -495,22 +496,35 @@ def check_env_expectation(env: dict[str, str], cell: Cell) -> list[str]:
 SYS_CPU_ROOT = Path("/sys/devices/system/cpu")
 FREQ_SAMPLE_INTERVAL_S = 10.0
 
+# Denominator of canonical_recipe's FREQ_BOOST_MIN_CORES ("80  # of 96"): the
+# recipe records the 96 only in a comment, so it is named here to keep the
+# ratio derived rather than retyped as a second remembered threshold.
+CANONICAL_FREQ_GATE_CORES = 96
+FREQ_BOOST_MIN_RATIO = FREQ_BOOST_MIN_CORES / CANONICAL_FREQ_GATE_CORES
 
-def read_physical_core_freqs(base: Path = SYS_CPU_ROOT) -> list[int]:
-    """Per-PHYSICAL-core scaling_cur_freq (SMT siblings deduped via topology).
 
-    FREQ_BOOST_MIN_CORES (80) is calibrated "of 96" PHYSICAL cores
-    (canonical_recipe); counting all 192 logical entries double-counts SMT
-    siblings (review F1). Siblings share one clock domain, so the per-core
-    frequency is the max over the sibling group.
-    """
-    groups: dict[str, int] = {}
+def parse_cpu_list(spec: str) -> set[int]:
+    """Expand a `taskset -c` list ("0-47,96-143") into logical CPU ids."""
+    cpus: set[int] = set()
+    for part in spec.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "-" in part:
+            lo, _, hi = part.partition("-")
+            cpus.update(range(int(lo), int(hi) + 1))
+        else:
+            cpus.add(int(part))
+    return cpus
+
+
+def read_core_sibling_groups(base: Path = SYS_CPU_ROOT) -> list[frozenset[int]]:
+    """SMT sibling groups, one entry per PHYSICAL core."""
+    groups: dict[str, set[int]] = {}
     for cpu_dir in base.glob("cpu[0-9]*"):
         try:
-            freq = int(
-                (cpu_dir / "cpufreq" / "scaling_cur_freq").read_text(encoding="utf-8").strip()
-            )
-        except (OSError, ValueError):
+            logical = int(cpu_dir.name[3:])
+        except ValueError:
             continue
         key: str | None = None
         for name in ("core_cpus_list", "thread_siblings_list"):
@@ -520,13 +534,68 @@ def read_physical_core_freqs(base: Path = SYS_CPU_ROOT) -> list[int]:
             except OSError:
                 continue
         if key is None:
-            key = cpu_dir.name  # no topology info: count the logical cpu alone
-        groups[key] = max(groups.get(key, 0), freq)
-    return list(groups.values())
+            key = cpu_dir.name  # no topology info: the logical cpu stands alone
+        groups.setdefault(key, set()).add(logical)
+    return [frozenset(members) for members in groups.values()]
 
 
-def cpu_freq_throttle_warnings(freqs: list[int] | None = None) -> list[str]:
-    """UNDER-LOAD throttle gate: >= FREQ_BOOST_MIN_CORES physical cores boosting.
+def resolve_pinned_physical_cores(
+    cpu_lists: Iterable[str], base: Path = SYS_CPU_ROOT
+) -> set[int]:
+    """Representative physical-core ids covered by the given taskset lists.
+
+    A physical core counts as pinned when ANY of its SMT siblings is in the
+    cpuset — the sibling pair shares one clock domain, so pinning either half
+    puts the whole core under load. The representative id is min(group), which
+    matches the keys of read_physical_core_freqs().
+    """
+    pinned_logical: set[int] = set()
+    for spec in cpu_lists:
+        pinned_logical |= parse_cpu_list(spec)
+    return {
+        min(group)
+        for group in read_core_sibling_groups(base)
+        if group & pinned_logical
+    }
+
+
+def read_physical_core_freqs(base: Path = SYS_CPU_ROOT) -> dict[int, int]:
+    """Per-PHYSICAL-core scaling_cur_freq, keyed by representative logical CPU.
+
+    FREQ_BOOST_MIN_CORES (80) is calibrated "of 96" PHYSICAL cores
+    (canonical_recipe); counting all 192 logical entries double-counts SMT
+    siblings (review F1). Siblings share one clock domain, so the per-core
+    frequency is the max over the sibling group.
+
+    Returns a mapping rather than a bare list so the gate can be scoped to a
+    cell's pinned cores and so the full per-core vector can be PERSISTED —
+    without it, a throttle verdict is not re-derivable offline (the 2026-07-29
+    Stage-B finding: only the aggregate count was ever recorded).
+    """
+    freqs: dict[int, int] = {}
+    for group in read_core_sibling_groups(base):
+        best = 0
+        for logical in group:
+            try:
+                text = (
+                    base / f"cpu{logical}" / "cpufreq" / "scaling_cur_freq"
+                ).read_text(encoding="utf-8").strip()
+            except OSError:
+                continue
+            try:
+                best = max(best, int(text))
+            except ValueError:
+                continue
+        if best:
+            freqs[min(group)] = best
+    return freqs
+
+
+def cpu_freq_throttle_warnings(
+    freqs: dict[int, int] | list[int] | None = None,
+    pinned_cores: set[int] | None = None,
+) -> list[str]:
+    """UNDER-LOAD throttle gate, SCOPED to the cores the cell actually pins.
 
     canonical_recipe defines this as an under-load expectation ("under load,
     expect ALL 96 cores boosting above 2.5 GHz"). It is only meaningful while
@@ -534,20 +603,58 @@ def cpu_freq_throttle_warnings(freqs: list[int] | None = None) -> list[str]:
     an idle quiet host amd-pstate parks cores near base clock and an
     instantaneous reading false-fails (review F1). Idle-time gating uses
     cpu_freq_static_warnings instead.
+
+    SCOPING (operator-ratified 2026-07-29). The recipe's expectation is written
+    for the full-machine canonical recipe (`taskset 0-95 -t 96`). E5 cells C1
+    and C2 deliberately pin only 48 of 96 physical cores; the other 48 idle
+    near base clock, so a machine-wide count can never reach 80 and the gate
+    fails a perfectly healthy host. That is a category error — a full-machine
+    expectation applied to a partial-machine cell — not a threshold
+    disagreement. W0 evidence, zero counterexamples: every 96-core cell
+    (C1b 15/15, C3 11/12) passed; every 48-core cell (C1-half 0/13, C2 0/10)
+    failed, at counts 53-78. The threshold (2.5 GHz) and the ratio
+    (FREQ_BOOST_MIN_RATIO = 80/96) are UNCHANGED; only the denominator becomes
+    the cell's pinned core count. A full-machine cell therefore still needs the
+    same 80 of 96.
+
+    `pinned_cores=None` means full-machine scope, preserving the original
+    semantics for callers that pass a bare list of frequencies.
     """
     if freqs is None:
         freqs = read_physical_core_freqs()
-    if not freqs:
+    if isinstance(freqs, dict):
+        scoped = (
+            {core: khz for core, khz in freqs.items() if core in pinned_cores}
+            if pinned_cores is not None
+            else dict(freqs)
+        )
+        values = list(scoped.values())
+    else:
+        # Bare list: no core identity available, so scoping is not expressible.
+        values = list(freqs)
+    if not values:
         return ["no scaling_cur_freq readable; cannot verify CPU boost state"]
-    boosting = sum(1 for freq in freqs if freq >= FREQ_BOOST_THRESHOLD_KHZ)
-    if boosting < FREQ_BOOST_MIN_CORES:
+    required = freq_boost_min_cores(len(values))
+    boosting = sum(1 for freq in values if freq >= FREQ_BOOST_THRESHOLD_KHZ)
+    if boosting < required:
         return [
-            f"only {boosting}/{len(freqs)} physical cores at >= "
+            f"only {boosting}/{len(values)} pinned physical cores at >= "
             f"{FREQ_BOOST_THRESHOLD_KHZ} kHz under load "
-            f"(need {FREQ_BOOST_MIN_CORES}); host may be throttled "
+            f"(need {required}); host may be throttled "
             "(feedback_host_throttle_check)"
         ]
     return []
+
+
+def freq_boost_min_cores(n_scoped_cores: int) -> int:
+    """Boosting-core requirement for a cell pinning `n_scoped_cores` cores.
+
+    Same 80-of-96 ratio the canonical recipe fixes for the full machine, so a
+    96-core cell still needs exactly 80 and no full-machine gate loosens.
+    """
+    if n_scoped_cores >= CANONICAL_FREQ_GATE_CORES:
+        return FREQ_BOOST_MIN_CORES
+    return math.ceil(FREQ_BOOST_MIN_RATIO * n_scoped_cores)
 
 
 def cpu_freq_static_warnings(base: Path = SYS_CPU_ROOT) -> list[str]:
@@ -602,18 +709,40 @@ class FreqSampler:
     def __init__(
         self,
         interval_s: float = FREQ_SAMPLE_INTERVAL_S,
-        read_fn: Callable[[], list[int]] | None = None,
+        read_fn: Callable[[], dict[int, int]] | None = None,
+        pinned_cores: set[int] | None = None,
     ) -> None:
         self.interval_s = interval_s
         self._read = read_fn or read_physical_core_freqs
+        # None = full-machine scope. Set by run_cell_execute from the cell's
+        # own cpusets so a 48-core cell is not judged against 96-core cores.
+        self.pinned_cores = pinned_cores
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self.samples = 0
-        self.best_freqs: list[int] | None = None
+        self.best_freqs: dict[int, int] | None = None
 
     @staticmethod
-    def _boost_count(freqs: list[int]) -> int:
-        return sum(1 for freq in freqs if freq >= FREQ_BOOST_THRESHOLD_KHZ)
+    def _normalize(freqs: dict[int, int] | list[int]) -> dict[int, int]:
+        """Accept a bare list from an injected read_fn (no core identity)."""
+        if isinstance(freqs, dict):
+            return freqs
+        return dict(enumerate(freqs))
+
+    def _scoped(self, freqs: dict[int, int] | list[int]) -> dict[int, int]:
+        normalized = self._normalize(freqs)
+        if self.pinned_cores is None:
+            return normalized
+        return {c: khz for c, khz in normalized.items() if c in self.pinned_cores}
+
+    def _boost_count(self, freqs: dict[int, int] | list[int]) -> int:
+        # "Best sample" is chosen on the SCOPED count: an idle core outside the
+        # cell drifting above threshold must never make a sample look better.
+        return sum(
+            1
+            for freq in self._scoped(freqs).values()
+            if freq >= FREQ_BOOST_THRESHOLD_KHZ
+        )
 
     def _loop(self) -> None:
         # Event.wait returns True once stop() is called: samples are only ever
@@ -623,10 +752,11 @@ class FreqSampler:
             if not freqs:
                 continue
             self.samples += 1
+            normalized = self._normalize(freqs)
             if self.best_freqs is None or (
-                self._boost_count(freqs) > self._boost_count(self.best_freqs)
+                self._boost_count(normalized) > self._boost_count(self.best_freqs)
             ):
-                self.best_freqs = freqs
+                self.best_freqs = normalized
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._loop, daemon=True)
@@ -648,14 +778,25 @@ class FreqSampler:
                     "state not evaluated (never gated on idle frequencies)"
                 ),
             }
-        warnings = cpu_freq_throttle_warnings(self.best_freqs)
+        warnings = cpu_freq_throttle_warnings(self.best_freqs, self.pinned_cores)
+        scoped = self._scoped(self.best_freqs)
         return {
             "status": "warning" if warnings else "ok",
             "samples": self.samples,
             "boosting_physical_cores": self._boost_count(self.best_freqs),
-            "n_physical_cores": len(self.best_freqs),
+            "n_physical_cores": len(scoped),
+            "n_physical_cores_host": len(self.best_freqs),
             "threshold_khz": FREQ_BOOST_THRESHOLD_KHZ,
-            "min_boosting_cores": FREQ_BOOST_MIN_CORES,
+            "min_boosting_cores": freq_boost_min_cores(len(scoped)),
+            "scope": "full_machine" if self.pinned_cores is None else "cell_pinned",
+            "pinned_physical_cores": (
+                None if self.pinned_cores is None else sorted(self.pinned_cores)
+            ),
+            # The FULL per-core vector, not just the aggregate: without it a
+            # throttle verdict cannot be re-derived offline, which is what made
+            # the pre-2026-07-29 gate un-rescoreable (deterministic replay
+            # before regeneration, MEASUREMENT_POLICY).
+            "per_core_khz": {str(core): khz for core, khz in sorted(self.best_freqs.items())},
             "warnings": warnings,
         }
 
@@ -1503,7 +1644,13 @@ def run_cell_execute(
 
         # Under-load throttle sampling runs only while the driver holds load
         # (review F1: the FREQ_BOOST gate is an under-load expectation).
-        freq_sampler = FreqSampler()
+        # Gate scope = exactly the physical cores this cell pins (C1/C2 pin 48
+        # of 96; the idle remainder is not evidence about this cell's host).
+        freq_sampler = FreqSampler(
+            pinned_cores=resolve_pinned_physical_cores(
+                inst.cpu_list for inst in cell.instances
+            )
+        )
         start = time.perf_counter()
         freq_sampler.start()
         try:

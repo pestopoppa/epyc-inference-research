@@ -1013,6 +1013,82 @@ def test_cpu_freq_underload_gate_semantics():
     assert sns.cpu_freq_throttle_warnings([])  # unreadable => warning, never silent
 
 
+def test_underload_gate_scopes_to_pinned_cores():
+    # Operator-ratified 2026-07-29. A C1/C2 cell pins 48 of 96 physical cores;
+    # the idle remainder parks near base clock, so a machine-wide count can
+    # never reach 80 and the gate failed a healthy host. Reproduces the exact
+    # W0 shape: 48 pinned cores boosting, 48 unpinned idle.
+    freqs = {core: 2_600_000 for core in range(48)}
+    freqs.update({core: 2_000_000 for core in range(48, 96)})
+    pinned = set(range(48))
+
+    # machine-wide scope: 48/96 boosting -> the false failure being fixed
+    assert sns.cpu_freq_throttle_warnings(freqs)
+    # cell-pinned scope: 48/48 boosting -> healthy
+    assert sns.cpu_freq_throttle_warnings(freqs, pinned) == []
+
+    # the SAME ratio still binds inside the pinned set: 39/48 < ceil(.833*48)=40
+    throttled = {core: 2_600_000 for core in range(39)}
+    throttled.update({core: 2_000_000 for core in range(39, 48)})
+    throttled.update({core: 2_600_000 for core in range(48, 96)})
+    warnings = sns.cpu_freq_throttle_warnings(throttled, pinned)
+    assert warnings and "39/48" in warnings[0] and "need 40" in warnings[0]
+
+
+def test_full_machine_gate_is_unchanged_by_scoping():
+    # A 96-core cell must still need exactly 80 — the scoping change must not
+    # loosen any gate that was already correct (C1b/C3 passed W0 cleanly).
+    assert sns.freq_boost_min_cores(96) == sns.FREQ_BOOST_MIN_CORES == 80
+    all_cores = set(range(96))
+    at_79 = {core: 2_600_000 for core in range(79)}
+    at_79.update({core: 2_000_000 for core in range(79, 96)})
+    assert sns.cpu_freq_throttle_warnings(at_79, all_cores)
+    at_80 = dict(at_79)
+    at_80[79] = 2_600_000
+    assert sns.cpu_freq_throttle_warnings(at_80, all_cores) == []
+
+
+def test_throttle_check_persists_per_core_vector():
+    # Without the per-core vector a throttle verdict is not re-derivable
+    # offline — the retention gap that made the pre-fix W0 gate un-rescoreable.
+    sampler = sns.FreqSampler(
+        interval_s=0.005,
+        read_fn=lambda: {c: 2_600_000 for c in range(96)},
+        pinned_cores=set(range(48)),
+    )
+    sampler.start()
+    time.sleep(0.05)
+    sampler.stop()
+    result = sampler.result()
+    assert result["scope"] == "cell_pinned"
+    assert result["n_physical_cores"] == 48          # scoped denominator
+    assert result["n_physical_cores_host"] == 96     # host-wide evidence kept
+    assert result["min_boosting_cores"] == 40        # same 80/96 ratio
+    assert result["pinned_physical_cores"] == list(range(48))
+    # full host vector retained, not just the aggregate count
+    assert len(result["per_core_khz"]) == 96
+    assert result["per_core_khz"]["95"] == 2_600_000
+
+
+def test_resolve_pinned_physical_cores_from_cpusets():
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp)
+        for logical, key in ((0, "0,96"), (96, "0,96"), (1, "1,97"), (97, "1,97")):
+            _write_sysfs_cpu(base, logical, 2_600_000, core_key=key)
+        # a cpuset naming only the HIGH sibling still pins the physical core
+        assert sns.resolve_pinned_physical_cores(["96"], base) == {0}
+        assert sns.resolve_pinned_physical_cores(["0-1,96-97"], base) == {0, 1}
+        # multi-instance cells (C3 = 4 quarters) union their cpusets
+        assert sns.resolve_pinned_physical_cores(["0,96", "1,97"], base) == {0, 1}
+
+
+def test_parse_cpu_list_ranges_and_singletons():
+    assert sns.parse_cpu_list("0-3") == {0, 1, 2, 3}
+    assert sns.parse_cpu_list("0-47,96-143") == set(range(48)) | set(range(96, 144))
+    assert sns.parse_cpu_list("5") == {5}
+    assert sns.parse_cpu_list("") == set()
+
+
 def test_read_physical_core_freqs_dedupes_smt_siblings():
     # 80-of-96 is calibrated for PHYSICAL cores; SMT siblings share one clock
     # domain and must not be double-counted (192 logical entries, review F1).
@@ -1023,7 +1099,8 @@ def test_read_physical_core_freqs_dedupes_smt_siblings():
         _write_sysfs_cpu(base, 1, 2_550_000, core_key="1,97")
         _write_sysfs_cpu(base, 97, 1_900_000, core_key="1,97")
         freqs = sns.read_physical_core_freqs(base)
-    assert sorted(freqs) == [2_550_000, 2_600_000]  # max per sibling group
+    # keyed by representative (lowest) logical cpu of each sibling group
+    assert freqs == {0: 2_600_000, 1: 2_550_000}  # max per sibling group
 
 
 def test_cpu_freq_static_warnings_synthetic_sysfs():
