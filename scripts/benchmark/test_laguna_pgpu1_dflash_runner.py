@@ -179,6 +179,8 @@ def _result(arm: runner.Arm, rep: int) -> dict:
         "draft_n": 30 if arm.speculative else 0,
         "draft_n_accepted": 18 if arm.speculative else 0,
         "draft_acceptance_rate": 0.6 if arm.speculative else 0.0,
+        "cleanup": {"pid": 1234, "dead": True, "returncode": 0, "signal": "SIGTERM"},
+        "post_cleanup_vram_settled": True,
         "records": records,
     }
 
@@ -947,6 +949,14 @@ def test_execute_requires_complete_matrix_and_final_clean_state(monkeypatch) -> 
         assert summary["matrix_cardinality_valid"] is True
         assert summary["final_guard_valid"] is True
         assert summary["execution_binding_valid"] is True
+        smoke = json.loads((output / "candidate_smoke_summary.json").read_text(encoding="utf-8"))
+        assert smoke["schema"] == runner.CANDIDATE_SMOKE_SCHEMA
+        assert smoke["status"] == "ok"
+        assert smoke["non_gating"] is True
+        assert smoke["observation_only"] is True
+        assert smoke["reps_per_arm"] == runner.DEFAULT_REPS
+        assert smoke["draft_acceptance_rate"] == pytest.approx(0.6)
+        assert smoke["final_port"] == runner.DEFAULT_PORT_BASE + len(runner.ARMS) * runner.DEFAULT_REPS - 1
 
         snapshots = [_clean_processes(), _clean_processes()]
         snapshots[-1]["kfd_proc"]["owners"] = [{"pid": 999, "target": "/dev/kfd"}]

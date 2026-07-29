@@ -60,6 +60,7 @@ CPU_INTERFERENCE_POLICY = "CPU production stack quiesced and verified before the
 EXPECTED_BRANCH = "production-consolidated-v8"
 ROLLBACK_BRANCH = "production-consolidated-v7"
 PROMOTION_ATTESTATION_SCHEMA = "epyc.kernel_promotion_attestation.v1"
+CANDIDATE_SMOKE_SCHEMA = "epyc.laguna_iq2_dflash_candidate_smoke.v2"
 SAFE_PATH = "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 BASE_ENVIRONMENT = {"PATH": SAFE_PATH, "LANG": "C", "LC_ALL": "C"}
 PINNED_VISIBLE_DEVICE_ENVIRONMENT = {"HIP_VISIBLE_DEVICES": "0", "ROCR_VISIBLE_DEVICES": "0"}
@@ -1295,6 +1296,96 @@ def matrix_cardinality_valid(results: list[dict[str, Any]], reps: int) -> tuple[
     return True, "ok"
 
 
+def candidate_smoke_projection(
+    results: list[dict[str, Any]],
+    *,
+    initial_rocm: dict[str, Any],
+    final_rocm: dict[str, Any],
+    identity: dict[str, Any],
+    final_port: int | None,
+) -> dict[str, Any]:
+    """Render the old smoke evidence shape from canonical-runner results.
+
+    This is deliberately an observation-only compatibility projection.  It
+    preserves the useful per-cell semantic and cleanup evidence from the
+    one-off smoke, but it is never a promotion or performance verdict.
+    """
+    expected_prompt_ids = [prompt_id for prompt_id, _ in PROMPT_SPECS]
+    cells: list[dict[str, Any]] = []
+    for result in results:
+        records = result.get("records")
+        records = records if isinstance(records, list) else []
+        prompt_ids = [record.get("prompt_id") for record in records if isinstance(record, dict)]
+        all_finished_stop = bool(records) and all(record.get("finish_reason") == "stop" for record in records if isinstance(record, dict))
+        all_semantic_passed = bool(records) and all((record.get("semantic_validation") or {}).get("passed") is True for record in records if isinstance(record, dict))
+        all_completion_floor_passed = bool(records) and all(
+            isinstance(record.get("completion_tokens"), int) and record["completion_tokens"] >= DEFAULT_MIN_COMPLETION_TOKENS
+            for record in records
+            if isinstance(record, dict)
+        )
+        cleanup = result.get("cleanup") if isinstance(result.get("cleanup"), dict) else {}
+        cells.append(
+            {
+                "arm": result.get("arm"),
+                "rep": result.get("rep"),
+                "status": result.get("status"),
+                "error": result.get("error"),
+                "prompt_count": result.get("prompt_count"),
+                "prompt_ids": prompt_ids,
+                "all_finished_stop": all_finished_stop,
+                "all_semantic_passed": all_semantic_passed,
+                "all_completion_floor_passed": all_completion_floor_passed,
+                "draft_n": result.get("draft_n"),
+                "draft_n_accepted": result.get("draft_n_accepted"),
+                "draft_acceptance_rate": result.get("draft_acceptance_rate"),
+                "cleanup": {
+                    "pid": cleanup.get("pid"),
+                    "pid_dead": cleanup.get("dead") is True,
+                    "returncode": cleanup.get("returncode"),
+                    "settled": result.get("post_cleanup_vram_settled") is True,
+                    "signal": cleanup.get("signal"),
+                },
+                "records": records,
+            }
+        )
+    base_count = sum(cell["arm"] == BASE_ARM.name for cell in cells)
+    dflash_count = sum(cell["arm"] == DFLASH_ARM.name for cell in cells)
+    cardinality_valid = bool(cells) and base_count == dflash_count and all(
+        cell["prompt_count"] == len(expected_prompt_ids) and cell["prompt_ids"] == expected_prompt_ids for cell in cells
+    )
+    all_cells_ok = cardinality_valid and all(cell["status"] == "ok" for cell in cells)
+    all_finished_stop = all(cell["all_finished_stop"] for cell in cells)
+    all_semantic_passed = all(cell["all_semantic_passed"] for cell in cells)
+    all_completion_floor_passed = all(cell["all_completion_floor_passed"] for cell in cells)
+    cleanup_valid = all(cell["cleanup"]["pid_dead"] and cell["cleanup"]["settled"] for cell in cells)
+    dflash_cells = [cell for cell in cells if cell["arm"] == DFLASH_ARM.name]
+    draft_n_total = sum(int(cell["draft_n"] or 0) for cell in dflash_cells)
+    draft_n_accepted_total = sum(int(cell["draft_n_accepted"] or 0) for cell in dflash_cells)
+    status = "ok" if all((all_cells_ok, all_finished_stop, all_semantic_passed, all_completion_floor_passed, cleanup_valid)) else "failed"
+    return {
+        "schema": CANDIDATE_SMOKE_SCHEMA,
+        "status": status,
+        "non_gating": True,
+        "observation_only": True,
+        "reps_per_arm": base_count if base_count == dflash_count else None,
+        "expected_prompt_ids": expected_prompt_ids,
+        "cardinality_valid": cardinality_valid,
+        "all_cells_ok": all_cells_ok,
+        "all_finished_stop": all_finished_stop,
+        "all_semantic_passed": all_semantic_passed,
+        "all_completion_floor_passed": all_completion_floor_passed,
+        "cleanup_valid": cleanup_valid,
+        "draft_n_total": draft_n_total,
+        "draft_n_accepted_total": draft_n_accepted_total,
+        "draft_acceptance_rate": (draft_n_accepted_total / draft_n_total) if draft_n_total else None,
+        "identity": identity,
+        "final_port": final_port,
+        "initial_rocm": initial_rocm,
+        "final_rocm": final_rocm,
+        "cells": cells,
+    }
+
+
 def build_plan(args: argparse.Namespace, model_identity: dict[str, Any] | None = None) -> dict[str, Any]:
     cells = []
     for rep in range(1, args.reps + 1):
@@ -1581,7 +1672,15 @@ def execute(args: argparse.Namespace, output_dir: Path, plan: dict[str, Any]) ->
     execution_binding_valid = binding_unchanged and final_identity["valid"] and per_replicate_bindings_valid
     final_guard_valid = final_clean and final_vram_settled and execution_binding_valid
     status = "ok" if cardinality_valid and all(summary["all_ok"] for summary in summaries.values()) and final_guard_valid else "failed"
-    return {"schema": "epyc.laguna_iq2_dflash_pgpu1.summary.v2", "created_at": utc_now(), "status": status, "production_named_kernel": True, "required_branch": EXPECTED_BRANCH, "attestation_ref": str(args.attestation_ref), "attestation_sha256": attestation["sha256"], "n": args.reps, "rep_policy": plan["rep_policy"], "median": True, "mad": True, "arm_order": plan["arm_order"], "results": results, "matrix_cardinality_valid": cardinality_valid, "matrix_cardinality_reason": cardinality_reason, "arm_summaries": summaries, "base_vs_dflash": {"decode_tps_ratio": ratio, "direction": "higher_better"}, "cross_arm_hash_observation": {"contract": "distribution-lossless, not byte-exact greedy", "decision_gating": False, "quality_equivalence_claimed": False, "rows": hash_observations}, "warmup_discard_policy": PGPU1_WARMUP_POLICY, "cpu_interference_policy": CPU_INTERFERENCE_POLICY, "hardware_state": hardware_state, "target_kv_quant": {"k": TARGET_CACHE_K, "v": TARGET_CACHE_V}, "drafter_kv_quant": {"k": DRAFTER_CACHE_K, "v": DRAFTER_CACHE_V}, "replicate_binding_checks": replicate_binding_checks, "per_replicate_bindings_valid": per_replicate_bindings_valid, "execution_binding_valid": execution_binding_valid, "post_execution_identity": post_identity, "final_process_guard": final_processes, "final_rocm": final_rocm, "final_clean": final_clean, "final_reason": final_reason, "final_vram_settled": final_vram_settled, "final_guard_valid": final_guard_valid, "post_cleanup_vram_sample": "after_cleanup ROCm snapshots in every replicate"}
+    candidate_smoke = candidate_smoke_projection(
+        results,
+        initial_rocm=initial_rocm,
+        final_rocm=final_rocm,
+        identity=pre_binding,
+        final_port=int(plan["cells"][-1]["port"]) if plan["cells"] else None,
+    )
+    write_json(output_dir / "candidate_smoke_summary.json", candidate_smoke)
+    return {"schema": "epyc.laguna_iq2_dflash_pgpu1.summary.v2", "created_at": utc_now(), "status": status, "production_named_kernel": True, "required_branch": EXPECTED_BRANCH, "attestation_ref": str(args.attestation_ref), "attestation_sha256": attestation["sha256"], "n": args.reps, "rep_policy": plan["rep_policy"], "median": True, "mad": True, "arm_order": plan["arm_order"], "results": results, "matrix_cardinality_valid": cardinality_valid, "matrix_cardinality_reason": cardinality_reason, "arm_summaries": summaries, "base_vs_dflash": {"decode_tps_ratio": ratio, "direction": "higher_better"}, "cross_arm_hash_observation": {"contract": "distribution-lossless, not byte-exact greedy", "decision_gating": False, "quality_equivalence_claimed": False, "rows": hash_observations}, "warmup_discard_policy": PGPU1_WARMUP_POLICY, "cpu_interference_policy": CPU_INTERFERENCE_POLICY, "hardware_state": hardware_state, "target_kv_quant": {"k": TARGET_CACHE_K, "v": TARGET_CACHE_V}, "drafter_kv_quant": {"k": DRAFTER_CACHE_K, "v": DRAFTER_CACHE_V}, "replicate_binding_checks": replicate_binding_checks, "per_replicate_bindings_valid": per_replicate_bindings_valid, "execution_binding_valid": execution_binding_valid, "post_execution_identity": post_identity, "final_process_guard": final_processes, "final_rocm": final_rocm, "final_clean": final_clean, "final_reason": final_reason, "final_vram_settled": final_vram_settled, "final_guard_valid": final_guard_valid, "post_cleanup_vram_sample": "after_cleanup ROCm snapshots in every replicate", "candidate_smoke_projection": {"path": "candidate_smoke_summary.json", "schema": CANDIDATE_SMOKE_SCHEMA, "non_gating": True}}
 
 
 def run_audit(output_dir: Path) -> dict[str, Any]:
