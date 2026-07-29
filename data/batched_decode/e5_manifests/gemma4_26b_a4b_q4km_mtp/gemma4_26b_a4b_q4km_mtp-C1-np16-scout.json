@@ -1,38 +1,46 @@
 {
-  "schema_version": "e5-cell-manifest/1",
-  "protocol_id": "P-BENCH-3",
+  "architecture": "gemma4",
+  "cell_id": "gemma4_26b_a4b_q4km_mtp-C1-np16-scout",
+  "chat_template_kwargs": {},
+  "config_id": "C1",
+  "ctx": 32768,
+  "decision_grade_intent": false,
+  "draft_model_path_present": true,
+  "env_expectation": {
+    "ggml_iqk": "1",
+    "kmp_blocktime": "10",
+    "omp_source": "scripts/lib/canonical_recipe.CANONICAL_OMP_ENV"
+  },
   "era": {
     "cpu_kernel": "E6-cpu-kernel",
     "eval_instrument": "E7-eval-instrument",
     "source": "epyc-orchestrator/orchestration/instrument_eras.yaml"
   },
-  "window": "W0",
-  "cell_id": "gemma4_26b_a4b_q4km_mtp-C1-np16-scout",
-  "model_key": "gemma4_26b_a4b_q4km_mtp",
-  "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
-  "quant": "Q4_K_M",
-  "architecture": "gemma4",
-  "config_id": "C1",
   "instances": [
     {
       "cpu_list": "0-95",
+      "numactl_policy": "interleave=all",
       "port": 19380,
-      "threads": 96,
-      "numactl_policy": "interleave=all"
+      "threads": 96
     }
   ],
+  "jinja": true,
+  "kv": {
+    "flash_attn": true,
+    "kv_unified": false,
+    "type_k": "q8_0",
+    "type_v": "q8_0"
+  },
+  "mlock": true,
+  "model_key": "gemma4_26b_a4b_q4km_mtp",
+  "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+  "model_path_present": true,
+  "notes": "gemma MTP: 1xfull(0-95)+interleave or 4xq ONLY \u2014 no half shape (half-pinning crashes the MTP draft path, 'tensor buffer not set'); -ub 512 MTP recipe override on every shape AMENDED 2026-07-29 (append-only provenance): added reasoning='off'. The artifact previously specified no reasoning mode, so llama-server ran gemma4 at its default --reasoning auto, which for arch=gemma4 is ON. That is NOT the production recipe this cell is required to mirror -- both model registries record reasoning: 'off' for this GGUF. Consequence measured, not hypothesised: the 2026-07-29 W2 capture smoke returned 41/43 response_capture_missing_answer_text, the entire 256-token budget consumed inside the reasoning channel with zero answer tokens; the same signature is behind W0's 430/430. The value restores the pre-registered INTENT (top optimized production recipe) rather than changing it.",
   "np": 16,
   "per_stream_ctx": 2048,
-  "ctx": 32768,
-  "ubatch_size": 512,
-  "prompt_caps": {
-    "n_predict": 64,
-    "max_prompt_chars": 4096,
-    "max_total_in_flight": 43
-  },
   "prompt_batch": {
-    "source": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/question_pool.jsonl",
-    "selection": "pinned_qids",
+    "limit": 43,
+    "pinned_from": "data/batched_decode/e1-pbench3-clean-20260703T1912Z/selected_prompts.jsonl",
     "qids": [
       "debugbench_fizz-buzz_python",
       "bcb_BigCodeBench/819",
@@ -78,55 +86,48 @@
       "hellaswag_48793",
       "simpleqa_general_02228"
     ],
-    "pinned_from": "data/batched_decode/e1-pbench3-clean-20260703T1912Z/selected_prompts.jsonl",
-    "tier": 1,
     "seed": 42,
-    "limit": 43
+    "selection": "pinned_qids",
+    "source": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/question_pool.jsonl",
+    "tier": 1
   },
+  "prompt_caps": {
+    "max_prompt_chars": 4096,
+    "max_total_in_flight": 43,
+    "n_predict": 64
+  },
+  "protocol_id": "P-BENCH-3",
+  "quant": "Q4_K_M",
+  "reasoning": "off",
+  "request_endpoint": "chat_completions",
   "sampling": {
+    "min_p": 0.05,
     "regime": "production",
+    "seed": 42,
     "temperature": 0.3,
     "top_k": 40,
-    "top_p": 0.95,
-    "min_p": 0.05,
-    "seed": 42
+    "top_p": 0.95
   },
-  "request_endpoint": "chat_completions",
-  "chat_template_kwargs": {},
+  "schema_version": "e5-cell-manifest/1",
   "spec_dec": {
-    "enabled": true,
-    "spec_type": "draft-mtp",
-    "draft_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf",
+    "device_draft": "none",
+    "disabled_reason": null,
     "draft_max": 2,
     "draft_min": null,
+    "draft_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf",
     "draft_p_min": 0.0,
     "draft_p_split": 0,
-    "threads_draft": 16,
+    "enabled": true,
     "ngram_mod": null,
-    "device_draft": "none",
     "record_accept_rate": true,
-    "disabled_reason": null
+    "spec_type": "draft-mtp",
+    "threads_draft": 16
   },
-  "kv": {
-    "type_k": "q8_0",
-    "type_v": "q8_0",
-    "flash_attn": true,
-    "kv_unified": false
-  },
-  "env_expectation": {
-    "ggml_iqk": "1",
-    "omp_source": "scripts/lib/canonical_recipe.CANONICAL_OMP_ENV",
-    "kmp_blocktime": "10"
-  },
-  "mlock": true,
-  "jinja": true,
-  "warmup": {
-    "prompts": 1,
-    "n_predict": 32
-  },
-  "decision_grade_intent": false,
-  "notes": "gemma MTP: 1xfull(0-95)+interleave or 4xq ONLY \u2014 no half shape (half-pinning crashes the MTP draft path, 'tensor buffer not set'); -ub 512 MTP recipe override on every shape",
   "stage_b_families": [],
-  "model_path_present": true,
-  "draft_model_path_present": true
+  "ubatch_size": 512,
+  "warmup": {
+    "n_predict": 32,
+    "prompts": 1
+  },
+  "window": "W0"
 }

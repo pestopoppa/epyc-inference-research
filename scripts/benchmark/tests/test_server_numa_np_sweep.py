@@ -1672,3 +1672,30 @@ def test_ensure_clean_runtime_allowing():
 
 if __name__ == "__main__":
     raise SystemExit(_run_all())
+
+
+def test_reasoning_flag_emitted_from_manifest():
+    # 2026-07-29: the harness had no --reasoning emit at all, so every cell ran
+    # at llama-server's `--reasoning auto`. For gemma4 that default is ON and
+    # the whole 256-token Stage-B budget went into the reasoning channel:
+    # 41/43 response_capture_missing_answer_text on the W2 smoke, and the same
+    # signature behind W0's 430/430.
+    manifest = make_manifest(reasoning="off")
+    with tempfile.TemporaryDirectory() as tmp:
+        cell = load_cell(Path(tmp), manifest)
+    cmd = sns.build_instance_command(
+        binary=Path("/fake/llama-server"), cell=cell, inst=cell.instances[0],
+    )
+    assert "--reasoning" in cmd
+    assert cmd[cmd.index("--reasoning") + 1] == "off"
+
+
+def test_reasoning_flag_absent_when_manifest_omits_it():
+    # Back-compat: a manifest without the key keeps the previous command shape
+    # exactly, so no already-run cell's recipe silently changes underneath it.
+    with tempfile.TemporaryDirectory() as tmp:
+        cell = load_cell(Path(tmp))
+    cmd = sns.build_instance_command(
+        binary=Path("/fake/llama-server"), cell=cell, inst=cell.instances[0],
+    )
+    assert "--reasoning" not in cmd

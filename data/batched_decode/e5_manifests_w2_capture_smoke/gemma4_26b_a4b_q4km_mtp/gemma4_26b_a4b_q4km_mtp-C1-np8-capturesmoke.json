@@ -35,7 +35,7 @@
   "model_key": "gemma4_26b_a4b_q4km_mtp",
   "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
   "model_path_present": true,
-  "notes": "W2 focused post-fix capture smoke (hard precondition before any decision-grade Gemma W2 sweep). Verifies the hardened SSE contract: reasoning_text persisted separately from answer text, nonempty answer-text deltas required whenever tokens were generated, and the offline scorer sees scoreable answer text. The historic W0 Gemma capture was 430/430 parse failures with NO raw SSE ledger \u2014 unrecoverable, not re-scoreable \u2014 which is the only reason re-running inference is authorised here. Uses the registered C1 (1x full machine + interleave) W2 shape at the same 256-token Stage-B cap, production sampling and pinned 43-question batch, so the smoke exercises the exact W2 path. Single instance = cheapest launch that still reproduces the failure class, which is a template/capture behaviour independent of placement.",
+  "notes": "W2 focused post-fix capture smoke (hard precondition before any decision-grade Gemma W2 sweep). Verifies the hardened SSE contract: reasoning_text persisted separately from answer text, nonempty answer-text deltas required whenever tokens were generated, and the offline scorer sees scoreable answer text. The historic W0 Gemma capture was 430/430 parse failures with NO raw SSE ledger \u2014 unrecoverable, not re-scoreable \u2014 which is the only reason re-running inference is authorised here. Uses the registered C1 (1x full machine + interleave) W2 shape at the same 256-token Stage-B cap, production sampling and pinned 43-question batch, so the smoke exercises the exact W2 path. Single instance = cheapest launch that still reproduces the failure class, which is a template/capture behaviour independent of placement. AMENDED 2026-07-29 (append-only provenance): added reasoning='off'. The artifact previously specified no reasoning mode, so llama-server ran gemma4 at its default --reasoning auto, which for arch=gemma4 is ON. That is NOT the production recipe this cell is required to mirror -- both model registries record reasoning: 'off' for this GGUF. Consequence measured, not hypothesised: the 2026-07-29 W2 capture smoke returned 41/43 response_capture_missing_answer_text, the entire 256-token budget consumed inside the reasoning channel with zero answer tokens; the same signature is behind W0's 430/430. The value restores the pre-registered INTENT (top optimized production recipe) rather than changing it.",
   "np": 8,
   "per_stream_ctx": 2048,
   "prompt_batch": {
@@ -98,6 +98,7 @@
   },
   "protocol_id": "P-BENCH-3",
   "quant": "Q4_K_M",
+  "reasoning": "off",
   "request_endpoint": "chat_completions",
   "sampling": {
     "min_p": 0.05,

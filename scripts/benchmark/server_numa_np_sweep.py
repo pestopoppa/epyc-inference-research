@@ -418,6 +418,18 @@ def build_instance_command(*, binary: Path, cell: Cell, inst: Instance) -> list[
         cmd += ["--flash-attn", "on"]
     if cell.manifest.get("jinja", True):
         cmd.append("--jinja")
+    # Reasoning mode is a SERVING-RECIPE property, not a sampling one, and the
+    # harness previously had no way to express it — so every cell ran at
+    # llama-server's `--reasoning auto` regardless of what the registry says.
+    # For gemma4 that default is ON (arch has a native channel/harmony
+    # reasoning template), which consumed the entire 256-token Stage-B budget
+    # inside the reasoning channel and emitted zero answer tokens: 41/43
+    # response_capture_missing_answer_text on the 2026-07-29 W2 smoke, and the
+    # same signature behind W0's 430/430. Server-side and template-independent,
+    # unlike chat_template_kwargs.enable_thinking, which some templates ignore.
+    reasoning = cell.manifest.get("reasoning")
+    if isinstance(reasoning, str) and reasoning:
+        cmd += ["--reasoning", reasoning]
     if cell.manifest.get("mlock", True):
         cmd.append("--mlock")
     # GPU contamination guard: the v7 binary is HIP-capable and would otherwise
