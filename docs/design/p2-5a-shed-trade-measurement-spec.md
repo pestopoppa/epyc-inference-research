@@ -62,7 +62,7 @@ a feature reversal instead of a decision.
 
 | Input | Source | Pinning requirement |
 |---|---|---|
-| Task corpus | The `worker_general`-class batch corpus, drawn once and frozen | Manifest with sha256; identical across every arm and rep |
+| Task corpus | Frozen, role-stratified terminal-duty corpus: the `worker_general` batch stratum that may shed plus an `architect_general` duty stratum that never sheds | Manifest with sha256; every row pins its forced target role and expected task-success contract. The role mix is declared before the run and identical across every arm and rep; a failed/unavailable forced target remains a non-completion, never a dropped row or a retargeted request. |
 | CPU fleet lineup | `orchestrator_stack.py status` + runtime-facts manifest | Terminal lineup, declared; must be the production shape, not a bench shape |
 | GPU lane tenant | `orchestration/gpu_shadow_lane_tenancy.yaml` | tenant id, path, bytes, sha256, launch mode, `draft_n_max` |
 | Lane serving shape | `serving_shape` block, ceiling-validated by `load_serving_shape()` | np × per-slot ctx; must be inside the np_ceiling table (P2-3d enforces) |
@@ -78,12 +78,12 @@ a feature reversal instead of a decision.
 Four arms. A0 and A2 answer the question; A1 and A3 explain the answer. All arms run the same
 frozen corpus.
 
-| Arm | CPU fleet | GPU lane | What it isolates |
-|---|---|---|---|
-| **A0 — CPU-only under stress** | full stress load, all tasks on CPU | **absent** (not launched; q3 free of the lane) | Baseline total `task_rate`. The status quo class 3 would replace |
-| **A1 — lane resident, idle** | full stress load, all tasks on CPU | **resident, serving nothing** | **The residency tax.** Does merely holding 8 host threads on q3 cost CPU throughput, before any work is shed? The control most likely to be skipped, and the one that separates "shedding is bad" from "the lane's mere presence is bad" |
-| **A2 — shed active** | stress load minus the shed fraction *f* | resident, serving the shed fraction *f* | Total `task_rate` under shedding. **A2 − A0 is the answer** |
-| **A3 — GPU reference, CPU quiesced** | quiesced (declared) | resident, serving the shed fraction | The un-contended GPU ceiling, so the GPU-side contention tax (A2's GPU half vs A3) is visible rather than assumed |
+| Arm | CPU fleet | GPU lane | q3 co-tenant state | What it isolates |
+|---|---|---|---|---|
+| **A0 — CPU-only under stress** | full stress load; every frozen row remains forced to its CPU role | **absent** (not launched; q3 free of the lane) | Full terminal q3 manifest | Baseline total `task_rate`. The status quo class 3 would replace |
+| **A1 — lane resident, idle** | full stress load; every frozen row remains forced to its CPU role | **resident, serving nothing** | Explicit manifest; any role that cannot coexist with the q3 claim is declared `stopped`, not silently removed | **The residency and availability tax.** Does merely holding 8 host threads on q3 cost CPU throughput or make an otherwise-needed role unavailable before any work is shed? |
+| **A2 — shed active** | worker stratum minus shed fraction *f*; architect stratum remains forced to architect | resident, serving the shed fraction *f* | Explicit manifest, independently captured from A1 | Total `task_rate` under shedding. **A2 − A0 is the answer** |
+| **A3 — GPU reference, CPU quiesced** | quiesced (declared); CPU-stratum outcomes still recorded as unavailable | resident, serving the shed fraction | Explicit all-role quiescence manifest | The un-contended GPU ceiling, so the GPU-side contention tax (A2's GPU half vs A3) is visible rather than assumed |
 
 ### 3.1 Co-tenant state and A1 reporting are per-role evidence
 
@@ -101,14 +101,18 @@ future SMT carve-out: it reveals which physical-core co-tenant absorbs the cost
 instead of hiding that distribution in an aggregate. These per-role diagnostics do
 not change the primary A2-minus-A0 decision metric.
 
-This declaration does not settle the separate P2-5h corpus-scope question. In
-particular, a deliberately stopped `architect_general` must remain visible in the
-manifest; its duty loss cannot be treated as zero merely because the frozen
-worker-class corpus does not invoke it. That pricing/corpus repair remains required
-before a class-3 verdict.
+The role-stratified corpus makes lifecycle loss part of the measurement rather than
+a hidden arm difference. In particular, a deliberately stopped
+`architect_general` remains visible in the manifest and its forced task rows remain
+in the denominator as non-completions; its duty loss cannot be treated as zero. A
+future topology such as a device-local placement or finer carve that permits a
+different lifecycle state is a separately declared arm/topology, not a silent
+exception to this rule.
 
 **Primary quantity:** `net_task_rate = task_rate_total(A2) − task_rate_total(A0)`, higher-better,
-where `task_rate_total` counts tasks completed on **both** devices in the same wall window.
+where `task_rate_total` counts completions from **both** devices across every
+frozen role stratum in the same wall window. Unavailable/failed forced-target rows
+count as zero completions; they are never removed from an arm after launch.
 
 **Diagnostics (each explains a possible sign):**
 - `residency_tax = task_rate(A1) − task_rate(A0)` — expected ≤ 0. If this alone explains a negative
