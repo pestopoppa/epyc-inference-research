@@ -1,0 +1,18 @@
+{
+  "apply_eligibility": "review_required",
+  "evidence_hash_semantics": "exact_written_evidence_json_bytes",
+  "evidence_sha256": "7beda889725d90544e5737eb54b256cfe35ec0b6fbe9d0ade170588fbb3539fe",
+  "intended_registry_field_targets": [
+    "roles.frontdoor.performance.baseline_tps",
+    "roles.frontdoor.performance.benchmark_date"
+  ],
+  "metric_semantics": "llama-server timings.predicted_per_second; median and MAD of five exact 512-token, single-request, stability-warmed production-shaped decodes",
+  "mode": "proposal_only",
+  "must_not_apply_automatically": true,
+  "not_comparable_to": [
+    "llama-bench tg512",
+    "P-BENCH-3 short task-rate"
+  ],
+  "requires_human_review": true,
+  "schema": "epyc.registry_patch_proposal.v1"
+}
