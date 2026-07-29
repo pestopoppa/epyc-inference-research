@@ -7,7 +7,20 @@ code-gen suite measure real capability instead of the adapter's placeholder
 `substring "def "` check.
 
 Isolation (scaffold level): fresh temp cwd, RLIMIT_CPU / RLIMIT_AS (memory) /
-RLIMIT_CORE=0 / RLIMIT_NPROC, wall-clock timeout, minimal env.
+RLIMIT_CORE=0, wall-clock timeout, minimal env, and a dedicated process group so a
+timeout kills the child's whole descendant tree rather than just the child.
+
+⚠ NOT bounded: process/thread COUNT. RLIMIT_NPROC is deliberately NOT set. It is
+enforced per real UID, not per process tree, and this host runs ~9.5k threads under
+the same uid (llama-server alone accounts for most of them). Any per-scorer cap
+would therefore fail the child's *first* fork under normal fleet load, and would
+fail NONDETERMINISTICALLY as that load varies — turning a scorer into an instrument
+whose results track how busy the box is. That is a worse failure than the one it
+would fix. The correct mechanism is cgroup v2 `pids.max`, which counts only the
+scorer's own subtree and is unaffected by co-tenants; verified available on this
+host (needs `+pids` in cgroup.subtree_control). Tracked in
+handoffs/active/scoring-infra-standardization.md. Corrected 2026-07-29 — this
+docstring previously claimed RLIMIT_NPROC was set; it never was.
 
 ⚠ HARDENING TODO (before untrusted / at-scale runs, Phase 2b): this does NOT yet
 provide network isolation or a real filesystem jail. Run only trusted algorithmic
@@ -16,8 +29,10 @@ adversarial code.
 """
 from __future__ import annotations
 
+import os
 import re
 import resource
+import signal
 import subprocess
 import sys
 import tempfile
@@ -47,6 +62,26 @@ def _limits(cpu_s: int, mem_mb: int):
     return _apply
 
 
+def _kill_group(proc: subprocess.Popen | None) -> None:
+    """SIGKILL the child's entire process group.
+
+    subprocess's own timeout path kills ONLY the direct child, so anything the
+    scored code spawned survives the timeout as an orphan and keeps consuming
+    cores reserved for inference. `start_new_session=True` puts the child in its
+    own process group precisely so the group can be killed as a unit here.
+    """
+    if proc is None or proc.pid is None:
+        return
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass  # already reaped, or the group is gone
+    try:
+        proc.wait(timeout=5)
+    except Exception:  # noqa: BLE001 — best-effort reap; never mask the real error
+        pass
+
+
 def _run_once(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
               python_exe: str | None = None) -> tuple[bool, str]:
     """Run code with stdin, return (ok, stdout-or-error)."""
@@ -58,10 +93,15 @@ def _run_once(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
     with tempfile.TemporaryDirectory(prefix="codeexec_") as d:
         src = Path(d) / "sol.py"
         src.write_text(code)
+        proc: subprocess.Popen | None = None
         try:
-            p = subprocess.run(
+            # Popen (not run) so the pid is available for a GROUP kill on timeout;
+            # start_new_session=True gives the child its own process group so the
+            # kill reaches descendants the scored code spawned.
+            proc = subprocess.Popen(
                 [exe, str(src)],
-                input=stdin, capture_output=True, text=True, timeout=timeout,
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True,
                 cwd=d, env={"PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1",
                             "MPLBACKEND": "Agg", "HOME": d,
                             # single-threaded math libs: OpenBLAS sizes buffers by
@@ -69,14 +109,23 @@ def _run_once(code: str, stdin: str, timeout: int, cpu_s: int, mem_mb: int,
                             "OPENBLAS_NUM_THREADS": "1", "OMP_NUM_THREADS": "1",
                             "MKL_NUM_THREADS": "1", "NUMEXPR_NUM_THREADS": "1"},
                 preexec_fn=_limits(cpu_s, mem_mb),
+                start_new_session=True,
             )
+            out, err = proc.communicate(input=stdin, timeout=timeout)
         except subprocess.TimeoutExpired:
+            _kill_group(proc)
+            # drain the pipes the killed group left behind, else the fds leak
+            try:
+                proc.communicate(timeout=5)
+            except Exception:  # noqa: BLE001
+                pass
             return False, "__timeout__"
         except Exception as e:  # noqa: BLE001
+            _kill_group(proc)
             return False, f"__spawn_error__:{e}"
-        if p.returncode != 0:
-            return False, f"__exit_{p.returncode}__:{p.stderr[-200:]}"
-        return True, p.stdout
+        if proc.returncode != 0:
+            return False, f"__exit_{proc.returncode}__:{err[-200:]}"
+        return True, out
 
 
 def score_code(

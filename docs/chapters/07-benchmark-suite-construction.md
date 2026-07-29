@@ -640,6 +640,34 @@ When adding questions to any suite, follow these six checks. They are quick but 
 
 </details>
 
+## Verifier Robustness: Structure-Derived Assertions and Negative Checks
+
+Not all deterministic scoring is equally brittle. The failure modes we have actually hit are
+concentrated in the *text-comparison* verifiers: `substring` is comma-brittle (an expected answer
+written "Paris, France" fails a model that answers "Paris" and vice versa), and `f1` /
+`exact_match` extraction produces parse failures that read as capability gaps — a cross-arm
+difference in parse-failure rate is a scorer artifact, not a model result, and the fix is to
+re-score offline rather than re-run inference.
+
+A different verifier class avoids that failure mode entirely. Where the answer is an artifact with
+structure — code, JSON, a file tree, a plan, a config — the assertions can be **computed from the
+artifact's own structure** instead of compared against a stored answer string. `code_execution` is
+the instance of this we already run: the check is `assert fibonacci(10) == 55` against the model's
+own object, so there is no expected-answer string to mis-match and no extraction step to fail. The
+same construction generalizes: assert a parsed JSON document has the required keys and types,
+assert a returned plan's steps each name a declared tool, assert a produced file compiles.
+
+Pair every such assertion with an explicit **negative check** — a property that must be *false*.
+Positive-only assertion sets are passed by degenerate outputs (an empty result satisfies "no
+forbidden key present"; an accept-all regex satisfies "answer matched"). This is the same guard the
+`verifier_builder` allowlist enforces when it rejects trivially accept-all patterns and empty
+references, and it is why `programmatic` ships `no_keyword` alongside `contains_keyword`.
+
+Practical consequence for suite construction: when a candidate question can be phrased so that its
+verifier reads the artifact rather than a stored string, prefer that phrasing. It costs a little
+more to author and it removes an entire class of scoring artifact from every future run of the
+suite.
+
 ## Relationship to Other Benchmark Layers
 
 The project has two parallel benchmark tracks. The `debug/` suite documented here uses machine verifiers for automated regression testing and MemRL rewards — this is the production path used by all automated seeding runs. A separate `v1/` rubric-scored track (Claude-as-Judge, open-ended quality assessment) exists for manual quality audits but is no longer executed in automated pipelines as of 2026-03 (deterministic scoring proved sufficient for routing signal).

@@ -214,6 +214,34 @@ class DockerEnv:
         code, out, _err = self._exec(cmd, timeout)
         return code, out
 
+    def reset_testbed(self, base_commit: str | None = None,
+                      timeout: float = 120) -> tuple[bool, str]:
+        """Restore /testbed to its pristine base state. Returns (ok, detail).
+
+        Added 2026-07-29. Before this, run_instance performed NO state reset, so a
+        repeated-trial sweep scored trial N against whatever trial N-1 left behind —
+        silent cross-trial contamination that looks like a quality signal.
+
+        Runs BEFORE each trial, never after: a trial that crashes, times out, or is
+        killed never reaches its own cleanup, so an after-reset leaves the NEXT trial
+        reading a dirty tree. Before-reset is idempotent on the first trial and
+        self-healing on every one after it.
+
+        `git clean -fd` deliberately omits -x. -x also deletes IGNORED files, which
+        in a SWE-bench testbed includes the .egg-info/build artifacts left by
+        `pip install -e .` — deleting those breaks imports and would manufacture
+        false failures. Agent contamination lives in tracked edits (handled by
+        `reset --hard`) and untracked new files (handled by `clean -fd`).
+
+        `reset --hard <base_commit>` rather than `checkout -- .` so that staged
+        changes, and any commit an agent made, are also undone.
+        """
+        target = f" {shlex.quote(base_commit)}" if base_commit else ""
+        code, out = self.run(f"git reset --hard{target} && git clean -fd", timeout)
+        if code != 0:
+            return False, (out or "").strip()[-400:]
+        return True, ""
+
     def read_file(self, rel_path: str) -> str | None:
         argv = [self.docker_bin, "exec", self.container, "cat",
                 posixpath.join(TESTBED, rel_path)]
@@ -279,6 +307,13 @@ class FakeEnv:
 
     def run_stdout(self, cmd: str, timeout: float) -> tuple[int, str]:
         return self.run(cmd, timeout)
+
+    def reset_testbed(self, base_commit: str | None = None,
+                      timeout: float = 120) -> tuple[bool, str]:
+        """No-op: FakeEnv is constructed fresh per test, so there is nothing to
+        reset. Present so run_instance's fail-closed reset path is exercised by
+        the same tests that cover the real env."""
+        return True, ""
 
     def read_file(self, rel_path: str) -> str | None:
         return self.files.get(self._key(rel_path))
@@ -676,6 +711,23 @@ def run_instance(client, env, instance: dict, cfg: AgentConfig,
     """Drive one instance through the agent loop. Returns a summary dict
     including model_patch. Trajectory JSONL is appended turn-by-turn."""
     t0 = clock()
+    # Reset /testbed BEFORE the loop, fail-closed. Added 2026-07-29: without this
+    # a repeated-trial sweep scored trial N against whatever trial N-1 left in the
+    # tree. Aborting is the point — scoring a polluted tree produces a number that
+    # looks valid and is not, which is worse than a missing datapoint.
+    reset_ok, reset_detail = env.reset_testbed(instance.get("base_commit"))
+    if not reset_ok:
+        return {
+            "instance_id": instance.get("instance_id", "?"),
+            "status": "testbed_reset_failed",
+            "turns_used": 0, "edits_applied": 0, "edits_failed": 0,
+            "malformed": 0, "patch_chars": 0,
+            "wall_s": round(clock() - t0, 2),
+            "evidence_complete": False, "evidence_bytes_captured": 0,
+            "evidence_bytes_limit": cfg.max_evidence_bytes,
+            "evidence_anomalies": [f"testbed_reset_failed: {reset_detail}"],
+            "model_patch": "",
+        }
     messages: list[dict] = [
         {"role": "system", "content": build_system_prompt(instance["repo"], cfg.max_turns)},
         {"role": "user", "content": build_task_prompt(instance)},
