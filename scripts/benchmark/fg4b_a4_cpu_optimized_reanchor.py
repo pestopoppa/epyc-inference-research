@@ -178,7 +178,12 @@ def protocol_contract() -> dict[str, Any]:
         },
         "per_request_witness": {
             "exclusive_inference_process_tree": True,
-            "exact_live_affinity": CPU_LIST,
+            "thread_affinity": {
+                "expected_cpu_list": CPU_LIST,
+                "thread_union_exact": True,
+                "no_thread_outside_expected": True,
+                "worker_thread_union_exact": True,
+            },
         },
         "durable_publish": "fsync_files_and_staging_dir_then_parent_before_and_after_atomic_rename",
     }
@@ -553,22 +558,103 @@ def collect_warmup_samples(
 
 
 def expected_affinity() -> set[int]:
+    return parse_cpu_list(CPU_LIST)
+
+
+def parse_cpu_list(value: str) -> set[int]:
     result: set[int] = set()
-    for part in CPU_LIST.split(","):
+    for part in value.split(","):
+        part = part.strip()
+        if not part:
+            raise ReanchorRefusal("empty CPU-affinity segment")
         start, end = (part.split("-", 1) + [part])[:2]
-        result.update(range(int(start), int(end) + 1))
+        try:
+            lower, upper = int(start), int(end)
+        except ValueError as exc:
+            raise ReanchorRefusal(f"invalid CPU-affinity segment {part!r}") from exc
+        if lower < 0 or upper < lower:
+            raise ReanchorRefusal(f"invalid CPU-affinity range {part!r}")
+        result.update(range(lower, upper + 1))
     return result
 
 
-def verify_live_affinity(pid: int) -> list[int]:
-    actual = set(os.sched_getaffinity(pid))
-    expected = expected_affinity()
-    if actual != expected:
+def _thread_affinity_from_status(status_path: Path) -> set[int]:
+    try:
+        lines = status_path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise ReanchorRefusal(f"cannot read thread affinity status: {status_path}") from exc
+    for line in lines:
+        if line.startswith("Cpus_allowed_list:"):
+            value = line.split(":", 1)[1].strip()
+            if not value:
+                raise ReanchorRefusal(f"thread affinity status is empty: {status_path}")
+            return parse_cpu_list(value)
+    raise ReanchorRefusal(f"thread affinity status lacks Cpus_allowed_list: {status_path}")
+
+
+def read_thread_affinities(
+    pid: int,
+    *,
+    proc_root: Path = Path("/proc"),
+) -> dict[int, set[int]]:
+    """Read every server thread's kernel affinity mask from procfs."""
+    task_dir = proc_root / str(pid) / "task"
+    try:
+        tids = sorted(int(path.name) for path in task_dir.iterdir() if path.name.isdigit())
+    except OSError as exc:
+        raise ReanchorRefusal(f"cannot enumerate server threads: {task_dir}") from exc
+    if pid not in tids:
+        raise ReanchorRefusal(f"server leader thread {pid} is absent from {task_dir}")
+    if len(tids) < 2:
         raise ReanchorRefusal(
-            f"live llama-server pid {pid} affinity mismatch: "
-            f"expected {sorted(expected)}, got {sorted(actual)}"
+            f"server pid {pid} has no worker threads; cannot prove OpenMP coverage"
         )
-    return sorted(actual)
+    return {
+        tid: _thread_affinity_from_status(task_dir / str(tid) / "status")
+        for tid in tids
+    }
+
+
+def verify_live_affinity(
+    pid: int,
+    *,
+    proc_root: Path = Path("/proc"),
+) -> dict[str, Any]:
+    thread_affinities = read_thread_affinities(pid, proc_root=proc_root)
+    expected = expected_affinity()
+    observed_union = set().union(*thread_affinities.values())
+    outside = {
+        tid: sorted(cpus - expected)
+        for tid, cpus in thread_affinities.items()
+        if cpus - expected
+    }
+    if outside:
+        raise ReanchorRefusal(
+            f"live llama-server pid {pid} has thread affinity outside expected mask: {outside}"
+        )
+    if observed_union != expected:
+        raise ReanchorRefusal(
+            f"live llama-server pid {pid} thread-affinity union mismatch: "
+            f"expected {sorted(expected)}, got {sorted(observed_union)}"
+        )
+    worker_affinities = {tid: cpus for tid, cpus in thread_affinities.items() if tid != pid}
+    worker_union = set().union(*worker_affinities.values())
+    if worker_union != expected:
+        raise ReanchorRefusal(
+            f"live llama-server pid {pid} worker thread coverage mismatch: "
+            f"expected {sorted(expected)}, got {sorted(worker_union)}"
+        )
+    return {
+        "server_pid": pid,
+        "expected_cpu_list": CPU_LIST,
+        "expected_cpus": sorted(expected),
+        "thread_affinities": {
+            str(tid): sorted(cpus) for tid, cpus in thread_affinities.items()
+        },
+        "thread_union": sorted(observed_union),
+        "worker_thread_ids": sorted(worker_affinities),
+        "worker_thread_union": sorted(worker_union),
+    }
 
 
 def process_tree_pids(root_pid: int) -> set[int]:

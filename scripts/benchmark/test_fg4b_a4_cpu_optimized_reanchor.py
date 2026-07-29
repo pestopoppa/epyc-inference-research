@@ -179,12 +179,50 @@ def test_finish_reason_must_be_length() -> None:
         runner.parse_sample(response, 1)
 
 
-def test_live_affinity_must_match_exactly(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(os, "sched_getaffinity", lambda _pid: runner.expected_affinity())
-    assert runner.verify_live_affinity(123) == sorted(runner.expected_affinity())
-    monkeypatch.setattr(os, "sched_getaffinity", lambda _pid: {0})
-    with pytest.raises(runner.ReanchorRefusal, match="affinity mismatch"):
-        runner.verify_live_affinity(123)
+def _write_thread_status(proc_root: Path, pid: int, tid: int, cpus: str | None) -> None:
+    status = proc_root / str(pid) / "task" / str(tid) / "status"
+    status.parent.mkdir(parents=True, exist_ok=True)
+    fields = ["Name:\tllama-server"]
+    if cpus is not None:
+        fields.append(f"Cpus_allowed_list:\t{cpus}")
+    status.write_text("\n".join(fields) + "\n")
+
+
+def test_live_affinity_accepts_thread_union_and_persists_each_mask(tmp_path: Path) -> None:
+    pid = 123
+    _write_thread_status(tmp_path, pid, pid, "0,96")
+    _write_thread_status(tmp_path, pid, 124, "0-47")
+    _write_thread_status(tmp_path, pid, 125, "96-143")
+
+    witness = runner.verify_live_affinity(pid, proc_root=tmp_path)
+    assert witness["thread_affinities"][str(pid)] == [0, 96]
+    assert witness["thread_union"] == sorted(runner.expected_affinity())
+    assert witness["worker_thread_union"] == sorted(runner.expected_affinity())
+
+
+def test_live_affinity_rejects_leader_only_coverage(tmp_path: Path) -> None:
+    pid = 123
+    _write_thread_status(tmp_path, pid, pid, runner.CPU_LIST)
+    _write_thread_status(tmp_path, pid, 124, "0,96")
+    with pytest.raises(runner.ReanchorRefusal, match="worker thread coverage mismatch"):
+        runner.verify_live_affinity(pid, proc_root=tmp_path)
+
+
+def test_live_affinity_rejects_thread_outside_expected_mask(tmp_path: Path) -> None:
+    pid = 123
+    _write_thread_status(tmp_path, pid, pid, "0,96")
+    _write_thread_status(tmp_path, pid, 124, "0-47,48")
+    _write_thread_status(tmp_path, pid, 125, "96-143")
+    with pytest.raises(runner.ReanchorRefusal, match="outside expected mask"):
+        runner.verify_live_affinity(pid, proc_root=tmp_path)
+
+
+def test_live_affinity_rejects_missing_thread_affinity_field(tmp_path: Path) -> None:
+    pid = 123
+    _write_thread_status(tmp_path, pid, pid, "0,96")
+    _write_thread_status(tmp_path, pid, 124, None)
+    with pytest.raises(runner.ReanchorRefusal, match="lacks Cpus_allowed_list"):
+        runner.read_thread_affinities(pid, proc_root=tmp_path)
 
 
 def test_protocol_receipt_binds_contract_instrument_and_amendment(tmp_path: Path) -> None:
