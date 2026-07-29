@@ -6259,19 +6259,19 @@ roles:
     constraints:
       forbid:
       - production_stack_registration
-      - benchmark_claim_without_dflash_runtime
-      reason: "Converted artifact exists, but DFlash runtime/harness support is not available in the current stack."
+      reason: "DFlash runtime is available; this target-locked draft artifact remains catalogue-only until an operator-approved acceptance benchmark clears the owning speculative-decoding gate."
     performance:
-      benchmark_status: converted_artifact_blocked_on_runtime
+      benchmark_status: runtime_available_acceptance_benchmark_gated
       evidence:
       - /mnt/raid0/llm/epyc-root/progress/2026-07/2026-07-03.md
+      - /mnt/raid0/llm/epyc-root/handoffs/active/speculative-decoding-mtp-refresh.md
     memory:
       residency: cold
       pinned: false
     benchmark_plan:
-      cpu_only: "Blocked until DFlash runtime/harness support exists."
-      gpu_only: "Blocked until DFlash runtime/harness support exists."
-      cpu_gpu_hybrid: "Blocked until DFlash runtime/harness support exists."
+      cpu_only: "Operator-approved target-locked DFlash acceptance benchmark only; no production registration before the gate passes."
+      gpu_only: "Acceptance benchmark only after the target/runtime compatibility preflight."
+      cpu_gpu_hybrid: "Not applicable to this target-locked draft artifact."
 
   strand_rust_coder_14b_q4km_local:
     tier: C
