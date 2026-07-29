@@ -225,6 +225,98 @@ def test_live_affinity_rejects_missing_thread_affinity_field(tmp_path: Path) -> 
         runner.read_thread_affinities(pid, proc_root=tmp_path)
 
 
+def test_live_affinity_rejects_no_worker_threads(tmp_path: Path) -> None:
+    pid = 123
+    _write_thread_status(tmp_path, pid, pid, runner.CPU_LIST)
+
+    with pytest.raises(runner.ReanchorRefusal, match="no worker threads"):
+        runner.read_thread_affinities(pid, proc_root=tmp_path)
+
+
+@pytest.mark.parametrize("mutation", ["appearance", "removal", "leader_removal"])
+def test_live_affinity_rejects_thread_set_races(
+    tmp_path: Path, mutation: str
+) -> None:
+    pid = 123
+    _write_thread_status(tmp_path, pid, pid, "0,96")
+    _write_thread_status(tmp_path, pid, 124, "0-47")
+    _write_thread_status(tmp_path, pid, 125, "96-143")
+
+    def mutate_task_set() -> None:
+        if mutation == "appearance":
+            _write_thread_status(tmp_path, pid, 126, "0,96")
+        elif mutation == "removal":
+            thread_dir = tmp_path / str(pid) / "task" / "125"
+            (thread_dir / "status").unlink()
+            thread_dir.rmdir()
+        else:
+            thread_dir = tmp_path / str(pid) / "task" / str(pid)
+            (thread_dir / "status").unlink()
+            thread_dir.rmdir()
+
+    expected_error = "disappeared" if mutation == "leader_removal" else "thread set changed"
+    with pytest.raises(runner.ReanchorRefusal, match=expected_error):
+        runner.read_thread_affinities(
+            pid,
+            proc_root=tmp_path,
+            after_status_read_hook=mutate_task_set,
+        )
+
+
+def test_request_witness_rejects_pre_post_affinity_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stable = {
+        "server_pid": 123,
+        "expected_cpus": [0, 96],
+        "thread_affinities": {"123": [0, 96], "124": [0, 96]},
+        "thread_union": [0, 96],
+        "worker_thread_ids": [124],
+        "worker_thread_union": [0, 96],
+    }
+    changed = {
+        **stable,
+        "thread_affinities": {"123": [0, 96], "124": [0]},
+        "worker_thread_union": [0],
+    }
+    witnesses = iter(
+        [
+            {"live_affinity": stable},
+            {"live_affinity": changed},
+        ]
+    )
+    monkeypatch.setattr(runner, "verify_exclusive_server", lambda _pid: next(witnesses))
+
+    with pytest.raises(runner.ReanchorRefusal, match="changed across request boundary"):
+        runner.request_with_witness(123, lambda: {"ok": True})
+
+
+def test_request_witness_persists_matching_pre_post_snapshots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    affinity = {
+        "server_pid": 123,
+        "expected_cpus": [0, 96],
+        "thread_affinities": {"123": [0, 96], "124": [0, 96]},
+        "thread_union": [0, 96],
+        "worker_thread_ids": [124],
+        "worker_thread_union": [0, 96],
+    }
+    witnesses = iter(
+        [
+            {"captured_at": "before", "live_affinity": affinity},
+            {"captured_at": "after", "live_affinity": affinity},
+        ]
+    )
+    monkeypatch.setattr(runner, "verify_exclusive_server", lambda _pid: next(witnesses))
+
+    response, witness = runner.request_with_witness(123, lambda: {"ok": True})
+
+    assert response == {"ok": True}
+    assert witness["before"]["captured_at"] == "before"
+    assert witness["after"]["captured_at"] == "after"
+
+
 def test_protocol_receipt_binds_contract_instrument_and_amendment(tmp_path: Path) -> None:
     amendment = tmp_path / "MEASUREMENT-amendment.md"
     amendment.write_text("human reviewed protocol\n")

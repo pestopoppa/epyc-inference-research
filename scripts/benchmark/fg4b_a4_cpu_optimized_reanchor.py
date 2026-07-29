@@ -30,7 +30,7 @@ import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 BENCHMARK_DIR = Path(__file__).resolve().parent
@@ -180,9 +180,15 @@ def protocol_contract() -> dict[str, Any]:
             "exclusive_inference_process_tree": True,
             "thread_affinity": {
                 "expected_cpu_list": CPU_LIST,
+                "observation": (
+                    "stable /proc task snapshots immediately before and after each "
+                    "request; not continuous scheduler tracing"
+                ),
+                "snapshot_tid_set_unchanged": True,
                 "thread_union_exact": True,
                 "no_thread_outside_expected": True,
                 "worker_thread_union_exact": True,
+                "before_after_witness_exact": True,
             },
         },
         "durable_publish": "fsync_files_and_staging_dir_then_parent_before_and_after_atomic_rename",
@@ -592,27 +598,45 @@ def _thread_affinity_from_status(status_path: Path) -> set[int]:
     raise ReanchorRefusal(f"thread affinity status lacks Cpus_allowed_list: {status_path}")
 
 
+def _task_thread_ids(task_dir: Path) -> list[int]:
+    try:
+        return sorted(
+            int(path.name) for path in task_dir.iterdir() if path.name.isdigit()
+        )
+    except OSError as exc:
+        raise ReanchorRefusal(f"cannot enumerate server threads: {task_dir}") from exc
+
+
 def read_thread_affinities(
     pid: int,
     *,
     proc_root: Path = Path("/proc"),
+    after_status_read_hook: Callable[[], None] | None = None,
 ) -> dict[int, set[int]]:
-    """Read every server thread's kernel affinity mask from procfs."""
+    """Read a stable, complete server-thread affinity snapshot from procfs."""
     task_dir = proc_root / str(pid) / "task"
-    try:
-        tids = sorted(int(path.name) for path in task_dir.iterdir() if path.name.isdigit())
-    except OSError as exc:
-        raise ReanchorRefusal(f"cannot enumerate server threads: {task_dir}") from exc
-    if pid not in tids:
+    tids_before = _task_thread_ids(task_dir)
+    if pid not in tids_before:
         raise ReanchorRefusal(f"server leader thread {pid} is absent from {task_dir}")
-    if len(tids) < 2:
+    if len(tids_before) < 2:
         raise ReanchorRefusal(
             f"server pid {pid} has no worker threads; cannot prove OpenMP coverage"
         )
-    return {
+    affinities = {
         tid: _thread_affinity_from_status(task_dir / str(tid) / "status")
-        for tid in tids
+        for tid in tids_before
     }
+    if after_status_read_hook is not None:
+        after_status_read_hook()
+    tids_after = _task_thread_ids(task_dir)
+    if pid not in tids_after:
+        raise ReanchorRefusal(f"server leader thread {pid} disappeared during affinity witness")
+    if tids_after != tids_before:
+        raise ReanchorRefusal(
+            "server thread set changed while collecting affinity witness: "
+            f"before={tids_before}, after={tids_after}"
+        )
+    return affinities
 
 
 def verify_live_affinity(
@@ -705,6 +729,21 @@ def verify_exclusive_server(pid: int) -> dict[str, Any]:
         "live_inference_processes": processes,
         "live_affinity": verify_live_affinity(pid),
     }
+
+
+def request_with_witness(
+    pid: int,
+    request: Callable[[], dict[str, Any]],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Make one request only when its boundary affinity witnesses agree."""
+    before = verify_exclusive_server(pid)
+    response = request()
+    after = verify_exclusive_server(pid)
+    if before["live_affinity"] != after["live_affinity"]:
+        raise ReanchorRefusal(
+            "server thread-affinity witness changed across request boundary"
+        )
+    return response, {"before": before, "after": after}
 
 
 def _run_identity() -> dict[str, Any]:
@@ -893,12 +932,16 @@ def execute(args: argparse.Namespace) -> Path:
             live_affinity = verify_live_affinity(proc.pid)
 
             def request(payload: dict[str, Any]) -> dict[str, Any]:
-                request_witnesses.append(verify_exclusive_server(proc.pid))
-                return _http_json(
-                    f"http://127.0.0.1:{args.port}/v1/chat/completions",
-                    payload,
-                    args.request_timeout,
+                response, witness = request_with_witness(
+                    proc.pid,
+                    lambda: _http_json(
+                        f"http://127.0.0.1:{args.port}/v1/chat/completions",
+                        payload,
+                        args.request_timeout,
+                    ),
                 )
+                request_witnesses.append(witness)
+                return response
 
             warmup_responses: list[dict[str, Any]] = []
 
