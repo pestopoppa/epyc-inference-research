@@ -956,7 +956,12 @@ def test_parse_sse_line():
 def test_gemma_reasoning_only_chat_stream_fails_closed_without_answer_text(tmp_path):
     # llama.cpp OpenAI-compatible streaming schema. This is the W0 Gemma
     # survivor shape: generated tokens arrive in reasoning_content, but no
-    # answer-text delta appears before the scout cap.
+    # answer-text delta appears before the token budget runs out.
+    # Re-attributed 2026-07-29 (research 5d6a17f2): the budget is consumed
+    # because reasoning is ON — the harness emitted no `--reasoning` flag and
+    # gemma4 defaults to `auto` (= on) — not because of the scout cap. This
+    # test asserts the fail-close, which detects the shape; `--reasoning off`
+    # is what prevents it.
     chunk = {
         "choices": [{"delta": {"reasoning_content": "Let me work this out."}}]
     }

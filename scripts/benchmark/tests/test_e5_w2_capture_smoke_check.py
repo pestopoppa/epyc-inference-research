@@ -6,6 +6,11 @@ predicted_n > 0, `response_text: ""`, and no `reasoning_text` field at all
 (the old parser read only `content`/`delta.content` while gemma emitted
 `reasoning_content`, so the answer channel captured nothing and the reasoning
 was never persisted anywhere).
+
+Re-attributed 2026-07-29 (research 5d6a17f2): that parser bug was real and is
+fixed, but the token budget was spent in the reasoning channel because the
+harness emitted no `--reasoning` flag and gemma4 defaults to reasoning ON. The
+checker detects the shape; `--reasoning off` is what prevents it.
 """
 
 from __future__ import annotations

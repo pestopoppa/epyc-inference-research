@@ -3,9 +3,16 @@
 
 HARD PRECONDITION for any decision-grade Gemma W2 sweep. The historic W0 Gemma
 capture was 430/430 parse failures (43/43 in each of 10 cells) with NO raw SSE
-ledger: reasoning-only output under the 64-token scout cap, with the answer
-channel never persisted. Those rows are UNRECOVERABLE — not re-scoreable —
-which is the only reason re-running inference is authorised for W2 at all.
+ledger: reasoning-only output, with the answer channel never persisted. Those
+rows are UNRECOVERABLE — not re-scoreable — which is the only reason re-running
+inference is authorised for W2 at all.
+
+Re-attributed 2026-07-29 (research 5d6a17f2): the capture parser bug was real
+and is fixed, but the budget sink was reasoning being ON — the harness emitted
+no `--reasoning` flag, so gemma4 ran at llama-server's `auto` default while both
+model registries record `reasoning: 'off'` for that GGUF. This smoke DETECTS
+that shape; it does not prevent it. Run W2 with `--reasoning off`, or the smoke
+fails closed again at ~41/43.
 
 This checks the three properties the smoke exists to prove, against a completed
 smoke run directory:

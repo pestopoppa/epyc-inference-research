@@ -4,7 +4,7 @@ Prepared 2026-07-29 by `mainA` (roster id was `claude-main` until the rename in
 epyc-root `4dc445a2`). Owning handoff: `epyc-root/handoffs/active/batched-decode-measurement.md`
 § *E5 — NUMA×batch interaction sweep*.
 
-Everything below is **staged and dry-run-verified**; nothing here has been executed.
+**EXECUTION UNDERWAY 2026-07-29.** W1 is running; W4 follows; W2 runs last, after its capture smoke. **W3 is REMOVED from CPU scope** (operator: `qwen36_27b_q8` is scheduled to run residently on the GPU, so a CPU dense-control sweep measures a shape that will never serve). The staging notes below remain accurate for the parts not yet run.
 
 ## Preconditions (verify at window start, do not assume)
 
@@ -44,10 +44,11 @@ sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'
 ## Step 0 — W2 capture smoke (HARD precondition for W2 only)
 
 The historic W0 Gemma capture was **430/430 parse failures** — HTTP 200, `predicted_n=64`,
-`response_text: ""`, and no reasoning field anywhere: the old parser read only
-`content`/`delta.content` while gemma emits `reasoning_content`, so the answer channel captured
-nothing and the reasoning was never persisted. Those rows are **unrecoverable, not re-scoreable** —
-which is the only reason re-running inference is authorised for W2 at all.
+`response_text: ""`, and no reasoning field anywhere. Those rows are **unrecoverable, not
+re-scoreable** — which is the only reason re-running inference is authorised for W2 at all.
+The parser bug (reading only `content`/`delta.content` while gemma emits `reasoning_content`)
+was real and is fixed, but see the re-attribution below: reasoning-mode-ON is what actually
+consumed the budget.
 
 ```bash
 RUN=e5-w2-capture-smoke-$(date -u +%Y%m%dT%H%M%SZ)
@@ -70,6 +71,15 @@ nothing:
 1. `reasoning_text` persisted separately from answer text;
 2. nonempty answer-text deltas whenever tokens were generated;
 3. the offline scorer sees scoreable answer text (per-cell parse-failure budget 2).
+
+> **The smoke DETECTS the failure; `--reasoning off` is what PREVENTS it.** Re-attributed
+> 2026-07-29 (research `5d6a17f2`): the harness emitted no `--reasoning` flag, so gemma4 ran at
+> llama-server's `auto` default — which for `arch=gemma4` is ON — while both registries record
+> `reasoning: 'off'`. The whole token budget went into the reasoning channel before the answer
+> channel opened: 41/43 on the 2026-07-29 smoke, and the same signature behind W0's 430/430.
+> **Before trusting a passing smoke, confirm the launch line actually carries `--reasoning off`**
+> (it comes from the manifest's `reasoning` field; all 19 gemma4 manifests were amended that day).
+> A green smoke on a run without the flag would be a false clearance.
 
 Negative control already run: pointed at a *copy* of the historic W0 Gemma run it fails all three
 and exits 1. (Run it against a copy — never the historic dir; the scorer writes
@@ -99,7 +109,7 @@ PY
 |---|---|---|---|
 | W1 | `qwen36_q8_0` | 11 | `C1b-np{4,8,16}` (W0: C3 wins 34.97–44.78%; C1b/C1 0.598@K4, 0.463@K8 — the documented half-pair collapse) |
 | W2 | `gemma4_26b_a4b_q4km_mtp` | 8 | none |
-| W3 | `qwen36_27b_q8` | 14 | none |
+| ~~W3~~ | ~~`qwen36_27b_q8`~~ | ~~14~~ | **REMOVED from CPU scope 2026-07-29 — GPU-resident; not run** |
 | W4 | `qwen3_next_80b` | 12 | none |
 
 Then per window:
