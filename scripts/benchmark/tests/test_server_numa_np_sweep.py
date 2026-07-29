@@ -1469,6 +1469,22 @@ def test_summarizer_mixed_metric_basis_flagged():
     assert "observation-only" in observation_pair["grade_note"]
 
 
+def test_summarizer_r2_r4_refuse_observation_only_cells() -> None:
+    rows = [
+        summary_row("C1", 1, 40.0, 10000.0, decision_grade=False),
+        summary_row("C1", 8, 120.0, 50000.0, decision_grade=False),
+        summary_row("C3", 4, 100.0, 20000.0, decision_grade=False),
+    ]
+    r2 = sns.evaluate_r2(rows)["models"]["testmodel_q8_0+Q8_0"]
+    assert r2["status"] == "insufficient_decision_grade_data"
+    assert r2["decision_grade"] is False
+    assert "peak_cell" not in r2
+    r4 = sns.evaluate_r4(rows)[0]
+    assert r4["status"] == "insufficient_decision_grade_data"
+    assert r4["decision_grade"] is False
+    assert r4["recommended"] is None
+
+
 def test_summarizer_r2_k1_proxy_baseline():
     # Review F5: no C1b@1 in the pre-registered grid — the same-shape C1@1
     # substitutes as the K=1 p95 baseline with the substitution recorded.

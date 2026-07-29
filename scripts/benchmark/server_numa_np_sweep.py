@@ -2341,6 +2341,18 @@ def evaluate_r2(rows: list[dict[str, Any]]) -> dict[str, Any]:
         by_model.setdefault(key, []).append(row)
     verdicts: dict[str, Any] = {}
     for model_label, model_rows in sorted(by_model.items()):
+        observation_only = [
+            row.get("cell_id") for row in model_rows if not row.get("decision_grade")
+        ]
+        model_rows = [row for row in model_rows if row.get("decision_grade")]
+        if not model_rows:
+            verdicts[model_label] = {
+                "status": "insufficient_decision_grade_data",
+                "decision_grade": False,
+                "observation_only_cells": observation_only,
+                "note": "no decision-grade cells; refusing peak/SLA verdict",
+            }
+            continue
         pareto = [
             row
             for row in model_rows
@@ -2362,6 +2374,9 @@ def evaluate_r2(rows: list[dict[str, Any]]) -> dict[str, Any]:
         peak_p95 = float(peak.get("p95_latency_ms") or 0.0)
         base, base_substitution = _k1_baseline(model_rows, str(peak.get("config_id")))
         verdict: dict[str, Any] = {
+            "status": "decision_grade",
+            "decision_grade": True,
+            "observation_only_cells": observation_only,
             "pareto": [
                 {
                     "cell_id": row.get("cell_id"),
@@ -2525,6 +2540,23 @@ def evaluate_r4(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         # variants (kvu / dense-full scout pairs) are compared in
         # evaluate_scout_probes, never silently max'd in (review F3/F5).
         canonical_rows = [row for row in model_rows if not _is_variant_row(row)] or model_rows
+        observation_only = [
+            row.get("cell_id") for row in canonical_rows if not row.get("decision_grade")
+        ]
+        canonical_rows = [row for row in canonical_rows if row.get("decision_grade")]
+        if not canonical_rows:
+            output.append(
+                {
+                    "model_key": model_key,
+                    "quant": quant,
+                    "status": "insufficient_decision_grade_data",
+                    "decision_grade": False,
+                    "recommended": None,
+                    "observation_only_cells": observation_only,
+                    "note": "no decision-grade canonical cells; refusing recommendation",
+                }
+            )
+            continue
         peak_rate = max(cell_aggregate(row) for row in canonical_rows)
         candidates = [
             row
@@ -2535,7 +2567,7 @@ def evaluate_r4(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             candidates, key=lambda row: float(row.get("p95_latency_ms") or 0.0)
         )
         per_shape: dict[str, dict[str, Any]] = {}
-        for row in model_rows:
+        for row in canonical_rows:
             if _is_variant_row(row):
                 continue  # paired-probe variants never seed capability rows
             config = str(row.get("config_id"))
@@ -2547,11 +2579,11 @@ def evaluate_r4(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "aggregate_basis": aggregate_basis(row),
                     "p95_latency_ms": row.get("p95_latency_ms"),
                 }
-        solo = _find(model_rows, "C1", 1) or _find(model_rows, "C3", 1)
+        solo = _find(canonical_rows, "C1", 1) or _find(canonical_rows, "C3", 1)
         splitting: dict[str, float] = {}
         for k in SCALING_K:
-            c1 = _find(model_rows, "C1", k)
-            c1b = _find(model_rows, "C1b", k)
+            c1 = _find(canonical_rows, "C1", k)
+            c1b = _find(canonical_rows, "C1b", k)
             if c1 is not None and c1b is not None and cell_aggregate(c1) > 0:
                 splitting[f"C1b_over_C1_at_np{k}"] = round(
                     cell_aggregate(c1b) / cell_aggregate(c1), 3
@@ -2560,6 +2592,9 @@ def evaluate_r4(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             {
                 "model_key": model_key,
                 "quant": quant,
+                "status": "decision_grade",
+                "decision_grade": True,
+                "observation_only_cells": observation_only,
                 "recommended": {
                     "config_id": recommended.get("config_id"),
                     "np": recommended.get("np"),
@@ -2591,11 +2626,11 @@ def evaluate_r4(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "spec_dec": recommended.get("spec_dec"),
                     "draft_accept_rate": recommended.get("draft_accept_rate"),
                     "accept_rates_per_cell": {
-                        row["cell_id"]: row.get("draft_accept_rate") for row in model_rows
+                        row["cell_id"]: row.get("draft_accept_rate") for row in canonical_rows
                     },
                 },
                 "kv_unified_attestation": {
-                    row["cell_id"]: bool(row.get("kv_unified")) for row in model_rows
+                    row["cell_id"]: bool(row.get("kv_unified")) for row in canonical_rows
                 },
             }
         )
@@ -2742,6 +2777,12 @@ def render_summary_md(rules: dict[str, Any], rows: list[dict[str, Any]]) -> str:
     lines.append("")
     for entry in rules["R4"]:
         recommended = entry["recommended"]
+        if recommended is None:
+            lines.append(
+                f"- {entry['model_key']}+{entry['quant']}: no decision-grade recommendation "
+                f"({entry.get('note', 'insufficient evidence')})"
+            )
+            continue
         lines.append(
             f"- {entry['model_key']}+{entry['quant']}: {recommended['config_id']}@np"
             f"{recommended['np']} ({recommended['aggregate_tasks_per_hour']} tasks/h)"
