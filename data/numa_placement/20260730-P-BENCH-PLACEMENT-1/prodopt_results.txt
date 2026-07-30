@@ -1,0 +1,21 @@
+=== gemma_PRODSPEC ===
+    extra: -md /mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf --spec-type draft-mtp --spec-draft-n-max 2 --draft-p-min 0.0 --threads-draft 16
+    decode tok/s: n=3 median=56.86 min=56.52 max=57.19
+    draft acceptance: mean=0.866  (spec-dec ACTIVE)
+=== gemma_nospec ===
+    extra: 
+    decode tok/s: n=3 median=37.63 min=37.18 max=37.78
+    draft acceptance: none reported (spec-dec inactive)
+=== q122_PRODSPEC ===
+    extra: --spec-type draft-mtp --spec-draft-n-max 4 --device-draft none
+    decode tok/s: n=3 median=24.00 min=23.96 max=24.11
+    draft acceptance: mean=0.831  (spec-dec ACTIVE)
+=== q122_nospec ===
+    extra: 
+    decode tok/s: n=3 median=11.30 min=11.25 max=11.33
+    draft acceptance: none reported (spec-dec inactive)
+=== q35_PRODSPEC ===
+    extra: --spec-type draft-mtp --spec-draft-n-max 4 --draft-p-split 0 --device-draft none
+    decode tok/s: n=3 median=40.22 min=40.11 max=40.29
+    draft acceptance: mean=0.746  (spec-dec ACTIVE)
+=== PRODOPT DONE ===

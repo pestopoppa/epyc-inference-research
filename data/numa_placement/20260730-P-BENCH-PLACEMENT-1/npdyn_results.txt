@@ -1,0 +1,9 @@
+=== ARM mixed ===
+  mixed: windowed decode rate (tg_3s) as each task progresses
+    task   1: 43.5@132 -> 47.0@274 -> 46.7@416 -> 45.9@554
+    task   2: 43.5@132 -> 47.0@274 -> 46.7@416 -> 45.9@554
+=== ARM control ===
+  control: windowed decode rate (tg_3s) as each task progresses
+    task   0: 46.2@141 -> 48.4@287 -> 45.8@426 -> 42.5@554
+    task   1: 46.2@141 -> 48.4@287 -> 45.8@426 -> 42.5@554
+=== NPDYN DONE ===
