@@ -1,0 +1,22 @@
+##### gemma26B — 4x quarter fleet, --no-mmap, membind per node #####
+--- np=1 per instance  (T=4) ---
+  per-stream tok/s: n=4 min=12.53 median=15.14 max=16.06
+  FLEET AGGREGATE : 58.88 tok/s
+--- np=2 per instance  (T=8) ---
+  per-stream tok/s: n=8 min=11.28 median=12.23 max=12.85
+  FLEET AGGREGATE : 97.27 tok/s
+##### qwen3next80B — 4x quarter fleet, --no-mmap, membind per node #####
+--- np=1 per instance  (T=4) ---
+  per-stream tok/s: n=4 min=9.47 median=10.86 max=11.45
+  FLEET AGGREGATE : 42.65 tok/s
+--- np=2 per instance  (T=8) ---
+  per-stream tok/s: n=8 min=6.71 median=8.06 max=10.40
+  FLEET AGGREGATE : 66.62 tok/s
+##### qwen35_122B — 4x quarter fleet, --no-mmap, membind per node #####
+--- np=1 per instance  (T=4) ---
+  per-stream tok/s: n=4 min=3.29 median=3.63 max=3.74
+  FLEET AGGREGATE : 14.29 tok/s
+--- np=2 per instance  (T=8) ---
+  per-stream tok/s: n=8 min=2.68 median=2.95 max=3.18
+  FLEET AGGREGATE : 23.50 tok/s
+=== FLEETPERROLE DONE ===
