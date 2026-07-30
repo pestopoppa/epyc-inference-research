@@ -1,0 +1,19 @@
+=== np=1 prompt=short ctx=32768 reps=3 ===
+  per-stream tok/s: n=3 median=36.65 min=35.88 max=36.66
+  prefill tok/s   : median=78.37
+=== np=1 prompt=p8k ctx=32768 reps=3 ===
+  per-stream tok/s: n=3 median=22.79 min=22.72 max=22.85
+  prefill tok/s   : median=13.11
+=== np=4 prompt=short ctx=65536 reps=3 ===
+  per-stream tok/s: n=12 median=32.37 min=31.93 max=32.64
+  prefill tok/s   : median=58.65
+=== np=4 prompt=p8k ctx=65536 reps=3 ===
+  per-stream tok/s: n=12 median=20.05 min=0.80 max=20.20
+  prefill tok/s   : median=10.41
+=== np=8 prompt=short ctx=131072 reps=3 ===
+  per-stream tok/s: n=24 median=25.87 min=25.73 max=26.32
+  prefill tok/s   : median=45.89
+=== np=8 prompt=p8k ctx=131072 reps=3 ===
+  per-stream tok/s: n=24 median=12.60 min=0.32 max=14.05
+  prefill tok/s   : median=6.50
+=== SLOTCHECK DONE ===
