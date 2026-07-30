@@ -1,0 +1,9 @@
+=== full_alone | cpuset=0-95 | -t 96 | lane-proxy=off ===
+    decode tok/s: n=3 median=40.28 min=40.28 max=40.30  accept=0.746
+=== full_withGPU | cpuset=0-95 | -t 96 | lane-proxy=ON ===
+    decode tok/s: n=3 median=40.52 min=40.47 max=40.53  accept=0.746
+=== half_alone | cpuset=0-47,96-143 | -t 48 | lane-proxy=off ===
+    decode tok/s: n=3 median=24.72 min=24.70 max=24.80  accept=0.746
+=== half_withGPU | cpuset=0-47,96-143 | -t 48 | lane-proxy=ON ===
+    decode tok/s: n=3 median=24.85 min=24.78 max=24.86  accept=0.746
+=== GPUOVERLAP DONE ===
