@@ -265,7 +265,7 @@ def assert_canonical_env(env: dict[str, str],
 # Decode-only tg128 r=2 takes ~6 seconds and serves as both a speed gate AND
 # the load source for the freq-under-load gate (parallel sampling).
 TRIPWIRE_MODEL_PATH: str = (
-    "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/"
+    "/mnt/raid0/llm/models/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/"
     "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf"
 )
 TRIPWIRE_TARGET_TPS: float = 28.0  # raw llama-bench baseline ~29; accelerated recipes are ~47
