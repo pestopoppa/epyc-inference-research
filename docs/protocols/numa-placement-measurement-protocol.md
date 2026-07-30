@@ -1,12 +1,23 @@
 # P-BENCH-PLACEMENT-1 — NUMA placement and concurrency measurement protocol
 
 **Protocol id**: `P-BENCH-PLACEMENT-1`
-**Status**: **STAGED** — implementation spec complete; **not yet ratified into
-`/workspace/MEASUREMENT.md`**. The measurement trust boundary is
-human-amendment-only (`MEASUREMENT.md` §4, `MEASUREMENT_POLICY.md` → *Trust boundary*), so this
-file is the executable contract and the registry entry in Appendix A is what the operator applies.
-Until that amendment lands, a run conforming to this document is **observation-grade by
-construction** — it may inform design, and it may not gate keep / revert / deploy / promote.
+**Status**: ✅ **RATIFIED 2026-07-30.** Registered in `/workspace/MEASUREMENT.md` §2 and given
+normative text in the CPU annex `/workspace/measurement/protocols/bench-cpu.md`, applied by the
+operator at epyc-root commit `07b7dcab`. A run conforming to this document **is decision-grade
+within its scope** and may gate keep / revert / deploy / promote — subject to this protocol's own
+gates, which are not waived by ratification: a run missing measured locality, or failing the
+`np=1` anchor gate, remains observation-grade or VOID respectively.
+
+> **Superseded status text, retained so the change is auditable:** this file previously read
+> *"STAGED — not yet ratified … a run conforming to this document is observation-grade by
+> construction"*. That was true when written and became stale the same day. Corrected 2026-07-30
+> after the contradiction was caught during authoring of `MRG-1` — the constitution said ratified
+> while this file still said staged, so anyone starting from the protocol file would have wrongly
+> concluded no placement number could gate a decision. **`MEASUREMENT.md` is the authority; where
+> this file disagrees with it, it is wrong.**
+
+Appendix A below is likewise historical: it was the *proposed* registry entry and has since been
+applied. It is retained as the authoring record, not as a pending action.
 **Created**: 2026-07-30
 **Supersedes**: nothing. **Extends**: `P-BENCH-1` (single-instance decode), `P-BENCH-2`
 (multi-instance aggregate), `P-BENCH-3` (batched slot decode) — none of which constrain *memory
