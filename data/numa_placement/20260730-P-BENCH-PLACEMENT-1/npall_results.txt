@@ -1,0 +1,37 @@
+##### worker_general_gemma26B #####
+  np=1
+  per-stream tok/s : n=1 min=36.11 median=36.11 max=36.11
+  AGGREGATE tok/s  : 36.11
+  np=2
+  per-stream tok/s : n=2 min=29.67 median=29.80 max=29.80
+  AGGREGATE tok/s  : 59.47
+  np=4
+  per-stream tok/s : n=4 min=28.50 median=28.65 max=28.65
+  AGGREGATE tok/s  : 114.45
+  np=8
+  per-stream tok/s : n=8 min=24.55 median=24.56 max=24.57
+  AGGREGATE tok/s  : 196.48
+##### ingest_long_context_80B #####
+  np=1
+  per-stream tok/s : n=1 min=23.42 median=23.42 max=23.42
+  AGGREGATE tok/s  : 23.42
+  np=2
+  per-stream tok/s : n=2 min=19.78 median=19.78 max=19.78
+  AGGREGATE tok/s  : 39.56
+  np=4
+  per-stream tok/s : n=4 min=14.51 median=14.51 max=14.51
+  AGGREGATE tok/s  : 58.04
+  np=8
+  per-stream tok/s : n=8 min=9.01 median=9.10 max=9.10
+  AGGREGATE tok/s  : 72.53
+##### architect_general_122B #####
+  np=1
+  per-stream tok/s : n=1 min=11.06 median=11.06 max=11.06
+  AGGREGATE tok/s  : 11.06
+  np=2
+  per-stream tok/s : n=2 min=9.28 median=9.28 max=9.28
+  AGGREGATE tok/s  : 18.56
+  np=4
+  per-stream tok/s : n=4 min=6.40 median=6.44 max=6.44
+  AGGREGATE tok/s  : 25.68
+=== NPALL DONE ===
