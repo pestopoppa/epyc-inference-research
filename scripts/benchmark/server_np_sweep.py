@@ -2,9 +2,20 @@
 """P-BENCH-3 single-server -np sweep for batched/slot decode.
 
 This harness launches one llama-server instance per cell, sends a fixed
-question batch with bounded client concurrency, and records tasks/hour plus
-per-stream latency. It intentionally avoids the orchestrator role path so E1
-can test the serving primitive before E2 tests the eval driver.
+question batch with bounded client concurrency, and records aggregate decode
+throughput plus per-stream latency. It intentionally avoids the orchestrator
+role path so E1 can test the serving primitive before E2 tests the eval driver.
+
+PRIMARY METRIC (operator ruling 2026-07-30): tasks/hour is ONLY an autopilot
+metric. Every model/instance number here is reported and RANKED in tok/s —
+``aggregate_decode_tps`` (sum of the per-stream decode rates, from llama.cpp's
+own predicted_n/predicted_ms, never wall clock) with ``per_stream_decode_tps``
+(what one request sees) reported alongside it. ``tasks_per_hour`` is still
+computed and persisted as a secondary/diagnostic quantity so historical
+comparisons survive, but it ranks nothing: the tested prompts are not a
+representative task ensemble and the number is not comparable across
+--n-predict caps (a 64-token cap yields ~4x the tasks/hour of a 256-token cap
+on identical hardware, by construction). p50/p95 latency is unaffected.
 """
 
 from __future__ import annotations
@@ -20,6 +31,7 @@ import signal
 import socket
 import statistics
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -83,6 +95,17 @@ class RequestResult:
     predicted_tokens: int
     prompt_tokens: int
     predicted_tps: float
+    # predicted_ms is llama.cpp's own decode duration for this request, taken
+    # verbatim from the response "timings" block. Retained (2026-07-30) because
+    # the primary metric is a decode rate and must come from the server's
+    # timings, never from a client wall clock and never derived back out of
+    # predicted_tokens / predicted_per_second.
+    predicted_ms: float = 0.0
+    # Which client stream (pool worker) issued this request. A stream is a
+    # SERIAL sequence of requests, so its decode seconds do not overlap, while
+    # different streams decode concurrently — that is what makes
+    # sum(per-stream rate) the system-wide aggregate. -1 = unassigned.
+    stream_id: int = -1
     http_status: int | None = None
     error: str = ""
 
@@ -539,6 +562,7 @@ def send_completion(
             predicted_tokens=int(timings.get("predicted_n") or 0),
             prompt_tokens=int(timings.get("prompt_n") or 0),
             predicted_tps=float(timings.get("predicted_per_second") or 0.0),
+            predicted_ms=float(timings.get("predicted_ms") or 0.0),
             http_status=status,
             error="" if status == 200 else f"HTTP {status}",
         )
@@ -609,19 +633,35 @@ def run_prompt_batch(
     requests_path: Path,
 ) -> tuple[list[RequestResult], float]:
     results: list[RequestResult] = []
+    # Stable 0..np_level-1 stream ids, one per pool worker thread. The pool has
+    # exactly np_level workers and each worker runs its requests serially, so a
+    # worker IS a client stream: its decode seconds never overlap with its own,
+    # and overlap fully with the other streams'. summarize_cell needs that
+    # grouping to sum per-stream decode rates into the system-wide aggregate
+    # (operator ruling 2026-07-30).
+    stream_ids: dict[int, int] = {}
+    stream_lock = threading.Lock()
+
+    def dispatch(prompt: PromptSpec, index: int) -> RequestResult:
+        ident = threading.get_ident()
+        with stream_lock:
+            stream_id = stream_ids.setdefault(ident, len(stream_ids))
+        result = send_completion(
+            port=port,
+            prompt=prompt,
+            request_index=index,
+            model_label=model.label,
+            np_level=np_level,
+            n_predict=n_predict,
+            timeout_s=request_timeout_s,
+        )
+        result.stream_id = stream_id
+        return result
+
     start = time.perf_counter()
     with ThreadPoolExecutor(max_workers=np_level) as pool:
         futures = [
-            pool.submit(
-                send_completion,
-                port=port,
-                prompt=prompt,
-                request_index=index,
-                model_label=model.label,
-                np_level=np_level,
-                n_predict=n_predict,
-                timeout_s=request_timeout_s,
-            )
+            pool.submit(dispatch, prompt, index)
             for index, prompt in enumerate(prompts)
         ]
         with requests_path.open("a", encoding="utf-8") as fh:
@@ -652,6 +692,32 @@ def summarize_cell(
     total_prompt = sum(result.prompt_tokens for result in successes)
     total = len(results)
     success_count = len(successes)
+    # PRIMARY metric inputs (operator ruling 2026-07-30): decode rate from
+    # llama.cpp's own predicted_n / predicted_ms, grouped by client stream.
+    # A request is excluded from BOTH numerator and denominator when either
+    # number is missing or non-positive, so the ratio stays self-consistent.
+    decode_tokens = 0
+    decode_seconds = 0.0
+    stream_decode: dict[int, list[float]] = {}
+    for result in successes:
+        if result.predicted_tokens <= 0 or result.predicted_ms <= 0:
+            continue
+        decode_tokens += int(result.predicted_tokens)
+        decode_seconds += float(result.predicted_ms) / 1000.0
+        bucket = stream_decode.setdefault(int(result.stream_id), [0.0, 0.0])
+        bucket[0] += float(result.predicted_tokens)
+        bucket[1] += float(result.predicted_ms) / 1000.0
+    stream_decode_tps = {
+        stream: tokens / seconds
+        for stream, (tokens, seconds) in sorted(stream_decode.items())
+        if seconds > 0
+    }
+    # aggregate = SUM of the per-stream decode rates (system-wide throughput);
+    # per_stream = decode tokens / decode seconds over all requests, i.e. the
+    # token-weighted mean PER-SLOT rate — what one request sees. Both are
+    # reported; neither substitutes for the other.
+    aggregate_decode_tps = sum(stream_decode_tps.values())
+    per_stream_decode_tps = (decode_tokens / decode_seconds) if decode_seconds > 0 else 0.0
     return {
         "timestamp": utc_now(),
         "protocol_id": "P-BENCH-3",
@@ -667,19 +733,29 @@ def summarize_cell(
         "success_count": success_count,
         "error_rate": ((total - success_count) / total) if total else 1.0,
         "wall_seconds": wall_s,
+        # ---- PRIMARY metric (operator ruling 2026-07-30) --------------------
+        # tok/s from llama.cpp's own predicted_n / predicted_ms. NEVER wall
+        # clock. aggregate = system-wide (sum of per-stream decode rates);
+        # per_stream = what one request sees. Both are reported because a
+        # single number hides the latency/throughput trade.
+        "aggregate_decode_tps": aggregate_decode_tps,
+        "per_stream_decode_tps": per_stream_decode_tps,
+        "decode_tokens_total": decode_tokens,
+        "decode_seconds_total": decode_seconds,
+        "decode_stream_count": len(stream_decode_tps),
+        # ---- SECONDARY / DIAGNOSTIC ----------------------------------------
+        # tasks/hour is ONLY an autopilot metric (operator ruling 2026-07-30):
+        # for a focused model/instance benchmark the prompts are not a
+        # representative ensemble and the number is not comparable across
+        # --n-predict caps. KEPT and still persisted so historical comparisons
+        # remain possible, but it ranks nothing (see build_recommendations).
         "tasks_per_hour": (success_count / wall_s * 3600.0) if wall_s > 0 else 0.0,
         # decoded tokens / TOTAL WALL TIME (includes model load, prefill,
         # queueing, idle gaps) — a wall-clock throughput, NOT a decode rate, and
         # it reads systematically LOW versus one. Renamed 2026-07-29 from
         # "aggregate_predicted_tps", which invited exactly that misreading;
-        # historical result files keep the old key and are append-only.
-        # A true decode rate would be sum(predicted_n) / sum(predicted_ms) from
-        # llama.cpp's per-request timings block. RequestResult here keeps only
-        # predicted_tokens / predicted_per_second and drops predicted_ms (see
-        # send_completion), so the true decode rate is NOT plumbed through in this
-        # script and is deliberately not emitted rather than approximated.
-        # server_numa_np_sweep.py retains the raw timings and does emit
-        # "aggregate_decode_tps".
+        # historical result files keep the old key and are append-only, so
+        # readers must accept both. Diagnostic only.
         "aggregate_wallclock_tps": (total_predicted / wall_s) if wall_s > 0 else 0.0,
         "predicted_tokens_total": total_predicted,
         "prompt_tokens_total": total_prompt,
@@ -702,8 +778,16 @@ def write_csv_row(path: Path, row: dict[str, Any]) -> None:
         "total_count",
         "error_rate",
         "wall_seconds",
+        # PRIMARY (tok/s) first — operator ruling 2026-07-30.
+        "aggregate_decode_tps",
+        "per_stream_decode_tps",
+        # raw inputs, so both rates stay re-derivable from summary.csv alone
+        "decode_tokens_total",
+        "decode_seconds_total",
+        "decode_stream_count",
+        # SECONDARY / DIAGNOSTIC: autopilot-only tasks/hour, and a wall-clock
+        # token rate that includes load/prefill/idle — see summarize_cell().
         "tasks_per_hour",
-        # wall-clock throughput, not a decode rate — see summarize_cell()
         "aggregate_wallclock_tps",
         "predicted_tokens_total",
         "prompt_tokens_total",
@@ -820,6 +904,35 @@ def run_cell(
             )
 
 
+def row_throughput_tps(row: dict[str, Any]) -> float:
+    """PRIMARY ranking metric: aggregate decode throughput in tok/s.
+
+    Operator ruling 2026-07-30: model/instance benchmarks rank in tok/s, never
+    tasks/hour. Reader tolerance for append-only data: prefer the new
+    decode-rate key, then fall back to the wall-clock token rate under BOTH its
+    current name and its pre-2026-07-29 name, so summaries recorded before this
+    change stay rankable. Which basis was used is reported per model.
+    """
+    value = float(row.get("aggregate_decode_tps") or 0.0)
+    if value > 0:
+        return value
+    for legacy_key in ("aggregate_wallclock_tps", "aggregate_predicted_tps"):
+        value = float(row.get(legacy_key) or 0.0)
+        if value > 0:
+            return value
+    return 0.0
+
+
+def row_throughput_basis(row: dict[str, Any]) -> str:
+    """Which number row_throughput_tps returned: 'decode' or 'wallclock_fallback'."""
+    if float(row.get("aggregate_decode_tps") or 0.0) > 0:
+        return "decode"
+    for legacy_key in ("aggregate_wallclock_tps", "aggregate_predicted_tps"):
+        if float(row.get(legacy_key) or 0.0) > 0:
+            return "wallclock_fallback"
+    return "none"
+
+
 def build_recommendations(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     by_model: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
@@ -832,13 +945,17 @@ def build_recommendations(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not successful:
             recommendations.append({"model": model, "status": "no_successful_cells"})
             continue
-        best = max(successful, key=lambda row: row.get("tasks_per_hour", 0.0))
-        best_rate = float(best.get("tasks_per_hour") or 0.0)
+        # best-np and the 95%-of-peak saturation knee are DECISIONS: they rank
+        # on aggregate decode tok/s (operator ruling 2026-07-30), never on
+        # tasks/hour. The tasks/hour numbers ride along, clearly labelled
+        # secondary, so no historical comparison loses its reference point.
+        best = max(successful, key=row_throughput_tps)
+        best_rate = row_throughput_tps(best)
         saturation = min(
             (
                 row
                 for row in successful
-                if best_rate > 0 and float(row.get("tasks_per_hour") or 0.0) >= 0.95 * best_rate
+                if best_rate > 0 and row_throughput_tps(row) >= 0.95 * best_rate
             ),
             key=lambda row: int(row["np"]),
         )
@@ -846,12 +963,31 @@ def build_recommendations(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             {
                 "model": model,
                 "status": "ok",
+                "metric": "aggregate_decode_tps",
                 "best_np": best["np"],
-                "best_tasks_per_hour": round(best_rate, 3),
+                "best_decode_tps": round(best_rate, 3),
+                "best_per_stream_decode_tps": round(
+                    float(best.get("per_stream_decode_tps") or 0.0), 3
+                ),
                 "saturation_np_95pct": saturation["np"],
-                "saturation_tasks_per_hour": round(float(saturation.get("tasks_per_hour") or 0.0), 3),
+                "saturation_decode_tps": round(row_throughput_tps(saturation), 3),
+                "saturation_per_stream_decode_tps": round(
+                    float(saturation.get("per_stream_decode_tps") or 0.0), 3
+                ),
+                "throughput_basis": {
+                    "best": row_throughput_basis(best),
+                    "saturation": row_throughput_basis(saturation),
+                },
+                "mixed_throughput_basis": (
+                    row_throughput_basis(best) != row_throughput_basis(saturation)
+                ),
                 "best_p95_latency_ms": round(float(best.get("p95_latency_ms") or 0.0), 1),
                 "saturation_p95_latency_ms": round(float(saturation.get("p95_latency_ms") or 0.0), 1),
+                # secondary / diagnostic (operator ruling 2026-07-30)
+                "best_tasks_per_hour": round(float(best.get("tasks_per_hour") or 0.0), 3),
+                "saturation_tasks_per_hour": round(
+                    float(saturation.get("tasks_per_hour") or 0.0), 3
+                ),
             }
         )
     return recommendations
@@ -996,6 +1132,14 @@ def main() -> int:
                     "success_count": 0,
                     "error_rate": 1.0,
                     "wall_seconds": 0.0,
+                    # PRIMARY (tok/s) zeroed explicitly so a failed cell can
+                    # never be mistaken for "metric absent, fall back".
+                    "aggregate_decode_tps": 0.0,
+                    "per_stream_decode_tps": 0.0,
+                    "decode_tokens_total": 0,
+                    "decode_seconds_total": 0.0,
+                    "decode_stream_count": 0,
+                    # secondary / diagnostic (operator ruling 2026-07-30)
                     "tasks_per_hour": 0.0,
                     "aggregate_wallclock_tps": 0.0,
                     "predicted_tokens_total": 0,
@@ -1024,8 +1168,15 @@ def main() -> int:
             if args.dry_run:
                 print("  dry-run command:", " ".join(str(part) for part in row["server_command"]), flush=True)
             else:
+                # tok/s leads (operator ruling 2026-07-30); the wall-clock rate
+                # and tasks/hour trail, explicitly labelled secondary.
                 print(
-                    "  tasks/hour={:.2f} wallclock_tps={:.2f} p95={:.0f}ms err={:.1%}".format(
+                    "  decode tok/s agg={:.2f} per-stream={:.2f} p95={:.0f}ms err={:.1%}"
+                    " | secondary tasks/hour={:.2f} wallclock_tps={:.2f}".format(
+                        row_throughput_tps(row),
+                        float(row.get("per_stream_decode_tps") or 0.0),
+                        float(row.get("p95_latency_ms") or 0.0),
+                        float(row.get("error_rate") or 0.0),
                         float(row.get("tasks_per_hour") or 0.0),
                         # prefer the new key; fall back to the old one so rows
                         # loaded from historical (append-only) results still read
@@ -1034,8 +1185,6 @@ def main() -> int:
                             or row.get("aggregate_predicted_tps")
                             or 0.0
                         ),
-                        float(row.get("p95_latency_ms") or 0.0),
-                        float(row.get("error_rate") or 0.0),
                     ),
                     flush=True,
                 )
@@ -1044,6 +1193,15 @@ def main() -> int:
         "created_at": utc_now(),
         "protocol_id": "P-BENCH-3",
         "summary_csv": str(output_dir / "summary.csv"),
+        # Operator ruling 2026-07-30: tasks/hour is ONLY an autopilot metric;
+        # model/instance benchmarks report and rank in tok/s. tasks/hour is
+        # still persisted below as a secondary/diagnostic number.
+        "primary_metric": "aggregate_decode_tps",
+        "secondary_metrics": [
+            "per_stream_decode_tps",
+            "tasks_per_hour",
+            "aggregate_wallclock_tps",
+        ],
         "recommendations": build_recommendations(summary_rows),
     }
     (output_dir / "recommendations.json").write_text(

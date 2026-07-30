@@ -302,6 +302,27 @@ def _current_jsonl_path(manifest: dict[str, Any], run_dir: Path) -> Path:
     return run_dir / "current_quarters.jsonl"
 
 
+def _batch_row_throughput_tps(row: dict[str, Any]) -> float:
+    """PRIMARY selection metric for a server_np_sweep summary row: tok/s.
+
+    Operator ruling 2026-07-30: tasks/hour is ONLY an autopilot metric; picking
+    which np cell represents the batch arm is a model/instance benchmark
+    decision and must rank on aggregate decode tok/s. Reader tolerance for the
+    append-only summary.csv: prefer the decode-rate key, then fall back to the
+    wall-clock token rate under both its current and pre-2026-07-29 names, so
+    historical E2 runs still resolve a batch row.
+    """
+    for key in (
+        "aggregate_decode_tps",
+        "aggregate_wallclock_tps",
+        "aggregate_predicted_tps",
+    ):
+        value = _float_value(row, key)
+        if value > 0:
+            return value
+    return 0.0
+
+
 def _load_batch_row(path: Path) -> tuple[dict[str, Any] | None, str | None]:
     if not path.exists():
         return None, f"missing batch summary: {path}"
@@ -311,7 +332,8 @@ def _load_batch_row(path: Path) -> tuple[dict[str, Any] | None, str | None]:
         return None, f"empty batch summary: {path}"
     successful = [row for row in rows if _int_value(row, "success_count") > 0]
     candidates = successful or rows
-    return max(candidates, key=lambda row: _float_value(row, "tasks_per_hour")), None
+    # Ranked on tok/s, not tasks/hour (operator ruling 2026-07-30).
+    return max(candidates, key=_batch_row_throughput_tps), None
 
 
 def _load_current_rows(path: Path) -> tuple[list[dict[str, Any]], str | None]:
@@ -377,6 +399,11 @@ def summarize_run(
                 "error_rate": batch_error_rate,
                 "wall_seconds": batch_wall_s,
                 "wall_minutes_per_eval": batch_wall_s / 60.0 if batch_wall_s > 0 else None,
+                # PRIMARY (operator ruling 2026-07-30); tasks/hour retained
+                # below as a labelled secondary/diagnostic quantity.
+                "aggregate_decode_tps": _batch_row_throughput_tps(batch_row),
+                "per_stream_decode_tps": _float_value(batch_row, "per_stream_decode_tps"),
+                "tasks_per_hour_secondary": _float_value(batch_row, "tasks_per_hour"),
                 "tasks_per_hour": _float_value(batch_row, "tasks_per_hour"),
                 "p95_latency_ms": _float_value(batch_row, "p95_latency_ms"),
             }

@@ -935,6 +935,141 @@ def test_empty_trimmed_window_demotes_decision_grade_cell(tmp_path):
     ]
 
 
+def test_aggregate_decode_tps_sums_per_stream_rates():
+    # Operator ruling 2026-07-30: the PRIMARY metric is aggregate decode tok/s,
+    # taken from llama.cpp's own predicted_n/predicted_ms — never wall clock.
+    # Two streams, 2 requests each. Stream 0: 100 tok in 10s -> 10 tok/s.
+    # Stream 1: 300 tok in 10s -> 30 tok/s. Aggregate = 40 tok/s (system-wide,
+    # the SUM), per-stream = 400/20 = 20 tok/s (token-weighted mean per slot).
+    # Wall time is deliberately 1000s so any wall-clock contamination shows up.
+    def record(stream_id, index, predicted_n, predicted_ms):
+        return sns.StreamRequestRecord(
+            cell_id="c", qid=f"q{index}", suite="s", request_index=index,
+            stream_id=stream_id, instance_port=19080, success=True,
+            start_s=float(index), first_token_s=float(index) + 0.1,
+            end_s=float(index) + 5.0, ttft_ms=100.0, latency_ms=5000.0,
+            predicted_tokens=predicted_n, prompt_tokens=10,
+            predicted_tps=predicted_n / (predicted_ms / 1000.0),
+            timings={"predicted_n": predicted_n, "predicted_ms": predicted_ms},
+        )
+
+    records = [
+        record(0, 0, 50, 5000.0), record(0, 1, 50, 5000.0),
+        record(1, 2, 150, 5000.0), record(1, 3, 150, 5000.0),
+    ]
+    with tempfile.TemporaryDirectory() as tmp:
+        cell = load_cell(Path(tmp))
+    row = sns.summarize_cell(
+        cell=cell, records=records, wall_s=1000.0, env={"GGML_IQK": "1"},
+        instance_pids={19080: 1}, affinity={"live_affinity_verified": True},
+        run_overrides_active=False, host_warnings=[], throttle_check={"warnings": []},
+    )
+    assert abs(row["aggregate_decode_tps"] - 40.0) < 1e-9
+    assert abs(row["per_stream_decode_tps"] - 20.0) < 1e-9
+    assert row["decode_tokens_total"] == 400
+    assert abs(row["decode_seconds_total"] - 20.0) < 1e-9
+    assert row["decode_stream_count"] == 2
+    # per-stream rates reported ALONGSIDE the aggregate, and they sum to it
+    per_stream = row["per_stream"]
+    assert abs(per_stream["0"]["decode_tps"] - 10.0) < 1e-9
+    assert abs(per_stream["1"]["decode_tps"] - 30.0) < 1e-9
+    assert abs(
+        sum(entry["decode_tps"] for entry in per_stream.values())
+        - row["aggregate_decode_tps"]
+    ) < 1e-9
+    # NEVER wall clock: the wall-clock rate is a different, much smaller number
+    assert abs(row["aggregate_wallclock_tps"] - 0.4) < 1e-9
+    # tasks/hour is still computed and persisted, as a secondary diagnostic
+    assert row["tasks_per_hour_raw"] > 0
+    assert "tasks_per_hour_trimmed" in row
+    # a malformed/missing timings block drops the request from BOTH sums
+    broken = records + [
+        sns.StreamRequestRecord(
+            cell_id="c", qid="qx", suite="s", request_index=9, stream_id=2,
+            instance_port=19080, success=True, start_s=0.0, first_token_s=0.1,
+            end_s=1.0, ttft_ms=1.0, latency_ms=1000.0, predicted_tokens=999,
+            prompt_tokens=1, predicted_tps=999.0, timings={"predicted_n": 999},
+        )
+    ]
+    row2 = sns.summarize_cell(
+        cell=cell, records=broken, wall_s=1000.0, env={"GGML_IQK": "1"},
+        instance_pids={19080: 1}, affinity={"live_affinity_verified": True},
+        run_overrides_active=False, host_warnings=[], throttle_check={"warnings": []},
+    )
+    assert abs(row2["aggregate_decode_tps"] - 40.0) < 1e-9
+    assert row2["decode_tokens_total"] == 400
+
+
+def test_cell_throughput_tps_prefers_decode_then_falls_back():
+    # Reader tolerance (append-only data): prefer the new key, fall back to the
+    # old ones so historical runs stay rankable — with the basis recorded.
+    fresh = {"aggregate_decode_tps": 42.0, "aggregate_wallclock_tps": 11.0}
+    assert sns.cell_throughput_tps(fresh) == 42.0
+    assert sns.throughput_basis(fresh) == "decode"
+    renamed = {"aggregate_wallclock_tps": 11.0}
+    assert sns.cell_throughput_tps(renamed) == 11.0
+    assert sns.throughput_basis(renamed) == "wallclock_fallback"
+    legacy = {"aggregate_predicted_tps": 9.0}  # pre-2026-07-29 key
+    assert sns.cell_throughput_tps(legacy) == 9.0
+    assert sns.throughput_basis(legacy) == "wallclock_fallback"
+    # tasks/hour never feeds the primary metric, however large it is
+    tasks_only = {"tasks_per_hour_trimmed": 5000.0, "tasks_per_hour_raw": 5000.0}
+    assert sns.cell_throughput_tps(tasks_only) == 0.0
+    assert sns.throughput_basis(tasks_only) == "none"
+    # ...but it is still readable as the labelled secondary quantity
+    assert sns.cell_aggregate(tasks_only) == 5000.0
+    assert sns.aggregate_basis(tasks_only) == "trimmed"
+
+
+def test_summary_row_fixture_drives_the_primary_metric():
+    # ANTI-SHORT-CIRCUIT GUARD (operator ruling 2026-07-30, and the 2026-07-30
+    # fixture defect where a test wrote `tasks_per_hour` while cell_aggregate
+    # read `tasks_per_hour_raw`, so both sides were 0 and the pair verdict
+    # short-circuited to "insufficient_data" without ever reaching the ranking).
+    #
+    # Here the two orderings DISAGREE on purpose: tasks/hour ranks LEFT first,
+    # tok/s ranks RIGHT first. A verdict computed on the demoted metric — or a
+    # fixture that stops writing the field the code reads (the wall-clock
+    # fallback preserves the tasks/hour ordering) — cannot pass this test.
+    left = summary_row(
+        "C1b", 4, 120.0, 24000.0,
+        aggregate_decode_tps=40.0, per_stream_decode_tps=10.0,
+        aggregate_wallclock_tps=20.0,
+    )
+    right = summary_row(
+        "C3", 2, 100.0, 15000.0,
+        aggregate_decode_tps=90.0, per_stream_decode_tps=45.0,
+        aggregate_wallclock_tps=45.0,
+    )
+    assert sns.cell_aggregate(left) > sns.cell_aggregate(right)          # tasks/hour
+    assert sns.cell_throughput_tps(left) < sns.cell_throughput_tps(right)  # tok/s
+
+    pair = sns._pair_verdict(left, right, label="metric-ruling", prefer_on_tie="C1b")
+    assert pair["metric"] == "aggregate_decode_tps"
+    assert pair["status"] == "winner"          # 55.6% tok/s margin, not a tie
+    assert pair["winner_config"] == "C3"       # tok/s wins; tasks/hour would say C1b
+    assert pair["cells"][right["cell_id"]] == 90.0
+    # tasks/hour is NOT deleted — it rides along, explicitly labelled secondary
+    assert pair["cells_tasks_per_hour_secondary"][left["cell_id"]] == 120.0
+    assert pair["cells_tasks_per_hour_secondary"][right["cell_id"]] == 100.0
+
+    rows = [left, right]
+    r2 = sns.evaluate_r2(rows)["models"]["testmodel_q8_0+Q8_0"]
+    assert r2["peak_cell"] == right["cell_id"]          # peak on tok/s
+    assert r2["peak_decode_tps"] == 90.0
+    assert r2["peak_tasks_per_hour_secondary"] == 100.0
+    assert [entry["cell_id"] for entry in r2["pareto"]][0] == right["cell_id"]
+
+    r4 = sns.evaluate_r4(rows)[0]
+    # >= 90% of peak tok/s (81) admits only C3@2; on tasks/hour (>=108) it
+    # would have admitted only C1b@4 and recommended the opposite shape.
+    assert r4["recommended"]["config_id"] == "C3"
+    assert r4["recommended"]["aggregate_decode_tps"] == 90.0
+    assert r4["recommended"]["per_stream_decode_tps"] == 45.0
+    assert r4["recommended"]["aggregate_tasks_per_hour"] == 100.0  # secondary kept
+    assert "tok/s" in r4["recommended"]["rule"]
+
+
 def test_percentile_math():
     values = [float(value) for value in range(1, 101)]
     assert sns.percentile(values, 0.50) == 50.0
@@ -1272,6 +1407,17 @@ def test_execute_throttle_warning_during_driver_demotes():
 
 
 def summary_row(config_id, np_level, aggregate, p95, **overrides):
+    """Synthetic summarizer row.
+
+    ``aggregate`` populates the PRIMARY ranked metric — ``aggregate_decode_tps``
+    (operator ruling 2026-07-30) — AND the secondary tasks/hour fields, so a
+    fixture can never silently rank on the demoted metric. Guarded by
+    test_summary_row_fixture_drives_the_primary_metric: if the code stops
+    reading aggregate_decode_tps, or if this fixture stops writing it, that
+    test fails instead of every ranking assertion quietly short-circuiting on
+    a 0-vs-0 comparison (the exact fixture/field-name mismatch that made a
+    pair verdict short-circuit to "insufficient_data" on 2026-07-30).
+    """
     row = {
         "cell_id": f"testmodel_q8_0-{config_id}-np{np_level}",
         "model_key": "testmodel_q8_0",
@@ -1281,8 +1427,16 @@ def summary_row(config_id, np_level, aggregate, p95, **overrides):
         "success_count": 43,
         "total_count": 43,
         "wall_seconds": 900.0,
+        # PRIMARY — what every R1/R2/R4 decision ranks on
+        "aggregate_decode_tps": aggregate,
+        "per_stream_decode_tps": aggregate / max(np_level, 1),
+        "decode_tokens_total": 43 * 256,
+        "decode_seconds_total": 43 * 256 / aggregate if aggregate else 0.0,
+        "decode_stream_count": np_level,
+        # SECONDARY / DIAGNOSTIC — still emitted, never ranked on
         "tasks_per_hour_raw": aggregate,
         "tasks_per_hour_trimmed": aggregate,
+        "aggregate_wallclock_tps": aggregate * 0.5,
         "p50_latency_ms": p95 * 0.6,
         "p95_latency_ms": p95,
         "ttft_p50_ms": 500.0,
@@ -1415,17 +1569,25 @@ def test_summarizer_variant_rows_excluded_and_probes_emitted():
     kvu = probes["kvu_split_pairs"][0]
     assert kvu["status"] == "ok"
     assert kvu["split_cell"] == "qwen36_q8_0-C1-np16-scout"
+    # escalation delta is computed on tok/s (operator ruling 2026-07-30)
+    assert kvu["metric"] == "aggregate_decode_tps"
+    assert kvu["kvu_decode_tps"] == 120.0 and kvu["split_decode_tps"] == 100.0
     assert abs(kvu["delta_fraction"] - 0.2) < 1e-9
     assert kvu["escalate_to_operator"] is True  # >= 5% delta (M06)
+    # tasks/hour is not deleted, just demoted to a labelled secondary readout
+    assert kvu["kvu_tasks_per_hour"] == 120.0
     shape = probes["dense_c1_shape_pairs"][0]
     assert shape["status"] == "ok"
     assert shape["winner_shape"] == "full"
+    assert shape["full_decode_tps"] == 50.0 and shape["half0_decode_tps"] == 30.0
     assert shape["half_cell"] == "qwen36_27b_q8-C1-np1-scout"
     # R4 recommended pick also excludes variants (kvu 120 > split 100)
     r4 = sns.evaluate_r4(rows)
     assert r4[0]["recommended"]["config_id"] == "C1"
     assert r4[0]["recommended"]["np"] == 16
-    assert r4[0]["recommended"]["aggregate_tasks_per_hour"] == 100.0
+    assert r4[0]["recommended"]["throughput_basis"] == "decode"
+    assert r4[0]["recommended"]["aggregate_decode_tps"] == 100.0
+    assert r4[0]["recommended"]["aggregate_tasks_per_hour"] == 100.0  # secondary
 
 
 def test_summarizer_mixed_metric_basis_flagged():
@@ -1569,6 +1731,14 @@ def test_summarizer_r4_model_keyed_capability_rows():
     # smallest-latency cell achieving >= 90% of peak (120*0.9=108): C1b@4 (p95 24000)
     assert entry["recommended"]["config_id"] == "C1b"
     assert entry["recommended"]["np"] == 4
+    # the pick is made on the PRIMARY metric, from the primary key — if the
+    # fixture ever stopped writing aggregate_decode_tps this would read
+    # "wallclock_fallback" and fail instead of silently ranking on the fallback
+    assert entry["metric"] == "aggregate_decode_tps"
+    assert entry["recommended"]["throughput_basis"] == "decode"
+    assert entry["recommended"]["aggregate_decode_tps"] == 120.0
+    assert entry["recommended"]["peak_decode_tps"] == 120.0
+    assert entry["per_shape_np_optimum"]["C3"]["aggregate_decode_tps"] == 120.0
     assert entry["per_shape_np_optimum"]["C3"]["np"] == 8
     assert entry["solo_shape"]["config_id"] == "C1"
     assert entry["numa_splitting_potential"]["C1b_over_C1_at_np4"] == 2.0

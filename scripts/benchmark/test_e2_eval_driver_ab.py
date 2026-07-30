@@ -167,11 +167,19 @@ def _write_completed_e2_run(tmp_path: Path, *, decision_grade: bool = True) -> P
         ],
     }
     (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    # Two candidate cells whose orderings DISAGREE: np=4 wins on tasks/hour
+    # (900 > 516), np=8 wins on aggregate decode tok/s (200 > 100). Operator
+    # ruling 2026-07-30 makes tok/s the selection metric, so np=8 must be
+    # picked — and only np=8 yields the 5.0 wall-minutes/eval asserted below.
+    # Ranking on the demoted metric would pick np=4 and fail loudly instead of
+    # short-circuiting on a single-candidate fixture.
     (batch_dir / "summary.csv").write_text(
         "\n".join(
             [
-                "model,np,success_count,total_count,error_rate,wall_seconds,tasks_per_hour,p95_latency_ms",
-                "qwen36_q8_0,8,43,43,0.0,300.0,516.0,12000.0",
+                "model,np,success_count,total_count,error_rate,wall_seconds,"
+                "aggregate_decode_tps,per_stream_decode_tps,tasks_per_hour,p95_latency_ms",
+                "qwen36_q8_0,8,43,43,0.0,300.0,200.0,25.0,516.0,12000.0",
+                "qwen36_q8_0,4,43,43,0.0,600.0,100.0,25.0,900.0,9000.0",
             ]
         )
         + "\n",
@@ -198,6 +206,11 @@ def test_summarize_run_marks_fast_decision_grade_batch_keep_candidate(tmp_path):
 
     assert summary["status"] == "keep_candidate"
     assert summary["decision_grade"] is True
+    # batch row selected on tok/s, not tasks/hour (operator ruling 2026-07-30)
+    assert summary["batch_arm"]["np"] == 8
+    assert summary["batch_arm"]["aggregate_decode_tps"] == 200.0
+    assert summary["batch_arm"]["per_stream_decode_tps"] == 25.0
+    assert summary["batch_arm"]["tasks_per_hour"] == 516.0  # secondary, kept
     assert summary["batch_arm"]["wall_minutes_per_eval"] == 5.0
     assert summary["current_arm"]["wall_minutes_per_eval"] == 10.0
     assert summary["comparison"]["speedup_current_over_batch"] == 2.0

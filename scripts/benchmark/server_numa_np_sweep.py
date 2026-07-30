@@ -24,6 +24,14 @@ operator-approved quiet windows).
 Offline summarizer: --summarize-run RUN_DIR emits the iso-T comparison tables
 and the pre-registered R1-R4 rule evaluation (R3 refuses to price the eval
 lane until a fresh current-arm baseline row is supplied).
+
+PRIMARY METRIC (operator ruling 2026-07-30): tasks/hour is ONLY an autopilot
+metric. Every model/instance number here is reported and RANKED in tok/s —
+``aggregate_decode_tps`` (sum of the per-stream decode rates, from llama.cpp's
+own predicted_n/predicted_ms, never wall clock) with ``per_stream_decode_tps``
+(what one request sees) reported alongside it. tasks/hour is still computed and
+persisted as a secondary/diagnostic quantity so historical comparisons survive,
+but it ranks nothing. p50/p95 latency is unaffected and remains the second axis.
 """
 
 from __future__ import annotations
@@ -125,8 +133,30 @@ VARIANT_CELL_ID_SUFFIXES = ("-kvu", "-scout-full", "-e1parity")
 # (review F5: C1b instances are halves like C1@1; C2 instances are quarters
 # like C3@1).
 R2_K1_PROXY = {"C1b": "C1", "C2": "C3"}
+PRIMARY_METRIC_RULING = (
+    "operator ruling 2026-07-30: tasks/hour is ONLY an autopilot metric. All "
+    "model/instance benchmark metrics are in tok/s. The PRIMARY, ranked number "
+    "is aggregate_decode_tps = SUM over streams of (stream decoded tokens / "
+    "stream decode seconds), from llama.cpp's own predicted_n/predicted_ms — "
+    "never wall clock. per_stream_decode_tps (what one request sees) is "
+    "reported ALONGSIDE it, never instead of it. tasks/hour is still computed "
+    "and persisted as a SECONDARY/DIAGNOSTIC quantity for historical "
+    "comparability; it ranks nothing. It is not comparable across n_predict "
+    "caps (a 64-token cap yields ~4x the tasks/hour of a 256-token cap on "
+    "identical hardware) and the prompt set is not a representative task "
+    "ensemble. p50/p95 latency is unaffected and remains the second axis."
+)
+THROUGHPUT_BASIS_CAVEAT = (
+    "aggregate decode tok/s falls back to the wall-clock token rate "
+    "(aggregate_wallclock_tps, or its pre-2026-07-29 name "
+    "aggregate_predicted_tps) for rows recorded before 2026-07-30, which carry "
+    "no decode-based aggregate; the fallback includes model load, prefill, "
+    "queueing and idle gaps and reads systematically LOW. Every comparison "
+    "records the per-cell throughput_basis and flags mixed-basis pairs."
+)
 TRIM_BASIS_CAVEAT = (
-    "aggregate tasks/hour falls back from trimmed to raw when the steady-state "
+    "SECONDARY metric only (see PRIMARY_METRIC_RULING): aggregate tasks/hour "
+    "falls back from trimmed to raw when the steady-state "
     "window is empty (structural at high K: the 43-prompt closed loop leaves "
     "few second-round requests); raw includes ramp+drain and systematically "
     "understates steady throughput — every R1/R2/R4 comparison records the "
@@ -1313,14 +1343,36 @@ def summarize_cell(
     ttfts = [record.ttft_ms for record in successes if record.ttft_ms is not None]
     total_predicted = sum(record.predicted_tokens for record in successes)
     total_prompt = sum(record.prompt_tokens for record in successes)
+    # OPERATOR RULING 2026-07-30: "tasks per hour is ONLY an autopilot metric.
+    # All model/instance benchmark metrics are in tok/s." tasks/hour is a
+    # representative-workload metric for the orchestrator; for a focused
+    # model/instance benchmark the tested prompts are not a representative
+    # ensemble AND tasks/hour is not even comparable across token caps (a
+    # 64-token cap yields ~4x the tasks/hour of a 256-token cap, on identical
+    # hardware, by construction). It had already caused one misreading. The
+    # tasks/hour fields below are STILL computed and persisted, as a
+    # SECONDARY/DIAGNOSTIC quantity so historical comparisons survive and no
+    # on-disk record loses information — but every ranking, peak selection and
+    # winner verdict in this file now sorts on tok/s (see cell_throughput_tps).
+    #
     # True decode rate inputs, taken from llama.cpp's own per-request timings
     # (record.timings is the verbatim server "timings" block). predicted_ms is
     # the time the server actually spent generating that request's tokens, so
-    # sum(predicted_n) / sum(predicted_ms) is a decode rate. Requests whose
-    # timings block is missing/malformed are excluded from BOTH sums so the
-    # ratio stays self-consistent.
+    # predicted_n / predicted_ms is a decode rate. Requests whose timings block
+    # is missing/malformed are excluded from BOTH sums so the ratio stays
+    # self-consistent. Grouping by stream_id matters: a stream is a serial
+    # sequence of requests, so its own decode seconds do NOT overlap, while
+    # different streams decode CONCURRENTLY. Hence:
+    #   per-stream decode rate  = stream tokens / stream decode seconds
+    #   aggregate decode rate   = SUM of the per-stream rates  (system-wide)
+    # Summing across streams is what makes the aggregate a system throughput;
+    # sum(predicted_n)/sum(predicted_ms) over ALL requests instead divides by
+    # overlapping slot-seconds and yields the token-weighted mean PER-SLOT rate
+    # (kept below as per_stream_decode_tps). Never wall clock: wall time
+    # includes model load, prefill, queueing and idle gaps.
     decode_tokens = 0
     decode_seconds = 0.0
+    stream_decode: dict[int, list[float]] = {}
     for record in successes:
         predicted_n = record.timings.get("predicted_n")
         predicted_ms = record.timings.get("predicted_ms")
@@ -1332,6 +1384,16 @@ def summarize_cell(
             continue
         decode_tokens += int(predicted_n)
         decode_seconds += float(predicted_ms) / 1000.0
+        bucket = stream_decode.setdefault(record.stream_id, [0.0, 0.0])
+        bucket[0] += float(predicted_n)
+        bucket[1] += float(predicted_ms) / 1000.0
+    stream_decode_tps = {
+        stream: tokens / seconds
+        for stream, (tokens, seconds) in sorted(stream_decode.items())
+        if seconds > 0
+    }
+    aggregate_decode_tps = sum(stream_decode_tps.values())
+    per_stream_decode_tps = (decode_tokens / decode_seconds) if decode_seconds > 0 else 0.0
     per_tps = [record.predicted_tps for record in successes if record.predicted_tps > 0]
     draft_totals = [record.draft_n for record in successes if record.draft_n is not None]
     accepted_totals = [
@@ -1354,6 +1416,14 @@ def summarize_cell(
             "count": bucket["count"],
             "p50_latency_ms": percentile(bucket["latencies"], 0.50),
             "p95_latency_ms": percentile(bucket["latencies"], 0.95),
+            # Per-stream decode rate: what ONE request on this stream sees.
+            # Reported ALONGSIDE the aggregate, never instead of it — they
+            # answer different questions and a single number hides the
+            # latency/throughput trade (operator ruling 2026-07-30). The
+            # aggregate is exactly the sum of these.
+            "decode_tps": stream_decode_tps.get(int(stream), 0.0),
+            "decode_tokens": stream_decode.get(int(stream), [0.0, 0.0])[0],
+            "decode_seconds": stream_decode.get(int(stream), [0.0, 0.0])[1],
         }
         for stream, bucket in sorted(per_stream.items(), key=lambda kv: int(kv[0]))
     }
@@ -1365,6 +1435,12 @@ def summarize_cell(
     throttle_warnings = list((throttle_check or {}).get("warnings") or [])
     gate_warnings = list(host_warnings) + list(cell_host_warnings or []) + throttle_warnings
     hard_gates_passed = bool(affinity.get("live_affinity_verified")) and not gate_warnings
+    # NOTE (2026-07-30 metric ruling): this remains a STEADY-STATE-WINDOW
+    # precondition, deliberately left as-is. It is expressed through the now
+    # secondary tasks/hour trim, so it is stricter than the primary tok/s metric
+    # requires (a decode rate needs no ramp/drain trim). Loosening a
+    # decision-grade gate is a measurement-trust-boundary change and needs an
+    # operator ruling of its own — it is NOT a side effect of the metric switch.
     trimmed_window_ready = bool(
         trimmed["steady_count"] > 0 and trimmed["tasks_per_hour_trimmed"] > 0
     )
@@ -1419,29 +1495,41 @@ def summarize_cell(
         "success_count": success_count,
         "error_rate": ((total - success_count) / total) if total else 1.0,
         "wall_seconds": wall_s,
-        "tasks_per_hour_raw": (success_count / wall_s * 3600.0) if wall_s > 0 else 0.0,
-        **trimmed,
-        # Two DIFFERENT numbers — do not conflate them (a misread of the old
-        # name "aggregate_predicted_tps" corrupted a decision-grade record,
-        # renamed 2026-07-29; historical result files keep the old key and are
-        # append-only, so readers must accept both):
-        #   aggregate_wallclock_tps = decoded tokens / TOTAL CELL WALL TIME.
-        #     Wall time includes model load, prefill, queueing and idle gaps, so
-        #     this is throughput-per-elapsed-second and reads systematically LOW
-        #     versus any decode rate. NOT comparable to llama.cpp's
-        #     predicted_per_second or to llama-bench tg.
-        #   aggregate_decode_tps = sum(predicted_n) / sum(predicted_ms) from
-        #     llama.cpp's per-request timings, i.e. tokens decoded divided by the
-        #     time actually spent decoding. THIS is the decode rate comparable to
-        #     predicted_per_second. With np>1 the per-slot decode intervals
-        #     overlap in wall time, so it is the token-weighted mean PER-SLOT
-        #     decode rate, not a system-wide aggregate.
-        "aggregate_wallclock_tps": (total_predicted / wall_s) if wall_s > 0 else 0.0,
-        "aggregate_decode_tps": (
-            (decode_tokens / decode_seconds) if decode_seconds > 0 else 0.0
-        ),
+        # ---- PRIMARY metric (operator ruling 2026-07-30: model/instance
+        # benchmarks report and rank in tok/s) --------------------------------
+        #   aggregate_decode_tps = SUM over streams of (stream decoded tokens /
+        #     stream decode seconds), from llama.cpp's own predicted_n /
+        #     predicted_ms. System-wide decode throughput; this is what R1/R2/R4
+        #     rank on. Never wall-clock.
+        #   per_stream_decode_tps = decode_tokens_total / decode_seconds_total,
+        #     i.e. the token-weighted mean PER-SLOT decode rate — what one
+        #     request sees. Reported ALONGSIDE the aggregate, never instead of
+        #     it. (This is the quantity the 2026-07-30 e5_rederived.md analysis
+        #     labelled "aggregate_decode_tps (per-slot)"; it now carries an
+        #     accurate name, and decode_tokens_total/decode_seconds_total are
+        #     both persisted so it stays exactly re-derivable.)
+        "aggregate_decode_tps": aggregate_decode_tps,
+        "per_stream_decode_tps": per_stream_decode_tps,
         "decode_seconds_total": decode_seconds,
         "decode_tokens_total": decode_tokens,
+        "decode_stream_count": len(stream_decode_tps),
+        # ---- SECONDARY / DIAGNOSTIC ----------------------------------------
+        # tasks/hour is ONLY an autopilot metric (operator ruling 2026-07-30):
+        # the benchmark's prompt set is not a representative task ensemble and
+        # the number is not comparable across n_predict caps. KEPT and still
+        # persisted so historical comparisons remain possible, but it must not
+        # rank, gate or headline a model/instance result.
+        "tasks_per_hour_raw": (success_count / wall_s * 3600.0) if wall_s > 0 else 0.0,
+        **trimmed,
+        # aggregate_wallclock_tps = decoded tokens / TOTAL CELL WALL TIME. Wall
+        # time includes model load, prefill, queueing and idle gaps, so this is
+        # throughput-per-elapsed-second and reads systematically LOW versus any
+        # decode rate; NOT comparable to predicted_per_second or llama-bench tg.
+        # Renamed 2026-07-29 from "aggregate_predicted_tps" after a misread of
+        # that name corrupted a decision-grade record; historical result files
+        # keep the old key and are append-only, so readers must accept both.
+        # Diagnostic only — never the ranked metric.
+        "aggregate_wallclock_tps": (total_predicted / wall_s) if wall_s > 0 else 0.0,
         "predicted_tokens_total": total_predicted,
         "prompt_tokens_total": total_prompt,
         "per_request_tps_mean": statistics.mean(per_tps) if per_tps else 0.0,
@@ -1479,11 +1567,20 @@ CSV_FIELDS = [
     "total_count",
     "error_rate",
     "wall_seconds",
+    # PRIMARY (tok/s) first — operator ruling 2026-07-30. aggregate = sum of
+    # per-stream decode rates (system-wide); per_stream = what one request sees.
+    "aggregate_decode_tps",
+    "per_stream_decode_tps",
+    # raw inputs, so both rates stay re-derivable from summary.csv alone
+    "decode_tokens_total",
+    "decode_seconds_total",
+    "decode_stream_count",
+    # SECONDARY / DIAGNOSTIC: tasks/hour is an autopilot-only metric and the
+    # wall-clock tps includes load/prefill/idle. Kept for continuity with
+    # historical rows; never ranked on. See summarize_cell().
     "tasks_per_hour_raw",
     "tasks_per_hour_trimmed",
-    # wall-clock throughput vs true decode rate — see summarize_cell()
     "aggregate_wallclock_tps",
-    "aggregate_decode_tps",
     "p50_latency_ms",
     "p95_latency_ms",
     "ttft_p50_ms",
@@ -1526,8 +1623,17 @@ def failed_cell_row(cell: Cell, error: str, affinity: dict[str, Any] | None = No
         "success_count": 0,
         "total_count": 0,
         "error_rate": 1.0,
+        # PRIMARY (tok/s) zeroed explicitly so a failed cell can never be
+        # mistaken for "metric absent, fall back to something else".
+        "aggregate_decode_tps": 0.0,
+        "per_stream_decode_tps": 0.0,
+        "decode_tokens_total": 0,
+        "decode_seconds_total": 0.0,
+        "decode_stream_count": 0,
+        # SECONDARY / DIAGNOSTIC (operator ruling 2026-07-30).
         "tasks_per_hour_raw": 0.0,
         "tasks_per_hour_trimmed": 0.0,
+        "aggregate_wallclock_tps": 0.0,
         "affinity_artifact": affinity.get("artifact_path"),
         "live_affinity_verified": affinity.get("live_affinity_verified"),
         "decision_grade_intent": cell.decision_grade_intent,
@@ -2036,12 +2142,16 @@ def cmd_sweep(args: argparse.Namespace) -> int:
             run_decision_grade = False
         write_jsonl(output_dir / "cells.jsonl", row)
         write_csv_row(output_dir / "summary.csv", row)
+        # tok/s leads (operator ruling 2026-07-30); tasks/hour trails, labelled.
         print(
-            "  tasks/hour raw={:.2f} trimmed={:.2f} p95={:.0f}ms err={:.1%}".format(
-                float(row.get("tasks_per_hour_raw") or 0.0),
-                float(row.get("tasks_per_hour_trimmed") or 0.0),
+            "  decode tok/s agg={:.2f} per-stream={:.2f} p95={:.0f}ms err={:.1%}"
+            " | secondary tasks/hour raw={:.2f} trimmed={:.2f}".format(
+                float(row.get("aggregate_decode_tps") or 0.0),
+                float(row.get("per_stream_decode_tps") or 0.0),
                 float(row.get("p95_latency_ms") or 0.0),
                 float(row.get("error_rate") or 0.0),
+                float(row.get("tasks_per_hour_raw") or 0.0),
+                float(row.get("tasks_per_hour_trimmed") or 0.0),
             ),
             flush=True,
         )
@@ -2077,7 +2187,50 @@ def load_cells_jsonl(run_dir: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def cell_throughput_tps(row: dict[str, Any]) -> float:
+    """PRIMARY ranking metric: aggregate decode throughput in tok/s.
+
+    Operator ruling 2026-07-30: "tasks per hour is ONLY an autopilot metric.
+    All model/instance benchmark metrics are in tok/s." Every peak selection,
+    Pareto front, margin and winner verdict below sorts on THIS function;
+    ``cell_aggregate`` (tasks/hour) is retained only to emit the secondary
+    diagnostic number beside each verdict.
+
+    Reader tolerance (append-only data): prefer the new decode-rate key, then
+    fall back to the wall-clock token rate under BOTH its current name and its
+    pre-2026-07-29 name, so runs recorded before this change stay summarizable.
+    The fallback is wall-clock-contaminated and reads LOW — which basis was
+    used is recorded per cell by ``throughput_basis`` and mixed-basis
+    comparisons are flagged, exactly like the trimmed/raw basis before it.
+    """
+    value = float(row.get("aggregate_decode_tps") or 0.0)
+    if value > 0:
+        return value
+    for legacy_key in ("aggregate_wallclock_tps", "aggregate_predicted_tps"):
+        value = float(row.get(legacy_key) or 0.0)
+        if value > 0:
+            return value
+    return 0.0
+
+
+def throughput_basis(row: dict[str, Any]) -> str:
+    """Which number cell_throughput_tps returned: 'decode' or 'wallclock_fallback'."""
+    if float(row.get("aggregate_decode_tps") or 0.0) > 0:
+        return "decode"
+    for legacy_key in ("aggregate_wallclock_tps", "aggregate_predicted_tps"):
+        if float(row.get(legacy_key) or 0.0) > 0:
+            return "wallclock_fallback"
+    return "none"
+
+
 def cell_aggregate(row: dict[str, Any]) -> float:
+    """SECONDARY / DIAGNOSTIC: ramp-trimmed tasks/hour, raw as fallback.
+
+    Operator ruling 2026-07-30 demoted tasks/hour to an autopilot-only metric;
+    it is still computed, persisted and reported beside every verdict so
+    historical comparisons remain possible, but it no longer ranks anything.
+    Use ``cell_throughput_tps`` for any decision.
+    """
     trimmed = float(row.get("tasks_per_hour_trimmed") or 0.0)
     return trimmed if trimmed > 0 else float(row.get("tasks_per_hour_raw") or 0.0)
 
@@ -2088,7 +2241,10 @@ def aggregate_basis(row: dict[str, Any]) -> str:
     The raw fallback (empty steady-state window, structural at high K)
     includes ramp+drain and systematically understates steady throughput —
     every R1/R2/R4 comparison records the per-cell basis and flags
-    mixed-basis pairs (review F3, TRIM_BASIS_CAVEAT).
+    mixed-basis pairs (review F3, TRIM_BASIS_CAVEAT). Retained after the
+    2026-07-30 metric ruling: it now describes the SECONDARY tasks/hour
+    number, and continues to caveat verdicts conservatively (a mixed
+    tasks/hour basis never promotes a verdict, it only demotes one).
     """
     if float(row.get("tasks_per_hour_trimmed") or 0.0) > 0:
         return "trimmed"
@@ -2176,7 +2332,9 @@ def _find(rows: list[dict[str, Any]], config_id: str, np_level: int) -> dict[str
     ]
     if not matches:
         return None
-    return max(matches, key=cell_aggregate)
+    # Duplicate-cell tie-break is a selection decision, so it ranks on tok/s
+    # too (operator ruling 2026-07-30).
+    return max(matches, key=cell_throughput_tps)
 
 
 def _pair_verdict(
@@ -2190,12 +2348,24 @@ def _pair_verdict(
     if left is None or right is None:
         entry["status"] = "insufficient_data"
         return entry
-    left_rate = cell_aggregate(left)
-    right_rate = cell_aggregate(right)
+    # Decided on tok/s (operator ruling 2026-07-30); the tasks/hour numbers ride
+    # along as a labelled secondary readout so nothing is lost from the record.
+    left_rate = cell_throughput_tps(left)
+    right_rate = cell_throughput_tps(right)
+    entry["metric"] = "aggregate_decode_tps"
     entry["cells"] = {
         left["cell_id"]: round(left_rate, 3),
         right["cell_id"]: round(right_rate, 3),
     }
+    entry["cells_tasks_per_hour_secondary"] = {
+        left["cell_id"]: round(cell_aggregate(left), 3),
+        right["cell_id"]: round(cell_aggregate(right), 3),
+    }
+    entry["throughput_basis"] = {
+        left["cell_id"]: throughput_basis(left),
+        right["cell_id"]: throughput_basis(right),
+    }
+    entry["mixed_throughput_basis"] = throughput_basis(left) != throughput_basis(right)
     entry["metric_basis"] = {
         left["cell_id"]: aggregate_basis(left),
         right["cell_id"]: aggregate_basis(right),
@@ -2204,6 +2374,12 @@ def _pair_verdict(
     entry["decision_grade"] = bool(left.get("decision_grade")) and bool(
         right.get("decision_grade")
     )
+    if entry["mixed_throughput_basis"]:
+        entry["throughput_basis_note"] = (
+            "mixed throughput basis (decode vs wallclock_fallback): the "
+            "wall-clock rate includes load/prefill/idle and reads LOW — "
+            "verdict caveated, not decision-grade"
+        )
     if entry["mixed_metric_basis"]:
         entry["basis_note"] = (
             "mixed metric basis (trimmed vs raw_fallback): raw includes "
@@ -2229,7 +2405,9 @@ def _pair_verdict(
         # be treated as a decision-grade R1 verdict by accident.
         entry["status"] = (
             "winner_caveated"
-            if entry["mixed_metric_basis"] or not entry["decision_grade"]
+            if entry["mixed_metric_basis"]
+            or entry["mixed_throughput_basis"]
+            or not entry["decision_grade"]
             else "winner"
         )
         entry["winner"] = winner["cell_id"]
@@ -2311,14 +2489,31 @@ def evaluate_r1(rows: list[dict[str, Any]]) -> dict[str, Any]:
         if c1 is None or c1b is None:
             scaling.append({"k": k, "status": "insufficient_data"})
             continue
-        base = cell_aggregate(c1)
+        # Scaling ratio on tok/s (operator ruling 2026-07-30); the tasks/hour
+        # ratio is kept beside it, clearly labelled, as a diagnostic.
+        base = cell_throughput_tps(c1)
+        base_tph = cell_aggregate(c1)
         scaling.append(
             {
                 "k": k,
                 "status": "ok",
-                "c1_tasks_per_hour": round(base, 3),
+                "metric": "aggregate_decode_tps",
+                "c1_decode_tps": round(base, 3),
+                "c1b_decode_tps": round(cell_throughput_tps(c1b), 3),
+                "c1b_over_c1": (
+                    round(cell_throughput_tps(c1b) / base, 3) if base > 0 else None
+                ),
+                "throughput_basis": {
+                    c1["cell_id"]: throughput_basis(c1),
+                    c1b["cell_id"]: throughput_basis(c1b),
+                },
+                "mixed_throughput_basis": throughput_basis(c1) != throughput_basis(c1b),
+                # secondary / diagnostic
+                "c1_tasks_per_hour": round(base_tph, 3),
                 "c1b_tasks_per_hour": round(cell_aggregate(c1b), 3),
-                "c1b_over_c1": round(cell_aggregate(c1b) / base, 3) if base > 0 else None,
+                "c1b_over_c1_tasks_per_hour": (
+                    round(cell_aggregate(c1b) / base_tph, 3) if base_tph > 0 else None
+                ),
                 "metric_basis": {
                     c1["cell_id"]: aggregate_basis(c1),
                     c1b["cell_id"]: aggregate_basis(c1b),
@@ -2332,12 +2527,14 @@ def evaluate_r1(rows: list[dict[str, Any]]) -> dict[str, Any]:
         quarters = _find(usable, "C3", total // 4)
         if big is None or quarters is None:
             continue
-        if cell_aggregate(big) > cell_aggregate(quarters):
+        if cell_throughput_tps(big) > cell_throughput_tps(quarters):
             k_star = total
             break
     return {
-        "rule": "R1 crossover: iso-T winner needs >= 10% aggregate tasks/hour margin; "
-        "smaller = tie -> prefer status-quo quarters (C3)",
+        "rule": "R1 crossover: iso-T winner needs >= 10% aggregate decode tok/s "
+        "margin (operator ruling 2026-07-30: model/instance benchmarks rank in "
+        "tok/s, never tasks/hour); smaller = tie -> prefer status-quo quarters (C3)",
+        "metric": "aggregate_decode_tps",
         "c1_whole_machine": c1_whole_machine,
         "iso_t_pairs": pairs,
         "scaling_pairs": scaling,
@@ -2394,40 +2591,51 @@ def evaluate_r2(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 "note": "no decision-grade cells; refusing peak/SLA verdict",
             }
             continue
+        # Pareto/peak on tok/s x p95 (operator ruling 2026-07-30). Latency is
+        # untouched by the ruling: it remains the legitimate second axis.
         pareto = [
             row
             for row in model_rows
             if not any(
                 other is not row
-                and cell_aggregate(other) >= cell_aggregate(row)
+                and cell_throughput_tps(other) >= cell_throughput_tps(row)
                 and float(other.get("p95_latency_ms") or 0.0)
                 <= float(row.get("p95_latency_ms") or 0.0)
                 and (
-                    cell_aggregate(other) > cell_aggregate(row)
+                    cell_throughput_tps(other) > cell_throughput_tps(row)
                     or float(other.get("p95_latency_ms") or 0.0)
                     < float(row.get("p95_latency_ms") or 0.0)
                 )
                 for other in model_rows
             )
         ]
-        peak = max(model_rows, key=cell_aggregate)
-        peak_rate = cell_aggregate(peak)
+        peak = max(model_rows, key=cell_throughput_tps)
+        peak_rate = cell_throughput_tps(peak)
         peak_p95 = float(peak.get("p95_latency_ms") or 0.0)
         base, base_substitution = _k1_baseline(model_rows, str(peak.get("config_id")))
         verdict: dict[str, Any] = {
             "status": "decision_grade",
             "decision_grade": True,
             "observation_only_cells": observation_only,
+            "metric": "aggregate_decode_tps",
             "pareto": [
                 {
                     "cell_id": row.get("cell_id"),
+                    "aggregate_decode_tps": round(cell_throughput_tps(row), 3),
+                    "per_stream_decode_tps": round(
+                        float(row.get("per_stream_decode_tps") or 0.0), 3
+                    ),
+                    "throughput_basis": throughput_basis(row),
+                    # secondary / diagnostic (operator ruling 2026-07-30)
                     "aggregate_tasks_per_hour": round(cell_aggregate(row), 3),
                     "aggregate_basis": aggregate_basis(row),
                     "p95_latency_ms": row.get("p95_latency_ms"),
                 }
-                for row in sorted(pareto, key=cell_aggregate, reverse=True)
+                for row in sorted(pareto, key=cell_throughput_tps, reverse=True)
             ],
             "peak_cell": peak.get("cell_id"),
+            "peak_decode_tps": round(peak_rate, 3),
+            "peak_tasks_per_hour_secondary": round(cell_aggregate(peak), 3),
         }
         if base is None:
             verdict["lanes_real"] = None
@@ -2458,9 +2666,9 @@ def evaluate_r2(rows: list[dict[str, Any]]) -> dict[str, Any]:
         holder = next(
             (
                 row
-                for row in sorted(model_rows, key=cell_aggregate, reverse=True)
+                for row in sorted(model_rows, key=cell_throughput_tps, reverse=True)
                 if int(row.get("np") or 0) < int(peak.get("np") or 0)
-                and cell_aggregate(row) >= R2_HOLD_FRACTION * peak_rate
+                and cell_throughput_tps(row) >= R2_HOLD_FRACTION * peak_rate
                 and within_sla(row)
             ),
             None,
@@ -2471,15 +2679,22 @@ def evaluate_r2(rows: list[dict[str, Any]]) -> dict[str, Any]:
         verdict["lanes_real"] = bool(sla_violated and holder is not None)
         bases = {str(peak.get("cell_id")): aggregate_basis(peak)}
         bases[str(base.get("cell_id"))] = aggregate_basis(base)
+        tps_bases = {str(peak.get("cell_id")): throughput_basis(peak)}
+        tps_bases[str(base.get("cell_id"))] = throughput_basis(base)
         if holder is not None:
             bases[str(holder.get("cell_id"))] = aggregate_basis(holder)
+            tps_bases[str(holder.get("cell_id"))] = throughput_basis(holder)
+        verdict["throughput_basis"] = tps_bases
+        verdict["mixed_throughput_basis"] = len(set(tps_bases.values())) > 1
         verdict["metric_basis"] = bases
         verdict["mixed_metric_basis"] = len(set(bases.values())) > 1
         verdicts[model_label] = verdict
     return {
-        "rule": "R2 lanes: lanes are real iff the peak-aggregate cell's p95 exceeds "
-        "3x that config's K=1 p95 (or 60s absolute) while some lower-K cell holds "
-        ">= 70% of peak within SLA",
+        "rule": "R2 lanes: lanes are real iff the peak aggregate-decode-tok/s cell's "
+        "p95 exceeds 3x that config's K=1 p95 (or 60s absolute) while some lower-K "
+        "cell holds >= 70% of peak tok/s within SLA (operator ruling 2026-07-30: "
+        "peak is selected on tok/s, never tasks/hour; latency is unaffected)",
+        "metric": "aggregate_decode_tps",
         "models": verdicts,
     }
 
@@ -2598,11 +2813,14 @@ def evaluate_r4(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 }
             )
             continue
-        peak_rate = max(cell_aggregate(row) for row in canonical_rows)
+        # Peak + candidate band on tok/s (operator ruling 2026-07-30). The
+        # recommendation rule itself is unchanged: smallest p95 among cells
+        # holding >= 90% of peak throughput.
+        peak_rate = max(cell_throughput_tps(row) for row in canonical_rows)
         candidates = [
             row
             for row in canonical_rows
-            if cell_aggregate(row) >= R4_PEAK_FRACTION * peak_rate
+            if cell_throughput_tps(row) >= R4_PEAK_FRACTION * peak_rate
         ]
         recommended = min(
             candidates, key=lambda row: float(row.get("p95_latency_ms") or 0.0)
@@ -2613,9 +2831,15 @@ def evaluate_r4(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 continue  # paired-probe variants never seed capability rows
             config = str(row.get("config_id"))
             best = per_shape.get(config)
-            if best is None or cell_aggregate(row) > best["aggregate_tasks_per_hour"]:
+            if best is None or cell_throughput_tps(row) > best["aggregate_decode_tps"]:
                 per_shape[config] = {
                     "np": row.get("np"),
+                    "aggregate_decode_tps": round(cell_throughput_tps(row), 3),
+                    "per_stream_decode_tps": round(
+                        float(row.get("per_stream_decode_tps") or 0.0), 3
+                    ),
+                    "throughput_basis": throughput_basis(row),
+                    # secondary / diagnostic (operator ruling 2026-07-30)
                     "aggregate_tasks_per_hour": round(cell_aggregate(row), 3),
                     "aggregate_basis": aggregate_basis(row),
                     "p95_latency_ms": row.get("p95_latency_ms"),
@@ -2625,9 +2849,10 @@ def evaluate_r4(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         for k in SCALING_K:
             c1 = _find(canonical_rows, "C1", k)
             c1b = _find(canonical_rows, "C1b", k)
-            if c1 is not None and c1b is not None and cell_aggregate(c1) > 0:
+            if c1 is not None and c1b is not None and cell_throughput_tps(c1) > 0:
+                # tok/s ratio (operator ruling 2026-07-30)
                 splitting[f"C1b_over_C1_at_np{k}"] = round(
-                    cell_aggregate(c1b) / cell_aggregate(c1), 3
+                    cell_throughput_tps(c1b) / cell_throughput_tps(c1), 3
                 )
         output.append(
             {
@@ -2636,14 +2861,26 @@ def evaluate_r4(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "status": "decision_grade",
                 "decision_grade": True,
                 "observation_only_cells": observation_only,
+                "metric": "aggregate_decode_tps",
                 "recommended": {
                     "config_id": recommended.get("config_id"),
                     "np": recommended.get("np"),
+                    "aggregate_decode_tps": round(cell_throughput_tps(recommended), 3),
+                    "per_stream_decode_tps": round(
+                        float(recommended.get("per_stream_decode_tps") or 0.0), 3
+                    ),
+                    "throughput_basis": throughput_basis(recommended),
+                    "peak_decode_tps": round(peak_rate, 3),
+                    # secondary / diagnostic (operator ruling 2026-07-30)
                     "aggregate_tasks_per_hour": round(cell_aggregate(recommended), 3),
                     "aggregate_basis": aggregate_basis(recommended),
                     "p95_latency_ms": recommended.get("p95_latency_ms"),
-                    "rule": "smallest-latency cell achieving >= 90% of peak aggregate",
+                    "rule": "smallest-latency cell achieving >= 90% of peak aggregate "
+                    "decode tok/s",
                 },
+                "mixed_throughput_basis": len(
+                    {throughput_basis(row) for row in canonical_rows}
+                ) > 1,
                 "mixed_metric_basis": len(
                     {aggregate_basis(row) for row in canonical_rows}
                 ) > 1,
@@ -2651,6 +2888,11 @@ def evaluate_r4(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     {
                         "config_id": solo.get("config_id"),
                         "cell_id": solo.get("cell_id"),
+                        "aggregate_decode_tps": round(cell_throughput_tps(solo), 3),
+                        "per_stream_decode_tps": round(
+                            float(solo.get("per_stream_decode_tps") or 0.0), 3
+                        ),
+                        # secondary / diagnostic (operator ruling 2026-07-30)
                         "aggregate_tasks_per_hour": round(cell_aggregate(solo), 3),
                     }
                     if solo
@@ -2695,16 +2937,24 @@ def evaluate_scout_probes(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "kvu_cell": kvu.get("cell_id"),
             "split_cell": split.get("cell_id") if split else None,
         }
-        split_rate = cell_aggregate(split) if split else 0.0
-        kvu_rate = cell_aggregate(kvu)
+        # Escalation delta on tok/s (operator ruling 2026-07-30); tasks/hour
+        # retained beside it as a labelled diagnostic.
+        split_rate = cell_throughput_tps(split) if split else 0.0
+        kvu_rate = cell_throughput_tps(kvu)
         if split is None or split_rate <= 0:
             entry["status"] = "insufficient_data"
         else:
             delta = (kvu_rate - split_rate) / split_rate
             entry["status"] = "ok"
-            entry["kvu_tasks_per_hour"] = round(kvu_rate, 3)
-            entry["split_tasks_per_hour"] = round(split_rate, 3)
+            entry["metric"] = "aggregate_decode_tps"
+            entry["kvu_decode_tps"] = round(kvu_rate, 3)
+            entry["split_decode_tps"] = round(split_rate, 3)
             entry["delta_fraction"] = round(delta, 4)
+            entry["kvu_tasks_per_hour"] = round(cell_aggregate(kvu), 3)
+            entry["split_tasks_per_hour"] = round(cell_aggregate(split), 3)
+            entry["mixed_throughput_basis"] = (
+                throughput_basis(kvu) != throughput_basis(split)
+            )
             entry["mixed_metric_basis"] = aggregate_basis(kvu) != aggregate_basis(split)
             entry["escalate_to_operator"] = abs(delta) >= KVU_PROBE_ESCALATION
             if entry["escalate_to_operator"]:
@@ -2728,15 +2978,22 @@ def evaluate_scout_probes(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "full_cell": full.get("cell_id"),
             "half_cell": half.get("cell_id") if half else None,
         }
-        half_rate = cell_aggregate(half) if half else 0.0
-        full_rate = cell_aggregate(full)
+        # Shape winner on tok/s (operator ruling 2026-07-30).
+        half_rate = cell_throughput_tps(half) if half else 0.0
+        full_rate = cell_throughput_tps(full)
         if half is None or (half_rate <= 0 and full_rate <= 0):
             entry["status"] = "insufficient_data"
         else:
             entry["status"] = "ok"
-            entry["full_tasks_per_hour"] = round(full_rate, 3)
-            entry["half0_tasks_per_hour"] = round(half_rate, 3)
+            entry["metric"] = "aggregate_decode_tps"
+            entry["full_decode_tps"] = round(full_rate, 3)
+            entry["half0_decode_tps"] = round(half_rate, 3)
             entry["winner_shape"] = "full" if full_rate > half_rate else "half0"
+            entry["full_tasks_per_hour"] = round(cell_aggregate(full), 3)
+            entry["half0_tasks_per_hour"] = round(cell_aggregate(half) if half else 0.0, 3)
+            entry["mixed_throughput_basis"] = (
+                throughput_basis(full) != throughput_basis(half)
+            )
             entry["mixed_metric_basis"] = aggregate_basis(full) != aggregate_basis(half)
             entry["note"] = (
                 "Stage-B C1 adopts the winning dense-control shape (regenerate "
@@ -2754,26 +3011,32 @@ def render_summary_md(rules: dict[str, Any], rows: list[dict[str, Any]]) -> str:
     lines.append("")
     lines.append("## Cells")
     lines.append("")
+    # PRIMARY tok/s columns lead; tasks/hour columns are explicitly marked
+    # secondary (operator ruling 2026-07-30).
     lines.append(
-        "| cell | config | np | tasks/h raw | tasks/h trimmed | p50 ms | p95 ms "
-        "| TTFT p50 ms | accept | kvu | grade | error |"
+        "| cell | config | np | agg decode tok/s | per-stream tok/s | p50 ms | p95 ms "
+        "| TTFT p50 ms | accept | kvu | grade "
+        "| tasks/h raw (2nd) | tasks/h trimmed (2nd) | error |"
     )
-    lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     for row in rows:
         accept = row.get("draft_accept_rate")
         lines.append(
-            "| {} | {} | {} | {:.2f} | {:.2f} | {:.0f} | {:.0f} | {:.0f} | {} | {} | {} | {} |".format(
+            "| {} | {} | {} | {:.2f} | {:.2f} | {:.0f} | {:.0f} | {:.0f} | {} | {} | {} "
+            "| {:.2f} | {:.2f} | {} |".format(
                 row.get("cell_id"),
                 row.get("config_id"),
                 row.get("np"),
-                float(row.get("tasks_per_hour_raw") or 0.0),
-                float(row.get("tasks_per_hour_trimmed") or 0.0),
+                cell_throughput_tps(row),
+                float(row.get("per_stream_decode_tps") or 0.0),
                 float(row.get("p50_latency_ms") or 0.0),
                 float(row.get("p95_latency_ms") or 0.0),
                 float(row.get("ttft_p50_ms") or 0.0),
                 f"{accept:.3f}" if isinstance(accept, (int, float)) else "-",
                 "on" if row.get("kv_unified") else "off",
                 "DG" if row.get("decision_grade") else ("degraded" if row.get("degraded") else "obs"),
+                float(row.get("tasks_per_hour_raw") or 0.0),
+                float(row.get("tasks_per_hour_trimmed") or 0.0),
                 row.get("cell_error") or "",
             )
         )
@@ -2826,7 +3089,9 @@ def render_summary_md(rules: dict[str, Any], rows: list[dict[str, Any]]) -> str:
             continue
         lines.append(
             f"- {entry['model_key']}+{entry['quant']}: {recommended['config_id']}@np"
-            f"{recommended['np']} ({recommended['aggregate_tasks_per_hour']} tasks/h)"
+            f"{recommended['np']} ({recommended['aggregate_decode_tps']} tok/s aggregate, "
+            f"{recommended['per_stream_decode_tps']} tok/s per stream; secondary: "
+            f"{recommended['aggregate_tasks_per_hour']} tasks/h)"
         )
     if rules.get("degraded_cells"):
         lines.append("")
@@ -2845,7 +3110,19 @@ def cmd_summarize(args: argparse.Namespace) -> int:
     rules = {
         "created_at": utc_now(),
         "protocol_id": EXPECTED_PROTOCOL_ID,
-        "caveats": [E1_COMPARABILITY_CAVEAT, TRIM_BASIS_CAVEAT],
+        "primary_metric": "aggregate_decode_tps",
+        "secondary_metrics": [
+            "per_stream_decode_tps",
+            "tasks_per_hour_trimmed",
+            "tasks_per_hour_raw",
+            "aggregate_wallclock_tps",
+        ],
+        "caveats": [
+            PRIMARY_METRIC_RULING,
+            THROUGHPUT_BASIS_CAVEAT,
+            E1_COMPARABILITY_CAVEAT,
+            TRIM_BASIS_CAVEAT,
+        ],
         "degraded_cells": degraded,
         "R1": evaluate_r1(rows),
         "R2": evaluate_r2(rows),
