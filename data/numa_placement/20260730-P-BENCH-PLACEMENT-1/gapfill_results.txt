@@ -1,0 +1,9 @@
+=== gemma | full | inst=1 np=8 T=8 -t 96 ===
+    per-stream median=32.10  aggregate=256.77 tok/s  n=8  accept=0.891
+=== gemma | full | inst=1 np=16 T=16 -t 96 ===
+    per-stream median=19.59  aggregate=313.62 tok/s  n=16  accept=0.865
+=== q35 | full | inst=1 np=8 T=8 -t 96 ===
+    per-stream median=15.52  aggregate=124.56 tok/s  n=8  accept=0.740
+=== q35 | full | inst=1 np=16 T=16 -t 96 ===
+    per-stream median=9.57  aggregate=153.05 tok/s  n=16  accept=0.743
+=== GAPFILL DONE ===

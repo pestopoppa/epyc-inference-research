@@ -1,0 +1,9 @@
+=== C_fullint  cpuset=0-95 policy=--interleave=all ===
+  load: 90s   RAM used: 254 GB
+  decode tok/s: n=3 median=5.17 min=5.14 max=5.19
+  prefill tok/s: median=5.07
+=== A_prod  cpuset=0-47,96-143 policy=none ===
+  load: 85s   RAM used: 250 GB
+  decode tok/s: n=1 median=1.79 min=1.79 max=1.79
+  prefill tok/s: median=9.90
+=== GLM DONE ===

@@ -1,0 +1,49 @@
+=== gemma | full | inst=1 np=1 T=1 -t 96 ===
+    per-stream median=56.90  aggregate=56.90 tok/s  n=1  accept=0.866
+=== gemma | full | inst=1 np=2 T=2 -t 96 ===
+    per-stream median=54.90  aggregate=109.80 tok/s  n=2  accept=0.866
+=== gemma | full | inst=1 np=4 T=4 -t 96 ===
+    per-stream median=42.06  aggregate=168.24 tok/s  n=4  accept=0.832
+=== gemma | half | inst=2 np=1 T=2 -t 48 ===
+    per-stream median=37.11  aggregate=74.23 tok/s  n=2  accept=0.866
+=== gemma | half | inst=2 np=2 T=4 -t 48 ===
+    per-stream median=32.77  aggregate=130.71 tok/s  n=4  accept=0.871
+=== gemma | half | inst=2 np=4 T=8 -t 48 ===
+    per-stream median=25.01  aggregate=200.12 tok/s  n=8  accept=0.842
+=== gemma | quarter | inst=4 np=1 T=4 -t 24 ===
+    per-stream median=23.55  aggregate=92.93 tok/s  n=4  accept=0.866
+=== gemma | quarter | inst=4 np=2 T=8 -t 24 ===
+    per-stream median=18.02  aggregate=150.57 tok/s  n=8  accept=0.866
+=== q35 | full | inst=1 np=1 T=1 -t 96 ===
+    per-stream median=40.51  aggregate=40.51 tok/s  n=1  accept=0.746
+=== q35 | full | inst=1 np=2 T=2 -t 96 ===
+    per-stream median=35.48  aggregate=70.97 tok/s  n=2  accept=0.746
+=== q35 | full | inst=1 np=4 T=4 -t 96 ===
+    per-stream median=23.82  aggregate=95.92 tok/s  n=4  accept=0.742
+=== q35 | half | inst=2 np=1 T=2 -t 48 ===
+    per-stream median=25.30  aggregate=50.60 tok/s  n=2  accept=0.746
+=== q35 | half | inst=2 np=2 T=4 -t 48 ===
+    per-stream median=21.48  aggregate=85.91 tok/s  n=4  accept=0.746
+=== q35 | half | inst=2 np=4 T=8 -t 48 ===
+    per-stream median=13.09  aggregate=104.53 tok/s  n=8  accept=0.727
+=== q35 | quarter | inst=4 np=1 T=4 -t 24 ===
+    per-stream median=14.56  aggregate=57.27 tok/s  n=4  accept=0.746
+=== q35 | quarter | inst=4 np=2 T=8 -t 24 ===
+    per-stream median=11.41  aggregate=89.25 tok/s  n=8  accept=0.746
+=== q122 | full | inst=1 np=1 T=1 -t 96 ===
+    per-stream median=24.12  aggregate=24.12 tok/s  n=1  accept=0.831
+=== q122 | full | inst=1 np=2 T=2 -t 96 ===
+    per-stream median=18.86  aggregate=37.72 tok/s  n=2  accept=0.822
+=== q122 | full | inst=1 np=4 T=4 -t 96 ===
+    per-stream median=10.56  aggregate=42.96 tok/s  n=4  accept=0.775
+=== q122 | half | inst=2 np=1 T=2 -t 48 ===
+    per-stream median=13.79  aggregate=27.58 tok/s  n=2  accept=0.831
+=== q122 | half | inst=2 np=2 T=4 -t 48 ===
+    per-stream median=10.57  aggregate=42.59 tok/s  n=4  accept=0.795
+=== q80 | half | inst=2 np=1 T=2 -t 48 ===
+    per-stream median=18.82  aggregate=37.65 tok/s  n=2  spec=off
+=== q80 | half | inst=2 np=2 T=4 -t 48 ===
+    per-stream median=15.29  aggregate=60.88 tok/s  n=4  spec=off
+=== q80 | half | inst=2 np=4 T=8 -t 48 ===
+    per-stream median=10.72  aggregate=86.17 tok/s  n=8  spec=off
+=== SHAPES_PRODOPT DONE ===
