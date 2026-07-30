@@ -1,0 +1,17 @@
+=== q35_mtp | spec=draft-mtp | p0k5 ===
+    prompt=4 tok  prefill= 197.05  DECODE= 28.94 tok/s  accept=0.500
+=== q35_ngrammtp | spec=ngram-mod,draft-mtp | p0k5 ===
+    prompt=4 tok  prefill= 201.37  DECODE= 29.05 tok/s  accept=0.500
+=== gemma_mtp | spec=draft-mtp | p0k5 ===
+    prompt=5 tok  prefill= 298.72  DECODE= 35.79 tok/s  accept=0.476
+=== gemma_ngrammtp | spec=ngram-mod,draft-mtp | p0k5 ===
+    prompt=5 tok  prefill= 285.71  DECODE= 36.17 tok/s  accept=0.476
+=== q35_mtp | spec=draft-mtp | p8k ===
+    prompt=4 tok  prefill= 145.85  DECODE= 25.33 tok/s  accept=0.478
+=== q35_ngrammtp | spec=ngram-mod,draft-mtp | p8k ===
+    prompt=4 tok  prefill= 145.87  DECODE= 63.91 tok/s  accept=0.710
+=== gemma_mtp | spec=draft-mtp | p8k ===
+    prompt=1 tok  prefill= 219.74  DECODE= 31.22 tok/s  accept=0.649
+=== gemma_ngrammtp | spec=ngram-mod,draft-mtp | p8k ===
+    prompt=1 tok  prefill= 221.72  DECODE= 30.36 tok/s  accept=0.649
+=== NGRAM DONE ===
