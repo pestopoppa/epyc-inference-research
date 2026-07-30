@@ -1,0 +1,21 @@
+=== q35_mtp | spec=draft-mtp | r8k ===
+    prompt=14059 tok  DECODE= 24.92 tok/s  accept=0.505
+=== q35_ngrammtp | spec=ngram-mod,draft-mtp | r8k ===
+    prompt=14059 tok  DECODE= 69.89 tok/s  accept=0.755
+=== q35_mtp | spec=draft-mtp | r32k ===
+    prompt=53730 tok  DECODE= 12.46 tok/s  accept=0.532
+=== q35_ngrammtp | spec=ngram-mod,draft-mtp | r32k ===
+    prompt=53730 tok  DECODE= 18.71 tok/s  accept=0.693
+=== gemma_mtp | spec=draft-mtp | r8k ===
+    prompt=16541 tok  DECODE= 27.22 tok/s  accept=0.754
+=== gemma_ngrammtp | spec=ngram-mod,draft-mtp | r8k ===
+    prompt=16541 tok  DECODE= 27.83 tok/s  accept=0.708
+=== q80_nospec | spec=none | r8k ===
+    prompt=14056 tok  DECODE= 17.40 tok/s  (no draft stats)
+=== q80_ngram | spec=ngram-mod | r8k ===
+    prompt=14056 tok  DECODE= 20.06 tok/s  accept=0.812
+=== q122_mtp | spec=draft-mtp | r8k ===
+    prompt=14059 tok  DECODE= 16.07 tok/s  accept=0.650
+=== q122_ngrammtp | spec=ngram-mod,draft-mtp | r8k ===
+    prompt=14059 tok  DECODE= 16.57 tok/s  accept=0.640
+=== NGRAM2 DONE ===
