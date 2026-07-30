@@ -39,6 +39,15 @@ vl_score: "11/12 (92%)"         # quoted string — mixed format
   compiled from the master. The production stack registry is FROZEN; lineup changes are
   operator-gated.
 
+## Storage Root (consolidated 2026-07-30)
+
+All model weights live under the single root `/mnt/raid0/llm/models/` (flat GGUFs plus
+`<publisher>/<repo>/` trees absorbed from the former LM Studio root). `model_base_path` in both
+registries points there. The old root `/mnt/raid0/llm/lmstudio/models/` remains as a
+**symlink farm** (one symlink per publisher dir) so LM Studio, historical absolute paths, and
+older scripts keep resolving — do not delete those symlinks, and do not add new files under the
+old root.
+
 ## Model Entry Requirements
 
 - Paths must be absolute (not relative to any base).

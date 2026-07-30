@@ -166,7 +166,7 @@ runtime_defaults:
   threads: 96
   numa_policy: interleave=all
   # Base path for models - override with ORCHESTRATOR_PATHS_MODEL_BASE env var
-  model_base_path: /mnt/raid0/llm/lmstudio/models
+  model_base_path: /mnt/raid0/llm/models
   binaries:
     # Binary path - override with ORCHESTRATOR_PATHS_LLAMA_CPP_BIN env var
     base_dir: /mnt/raid0/llm/llama.cpp/build/bin
@@ -942,7 +942,7 @@ worker_pool:
   health_check_interval: 30
 
   # Model paths
-  model_base_path: /mnt/raid0/llm/lmstudio/models
+  model_base_path: /mnt/raid0/llm/models
 
   workers:
     # === HOT WORKERS (DEPRECATED — GGUFs not on disk; canonical-recipe quality 44% << worker_general 84%) ===
@@ -1259,7 +1259,7 @@ roles:
     description: Qwen2.5-Coder-32B-Instruct f16 — full precision coder escalation candidate
     model:
       name: Qwen2.5-Coder-32B-Instruct-f16
-      path: ../../models/Qwen2.5-Coder-32B-Instruct-GGUF-f16/qwen2.5-coder-32b-instruct-fp16-00001-of-00009.gguf
+      path: Qwen2.5-Coder-32B-Instruct-GGUF-f16/qwen2.5-coder-32b-instruct-fp16-00001-of-00009.gguf
       quant: f16
       size_gb: 65
       split_count: 9
