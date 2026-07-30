@@ -1,0 +1,21 @@
+=== ARM MMAP (4 quarters, np=1 each, membind to own node) ===
+  q0 locality: 0.0% on own node (9402798 pages total)
+  q1 locality: 0.0% on own node (9402815 pages total)
+  q2 locality: 0.0% on own node (9402781 pages total)
+  q3 locality: 0.0% on own node (9402787 pages total)
+  q0 decode: 10.14 tok/s
+  q1 decode: 11.10 tok/s
+  q2 decode: 9.89 tok/s
+  q3 decode: 9.78 tok/s
+  FLEET AGGREGATE: 40.91 tok/s
+=== ARM NOMMAP (4 quarters, np=1 each, membind to own node) ===
+  q0 locality: 0.0% on own node (9402837 pages total)
+  q1 locality: 0.0% on own node (9402819 pages total)
+  q2 locality: 0.0% on own node (9402845 pages total)
+  q3 locality: 0.0% on own node (9402863 pages total)
+  q0 decode: 14.13 tok/s
+  q1 decode: 11.28 tok/s
+  q2 decode: 13.84 tok/s
+  q3 decode: 12.88 tok/s
+  FLEET AGGREGATE: 52.13 tok/s
+=== QUADFLEET DONE ===

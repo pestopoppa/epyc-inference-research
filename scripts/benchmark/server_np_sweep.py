@@ -668,7 +668,19 @@ def summarize_cell(
         "error_rate": ((total - success_count) / total) if total else 1.0,
         "wall_seconds": wall_s,
         "tasks_per_hour": (success_count / wall_s * 3600.0) if wall_s > 0 else 0.0,
-        "aggregate_predicted_tps": (total_predicted / wall_s) if wall_s > 0 else 0.0,
+        # decoded tokens / TOTAL WALL TIME (includes model load, prefill,
+        # queueing, idle gaps) — a wall-clock throughput, NOT a decode rate, and
+        # it reads systematically LOW versus one. Renamed 2026-07-29 from
+        # "aggregate_predicted_tps", which invited exactly that misreading;
+        # historical result files keep the old key and are append-only.
+        # A true decode rate would be sum(predicted_n) / sum(predicted_ms) from
+        # llama.cpp's per-request timings block. RequestResult here keeps only
+        # predicted_tokens / predicted_per_second and drops predicted_ms (see
+        # send_completion), so the true decode rate is NOT plumbed through in this
+        # script and is deliberately not emitted rather than approximated.
+        # server_numa_np_sweep.py retains the raw timings and does emit
+        # "aggregate_decode_tps".
+        "aggregate_wallclock_tps": (total_predicted / wall_s) if wall_s > 0 else 0.0,
         "predicted_tokens_total": total_predicted,
         "prompt_tokens_total": total_prompt,
         "per_request_tps_mean": statistics.mean(per_tps) if per_tps else 0.0,
@@ -691,7 +703,8 @@ def write_csv_row(path: Path, row: dict[str, Any]) -> None:
         "error_rate",
         "wall_seconds",
         "tasks_per_hour",
-        "aggregate_predicted_tps",
+        # wall-clock throughput, not a decode rate — see summarize_cell()
+        "aggregate_wallclock_tps",
         "predicted_tokens_total",
         "prompt_tokens_total",
         "per_request_tps_mean",
@@ -984,7 +997,7 @@ def main() -> int:
                     "error_rate": 1.0,
                     "wall_seconds": 0.0,
                     "tasks_per_hour": 0.0,
-                    "aggregate_predicted_tps": 0.0,
+                    "aggregate_wallclock_tps": 0.0,
                     "predicted_tokens_total": 0,
                     "prompt_tokens_total": 0,
                     "per_request_tps_mean": 0.0,
@@ -1012,9 +1025,15 @@ def main() -> int:
                 print("  dry-run command:", " ".join(str(part) for part in row["server_command"]), flush=True)
             else:
                 print(
-                    "  tasks/hour={:.2f} agg_tps={:.2f} p95={:.0f}ms err={:.1%}".format(
+                    "  tasks/hour={:.2f} wallclock_tps={:.2f} p95={:.0f}ms err={:.1%}".format(
                         float(row.get("tasks_per_hour") or 0.0),
-                        float(row.get("aggregate_predicted_tps") or 0.0),
+                        # prefer the new key; fall back to the old one so rows
+                        # loaded from historical (append-only) results still read
+                        float(
+                            row.get("aggregate_wallclock_tps")
+                            or row.get("aggregate_predicted_tps")
+                            or 0.0
+                        ),
                         float(row.get("p95_latency_ms") or 0.0),
                         float(row.get("error_rate") or 0.0),
                     ),

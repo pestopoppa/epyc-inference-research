@@ -1,0 +1,21 @@
+=== MMAP ===
+q0:
+  own=N0 local= 25.6%  [N0= 25.6% N1= 24.8% N2= 23.5% N3= 26.2%]  total=38.1 GB
+q1:
+  own=N1 local= 25.6%  [N0= 24.8% N1= 25.6% N2= 23.5% N3= 26.2%]  total=38.1 GB
+q2:
+  own=N2 local= 24.2%  [N0= 24.8% N1= 24.8% N2= 24.2% N3= 26.2%]  total=38.1 GB
+q3:
+  own=N3 local= 26.9%  [N0= 24.8% N1= 24.8% N2= 23.5% N3= 26.9%]  total=38.1 GB
+  host free: 30 GB used
+=== NOMMAP ===
+q0:
+  own=N0 local=100.0%  [N0=100.0% N1=  0.0% N2=  0.0% N3=  0.0%]  total=38.1 GB
+q1:
+  own=N1 local=100.0%  [N0=  0.0% N1=100.0% N2=  0.0% N3=  0.0%]  total=38.1 GB
+q2:
+  own=N2 local=100.0%  [N0=  0.0% N1=  0.0% N2=100.0% N3=  0.0%]  total=38.1 GB
+q3:
+  own=N3 local=100.0%  [N0=  0.0% N1=  0.0% N2=  0.0% N3=100.0%]  total=38.1 GB
+  host free: 171 GB used
+=== LOCVERIFY DONE ===

@@ -1,0 +1,31 @@
+=== np=1 ctx=8192 ===
+  per-stream tok/s : n=2 min=38.72 median=117.11 max=117.11
+  AGGREGATE tok/s  : 155.83
+  wall=4.4s  tokens=187  wall-derived agg=42.98
+  draft acceptance : mean=0.720
+=== np=2 ctx=8192 ===
+  per-stream tok/s : n=2 min=27.15 median=27.79 max=27.79
+  AGGREGATE tok/s  : 54.94
+  wall=6.5s  tokens=314  wall-derived agg=48.66
+  draft acceptance : mean=0.654
+=== np=4 ctx=8192 ===
+  per-stream tok/s : n=4 min=19.38 median=19.93 max=20.65
+  AGGREGATE tok/s  : 79.73
+  wall=8.9s  tokens=628  wall-derived agg=70.61
+  draft acceptance : mean=0.669
+=== np=8 ctx=16384 ===
+  per-stream tok/s : n=8 min=12.84 median=13.11 max=13.63
+  AGGREGATE tok/s  : 105.07
+  wall=13.6s  tokens=1256  wall-derived agg=92.64
+  draft acceptance : mean=0.664
+=== np=16 ctx=32768 ===
+  per-stream tok/s : n=16 min=7.89 median=8.09 max=8.62
+  AGGREGATE tok/s  : 130.96
+  wall=22.0s  tokens=2512  wall-derived agg=114.40
+  draft acceptance : mean=0.678
+=== np=32 ctx=65536 ===
+  per-stream tok/s : n=32 min=4.42 median=4.56 max=4.73
+  AGGREGATE tok/s  : 145.85
+  wall=38.8s  tokens=5024  wall-derived agg=129.39
+  draft acceptance : mean=0.671
+=== SWEEP DONE ===

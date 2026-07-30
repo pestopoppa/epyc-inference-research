@@ -1,0 +1,16 @@
+p0k5: ~500 tok target, 540 words, 3153 bytes
+p8k: ~8000 tok target, 8724 words, 47483 bytes
+p32k: ~32000 tok target, 34908 words, 189313 bytes
+=== ARM A_prod cpuset=0-47,96-143 policy=none drop_caches=0 ===
+  p0k5 : prompt_tokens=565  prefill=194.29 tok/s  DECODE=15.36 tok/s
+  p8k : prompt_tokens=8749  prefill=167.87 tok/s  DECODE=13.15 tok/s
+  p32k : prompt_tokens=28232  prefill=100.72 tok/s  DECODE=9.15 tok/s
+=== ARM B_halfint cpuset=0-47,96-143 policy=--interleave=0,1 drop_caches=1 ===
+  p0k5 : prompt_tokens=565  prefill=226.51 tok/s  DECODE=21.12 tok/s
+  p8k : prompt_tokens=8749  prefill=175.85 tok/s  DECODE=17.28 tok/s
+  p32k : prompt_tokens=28232  prefill=105.63 tok/s  DECODE=11.29 tok/s
+=== ARM C_fullint cpuset=0-95 policy=--interleave=all drop_caches=1 ===
+  p0k5 : prompt_tokens=565  prefill=274.02 tok/s  DECODE=25.36 tok/s
+  p8k : prompt_tokens=8749  prefill=188.67 tok/s  DECODE=20.35 tok/s
+  p32k : prompt_tokens=28232  prefill=107.46 tok/s  DECODE=12.21 tok/s
+=== CTX80B DONE ===

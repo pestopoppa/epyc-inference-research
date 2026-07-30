@@ -1,0 +1,25 @@
+=== HALF2  2x instances  np=1  T=2  -t 48 ===
+  per-stream tok/s: n=2 min=21.84 median=22.99 max=24.14
+  FLEET AGGREGATE : 45.98 tok/s
+=== HALF2  2x instances  np=2  T=4  -t 48 ===
+  per-stream tok/s: n=4 min=16.79 median=18.30 max=19.44
+  FLEET AGGREGATE : 72.83 tok/s
+=== HALF2  2x instances  np=4  T=8  -t 48 ===
+  per-stream tok/s: n=8 min=11.62 median=12.33 max=13.33
+  FLEET AGGREGATE : 98.81 tok/s
+=== HALF2  2x instances  np=8  T=16  -t 48 ===
+  per-stream tok/s: n=16 min=7.51 median=8.03 max=8.47
+  FLEET AGGREGATE : 127.94 tok/s
+=== QUAD4  4x instances  np=1  T=4  -t 24 ===
+  per-stream tok/s: n=4 min=11.38 median=13.62 max=14.28
+  FLEET AGGREGATE : 52.90 tok/s
+=== QUAD4  4x instances  np=2  T=8  -t 24 ===
+  per-stream tok/s: n=8 min=7.68 median=10.41 max=12.02
+  FLEET AGGREGATE : 81.00 tok/s
+=== QUAD4  4x instances  np=4  T=16  -t 24 ===
+  per-stream tok/s: n=16 min=5.86 median=6.83 max=7.57
+  FLEET AGGREGATE : 108.39 tok/s
+=== QUAD4  4x instances  np=8  T=32  -t 24 ===
+  per-stream tok/s: n=32 min=3.81 median=4.50 max=5.23
+  FLEET AGGREGATE : 143.76 tok/s
+=== FLEETGRID DONE ===

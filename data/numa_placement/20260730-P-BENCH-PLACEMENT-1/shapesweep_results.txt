@@ -1,0 +1,66 @@
+=== HALF np=1 cpuset=0-47,96-143 policy=--interleave=0,1 -t 96 ctx=8192 ===
+  per-stream tok/s : n=2 min=20.55 median=21.92 max=21.92
+  AGGREGATE tok/s  : 42.47
+  wall=15.5s  tokens=314  wall-derived agg=20.32
+  draft acceptance : mean=0.686
+=== HALF np=2 cpuset=0-47,96-143 policy=--interleave=0,1 -t 96 ctx=8192 ===
+  per-stream tok/s : n=4 min=17.67 median=18.83 max=18.83
+  AGGREGATE tok/s  : 73.00
+  wall=18.0s  tokens=628  wall-derived agg=34.84
+  draft acceptance : mean=0.686
+=== HALF np=4 cpuset=0-47,96-143 policy=--interleave=0,1 -t 96 ctx=8192 ===
+  per-stream tok/s : n=8 min=11.19 median=11.91 max=12.51
+  AGGREGATE tok/s  : 94.14
+  wall=28.9s  tokens=1256  wall-derived agg=43.53
+  draft acceptance : mean=0.667
+=== HALF np=8 cpuset=0-47,96-143 policy=--interleave=0,1 -t 96 ctx=16384 ===
+  per-stream tok/s : n=16 min=7.43 median=7.75 max=8.21
+  AGGREGATE tok/s  : 124.94
+  wall=44.2s  tokens=2512  wall-derived agg=56.89
+  draft acceptance : mean=0.676
+=== HALF np=16 cpuset=0-47,96-143 policy=--interleave=0,1 -t 96 ctx=32768 ===
+  per-stream tok/s : n=32 min=4.43 median=4.57 max=4.90
+  AGGREGATE tok/s  : 147.86
+  wall=74.2s  tokens=5024  wall-derived agg=67.73
+  draft acceptance : mean=0.678
+=== HALFphys np=1 cpuset=0-47,96-143 policy=--interleave=0,1 -t 48 ctx=8192 ===
+  per-stream tok/s : n=2 min=20.94 median=22.52 max=22.52
+  AGGREGATE tok/s  : 43.46
+  wall=15.0s  tokens=314  wall-derived agg=20.88
+  draft acceptance : mean=0.686
+=== HALFphys np=4 cpuset=0-47,96-143 policy=--interleave=0,1 -t 48 ctx=8192 ===
+  per-stream tok/s : n=8 min=11.74 median=13.49 max=13.49
+  AGGREGATE tok/s  : 102.15
+  wall=26.4s  tokens=1256  wall-derived agg=47.50
+  draft acceptance : mean=0.661
+=== QUARTER np=1 cpuset=0-23,96-119 policy=--membind=0 -t 48 ctx=8192 ===
+  per-stream tok/s : n=2 min=13.23 median=14.16 max=14.16
+  AGGREGATE tok/s  : 27.39
+  wall=23.8s  tokens=314  wall-derived agg=13.20
+  draft acceptance : mean=0.686
+=== QUARTER np=2 cpuset=0-23,96-119 policy=--membind=0 -t 48 ctx=8192 ===
+  per-stream tok/s : n=4 min=9.73 median=10.84 max=11.09
+  AGGREGATE tok/s  : 41.64
+  wall=32.5s  tokens=628  wall-derived agg=19.35
+  draft acceptance : mean=0.649
+=== QUARTER np=4 cpuset=0-23,96-119 policy=--membind=0 -t 48 ctx=8192 ===
+  per-stream tok/s : n=8 min=7.51 median=8.18 max=8.50
+  AGGREGATE tok/s  : 64.03
+  wall=42.5s  tokens=1256  wall-derived agg=29.58
+  draft acceptance : mean=0.675
+=== QUARTER np=8 cpuset=0-23,96-119 policy=--membind=0 -t 48 ctx=16384 ===
+  per-stream tok/s : n=16 min=4.54 median=4.92 max=5.22
+  AGGREGATE tok/s  : 78.11
+  wall=69.7s  tokens=2512  wall-derived agg=36.04
+  draft acceptance : mean=0.671
+=== QUARTERphys np=1 cpuset=0-23,96-119 policy=--membind=0 -t 24 ctx=8192 ===
+  per-stream tok/s : n=2 min=12.91 median=13.83 max=13.83
+  AGGREGATE tok/s  : 26.74
+  wall=24.4s  tokens=314  wall-derived agg=12.88
+  draft acceptance : mean=0.686
+=== QUARTERphys np=4 cpuset=0-23,96-119 policy=--membind=0 -t 24 ctx=8192 ===
+  per-stream tok/s : n=8 min=7.68 median=8.38 max=8.70
+  AGGREGATE tok/s  : 65.51
+  wall=41.4s  tokens=1256  wall-derived agg=30.31
+  draft acceptance : mean=0.675
+=== SHAPE SWEEP DONE ===

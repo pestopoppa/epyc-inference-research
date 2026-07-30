@@ -1,0 +1,9 @@
+##### worker_general_gemma26B_Q4KM #####
+--- A_prod (taskset 0-47,96-143 no-numactl) ---
+| gemma4 26B.A4B Q4_K - Medium   |  15.63 GiB |    25.23 B | CPU        |      96 |   1 |           tg128 |         16.37 ± 0.11 |
+--- B_halfint (taskset 0-47,96-143 numactl --interleave=0,1) ---
+| gemma4 26B.A4B Q4_K - Medium   |  15.63 GiB |    25.23 B | CPU        |      96 |   1 |           tg128 |         23.43 ± 0.11 |
+--- C_fullint (taskset 0-95 numactl --interleave=all) ---
+| gemma4 26B.A4B Q4_K - Medium   |  15.63 GiB |    25.23 B | CPU        |      96 |   1 |           tg128 |         39.03 ± 0.56 |
+##### architect_general_qwen35_122B_Q4KM #####
+--- A_prod (taskset 0-47,96-143 no-numactl) ---

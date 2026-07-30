@@ -1,0 +1,10 @@
+##### gemma26B_Q4KM #####
+  A_prod (cpuset=0-47,96-143 policy=none) decode reps: 18.38 18.23  tok/s
+  C_fullint (cpuset=0-95 policy=--interleave=all) decode reps: 41.17 39.86  tok/s
+##### gemma31B_Q4KM #####
+  A_prod (cpuset=0-47,96-143 policy=none) decode reps: 2.46 2.51  tok/s
+  C_fullint (cpuset=0-95 policy=--interleave=all) decode reps: 6.91 7.02  tok/s
+##### qwen35B_Q8_nonMTP #####
+  A_prod (cpuset=0-47,96-143 policy=none) decode reps: 9.94 10.03  tok/s
+  C_fullint (cpuset=0-95 policy=--interleave=all) decode reps: 23.73 23.68  tok/s
+=== MODELREF DONE ===

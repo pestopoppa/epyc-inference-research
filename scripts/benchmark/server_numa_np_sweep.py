@@ -1313,6 +1313,25 @@ def summarize_cell(
     ttfts = [record.ttft_ms for record in successes if record.ttft_ms is not None]
     total_predicted = sum(record.predicted_tokens for record in successes)
     total_prompt = sum(record.prompt_tokens for record in successes)
+    # True decode rate inputs, taken from llama.cpp's own per-request timings
+    # (record.timings is the verbatim server "timings" block). predicted_ms is
+    # the time the server actually spent generating that request's tokens, so
+    # sum(predicted_n) / sum(predicted_ms) is a decode rate. Requests whose
+    # timings block is missing/malformed are excluded from BOTH sums so the
+    # ratio stays self-consistent.
+    decode_tokens = 0
+    decode_seconds = 0.0
+    for record in successes:
+        predicted_n = record.timings.get("predicted_n")
+        predicted_ms = record.timings.get("predicted_ms")
+        if not isinstance(predicted_n, (int, float)) or isinstance(predicted_n, bool):
+            continue
+        if not isinstance(predicted_ms, (int, float)) or isinstance(predicted_ms, bool):
+            continue
+        if predicted_n <= 0 or predicted_ms <= 0:
+            continue
+        decode_tokens += int(predicted_n)
+        decode_seconds += float(predicted_ms) / 1000.0
     per_tps = [record.predicted_tps for record in successes if record.predicted_tps > 0]
     draft_totals = [record.draft_n for record in successes if record.draft_n is not None]
     accepted_totals = [
@@ -1402,7 +1421,27 @@ def summarize_cell(
         "wall_seconds": wall_s,
         "tasks_per_hour_raw": (success_count / wall_s * 3600.0) if wall_s > 0 else 0.0,
         **trimmed,
-        "aggregate_predicted_tps": (total_predicted / wall_s) if wall_s > 0 else 0.0,
+        # Two DIFFERENT numbers — do not conflate them (a misread of the old
+        # name "aggregate_predicted_tps" corrupted a decision-grade record,
+        # renamed 2026-07-29; historical result files keep the old key and are
+        # append-only, so readers must accept both):
+        #   aggregate_wallclock_tps = decoded tokens / TOTAL CELL WALL TIME.
+        #     Wall time includes model load, prefill, queueing and idle gaps, so
+        #     this is throughput-per-elapsed-second and reads systematically LOW
+        #     versus any decode rate. NOT comparable to llama.cpp's
+        #     predicted_per_second or to llama-bench tg.
+        #   aggregate_decode_tps = sum(predicted_n) / sum(predicted_ms) from
+        #     llama.cpp's per-request timings, i.e. tokens decoded divided by the
+        #     time actually spent decoding. THIS is the decode rate comparable to
+        #     predicted_per_second. With np>1 the per-slot decode intervals
+        #     overlap in wall time, so it is the token-weighted mean PER-SLOT
+        #     decode rate, not a system-wide aggregate.
+        "aggregate_wallclock_tps": (total_predicted / wall_s) if wall_s > 0 else 0.0,
+        "aggregate_decode_tps": (
+            (decode_tokens / decode_seconds) if decode_seconds > 0 else 0.0
+        ),
+        "decode_seconds_total": decode_seconds,
+        "decode_tokens_total": decode_tokens,
         "predicted_tokens_total": total_predicted,
         "prompt_tokens_total": total_prompt,
         "per_request_tps_mean": statistics.mean(per_tps) if per_tps else 0.0,
@@ -1442,7 +1481,9 @@ CSV_FIELDS = [
     "wall_seconds",
     "tasks_per_hour_raw",
     "tasks_per_hour_trimmed",
-    "aggregate_predicted_tps",
+    # wall-clock throughput vs true decode rate — see summarize_cell()
+    "aggregate_wallclock_tps",
+    "aggregate_decode_tps",
     "p50_latency_ms",
     "p95_latency_ms",
     "ttft_p50_ms",
