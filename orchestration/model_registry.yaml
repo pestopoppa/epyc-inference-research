@@ -482,6 +482,14 @@ server_mode:
 
   # HOT tier - always resident (~40GB total)
   frontdoor:
+    # 2026-07-30: private per-instance weights. Under shared mmap the GGUF's
+    # pages are placed ONCE by whichever process faults them first, and every
+    # later instance inherits that placement regardless of its own --membind /
+    # --interleave. Measured: 4 co-resident instances at 0.256/0.256/0.242/0.269
+    # node-local under mmap vs 1.00 each under --no-mmap, fleet decode 40.91 ->
+    # 52.13 tok/s. Without this the numactl policy in stack_numa.py is accepted
+    # and silently does nothing.
+    no_mmap: true
     url: http://localhost:8070
     port: 8070
     slots: 2  # v6 shared MTP process; logical role still advertises NUMA quarter fanout below
@@ -498,8 +506,14 @@ server_mode:
     kv_quant: {k: q8_0, v: q8_0}  # Q8 KV (lean parity)
     memory_gb: 37
     tier: hot
-    numa_instances: 4  # 4×48t NUMA-quarter instances
-    numa_ports: [8080, 8180, 8280, 8380]
+    # 2026-07-30: quarters retired. These are the SUB-FULL instances only —
+    # the full lives at `port` above. Halves reuse the first two quarter port
+    # slots; 8280/8380/8282/8382/8385/8485 are FREED and must not be revived
+    # without a topology change, because several fail-open paths treat an
+    # unknown port as lock-free (backend.py:207, placement.py:186,
+    # cpu_region_lock.py:641).
+    numa_instances: 2  # 2×48t NUMA-half instances (nodes 0,1 and 2,3)
+    numa_ports: [8080, 8180]
     acceleration:
       type: speculative_decoding
       spec_type: draft-mtp
@@ -530,6 +544,14 @@ server_mode:
     throughput: 10.8   # t/s at 48t NUMA deployment (sweep 2026-03-21). 192t ref: 12.2. Old 39.44 was inflated.
 
   coder_escalation:
+    # 2026-07-30: private per-instance weights. Under shared mmap the GGUF's
+    # pages are placed ONCE by whichever process faults them first, and every
+    # later instance inherits that placement regardless of its own --membind /
+    # --interleave. Measured: 4 co-resident instances at 0.256/0.256/0.242/0.269
+    # node-local under mmap vs 1.00 each under --no-mmap, fleet decode 40.91 ->
+    # 52.13 tok/s. Without this the numactl policy in stack_numa.py is accepted
+    # and silently does nothing.
+    no_mmap: true
     url: http://localhost:8070
     port: 8070
     slots: 1
@@ -573,8 +595,14 @@ server_mode:
       ubatch: 512
       lookup: false
       corpus_retrieval: false
-    numa_instances: 4
-    numa_ports: [8082, 8182, 8282, 8382]
+    # 2026-07-30: quarters retired. These are the SUB-FULL instances only —
+    # the full lives at `port` above. Halves reuse the first two quarter port
+    # slots; 8280/8380/8282/8382/8385/8485 are FREED and must not be revived
+    # without a topology change, because several fail-open paths treat an
+    # unknown port as lock-free (backend.py:207, placement.py:186,
+    # cpu_region_lock.py:641).
+    numa_instances: 2  # 2×48t NUMA-half instances (nodes 0,1 and 2,3)
+    numa_ports: [8082, 8182]
     # 2026-07-16 routing-prior rollback: supersedes the legacy May-08 60.7 t/s
     # prior with the Jun-28 matched v6/iQK port artifact (N=206, avg_tokens_per_second).
     throughput: 38.46
@@ -613,6 +641,14 @@ server_mode:
 
   # WARM tier - mmap preloaded, loaded on demand (~430GB total)
   architect_general:
+    # 2026-07-30: private per-instance weights. Under shared mmap the GGUF's
+    # pages are placed ONCE by whichever process faults them first, and every
+    # later instance inherits that placement regardless of its own --membind /
+    # --interleave. Measured: 4 co-resident instances at 0.256/0.256/0.242/0.269
+    # node-local under mmap vs 1.00 each under --no-mmap, fleet decode 40.91 ->
+    # 52.13 tok/s. Without this the numactl policy in stack_numa.py is accepted
+    # and silently does nothing.
+    no_mmap: true
     url: http://localhost:8083
     port: 8083
     slots: 2  # Serial admission with -np 2 to keep draft-mtp KV slot semantics valid
@@ -674,8 +710,26 @@ server_mode:
     throughput: 7.0    # t/s at 96t NUMA deployment (sweep 2026-03-21). 192t ref: 7.1. Old 9.00 was different config.
 
   ingest_long_context:
+    # 2026-07-30: private per-instance weights. Under shared mmap the GGUF's
+    # pages are placed ONCE by whichever process faults them first, and every
+    # later instance inherits that placement regardless of its own --membind /
+    # --interleave. Measured: 4 co-resident instances at 0.256/0.256/0.242/0.269
+    # node-local under mmap vs 1.00 each under --no-mmap, fleet decode 40.91 ->
+    # 52.13 tok/s. Without this the numactl policy in stack_numa.py is accepted
+    # and silently does nothing.
+    no_mmap: true
     url: http://localhost:8085
     port: 8085
+    # 2026-07-30: declared for the first time. This role previously had NO
+    # numa_ports, so src/fleet.py hardcoded a 5-port list for it — a second
+    # source of truth that went stale the moment the topology changed. Declaring
+    # them here lets fleet.py derive instead of restating.
+    # Quarters retired; halves reuse the first two quarter port slots.
+    # 8385/8485 are FREED and must not be revived without a topology change:
+    # several dispatch paths fail OPEN on an unknown port (backend.py:207,
+    # placement.py:186, cpu_region_lock.py:641 yields no lock at all).
+    numa_instances: 2  # 2×48t NUMA-half instances (nodes 0,1 and 2,3)
+    numa_ports: [8185, 8285]
     slots: 1  # Serial — admission=1, no wasted KV
     model_role: ingest_long_context
     thinking_control:
@@ -4019,6 +4073,12 @@ roles:
     system_prompt_suffix: |
       Output final answer on last line.
   worker_vision:
+    # 2026-07-30: private weights. worker_vision (node1) and vision_escalation
+    # (node3) are two roles on two DIFFERENT nodes sharing ONE VL GGUF. Under
+    # shared mmap its pages are placed once by whichever loads first, so at most
+    # one can be node-local — both measured 0.25. A single-instance role is NOT
+    # immune to the shared-mmap defect when the sharing is CROSS-ROLE.
+    no_mmap: true
     tier: C
     port: 8086
     description: "Agentic vision tasks - dedicated VL server with mmproj"
@@ -4070,6 +4130,12 @@ roles:
       Keep for: screenshot analysis, UI automation, tool-using vision tasks.
       Server uses /v1/chat/completions with image_url content type.
   vision_escalation:
+    # 2026-07-30: private weights. worker_vision (node1) and vision_escalation
+    # (node3) are two roles on two DIFFERENT nodes sharing ONE VL GGUF. Under
+    # shared mmap its pages are placed once by whichever loads first, so at most
+    # one can be node-local — both measured 0.25. A single-instance role is NOT
+    # immune to the shared-mmap defect when the sharing is CROSS-ROLE.
+    no_mmap: true
     tier: C
     port: 8087
     description: "Temporary safe vision escalation alias - Qwen2.5-VL server with mmproj"

@@ -60,12 +60,20 @@ numactl --interleave=all \
 
 `KMP_BLOCKTIME=10` is the workaround for the AOCC libomp idle-spin issue (`omp_pause_resource` is ignored). Without it, gemma-4 idle cores stay at ~95% utilization and decode regresses ~78% on the frontdoor port.
 
-### When to Use Single-NUMA-Node vs Aggregate
+### When to Use Full-Machine vs Aggregate
+
+> **Corrected 2026-07-30.** This section was headed "Single-NUMA-Node vs Aggregate" and described
+> the 96-thread arm as "96t-single-NUMA-node". That is a misnomer: `taskset -c 0-95` is **all 96
+> physical cores across all four NPS4 nodes**. A NUMA node on this host is 24 physical cores
+> (`node0 = 0-23,96-119`, `node1 = 24-47,120-143`, `node2 = 48-71,144-167`,
+> `node3 = 72-95,168-191`) — i.e. exactly one quarter. The `stack_numa.py` names
+> `NUMA_NODE0 = "0-47,96-143"` / `NUMA_NODE1 = "48-95,144-191"` are NPS2-era and each span **two**
+> nodes; only `NUMA_Q*` is node-aligned.
 
 The orchestrator runs frontdoor as 4×48t NUMA-quarter instances (`numa_ports: [8080, 8180, 8280, 8380]`). Two distinct operating points exist:
 
-- **Single-model, single-instance (192t or 96t)**: useful for measuring per-instance peak; e.g. Qwen3-Coder-30B-A3B reaches ~49 t/s at 96t-single-NUMA-node.
-- **Concurrent split (4×48t or 32×6t)**: the production deployment mode; aggregate throughput is 1.4–1.6× the sum of independent 48t runs at the same model.
+- **Single-model, single-instance (192t or 96t)**: useful for measuring per-instance peak; e.g. Qwen3-Coder-30B-A3B reaches ~49 t/s at 96 threads on the whole machine (`taskset -c 0-95`). Canonical placement pairs this with `numactl --interleave=all`.
+- **Concurrent split (4×48t or 32×6t)**: the production deployment mode; aggregate throughput is 1.4–1.6× the sum of independent 48t runs at the same model. **Note (observation-grade, 2026-07-30):** at *matched total concurrency* a single full-machine instance out-aggregates four quarters at every measured rung (T=4 79.7 vs 52.9, T=8 105.1 vs 81.0, T=16 131.0 vs 108.4, T=32 145.9 vs 143.8 tok/s). Protocol `P-BENCH-PLACEMENT-1` ([numa-placement-measurement-protocol](../protocols/numa-placement-measurement-protocol.md)) has a MEASUREMENT.md registry entry that is **STAGED, not applied**, so this may not gate a keep/revert/deploy/promote decision.
 
 Index benchmarks by **model name + quantization**, never by orchestrator role (`feedback_model_not_role_indexing`). Role reassignment otherwise destroys historical data.
 

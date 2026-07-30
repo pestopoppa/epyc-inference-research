@@ -65,7 +65,7 @@ fi
 | Resource | How to Check | Why It Matters |
 |----------|--------------|----------------|
 | **RAM** | `free -g` | Models load entirely into RAM (mmap + mlock for HOT) |
-| **CPU Cores** | `nproc` | Affects decode throughput; production uses 96t per single-NUMA-node instance |
+| **CPU Cores** | `nproc` | Affects decode throughput; canonical single-instance placement is 96t on the **whole machine** (`taskset -c 0-95` + `numactl --interleave=all`) — *not* one NUMA node |
 | **AVX-512** | `grep avx512 /proc/cpuinfo` | Required for quantized GEMV ukernels (Zen 5 VPMADDUBSW 2/cycle, see `project_zen5_vnni_vs_maddubs`) |
 | **NUMA** | `numactl --hardware` | NPS4 is the production BIOS setting; pinning + interleave required |
 | **Storage** | `df -h` | Models are 1–300 GB each |
@@ -75,9 +75,18 @@ fi
 
 The production EPYC 9655 runs **NPS4** (4 NUMA nodes per socket). Each node has 6 memory channels. RAID0 NVMes are split across nodes 2+3, so I/O-heavy work needs `numactl --interleave=2,3` (`project_raid_numa_split_nps4`).
 
+**A NUMA node on this host is 24 physical cores, not 48.** Live topology (`numactl --hardware`):
+`node0 = 0-23,96-119`, `node1 = 24-47,120-143`, `node2 = 48-71,144-167`, `node3 = 72-95,168-191`.
+The `stack_numa.py` constants `NUMA_NODE0 = "0-47,96-143"` and `NUMA_NODE1 = "48-95,144-191"` are
+**NPS2-era names that each span two NPS4 nodes** — they have been misleading since the 2026-04-24
+reboot. Only the `NUMA_Q*` quarter constants are node-aligned. *(Corrected 2026-07-30.)*
+
 Key sizing implications:
 
-- Single-instance peak (96t-single-NUMA-node) ≈ 49 t/s for 30B-A3B Q4_K_M.
+- Single-instance peak ≈ 49 t/s for 30B-A3B Q4_K_M at **96 threads on the whole machine**
+  (`taskset -c 0-95`). This was historically labelled "96t-single-NUMA-node"; that label was
+  always a misnomer — `0-95` is all 96 physical cores across every node. Canonical placement
+  pairs it with `numactl --interleave=all`.
 - Production "concurrent split" mode runs 4×48t instances per model, aggregating to ~150 t/s for 7B / Qwen3-Coder-30B (`project_concurrent_split_throughput`).
 - For NUMA multi-instance, **always** use `--mlock` with `numactl --membind` — never bare `taskset` (`feedback_mmap_numa_sharing`).
 
