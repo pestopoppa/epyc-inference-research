@@ -16,6 +16,125 @@
 # =============================================================================
 
 # =============================================================================
+# CANONICAL: speculative-decoding recipe policy
+# =============================================================================
+#
+# THIS BLOCK IS THE SINGLE SOURCE OF TRUTH for what speculative-decoding recipe
+# production runs. Every other document, handoff, wiki page, harness header and
+# code comment MUST LINK HERE rather than restate the recipe. Restated content
+# rots; this block does not.
+#
+#   Anchor for cross-references:
+#     epyc-inference-research/orchestration/model_registry.yaml
+#       -> speculative_decoding_policy
+#
+speculative_decoding_policy:
+  canonical: true
+  ratified_by: operator
+  ratified_on: 2026-07-31
+  supersedes: >
+    All prior per-role prose describing `draft-mtp` alone as the production
+    recipe, and the `ngram_candidate_spec_type` field (RETIRED — see below).
+
+  # ---------------------------------------------------------------------------
+  # THE RECIPE
+  # ---------------------------------------------------------------------------
+  production_recipe: ngram-mod,draft-mtp
+  statement: >
+    Production runs COMPOSED speculative decoding: `--spec-type ngram-mod,draft-mtp`.
+    n-gram drafting and MTP self-draft run TOGETHER as one launch-time stack.
+    This applies to every role that has a working draft path. It is not a
+    candidate, not an experiment, and not task-specific — it is the default.
+
+  cost_accepted: >
+    Composed measures approximately -1.6% versus `draft-mtp` alone on ordinary
+    (non-repetitive) text. That cost is DELIBERATELY ACCEPTED by the operator in
+    exchange for the large upside on repetitive / token-reuse context, where the
+    n-gram lane contributes drafts that MTP alone cannot. Do NOT "optimise" the
+    recipe back to `draft-mtp` alone on the strength of an ordinary-text
+    microbenchmark: that trade has already been made, with eyes open.
+
+  # ---------------------------------------------------------------------------
+  # THE EXCEPTION
+  # ---------------------------------------------------------------------------
+  exceptions:
+    ingest_long_context:
+      model: Qwen3-Next-80B-A3B-Instruct
+      spec_type: none
+      category: OPTIMUM          # NOT a baseline. See category grammar below.
+      reason: >
+        Qwen3-Next-80B is an SSM/MoE hybrid. Its recurrent state cannot fork, so
+        NO external draft-model path exists and none can be built. n-gram alone
+        yields 1.6-4.7% acceptance, i.e. nothing. `--spec-type none` is therefore
+        the BEST AVAILABLE configuration for this model — it is this model's
+        OPTIMUM and BELONGS IN HEADLINE TABLES. It is emphatically NOT a
+        baseline and must never be excluded from a headline on the grounds that
+        "speculation is off". That exact mistake was made on 2026-07-31.
+
+  # ---------------------------------------------------------------------------
+  # CATEGORY GRAMMAR — the three things that keep getting conflated
+  # ---------------------------------------------------------------------------
+  # Conflating these is the specific defect that has cost repeated wasted
+  # measurement runs. Every reported measurement MUST declare its category.
+  measurement_categories:
+    BASELINE: >
+      An optimization the model HAS, deliberately switched OFF. Diagnostic only.
+      Belongs in an addendum. NEVER a headline number. NEVER a comparison arm in
+      a promotion decision. A BASELINE regression does NOT block a promotion; a
+      BASELINE improvement is NOT a promotion argument.
+    OPTIMUM: >
+      The best configuration AVAILABLE for that model. If a model has no draft
+      path, running it with `--spec-type none` IS its OPTIMUM (see
+      ingest_long_context above) — that is not a baseline and it belongs in
+      headline tables. Promotion decisions are made between OPTIMUM configs and
+      nothing else.
+    CANDIDATE: >
+      Measured but NOT adopted. Must be labelled as such so it is never mistaken
+      for what production runs.
+
+  promotion_rule: >
+    Promotion is decided on the production-OPTIMAL configuration alone. A
+    regression in a BASELINE-category measurement is not a promotion blocker and
+    must not be cited as one. See MEASUREMENT.md / agents/shared/MEASUREMENT_POLICY.md
+    for the ratified constitution-level wording.
+
+  # ---------------------------------------------------------------------------
+  # WHERE THIS VALUE ACTUALLY TAKES EFFECT (read before assuming a fix landed)
+  # ---------------------------------------------------------------------------
+  # The launcher does NOT read this file directly. The chain is:
+  #
+  #   1. THIS master registry  (epyc-inference-research/orchestration/model_registry.yaml)
+  #        |  recompiled at every `orchestrator_stack.py start` (--compile-registry, default ON)
+  #        v
+  #   2. LEAN registry         (epyc-orchestrator/orchestration/model_registry.yaml)
+  #        |  recompiled ONLY by scripts/registry/stack_change_pipeline.py
+  #        |  ** NOT regenerated at start **
+  #        v
+  #   3. stack_priors.yaml     (epyc-orchestrator/orchestration/derived/stack_priors.yaml)
+  #        |  read verbatim by orchestrator_stack.py:_stack_prior_launch()
+  #        v
+  #   4. llama-server argv     (orchestrator_stack.py:_append_spec_decode_args, ~line 278)
+  #
+  # Editing THIS file changes step 1 and 2 only. Until the stack-change pipeline
+  # regenerates step 3, the launcher keeps emitting whatever stack_priors.yaml
+  # already says. ALWAYS verify the realized flags with `ps -eo args` on a
+  # running server, or by reading
+  # `orchestration/derived/stack_priors.yaml -> roles.<role>.serving.launch.runtime.flags.spec`.
+  effective_only_after: >
+    scripts/registry/stack_change_pipeline.py must regenerate
+    orchestration/derived/stack_priors.yaml before a registry spec_type change
+    reaches a launched server. A master-registry edit alone does NOT change
+    production behaviour.
+
+  retired_fields:
+    ngram_candidate_spec_type: >
+      RETIRED 2026-07-31. This field previously carried `ngram-mod,draft-mtp`
+      while `spec_type` carried `draft-mtp`, which read as "the real one is
+      elsewhere" and directly caused mis-launched measurement runs. The composed
+      recipe is now the value of `spec_type` itself. Any surviving occurrence of
+      this key is stale and MUST be deleted, not consulted.
+
+# =============================================================================
 # Kernel audit history
 # =============================================================================
 #
@@ -516,7 +635,9 @@ server_mode:
     numa_ports: [8080, 8180]
     acceleration:
       type: speculative_decoding
-      spec_type: draft-mtp
+      # CANONICAL: see top-level `speculative_decoding_policy`. Composed ngram+MTP
+      # is the production recipe (was `draft-mtp` alone until 2026-07-31).
+      spec_type: ngram-mod,draft-mtp
       draft_max: 4
       lookup: false
       corpus_retrieval: true
@@ -567,7 +688,14 @@ server_mode:
     memory_gb: 37
     tier: hot
     acceleration:
-      type: none  # Qwen3.6 Q8 runs full — GDN verification wall makes spec-dec net-negative
+      # ALIAS ROLE — coder_escalation shares frontdoor's :8070 llama-server process
+      # and does NOT launch its own server. It therefore INHERITS frontdoor's
+      # speculative recipe at runtime (composed ngram-mod,draft-mtp) regardless of
+      # what this block says. `type: none` here means "launches no draft of its
+      # own", NOT "runs without speculation". Do not read this as a recipe.
+      # CANONICAL: see top-level `speculative_decoding_policy`.
+      type: none  # alias: no own draft; inherits frontdoor's composed recipe
+      inherits_spec_from: frontdoor
       lookup: false
       corpus_retrieval: true
     throughput: 24.3  # t/s, shares frontdoor Qwen3.6 Q8 (lean, May-4)
@@ -587,8 +715,11 @@ server_mode:
     previous_model: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
     acceleration:
       type: speculative_decoding
-      spec_type: draft-mtp
-      ngram_candidate_spec_type: ngram-mod,draft-mtp
+      # CANONICAL: see top-level `speculative_decoding_policy`. Composed ngram+MTP
+      # is the production recipe. `ngram_candidate_spec_type` RETIRED 2026-07-31 —
+      # it held this same value while `spec_type` held `draft-mtp`, which read as
+      # "the real one is elsewhere" and caused mis-launched measurement runs.
+      spec_type: ngram-mod,draft-mtp
       draft_max: 2
       draft_p_min: 0.0
       threads_draft: 16
@@ -673,7 +804,10 @@ server_mode:
     # type/spec_type must match the roles block: native draft-mtp on v6, ik_llama deprecated.
     acceleration:
       type: speculative_decoding   # 2026-06-26 v6 cutover: matches roles.architect_general
-      spec_type: draft-mtp          # 2026-06-26 v6 cutover: native MTP via NEXTN Qwen3.5-122B variant (same-file draft path; launcher omits -md)
+      # CANONICAL: see top-level `speculative_decoding_policy`. Composed ngram+MTP
+      # is the production recipe (was `draft-mtp` alone until 2026-07-31).
+      # NEXTN self-draft = same-file draft path; launcher omits -md.
+      spec_type: ngram-mod,draft-mtp
       draft_max: 4
       draft_model: /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf
       lookup: false
@@ -746,6 +880,16 @@ server_mode:
     tier: hot
     acceleration:
       type: none  # 2026-07-17: default experts; stale MoE4 override removed from live ingest policy
+      # CANONICAL: see top-level `speculative_decoding_policy` -> exceptions.ingest_long_context.
+      # `none` IS THIS MODEL'S OPTIMUM — it is NOT a baseline.
+      # Qwen3-Next-80B is an SSM/MoE hybrid: its recurrent state cannot fork, so
+      # NO draft-model path exists and none can be built. n-gram alone yields
+      # 1.6-4.7% acceptance (i.e. nothing). `--spec-type none` is therefore the
+      # BEST AVAILABLE config for this role and BELONGS IN HEADLINE TABLES.
+      # Do NOT exclude this role from a headline on the grounds that
+      # "speculation is off" — that mistake was made on 2026-07-31.
+      spec_type: none
+      spec_category: OPTIMUM   # NOT BASELINE. See measurement_categories in the policy block.
     throughput: 14.4-20.8
     benchmark_score: 25/27 (93%) on canonical long_context suite, May-4
     notes: "SSM-hybrid linear attention scales O(n) per token — at extreme contexts (50K+) outperforms pure-attention models. Best Stage-1 candidate for three_stage_summarization (full-context fast draft). Stage-2 review now uses frontdoor (Qwen3.6-35B-A3B Q8, 100% long_context). Historical MoE4 rows are not live launch policy as of 2026-07-17."
@@ -1098,12 +1242,16 @@ roles:
     - ingest
     acceleration:
       type: speculative_decoding
-      spec_type: draft-mtp
+      # CANONICAL: see top-level `speculative_decoding_policy`. Composed ngram+MTP
+      # is the production recipe (was `draft-mtp` alone until 2026-07-31).
+      spec_type: ngram-mod,draft-mtp
       draft_max: 4
       draft_model: Qwen3.6-35B-A3B-MTP-Q8_0.gguf
       lookup: false
       corpus_retrieval: true
     performance:
+      # NOTE: baseline_tps == optimized_tps here because both rows were filled
+      # with the same May-4 figure. Neither is a measured spec-off BASELINE.
       baseline_tps: 24.3
       optimized_tps: 24.3
       quality_pct: 93  # May-4 Claude-as-Judge 170/183
@@ -1388,6 +1536,12 @@ roles:
     - architect
     acceleration:
       type: none  # 2026-07-17: default experts for live ingest; historical MoE4 benchmark retained below
+      # CANONICAL: see top-level `speculative_decoding_policy` -> exceptions.ingest_long_context.
+      # `none` IS THIS MODEL'S OPTIMUM — it is NOT a baseline. No draft path
+      # exists (SSM state cannot fork); n-gram alone gives 1.6-4.7% acceptance.
+      # This row BELONGS IN HEADLINE TABLES.
+      spec_type: none
+      spec_category: OPTIMUM   # NOT BASELINE. See measurement_categories in the policy block.
     constraints:
       forbid:
       - speculative_decoding
@@ -1395,6 +1549,8 @@ roles:
       reason: SSM incompatible with external draft (state can't fork). Prompt lookup
         works via auto freeze-recurrent (validated 2026-03-10).
     performance:
+      # baseline_tps == optimized_tps is CORRECT here and is not a copy error:
+      # with no draft path available, the unaccelerated figure IS the optimum.
       baseline_tps: 10.12
       optimized_tps: 10.12  # default-expert live policy; old MoE4 6.29 t/s row is historical only
       long_context_tps_range: 14.4-20.8 t/s @ ~12K context (May-4 long_context suite)
@@ -1450,7 +1606,9 @@ roles:
       # MTP via NEXTN-embedded Qwen3.5-122B variant (same-file draft path; launcher omits -md).
       # Dropped the no-op expert_used_count override (experts=8 == GGUF default == no reduction).
       type: speculative_decoding                  # 2026-06-26 v6 cutover: was moe_expert_reduction
-      spec_type: draft-mtp                         # 2026-06-26 v6 cutover: native MTP on v6 (NEXTN variant)
+      # CANONICAL: see top-level `speculative_decoding_policy`. Composed ngram+MTP
+      # is the production recipe (was `draft-mtp` alone until 2026-07-31).
+      spec_type: ngram-mod,draft-mtp               # NEXTN self-draft variant + n-gram lane
       draft_model: /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf  # NEXTN self-draft = same file; launcher omits -md
       draft_max: 4                                # 2026-06-26 v6 cutover: architect n-max=4 (emitted as --spec-draft-n-max)
       k: 4                                         # alias for draft_max (RegistryLoader)
@@ -2849,12 +3007,29 @@ roles:
     - coder
     - general
     acceleration:
-      type: ngram_lookup
-      spec_type: ngram-simple
-      draft_max: 64  # sweep-verified +10.1%
+      # CANONICAL: see top-level `speculative_decoding_policy`.
+      # 2026-07-31: was `type: ngram_lookup` / `spec_type: ngram-simple` /
+      # `draft_max: 64`. That was a PRE-MTP-ERA record and it is the ONLY place
+      # `ngram-simple` ever appeared on a production model role — a third
+      # variant nobody had discussed, and a live source of recipe ambiguity.
+      # qwen36_q8_0 is the model backing BOTH frontdoor and coder_escalation, so
+      # this record now matches server_mode.frontdoor exactly.
+      type: speculative_decoding
+      spec_type: ngram-mod,draft-mtp
+      draft_max: 4                      # matches server_mode.frontdoor (MTP n-max)
+      historical_candidate:
+        category: CANDIDATE             # measured, NOT adopted — never a production recipe
+        spec_type: ngram-simple
+        draft_max: 64
+        result: "+10.1% sweep-verified, pre-MTP era (interleave + ngram dm=64 -> 27.4 t/s)"
+        note: >
+          Superseded by the composed ngram-mod,draft-mtp recipe. Retained as a
+          research record only. Do NOT launch this.
     performance:
+      # baseline_tps below is a pre-MTP-era spec-off figure: BASELINE category,
+      # diagnostic only. It is NOT a headline number and NOT a promotion arm.
       baseline_tps: 25.6
-      optimized_tps: 27.4  # interleave + ngram dm=64
+      optimized_tps: 27.4  # pre-MTP era: interleave + ngram dm=64 (see historical_candidate)
       quad_aggregate_tps: 57.4
       eight_aggregate_tps: 76.8
       prompt_processing_tps: 219.2  # 22K context
@@ -3582,6 +3757,11 @@ roles:
     candidate_roles:
     - general
     acceleration:
+      # NOT A PRODUCTION ROLE. supergemma4_31b_q4km is a research/catalogue model.
+      # This `ngram-simple` record is CANDIDATE category (measured, not adopted)
+      # and is NOT the production recipe. Production recipe:
+      # see top-level `speculative_decoding_policy` (ngram-mod,draft-mtp).
+      category: CANDIDATE
       type: ngram_lookup
       spec_type: ngram-simple
       draft_max: 128  # +6%
@@ -3755,7 +3935,10 @@ roles:
     - thinking
     acceleration:
       type: speculative_decoding
-      spec_type: draft-mtp  # 2026-06-26 v6 cutover: native draft-mtp on production-consolidated-v6 (was 'mtp', ik_llama deprecated)
+      # CANONICAL: see top-level `speculative_decoding_policy`. This is the
+      # MODEL-indexed record for the production worker GGUF; it must agree with
+      # server_mode.worker / roles.worker_general. Composed since 2026-07-31.
+      spec_type: ngram-mod,draft-mtp
       draft_role: draft_gemma4_26b_a4b_assistant_q8
       draft_max: 2          # 2026-05-08: matches 31B sibling tuning (lowered from 3 for realistic acceptance)
       draft_p_min: 0.0
@@ -4016,8 +4199,19 @@ roles:
     - coder
     acceleration:
       type: speculative_decoding
-      spec_type: draft-mtp
-      ngram_candidate_spec_type: ngram-mod,draft-mtp  # Repetitive/token-reuse candidate only; not a broad worker default on 2026-07-19 prompt-diverse MI210 evidence.
+      # CANONICAL: see top-level `speculative_decoding_policy`.
+      # 2026-07-31: restored to the composed production recipe.
+      # HISTORY — this is the exact field that caused the confusion:
+      #   9905c2fb (2026-07-16) set spec_type: ngram-mod,draft-mtp  [K16 deployment,
+      #                         live worker cmdlines verified on 8072/8082/8182/8282/8382]
+      #   2370025f (2026-07-19) REVERTED it to draft-mtp and moved the composed
+      #                         value into `ngram_candidate_spec_type`, demoting a
+      #                         DEPLOYED recipe to a "candidate" on prompt-diverse
+      #                         MI210 evidence. The launcher reads `spec_type`
+      #                         verbatim, so that commit silently un-deployed
+      #                         composed speculation on every worker.
+      # `ngram_candidate_spec_type` is RETIRED — do not reintroduce it.
+      spec_type: ngram-mod,draft-mtp
       draft_role: draft_gemma4_26b_a4b_assistant_q8
       draft_max: 2
       draft_p_min: 0.0
