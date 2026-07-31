@@ -1252,8 +1252,13 @@ roles:
     performance:
       # NOTE: baseline_tps == optimized_tps here because both rows were filled
       # with the same May-4 figure. Neither is a measured spec-off BASELINE.
-      baseline_tps: 24.3
-      optimized_tps: 24.3
+      # CORRECTED 2026-07-31. Both rows previously held the same 2026-05-04 figure
+      # (24.3), so `optimized_tps` was NOT an optimized number -- routing and the
+      # cost model decided on a value ~40% below the ratified production optimum.
+      # category=OPTIMUM per MEASUREMENT.md §3.
+      baseline_tps: null      # category=BASELINE: spec-dec-off NOT measured for this model. Do not fabricate.
+      optimized_tps: 40.22    # category=OPTIMUM: full instance, interleave=all, draft-mtp n_max 4
+      optimized_tps_attest: "[P-BENCH-PLACEMENT-1, n=3, 2026-07-30, attest data/numa_placement/20260730-P-BENCH-PLACEMENT-1/prodopt_results.txt]"
       quality_pct: 93  # May-4 Claude-as-Judge 170/183
       benchmark_date: 2026-05-04
     memory:
@@ -1429,8 +1434,13 @@ roles:
       lookup: false
       corpus_retrieval: true
     performance:
-      baseline_tps: 24.3
-      optimized_tps: 24.3
+      # CORRECTED 2026-07-31. Both rows previously held the same 2026-05-04 figure
+      # (24.3), so `optimized_tps` was NOT an optimized number -- routing and the
+      # cost model decided on a value ~40% below the ratified production optimum.
+      # category=OPTIMUM per MEASUREMENT.md §3.
+      baseline_tps: null      # category=BASELINE: spec-dec-off NOT measured for this model. Do not fabricate.
+      optimized_tps: 40.22    # category=OPTIMUM: full instance, interleave=all, draft-mtp n_max 4
+      optimized_tps_attest: "[P-BENCH-PLACEMENT-1, n=3, 2026-07-30, attest data/numa_placement/20260730-P-BENCH-PLACEMENT-1/prodopt_results.txt]"
       quality_pct: 93  # shares frontdoor bench (May-4 170/183)
       coder_suite: 29/30 (97%)
       agentic_suite: 26/30 (87%)
@@ -4223,8 +4233,11 @@ roles:
       reason: "legacy prompt_lookup remains disabled; v7 common_speculative composes ngram-mod with draft-mtp as one launch-time stack."
     # 2026-06-26 v6 cutover: runtime_requirements (ik_llama binary_dir + ld_library_path) removed — native draft-mtp on production-consolidated-v6.
     performance:
-      baseline_tps: 38.46
-      optimized_tps: 38.46
+      # CORRECTED 2026-07-31. Both rows held the same figure, so `optimized_tps`
+      # was not an optimized number. Baseline here IS measured (spec-dec off).
+      baseline_tps: 37.63     # category=BASELINE: spec-dec off, diagnostic only, never a promotion arm
+      optimized_tps: 56.86    # category=OPTIMUM: full instance, draft-mtp + 8B draft, n_max 2
+      optimized_tps_attest: "[P-BENCH-PLACEMENT-1, n=3, 2026-07-30, attest data/numa_placement/20260730-P-BENCH-PLACEMENT-1/prodopt_results.txt]"
       quality_pct: 90
       tool_compliance_pct: 96
       draft_depth_sweep_observation: "2026-07-17 T5 production-shaped CPU worker sweep at /mnt/raid0/llm/tmp/t5-gemma-worker-draft-depth-20260717T213641Z/summary.json confirms draft_max=2: depth2 87.76 t/s with 492/666 accepted; depth3 76.38 t/s with 492/812 accepted; depth4 84.40 t/s with 494/734 accepted."
@@ -4432,8 +4445,13 @@ roles:
       type: none
       lookup: false
     performance:
-      baseline_tps: 24.3
-      optimized_tps: 24.3
+      # CORRECTED 2026-07-31. Both rows previously held the same 2026-05-04 figure
+      # (24.3), so `optimized_tps` was NOT an optimized number -- routing and the
+      # cost model decided on a value ~40% below the ratified production optimum.
+      # category=OPTIMUM per MEASUREMENT.md §3.
+      baseline_tps: null      # category=BASELINE: spec-dec-off NOT measured for this model. Do not fabricate.
+      optimized_tps: 40.22    # category=OPTIMUM: full instance, interleave=all, draft-mtp n_max 4
+      optimized_tps_attest: "[P-BENCH-PLACEMENT-1, n=3, 2026-07-30, attest data/numa_placement/20260730-P-BENCH-PLACEMENT-1/prodopt_results.txt]"
       quality_pct: 93
       general_suite: "30/30 (100%)"
       coder_suite: "29/30 (97%)"
