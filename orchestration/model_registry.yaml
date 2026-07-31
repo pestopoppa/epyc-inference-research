@@ -656,7 +656,13 @@ server_mode:
     chat_template_kwargs:
       enable_thinking: false  # Qwen3.6 thinking OFF for task suites (lean parity; +33pp empirically)
     model_role: qwen36_q8_0
-    shared_with: []
+    shared_with: [coder_escalation, worker_summarize]  # RESTORED 2026-07-31 — was [] while BOTH roles serve on 8070.
+                       # registry_compiler.py:71-73 reads THIS to resolve an alias role to its serving
+                       # process; an empty list means the compiler cannot see that frontdoor serves them.
+                       # A drift guard caught it and told us to 'update this guard to the new declared
+                       # reality' -- the guard was right and the DATA was wrong, so the data is fixed here.
+                       # MUST become [worker_summarize] in the SAME commit that repoints coder_escalation
+                       # to the GPU 27B dense Q8 -- never split, or this drifts again.
     description: Root LM — Qwen3.6-35B-A3B MTP Q8 (quality 93%, May-4 Claude-as-Judge 170/183; v6 NEXTN self-draft)
     benchmark_date: 2026-05-04
     benchmark_score: 170/183 (92.9%)
