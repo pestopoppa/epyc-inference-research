@@ -3837,7 +3837,7 @@ roles:
       baseline_tps: 21.1
       optimized_tps: 21.1
       quad_aggregate_tps: 35.3
-      k35_vision_observation: "2026-07-17 K35 fixed OCR/chart candidate gate at /mnt/raid0/llm/tmp/k35-supergemma4-candidate-20260717T193120Z/: SuperGemma4-26B multimodal Q8_0 + F16 projector passed CPU (`4/4`, 25.58-31.76 t/s decode, ~26.4 GiB PSS) and MI210 (`4/4`, 80.35-83.87 t/s decode, ~42% VRAM). Quality-clean on this small fixture set, but not the preferred active vision_escalation replacement because MiniCPM-o is faster on MI210, much smaller, and has frontdoor co-residency/service-tax evidence."
+      k35_vision_observation: "2026-07-17 K35 fixed OCR/chart candidate gate at /mnt/raid0/llm/tmp/k35-supergemma4-candidate-20260717T193120Z/: SuperGemma4-26B multimodal Q8_0 + F16 projector passed CPU (`4/4`, 25.58-31.76 t/s decode, ~26.4 GiB PSS) and MI210 (`4/4`, 80.35-83.87 t/s decode, ~42% VRAM). Quality-clean on this small fixture set, but not the preferred active vision_escalation replacement because MiniCPM-o is faster on MI210, much smaller, and has frontdoor co-residency/service-tax evidence. — SUPERSEDED 2026-07-31: MiniCPM-o is DEPRECATED and its weights are deleted, so it is no longer the comparator this sentence defers to. A 42-question OCRBench+ChartQA measurement on the MI210 scored MiniCPM-o 31/42 against the Qwen2.5-VL-7B incumbent's 35/42 — a quality downgrade. Speed was never the binding constraint. If vision_escalation is revisited, the forward candidate is Qwen3-VL-30B-A3B Q4_K_M (36/42), not MiniCPM-o."
       quality_score: {pct: 65.4, raw: "159/243"}  # Claude-as-Judge 0-3 scale
       quality_pass_rate: 67.9  # 55/81 scored >= 2
       quality_by_suite:  # pass rates (score >= 2)
@@ -3855,6 +3855,10 @@ roles:
       Known upstream repetition bug on tier 3 long-form (google-deepmind/gemma#622).
       Half speed of Q4 text-only (21 vs 42 tps). K35 multimodal fixture gate is now
       quality-clean, but MiniCPM-o remains the faster/lighter escalation candidate.
+      SUPERSEDED 2026-07-31: MiniCPM-o is deprecated and deleted — it is no longer an
+      escalation candidate at all. 42q OCRBench+ChartQA on the MI210 scored it 31/42 vs
+      the Qwen2.5-VL-7B incumbent's 35/42. The forward vision candidate is
+      Qwen3-VL-30B-A3B Q4_K_M (36/42).
 
   # --- Gemma 4 (2026-04-17, both deprecated) ---
   gemma4_e2b_q8:
@@ -4177,6 +4181,13 @@ roles:
         but persistent API/AutoPilot traffic was not restarted or observed; keep
         this Qwen2.5-VL alias as the safety lane until that persistent-live
         cutover is explicitly performed.
+        SUPERSEDED 2026-07-31: the MiniCPM-o cutover is CANCELLED and MiniCPM-o is
+        deprecated with its weights deleted. Qwen2.5-VL is no longer a "temporary
+        alias" or a "safety lane" pending a flip — on 42q OCRBench+ChartQA it scored
+        35/42 against MiniCPM-o's 31/42, so it is the better model on quality as well
+        as speed and it stands as the incumbent on its own merits. Any future
+        vision_escalation change should be evaluated against Qwen3-VL-30B-A3B Q4_K_M
+        (36/42), the only arm measured above the incumbent.
     memory:
       residency: hot
       pinned: false
@@ -7972,11 +7983,45 @@ roles:
 
   minicpm_o_45_local_multimodal:
     tier: C
-    description: MiniCPM-o-4_5 local multimodal/audio bundle; reasoning-off vision lane is K35 quality-clean with frontdoor co-residency and service-matrix evidence, while audio/TTS coverage remains catalogue-only.
+    deprecated: true
+    deprecated_date: 2026-07-31
+    deprecated_reason: >
+      DEPRECATED 2026-07-31 — vision quality is a DOWNGRADE vs the incumbent, and the
+      speech case is superseded by dedicated models. Weights DELETED from disk
+      2026-07-31 (22 GB reclaimed); re-download from `openbmb/MiniCPM-o-4_5-gguf` if ever
+      needed again.
+
+      (1) VISION — measured 2026-07-31 on the MI210, 42 questions (OCRBench + ChartQA),
+      each model at the best quantization present on disk, scored offline with a
+      unit/whitespace-normalizing scorer:
+      Qwen3-VL-30B-A3B Q4_K_M 36/42; Qwen2.5-VL-7B Q4_K_M (incumbent) 35/42;
+      Qwen3-VL-8B Q8_0 33/42; MiniCPM-o-4.5 Q8_0 31/42; Qwen3-VL-4B Q8_0 29/42.
+      MiniCPM-o ranks 4th of 5 and is 4 questions BELOW the deployed incumbent, so the
+      vision-promotion case is closed. Raw per-question results
+      `/mnt/raid0/llm/tmp/vlquality_results.json`, harness `/mnt/raid0/llm/tmp/vlquality.py`.
+
+      (2) The earlier "+10pp" that motivated promotion (M-1, n=10) was ONE discordant
+      question and that question was a SCORING ARTIFACT — the incumbent answered
+      `0.11 kWh` where the accepted answer was `0.11` (case `vl_chart_test_0563`).
+      Corrected, the two tied 7/10. Verifiable at
+      `/mnt/raid0/llm/epyc-inference-research/artifacts/minicpm-o-phase1-v8-20260726/live-20260726T174112Z-O98PrJ/escalation-{baseline,candidate}-scored.json`
+      (rows carry `score.pass`). Every prior K35/M-1 observation below is retained
+      verbatim as the audit trail and is SUPERSEDED by this entry.
+
+      (3) SPEECH — the remaining argument (audio + TTS projectors) is also dead: a
+      dedicated Qwen3-TTS-12Hz-0.6B is 1.14 GB and already on disk, and Qwen3-ASR is
+      already supported by the frozen v8 kernel. MiniCPM-o's bundle was 22 GB, of which
+      ~9.13 GB was a duplicate LLM backbone plus the vision tower measured above.
+    description: DEPRECATED 2026-07-31 — weights deleted. MiniCPM-o-4_5 local multimodal/audio bundle, retained as an audit-trail entry only. Vision measured 31/42 vs the Qwen2.5-VL-7B incumbent's 35/42 (42q OCRBench+ChartQA, MI210, 2026-07-31) — a downgrade, not a promotion; speech superseded by dedicated Qwen3-TTS + Qwen3-ASR. NOT a candidate for any role.
     model:
       name: MiniCPM-o-4_5
       huggingface_id: openbmb/MiniCPM-o-4_5-gguf
-      path: /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf
+      # 2026-07-31: the whole /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/ tree (22 GB) was
+      # DELETED. Every path below is historical — nothing here resolves on disk any more.
+      # Recoverable only by re-download from the huggingface_id above.
+      on_disk: false
+      deleted_date: 2026-07-31
+      path: /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf  # DELETED 2026-07-31
       quant: Q4_K_M
       size_gb: 4.7
       architecture: minicpm_o
@@ -8012,20 +8057,18 @@ roles:
           revision: 385a4f55f7272bf2ee941b4a57f2e3f51a8fca38
           source_hash_kind: hf_lfs_etag_sha256
           source_hash: ae6af22ad3b7f1a7bf667922af84b9eb3e2199cc86f402702eaf9b054054788d
-    candidate_roles:
-    - multimodal
-    - vision
-    - audio
-    - tts
+    candidate_roles: []  # 2026-07-31: was [multimodal, vision, audio, tts]; all withdrawn on deprecation.
     acceleration:
       type: none
     constraints:
       forbid:
       - production_stack_registration_without_capacity_cap_or_controlled_reload
-      reason: "Reasoning-off vision lane has runtime, task-level, frontdoor co-residency, 2K/8K service-matrix evidence, and a 2026-07-18 activation policy decision. Production stack use now requires the controlled live-stack registry/reload patch, a one-active-vision-request capacity cap while frontdoor is resident, and Qwen2.5-VL rollback verification."
+      - any_use_deprecated_weights_deleted_2026_07_31
+      reason: "Reasoning-off vision lane has runtime, task-level, frontdoor co-residency, 2K/8K service-matrix evidence, and a 2026-07-18 activation policy decision. Production stack use now requires the controlled live-stack registry/reload patch, a one-active-vision-request capacity cap while frontdoor is resident, and Qwen2.5-VL rollback verification. — SUPERSEDED 2026-07-31: the 2026-07-18 activation policy is REVOKED and the live flip is CANCELLED. The 42-question OCRBench+ChartQA measurement put MiniCPM-o at 31/42 against the Qwen2.5-VL-7B incumbent's 35/42, so promotion would have been a quality regression. Weights deleted from disk; this role is unrunnable. See deprecated_reason."
     performance:
-      benchmark_status: k35_vision_activation_policy_approved_live_flip_pending
+      benchmark_status: deprecated_2026_07_31_vision_downgrade_confirmed  # was: k35_vision_activation_policy_approved_live_flip_pending
       observed_date: 2026-07-18
+      vision_quality_supersede_20260731: "2026-07-31 MI210, 42 questions (OCRBench + ChartQA), best-on-disk quant per arm, offline unit/whitespace-normalizing scorer: Qwen3-VL-30B-A3B Q4_K_M `36/42`, Qwen2.5-VL-7B Q4_K_M incumbent `35/42`, Qwen3-VL-8B Q8_0 `33/42`, MiniCPM-o-4.5 Q8_0 `31/42`, Qwen3-VL-4B Q8_0 `29/42`. MiniCPM-o is 4 questions BELOW the deployed incumbent and 4th of 5 arms. This SUPERSEDES every k35_* and M-1 observation in this entry as the basis for any promotion decision: the earlier n=10 `+10pp` rested on one discordant question (`vl_chart_test_0563`) that was a scoring artifact (incumbent said `0.11 kWh`, accepted answer `0.11`); corrected, the arms tied 7/10. Raw: /mnt/raid0/llm/tmp/vlquality_results.json; harness: /mnt/raid0/llm/tmp/vlquality.py."
       cpu_observation: "Text smoke passed during active GLM download: prompt 67.6 t/s, generation 9.5 t/s, returned `ok`."
       mi210_observation: "Text smoke passed during active GLM download: prompt 423.3 t/s, generation 107.2 t/s, returned `ok` plus stray `</think>`."
       long_cpu_observation: "2026-07-16 longer CPU server run generated 768 completion tokens at 7.69 t/s after a 62-token prompt; response had empty message.content despite nonzero completion tokens, so treat as throughput-only."
@@ -8053,9 +8096,9 @@ roles:
       gpu_only_candidate: true
       hybrid_candidate: false
     benchmark_plan:
-      cpu_only: "Text-only load smoke first; modality smokes only after runtime support is mapped."
-      gpu_only: "Controlled MiniCPM-o launch/smoke plus Qwen2.5-VL rollback path executed; persistent API/AutoPilot traffic remains unconfirmed, so production alias stays on the Qwen2.5-VL safety lane until an explicit cutover window."
-      cpu_gpu_hybrid: "Not a primary path at this size."
+      cpu_only: "Text-only load smoke first; modality smokes only after runtime support is mapped. — CANCELLED 2026-07-31 (deprecated, weights deleted)."
+      gpu_only: "Controlled MiniCPM-o launch/smoke plus Qwen2.5-VL rollback path executed; persistent API/AutoPilot traffic remains unconfirmed, so production alias stays on the Qwen2.5-VL safety lane until an explicit cutover window. — CANCELLED 2026-07-31: the cutover window will never open. 42q OCRBench+ChartQA put MiniCPM-o at 31/42 vs the Qwen2.5-VL-7B incumbent's 35/42; Qwen3-VL-30B-A3B (36/42) is the forward candidate if vision_escalation is ever revisited."
+      cpu_gpu_hybrid: "Not a primary path at this size. — CANCELLED 2026-07-31 (deprecated, weights deleted)."
 
   qwen25_coder_14b_local_q4km:
     tier: C
