@@ -408,7 +408,7 @@ runtime_defaults:
       coder_escalation: 120    # 32B Q4KM @ 10.8 t/s — 500 tok ~46s. 120s = 2.6x headroom
       vision_escalation: 60    # temporary Qwen2.5-VL alias while 30B escalation replacement is gated
       ingest_long_context: 300 # 80B SSM, long document ingestion
-      architect_general: 600   # 122B MoE hybrid; ~12.19 t/s no-MTP canonical (Probe B 2026-05-04), ~20.75 t/s v6 MTP-on (2026-06-26). Old "4.3 t/s" = pre-2026-05-04 2x cross-NUMA artifact. Complex multi-step reasoning.
+      architect_general: 600   # 122B MoE hybrid; 24.00 t/s production-optimal short ctx / 15.76 long ctx (category=OPTIMUM, 2026-07-31). Old "4.3 t/s" = pre-2026-05-04 2x cross-NUMA artifact. Complex multi-step reasoning.
 
     # Server/connection timeouts
     server:
@@ -854,9 +854,11 @@ server_mode:
       lookup: false
     numa_instances: 1
     numa_ports: [8083]
-    throughput: 12.19  # t/s at 96t NUMA single-instance canonical, NO MTP (Probe B 2026-05-04, n=5).
+    throughput: 24.00  # category=OPTIMUM t/s, full instance canonical placement, draft-mtp, short context (2026-07-31).
+                       # Long context 15.76. Was 12.19 (a NO-MTP 2026-05-04 probe) until corrected 2026-07-31.
                        # Scalar kept at the attested no-MTP protocol figure (MEASUREMENT.md: append, don't overwrite the historical record).
-                       # v6 MTP-on era (NEXTN self-draft): ~20.75 t/s single-instance, +89% vs base (measured 2026-06-25/26; progress/2026-06/2026-06-26.md).
+                       # SUPERSEDED: the 2026-06-25/26 v6 MTP-on figure (~20.75 t/s) predates the
+                       # v8 kernel and the canonical-placement correction. 24.00 is the current OPTIMUM.
                        # Live production (2026-07-05, port 8083 telemetry, n=287 req): median ~16 t/s; single-stream bulk 17-22; 2-slot concurrent ~8.5/slot.
                        # Deployed quant: UD-Q4_K_M (Qwen3.5-122B-A10B). No other-quant 122B speed on record.
                        # Old 4.3 was 2× cross-NUMA wiring (pre-2026-05-04). Bundle:
@@ -1673,14 +1675,30 @@ roles:
         (M-RoPE rollback bug, pre-v6 build b8957) is superseded by v6 native MTP.
       benchmarked: 2026-05-04                     # Probe B canonical re-bench
     performance:
-      baseline_tps: 5.30                          # Qwen3-235B canonical (pre-2026-03-19, kept for history)
-      moe4_baseline_tps: 3.87
-      moe4_spec_tps: 8.21
-      full_spec_tps: 6.08
-      qwen35_122b_probe_b_tps: 12.19              # 2026-05-04 single-instance canonical (n=5, σ ~0.4%, z ~3)
-      optimized_tps: 12.19
+      # CORRECTED 2026-07-31. `optimized_tps` held 12.19 (a 2026-05-04 NO-MTP probe)
+      # while the ratified production-optimal figure is 24.00 — routing and the cost
+      # model were deciding on a value ~49% below the real optimum. Same defect class
+      # as the frontdoor correction (24.3 -> 40.22) made the same day.
+      #
+      # The four figures below `superseded_model_history` are Qwen3-235B-A22B numbers
+      # from BEFORE the 2026-03-19 swap to the 122B. They were sitting unlabelled in
+      # this block and were mistaken for the 122B's throughput on 2026-07-31, which is
+      # exactly the failure they invite. They are retained for history only and MUST
+      # NOT be cited as this role's performance or used in any decision.
+      superseded_model_history:
+        model: Qwen3-235B-A22B-Q4_K_M              # NOT the current model. Swapped out 2026-03-19.
+        note: "category=BASELINE / historical. Never a headline, never a decision input."
+        baseline_tps: 5.30
+        moe4_baseline_tps: 3.87
+        moe4_spec_tps: 8.21
+        full_spec_tps: 6.08
+      qwen35_122b_probe_b_tps: 12.19              # category=BASELINE: 2026-05-04, NO MTP. Diagnostic only.
+      optimized_tps: 24.00                        # category=OPTIMUM: full instance, canonical placement, draft-mtp, short context
+      optimized_tps_long_context: 15.76           # category=OPTIMUM: same config, long context
+      optimized_tps_attest: "[published stack measurement artifact, production-optimal rows, 2026-07-31]"
       quality_score: 2.57/3
-      speedup: 2.30x                              # 12.19 / 5.30
+      # speedup REMOVED 2026-07-31: it was 12.19/5.30, a ratio across TWO DIFFERENT MODELS
+      #   (122B probe / 235B baseline). Cross-model ratios are not speedups.
       spec_acceptance_moe4: 54.8%                 # historical Qwen3-235B
       spec_acceptance_full: 52.7%
     memory:
