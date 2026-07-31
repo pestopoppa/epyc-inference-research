@@ -73,6 +73,16 @@ export MKL_NUM_THREADS="$THREADS"
 # Environment variables already set by env.sh:
 # HF_HOME, TRANSFORMERS_CACHE, TMPDIR
 
+# STT runs LOCALLY. The model is passed by name, so huggingface_hub would try to
+# reach huggingface.co on a cold start and this role fails *silently* (it is in
+# OPTIONAL_AUXILIARY_ROLES). Weights are already in the local cache; pin offline
+# so a network outage cannot take speech down. Set WHISPER_ALLOW_DOWNLOAD=1
+# deliberately, and only when fetching a model we do not yet have.
+if [[ "${WHISPER_ALLOW_DOWNLOAD:-0}" != "1" ]]; then
+  export HF_HUB_OFFLINE=1
+  export TRANSFORMERS_OFFLINE=1
+fi
+
 echo "=============================================="
 echo "Whisper Transcription Server"
 echo "=============================================="

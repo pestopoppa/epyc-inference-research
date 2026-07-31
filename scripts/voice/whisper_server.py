@@ -56,11 +56,20 @@ def get_model():
     logger.info(f"Loading model: {model_name}")
     start = time.time()
 
+    # STT must not depend on network reachability. `model_name` is a NAME
+    # ("large-v3-turbo"), not a path, so faster-whisper resolves it through
+    # huggingface_hub — which reaches huggingface.co on every cold start unless
+    # told otherwise. That made an OPTIONAL_AUXILIARY role (it fails silently)
+    # depend on the internet being up. Weights are already local:
+    #   /mnt/raid0/llm/cache/huggingface/hub/models--Systran--faster-whisper-large-v3-turbo
+    # `local_files_only=True` resolves from that cache and raises loudly if the
+    # snapshot is genuinely absent, instead of silently hitting the network.
     model_instance = WhisperModel(
         model_name,
         device="cpu",
         compute_type="int8",  # 2x faster than float16 on CPU
         cpu_threads=int(os.environ.get("OMP_NUM_THREADS", 64)),
+        local_files_only=os.environ.get("WHISPER_ALLOW_DOWNLOAD", "0") != "1",
     )
 
     logger.info(f"Model loaded in {time.time() - start:.2f}s")
