@@ -682,7 +682,10 @@ server_mode:
       draft_max: 4
       lookup: false
       corpus_retrieval: true
-    throughput: 24.3  # t/s, Qwen3.6 Q8 full (lean registry, May-4)
+    throughput: 40.22  # category=OPTIMUM t/s, full instance canonical placement, draft-mtp, short ctx.
+                       # Long ctx 22.59. Was 24.3 (a May-4 figure equal to its own baseline) until 2026-07-31.
+                       # q_scorer.registry_baseline_tps_by_role reads THIS FIRST, ahead of roles.*.performance,
+                       # so correcting roles/ alone left the cost model stale.
     previous_model: Qwen3.5-35B-A3B-UD-Q4_K_M.gguf  # frontdoor swapped to Qwen3.6 Q8 2026-05-04 (lean)
 
   # qwen25_coder_32b_q4km: launch spec preserved from the former coder_escalation model
@@ -739,7 +742,9 @@ server_mode:
       inherits_spec_from: frontdoor
       lookup: false
       corpus_retrieval: true
-    throughput: 24.3  # t/s, shares frontdoor Qwen3.6 Q8 (lean, May-4)
+    throughput: 40.22  # category=OPTIMUM, shares frontdoor's Qwen3.6-35B-A3B Q8 server. Long ctx 22.59.
+                       # Was 24.3 (May-4). NOTE: coder_escalation is being repointed to the GPU 27B dense Q8
+                       # (47.79 short / 36.71 long) -- this value must move WITH that repoint, not after it.
     previous_model: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf  # swapped 2026-05-06 (frontdoor model dominates: +20pp coder vs Qwen3-Coder, +27pp coder vs REAP-246B; shares mmap with frontdoor)
 
   worker:
@@ -777,7 +782,8 @@ server_mode:
     numa_ports: [8082, 8182]
     # 2026-07-16 routing-prior rollback: supersedes the legacy May-08 60.7 t/s
     # prior with the Jun-28 matched v6/iQK port artifact (N=206, avg_tokens_per_second).
-    throughput: 38.46
+    throughput: 56.86  # category=OPTIMUM t/s, full instance canonical placement, draft-mtp + 8B draft, short ctx.
+                       # Long ctx 27.01. Was 38.46 until 2026-07-31.
 
   # REAP-25B: Permanently pruned Qwen3-Coder-30B-A3B (25% experts removed by Cerebras REAP)
   # Pure MoE — speculative decoding IS viable (unlike Qwen3.5 hybrids)
