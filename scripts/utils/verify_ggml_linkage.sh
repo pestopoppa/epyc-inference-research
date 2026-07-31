@@ -21,9 +21,24 @@
 # integrity failure, not a build annoyance: the run completes, the output is
 # well-formed, and only the throughput is quietly wrong.
 #
-# Do NOT "fix" this by editing /etc/environment — production tooling depends on
-# finding the production libs there. Fix it per-invocation by prepending the
-# project's own build dir, and call this script to PROVE it worked:
+# RESOLVED 2026-07-31: the two llama.cpp entries were REMOVED from the global
+# LD_LIBRARY_PATH (/etc/environment:5, .devcontainer/devcontainer.json:57,
+# .devc/overrides.json:27). The old header here said "production tooling depends
+# on finding the production libs there" — that premise was FALSE. Every binary in
+# both production build dirs carries DT_RUNPATH=$ORIGIN and resolves its own
+# siblings; an audit of 3192 ELF objects under /mnt/raid0/llm found exactly two
+# consumers without a runpath, both unreferenced March-2026 scratch binaries.
+#
+# Worse, the global entries actively BROKE the GPU: under the old environment,
+# /mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server loaded all seven of its
+# libraries from the CPU-only build/bin, and libggml-hip.so.0 was not loaded at
+# all — because the CPU tree's libggml.so.0 carries no DT_NEEDED on it. The
+# production GPU binary was silently a CPU binary.
+#
+# This script now guards against RE-INTRODUCING those entries. Third-party ggml
+# trees (whisper.cpp, qwentts.cpp) still differ in ggml version, so a launcher that
+# builds its own env must still prepend the project's own build dir and call this
+# script to PROVE it worked:
 #
 #   export LD_LIBRARY_PATH="$MY_BUILD/bin:$LD_LIBRARY_PATH"
 #   verify_ggml_linkage.sh "$MY_BUILD/bin/whisper-cli" "$MY_BUILD"
