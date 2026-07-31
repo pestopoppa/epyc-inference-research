@@ -39,20 +39,61 @@ speculative_decoding_policy:
   # ---------------------------------------------------------------------------
   # THE RECIPE
   # ---------------------------------------------------------------------------
-  production_recipe: ngram-mod,draft-mtp
+  production_recipe: draft-mtp
   statement: >
-    Production runs COMPOSED speculative decoding: `--spec-type ngram-mod,draft-mtp`.
-    n-gram drafting and MTP self-draft run TOGETHER as one launch-time stack.
-    This applies to every role that has a working draft path. It is not a
-    candidate, not an experiment, and not task-specific — it is the default.
+    Production runs `--spec-type draft-mtp` — MTP self-draft ALONE. The n-gram
+    lane is NOT composed in. This applies to every role that has a working draft
+    path.
 
-  cost_accepted: >
-    Composed measures approximately -1.6% versus `draft-mtp` alone on ordinary
-    (non-repetitive) text. That cost is DELIBERATELY ACCEPTED by the operator in
-    exchange for the large upside on repetitive / token-reuse context, where the
-    n-gram lane contributes drafts that MTP alone cannot. Do NOT "optimise" the
-    recipe back to `draft-mtp` alone on the strength of an ordinary-text
-    microbenchmark: that trade has already been made, with eyes open.
+  superseded_recipe: >
+    REVERSED 2026-07-31 (same day it was adopted). The composed recipe
+    `ngram-mod,draft-mtp` was adopted on the expectation of a large upside on
+    repetitive / token-reuse context, with a measured -1.6% cost on ordinary text
+    accepted in exchange. The long-context coding test that was supposed to
+    demonstrate that upside instead falsified it, and the exception case was
+    falsified independently. The trade was made with eyes open and is now unmade
+    on evidence.
+
+  evidence_for_reversal:
+    long_context_coding_35b: >
+      Qwen3.6-35B-A3B Q8, 12 matched prompts at 15k-28k context (extend / port /
+      fill-in-the-middle / prose). Composed won 0 of 12. Mean -4.06% against the
+      first draft-mtp baseline and -8.24% against a second replicate of the SAME
+      baseline config. Mechanism is in the counters: composed drafts MORE and
+      accepts LESS (extend_3: 518 -> 708 drafts, acceptance 0.734 -> 0.540). Each
+      rejected draft costs a full verification pass.
+    long_context_coding_gemma: >
+      gemma-4-26B-A4B Q4_K_M, same 12 prompts. Mean -0.04%. The real result is
+      structural, not numeric: n-gram produced ZERO drafts on 9 of 12 prompts —
+      those arms are byte-identical in acceptance, draft count and tok/s. Coding
+      output does not contain n-grams repeated from its context. Where it did
+      fire (the 3 fill-in-the-middle prompts) acceptance fell from 0.78/0.84/0.78
+      to 0.67/0.68/0.62.
+    ordinary_text: >
+      -1.6% mean on non-repetitive prose/code. Independent distinct-prompt re-run
+      (ngramfix): -4.2% to +1.3% composed vs draft-mtp; n-gram ALONE costs 23-31%.
+    retracted_positive: >
+      The 2.80x that originally motivated composed was RETRACTED — a warm-context
+      self-copy artifact from repeating one prompt, so the model copied its own
+      prior answer (mean accepted length 3.58 -> 15.88, acceptance -> 1.000).
+    harness_caveat: >
+      The 35B coding run executed its arms sequentially and its two same-config
+      replicates differ by +4.17% (11/11 consistent), i.e. monotonic host drift
+      over the ~2h window. DIRECTION survives — composed loses against both the
+      early and the late baseline, 0/12 and 0/11 — but quoted MAGNITUDES are soft.
+
+  where_ngram_does_win: >
+    TASK-CLASS SCOPED, not a default. Composed wins only where the OUTPUT repeats
+    itself or repeats the input verbatim, AND verification is cheap (small active
+    parameter count). Measured on fresh servers: gemma-4-26B-A4B Q4_K_M on a
+    repetitive strict-JSON tool_call, 143.58 -> 330.57 t/s (2.30x); Qwen3.5-9B
+    Q4_K_M generating 1024 literal repetitions of one word, 114.81 -> 466.47 t/s
+    (4.06x). The SAME gemma fixture on a non-repetitive coding explanation
+    (harness-verified repeated_5grams = 0) gave +0.07% — a dead wash — and the
+    n-gram arm FAILED a quality check the draft-mtp arm passed. Large models lose
+    outright: Qwen3-Coder-480B refactoring -34% at 18.4% acceptance.
+    Re-enabling composed for a specific role requires measuring THAT role's real
+    traffic, not a synthetic repetitive fixture.
 
   # ---------------------------------------------------------------------------
   # THE EXCEPTION
@@ -635,9 +676,9 @@ server_mode:
     numa_ports: [8080, 8180]
     acceleration:
       type: speculative_decoding
-      # CANONICAL: see top-level `speculative_decoding_policy`. Composed ngram+MTP
+      # CANONICAL: see top-level `speculative_decoding_policy`. MTP self-draft ALONE
       # is the production recipe (was `draft-mtp` alone until 2026-07-31).
-      spec_type: ngram-mod,draft-mtp
+      spec_type: draft-mtp
       draft_max: 4
       lookup: false
       corpus_retrieval: true
@@ -715,11 +756,11 @@ server_mode:
     previous_model: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
     acceleration:
       type: speculative_decoding
-      # CANONICAL: see top-level `speculative_decoding_policy`. Composed ngram+MTP
-      # is the production recipe. `ngram_candidate_spec_type` RETIRED 2026-07-31 —
+      # CANONICAL: see top-level `speculative_decoding_policy`. MTP self-draft ALONE
+      # is the production recipe (composed REVERSED 2026-07-31 on evidence).
       # it held this same value while `spec_type` held `draft-mtp`, which read as
       # "the real one is elsewhere" and caused mis-launched measurement runs.
-      spec_type: ngram-mod,draft-mtp
+      spec_type: draft-mtp
       draft_max: 2
       draft_p_min: 0.0
       threads_draft: 16
@@ -804,10 +845,10 @@ server_mode:
     # type/spec_type must match the roles block: native draft-mtp on v6, ik_llama deprecated.
     acceleration:
       type: speculative_decoding   # 2026-06-26 v6 cutover: matches roles.architect_general
-      # CANONICAL: see top-level `speculative_decoding_policy`. Composed ngram+MTP
+      # CANONICAL: see top-level `speculative_decoding_policy`. MTP self-draft ALONE
       # is the production recipe (was `draft-mtp` alone until 2026-07-31).
       # NEXTN self-draft = same-file draft path; launcher omits -md.
-      spec_type: ngram-mod,draft-mtp
+      spec_type: draft-mtp
       draft_max: 4
       draft_model: /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf
       lookup: false
@@ -1242,9 +1283,9 @@ roles:
     - ingest
     acceleration:
       type: speculative_decoding
-      # CANONICAL: see top-level `speculative_decoding_policy`. Composed ngram+MTP
+      # CANONICAL: see top-level `speculative_decoding_policy`. MTP self-draft ALONE
       # is the production recipe (was `draft-mtp` alone until 2026-07-31).
-      spec_type: ngram-mod,draft-mtp
+      spec_type: draft-mtp
       draft_max: 4
       draft_model: Qwen3.6-35B-A3B-MTP-Q8_0.gguf
       lookup: false
@@ -1616,9 +1657,9 @@ roles:
       # MTP via NEXTN-embedded Qwen3.5-122B variant (same-file draft path; launcher omits -md).
       # Dropped the no-op expert_used_count override (experts=8 == GGUF default == no reduction).
       type: speculative_decoding                  # 2026-06-26 v6 cutover: was moe_expert_reduction
-      # CANONICAL: see top-level `speculative_decoding_policy`. Composed ngram+MTP
+      # CANONICAL: see top-level `speculative_decoding_policy`. MTP self-draft ALONE
       # is the production recipe (was `draft-mtp` alone until 2026-07-31).
-      spec_type: ngram-mod,draft-mtp               # NEXTN self-draft variant + n-gram lane
+      spec_type: draft-mtp               # NEXTN self-draft variant (n-gram lane REMOVED 2026-07-31)
       draft_model: /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf  # NEXTN self-draft = same file; launcher omits -md
       draft_max: 4                                # 2026-06-26 v6 cutover: architect n-max=4 (emitted as --spec-draft-n-max)
       k: 4                                         # alias for draft_max (RegistryLoader)
@@ -3025,7 +3066,7 @@ roles:
       # qwen36_q8_0 is the model backing BOTH frontdoor and coder_escalation, so
       # this record now matches server_mode.frontdoor exactly.
       type: speculative_decoding
-      spec_type: ngram-mod,draft-mtp
+      spec_type: draft-mtp
       draft_max: 4                      # matches server_mode.frontdoor (MTP n-max)
       historical_candidate:
         category: CANDIDATE             # measured, NOT adopted — never a production recipe
@@ -3948,7 +3989,7 @@ roles:
       # CANONICAL: see top-level `speculative_decoding_policy`. This is the
       # MODEL-indexed record for the production worker GGUF; it must agree with
       # server_mode.worker / roles.worker_general. Composed since 2026-07-31.
-      spec_type: ngram-mod,draft-mtp
+      spec_type: draft-mtp
       draft_role: draft_gemma4_26b_a4b_assistant_q8
       draft_max: 2          # 2026-05-08: matches 31B sibling tuning (lowered from 3 for realistic acceptance)
       draft_p_min: 0.0
@@ -4212,7 +4253,7 @@ roles:
       # CANONICAL: see top-level `speculative_decoding_policy`.
       # 2026-07-31: restored to the composed production recipe.
       # HISTORY — this is the exact field that caused the confusion:
-      #   9905c2fb (2026-07-16) set spec_type: ngram-mod,draft-mtp  [K16 deployment,
+      #   9905c2fb (2026-07-16) set spec_type: draft-mtp  [K16 deployment,
       #                         live worker cmdlines verified on 8072/8082/8182/8282/8382]
       #   2370025f (2026-07-19) REVERTED it to draft-mtp and moved the composed
       #                         value into `ngram_candidate_spec_type`, demoting a
@@ -4221,7 +4262,7 @@ roles:
       #                         verbatim, so that commit silently un-deployed
       #                         composed speculation on every worker.
       # `ngram_candidate_spec_type` is RETIRED — do not reintroduce it.
-      spec_type: ngram-mod,draft-mtp
+      spec_type: draft-mtp
       draft_role: draft_gemma4_26b_a4b_assistant_q8
       draft_max: 2
       draft_p_min: 0.0
