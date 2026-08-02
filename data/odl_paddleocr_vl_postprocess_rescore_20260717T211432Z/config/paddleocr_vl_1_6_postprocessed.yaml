@@ -1,0 +1,23 @@
+end2end_eval:
+  metrics:
+    text_block:
+      metric:
+      - Edit_dist
+    table:
+      metric:
+      - TEDS
+      - Edit_dist
+      teds_workers: 8
+    reading_order:
+      metric:
+      - Edit_dist
+  dataset:
+    dataset_name: end2end_dataset
+    ground_truth:
+      data_path: /mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/OmniDocBench_demo.json
+    prediction:
+      data_path: /mnt/raid0/llm/tmp/odl-paddleocr-vl-postprocess-rescore-20260717T211432Z/predictions/paddleocr_vl_1_6_postprocessed_20260717T211432Z
+    match_method: quick_match
+    match_workers: 8
+    quick_match_truncated_timeout_sec: 300
+    match_timeout_sec: 420

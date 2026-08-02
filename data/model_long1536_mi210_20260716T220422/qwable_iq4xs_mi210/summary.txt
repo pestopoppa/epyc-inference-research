@@ -1,0 +1,8 @@
+finish_reason=stop
+prompt_tokens=84
+completion_tokens=1322
+total_tokens=1406
+prompt_tps=519.888842814084
+generation_tps=98.32323921077229
+content_chars=7569
+content_preview=When evaluating the performance of a locally hosted large language model, it is essential to understand that throughput measurements are not a single static number but rather a com

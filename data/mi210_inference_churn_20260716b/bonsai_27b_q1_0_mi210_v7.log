@@ -1,0 +1,42 @@
+
+
+Loading model... |-\|/-\|/-\|/-\|/-\|/-\|/ 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10077-da1bf5e2f
+model      : /mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-Q1_0.gguf
+ftype      : Q1_0
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> Reply with OK only.
+
+[Start thinking]
+
+Here's a thinking process:
+
+1
+
+[ Prompt: 31.3 t/s | Generation: 12.4 t/s ]
+
+
+Exiting...
+ELAPSED=3.76
+CPU_PCT=89%
+MAXRSS_KB=4222036
+EXIT=0

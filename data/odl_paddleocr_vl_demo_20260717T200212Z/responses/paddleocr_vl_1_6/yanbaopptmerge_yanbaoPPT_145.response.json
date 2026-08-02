@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "\u6df1\u5165\u8d4f\u6790",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784318535,
+  "id": "chatcmpl-ScumlPcI2bmZSoS8CyMHTmtsM87DPQnm",
+  "model": "/mnt/raid0/llm/models/PaddleOCR-VL-1.6-GGUF/PaddleOCR-VL-1.6-GGUF.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 5.936,
+    "predicted_n": 3,
+    "predicted_per_second": 505.3908355795148,
+    "predicted_per_token_ms": 1.9786666666666666,
+    "prompt_ms": 402.486,
+    "prompt_n": 1273,
+    "prompt_per_second": 3162.8429311826994,
+    "prompt_per_token_ms": 0.31617124901806754
+  },
+  "usage": {
+    "completion_tokens": 3,
+    "prompt_tokens": 1273,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1276
+  }
+}

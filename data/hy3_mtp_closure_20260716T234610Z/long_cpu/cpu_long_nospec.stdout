@@ -1,0 +1,44 @@
+
+
+Loading model... 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10078-98a1ad8cf
+model      : /mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf
+ftype      : IQ1_M - 1.75 bpw
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> Write exactly twelve numbered sentences about how routing experts in a sparse model can affect inference speed. Keep each sentence short.
+1. Sparse models use routing experts to direct inputs.
+2. Routing limits computation to selected experts.
+3. This reduces active parameters per input.
+4. Fewer active parameters speed up inference.
+5. Expert selection adds slight routing overhead.
+6. Good routing keeps expert loads balanced.
+7. Imbalanced routing can cause bottlenecks.
+8. Bottlenecks slow down overall inference.
+9. Cheap routers preserve speed benefits.
+10. Costly routers may offset sparse gains.
+11. Top-k routing controls expert activation.
+12. Lower k usually increases inference speed.
+
+[ Prompt: 22.7 t/s | Generation: 3.9 t/s ]
+
+
+Exiting...

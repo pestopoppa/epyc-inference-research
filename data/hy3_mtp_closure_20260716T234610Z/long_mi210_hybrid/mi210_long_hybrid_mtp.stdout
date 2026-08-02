@@ -1,0 +1,44 @@
+
+
+Loading model... 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10078-98a1ad8cf
+model      : /mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf
+ftype      : IQ1_M - 1.75 bpw
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> Write exactly twelve numbered sentences about how routing experts in a sparse model can affect inference speed. Keep each sentence short.
+1. Routing experts in sparse models selectively activate only relevant pathways.
+2. This reduces the number of computations per input.
+3. Fewer computations lower latency during inference.
+4. Sparse routing avoids dense matrix operations.
+5. Expert selection limits memory bandwidth needs.
+6. Lower memory access speeds up prediction.
+7. Unused experts stay inactive to save time.
+8. Dynamic routing adapts compute to input complexity.
+9. Lightweight routing logic adds minimal overhead.
+10. Batch inference benefits from balanced expert use.
+11. Poor routing can cause bottlenecks and slowdowns.
+12. Overall, smart routing boosts inference speed significantly.
+
+[ Prompt: 7.8 t/s | Generation: 5.9 t/s ]
+
+
+Exiting...

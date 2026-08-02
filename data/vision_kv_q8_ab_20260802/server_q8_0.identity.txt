@@ -1,0 +1,20 @@
+0.00.037.791 I srv    load_model: loading model '/mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf'
+0.00.037.793 I srv    load_model: local path '/mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf'
+0.00.219.228 I srv    load_model: [mtmd] estimated worst-case memory usage of mmproj is 1417.90 MiB (took 181.41 ms)
+0.00.219.257 D srv    load_model: [mtmd] adding 1392.97 MiB to fit_params_target for device ROCm0
+0.00.219.263 D srv    load_model: [mtmd] adding 24.93 MiB to fit_params_target for device CPU
+0.00.337.830 I llama_kv_cache: size = 3264.00 MiB ( 65536 cells,  48 layers,  1/1 seqs), K (q8_0): 1632.00 MiB, V (q8_0): 1632.00 MiB
+0.01.907.457 I llama_kv_cache: size = 3264.00 MiB ( 65536 cells,  48 layers,  1/1 seqs), K (q8_0): 1632.00 MiB, V (q8_0): 1632.00 MiB
+0.02.116.889 I srv    load_model: loaded multimodal model, '/mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf'
+0.02.460.141 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 65536, kv_unified = 'false'
+0.02.460.174 I slot   load_model: id  0 | task -1 | new slot, n_ctx = 65536
+0.02.460.228 I srv    load_model: prompt cache is disabled - use `--cache-ram N` to enable it
+0.02.460.233 I srv    load_model: for more info see https://github.com/ggml-org/llama.cpp/pull/16391
+0.02.460.237 I srv    load_model: context checkpoints enabled, max = 32, min spacing = 8192
+0.02.465.757 I srv  llama_server: listening on http://127.0.0.1:8087
+0.29.102.858 I slot   operator(): id  0 | task 0 | new prompt, n_ctx_slot = 65536, n_keep = 0, task.n_tokens = 1161
+0.53.854.554 I slot   operator(): id  0 | task 2050 | new prompt, n_ctx_slot = 65536, n_keep = 0, task.n_tokens = 1272
+0.54.887.673 I slot   operator(): id  0 | task 2057 | new prompt, n_ctx_slot = 65536, n_keep = 0, task.n_tokens = 1125
+0.55.841.188 I slot   operator(): id  0 | task 2065 | new prompt, n_ctx_slot = 65536, n_keep = 0, task.n_tokens = 1146
+0.56.929.671 I slot   operator(): id  0 | task 2080 | new prompt, n_ctx_slot = 65536, n_keep = 0, task.n_tokens = 1111
+0.57.875.995 I slot   operator(): id  0 | task 2090 | new prompt, n_ctx_slot = 65536, n_keep = 0, task.n_tokens = 1144

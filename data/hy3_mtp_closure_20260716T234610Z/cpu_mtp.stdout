@@ -1,0 +1,33 @@
+
+
+Loading model... 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10078-98a1ad8cf
+model      : /mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf
+ftype      : IQ1_M - 1.75 bpw
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> Write a compact JSON object with keys status and model. Use status ok and model hy3.
+{"status":"ok","model":"hy3"}
+
+[ Prompt: 20.5 t/s | Generation: 5.9 t/s ]
+
+
+Exiting...

@@ -1,0 +1,45 @@
+
+
+Loading model... 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10077-da1bf5e2f
+model      : /mnt/raid0/llm/models/Qwen3.5-9B-MTP-GGUF/Qwen3.5-9B-Q4_K_M.gguf
+ftype      : Q4_K - Medium
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> Return exactly: ok
+
+[Start thinking]
+
+Thinking Process:
+
+1.  **Analyze the Request:**
+    *   Input: "Return exactly: ok"
+    *   Constraint: "Return exactly: ok"
+    *   Goal: Output the string "ok" without any additional text, punctuation, or formatting.
+
+2.  **Determine the Output:**
+    *   The user explicitly asked to return *exactly* the word "ok".
+    *   Any extra whitespace,
+
+[ Prompt: 35.8 t/s | Generation: 11.4 t/s ]
+
+
+Exiting...

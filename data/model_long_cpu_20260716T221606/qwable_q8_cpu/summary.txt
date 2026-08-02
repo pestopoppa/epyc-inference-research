@@ -1,0 +1,8 @@
+finish_reason=stop
+prompt_tokens=66
+completion_tokens=706
+total_tokens=772
+prompt_tps=87.98603954839166
+generation_tps=10.003708740404694
+content_chars=3827
+content_preview=When evaluating the performance of a locally hosted large language model, raw throughput numbers can be deceptive if not contextualized properly. The most commo

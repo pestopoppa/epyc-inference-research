@@ -1,0 +1,68 @@
+{
+  "created_at": "2026-07-17T08:21:54.436635+00:00",
+  "model": "/mnt/raid0/llm/models/Nemotron-Labs-Diffusion-14B-Q8_0-GGUF/nemotron-diffusion-14b-Q8_0.gguf",
+  "server_bin": "/mnt/raid0/llm/tmp/buun-llama-cpp-src/build-hip/bin/llama-server",
+  "server_pid": 429873,
+  "mode": "mi210_gpu_only_buun_fork_loader",
+  "decision_grade": false,
+  "tests": [
+    {
+      "name": "strict_json",
+      "passed": true,
+      "elapsed_s": 0.34449243545532227,
+      "finish_reason": "stop",
+      "content_chars": 21,
+      "content_words": 1,
+      "content_preview": "{\"status\":\"ok\",\"n\":3}",
+      "prompt_tokens": 37,
+      "completion_tokens": 10,
+      "prompt_tps": 405.6973059505927,
+      "generation_tps": 84.68834688346882,
+      "response_path": "/mnt/raid0/llm/tmp/nemotron-diff14-quality-mi210-20260717T0900Z/strict_json.response.json"
+    },
+    {
+      "name": "math_word_problem",
+      "passed": true,
+      "elapsed_s": 1.4637949466705322,
+      "finish_reason": "stop",
+      "content_chars": 136,
+      "content_words": 28,
+      "content_preview": "The tray originally has 7 rows \u00d7 9 bolts = 63 bolts. After removing 18 bolts, the remaining count is 63 - 18 = 45 bolts.\n\n**Answer:** 45",
+      "prompt_tokens": 36,
+      "completion_tokens": 48,
+      "prompt_tps": 865.1142671761229,
+      "generation_tps": 37.33383526600747,
+      "response_path": "/mnt/raid0/llm/tmp/nemotron-diff14-quality-mi210-20260717T0900Z/math_word_problem.response.json"
+    },
+    {
+      "name": "code_edit",
+      "passed": true,
+      "elapsed_s": 0.5316720008850098,
+      "finish_reason": "stop",
+      "content_chars": 47,
+      "content_words": 6,
+      "content_preview": "```python\ndef total(xs):\n    return sum(xs)\n```",
+      "prompt_tokens": 37,
+      "completion_tokens": 16,
+      "prompt_tps": 885.4428410749755,
+      "generation_tps": 45.459323849381896,
+      "response_path": "/mnt/raid0/llm/tmp/nemotron-diff14-quality-mi210-20260717T0900Z/code_edit.response.json"
+    },
+    {
+      "name": "long_throughput",
+      "passed": true,
+      "elapsed_s": 112.38358116149902,
+      "finish_reason": "length",
+      "content_chars": 15525,
+      "content_words": 2378,
+      "content_preview": "**Interpreting Local LLM Throughput Measurements: A Technical Note**\n\nWhen evaluating the performance of large language models (LLMs) on a local machine, throughput is a critical metric that reflects how many tokens can be processed per sec",
+      "prompt_tokens": 90,
+      "completion_tokens": 3072,
+      "prompt_tps": 1253.324792156972,
+      "generation_tps": 27.387053145058044,
+      "response_path": "/mnt/raid0/llm/tmp/nemotron-diff14-quality-mi210-20260717T0900Z/long_throughput.response.json"
+    }
+  ],
+  "pass_count": 4,
+  "test_count": 4
+}

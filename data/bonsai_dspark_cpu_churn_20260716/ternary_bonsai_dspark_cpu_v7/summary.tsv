@@ -1,0 +1,2 @@
+case	status	exit_code	stdout	stderr	timeout_s	log_cap_bytes
+ternary_bonsai_dspark_cpu_v7	fail	1	/mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/ternary_bonsai_dspark_cpu_v7/ternary_bonsai_dspark_cpu_v7.stdout	/mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/ternary_bonsai_dspark_cpu_v7/ternary_bonsai_dspark_cpu_v7.stderr	180	1048576

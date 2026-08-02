@@ -1,0 +1,18 @@
+{
+  "content": "\n\nok\n",
+  "reasoning_content_prefix": "Okay, the user wants me to return exactly \"ok\". Let me make sure I understand the request correctly. They specified \"Return exactly: ok\", so I shouldn't add any",
+  "finish_reason": "stop",
+  "completion_tokens": 101,
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 18,
+    "prompt_ms": 89.402,
+    "prompt_per_token_ms": 4.966777777777778,
+    "prompt_per_second": 201.3377776783517,
+    "predicted_n": 101,
+    "predicted_ms": 1215.222,
+    "predicted_per_token_ms": 12.03190099009901,
+    "predicted_per_second": 83.11238604962715
+  },
+  "content_exact_ok": true
+}

@@ -1,0 +1,17 @@
+{
+  "all_benchmark": true,
+  "arm": "no_spec",
+  "cleanup": {
+    "killed": false,
+    "returncode": 0
+  },
+  "completion_tokens": 1024,
+  "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+  "decode_tps": 95.07920543496508,
+  "draft_n": null,
+  "draft_n_accepted": null,
+  "finish_reason": "length",
+  "prompt_tps": 422.90367631149314,
+  "spec_type": "none",
+  "word_count": 1024
+}

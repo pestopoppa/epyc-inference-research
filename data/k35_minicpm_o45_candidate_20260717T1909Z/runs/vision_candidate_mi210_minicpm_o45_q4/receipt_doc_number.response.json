@@ -1,0 +1,37 @@
+{
+  "choices": [
+    {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+        "content": "To find the Doc No",
+        "reasoning_content": "Got it, let's find the Doc No. on the receipt. Looking at the section with \"Doc No.\"... The value there is CS00012465. I need to make sure I'm reading that correctly. Let me check again. The line says \"Doc No. : CS00012465\". So the document number is CS00012465.\n",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784315362,
+  "id": "chatcmpl-QbPiyTidqfOEvhn3N2xbNPoLWns8E8bK",
+  "model": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 892.687,
+    "predicted_n": 96,
+    "predicted_per_second": 107.54049291633015,
+    "predicted_per_token_ms": 9.298822916666667,
+    "prompt_ms": 727.839,
+    "prompt_n": 622,
+    "prompt_per_second": 854.5845990665517,
+    "prompt_per_token_ms": 1.1701591639871383
+  },
+  "usage": {
+    "completion_tokens": 96,
+    "prompt_tokens": 622,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 718
+  }
+}

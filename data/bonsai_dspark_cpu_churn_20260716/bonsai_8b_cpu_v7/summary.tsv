@@ -1,0 +1,2 @@
+case	status	exit_code	stdout	stderr	timeout_s	log_cap_bytes
+bonsai_8b_cpu_v7	pass	0	/mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/bonsai_8b_cpu_v7/bonsai_8b_cpu_v7.stdout	/mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/bonsai_8b_cpu_v7/bonsai_8b_cpu_v7.stderr	180	1048576

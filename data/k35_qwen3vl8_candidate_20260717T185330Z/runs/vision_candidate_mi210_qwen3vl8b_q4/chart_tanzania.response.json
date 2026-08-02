@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Moldova",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784314434,
+  "id": "chatcmpl-EQfNbwSsM81JxCQOno6nrpxd9QiLOWvh",
+  "model": "/mnt/raid0/llm/models/Qwen3-VL-8B-Instruct-GGUF/Qwen3VL-8B-Instruct-Q4_K_M.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 31.818,
+    "predicted_n": 4,
+    "predicted_per_second": 125.71500408573763,
+    "predicted_per_token_ms": 7.9545,
+    "prompt_ms": 801.164,
+    "prompt_n": 1083,
+    "prompt_per_second": 1351.7831555087348,
+    "prompt_per_token_ms": 0.7397636195752539
+  },
+  "usage": {
+    "completion_tokens": 4,
+    "prompt_tokens": 1083,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1087
+  }
+}

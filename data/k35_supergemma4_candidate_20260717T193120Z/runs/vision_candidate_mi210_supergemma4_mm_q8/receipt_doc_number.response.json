@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "The receipt document number is CS00012465",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784316702,
+  "id": "chatcmpl-GGv0m1zXyLIxqzps3OT8baKYlkT7AIPH",
+  "model": "/mnt/raid0/llm/models/supergemma4-26b-abliterated-multimodal-8bit/supergemma4-26b-abliterated-multimodal-Q8_0.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 186.107,
+    "predicted_n": 15,
+    "predicted_per_second": 80.59879531667266,
+    "predicted_per_token_ms": 12.407133333333332,
+    "prompt_ms": 369.67,
+    "prompt_n": 285,
+    "prompt_per_second": 770.9578813536397,
+    "prompt_per_token_ms": 1.2970877192982457
+  },
+  "usage": {
+    "completion_tokens": 15,
+    "prompt_tokens": 285,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 300
+  }
+}

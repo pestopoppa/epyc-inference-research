@@ -1,0 +1,8 @@
+finish_reason=length
+prompt_tokens=62
+completion_tokens=768
+total_tokens=830
+prompt_tps=229.3747687754347
+generation_tps=7.693436586999194
+content_chars=4176
+content_preview=Interpreting local LLM throughput measurements requires understanding the context in which those numbers are generated, as well as the limitations of the metric

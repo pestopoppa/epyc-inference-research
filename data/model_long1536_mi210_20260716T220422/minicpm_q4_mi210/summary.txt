@@ -1,0 +1,8 @@
+finish_reason=stop
+prompt_tokens=84
+completion_tokens=1472
+total_tokens=1556
+prompt_tps=1648.9017136799953
+generation_tps=107.19778508402536
+content_chars=8695
+content_preview=Interpreting local LLM throughput measurements is a nuanced task that requires careful consideration of several factors, each of which can significantly influence the observed perf

@@ -1,0 +1,12 @@
+{
+  "dead": true,
+  "killed": false,
+  "pid": 2284313,
+  "ps_after": {
+    "returncode": 1,
+    "stderr": "",
+    "stdout": ""
+  },
+  "returncode": 0,
+  "terminated": true
+}

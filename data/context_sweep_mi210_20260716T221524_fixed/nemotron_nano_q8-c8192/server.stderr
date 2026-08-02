@@ -1,0 +1,20 @@
+0.00.044.092 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.044.532 W srv  llama_server: -----------------
+0.00.044.534 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.044.534 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.044.535 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.044.535 W srv  llama_server: -----------------
+0.00.045.824 I srv    load_model: loading model '/mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-Q8_0.gguf'
+0.00.784.471 W load: special_eos_id is not in special_eog_ids - the tokenizer config may be incorrect
+0.02.441.693 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 8192, kv_unified = 'false'
+0.02.446.550 I srv  llama_server: model loaded
+0.02.446.558 I srv  llama_server: listening on http://127.0.0.1:18305
+0.03.506.100 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.03.506.541 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.09.786.368 I slot print_timing: id  0 | task 0 | n_decoded =    240, tg =  79.81 t/s, tg_3s =  79.81 t/s
+0.09.985.339 I slot print_timing: id  0 | task 0 | prompt eval time =    3272.79 ms /  6428 tokens (    0.51 ms per token,  1964.08 tokens per second)
+0.09.985.343 I slot print_timing: id  0 | task 0 |        eval time =    3205.95 ms /   256 tokens (   12.52 ms per token,    79.85 tokens per second)
+0.09.985.344 I slot print_timing: id  0 | task 0 |       total time =    6478.74 ms /  6684 tokens
+0.09.985.351 I slot print_timing: id  0 | task 0 |    graphs reused =        254
+0.09.985.513 I slot      release: id  0 | task 0 | stop processing: n_tokens = 6683, truncated = 0
+0.10.063.108 I srv    operator(): operator(): cleaning up before exit...

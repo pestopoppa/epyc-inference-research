@@ -1,0 +1,2 @@
+GPU[0]		: GPU use (%): 0
+GPU[0]		: GPU Memory Allocated (VRAM%): 0

@@ -1,0 +1,8 @@
+finish_reason=stop
+prompt_tokens=84
+completion_tokens=1087
+total_tokens=1171
+prompt_tps=497.75418054255204
+generation_tps=100.15000388346152
+content_chars=6281
+content_preview=When evaluating the performance of a locally hosted large language model, it is essential to move beyond simple latency numbers and understand the underlying throughput metrics tha

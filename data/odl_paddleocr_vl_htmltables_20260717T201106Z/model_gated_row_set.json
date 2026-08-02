@@ -1,0 +1,289 @@
+{
+  "engines": [
+    "paddleocr_vl_1_6"
+  ],
+  "gt_json": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/OmniDocBench_demo.json",
+  "metric_rows": [
+    {
+      "engine": "paddleocr_vl_1_6",
+      "metric_family": "speed",
+      "metric_name": "latency_ms_median",
+      "value": 3245.5979044316337,
+      "n": 18,
+      "detail": "median per-page extraction latency (ms); mean=3220.940"
+    },
+    {
+      "engine": "paddleocr_vl_1_6",
+      "metric_family": "structural_fidelity",
+      "metric_name": "text_block.Edit_dist.ALL_page_avg",
+      "value": 0.42906216255138685,
+      "n": 0,
+      "detail": "normalized edit distance; LOWER is better"
+    },
+    {
+      "engine": "paddleocr_vl_1_6",
+      "metric_family": "table_fidelity",
+      "metric_name": "table.TEDS.all",
+      "value": 0.0,
+      "n": 0,
+      "detail": "TEDS; HIGHER is better; TEDS_structure_only=0.0"
+    },
+    {
+      "engine": "paddleocr_vl_1_6",
+      "metric_family": "reading_order",
+      "metric_name": "reading_order.Edit_dist.ALL_page_avg",
+      "value": 0.28575267455706616,
+      "n": 0,
+      "detail": "normalized edit distance; LOWER is better"
+    }
+  ],
+  "run_manifests": [
+    {
+      "engine": "paddleocr_vl_1_6",
+      "kind": "model_gated",
+      "available": true,
+      "prediction_dir": "/mnt/raid0/llm/tmp/odl-paddleocr-vl-htmltables-20260717T201106Z/predictions/paddleocr_vl_1_6",
+      "detail": "server_log=/mnt/raid0/llm/tmp/odl-paddleocr-vl-htmltables-20260717T201106Z/responses/paddleocr_vl_1_6/server.stderr; cleanup_dead=True; max_tokens=2048",
+      "n_artifacts": 18,
+      "artifacts": [
+        {
+          "gt_image": "yanbaopptmerge_SE05.pdf_7.jpg",
+          "prediction_filename": "yanbaopptmerge_SE05.pdf_7.md",
+          "source_pdf": "",
+          "char_count": 334,
+          "latency_ms": 890.6180108897388,
+          "source_image": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images/yanbaopptmerge_SE05.pdf_7.jpg",
+          "prompt_tokens": 1322,
+          "completion_tokens": 196,
+          "prompt_tps": 2926.8379080857767,
+          "decode_tps": 483.39322312296684,
+          "finish_reason": "stop"
+        },
+        {
+          "gt_image": "yanbaopptmerge_yanbaoPPT_145.jpg",
+          "prediction_filename": "yanbaopptmerge_yanbaoPPT_145.md",
+          "source_pdf": "",
+          "char_count": 4,
+          "latency_ms": 456.55815792270005,
+          "source_image": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images/yanbaopptmerge_yanbaoPPT_145.jpg",
+          "prompt_tokens": 1314,
+          "completion_tokens": 3,
+          "prompt_tps": 3257.724699949671,
+          "decode_tps": 499.41734642916606,
+          "finish_reason": "stop"
+        },
+        {
+          "gt_image": "docstructbench_llm-raw-scihub-o.O-j.chroma.2005.05.085.pdf_4.jpg",
+          "prediction_filename": "docstructbench_llm-raw-scihub-o.O-j.chroma.2005.05.085.pdf_4.md",
+          "source_pdf": "",
+          "char_count": 4615,
+          "latency_ms": 2933.3981671370566,
+          "source_image": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images/docstructbench_llm-raw-scihub-o.O-j.chroma.2005.05.085.pdf_4.jpg",
+          "prompt_tokens": 1322,
+          "completion_tokens": 1181,
+          "prompt_tps": 3257.6982218191856,
+          "decode_tps": 483.25506865413666,
+          "finish_reason": "stop"
+        },
+        {
+          "gt_image": "docstructbench_llm-raw-scihub-o.O-j.physletb.2004.06.101.pdf_3.jpg",
+          "prediction_filename": "docstructbench_llm-raw-scihub-o.O-j.physletb.2004.06.101.pdf_3.md",
+          "source_pdf": "",
+          "char_count": 3476,
+          "latency_ms": 3153.0578539241105,
+          "source_image": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images/docstructbench_llm-raw-scihub-o.O-j.physletb.2004.06.101.pdf_3.jpg",
+          "prompt_tokens": 1322,
+          "completion_tokens": 1300,
+          "prompt_tps": 3234.7018422140827,
+          "decode_tps": 484.6409816887725,
+          "finish_reason": "stop"
+        },
+        {
+          "gt_image": "docstructbench_dianzishu_zhongwenzaixian-o.O-60599898.pdf_30.jpg",
+          "prediction_filename": "docstructbench_dianzishu_zhongwenzaixian-o.O-60599898.pdf_30.md",
+          "source_pdf": "",
+          "char_count": 1659,
+          "latency_ms": 2590.4375889804214,
+          "source_image": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images/docstructbench_dianzishu_zhongwenzaixian-o.O-60599898.pdf_30.jpg",
+          "prompt_tokens": 1352,
+          "completion_tokens": 992,
+          "prompt_tps": 3176.6544096051502,
+          "decode_tps": 481.62260208262927,
+          "finish_reason": "stop"
+        },
+        {
+          "gt_image": "docstructbench_dianzishu_zhongwenzaixian-o.O-61522235.pdf_170.jpg",
+          "prediction_filename": "docstructbench_dianzishu_zhongwenzaixian-o.O-61522235.pdf_170.md",
+          "source_pdf": "",
+          "char_count": 2538,
+          "latency_ms": 4746.462169103324,
+          "source_image": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images/docstructbench_dianzishu_zhongwenzaixian-o.O-61522235.pdf_170.jpg",
+          "prompt_tokens": 1310,
+          "completion_tokens": 2048,
+          "prompt_tps": 3255.855569252794,
+          "decode_tps": 478.34731004379864,
+          "finish_reason": "length"
+        },
+        {
+          "gt_image": "docstructbench_dianzishu_zhongwenzaixian-o.O-61520814.pdf_185.jpg",
+          "prediction_filename": "docstructbench_dianzishu_zhongwenzaixian-o.O-61520814.pdf_185.md",
+          "source_pdf": "",
+          "char_count": 1103,
+          "latency_ms": 3982.0934261661023,
+          "source_image": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images/docstructbench_dianzishu_zhongwenzaixian-o.O-61520814.pdf_185.jpg",
+          "prompt_tokens": 1352,
+          "completion_tokens": 1667,
+          "prompt_tps": 3202.2055427525233,
+          "decode_tps": 477.99584685552134,
+          "finish_reason": "stop"
+        },
+        {
+          "gt_image": "docstructbench_dianzishu_zhongwenzaixian-o.O-61569294.pdf_128.jpg",
+          "prediction_filename": "docstructbench_dianzishu_zhongwenzaixian-o.O-61569294.pdf_128.md",
+          "source_pdf": "",
+          "char_count": 478,
+          "latency_ms": 1770.7526590675116,
+          "source_image": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images/docstructbench_dianzishu_zhongwenzaixian-o.O-61569294.pdf_128.jpg",
+          "prompt_tokens": 1352,
+          "completion_tokens": 613,
+          "prompt_tps": 3177.4831137454344,
+          "decode_tps": 480.8657780455355,
+          "finish_reason": "stop"
+        },
+        {
+          "gt_image": "jiaocaineedrop_Chapter9.pdf_46.jpg",
+          "prediction_filename": "jiaocaineedrop_Chapter9.pdf_46.md",
+          "source_pdf": "",
+          "char_count": 6044,
+          "latency_ms": 4741.054152138531,
+          "source_image": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images/jiaocaineedrop_Chapter9.pdf_46.jpg",
+          "prompt_tokens": 1332,
+          "completion_tokens": 2048,
+          "prompt_tps": 3249.7554144292067,
+          "decode_tps": 478.17810406584476,
+          "finish_reason": "length"
+        },
+        {
+          "gt_image": "jiaocaineedrop_Evans_PDE_Solution_Chapter_6_Second-Order_Elliptic_Equations.pdf_5.jpg",
+          "prediction_filename": "jiaocaineedrop_Evans_PDE_Solution_Chapter_6_Second-Order_Elliptic_Equations.pdf_5.md",
+          "source_pdf": "",
+          "char_count": 2461,
+          "latency_ms": 2855.044658994302,
+          "source_image": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images/jiaocaineedrop_Evans_PDE_Solution_Chapter_6_Second-Order_Elliptic_Equations.pdf_5.jpg",
+          "prompt_tokens": 1352,
+          "completion_tokens": 1147,
+          "prompt_tps": 3203.814245124965,
+          "decode_tps": 481.3319171739816,
+          "finish_reason": "stop"
+        },
+        {
+          "gt_image": "jiaocaineedrop_jiaocai_needrop_en_1898.jpg",
+          "prediction_filename": "jiaocaineedrop_jiaocai_needrop_en_1898.md",
+          "source_pdf": "",
+          "char_count": 8415,
+          "latency_ms": 4766.020049108192,
+          "source_image": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images/jiaocaineedrop_jiaocai_needrop_en_1898.jpg",
+          "prompt_tokens": 1352,
+          "completion_tokens": 2048,
+          "prompt_tps": 3183.71595225368,
+          "decode_tps": 477.3698042620639,
+          "finish_reason": "length"
+        },
+        {
+          "gt_image": "jiaocaineedrop_jiaocai_needrop_en_3361.jpg",
+          "prediction_filename": "jiaocaineedrop_jiaocai_needrop_en_3361.md",
+          "source_pdf": "",
+          "char_count": 2933,
+          "latency_ms": 4469.358881004155,
+          "source_image": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images/jiaocaineedrop_jiaocai_needrop_en_3361.jpg",
+          "prompt_tokens": 774,
+          "completion_tokens": 2048,
+          "prompt_tps": 4376.689322913721,
+          "decode_tps": 480.0140254098049,
+          "finish_reason": "length"
+        },
+        {
+          "gt_image": "notes_1ba14cb325bc448f7201b20502ecf2b5_15.jpg",
+          "prediction_filename": "notes_1ba14cb325bc448f7201b20502ecf2b5_15.md",
+          "source_pdf": "",
+          "char_count": 533,
+          "latency_ms": 1518.333466956392,
+          "source_image": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images/notes_1ba14cb325bc448f7201b20502ecf2b5_15.jpg",
+          "prompt_tokens": 560,
+          "completion_tokens": 658,
+          "prompt_tps": 4880.301881530672,
+          "decode_tps": 477.45512066988834,
+          "finish_reason": "stop"
+        },
+        {
+          "gt_image": "notes_f7f010b78016aeebd76e56d9283eb67f_49.jpg",
+          "prediction_filename": "notes_f7f010b78016aeebd76e56d9283eb67f_49.md",
+          "source_pdf": "",
+          "char_count": 866,
+          "latency_ms": 1787.7271710895002,
+          "source_image": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images/notes_f7f010b78016aeebd76e56d9283eb67f_49.jpg",
+          "prompt_tokens": 560,
+          "completion_tokens": 787,
+          "prompt_tps": 4784.198475891057,
+          "decode_tps": 477.17820938725345,
+          "finish_reason": "stop"
+        },
+        {
+          "gt_image": "newspaper_1cddf9d22ca549f3a86cf1512a3110cc_1.jpg",
+          "prediction_filename": "newspaper_1cddf9d22ca549f3a86cf1512a3110cc_1.md",
+          "source_pdf": "",
+          "char_count": 2024,
+          "latency_ms": 4746.887332061306,
+          "source_image": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images/newspaper_1cddf9d22ca549f3a86cf1512a3110cc_1.jpg",
+          "prompt_tokens": 1310,
+          "completion_tokens": 2048,
+          "prompt_tps": 3251.4755742205148,
+          "decode_tps": 475.77132218662456,
+          "finish_reason": "length"
+        },
+        {
+          "gt_image": "newspaper_5e266dfd9c498cab274e12a7b4a75755_4.jpg",
+          "prediction_filename": "newspaper_5e266dfd9c498cab274e12a7b4a75755_4.md",
+          "source_pdf": "",
+          "char_count": 8552,
+          "latency_ms": 4462.995149893686,
+          "source_image": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images/newspaper_5e266dfd9c498cab274e12a7b4a75755_4.jpg",
+          "prompt_tokens": 708,
+          "completion_tokens": 2048,
+          "prompt_tps": 4552.059356796585,
+          "decode_tps": 479.14222312165367,
+          "finish_reason": "length"
+        },
+        {
+          "gt_image": "eastmoney_62b4149b1612ce28d20f26cd5c5b2e18f80b26fca6e4452e090376a2fe72eae3.pdf_0.jpg",
+          "prediction_filename": "eastmoney_62b4149b1612ce28d20f26cd5c5b2e18f80b26fca6e4452e090376a2fe72eae3.pdf_0.md",
+          "source_pdf": "",
+          "char_count": 1722,
+          "latency_ms": 4767.990397056565,
+          "source_image": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images/eastmoney_62b4149b1612ce28d20f26cd5c5b2e18f80b26fca6e4452e090376a2fe72eae3.pdf_0.jpg",
+          "prompt_tokens": 1352,
+          "completion_tokens": 2048,
+          "prompt_tps": 3206.945218639183,
+          "decode_tps": 477.3052761110807,
+          "finish_reason": "length"
+        },
+        {
+          "gt_image": "yanbaopptmerge_0c79d327060dbf9f1582d03c235dadb039533a19091d2c0d24f2ad95d267f79b.pdf_2.jpg",
+          "prediction_filename": "yanbaopptmerge_0c79d327060dbf9f1582d03c235dadb039533a19091d2c0d24f2ad95d267f79b.pdf_2.md",
+          "source_pdf": "",
+          "char_count": 1468,
+          "latency_ms": 3338.1379549391568,
+          "source_image": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images/yanbaopptmerge_0c79d327060dbf9f1582d03c235dadb039533a19091d2c0d24f2ad95d267f79b.pdf_2.jpg",
+          "prompt_tokens": 1352,
+          "completion_tokens": 1369,
+          "prompt_tps": 3184.2633329250943,
+          "decode_tps": 478.96021201598865,
+          "finish_reason": "stop"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "paddleocr_vl_1_6: server_log=/mnt/raid0/llm/tmp/odl-paddleocr-vl-htmltables-20260717T201106Z/responses/paddleocr_vl_1_6/server.stderr; cleanup_dead=True; max_tokens=2048"
+  ]
+}

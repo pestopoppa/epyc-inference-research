@@ -1,0 +1,100 @@
+Route the query through sparse experts.
+Record per-layer expert hit frequency for the quiet-window MI210 gate.
+Prefer short, technical sentences so tokenization stays deterministic.
+Measure whether the routing pattern is Zipfian or near-uniform.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.
+The calibration corpus should stay small, repetitive, and workload-like.
+It should exercise expert selection without turning into a long benchmark.

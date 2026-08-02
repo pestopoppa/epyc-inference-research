@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "[\n  \"health_check_001\",\n  \"health_check_002\",\n  \"health_check_003\",\n  \"health_check_004\",\n  \"health_check_005\",\n  \"health_check_006\",\n  \"health_check_007\",\n  \"health_check_008\",\n  \"health_check_009\",\n  \"health_check_010\",\n  \"health_check_011\",\n  \"health_check_012\",\n  \"health_check_013\",\n  \"health_check_014\",\n  \"health_check_015\",\n  \"health_check_016\",\n  \"health_check_017\",\n  \"health_check_018\",\n  \"health_check_019\",\n  \"health_check_020\",\n  \"health_check_021\",\n  \"health_check_022\",\n  \"health_check_023\",\n  \"health_check_024\",\n  \"health_check_025\",\n  \"health_check_026\",\n  \"health_check_027\",\n  \"health_check_028\",\n  \"health_check_029\",\n  \"health_check_030\",\n  \"health_check_031\",\n  \"health_check_032\",\n  \"health_check_033\",\n  \"health_check_034\",\n  \"health_check_035\",\n  \"health_check_036\",\n  \"health_check_037\",\n  \"health_check_038\",\n  \"health_check_039\",\n  \"health_check_040\",\n  \"health_check_041\",\n  \"health_check_042\",\n  \"health_check_043\",\n  \"health_check_044\",\n  \"health_check_045\",\n  \"health_check_046\",\n  \"health_check_047\",\n  \"health_check_048\",\n  \"health_check_049\",\n  \"health_check_050\",\n  \"health_check_051\",\n  \"health_check_052\",\n  \"health_check_053\",\n  \"health_check_054\",\n  \"health_check_055\",\n  \"health_check_056\",\n  \"health_check_057\",\n  \"health_check_058\",\n  \"health_check_059\",\n  \"health_check_060\",\n  \"health_check_061\",\n  \"health_check_062\",\n  \"health_check_063\",\n  \"health_check_064\",\n  \"health_check_065\",\n  \"health_check_066\",\n  \"health_check_067\",\n  \"health_check_068\",\n  \"health_check_069\",\n  \"health_check_070\",\n  \"health_check_071\",\n  \"health_check_072\",\n  \"health_check_073\",\n  \"health_check_074\",\n  \"health_check_075\",\n  \"health_check_076\",\n  \"health_check_077\",\n  \"health_check_078\",\n  \"health_check_079\",\n  \"health_check_080\",\n  \"health_check_081\",\n  \"health_check_082\",\n  \"health_check_083\",\n  \"health_check_084\",\n  \"health_check_085\",\n  \"health_check_086\",\n  \"health_check_087\",\n  \"health_check_088\",\n  \"health_check_089\",\n  \"health_check_090\",\n  \"health_check_091\",\n  \"health_check_092\",\n  \"health_check_093\",\n  \"health_check_094\",\n  \"health_check_095\",\n  \"health_check_096\",\n  \"health_check_097\",\n  \"health_check_098\",\n  \"health_check_099\",\n  \"health_check_100\",\n  \"health_check_101\",\n  \"health_check_102\",\n  \""
+      }
+    }
+  ],
+  "created": 1784316283,
+  "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 1024,
+    "prompt_tokens": 39,
+    "total_tokens": 1063,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "id": "chatcmpl-BXLgO2TbBVvercgEHI9xdNZBIF929gUk",
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 39,
+    "prompt_ms": 153.325,
+    "prompt_per_token_ms": 3.931410256410256,
+    "prompt_per_second": 254.36165008967882,
+    "predicted_n": 1024,
+    "predicted_ms": 10070.374,
+    "predicted_per_token_ms": 9.834349609375,
+    "predicted_per_second": 101.684406160089
+  }
+}

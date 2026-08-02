@@ -1,0 +1,45 @@
+{
+  "generated_at": "2026-07-17T09:23:54.635962+00:00",
+  "status": "ok",
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "port": 19471,
+  "pid": 478914,
+  "response_path": "/mnt/raid0/llm/tmp/glm52-current-source-ready-smoke-20260717T092344/response.json",
+  "server_log": "/mnt/raid0/llm/tmp/glm52-current-source-ready-smoke-20260717T092344/server.log",
+  "content": "READY",
+  "reasoning_content": null,
+  "finish_reason": "stop",
+  "usage": {
+    "completion_tokens": 2,
+    "prompt_tokens": 10,
+    "total_tokens": 12,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 10,
+    "prompt_ms": 1057.217,
+    "prompt_per_token_ms": 105.72170000000001,
+    "prompt_per_second": 9.458796065519188,
+    "predicted_n": 2,
+    "predicted_ms": 364.546,
+    "predicted_per_token_ms": 182.273,
+    "predicted_per_second": 5.4862760803849175
+  },
+  "matched_lines_tail": [
+    "0.00.300.653 I llama_model_loader: - kv   0:                       general.architecture str              = glm-dsa",
+    "0.00.300.694 I llama_model_loader: - kv  47:            glm-dsa.attention.indexer.top_k u32              = 2048",
+    "0.00.328.908 I validate_override: Using metadata override (  int) 'glm-dsa.attention.indexer.top_k' = 0.00.328.909 I 32",
+    "0.07.886.840 I llama_kv_cache_dsa: creating main KV cache, size = 1024 cells",
+    "0.07.892.372 I llama_kv_cache_dsa: creating indexer KV cache, size = 1024 cells",
+    "0.07.899.008 I resolve_fused_ops: resolving fused Lightning Indexer support:",
+    "0.07.900.074 I resolve_fused_ops: Lightning Indexer enabled",
+    "0.10.118.289 I slot print_timing: id  3 | task 0 | prompt eval time =    1057.22 ms /    10 tokens (  105.72 ms per token,     9.46 tokens per second)",
+    "0.10.118.295 I slot print_timing: id  3 | task 0 |        eval time =     364.55 ms /     2 tokens (  182.27 ms per token,     5.49 tokens per second)",
+    "0.10.118.296 I slot print_timing: id  3 | task 0 |       total time =    1421.76 ms /    12 tokens",
+    "0.10.118.302 I slot print_timing: id  3 | task 0 |    graphs reused =          0"
+  ]
+}

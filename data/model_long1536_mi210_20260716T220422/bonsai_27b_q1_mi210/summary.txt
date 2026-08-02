@@ -1,0 +1,8 @@
+finish_reason=stop
+prompt_tokens=84
+completion_tokens=1259
+total_tokens=1343
+prompt_tps=136.62202054209666
+generation_tps=11.152970825874656
+content_chars=7407
+content_preview=Interpreting local large language model throughput measurements requires a nuanced understanding of the underlying hardware constraints, software stack optimizations, and the speci

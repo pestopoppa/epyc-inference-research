@@ -1,0 +1,73 @@
+{
+  "changed_files": [
+    "docstructbench_dianzishu_zhongwenzaixian-o.O-60599898.pdf_30.md",
+    "jiaocaineedrop_Chapter9.pdf_46.md"
+  ],
+  "changed_files_count": 2,
+  "config_path": "/mnt/raid0/llm/tmp/odl-paddleocr-vl-postprocess-rescore-20260717T211432Z/config/paddleocr_vl_1_6_postprocessed.yaml",
+  "gt_json": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/OmniDocBench_demo.json",
+  "original_metric_rows": [
+    {
+      "detail": "median per-page extraction latency (ms); mean=2834.398",
+      "engine": "paddleocr_vl_1_6",
+      "metric_family": "speed",
+      "metric_name": "latency_ms_median",
+      "n": 18,
+      "value": 2918.779006926343
+    },
+    {
+      "detail": "normalized edit distance; LOWER is better",
+      "engine": "paddleocr_vl_1_6",
+      "metric_family": "structural_fidelity",
+      "metric_name": "text_block.Edit_dist.ALL_page_avg",
+      "n": 0,
+      "value": 0.3430194505039449
+    },
+    {
+      "detail": "TEDS; HIGHER is better; TEDS_structure_only=0.0",
+      "engine": "paddleocr_vl_1_6",
+      "metric_family": "table_fidelity",
+      "metric_name": "table.TEDS.all",
+      "n": 0,
+      "value": 0.0
+    },
+    {
+      "detail": "normalized edit distance; LOWER is better",
+      "engine": "paddleocr_vl_1_6",
+      "metric_family": "reading_order",
+      "metric_name": "reading_order.Edit_dist.ALL_page_avg",
+      "n": 0,
+      "value": 0.33731788904532656
+    }
+  ],
+  "postprocessed_metric_rows": [
+    {
+      "detail": "normalized edit distance; LOWER is better",
+      "engine": "paddleocr_vl_1_6_postprocessed_20260717T211432Z",
+      "metric_family": "structural_fidelity",
+      "metric_name": "text_block.Edit_dist.ALL_page_avg",
+      "n": 0,
+      "value": 0.3435395989228812
+    },
+    {
+      "detail": "TEDS; HIGHER is better; TEDS_structure_only=0.06666666666666668",
+      "engine": "paddleocr_vl_1_6_postprocessed_20260717T211432Z",
+      "metric_family": "table_fidelity",
+      "metric_name": "table.TEDS.all",
+      "n": 0,
+      "value": 0.05833333333333333
+    },
+    {
+      "detail": "normalized edit distance; LOWER is better",
+      "engine": "paddleocr_vl_1_6_postprocessed_20260717T211432Z",
+      "metric_family": "reading_order",
+      "metric_name": "reading_order.Edit_dist.ALL_page_avg",
+      "n": 0,
+      "value": 0.3501384018658394
+    }
+  ],
+  "postprocessed_prediction_dir": "/mnt/raid0/llm/tmp/odl-paddleocr-vl-postprocess-rescore-20260717T211432Z/predictions/paddleocr_vl_1_6_postprocessed_20260717T211432Z",
+  "run_dir": "/mnt/raid0/llm/tmp/odl-paddleocr-vl-postprocess-rescore-20260717T211432Z",
+  "source_prediction_dir": "/mnt/raid0/llm/tmp/odl-paddleocr-vl-demo-20260717T200212Z/predictions/paddleocr_vl_1_6",
+  "source_run": "/mnt/raid0/llm/tmp/odl-paddleocr-vl-demo-20260717T200212Z"
+}

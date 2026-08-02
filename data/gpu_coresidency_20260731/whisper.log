@@ -1,0 +1,2532 @@
+ggml_cuda_init: found 1 ROCm devices (Total VRAM: 65520 MiB):
+  Device 0: AMD Instinct MI210, gfx90a:sramecc+:xnack- (0x90a), VMM: no, Wave Size: 64, VRAM: 65520 MiB
+whisper_init_from_file_with_params_no_state: loading model from '/mnt/raid0/llm/models/whisper-ggml/ggml-large-v3-turbo.bin'
+whisper_init_with_params_no_state: use gpu    = 1
+whisper_init_with_params_no_state: flash attn = 1
+whisper_init_with_params_no_state: gpu_device = 0
+whisper_init_with_params_no_state: dtw        = 0
+whisper_init_with_params_no_state: devices    = 2
+whisper_init_with_params_no_state: backends   = 2
+whisper_model_load: loading model
+whisper_model_load: n_vocab       = 51866
+whisper_model_load: n_audio_ctx   = 1500
+whisper_model_load: n_audio_state = 1280
+whisper_model_load: n_audio_head  = 20
+whisper_model_load: n_audio_layer = 32
+whisper_model_load: n_text_ctx    = 448
+whisper_model_load: n_text_state  = 1280
+whisper_model_load: n_text_head   = 20
+whisper_model_load: n_text_layer  = 4
+whisper_model_load: n_mels        = 128
+whisper_model_load: ftype         = 1
+whisper_model_load: qntvr         = 0
+whisper_model_load: type          = 5 (large v3)
+whisper_model_load: adding 1609 extra tokens
+whisper_model_load: n_langs       = 100
+whisper_model_load:        ROCm0 total size =  1623.92 MB
+whisper_model_load: model size    = 1623.92 MB
+whisper_backend_init_gpu: device 0: ROCm0 (type: 1)
+whisper_backend_init_gpu: found GPU device 0: ROCm0 (type: 1, cnt: 0)
+whisper_backend_init_gpu: using ROCm0 backend
+whisper_init_state: kv self size  =   10.49 MB
+whisper_init_state: kv cross size =   31.46 MB
+whisper_init_state: kv pad  size  =    7.86 MB
+whisper_init_state: compute buffer (conv)   =   37.69 MB
+whisper_init_state: compute buffer (encode) =   55.35 MB
+whisper_init_state: compute buffer (cross)  =    9.27 MB
+whisper_init_state: compute buffer (decode) =  100.04 MB
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+whisper server listening at http://127.0.0.1:9001
+
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whi
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+sper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp in
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+ference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on 
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Rec
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+eived request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received reque
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+st: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+system_info: n_threads = 8 / 192 | WHISPER : COREML = 0 | OPENVINO = 0 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | REPACK = 1 | 
+
+operator(): processing 'jfk.wav' (176000 samples, 11.0 sec), 8 threads, 1 processors, lang = en, task = transcribe, timestamps = 1 ...
+
+
+whisper_print_timings:     load time =   615.30 ms
+whisper_print_timings:     fallbacks =   0 p /   0 h
+whisper_print_timings:      mel time =  3253.87 ms
+whisper_print_timings:   sample time =  3003.41 ms /     1 runs (  3003.41 ms per run)
+whisper_print_timings:   encode time = 41935.25 ms /   310 runs (   135.28 ms per run)
+whisper_print_timings:   decode time = 23410.39 ms /  8680 runs (     2.70 ms per run)
+whisper_print_timings:   batchd time =  1212.16 ms /   930 runs (     1.30 ms per run)
+whisper_print_timings:   prompt time =     0.00 ms /     1 runs (     0.00 ms per run)
+whisper_print_timings:    total time = 504669.59 ms
+
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+Received request: jfk.wav
+Successfully loaded jfk.wav
+Running whisper.cpp inference on jfk.wav
+
+Caught signal 15, shutting down gracefully...

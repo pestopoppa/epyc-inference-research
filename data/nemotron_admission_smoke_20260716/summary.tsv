@@ -1,0 +1,2 @@
+case	status	exit_code	stdout	stderr	timeout_s	log_cap_bytes
+nemotron_diff14_q8_cpu_v7	fail	1	/mnt/raid0/llm/tmp/nemotron-admission-smoke-20260716/nemotron_diff14_q8_cpu_v7.stdout	/mnt/raid0/llm/tmp/nemotron-admission-smoke-20260716/nemotron_diff14_q8_cpu_v7.stderr	180	1048576

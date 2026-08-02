@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "INVOICE  Date: 2025-12-16\nItem    Qty    Price    Amount\nWidget A  2    $15.00    $30.00\nWidget B  3    $25.00    $75.00\nService  1    $50.00    $50.00\nTOTAL: $155.00",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784317415,
+  "id": "chatcmpl-q6UqdhV0ZmIyYdL8XHTZ4Ga0ceiNA56c",
+  "model": "/mnt/raid0/llm/models/PaddleOCR-VL-1.6-GGUF/PaddleOCR-VL-1.6-GGUF.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 189.864,
+    "predicted_n": 93,
+    "predicted_per_second": 489.8242952850461,
+    "predicted_per_token_ms": 2.0415483870967743,
+    "prompt_ms": 40.659,
+    "prompt_n": 186,
+    "prompt_per_second": 4574.632922600163,
+    "prompt_per_token_ms": 0.2185967741935484
+  },
+  "usage": {
+    "completion_tokens": 93,
+    "prompt_tokens": 186,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 279
+  }
+}

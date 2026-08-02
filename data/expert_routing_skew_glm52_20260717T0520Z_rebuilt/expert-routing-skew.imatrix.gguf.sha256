@@ -1,0 +1,9 @@
+# Evidence blob deliberately NOT carried into this repository.
+# Recorded 2026-08-02 by scripts/validate/check_evidence_durability.py's migration.
+# `*.gguf` is excluded by .gitignore policy (heavy binaries); at 1079 MiB this file is a build input, not a result.
+# The registry citation points HERE so the hash stays in-tree and checkable
+# against the scratch original for as long as that original survives.
+sha256   a45cd5fae80417bfb87bf2debb82f579e60f1dc2d985f746a9ce25198b00e336
+bytes    1131474176
+origin   /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/expert-routing-skew.imatrix.gguf
+mtime    2026-07-17T05:15:17.527203Z

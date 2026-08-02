@@ -1,0 +1,44 @@
+{
+ "n": 250,
+ "f16_correct": 153,
+ "q8_correct": 155,
+ "f16_pct": 61.2,
+ "q8_pct": 62.0,
+ "b_q8_only_correct": 6,
+ "c_f16_only_correct": 4,
+ "both_correct": 149,
+ "neither_correct": 91,
+ "discordant": 10,
+ "delta_pp": 0.8,
+ "mcnemar_p": 0.75390625,
+ "delta_ci95_pp": [
+  -1.9,
+  3.03
+ ],
+ "achieved_mde_pp": 3.2,
+ "answer_agreement": 228,
+ "answer_agreement_pct": 91.2,
+ "parse_fail_f16": 21,
+ "parse_fail_q8": 17,
+ "parse_asymmetry_p": 0.3876953125,
+ "capped_asymmetry_p": 0.1796875,
+ "artifacts": [],
+ "void_reasons": [],
+ "verdict": "ADOPT q8_0",
+ "prereg": {
+  "primary_test": "two-sided exact McNemar on the 250 paired correctness outcomes",
+  "alpha": 0.05,
+  "ni_margin_pp": 3.0,
+  "instrument_band_pct": [
+   57.5,
+   69.3
+  ],
+  "precedent_raw": "159/250",
+  "decision": {
+   "ADOPT_Q8_0": "McNemar p >= alpha AND exact 95% CI lower bound on delta > -3.0 pp AND no scorer/truncation asymmetry AND run not void",
+   "KEEP_F16": "McNemar p < alpha with f16 ahead, OR point estimate delta <= -3.0 pp",
+   "INCONCLUSIVE": "anything else -- notably p >= alpha with a CI that still admits a worse-than-3-pp drop. This is NOT evidence of no harm.",
+   "VOID": "instrument drift, unverified arm identity, transport errors, prompt-bytes mismatch between arms, or f16 arm outside the sanity band"
+  }
+ }
+}

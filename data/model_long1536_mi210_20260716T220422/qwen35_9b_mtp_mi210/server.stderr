@@ -1,0 +1,23 @@
+0.00.035.928 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.036.267 W srv  llama_server: -----------------
+0.00.036.269 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.036.269 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.036.270 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.036.270 W srv  llama_server: -----------------
+0.00.037.462 I srv    load_model: loading model '/mnt/raid0/llm/models/Qwen3.5-9B-MTP-GGUF/Qwen3.5-9B-Q4_K_M.gguf'
+0.01.688.534 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 8192, kv_unified = 'false'
+0.01.688.660 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.01.721.189 I srv  llama_server: model loaded
+0.01.721.196 I srv  llama_server: listening on http://127.0.0.1:18205
+0.02.140.823 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.02.140.872 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.05.328.860 I slot print_timing: id  0 | task 0 | n_decoded =    308, tg = 102.13 t/s, tg_3s = 102.13 t/s
+0.08.354.094 I slot print_timing: id  0 | task 0 | n_decoded =    602, tg =  99.65 t/s, tg_3s =  97.18 t/s
+0.11.368.121 I slot print_timing: id  0 | task 0 | n_decoded =    890, tg =  98.29 t/s, tg_3s =  95.55 t/s
+0.14.350.578 I slot print_timing: id  0 | task 0 | prompt eval time =     172.29 ms /    84 tokens (    2.05 ms per token,   487.56 tokens per second)
+0.14.350.582 I slot print_timing: id  0 | task 0 |        eval time =   12037.38 ms /  1197 tokens (   10.06 ms per token,    99.44 tokens per second)
+0.14.350.583 I slot print_timing: id  0 | task 0 |       total time =   12209.67 ms /  1281 tokens
+0.14.350.588 I slot print_timing: id  0 | task 0 |    graphs reused =        560
+0.14.350.598 I slot print_timing: id  0 | task 0 | draft acceptance = 0.56028 (  632 accepted /  1128 generated), mean len =  2.12
+0.14.350.659 I slot      release: id  0 | task 0 | stop processing: n_tokens = 1280, truncated = 0
+0.14.489.016 I srv    operator(): operator(): cleaning up before exit...

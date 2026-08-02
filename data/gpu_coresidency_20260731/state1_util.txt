@@ -1,0 +1,14 @@
+GPU[0]		: GPU use (%): 0
+GPU[0]		: GPU use (%): 99
+GPU[0]		: GPU use (%): 100
+GPU[0]		: GPU use (%): 100
+GPU[0]		: GPU use (%): 99
+GPU[0]		: GPU use (%): 100
+GPU[0]		: GPU use (%): 99
+GPU[0]		: GPU use (%): 99
+GPU[0]		: GPU use (%): 99
+GPU[0]		: GPU use (%): 99
+GPU[0]		: GPU use (%): 99
+GPU[0]		: GPU use (%): 99
+GPU[0]		: GPU use (%): 100
+GPU[0]		: GPU use (%): 0

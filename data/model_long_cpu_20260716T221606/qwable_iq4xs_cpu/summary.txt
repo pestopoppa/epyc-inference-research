@@ -1,0 +1,8 @@
+finish_reason=stop
+prompt_tokens=66
+completion_tokens=616
+total_tokens=682
+prompt_tps=88.90062257375384
+generation_tps=13.705064519706015
+content_chars=3541
+content_preview=When evaluating the performance of a locally hosted large language model, it is essential to distinguish between two distinct throughput metrics: prompt through

@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "\u2022 Human Factors\n\u2022 the process molds to the needs of the people and\nteam, not the other way around\n\u2022 key traits must exist among the people on an agile\nteam and the team itself:\n- Competence.\n- Common focus.\n- Collaboration.\n- Decision-making ability.\n- Fuzzy problem-solving ability.\n- Mutual trust and respect.\n- Self-organization.\n8",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784318534,
+  "id": "chatcmpl-mtVOrYypZEDfS88OiYxKTlGzo1W9We6S",
+  "model": "/mnt/raid0/llm/models/PaddleOCR-VL-1.6-GGUF/PaddleOCR-VL-1.6-GGUF.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 400.969,
+    "predicted_n": 196,
+    "predicted_per_second": 488.8158436188334,
+    "predicted_per_token_ms": 2.0457602040816325,
+    "prompt_ms": 449.292,
+    "prompt_n": 1281,
+    "prompt_per_second": 2851.1524799017125,
+    "prompt_per_token_ms": 0.35073536299765806
+  },
+  "usage": {
+    "completion_tokens": 196,
+    "prompt_tokens": 1281,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1477
+  }
+}

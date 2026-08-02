@@ -1,0 +1,2 @@
+cpu_long_nospec_exit=0
+cpu_long_mtp_exit=0

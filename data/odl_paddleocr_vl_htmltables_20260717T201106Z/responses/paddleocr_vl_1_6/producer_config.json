@@ -1,0 +1,9 @@
+{
+  "context": 8192,
+  "device": "ROCm0",
+  "engine": "paddleocr_vl_1_6",
+  "gpu_layers": 99,
+  "max_tokens": 2048,
+  "prompt": "Extract this document page as Markdown for OmniDocBench end-to-end scoring. Preserve reading order and all visible text. Render every table as valid HTML using <table>, <tr>, <th>, and <td> tags with rowspan/colspan when visible; do not use Markdown pipe tables. Keep non-table content as concise Markdown. Return only the extracted document content.",
+  "prompt_profile": "html_tables"
+}

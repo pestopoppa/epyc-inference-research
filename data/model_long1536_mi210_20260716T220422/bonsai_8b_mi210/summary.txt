@@ -1,0 +1,8 @@
+finish_reason=stop
+prompt_tokens=84
+completion_tokens=1073
+total_tokens=1157
+prompt_tps=950.7532455772996
+generation_tps=37.995298639506274
+content_chars=5915
+content_preview=Interpreting local large language model (LLM) throughput measurements is a critical task for developers and researchers who are optimizing models for performance in real-world appl

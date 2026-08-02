@@ -1,0 +1,32 @@
+{
+  "argv_path": "/mnt/raid0/llm/tmp/t5-gemma-worker-draft-depth-20260717T213641Z/draft3/server_argv.json",
+  "cleanup": {
+    "dead": true,
+    "killed": false,
+    "pid": 2338837,
+    "ps_after": {
+      "returncode": 1,
+      "stderr": "",
+      "stdout": ""
+    },
+    "returncode": 0,
+    "terminated": true
+  },
+  "completion_tokens": 512,
+  "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+  "decode_tps": 76.38022193824958,
+  "depth": 3,
+  "draft_n": 812,
+  "draft_n_accepted": 492,
+  "elapsed_s": 32.90985788102262,
+  "max_tokens": 512,
+  "min_completion_tokens": 256,
+  "nominal_context": 8192,
+  "passed_min_completion": true,
+  "port": 19421,
+  "prompt_tokens": 6726,
+  "prompt_tps": 256.94431551386685,
+  "role": "worker_general",
+  "scenario": "worker_general_cpu_composed_spec_draft3",
+  "status": "ok"
+}

@@ -1,0 +1,2 @@
+case	status	exit_code	stdout	stderr	timeout_s	log_cap_bytes
+qwen3_vl8_cpu_text_v7	pass	0	/mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/qwen3_vl8_cpu_text_v7/qwen3_vl8_cpu_text_v7.stdout	/mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/qwen3_vl8_cpu_text_v7/qwen3_vl8_cpu_text_v7.stderr	120	1048576

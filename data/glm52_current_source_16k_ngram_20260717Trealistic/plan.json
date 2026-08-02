@@ -1,0 +1,1542 @@
+{
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "execution": {
+    "stages": [
+      {
+        "name": "shard_integrity_inventory",
+        "reason": "not selected",
+        "status": "skipped"
+      },
+      {
+        "name": "short_load_decode_smoke",
+        "reason": "not selected",
+        "status": "skipped"
+      },
+      {
+        "completion_token_count": 512,
+        "completion_token_count_source": "server_log_eval_time",
+        "completion_token_min": 256,
+        "completion_token_min_passed": true,
+        "content_preview": " D * GT0 the the : support the the1 `:0 is the the0 -. `1 a0:2- D0 a and  the6 is4 s the ``04 **...\n\n  the context the and` D the: the the the to while F 0  :0word  the is a  A   the A the  c:...\n\n:  ",
+        "context_length": 16384,
+        "finish_reason": null,
+        "name": "long_context_dsa_probe",
+        "port": 19502,
+        "progress_metrics_samples": [],
+        "prompt_char_count": 65012,
+        "prompt_kind": "long_context_dsa_probe",
+        "prompt_token_adjustment_attempts": 1,
+        "prompt_token_count": 11940,
+        "prompt_token_max": 15360,
+        "prompt_token_min": 8192,
+        "reasoning_preview": null,
+        "request_purpose": "coherence_plus_throughput",
+        "server_log": {
+          "bytes": 36387,
+          "decode_tokens": 512,
+          "decode_tps": 2.54,
+          "line_count": 418,
+          "matched_line_count": 167,
+          "matched_lines_tail": [
+            "0.09.589.423 I slot launch_slot_: id  3 | task 0 | processing task, is_child = 0",
+            "0.09.589.424 I slot process_sing: id  0 | task -1 | saving idle slot to prompt cache",
+            "0.09.589.425 I slot prompt_clear: id  0 | task -1 | clearing prompt with 0 tokens",
+            "0.09.589.445 I slot process_sing: id  1 | task -1 | saving idle slot to prompt cache",
+            "0.09.589.446 I slot prompt_clear: id  1 | task -1 | clearing prompt with 0 tokens",
+            "0.09.589.459 I slot process_sing: id  2 | task -1 | saving idle slot to prompt cache",
+            "0.09.589.460 I slot prompt_clear: id  2 | task -1 | clearing prompt with 0 tokens",
+            "0.09.589.485 I slot   operator(): id  3 | task 0 | new prompt, n_ctx_slot = 16384, n_keep = 0, task.n_tokens = 11952",
+            "0.09.589.495 I slot   operator(): id  3 | task 0 | cached n_tokens = 0, memory_seq_rm [0, end)",
+            "1.25.657.330 I slot print_timing: id  3 | task 0 | prompt processing, n_tokens =   2048, progress = 0.17, t =  76.07 s / 26.92 tokens per second",
+            "1.25.657.335 I slot   operator(): id  3 | task 0 | cached n_tokens = 2048, memory_seq_rm [2048, end)",
+            "2.57.377.126 I slot print_timing: id  3 | task 0 | prompt processing, n_tokens =   4096, progress = 0.34, t = 167.79 s / 24.41 tokens per second",
+            "2.57.377.132 I slot   operator(): id  3 | task 0 | cached n_tokens = 4096, memory_seq_rm [4096, end)",
+            "4.45.259.119 I slot print_timing: id  3 | task 0 | prompt processing, n_tokens =   6144, progress = 0.51, t = 275.67 s / 22.29 tokens per second",
+            "4.45.259.124 I slot   operator(): id  3 | task 0 | cached n_tokens = 6144, memory_seq_rm [6144, end)",
+            "6.44.783.836 I slot print_timing: id  3 | task 0 | prompt processing, n_tokens =   8192, progress = 0.69, t = 395.19 s / 20.73 tokens per second",
+            "6.44.783.840 I slot   operator(): id  3 | task 0 | cached n_tokens = 8192, memory_seq_rm [8192, end)",
+            "8.50.916.184 I slot print_timing: id  3 | task 0 | prompt processing, n_tokens =  10240, progress = 0.86, t = 521.33 s / 19.64 tokens per second",
+            "8.50.916.191 I slot   operator(): id  3 | task 0 | cached n_tokens = 10240, memory_seq_rm [10240, end)",
+            "8.50.917.795 I slot init_sampler: id  3 | task 0 | init sampler, took 1.55 ms, tokens: text = 11952, total = 11952",
+            "11.25.975.145 I slot print_timing: id  3 | task 0 | n_decoded =    100, tg =   2.56 t/s, tg_3s =   2.56 t/s",
+            "11.29.155.221 I slot print_timing: id  3 | task 0 | n_decoded =    108, tg =   2.56 t/s, tg_3s =   2.52 t/s",
+            "11.32.311.734 I slot print_timing: id  3 | task 0 | n_decoded =    116, tg =   2.56 t/s, tg_3s =   2.53 t/s",
+            "11.35.468.094 I slot print_timing: id  3 | task 0 | n_decoded =    124, tg =   2.55 t/s, tg_3s =   2.53 t/s",
+            "11.38.624.232 I slot print_timing: id  3 | task 0 | n_decoded =    132, tg =   2.55 t/s, tg_3s =   2.53 t/s",
+            "11.41.775.546 I slot print_timing: id  3 | task 0 | n_decoded =    140, tg =   2.55 t/s, tg_3s =   2.54 t/s",
+            "11.44.931.263 I slot print_timing: id  3 | task 0 | n_decoded =    148, tg =   2.55 t/s, tg_3s =   2.54 t/s",
+            "11.48.085.830 I slot print_timing: id  3 | task 0 | n_decoded =    156, tg =   2.55 t/s, tg_3s =   2.54 t/s",
+            "11.51.244.469 I slot print_timing: id  3 | task 0 | n_decoded =    164, tg =   2.55 t/s, tg_3s =   2.53 t/s",
+            "11.54.397.983 I slot print_timing: id  3 | task 0 | n_decoded =    172, tg =   2.55 t/s, tg_3s =   2.54 t/s",
+            "11.57.561.672 I slot print_timing: id  3 | task 0 | n_decoded =    180, tg =   2.55 t/s, tg_3s =   2.53 t/s",
+            "12.00.719.245 I slot print_timing: id  3 | task 0 | n_decoded =    188, tg =   2.55 t/s, tg_3s =   2.53 t/s",
+            "12.03.873.633 I slot print_timing: id  3 | task 0 | n_decoded =    196, tg =   2.55 t/s, tg_3s =   2.54 t/s",
+            "12.07.030.996 I slot print_timing: id  3 | task 0 | n_decoded =    204, tg =   2.55 t/s, tg_3s =   2.53 t/s",
+            "12.10.183.807 I slot print_timing: id  3 | task 0 | n_decoded =    212, tg =   2.55 t/s, tg_3s =   2.54 t/s",
+            "12.13.340.415 I slot print_timing: id  3 | task 0 | n_decoded =    220, tg =   2.55 t/s, tg_3s =   2.53 t/s",
+            "12.16.503.146 I slot print_timing: id  3 | task 0 | n_decoded =    228, tg =   2.55 t/s, tg_3s =   2.53 t/s",
+            "12.19.658.976 I slot print_timing: id  3 | task 0 | n_decoded =    236, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "12.22.812.102 I slot print_timing: id  3 | task 0 | n_decoded =    244, tg =   2.54 t/s, tg_3s =   2.54 t/s",
+            "12.25.964.427 I slot print_timing: id  3 | task 0 | n_decoded =    252, tg =   2.54 t/s, tg_3s =   2.54 t/s",
+            "12.29.120.961 I slot print_timing: id  3 | task 0 | n_decoded =    260, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "12.32.277.367 I slot print_timing: id  3 | task 0 | n_decoded =    268, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "12.35.431.508 I slot print_timing: id  3 | task 0 | n_decoded =    276, tg =   2.54 t/s, tg_3s =   2.54 t/s",
+            "12.38.600.277 I slot print_timing: id  3 | task 0 | n_decoded =    284, tg =   2.54 t/s, tg_3s =   2.52 t/s",
+            "12.41.759.269 I slot print_timing: id  3 | task 0 | n_decoded =    292, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "12.44.922.840 I slot print_timing: id  3 | task 0 | n_decoded =    300, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "12.48.087.578 I slot print_timing: id  3 | task 0 | n_decoded =    308, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "12.51.264.631 I slot print_timing: id  3 | task 0 | n_decoded =    316, tg =   2.54 t/s, tg_3s =   2.52 t/s",
+            "12.54.440.551 I slot print_timing: id  3 | task 0 | n_decoded =    324, tg =   2.54 t/s, tg_3s =   2.52 t/s",
+            "12.57.609.309 I slot print_timing: id  3 | task 0 | n_decoded =    332, tg =   2.54 t/s, tg_3s =   2.52 t/s",
+            "13.00.764.802 I slot print_timing: id  3 | task 0 | n_decoded =    340, tg =   2.54 t/s, tg_3s =   2.54 t/s",
+            "13.03.930.457 I slot print_timing: id  3 | task 0 | n_decoded =    348, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "13.07.091.797 I slot print_timing: id  3 | task 0 | n_decoded =    356, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "13.10.249.399 I slot print_timing: id  3 | task 0 | n_decoded =    364, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "13.13.408.682 I slot print_timing: id  3 | task 0 | n_decoded =    372, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "13.16.585.722 I slot print_timing: id  3 | task 0 | n_decoded =    380, tg =   2.54 t/s, tg_3s =   2.52 t/s",
+            "13.19.757.028 I slot print_timing: id  3 | task 0 | n_decoded =    388, tg =   2.54 t/s, tg_3s =   2.52 t/s",
+            "13.22.918.365 I slot print_timing: id  3 | task 0 | n_decoded =    396, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "13.26.074.615 I slot print_timing: id  3 | task 0 | n_decoded =    404, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "13.29.236.944 I slot print_timing: id  3 | task 0 | n_decoded =    412, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "13.32.407.737 I slot print_timing: id  3 | task 0 | n_decoded =    420, tg =   2.54 t/s, tg_3s =   2.52 t/s",
+            "13.35.568.671 I slot print_timing: id  3 | task 0 | n_decoded =    428, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "13.38.727.761 I slot print_timing: id  3 | task 0 | n_decoded =    436, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "13.41.885.596 I slot print_timing: id  3 | task 0 | n_decoded =    444, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "13.45.042.828 I slot print_timing: id  3 | task 0 | n_decoded =    452, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "13.48.208.466 I slot print_timing: id  3 | task 0 | n_decoded =    460, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "13.51.368.142 I slot print_timing: id  3 | task 0 | n_decoded =    468, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "13.54.531.309 I slot print_timing: id  3 | task 0 | n_decoded =    476, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "13.57.684.079 I slot print_timing: id  3 | task 0 | n_decoded =    484, tg =   2.54 t/s, tg_3s =   2.54 t/s",
+            "14.00.841.950 I slot print_timing: id  3 | task 0 | n_decoded =    492, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "14.04.004.436 I slot print_timing: id  3 | task 0 | n_decoded =    500, tg =   2.54 t/s, tg_3s =   2.53 t/s",
+            "14.07.156.587 I slot print_timing: id  3 | task 0 | n_decoded =    508, tg =   2.54 t/s, tg_3s =   2.54 t/s",
+            "14.08.734.792 I slot print_timing: id  3 | task 0 | prompt eval time =  637337.47 ms / 11952 tokens (   53.32 ms per token,    18.75 tokens per second)",
+            "14.08.734.795 I slot print_timing: id  3 | task 0 |        eval time =  201807.81 ms /   512 tokens (  394.16 ms per token,     2.54 tokens per second)",
+            "14.08.734.796 I slot print_timing: id  3 | task 0 |       total time =  839145.28 ms / 12464 tokens",
+            "14.08.734.802 I slot print_timing: id  3 | task 0 |    graphs reused =        509",
+            "14.08.734.829 I spec common_specu: statistics        ngram-mod: #calls(b,g,a) =    1    510      0, #gen drafts =      0, #acc drafts =     0, #gen tokens =      0, #acc tokens =     0, dur(b,g,a) = 0.221, 0.749, 0.000 ms",
+            "14.08.735.246 I slot      release: id  3 | task 0 | stop processing: n_tokens = 12463, truncated = 0",
+            "14.08.735.266 I srv  update_slots: all slots are idle",
+            "14.08.735.524 I srv  update_slots: all slots are idle"
+          ],
+          "max_decoded_checkpoint": 508,
+          "path": "/mnt/raid0/llm/tmp/glm52-current-source-16k-ngram-20260717Trealistic/logs/long_context_dsa_probe.server.log",
+          "prompt_eval_tokens": 11952,
+          "prompt_eval_tps": 18.75,
+          "status": "ok"
+        },
+        "status": "ok",
+        "stream_progress_samples_tail": [
+          {
+            "chunk_count": 148,
+            "content_char_count": 332,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:36.530121+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 149,
+            "content_char_count": 333,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:36.924381+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 150,
+            "content_char_count": 337,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:37.319029+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 151,
+            "content_char_count": 339,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:37.716438+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 152,
+            "content_char_count": 341,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:38.109842+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 153,
+            "content_char_count": 342,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:38.504476+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 154,
+            "content_char_count": 343,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:38.896867+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 155,
+            "content_char_count": 344,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:39.291188+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 156,
+            "content_char_count": 346,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:39.684655+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 157,
+            "content_char_count": 347,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:40.079015+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 158,
+            "content_char_count": 348,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:40.474587+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 159,
+            "content_char_count": 352,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:40.868546+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 160,
+            "content_char_count": 353,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:41.263335+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 161,
+            "content_char_count": 354,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:41.656746+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 162,
+            "content_char_count": 355,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:42.051415+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 163,
+            "content_char_count": 356,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:42.446744+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 164,
+            "content_char_count": 358,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:42.843303+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 165,
+            "content_char_count": 362,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:43.237538+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 166,
+            "content_char_count": 363,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:43.632839+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 167,
+            "content_char_count": 364,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:44.027660+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 168,
+            "content_char_count": 365,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:44.422944+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 169,
+            "content_char_count": 366,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:44.817204+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 170,
+            "content_char_count": 370,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:45.210701+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 171,
+            "content_char_count": 373,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:45.603350+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 172,
+            "content_char_count": 374,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:45.996815+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 173,
+            "content_char_count": 375,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:46.391394+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 174,
+            "content_char_count": 379,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:46.793253+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 175,
+            "content_char_count": 380,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:47.188331+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 176,
+            "content_char_count": 383,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:47.583129+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 177,
+            "content_char_count": 384,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:47.978037+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 178,
+            "content_char_count": 388,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:48.373922+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 179,
+            "content_char_count": 389,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:48.767117+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 180,
+            "content_char_count": 390,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:49.160510+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 181,
+            "content_char_count": 393,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:49.555629+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 182,
+            "content_char_count": 395,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:49.950812+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 183,
+            "content_char_count": 396,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:50.345117+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 184,
+            "content_char_count": 401,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:50.739131+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 185,
+            "content_char_count": 402,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:51.133981+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 186,
+            "content_char_count": 403,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:51.528904+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 187,
+            "content_char_count": 404,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:51.923357+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 188,
+            "content_char_count": 405,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:52.318110+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 189,
+            "content_char_count": 409,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:52.711799+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 190,
+            "content_char_count": 411,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:53.106839+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 191,
+            "content_char_count": 412,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:53.501689+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 192,
+            "content_char_count": 414,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:53.896963+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 193,
+            "content_char_count": 416,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:54.289935+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 194,
+            "content_char_count": 417,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:54.684255+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 195,
+            "content_char_count": 418,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:55.077465+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 196,
+            "content_char_count": 422,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:55.472467+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 197,
+            "content_char_count": 423,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:55.867170+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 198,
+            "content_char_count": 424,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:56.261559+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 199,
+            "content_char_count": 425,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:56.657401+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 200,
+            "content_char_count": 429,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:57.052052+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 201,
+            "content_char_count": 431,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:57.448570+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 202,
+            "content_char_count": 432,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:57.842888+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 203,
+            "content_char_count": 434,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:58.236925+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 204,
+            "content_char_count": 437,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:58.629939+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 205,
+            "content_char_count": 439,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:59.022255+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 206,
+            "content_char_count": 440,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:59.416308+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 207,
+            "content_char_count": 444,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:27:59.810926+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 208,
+            "content_char_count": 447,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:00.205929+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 209,
+            "content_char_count": 452,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:00.598822+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 210,
+            "content_char_count": 453,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:00.992468+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 211,
+            "content_char_count": 457,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:01.385712+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 212,
+            "content_char_count": 458,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:01.782644+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 213,
+            "content_char_count": 459,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:02.176432+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 214,
+            "content_char_count": 460,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:02.570447+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 215,
+            "content_char_count": 464,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:02.964744+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 216,
+            "content_char_count": 466,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:03.361427+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 217,
+            "content_char_count": 470,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:03.756850+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 218,
+            "content_char_count": 472,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:04.152002+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 219,
+            "content_char_count": 474,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:04.545289+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 220,
+            "content_char_count": 475,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:04.939264+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 221,
+            "content_char_count": 476,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:05.334389+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 222,
+            "content_char_count": 477,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:05.728682+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 223,
+            "content_char_count": 478,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:06.121777+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 224,
+            "content_char_count": 479,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:06.517583+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 225,
+            "content_char_count": 483,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:06.912593+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 226,
+            "content_char_count": 484,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:07.307001+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 227,
+            "content_char_count": 485,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:07.704415+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 228,
+            "content_char_count": 486,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:08.102022+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 229,
+            "content_char_count": 490,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:08.498817+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 230,
+            "content_char_count": 494,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:08.893180+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 231,
+            "content_char_count": 495,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:09.286829+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 232,
+            "content_char_count": 497,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:09.679700+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 233,
+            "content_char_count": 498,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:10.074280+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 234,
+            "content_char_count": 502,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:10.470393+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 235,
+            "content_char_count": 504,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:10.863771+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 236,
+            "content_char_count": 505,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:11.257827+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 237,
+            "content_char_count": 509,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:11.651981+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 238,
+            "content_char_count": 510,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:12.046798+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 239,
+            "content_char_count": 511,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:12.441495+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 240,
+            "content_char_count": 512,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:12.834662+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 241,
+            "content_char_count": 513,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:13.226847+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 242,
+            "content_char_count": 515,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:13.623411+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 243,
+            "content_char_count": 517,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:14.017004+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 244,
+            "content_char_count": 518,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:14.410922+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 245,
+            "content_char_count": 519,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:14.804911+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 246,
+            "content_char_count": 520,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:15.198521+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 247,
+            "content_char_count": 523,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:15.593463+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 248,
+            "content_char_count": 527,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:15.985571+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 249,
+            "content_char_count": 531,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:16.379810+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 250,
+            "content_char_count": 533,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:16.774957+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 251,
+            "content_char_count": 534,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:17.169889+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 252,
+            "content_char_count": 535,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:17.563261+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 253,
+            "content_char_count": 536,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:17.958199+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 254,
+            "content_char_count": 537,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:18.352489+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 255,
+            "content_char_count": 538,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:18.746475+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 256,
+            "content_char_count": 539,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:19.142361+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 257,
+            "content_char_count": 540,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:19.536381+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 258,
+            "content_char_count": 542,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:19.930719+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 259,
+            "content_char_count": 543,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:20.326156+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 260,
+            "content_char_count": 546,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:20.719781+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 261,
+            "content_char_count": 548,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:21.113619+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 262,
+            "content_char_count": 550,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:21.508812+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 263,
+            "content_char_count": 554,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:21.903858+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 264,
+            "content_char_count": 557,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:22.298460+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 265,
+            "content_char_count": 558,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:22.692049+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 266,
+            "content_char_count": 560,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:28:23.085908+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 267,
+            "content_char_count": 560,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T16:30:00.334247+00:00",
+            "status": "stream_chunk"
+          }
+        ],
+        "streaming": {
+          "chunk_count": 267,
+          "completed_at": "2026-07-17T16:30:00.334369+00:00",
+          "enabled": true,
+          "first_chunk_at": "2026-07-17T16:26:38.525975+00:00",
+          "parse_errors_tail": [],
+          "started_at": "2026-07-17T16:16:01.166459+00:00"
+        },
+        "timings": {},
+        "usage": {}
+      },
+      {
+        "name": "kv_length_scaling",
+        "reason": "not selected",
+        "status": "skipped"
+      }
+    ],
+    "status": "ok"
+  },
+  "execution_allowed": true,
+  "generated_at": "2026-07-17T16:15:51.568661+00:00",
+  "inventory": {
+    "blocker_files": [],
+    "hf_tree_manifest": {
+      "matched_shards": 6,
+      "mismatches": [],
+      "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/trees/abc55e72527792c6e77069c99b4cb7de16fa9f23.json",
+      "status": "complete"
+    },
+    "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+    "non_cache_shard_count": 6,
+    "non_cache_shards": [
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+        "size": 9423744
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00002-of-00006.gguf",
+        "size": 49223976800
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00003-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00004-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00005-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+        "size": 41914650304
+      }
+    ],
+    "primary_shard": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+    "refusal_reasons": [],
+    "required_non_cache_shards": 6,
+    "stale_cache_marker_files": [
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/MXDnX6jasA4bS7RNxjDs33gUqGE=.10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e.d9f0c4e1.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/_S0CJvi02TKjl6SduhlT8xU50Ss=.40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d.8fa26805.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/tis-1RBFRe2FmP4GPVO0QXg__g0=.eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d.f8fbc9ef.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yTEbJ8S6mw7vDbhN2qBkHHJgD4g=.1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b.418eadc0.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yrL2NmK-0aOPSp785Zv2VJFzACA=.251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1.a802498d.incomplete",
+        "size": 36074
+      }
+    ],
+    "status": "ready",
+    "total_shard_bytes": 238577580768
+  },
+  "library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+  "mode": "execute",
+  "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+  "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "refusal_reasons": [],
+  "schema": "glm52_dsa_probe_plan.v1",
+  "selected_stages": [
+    "long_context_dsa_probe"
+  ],
+  "stages": [
+    {
+      "blockers": [],
+      "hashing": "disabled",
+      "kind": "inventory",
+      "name": "shard_integrity_inventory",
+      "stale_cache_markers": [
+        {
+          "path": ".cache/huggingface/download/UD-IQ2_M/MXDnX6jasA4bS7RNxjDs33gUqGE=.10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e.d9f0c4e1.incomplete",
+          "size": 0
+        },
+        {
+          "path": ".cache/huggingface/download/UD-IQ2_M/_S0CJvi02TKjl6SduhlT8xU50Ss=.40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d.8fa26805.incomplete",
+          "size": 0
+        },
+        {
+          "path": ".cache/huggingface/download/UD-IQ2_M/tis-1RBFRe2FmP4GPVO0QXg__g0=.eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d.f8fbc9ef.incomplete",
+          "size": 0
+        },
+        {
+          "path": ".cache/huggingface/download/UD-IQ2_M/yTEbJ8S6mw7vDbhN2qBkHHJgD4g=.1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b.418eadc0.incomplete",
+          "size": 0
+        },
+        {
+          "path": ".cache/huggingface/download/UD-IQ2_M/yrL2NmK-0aOPSp785Zv2VJFzACA=.251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1.a802498d.incomplete",
+          "size": 36074
+        }
+      ],
+      "status": "ready",
+      "summary": {
+        "non_cache_shard_count": 6,
+        "required_non_cache_shards": 6,
+        "total_shard_bytes": 238577580768
+      }
+    },
+    {
+      "kind": "load_decode_smoke",
+      "name": "short_load_decode_smoke",
+      "prompt": {
+        "answer_instruction": "Answer with a single short sentence.",
+        "chars_per_token_heuristic": 4.0,
+        "context_length": 4096,
+        "kind": "short_load_decode_smoke",
+        "min_prompt_tokens": 8192,
+        "prompt_context_guard_tokens": 512,
+        "task_line": "Return READY after the short load/decode smoke."
+      },
+      "request": {
+        "endpoint": "/v1/chat/completions",
+        "max_tokens": 32,
+        "min_completion_tokens": 0,
+        "progress_poll_interval_s": 0,
+        "purpose": "coherence",
+        "seed": 42,
+        "stream": false,
+        "temperature": 0.0,
+        "timeout_s": 3600
+      },
+      "server": {
+        "context_length": 4096,
+        "extra_args": [
+          "--spec-type",
+          "ngram-mod"
+        ],
+        "indexer_top_k": 32,
+        "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:32",
+        "log_file": null,
+        "metrics": true,
+        "port": 19501,
+        "server_command": [
+          "env",
+          "-i",
+          "PATH=/usr/bin:/bin",
+          "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+          "OMP_NUM_THREADS=1",
+          "numactl",
+          "--interleave=all",
+          "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+          "-m",
+          "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+          "--override-kv",
+          "glm-dsa.attention.indexer.top_k=int:32",
+          "--device",
+          "none",
+          "-ngl",
+          "0",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "19501",
+          "-c",
+          "4096",
+          "-t",
+          "96",
+          "-ub",
+          "512",
+          "--log-disable",
+          "--metrics",
+          "--spec-type",
+          "ngram-mod"
+        ],
+        "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:32 --device none -ngl 0 --host 127.0.0.1 --port 19501 -c 4096 -t 96 -ub 512 --log-disable --metrics --spec-type ngram-mod",
+        "threads": 96,
+        "trace_logs": false,
+        "ubatch": 512
+      },
+      "status": "ready"
+    },
+    {
+      "kind": "long_context_probe",
+      "name": "long_context_dsa_probe",
+      "prompt": {
+        "answer_instruction": "Return the requested READY marker and tokenstream sequence only.",
+        "chars_per_token_heuristic": 4.0,
+        "context_length": 16384,
+        "kind": "long_context_dsa_probe",
+        "min_prompt_tokens": 8192,
+        "prompt_context_guard_tokens": 512,
+        "task_line": "First output READY. Then output the word tokenstream repeated exactly 620 times, separated by single spaces. Do not use markdown. Do not explain. Do not stop early."
+      },
+      "request": {
+        "endpoint": "/v1/chat/completions",
+        "max_tokens": 512,
+        "min_completion_tokens": 256,
+        "progress_poll_interval_s": 15,
+        "purpose": "coherence_plus_throughput",
+        "seed": 42,
+        "stream": true,
+        "temperature": 0.0,
+        "timeout_s": 3600
+      },
+      "server": {
+        "context_length": 16384,
+        "extra_args": [
+          "--spec-type",
+          "ngram-mod"
+        ],
+        "indexer_top_k": 32,
+        "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:32",
+        "log_file": "/mnt/raid0/llm/tmp/glm52-current-source-16k-ngram-20260717Trealistic/logs/long_context_dsa_probe.server.log",
+        "metrics": true,
+        "port": 19502,
+        "server_command": [
+          "env",
+          "-i",
+          "PATH=/usr/bin:/bin",
+          "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+          "OMP_NUM_THREADS=1",
+          "numactl",
+          "--interleave=all",
+          "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+          "-m",
+          "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+          "--override-kv",
+          "glm-dsa.attention.indexer.top_k=int:32",
+          "--device",
+          "none",
+          "-ngl",
+          "0",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "19502",
+          "-c",
+          "16384",
+          "-t",
+          "96",
+          "-ub",
+          "512",
+          "--log-verbosity",
+          "4",
+          "--log-file",
+          "/mnt/raid0/llm/tmp/glm52-current-source-16k-ngram-20260717Trealistic/logs/long_context_dsa_probe.server.log",
+          "--metrics",
+          "--spec-type",
+          "ngram-mod"
+        ],
+        "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:32 --device none -ngl 0 --host 127.0.0.1 --port 19502 -c 16384 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/tmp/glm52-current-source-16k-ngram-20260717Trealistic/logs/long_context_dsa_probe.server.log --metrics --spec-type ngram-mod",
+        "threads": 96,
+        "trace_logs": true,
+        "ubatch": 512
+      },
+      "status": "ready"
+    },
+    {
+      "fixed_indexer_top_k": 32,
+      "kind": "kv_length_scaling",
+      "name": "kv_length_scaling",
+      "series": [
+        {
+          "context_length": 4096,
+          "prompt": {
+            "answer_instruction": "Answer with a single short sentence.",
+            "chars_per_token_heuristic": 4.0,
+            "context_length": 4096,
+            "kind": "kv_length_scaling",
+            "min_prompt_tokens": 8192,
+            "prompt_context_guard_tokens": 512,
+            "task_line": "Return READY for the KV-length scaling checkpoint."
+          },
+          "request": {
+            "endpoint": "/v1/chat/completions",
+            "max_tokens": 32,
+            "min_completion_tokens": 0,
+            "progress_poll_interval_s": 0,
+            "purpose": "coherence",
+            "seed": 42,
+            "stream": false,
+            "temperature": 0.0,
+            "timeout_s": 3600
+          },
+          "server": {
+            "context_length": 4096,
+            "extra_args": [
+              "--spec-type",
+              "ngram-mod"
+            ],
+            "indexer_top_k": 32,
+            "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:32",
+            "log_file": null,
+            "metrics": true,
+            "port": 19510,
+            "server_command": [
+              "env",
+              "-i",
+              "PATH=/usr/bin:/bin",
+              "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+              "OMP_NUM_THREADS=1",
+              "numactl",
+              "--interleave=all",
+              "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+              "-m",
+              "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+              "--override-kv",
+              "glm-dsa.attention.indexer.top_k=int:32",
+              "--device",
+              "none",
+              "-ngl",
+              "0",
+              "--host",
+              "127.0.0.1",
+              "--port",
+              "19510",
+              "-c",
+              "4096",
+              "-t",
+              "96",
+              "-ub",
+              "512",
+              "--log-disable",
+              "--metrics",
+              "--spec-type",
+              "ngram-mod"
+            ],
+            "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:32 --device none -ngl 0 --host 127.0.0.1 --port 19510 -c 4096 -t 96 -ub 512 --log-disable --metrics --spec-type ngram-mod",
+            "threads": 96,
+            "trace_logs": false,
+            "ubatch": 512
+          }
+        },
+        {
+          "context_length": 8192,
+          "prompt": {
+            "answer_instruction": "Answer with a single short sentence.",
+            "chars_per_token_heuristic": 4.0,
+            "context_length": 8192,
+            "kind": "kv_length_scaling",
+            "min_prompt_tokens": 8192,
+            "prompt_context_guard_tokens": 512,
+            "task_line": "Return READY for the KV-length scaling checkpoint."
+          },
+          "request": {
+            "endpoint": "/v1/chat/completions",
+            "max_tokens": 32,
+            "min_completion_tokens": 0,
+            "progress_poll_interval_s": 0,
+            "purpose": "coherence",
+            "seed": 42,
+            "stream": false,
+            "temperature": 0.0,
+            "timeout_s": 3600
+          },
+          "server": {
+            "context_length": 8192,
+            "extra_args": [
+              "--spec-type",
+              "ngram-mod"
+            ],
+            "indexer_top_k": 32,
+            "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:32",
+            "log_file": null,
+            "metrics": true,
+            "port": 19511,
+            "server_command": [
+              "env",
+              "-i",
+              "PATH=/usr/bin:/bin",
+              "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+              "OMP_NUM_THREADS=1",
+              "numactl",
+              "--interleave=all",
+              "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+              "-m",
+              "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+              "--override-kv",
+              "glm-dsa.attention.indexer.top_k=int:32",
+              "--device",
+              "none",
+              "-ngl",
+              "0",
+              "--host",
+              "127.0.0.1",
+              "--port",
+              "19511",
+              "-c",
+              "8192",
+              "-t",
+              "96",
+              "-ub",
+              "512",
+              "--log-disable",
+              "--metrics",
+              "--spec-type",
+              "ngram-mod"
+            ],
+            "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:32 --device none -ngl 0 --host 127.0.0.1 --port 19511 -c 8192 -t 96 -ub 512 --log-disable --metrics --spec-type ngram-mod",
+            "threads": 96,
+            "trace_logs": false,
+            "ubatch": 512
+          }
+        },
+        {
+          "context_length": 16384,
+          "prompt": {
+            "answer_instruction": "Answer with a single short sentence.",
+            "chars_per_token_heuristic": 4.0,
+            "context_length": 16384,
+            "kind": "kv_length_scaling",
+            "min_prompt_tokens": 8192,
+            "prompt_context_guard_tokens": 512,
+            "task_line": "Return READY for the KV-length scaling checkpoint."
+          },
+          "request": {
+            "endpoint": "/v1/chat/completions",
+            "max_tokens": 32,
+            "min_completion_tokens": 0,
+            "progress_poll_interval_s": 0,
+            "purpose": "coherence",
+            "seed": 42,
+            "stream": false,
+            "temperature": 0.0,
+            "timeout_s": 3600
+          },
+          "server": {
+            "context_length": 16384,
+            "extra_args": [
+              "--spec-type",
+              "ngram-mod"
+            ],
+            "indexer_top_k": 32,
+            "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:32",
+            "log_file": null,
+            "metrics": true,
+            "port": 19512,
+            "server_command": [
+              "env",
+              "-i",
+              "PATH=/usr/bin:/bin",
+              "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+              "OMP_NUM_THREADS=1",
+              "numactl",
+              "--interleave=all",
+              "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+              "-m",
+              "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+              "--override-kv",
+              "glm-dsa.attention.indexer.top_k=int:32",
+              "--device",
+              "none",
+              "-ngl",
+              "0",
+              "--host",
+              "127.0.0.1",
+              "--port",
+              "19512",
+              "-c",
+              "16384",
+              "-t",
+              "96",
+              "-ub",
+              "512",
+              "--log-disable",
+              "--metrics",
+              "--spec-type",
+              "ngram-mod"
+            ],
+            "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:32 --device none -ngl 0 --host 127.0.0.1 --port 19512 -c 16384 -t 96 -ub 512 --log-disable --metrics --spec-type ngram-mod",
+            "threads": 96,
+            "trace_logs": false,
+            "ubatch": 512
+          }
+        },
+        {
+          "context_length": 32768,
+          "prompt": {
+            "answer_instruction": "Answer with a single short sentence.",
+            "chars_per_token_heuristic": 4.0,
+            "context_length": 32768,
+            "kind": "kv_length_scaling",
+            "min_prompt_tokens": 8192,
+            "prompt_context_guard_tokens": 512,
+            "task_line": "Return READY for the KV-length scaling checkpoint."
+          },
+          "request": {
+            "endpoint": "/v1/chat/completions",
+            "max_tokens": 32,
+            "min_completion_tokens": 0,
+            "progress_poll_interval_s": 0,
+            "purpose": "coherence",
+            "seed": 42,
+            "stream": false,
+            "temperature": 0.0,
+            "timeout_s": 3600
+          },
+          "server": {
+            "context_length": 32768,
+            "extra_args": [
+              "--spec-type",
+              "ngram-mod"
+            ],
+            "indexer_top_k": 32,
+            "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:32",
+            "log_file": null,
+            "metrics": true,
+            "port": 19513,
+            "server_command": [
+              "env",
+              "-i",
+              "PATH=/usr/bin:/bin",
+              "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+              "OMP_NUM_THREADS=1",
+              "numactl",
+              "--interleave=all",
+              "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+              "-m",
+              "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+              "--override-kv",
+              "glm-dsa.attention.indexer.top_k=int:32",
+              "--device",
+              "none",
+              "-ngl",
+              "0",
+              "--host",
+              "127.0.0.1",
+              "--port",
+              "19513",
+              "-c",
+              "32768",
+              "-t",
+              "96",
+              "-ub",
+              "512",
+              "--log-disable",
+              "--metrics",
+              "--spec-type",
+              "ngram-mod"
+            ],
+            "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:32 --device none -ngl 0 --host 127.0.0.1 --port 19513 -c 32768 -t 96 -ub 512 --log-disable --metrics --spec-type ngram-mod",
+            "threads": 96,
+            "trace_logs": false,
+            "ubatch": 512
+          }
+        }
+      ],
+      "status": "ready"
+    }
+  ]
+}

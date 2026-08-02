@@ -1,0 +1,1 @@
+/mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-Q1_0.gguf

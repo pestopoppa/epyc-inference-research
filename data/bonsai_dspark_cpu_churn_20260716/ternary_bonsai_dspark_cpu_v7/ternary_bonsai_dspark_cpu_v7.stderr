@@ -1,0 +1,18 @@
+WARNING: running non-GLM smoke while GLM-5.2 HF download is active (ALLOW_GLM_DOWNLOAD=1).
+0.00.017.932 E ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
+warning: no usable GPU found, --gpu-layers option will be ignored
+warning: one possible reason is that llama.cpp was compiled without GPU support
+warning: consult docs/build.md for compilation instructions
+0.00.022.071 E gguf_init_from_reader: tensor 'dspark.fc.weight' has offset 337718592, expected 357584192
+0.00.022.073 E gguf_init_from_reader: failed to read tensor data
+0.00.022.141 E llama_model_load: error loading model: llama_model_loader: failed to load model from /mnt/raid0/llm/models/ternary-bonsai-27b/Ternary-Bonsai-27B-dspark-Q4_1.gguf
+0.00.022.149 E llama_model_load_from_file_impl: failed to load model
+0.00.022.178 E common_fit_params: encountered an error while trying to fit params to free device memory: failed to load model
+0.00.022.208 E gguf_init_from_reader: tensor 'dspark.fc.weight' has offset 337718592, expected 357584192
+0.00.022.210 E gguf_init_from_reader: failed to read tensor data
+0.00.022.215 E llama_model_load: error loading model: llama_model_loader: failed to load model from /mnt/raid0/llm/models/ternary-bonsai-27b/Ternary-Bonsai-27B-dspark-Q4_1.gguf
+0.00.022.215 E llama_model_load_from_file_impl: failed to load model
+0.00.022.218 E cmn  common_init_: failed to load model '/mnt/raid0/llm/models/ternary-bonsai-27b/Ternary-Bonsai-27B-dspark-Q4_1.gguf'
+0.00.022.222 E srv    load_model: failed to load model, '/mnt/raid0/llm/models/ternary-bonsai-27b/Ternary-Bonsai-27B-dspark-Q4_1.gguf'
+0.00.027.788 E srv  llama_server: exiting due to model loading error
+llama_server exited with code 1

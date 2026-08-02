@@ -1,0 +1,37 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "```python\ndef total(xs):\n    return sum(xs)\n```"
+      }
+    }
+  ],
+  "created": 1784276402,
+  "model": "nemotron-diffusion-14b-Q8_0.gguf",
+  "system_fingerprint": "b0-unknown",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 16,
+    "prompt_tokens": 45,
+    "total_tokens": 61,
+    "prompt_tokens_details": {
+      "cached_tokens": 8
+    }
+  },
+  "id": "chatcmpl-4qplE4fnhMysYTAEWUuIRKth45Aruk1A",
+  "timings": {
+    "cache_n": 8,
+    "prompt_n": 37,
+    "prompt_ms": 41.787,
+    "prompt_per_token_ms": 1.1293783783783784,
+    "prompt_per_second": 885.4428410749755,
+    "predicted_n": 16,
+    "predicted_ms": 351.963,
+    "predicted_per_token_ms": 21.9976875,
+    "predicted_per_second": 45.459323849381896,
+    "kv_bpv": 16.0
+  }
+}

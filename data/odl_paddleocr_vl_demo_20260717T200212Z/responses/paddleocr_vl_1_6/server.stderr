@@ -1,0 +1,199 @@
+0.00.035.830 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.036.163 W srv  llama_server: -----------------
+0.00.036.164 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.036.164 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.036.164 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.036.165 W srv  llama_server: -----------------
+0.00.037.367 I srv    load_model: loading model '/mnt/raid0/llm/models/PaddleOCR-VL-1.6-GGUF/PaddleOCR-VL-1.6-GGUF.gguf'
+0.00.294.977 W load: empty token at index 96148
+0.00.570.632 I srv    load_model: loaded multimodal model, '/mnt/raid0/llm/models/PaddleOCR-VL-1.6-GGUF/PaddleOCR-VL-1.6-GGUF-mmproj.gguf'
+0.00.577.857 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 8192, kv_unified = 'false'
+0.00.579.742 I srv  llama_server: model loaded
+0.00.579.748 I srv  llama_server: listening on http://127.0.0.1:19331
+0.01.021.925 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.01.021.967 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.01.872.257 I slot print_timing: id  0 | task 0 | prompt eval time =     449.29 ms /  1281 tokens (    0.35 ms per token,  2851.15 tokens per second)
+0.01.872.261 I slot print_timing: id  0 | task 0 |        eval time =     400.97 ms /   196 tokens (    2.05 ms per token,   488.82 tokens per second)
+0.01.872.261 I slot print_timing: id  0 | task 0 |       total time =     850.26 ms /  1477 tokens
+0.01.872.265 I slot print_timing: id  0 | task 0 |    graphs reused =        195
+0.01.872.311 I slot      release: id  0 | task 0 | stop processing: n_tokens = 1476, truncated = 0
+0.01.912.113 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1303262165642
+0.01.919.128 I slot launch_slot_: id  0 | task 198 | processing task, is_child = 0
+0.02.327.569 I slot print_timing: id  0 | task 198 | prompt eval time =     402.49 ms /  1273 tokens (    0.32 ms per token,  3162.84 tokens per second)
+0.02.327.573 I slot print_timing: id  0 | task 198 |        eval time =       5.94 ms /     3 tokens (    1.98 ms per token,   505.39 tokens per second)
+0.02.327.573 I slot print_timing: id  0 | task 198 |       total time =     408.42 ms /  1276 tokens
+0.02.327.574 I slot print_timing: id  0 | task 198 |    graphs reused =        196
+0.02.327.606 I slot      release: id  0 | task 198 | stop processing: n_tokens = 1275, truncated = 0
+0.02.404.790 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1303262620934
+0.02.411.163 I slot launch_slot_: id  0 | task 203 | processing task, is_child = 0
+0.05.315.443 I slot print_timing: id  0 | task 203 | prompt eval time =     405.23 ms /  1281 tokens (    0.32 ms per token,  3161.17 tokens per second)
+0.05.315.447 I slot print_timing: id  0 | task 203 |        eval time =    2499.03 ms /  1220 tokens (    2.05 ms per token,   488.19 tokens per second)
+0.05.315.447 I slot print_timing: id  0 | task 203 |       total time =    2904.26 ms /  2501 tokens
+0.05.315.448 I slot print_timing: id  0 | task 203 |    graphs reused =       1410
+0.05.315.476 I slot      release: id  0 | task 203 | stop processing: n_tokens = 2500, truncated = 0
+0.05.368.153 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1303265608803
+0.05.376.584 I slot launch_slot_: id  0 | task 1425 | processing task, is_child = 0
+0.08.445.727 I slot print_timing: id  0 | task 1425 | prompt eval time =     408.88 ms /  1281 tokens (    0.32 ms per token,  3132.92 tokens per second)
+0.08.445.731 I slot print_timing: id  0 | task 1425 |        eval time =    2660.24 ms /  1294 tokens (    2.06 ms per token,   486.42 tokens per second)
+0.08.445.731 I slot print_timing: id  0 | task 1425 |       total time =    3069.12 ms /  2575 tokens
+0.08.445.732 I slot print_timing: id  0 | task 1425 |    graphs reused =       2697
+0.08.445.765 I slot      release: id  0 | task 1425 | stop processing: n_tokens = 2574, truncated = 0
+0.08.542.378 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1303268739091
+0.08.550.980 I slot launch_slot_: id  0 | task 2721 | processing task, is_child = 0
+0.10.450.660 I slot print_timing: id  0 | task 2721 | prompt eval time =     424.99 ms /  1311 tokens (    0.32 ms per token,  3084.81 tokens per second)
+0.10.450.663 I slot print_timing: id  0 | task 2721 |        eval time =    1474.67 ms /   720 tokens (    2.05 ms per token,   488.24 tokens per second)
+0.10.450.663 I slot print_timing: id  0 | task 2721 |       total time =    1899.66 ms /  2031 tokens
+0.10.450.664 I slot print_timing: id  0 | task 2721 |    graphs reused =       3413
+0.10.450.691 I slot      release: id  0 | task 2721 | stop processing: n_tokens = 2030, truncated = 0
+0.10.505.123 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1303270744017
+0.10.514.055 I slot launch_slot_: id  0 | task 3443 | processing task, is_child = 0
+0.13.917.067 I slot print_timing: id  0 | task 3443 | n_decoded =   1456, tg = 485.14 t/s, tg_3s = 485.14 t/s
+0.15.157.507 I slot print_timing: id  0 | task 3443 | prompt eval time =     401.79 ms /  1269 tokens (    0.32 ms per token,  3158.35 tokens per second)
+0.15.157.509 I slot print_timing: id  0 | task 3443 |        eval time =    4241.65 ms /  2048 tokens (    2.07 ms per token,   482.83 tokens per second)
+0.15.157.510 I slot print_timing: id  0 | task 3443 |       total time =    4643.44 ms /  3317 tokens
+0.15.157.510 I slot print_timing: id  0 | task 3443 |    graphs reused =       5451
+0.15.157.541 I slot      release: id  0 | task 3443 | stop processing: n_tokens = 3316, truncated = 0
+0.15.219.955 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1303275450868
+0.15.230.071 I slot launch_slot_: id  0 | task 5493 | processing task, is_child = 0
+0.18.652.229 I slot print_timing: id  0 | task 5493 | n_decoded =   1456, tg = 485.25 t/s, tg_3s = 485.25 t/s
+0.19.189.056 I slot print_timing: id  0 | task 5493 | prompt eval time =     421.62 ms /  1311 tokens (    0.32 ms per token,  3109.41 tokens per second)
+0.19.189.059 I slot print_timing: id  0 | task 5493 |        eval time =    3537.35 ms /  1713 tokens (    2.07 ms per token,   484.26 tokens per second)
+0.19.189.059 I slot print_timing: id  0 | task 5493 |       total time =    3958.97 ms /  3024 tokens
+0.19.189.060 I slot print_timing: id  0 | task 5493 |    graphs reused =       7156
+0.19.189.084 I slot      release: id  0 | task 5493 | stop processing: n_tokens = 3023, truncated = 0
+0.19.248.697 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1303279482411
+0.19.258.417 I slot launch_slot_: id  0 | task 7208 | processing task, is_child = 0
+0.20.942.175 I slot print_timing: id  0 | task 7208 | prompt eval time =     424.73 ms /  1311 tokens (    0.32 ms per token,  3086.70 tokens per second)
+0.20.942.179 I slot print_timing: id  0 | task 7208 |        eval time =    1259.01 ms /   611 tokens (    2.06 ms per token,   485.30 tokens per second)
+0.20.942.180 I slot print_timing: id  0 | task 7208 |       total time =    1683.74 ms /  1922 tokens
+0.20.942.180 I slot print_timing: id  0 | task 7208 |    graphs reused =       7763
+0.20.942.211 I slot      release: id  0 | task 7208 | stop processing: n_tokens = 1921, truncated = 0
+0.20.981.832 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1303281235538
+0.20.990.590 I slot launch_slot_: id  0 | task 7821 | processing task, is_child = 0
+0.22.730.971 I slot print_timing: id  0 | task 7821 | prompt eval time =     410.41 ms /  1291 tokens (    0.32 ms per token,  3145.61 tokens per second)
+0.22.730.975 I slot print_timing: id  0 | task 7821 |        eval time =    1329.95 ms /   645 tokens (    2.06 ms per token,   484.98 tokens per second)
+0.22.730.976 I slot print_timing: id  0 | task 7821 |       total time =    1740.36 ms /  1936 tokens
+0.22.730.977 I slot print_timing: id  0 | task 7821 |    graphs reused =       8404
+0.22.731.008 I slot      release: id  0 | task 7821 | stop processing: n_tokens = 1935, truncated = 0
+0.22.769.914 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1303283024335
+0.22.778.118 I slot launch_slot_: id  0 | task 8468 | processing task, is_child = 0
+0.25.581.132 I slot print_timing: id  0 | task 8468 | prompt eval time =     421.67 ms /  1311 tokens (    0.32 ms per token,  3109.08 tokens per second)
+0.25.581.136 I slot print_timing: id  0 | task 8468 |        eval time =    2381.33 ms /  1157 tokens (    2.06 ms per token,   485.86 tokens per second)
+0.25.581.136 I slot print_timing: id  0 | task 8468 |       total time =    2803.00 ms /  2468 tokens
+0.25.581.137 I slot print_timing: id  0 | task 8468 |    graphs reused =       9555
+0.25.581.167 I slot      release: id  0 | task 8468 | stop processing: n_tokens = 2467, truncated = 0
+0.25.624.273 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1303285874494
+0.25.632.604 I slot launch_slot_: id  0 | task 9627 | processing task, is_child = 0
+0.27.176.926 I slot print_timing: id  0 | task 9627 | prompt eval time =     424.39 ms /  1311 tokens (    0.32 ms per token,  3089.15 tokens per second)
+0.27.176.930 I slot print_timing: id  0 | task 9627 |        eval time =    1119.91 ms /   544 tokens (    2.06 ms per token,   485.75 tokens per second)
+0.27.176.931 I slot print_timing: id  0 | task 9627 |       total time =    1544.30 ms /  1855 tokens
+0.27.176.932 I slot print_timing: id  0 | task 9627 |    graphs reused =      10095
+0.27.176.962 I slot      release: id  0 | task 9627 | stop processing: n_tokens = 1854, truncated = 0
+0.27.192.159 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1303287470289
+0.27.200.297 I slot launch_slot_: id  0 | task 10173 | processing task, is_child = 0
+0.30.376.809 I slot print_timing: id  0 | task 10173 | n_decoded =   1454, tg = 484.61 t/s, tg_3s = 484.61 t/s
+0.31.605.293 I slot print_timing: id  0 | task 10173 | prompt eval time =     176.13 ms /   733 tokens (    0.24 ms per token,  4161.60 tokens per second)
+0.31.605.296 I slot print_timing: id  0 | task 10173 |        eval time =    4228.85 ms /  2048 tokens (    2.06 ms per token,   484.29 tokens per second)
+0.31.605.297 I slot print_timing: id  0 | task 10173 |       total time =    4404.99 ms /  2781 tokens
+0.31.605.297 I slot print_timing: id  0 | task 10173 |    graphs reused =      12133
+0.31.605.328 I slot      release: id  0 | task 10173 | stop processing: n_tokens = 2780, truncated = 0
+0.31.621.969 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1303291898655
+0.31.631.264 I slot launch_slot_: id  0 | task 12223 | processing task, is_child = 0
+0.33.125.386 I slot print_timing: id  0 | task 12223 | prompt eval time =     114.20 ms /   519 tokens (    0.22 ms per token,  4544.66 tokens per second)
+0.33.125.390 I slot print_timing: id  0 | task 12223 |        eval time =    1379.90 ms /   666 tokens (    2.07 ms per token,   482.64 tokens per second)
+0.33.125.390 I slot print_timing: id  0 | task 12223 |       total time =    1494.10 ms /  1185 tokens
+0.33.125.391 I slot print_timing: id  0 | task 12223 |    graphs reused =      12795
+0.33.125.422 I slot      release: id  0 | task 12223 | stop processing: n_tokens = 1184, truncated = 0
+0.33.141.837 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1303293418749
+0.33.146.873 I slot launch_slot_: id  0 | task 12891 | processing task, is_child = 0
+0.34.897.582 I slot print_timing: id  0 | task 12891 | prompt eval time =     117.04 ms /   519 tokens (    0.23 ms per token,  4434.38 tokens per second)
+0.34.897.585 I slot print_timing: id  0 | task 12891 |        eval time =    1633.65 ms /   788 tokens (    2.07 ms per token,   482.36 tokens per second)
+0.34.897.586 I slot print_timing: id  0 | task 12891 |       total time =    1750.69 ms /  1307 tokens
+0.34.897.587 I slot print_timing: id  0 | task 12891 |    graphs reused =      13578
+0.34.897.615 I slot      release: id  0 | task 12891 | stop processing: n_tokens = 1306, truncated = 0
+0.34.930.412 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1303295190942
+0.34.936.615 I slot launch_slot_: id  0 | task 13681 | processing task, is_child = 0
+0.38.339.030 I slot print_timing: id  0 | task 13681 | n_decoded =   1454, tg = 484.63 t/s, tg_3s = 484.63 t/s
+0.39.577.695 I slot print_timing: id  0 | task 13681 | prompt eval time =     402.18 ms /  1269 tokens (    0.32 ms per token,  3155.32 tokens per second)
+0.39.577.699 I slot print_timing: id  0 | task 13681 |        eval time =    4238.89 ms /  2048 tokens (    2.07 ms per token,   483.15 tokens per second)
+0.39.577.699 I slot print_timing: id  0 | task 13681 |       total time =    4641.07 ms /  3317 tokens
+0.39.577.700 I slot print_timing: id  0 | task 13681 |    graphs reused =      15616
+0.39.577.732 I slot      release: id  0 | task 13681 | stop processing: n_tokens = 3316, truncated = 0
+0.39.601.556 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1303299871059
+0.39.611.666 I slot launch_slot_: id  0 | task 15731 | processing task, is_child = 0
+0.42.768.375 I slot print_timing: id  0 | task 15731 | n_decoded =   1456, tg = 485.10 t/s, tg_3s = 485.10 t/s
+0.43.991.977 I slot print_timing: id  0 | task 15731 | prompt eval time =     155.27 ms /   667 tokens (    0.23 ms per token,  4295.66 tokens per second)
+0.43.991.979 I slot print_timing: id  0 | task 15731 |        eval time =    4225.02 ms /  2048 tokens (    2.06 ms per token,   484.73 tokens per second)
+0.43.991.980 I slot print_timing: id  0 | task 15731 |       total time =    4380.29 ms /  2715 tokens
+0.43.991.980 I slot print_timing: id  0 | task 15731 |    graphs reused =      17654
+0.43.992.010 I slot      release: id  0 | task 15731 | stop processing: n_tokens = 2714, truncated = 0
+0.43.992.067 W common_chat_peg_parse: unparsed peg-native output: Federal Register / Vol. 89, No. 134 / Friday, July 12, 2024 / Notices
+
+The regulation provides that all other use, absent statutory or other express生产线信息，and to it, or persons authorized by the United States, to be and/or to perform the same under applicable law and regulations to be established by the United States are reserved to the United States, together with all necessary actions and exit rights.
+
+(A) The parcels are subject to reservations for roads, public utilities, and flood control purposes, both existing and proposed, in accordance with the local governing entities and transportation plans.
+
+(5) An appropriate indemnification clause protecting the United States from claims related to the power of use or occupancy, or occupations on the patented lands.
+
+To the extent required by law, the parameters subject to the requirements of Section 120(h) of the CERCLA, as amended. Accordingly, notice is hereby given that the laws have been to the extent and no evidence was found to indicate that any hazardous substances have been stored for one year or more, nor that any hazardous substances have been disposed of or released on the subject properties.
+
+No warranty of any kind, express or implied, is given by the United States as to the title, whether or to what extent the land may be developed, its physical conditions, and the nature of their use, or any other circumstance or condition. The conveyance of the parcels will not be on a contingency basis.
+
+Authority: 43 CFR 2711.3–2
+
+Robbie McAboy.
+
+District Manager, Ely District Office.
+
+PRC No. 10252–1926 Filed 7–1–21; 8:45 am
+
+BILLING CODE 4301-41-P
+
+DEPARTMENT OF THE INTERIOR
+
+Bureau of Indian Affairs
+
+Bureau of Indian Affairs
+
+Termination of Preparation of the Environmental Impact Statement for the Farming and Manoe-Gallup Removal Management Plan Amendment, New Mexico
+
+AGENCY: Bureau of Land Management; Bureau of Indian Affairs, Interior.
+ACTION: Notice of termination.
+SUMMARY: The Bureau of Land Management (BLM) and the Bureau of Indian Affairs (BIA) are terminating the preparation of an environmental impact statement (ES) for the Farming Manage-Callup Removal Management Plan (RMP) Amendment.
+DATES: The EIS development process for the Farming and Manoe-Gallup Removal Management Plan (RMP) and the United States (U.S.) Farming and Manoe-Gallup Removal Management Plan (RMP).
+FOR FURTHER INFORMATION CONTACT: BLM Farming and Manoe-Gallup Removal Management Plan, Scott, Scott & Scott Group 505–564–7689 or BIA Navajo Region Officer Regional Archeological/Project Manager Robert Begov, robert.begov@18.gov for 2005–063–8515. Individuals in the United States who are dead, deshland, hard of hearing, or have a speech disability may also be�or-like to the National Environmental Policy Act of 1963, as implemented by the Council on Environmental Quality regulations, the BLM announced its intention to prepare an RMA and implement and associated EIS on February 25, 2014 (79 FR 10548). On October 21, 2016, the RMA has been issued the BLA, and the RMA amended Notice of Interim in the Federal Register amending the addition of the BLA as a joint-co-lead agency for the EIS (81 FR 2919). The RMA has been used to analyze the impacts of additional oil and gas development within the San Juan Basin in northwestern New Mexico.
+
+Mexico, as well as decisions related to lands and reality, BLM-managed lands were required to provide a characteristic, and vegetation management. The EIS was also to evaluate alternatives and issues related to the BLA. The BLA is a general and non-national enforcement activity. The Federal State and local lawsuits are on Navajo Tribal Trust Lands and Navajo Indian Islands. The Notice of availability for the Draft EIS published in the Federal Register on February 28, 2020 (85 FR 12012). The basis for the BLA is also available to various Federal, State, and local agencies, elected officials, special groups, and other individuals, and the media. Due to the COVID-19 pandemic and restrictions placed on in-person meetings, virtual public hearings (up to 100 min) have been held for the 2020, 2021, 2022, and 2023. Since the initial publication of the Notice of Interim in 2014 and 2016, the publication of the draft RMP Amendment and EIS in 2020, there have left many changes relevant to the plan amendment and associated EIS, such as a change in the development trends in the San Juan Basin, the withdrawal of 2004 acres from mineral entry around the Chaco Culture National Historical Park; the preparation of BLA for the State of California; the distribution of the information for the region; the establishment of the Honoring Chaco Initiative; and an increase in outdoor recreation in the region. Given these changes and the extent of revisions necessary to address these changes in the current EIS, EMS are subject to the impact of the plan amendment to continue the plan amendment effort as currently structured. Therefore, the BLM and BLA hereby terminate the preparation of the EIS for the RMP Amendment.
+
+(Authority: 40 CFR 1056.4, 40 CFR 1061.10)
+
+Melanie G. Barnes.
+
+BLM New Mexico State Director.
+Deborah S. Ashley.
+
+Acting BIA Navajo Region Director.
+(FR Doc. 2024–15279 Filed 7–11–24; 8:45 am)
+BILLING CODE 4311-32-P
+DEPARTMENT OF THE INTERIOR
+
+AGENCY: Bureau of Safety and Environmental Enforcement
+(Docket ID BSEE-2024-0003; EEEE500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0.43.992.214 W srv          stop: cancel task, id_task = 15731
+0.43.992.269 W srv    operator(): got exception: {"error":{"code":500,"message":"The model produced output that does not match the expected peg-native format","type":"server_error"}}
+0.44.039.182 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1303304285337
+0.44.048.099 I slot launch_slot_: id  0 | task 17782 | processing task, is_child = 0
+0.47.471.272 I slot print_timing: id  0 | task 17782 | n_decoded =   1455, tg = 484.77 t/s, tg_3s = 484.77 t/s
+0.48.713.791 I slot print_timing: id  0 | task 17782 | prompt eval time =     421.70 ms /  1311 tokens (    0.32 ms per token,  3108.82 tokens per second)
+0.48.713.793 I slot print_timing: id  0 | task 17782 |        eval time =    4243.98 ms /  2048 tokens (    2.07 ms per token,   482.57 tokens per second)
+0.48.713.794 I slot print_timing: id  0 | task 17782 |       total time =    4665.68 ms /  3359 tokens
+0.48.713.795 I slot print_timing: id  0 | task 17782 |    graphs reused =      19692
+0.48.713.828 I slot      release: id  0 | task 17782 | stop processing: n_tokens = 3358, truncated = 0
+0.48.758.540 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1303309007155
+0.48.769.128 I slot launch_slot_: id  0 | task 19832 | processing task, is_child = 0
+0.52.013.640 I slot print_timing: id  0 | task 19832 | prompt eval time =     424.19 ms /  1311 tokens (    0.32 ms per token,  3090.58 tokens per second)
+0.52.013.643 I slot print_timing: id  0 | task 19832 |        eval time =    2820.30 ms /  1369 tokens (    2.06 ms per token,   485.41 tokens per second)
+0.52.013.644 I slot print_timing: id  0 | task 19832 |       total time =    3244.49 ms /  2680 tokens
+0.52.013.645 I slot print_timing: id  0 | task 19832 |    graphs reused =      21054
+0.52.013.678 I slot      release: id  0 | task 19832 | stop processing: n_tokens = 2679, truncated = 0
+0.52.014.662 I srv    operator(): operator(): cleaning up before exit...

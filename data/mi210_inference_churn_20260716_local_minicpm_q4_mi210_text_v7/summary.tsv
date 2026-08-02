@@ -1,0 +1,2 @@
+case	status	exit_code	stdout	stderr	timeout_s	log_cap_bytes
+minicpm_q4_mi210_text_v7	pass	0	/mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-minicpm_q4_mi210_text_v7/minicpm_q4_mi210_text_v7.stdout	/mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-minicpm_q4_mi210_text_v7/minicpm_q4_mi210_text_v7.stderr	180	1048576

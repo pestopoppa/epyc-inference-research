@@ -1,0 +1,10 @@
+context=32768
+repeats=1400
+finish_reason=length
+prompt_tokens=22428
+completion_tokens=256
+total_tokens=22684
+prompt_tps=1799.1056452354262
+generation_tps=74.30173062081708
+content_chars=1439
+content_preview=<think>\nOkay, the user provided a long context filler sentence repeated many times, which seems to be used for measuring local inference throughput under long p

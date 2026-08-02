@@ -1,0 +1,8 @@
+finish_reason=length
+prompt_tokens=67
+completion_tokens=768
+total_tokens=835
+prompt_tps=97.45596299582539
+generation_tps=5.438927119502627
+content_chars=3944
+content_preview=<think>\nOkay, I need to write a detailed technical note of about 500 words explaining how to interpret local LLM throughput measurements. The key points to cove

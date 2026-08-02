@@ -1,0 +1,40 @@
+
+
+Loading model... 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10088-d1e5a20eb
+model      : /mnt/raid0/llm/models/ternary-bonsai-27b/Ternary-Bonsai-27B-Q2_g64.gguf
+ftype      : Q2_0
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> Return the following JSON array exactly, with no extra text.
+[
+  {"id":001,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-001"},  {"id":002,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-002"},  {"id":003,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-003"},  {"id":004,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-004"},  {"id":005,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-005"},  {"id":006, ... (truncated)
+<think>
+
+</think>
+
+[
+  {"id":001,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-001"},  {"id":002,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-002"},  {"id":003,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-003"},  {"id":004,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-004"},  {"id":005,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-005"},  {"id":006,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-006"},  {"id":007,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-007"},  {"id":008,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-008"},  {"id":009,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-009"},  {"id":010,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-010"},  {"id":011,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-011"},  {"id":012,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-012"},  {"id":013,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-013"},  {"id":014,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-014"},  {"id":015,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-015"},  {"id":016,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-016"},  {"id":017,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-017"},  {"id":018,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-018"},  {"id":019,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-019"},  {"id":020,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-020"},  {"id":021,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-021"},  {"id":022,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-022"},  {"id":023,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-023"},  {"id":024,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-024"},  {"id":025,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-025"},  {"id":026,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-026"},  {"id":027,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-027"},  {"id":028,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-028"},  {"id":029,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-029"},  {"id":030,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-030"},  {"id":031,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-031"},  {"id":032,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-032"},  {"id":033,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-033"},  {"id":034,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-034"},  {"id":035,"kind":"task","owner":"autopilot","status":"ready","checksum":"row-035"},  {"id":036
+
+[ Prompt: 25.6 t/s | Generation: 22.9 t/s ]
+
+
+Exiting...

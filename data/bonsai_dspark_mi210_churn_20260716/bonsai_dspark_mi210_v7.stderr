@@ -1,0 +1,10 @@
+WARNING: running non-GLM smoke while GLM-5.2 HF download is active (ALLOW_GLM_DOWNLOAD=1).
+0.00.041.712 E llama_model_load: error loading model: unknown model architecture: 'dspark'
+0.00.041.719 E llama_model_load_from_file_impl: failed to load model
+0.00.041.748 E common_fit_params: encountered an error while trying to fit params to free device memory: failed to load model
+0.00.041.916 E llama_model_load: error loading model: unknown model architecture: 'dspark'
+0.00.041.917 E llama_model_load_from_file_impl: failed to load model
+0.00.041.920 E cmn  common_init_: failed to load model '/mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-dspark-Q4_1.gguf'
+0.00.041.924 E srv    load_model: failed to load model, '/mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-dspark-Q4_1.gguf'
+0.00.047.995 E srv  llama_server: exiting due to model loading error
+llama_server exited with code 1

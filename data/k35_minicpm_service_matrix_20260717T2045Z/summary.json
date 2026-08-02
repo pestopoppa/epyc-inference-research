@@ -1,0 +1,2227 @@
+{
+  "cleanup_process_blockers": [],
+  "compact": {
+    "active_overlap_passed": true,
+    "frontdoor_active_overlap_decode_tps": {
+      "max": 98.94283828739997,
+      "mean": 94.77041340549043,
+      "min": 90.72961317110453,
+      "n": 8
+    },
+    "frontdoor_alone_decode_tps": {
+      "max": 99.22880612241732,
+      "mean": 96.32812141428202,
+      "min": 93.5355601373365,
+      "n": 4
+    },
+    "frontdoor_idle_resident_decode_tps": {
+      "max": 99.53819719994385,
+      "mean": 96.48357692663313,
+      "min": 93.55735202726174,
+      "n": 4
+    },
+    "minicpm_active_overlap_decode_tps": {
+      "max": 108.08181793617769,
+      "mean": 85.22104154564765,
+      "min": 64.18897233455293,
+      "n": 8
+    }
+  },
+  "created_at": "2026-07-17T20:44:42.151880+00:00",
+  "results": [
+    {
+      "arm": "frontdoor_alone_control",
+      "cleanup": {
+        "dead": true,
+        "killed": false,
+        "pid": 2310692,
+        "ps_after": {
+          "argv": [
+            "ps",
+            "-p",
+            "2310692",
+            "-o",
+            "pid=,comm=,args="
+          ],
+          "ok": false,
+          "returncode": 1,
+          "stderr": "",
+          "stdout": ""
+        },
+        "returncode": 0,
+        "terminated": true
+      },
+      "frontdoor_results": [
+        {
+          "completion_tokens": 512,
+          "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+          "decode_tps": 99.22880612241732,
+          "draft_n": null,
+          "draft_n_accepted": null,
+          "elapsed_s": 5.595838400069624,
+          "max_tokens": 512,
+          "min_completion_tokens": 256,
+          "nominal_context": 2048,
+          "passed_min_completion": true,
+          "phase": "frontdoor_alone",
+          "prompt_tokens": 581,
+          "prompt_tps": 1366.80154323892,
+          "rep": 0,
+          "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_alone_control/frontdoor_alone_rep0_ctx2048.response.json",
+          "role": "frontdoor",
+          "scenario": "frontdoor_gpu_resident_no_spec"
+        },
+        {
+          "completion_tokens": 512,
+          "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+          "decode_tps": 93.73131552267475,
+          "draft_n": null,
+          "draft_n_accepted": null,
+          "elapsed_s": 8.752314798068255,
+          "max_tokens": 512,
+          "min_completion_tokens": 256,
+          "nominal_context": 8192,
+          "passed_min_completion": true,
+          "phase": "frontdoor_alone",
+          "prompt_tokens": 6725,
+          "prompt_tps": 2074.1986345141718,
+          "rep": 0,
+          "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_alone_control/frontdoor_alone_rep0_ctx8192.response.json",
+          "role": "frontdoor",
+          "scenario": "frontdoor_gpu_resident_no_spec"
+        },
+        {
+          "completion_tokens": 512,
+          "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+          "decode_tps": 98.81680387469952,
+          "draft_n": null,
+          "draft_n_accepted": null,
+          "elapsed_s": 5.610977737000212,
+          "max_tokens": 512,
+          "min_completion_tokens": 256,
+          "nominal_context": 2048,
+          "passed_min_completion": true,
+          "phase": "frontdoor_alone",
+          "prompt_tokens": 581,
+          "prompt_tps": 1557.3067438619064,
+          "rep": 1,
+          "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_alone_control/frontdoor_alone_rep1_ctx2048.response.json",
+          "role": "frontdoor",
+          "scenario": "frontdoor_gpu_resident_no_spec"
+        },
+        {
+          "completion_tokens": 512,
+          "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+          "decode_tps": 93.5355601373365,
+          "draft_n": null,
+          "draft_n_accepted": null,
+          "elapsed_s": 8.776496673934162,
+          "max_tokens": 512,
+          "min_completion_tokens": 256,
+          "nominal_context": 8192,
+          "passed_min_completion": true,
+          "phase": "frontdoor_alone",
+          "prompt_tokens": 6725,
+          "prompt_tps": 2075.938285518841,
+          "rep": 1,
+          "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_alone_control/frontdoor_alone_rep1_ctx8192.response.json",
+          "role": "frontdoor",
+          "scenario": "frontdoor_gpu_resident_no_spec"
+        }
+      ],
+      "memory_samples": [
+        {
+          "phase": "after_health",
+          "process": {
+            "captured_at": "2026-07-17T20:42:35.670743+00:00",
+            "pid": 2310692,
+            "ps": {
+              "argv": [
+                "ps",
+                "-p",
+                "2310692",
+                "-o",
+                "pid=,comm=,rss=,vsz=,psr=,args="
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "2310692 llama-server    1252696 48860492 104 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 19320 -np 1 -c 9728 -t 96 -ub 512 --metrics --slots --jinja --reasoning off --device ROCm0 -ngl 99 -ctk q8_0 -ctv q8_0 -fa on --spec-type none\n"
+            },
+            "smaps_rollup": {
+              "error": null,
+              "fields": {
+                "AnonHugePages_kib": 65536,
+                "Anonymous_kib": 538620,
+                "Private_Clean_kib": 790564,
+                "Private_Dirty_kib": 457368,
+                "Pss_Dirty_kib": 457368,
+                "Pss_kib": 1248875,
+                "Rss_kib": 1252696,
+                "Shared_Clean_kib": 4764,
+                "Shared_Dirty_kib": 0,
+                "Swap_kib": 0
+              },
+              "ok": true
+            },
+            "status": {
+              "error": null,
+              "fields": {
+                "Cpus_allowed_list": "0-191",
+                "Mems_allowed_list": "0-3",
+                "Name": "llama-server",
+                "RssAnon": "538620 kB",
+                "RssFile": "714076 kB",
+                "RssShmem": "0 kB",
+                "State": "S (sleeping)",
+                "Threads": "196",
+                "VmHWM": "37420828 kB",
+                "VmPeak": "84224608 kB",
+                "VmRSS": "1252696 kB",
+                "VmSize": "48860492 kB",
+                "VmSwap": "0 kB"
+              },
+              "ok": true
+            }
+          },
+          "rocm": {
+            "argv": [
+              "rocm-smi",
+              "--showpidgpus",
+              "--showmemuse",
+              "--showuse"
+            ],
+            "ok": true,
+            "returncode": 0,
+            "stderr": "",
+            "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3632116351\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 55\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2289643003\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2310692 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+          }
+        },
+        {
+          "phase": "after_requests",
+          "process": {
+            "captured_at": "2026-07-17T20:43:04.505953+00:00",
+            "pid": 2310692,
+            "ps": {
+              "argv": [
+                "ps",
+                "-p",
+                "2310692",
+                "-o",
+                "pid=,comm=,rss=,vsz=,psr=,args="
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "2310692 llama-server    1651220 49619500 105 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 19320 -np 1 -c 9728 -t 96 -ub 512 --metrics --slots --jinja --reasoning off --device ROCm0 -ngl 99 -ctk q8_0 -ctv q8_0 -fa on --spec-type none\n"
+            },
+            "smaps_rollup": {
+              "error": null,
+              "fields": {
+                "AnonHugePages_kib": 421888,
+                "Anonymous_kib": 933076,
+                "Private_Clean_kib": 794632,
+                "Private_Dirty_kib": 851824,
+                "Pss_Dirty_kib": 851824,
+                "Pss_kib": 1647400,
+                "Rss_kib": 1651220,
+                "Shared_Clean_kib": 4764,
+                "Shared_Dirty_kib": 0,
+                "Swap_kib": 0
+              },
+              "ok": true
+            },
+            "status": {
+              "error": null,
+              "fields": {
+                "Cpus_allowed_list": "0-191",
+                "Mems_allowed_list": "0-3",
+                "Name": "llama-server",
+                "RssAnon": "933076 kB",
+                "RssFile": "718144 kB",
+                "RssShmem": "0 kB",
+                "State": "S (sleeping)",
+                "Threads": "196",
+                "VmHWM": "37420828 kB",
+                "VmPeak": "84224608 kB",
+                "VmRSS": "1651220 kB",
+                "VmSize": "49619500 kB",
+                "VmSwap": "0 kB"
+              },
+              "ok": true
+            }
+          },
+          "rocm": {
+            "argv": [
+              "rocm-smi",
+              "--showpidgpus",
+              "--showmemuse",
+              "--showuse"
+            ],
+            "ok": true,
+            "returncode": 0,
+            "stderr": "",
+            "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3634907806\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 55\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2290161137\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2310692 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+          }
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "active_results": [
+        {
+          "context": 2048,
+          "fixture_id": "ocr_digit_7500",
+          "frontdoor": {
+            "completion_tokens": 512,
+            "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+            "decode_tps": 98.94283828739997,
+            "draft_n": null,
+            "draft_n_accepted": null,
+            "elapsed_s": 5.666436662198976,
+            "max_tokens": 512,
+            "min_completion_tokens": 256,
+            "nominal_context": 2048,
+            "passed_min_completion": true,
+            "prompt_tokens": 581,
+            "prompt_tps": 1348.829002841595,
+            "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_minicpm_pair/active_rep0_ctx2048_ocr_digit_7500.frontdoor.response.json",
+            "role": "frontdoor",
+            "scenario": "frontdoor_gpu_resident_no_spec"
+          },
+          "pair_elapsed_s": 5.667955955024809,
+          "rep": 0,
+          "vision": {
+            "completion_tokens": 5,
+            "content_preview": "7500",
+            "decode_tps": 72.63008047412916,
+            "elapsed_s": 0.2787256350275129,
+            "fixture_id": "ocr_digit_7500",
+            "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0237.png",
+            "prompt": "What number is shown in the image? Answer with digits only.",
+            "prompt_tokens": 91,
+            "prompt_tps": 454.0125227629905,
+            "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_minicpm_pair/active_rep0_ctx2048_ocr_digit_7500.vision.response.json",
+            "role": "vision_escalation_candidate",
+            "scenario": "vision_candidate_mi210_minicpm_o45_q4",
+            "score": {
+              "expected_terms": [
+                "7500"
+              ],
+              "method": "all_substrings",
+              "missing_terms": [],
+              "normalized_content": "7500",
+              "normalized_expected_terms": [
+                "7500"
+              ],
+              "pass": true
+            },
+            "usage": {
+              "completion_tokens": 5,
+              "prompt_tokens": 91,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 96
+            }
+          }
+        },
+        {
+          "context": 2048,
+          "fixture_id": "receipt_total_payable",
+          "frontdoor": {
+            "completion_tokens": 512,
+            "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+            "decode_tps": 96.30703887832395,
+            "draft_n": null,
+            "draft_n_accepted": null,
+            "elapsed_s": 5.805486633908004,
+            "max_tokens": 512,
+            "min_completion_tokens": 256,
+            "nominal_context": 2048,
+            "passed_min_completion": true,
+            "prompt_tokens": 581,
+            "prompt_tps": 1216.3438086844017,
+            "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_minicpm_pair/active_rep0_ctx2048_receipt_total_payable.frontdoor.response.json",
+            "role": "frontdoor",
+            "scenario": "frontdoor_gpu_resident_no_spec"
+          },
+          "pair_elapsed_s": 5.805921477964148,
+          "rep": 0,
+          "vision": {
+            "completion_tokens": 6,
+            "content_preview": "43.36",
+            "decode_tps": 100.44867072925734,
+            "elapsed_s": 0.7800359560642391,
+            "fixture_id": "receipt_total_payable",
+            "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0713.png",
+            "prompt": "What is the total payable amount on the receipt? Answer with the amount only.",
+            "prompt_tokens": 294,
+            "prompt_tps": 480.1034671961957,
+            "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_minicpm_pair/active_rep0_ctx2048_receipt_total_payable.vision.response.json",
+            "role": "vision_escalation_candidate",
+            "scenario": "vision_candidate_mi210_minicpm_o45_q4",
+            "score": {
+              "expected_terms": [
+                "43.36"
+              ],
+              "method": "all_substrings",
+              "missing_terms": [],
+              "normalized_content": "43.36",
+              "normalized_expected_terms": [
+                "43.36"
+              ],
+              "pass": true
+            },
+            "usage": {
+              "completion_tokens": 6,
+              "prompt_tokens": 294,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 300
+            }
+          }
+        },
+        {
+          "context": 2048,
+          "fixture_id": "chart_tanzania",
+          "frontdoor": {
+            "completion_tokens": 512,
+            "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+            "decode_tps": 98.68665791079574,
+            "draft_n": null,
+            "draft_n_accepted": null,
+            "elapsed_s": 5.7215182080399245,
+            "max_tokens": 512,
+            "min_completion_tokens": 256,
+            "nominal_context": 2048,
+            "passed_min_completion": true,
+            "prompt_tokens": 581,
+            "prompt_tps": 1112.0915551863473,
+            "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_minicpm_pair/active_rep0_ctx2048_chart_tanzania.frontdoor.response.json",
+            "role": "frontdoor",
+            "scenario": "frontdoor_gpu_resident_no_spec"
+          },
+          "pair_elapsed_s": 5.721944632008672,
+          "rep": 0,
+          "vision": {
+            "completion_tokens": 4,
+            "content_preview": "Tanzania",
+            "decode_tps": 108.08181793617769,
+            "elapsed_s": 0.6015099848154932,
+            "fixture_id": "chart_tanzania",
+            "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0619.png",
+            "prompt": "Which country has 7 years of compulsory education in the chart? Answer with the country name only.",
+            "prompt_tokens": 230,
+            "prompt_tps": 464.4053491419606,
+            "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_minicpm_pair/active_rep0_ctx2048_chart_tanzania.vision.response.json",
+            "role": "vision_escalation_candidate",
+            "scenario": "vision_candidate_mi210_minicpm_o45_q4",
+            "score": {
+              "expected_terms": [
+                "tanzania"
+              ],
+              "method": "all_substrings",
+              "missing_terms": [],
+              "normalized_content": "tanzania",
+              "normalized_expected_terms": [
+                "tanzania"
+              ],
+              "pass": true
+            },
+            "usage": {
+              "completion_tokens": 4,
+              "prompt_tokens": 230,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 234
+            }
+          }
+        },
+        {
+          "context": 2048,
+          "fixture_id": "receipt_doc_number",
+          "frontdoor": {
+            "completion_tokens": 512,
+            "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+            "decode_tps": 90.72961317110453,
+            "draft_n": null,
+            "draft_n_accepted": null,
+            "elapsed_s": 6.12602175003849,
+            "max_tokens": 512,
+            "min_completion_tokens": 256,
+            "nominal_context": 2048,
+            "passed_min_completion": true,
+            "prompt_tokens": 581,
+            "prompt_tps": 1233.2157427100183,
+            "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_minicpm_pair/active_rep0_ctx2048_receipt_doc_number.frontdoor.response.json",
+            "role": "frontdoor",
+            "scenario": "frontdoor_gpu_resident_no_spec"
+          },
+          "pair_elapsed_s": 6.126405703136697,
+          "rep": 0,
+          "vision": {
+            "completion_tokens": 10,
+            "content_preview": "CS00012465",
+            "decode_tps": 95.71759480827765,
+            "elapsed_s": 1.3493572489824146,
+            "fixture_id": "receipt_doc_number",
+            "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0734.png",
+            "prompt": "What is the Doc No. on the receipt? Answer with the document number only.",
+            "prompt_tokens": 626,
+            "prompt_tps": 616.1799402915732,
+            "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_minicpm_pair/active_rep0_ctx2048_receipt_doc_number.vision.response.json",
+            "role": "vision_escalation_candidate",
+            "scenario": "vision_candidate_mi210_minicpm_o45_q4",
+            "score": {
+              "expected_terms": [
+                "cs00012465"
+              ],
+              "method": "all_substrings",
+              "missing_terms": [],
+              "normalized_content": "cs00012465",
+              "normalized_expected_terms": [
+                "cs00012465"
+              ],
+              "pass": true
+            },
+            "usage": {
+              "completion_tokens": 10,
+              "prompt_tokens": 626,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 636
+            }
+          }
+        },
+        {
+          "context": 8192,
+          "fixture_id": "ocr_digit_7500",
+          "frontdoor": {
+            "completion_tokens": 512,
+            "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+            "decode_tps": 93.56466954219648,
+            "draft_n": null,
+            "draft_n_accepted": null,
+            "elapsed_s": 8.82084025698714,
+            "max_tokens": 512,
+            "min_completion_tokens": 256,
+            "nominal_context": 8192,
+            "passed_min_completion": true,
+            "prompt_tokens": 6725,
+            "prompt_tps": 2051.692898335795,
+            "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_minicpm_pair/active_rep0_ctx8192_ocr_digit_7500.frontdoor.response.json",
+            "role": "frontdoor",
+            "scenario": "frontdoor_gpu_resident_no_spec"
+          },
+          "pair_elapsed_s": 8.821368232136592,
+          "rep": 0,
+          "vision": {
+            "completion_tokens": 5,
+            "content_preview": "7500",
+            "decode_tps": 64.18897233455293,
+            "elapsed_s": 0.2785005948971957,
+            "fixture_id": "ocr_digit_7500",
+            "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0237.png",
+            "prompt": "What number is shown in the image? Answer with digits only.",
+            "prompt_tokens": 91,
+            "prompt_tps": 534.1347310837066,
+            "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_minicpm_pair/active_rep0_ctx8192_ocr_digit_7500.vision.response.json",
+            "role": "vision_escalation_candidate",
+            "scenario": "vision_candidate_mi210_minicpm_o45_q4",
+            "score": {
+              "expected_terms": [
+                "7500"
+              ],
+              "method": "all_substrings",
+              "missing_terms": [],
+              "normalized_content": "7500",
+              "normalized_expected_terms": [
+                "7500"
+              ],
+              "pass": true
+            },
+            "usage": {
+              "completion_tokens": 5,
+              "prompt_tokens": 91,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 96
+            }
+          }
+        },
+        {
+          "context": 8192,
+          "fixture_id": "receipt_total_payable",
+          "frontdoor": {
+            "completion_tokens": 512,
+            "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+            "decode_tps": 93.28259634616442,
+            "draft_n": null,
+            "draft_n_accepted": null,
+            "elapsed_s": 8.989013307029381,
+            "max_tokens": 512,
+            "min_completion_tokens": 256,
+            "nominal_context": 8192,
+            "passed_min_completion": true,
+            "prompt_tokens": 6725,
+            "prompt_tps": 1932.9711707050674,
+            "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_minicpm_pair/active_rep0_ctx8192_receipt_total_payable.frontdoor.response.json",
+            "role": "frontdoor",
+            "scenario": "frontdoor_gpu_resident_no_spec"
+          },
+          "pair_elapsed_s": 8.989613761892542,
+          "rep": 0,
+          "vision": {
+            "completion_tokens": 6,
+            "content_preview": "43.36",
+            "decode_tps": 78.5648814979704,
+            "elapsed_s": 0.9940765139181167,
+            "fixture_id": "receipt_total_payable",
+            "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0713.png",
+            "prompt": "What is the total payable amount on the receipt? Answer with the amount only.",
+            "prompt_tokens": 294,
+            "prompt_tps": 365.0106275203115,
+            "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_minicpm_pair/active_rep0_ctx8192_receipt_total_payable.vision.response.json",
+            "role": "vision_escalation_candidate",
+            "scenario": "vision_candidate_mi210_minicpm_o45_q4",
+            "score": {
+              "expected_terms": [
+                "43.36"
+              ],
+              "method": "all_substrings",
+              "missing_terms": [],
+              "normalized_content": "43.36",
+              "normalized_expected_terms": [
+                "43.36"
+              ],
+              "pass": true
+            },
+            "usage": {
+              "completion_tokens": 6,
+              "prompt_tokens": 294,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 300
+            }
+          }
+        },
+        {
+          "context": 8192,
+          "fixture_id": "chart_tanzania",
+          "frontdoor": {
+            "completion_tokens": 512,
+            "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+            "decode_tps": 93.29083984167525,
+            "draft_n": null,
+            "draft_n_accepted": null,
+            "elapsed_s": 8.924583239015192,
+            "max_tokens": 512,
+            "min_completion_tokens": 256,
+            "nominal_context": 8192,
+            "passed_min_completion": true,
+            "prompt_tokens": 6725,
+            "prompt_tps": 1969.6962596566375,
+            "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_minicpm_pair/active_rep0_ctx8192_chart_tanzania.frontdoor.response.json",
+            "role": "frontdoor",
+            "scenario": "frontdoor_gpu_resident_no_spec"
+          },
+          "pair_elapsed_s": 8.925219445023686,
+          "rep": 0,
+          "vision": {
+            "completion_tokens": 4,
+            "content_preview": "Tanzania",
+            "decode_tps": 91.2866858368707,
+            "elapsed_s": 0.7298009369987994,
+            "fixture_id": "chart_tanzania",
+            "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0619.png",
+            "prompt": "Which country has 7 years of compulsory education in the chart? Answer with the country name only.",
+            "prompt_tokens": 230,
+            "prompt_tps": 375.87779722536817,
+            "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_minicpm_pair/active_rep0_ctx8192_chart_tanzania.vision.response.json",
+            "role": "vision_escalation_candidate",
+            "scenario": "vision_candidate_mi210_minicpm_o45_q4",
+            "score": {
+              "expected_terms": [
+                "tanzania"
+              ],
+              "method": "all_substrings",
+              "missing_terms": [],
+              "normalized_content": "tanzania",
+              "normalized_expected_terms": [
+                "tanzania"
+              ],
+              "pass": true
+            },
+            "usage": {
+              "completion_tokens": 4,
+              "prompt_tokens": 230,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 234
+            }
+          }
+        },
+        {
+          "context": 8192,
+          "fixture_id": "receipt_doc_number",
+          "frontdoor": {
+            "completion_tokens": 512,
+            "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+            "decode_tps": 93.35905326626312,
+            "draft_n": null,
+            "draft_n_accepted": null,
+            "elapsed_s": 9.234391525154933,
+            "max_tokens": 512,
+            "min_completion_tokens": 256,
+            "nominal_context": 8192,
+            "passed_min_completion": true,
+            "prompt_tokens": 6725,
+            "prompt_tps": 1803.83405263172,
+            "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_minicpm_pair/active_rep0_ctx8192_receipt_doc_number.frontdoor.response.json",
+            "role": "frontdoor",
+            "scenario": "frontdoor_gpu_resident_no_spec"
+          },
+          "pair_elapsed_s": 9.234919870039448,
+          "rep": 0,
+          "vision": {
+            "completion_tokens": 10,
+            "content_preview": "CS00012465",
+            "decode_tps": 70.84962874794536,
+            "elapsed_s": 2.104639941127971,
+            "fixture_id": "receipt_doc_number",
+            "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0734.png",
+            "prompt": "What is the Doc No. on the receipt? Answer with the document number only.",
+            "prompt_tokens": 626,
+            "prompt_tps": 362.81778433090835,
+            "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_minicpm_pair/active_rep0_ctx8192_receipt_doc_number.vision.response.json",
+            "role": "vision_escalation_candidate",
+            "scenario": "vision_candidate_mi210_minicpm_o45_q4",
+            "score": {
+              "expected_terms": [
+                "cs00012465"
+              ],
+              "method": "all_substrings",
+              "missing_terms": [],
+              "normalized_content": "cs00012465",
+              "normalized_expected_terms": [
+                "cs00012465"
+              ],
+              "pass": true
+            },
+            "usage": {
+              "completion_tokens": 10,
+              "prompt_tokens": 626,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 636
+            }
+          }
+        }
+      ],
+      "arm": "frontdoor_minicpm_pair",
+      "cleanup": {
+        "frontdoor": {
+          "dead": true,
+          "killed": false,
+          "pid": 2311038,
+          "ps_after": {
+            "argv": [
+              "ps",
+              "-p",
+              "2311038",
+              "-o",
+              "pid=,comm=,args="
+            ],
+            "ok": false,
+            "returncode": 1,
+            "stderr": "",
+            "stdout": ""
+          },
+          "returncode": 0,
+          "terminated": true
+        },
+        "minicpm": {
+          "dead": true,
+          "killed": false,
+          "pid": 2311039,
+          "ps_after": {
+            "argv": [
+              "ps",
+              "-p",
+              "2311039",
+              "-o",
+              "pid=,comm=,args="
+            ],
+            "ok": false,
+            "returncode": 1,
+            "stderr": "",
+            "stdout": ""
+          },
+          "returncode": 0,
+          "terminated": true
+        }
+      },
+      "idle_results": [
+        {
+          "completion_tokens": 512,
+          "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+          "decode_tps": 99.53819719994385,
+          "draft_n": null,
+          "draft_n_accepted": null,
+          "elapsed_s": 5.580878328066319,
+          "max_tokens": 512,
+          "min_completion_tokens": 256,
+          "nominal_context": 2048,
+          "passed_min_completion": true,
+          "phase": "minicpm_idle",
+          "prompt_tokens": 581,
+          "prompt_tps": 1365.1027116437858,
+          "rep": 0,
+          "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_minicpm_pair/minicpm_idle_rep0_ctx2048.response.json",
+          "role": "frontdoor",
+          "scenario": "frontdoor_gpu_resident_no_spec"
+        },
+        {
+          "completion_tokens": 512,
+          "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+          "decode_tps": 93.70856781828152,
+          "draft_n": null,
+          "draft_n_accepted": null,
+          "elapsed_s": 8.749463248997927,
+          "max_tokens": 512,
+          "min_completion_tokens": 256,
+          "nominal_context": 8192,
+          "passed_min_completion": true,
+          "phase": "minicpm_idle",
+          "prompt_tokens": 6725,
+          "prompt_tps": 2077.045573313995,
+          "rep": 0,
+          "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_minicpm_pair/minicpm_idle_rep0_ctx8192.response.json",
+          "role": "frontdoor",
+          "scenario": "frontdoor_gpu_resident_no_spec"
+        },
+        {
+          "completion_tokens": 512,
+          "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+          "decode_tps": 99.13019066104542,
+          "draft_n": null,
+          "draft_n_accepted": null,
+          "elapsed_s": 5.596691288985312,
+          "max_tokens": 512,
+          "min_completion_tokens": 256,
+          "nominal_context": 2048,
+          "passed_min_completion": true,
+          "phase": "minicpm_idle",
+          "prompt_tokens": 581,
+          "prompt_tps": 1549.0276585420477,
+          "rep": 1,
+          "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_minicpm_pair/minicpm_idle_rep1_ctx2048.response.json",
+          "role": "frontdoor",
+          "scenario": "frontdoor_gpu_resident_no_spec"
+        },
+        {
+          "completion_tokens": 512,
+          "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+          "decode_tps": 93.55735202726174,
+          "draft_n": null,
+          "draft_n_accepted": null,
+          "elapsed_s": 8.775228206068277,
+          "max_tokens": 512,
+          "min_completion_tokens": 256,
+          "nominal_context": 8192,
+          "passed_min_completion": true,
+          "phase": "minicpm_idle",
+          "prompt_tokens": 6725,
+          "prompt_tps": 2075.7755298011916,
+          "rep": 1,
+          "response_path": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/frontdoor_minicpm_pair/minicpm_idle_rep1_ctx8192.response.json",
+          "role": "frontdoor",
+          "scenario": "frontdoor_gpu_resident_no_spec"
+        }
+      ],
+      "memory_samples": [
+        {
+          "frontdoor": {
+            "phase": "frontdoor_after_health",
+            "process": {
+              "captured_at": "2026-07-17T20:43:11.725520+00:00",
+              "pid": 2311038,
+              "ps": {
+                "argv": [
+                  "ps",
+                  "-p",
+                  "2311038",
+                  "-o",
+                  "pid=,comm=,rss=,vsz=,psr=,args="
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "2311038 llama-server    1252680 48860492 8 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 19320 -np 1 -c 9728 -t 96 -ub 512 --metrics --slots --jinja --reasoning off --device ROCm0 -ngl 99 -ctk q8_0 -ctv q8_0 -fa on --spec-type none\n"
+              },
+              "smaps_rollup": {
+                "error": null,
+                "fields": {
+                  "AnonHugePages_kib": 71680,
+                  "Anonymous_kib": 538644,
+                  "Private_Clean_kib": 703104,
+                  "Private_Dirty_kib": 366640,
+                  "Pss_Dirty_kib": 366640,
+                  "Pss_kib": 1159591,
+                  "Rss_kib": 1252680,
+                  "Shared_Clean_kib": 182936,
+                  "Shared_Dirty_kib": 0,
+                  "Swap_kib": 0
+                },
+                "ok": true
+              },
+              "status": {
+                "error": null,
+                "fields": {
+                  "Cpus_allowed_list": "0-191",
+                  "Mems_allowed_list": "0-3",
+                  "Name": "llama-server",
+                  "RssAnon": "538644 kB",
+                  "RssFile": "714036 kB",
+                  "RssShmem": "0 kB",
+                  "State": "S (sleeping)",
+                  "Threads": "196",
+                  "VmHWM": "37421188 kB",
+                  "VmPeak": "84224600 kB",
+                  "VmRSS": "1252680 kB",
+                  "VmSize": "48860492 kB",
+                  "VmSwap": "0 kB"
+                },
+                "ok": true
+              }
+            },
+            "rocm": {
+              "argv": [
+                "rocm-smi",
+                "--showpidgpus",
+                "--showmemuse",
+                "--showuse"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3634927332\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 66\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2290168131\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2311039 is using 1 DRM device(s):\n0 \nPID 2311038 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+            }
+          },
+          "minicpm": {
+            "phase": "minicpm_after_health",
+            "process": {
+              "captured_at": "2026-07-17T20:43:11.819790+00:00",
+              "pid": 2311039,
+              "ps": {
+                "argv": [
+                  "ps",
+                  "-p",
+                  "2311039",
+                  "-o",
+                  "pid=,comm=,rss=,vsz=,psr=,args="
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "2311039 llama-server    1004760 18383764 72 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf --mmproj /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf --host 127.0.0.1 --port 19321 -np 1 -c 8192 -t 24 --flash-attn on --device ROCm0 --reasoning off\n"
+              },
+              "smaps_rollup": {
+                "error": null,
+                "fields": {
+                  "AnonHugePages_kib": 43008,
+                  "Anonymous_kib": 479196,
+                  "Private_Clean_kib": 523736,
+                  "Private_Dirty_kib": 298112,
+                  "Pss_Dirty_kib": 298112,
+                  "Pss_kib": 911701,
+                  "Rss_kib": 1004760,
+                  "Shared_Clean_kib": 182912,
+                  "Shared_Dirty_kib": 0,
+                  "Swap_kib": 0
+                },
+                "ok": true
+              },
+              "status": {
+                "error": null,
+                "fields": {
+                  "Cpus_allowed_list": "0-191",
+                  "Mems_allowed_list": "0-3",
+                  "Name": "llama-server",
+                  "RssAnon": "479196 kB",
+                  "RssFile": "525564 kB",
+                  "RssShmem": "0 kB",
+                  "State": "S (sleeping)",
+                  "Threads": "196",
+                  "VmHWM": "5314448 kB",
+                  "VmPeak": "19973524 kB",
+                  "VmRSS": "1004760 kB",
+                  "VmSize": "18383764 kB",
+                  "VmSwap": "0 kB"
+                },
+                "ok": true
+              }
+            },
+            "rocm": {
+              "argv": [
+                "rocm-smi",
+                "--showpidgpus",
+                "--showmemuse",
+                "--showuse"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3634927332\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 66\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2290168131\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2311039 is using 1 DRM device(s):\n0 \nPID 2311038 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+            }
+          },
+          "phase": "after_pair_health"
+        },
+        {
+          "frontdoor": {
+            "phase": "frontdoor_after_idle",
+            "process": {
+              "captured_at": "2026-07-17T20:43:40.618859+00:00",
+              "pid": 2311038,
+              "ps": {
+                "argv": [
+                  "ps",
+                  "-p",
+                  "2311038",
+                  "-o",
+                  "pid=,comm=,rss=,vsz=,psr=,args="
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "2311038 llama-server    1651192 49619500 8 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 19320 -np 1 -c 9728 -t 96 -ub 512 --metrics --slots --jinja --reasoning off --device ROCm0 -ngl 99 -ctk q8_0 -ctv q8_0 -fa on --spec-type none\n"
+              },
+              "smaps_rollup": {
+                "error": null,
+                "fields": {
+                  "AnonHugePages_kib": 428032,
+                  "Anonymous_kib": 933088,
+                  "Private_Clean_kib": 706980,
+                  "Private_Dirty_kib": 761084,
+                  "Pss_Dirty_kib": 761084,
+                  "Pss_kib": 1558007,
+                  "Rss_kib": 1651192,
+                  "Shared_Clean_kib": 183128,
+                  "Shared_Dirty_kib": 0,
+                  "Swap_kib": 0
+                },
+                "ok": true
+              },
+              "status": {
+                "error": null,
+                "fields": {
+                  "Cpus_allowed_list": "0-191",
+                  "Mems_allowed_list": "0-3",
+                  "Name": "llama-server",
+                  "RssAnon": "933088 kB",
+                  "RssFile": "718104 kB",
+                  "RssShmem": "0 kB",
+                  "State": "S (sleeping)",
+                  "Threads": "196",
+                  "VmHWM": "37421188 kB",
+                  "VmPeak": "84224600 kB",
+                  "VmRSS": "1651192 kB",
+                  "VmSize": "49619500 kB",
+                  "VmSwap": "0 kB"
+                },
+                "ok": true
+              }
+            },
+            "rocm": {
+              "argv": [
+                "rocm-smi",
+                "--showpidgpus",
+                "--showmemuse",
+                "--showuse"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3637714169\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 66\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2290686271\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2311039 is using 1 DRM device(s):\n0 \nPID 2311038 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+            }
+          },
+          "minicpm": {
+            "phase": "minicpm_after_idle",
+            "process": {
+              "captured_at": "2026-07-17T20:43:40.715794+00:00",
+              "pid": 2311039,
+              "ps": {
+                "argv": [
+                  "ps",
+                  "-p",
+                  "2311039",
+                  "-o",
+                  "pid=,comm=,rss=,vsz=,psr=,args="
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "2311039 llama-server    1004760 18383764 72 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf --mmproj /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf --host 127.0.0.1 --port 19321 -np 1 -c 8192 -t 24 --flash-attn on --device ROCm0 --reasoning off\n"
+              },
+              "smaps_rollup": {
+                "error": null,
+                "fields": {
+                  "AnonHugePages_kib": 43008,
+                  "Anonymous_kib": 479196,
+                  "Private_Clean_kib": 523544,
+                  "Private_Dirty_kib": 298112,
+                  "Pss_Dirty_kib": 298112,
+                  "Pss_kib": 911604,
+                  "Rss_kib": 1004760,
+                  "Shared_Clean_kib": 183104,
+                  "Shared_Dirty_kib": 0,
+                  "Swap_kib": 0
+                },
+                "ok": true
+              },
+              "status": {
+                "error": null,
+                "fields": {
+                  "Cpus_allowed_list": "0-191",
+                  "Mems_allowed_list": "0-3",
+                  "Name": "llama-server",
+                  "RssAnon": "479196 kB",
+                  "RssFile": "525564 kB",
+                  "RssShmem": "0 kB",
+                  "State": "S (sleeping)",
+                  "Threads": "196",
+                  "VmHWM": "5314448 kB",
+                  "VmPeak": "19973524 kB",
+                  "VmRSS": "1004760 kB",
+                  "VmSize": "18383764 kB",
+                  "VmSwap": "0 kB"
+                },
+                "ok": true
+              }
+            },
+            "rocm": {
+              "argv": [
+                "rocm-smi",
+                "--showpidgpus",
+                "--showmemuse",
+                "--showuse"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3637714169\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 66\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2290686271\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2311039 is using 1 DRM device(s):\n0 \nPID 2311038 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+            }
+          },
+          "phase": "after_idle_requests"
+        },
+        {
+          "frontdoor": {
+            "phase": "frontdoor_after_active",
+            "process": {
+              "captured_at": "2026-07-17T20:43:46.482339+00:00",
+              "pid": 2311038,
+              "ps": {
+                "argv": [
+                  "ps",
+                  "-p",
+                  "2311038",
+                  "-o",
+                  "pid=,comm=,rss=,vsz=,psr=,args="
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "2311038 llama-server    1716944 49752484 8 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 19320 -np 1 -c 9728 -t 96 -ub 512 --metrics --slots --jinja --reasoning off --device ROCm0 -ngl 99 -ctk q8_0 -ctv q8_0 -fa on --spec-type none\n"
+              },
+              "smaps_rollup": {
+                "error": null,
+                "fields": {
+                  "AnonHugePages_kib": 493568,
+                  "Anonymous_kib": 998840,
+                  "Private_Clean_kib": 704116,
+                  "Private_Dirty_kib": 826836,
+                  "Pss_Dirty_kib": 826836,
+                  "Pss_kib": 1622327,
+                  "Rss_kib": 1716944,
+                  "Shared_Clean_kib": 185992,
+                  "Shared_Dirty_kib": 0,
+                  "Swap_kib": 0
+                },
+                "ok": true
+              },
+              "status": {
+                "error": null,
+                "fields": {
+                  "Cpus_allowed_list": "0-191",
+                  "Mems_allowed_list": "0-3",
+                  "Name": "llama-server",
+                  "RssAnon": "998840 kB",
+                  "RssFile": "718104 kB",
+                  "RssShmem": "0 kB",
+                  "State": "S (sleeping)",
+                  "Threads": "196",
+                  "VmHWM": "37421188 kB",
+                  "VmPeak": "84224600 kB",
+                  "VmRSS": "1716944 kB",
+                  "VmSize": "49752484 kB",
+                  "VmSwap": "0 kB"
+                },
+                "ok": true
+              }
+            },
+            "rocm": {
+              "argv": [
+                "rocm-smi",
+                "--showpidgpus",
+                "--showmemuse",
+                "--showuse"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3638262570\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 66\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2290801562\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2311039 is using 1 DRM device(s):\n0 \nPID 2311038 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+            }
+          },
+          "minicpm": {
+            "phase": "minicpm_after_active",
+            "process": {
+              "captured_at": "2026-07-17T20:43:46.576964+00:00",
+              "pid": 2311039,
+              "ps": {
+                "argv": [
+                  "ps",
+                  "-p",
+                  "2311039",
+                  "-o",
+                  "pid=,comm=,rss=,vsz=,psr=,args="
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "2311039 llama-server    1050044 18636792 73 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf --mmproj /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf --host 127.0.0.1 --port 19321 -np 1 -c 8192 -t 24 --flash-attn on --device ROCm0 --reasoning off\n"
+              },
+              "smaps_rollup": {
+                "error": null,
+                "fields": {
+                  "AnonHugePages_kib": 43008,
+                  "Anonymous_kib": 519824,
+                  "Private_Clean_kib": 525336,
+                  "Private_Dirty_kib": 338740,
+                  "Pss_Dirty_kib": 338740,
+                  "Pss_kib": 955456,
+                  "Rss_kib": 1050044,
+                  "Shared_Clean_kib": 185968,
+                  "Shared_Dirty_kib": 0,
+                  "Swap_kib": 0
+                },
+                "ok": true
+              },
+              "status": {
+                "error": null,
+                "fields": {
+                  "Cpus_allowed_list": "0-191",
+                  "Mems_allowed_list": "0-3",
+                  "Name": "llama-server",
+                  "RssAnon": "519824 kB",
+                  "RssFile": "530220 kB",
+                  "RssShmem": "0 kB",
+                  "State": "S (sleeping)",
+                  "Threads": "196",
+                  "VmHWM": "5314448 kB",
+                  "VmPeak": "19973524 kB",
+                  "VmRSS": "1050044 kB",
+                  "VmSize": "18636792 kB",
+                  "VmSwap": "0 kB"
+                },
+                "ok": true
+              }
+            },
+            "rocm": {
+              "argv": [
+                "rocm-smi",
+                "--showpidgpus",
+                "--showmemuse",
+                "--showuse"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3638262570\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 66\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2290801562\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2311039 is using 1 DRM device(s):\n0 \nPID 2311038 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+            }
+          },
+          "phase": "after_active:0:2048:ocr_digit_7500"
+        },
+        {
+          "frontdoor": {
+            "phase": "frontdoor_after_active",
+            "process": {
+              "captured_at": "2026-07-17T20:43:52.479289+00:00",
+              "pid": 2311038,
+              "ps": {
+                "argv": [
+                  "ps",
+                  "-p",
+                  "2311038",
+                  "-o",
+                  "pid=,comm=,rss=,vsz=,psr=,args="
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "2311038 llama-server    1717296 49820068 9 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 19320 -np 1 -c 9728 -t 96 -ub 512 --metrics --slots --jinja --reasoning off --device ROCm0 -ngl 99 -ctk q8_0 -ctv q8_0 -fa on --spec-type none\n"
+              },
+              "smaps_rollup": {
+                "error": null,
+                "fields": {
+                  "AnonHugePages_kib": 493568,
+                  "Anonymous_kib": 999192,
+                  "Private_Clean_kib": 704116,
+                  "Private_Dirty_kib": 827188,
+                  "Pss_Dirty_kib": 827188,
+                  "Pss_kib": 1622679,
+                  "Rss_kib": 1717296,
+                  "Shared_Clean_kib": 185992,
+                  "Shared_Dirty_kib": 0,
+                  "Swap_kib": 0
+                },
+                "ok": true
+              },
+              "status": {
+                "error": null,
+                "fields": {
+                  "Cpus_allowed_list": "0-191",
+                  "Mems_allowed_list": "0-3",
+                  "Name": "llama-server",
+                  "RssAnon": "999192 kB",
+                  "RssFile": "718104 kB",
+                  "RssShmem": "0 kB",
+                  "State": "S (sleeping)",
+                  "Threads": "196",
+                  "VmHWM": "37421188 kB",
+                  "VmPeak": "84224600 kB",
+                  "VmRSS": "1717296 kB",
+                  "VmSize": "49820068 kB",
+                  "VmSwap": "0 kB"
+                },
+                "ok": true
+              }
+            },
+            "rocm": {
+              "argv": [
+                "rocm-smi",
+                "--showpidgpus",
+                "--showmemuse",
+                "--showuse"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3638827623\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 67\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2290921759\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2311039 is using 1 DRM device(s):\n0 \nPID 2311038 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+            }
+          },
+          "minicpm": {
+            "phase": "minicpm_after_active",
+            "process": {
+              "captured_at": "2026-07-17T20:43:52.575487+00:00",
+              "pid": 2311039,
+              "ps": {
+                "argv": [
+                  "ps",
+                  "-p",
+                  "2311039",
+                  "-o",
+                  "pid=,comm=,rss=,vsz=,psr=,args="
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "2311039 llama-server    1109396 18710752 73 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf --mmproj /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf --host 127.0.0.1 --port 19321 -np 1 -c 8192 -t 24 --flash-attn on --device ROCm0 --reasoning off\n"
+              },
+              "smaps_rollup": {
+                "error": null,
+                "fields": {
+                  "AnonHugePages_kib": 65536,
+                  "Anonymous_kib": 578408,
+                  "Private_Clean_kib": 526104,
+                  "Private_Dirty_kib": 397324,
+                  "Pss_Dirty_kib": 397324,
+                  "Pss_kib": 1014808,
+                  "Rss_kib": 1109396,
+                  "Shared_Clean_kib": 185968,
+                  "Shared_Dirty_kib": 0,
+                  "Swap_kib": 0
+                },
+                "ok": true
+              },
+              "status": {
+                "error": null,
+                "fields": {
+                  "Cpus_allowed_list": "0-191",
+                  "Mems_allowed_list": "0-3",
+                  "Name": "llama-server",
+                  "RssAnon": "578408 kB",
+                  "RssFile": "530988 kB",
+                  "RssShmem": "0 kB",
+                  "State": "S (sleeping)",
+                  "Threads": "196",
+                  "VmHWM": "5314448 kB",
+                  "VmPeak": "19973524 kB",
+                  "VmRSS": "1109396 kB",
+                  "VmSize": "18710752 kB",
+                  "VmSwap": "0 kB"
+                },
+                "ok": true
+              }
+            },
+            "rocm": {
+              "argv": [
+                "rocm-smi",
+                "--showpidgpus",
+                "--showmemuse",
+                "--showuse"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3638827623\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 67\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2290921759\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2311039 is using 1 DRM device(s):\n0 \nPID 2311038 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+            }
+          },
+          "phase": "after_active:0:2048:receipt_total_payable"
+        },
+        {
+          "frontdoor": {
+            "phase": "frontdoor_after_active",
+            "process": {
+              "captured_at": "2026-07-17T20:43:58.393377+00:00",
+              "pid": 2311038,
+              "ps": {
+                "argv": [
+                  "ps",
+                  "-p",
+                  "2311038",
+                  "-o",
+                  "pid=,comm=,rss=,vsz=,psr=,args="
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "2311038 llama-server    1717652 49887652 112 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 19320 -np 1 -c 9728 -t 96 -ub 512 --metrics --slots --jinja --reasoning off --device ROCm0 -ngl 99 -ctk q8_0 -ctv q8_0 -fa on --spec-type none\n"
+              },
+              "smaps_rollup": {
+                "error": null,
+                "fields": {
+                  "AnonHugePages_kib": 493568,
+                  "Anonymous_kib": 999548,
+                  "Private_Clean_kib": 704116,
+                  "Private_Dirty_kib": 827544,
+                  "Pss_Dirty_kib": 827544,
+                  "Pss_kib": 1623035,
+                  "Rss_kib": 1717652,
+                  "Shared_Clean_kib": 185992,
+                  "Shared_Dirty_kib": 0,
+                  "Swap_kib": 0
+                },
+                "ok": true
+              },
+              "status": {
+                "error": null,
+                "fields": {
+                  "Cpus_allowed_list": "0-191",
+                  "Mems_allowed_list": "0-3",
+                  "Name": "llama-server",
+                  "RssAnon": "999548 kB",
+                  "RssFile": "718104 kB",
+                  "RssShmem": "0 kB",
+                  "State": "S (sleeping)",
+                  "Threads": "196",
+                  "VmHWM": "37421188 kB",
+                  "VmPeak": "84224600 kB",
+                  "VmRSS": "1717652 kB",
+                  "VmSize": "49887652 kB",
+                  "VmSwap": "0 kB"
+                },
+                "ok": true
+              }
+            },
+            "rocm": {
+              "argv": [
+                "rocm-smi",
+                "--showpidgpus",
+                "--showmemuse",
+                "--showuse"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3639384770\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 67\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2291040025\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2311039 is using 1 DRM device(s):\n0 \nPID 2311038 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+            }
+          },
+          "minicpm": {
+            "phase": "minicpm_after_active",
+            "process": {
+              "captured_at": "2026-07-17T20:43:58.486624+00:00",
+              "pid": 2311039,
+              "ps": {
+                "argv": [
+                  "ps",
+                  "-p",
+                  "2311039",
+                  "-o",
+                  "pid=,comm=,rss=,vsz=,psr=,args="
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "2311039 llama-server    1154808 18828284 73 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf --mmproj /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf --host 127.0.0.1 --port 19321 -np 1 -c 8192 -t 24 --flash-attn on --device ROCm0 --reasoning off\n"
+              },
+              "smaps_rollup": {
+                "error": null,
+                "fields": {
+                  "AnonHugePages_kib": 110592,
+                  "Anonymous_kib": 623820,
+                  "Private_Clean_kib": 526104,
+                  "Private_Dirty_kib": 442736,
+                  "Pss_Dirty_kib": 442736,
+                  "Pss_kib": 1060220,
+                  "Rss_kib": 1154808,
+                  "Shared_Clean_kib": 185968,
+                  "Shared_Dirty_kib": 0,
+                  "Swap_kib": 0
+                },
+                "ok": true
+              },
+              "status": {
+                "error": null,
+                "fields": {
+                  "Cpus_allowed_list": "0-191",
+                  "Mems_allowed_list": "0-3",
+                  "Name": "llama-server",
+                  "RssAnon": "623820 kB",
+                  "RssFile": "530988 kB",
+                  "RssShmem": "0 kB",
+                  "State": "S (sleeping)",
+                  "Threads": "196",
+                  "VmHWM": "5314448 kB",
+                  "VmPeak": "19973524 kB",
+                  "VmRSS": "1154808 kB",
+                  "VmSize": "18828284 kB",
+                  "VmSwap": "0 kB"
+                },
+                "ok": true
+              }
+            },
+            "rocm": {
+              "argv": [
+                "rocm-smi",
+                "--showpidgpus",
+                "--showmemuse",
+                "--showuse"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3639384770\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 67\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2291040025\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2311039 is using 1 DRM device(s):\n0 \nPID 2311038 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+            }
+          },
+          "phase": "after_active:0:2048:chart_tanzania"
+        },
+        {
+          "frontdoor": {
+            "phase": "frontdoor_after_active",
+            "process": {
+              "captured_at": "2026-07-17T20:44:04.706926+00:00",
+              "pid": 2311038,
+              "ps": {
+                "argv": [
+                  "ps",
+                  "-p",
+                  "2311038",
+                  "-o",
+                  "pid=,comm=,rss=,vsz=,psr=,args="
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "2311038 llama-server    1718004 49955236 112 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 19320 -np 1 -c 9728 -t 96 -ub 512 --metrics --slots --jinja --reasoning off --device ROCm0 -ngl 99 -ctk q8_0 -ctv q8_0 -fa on --spec-type none\n"
+              },
+              "smaps_rollup": {
+                "error": null,
+                "fields": {
+                  "AnonHugePages_kib": 493568,
+                  "Anonymous_kib": 999900,
+                  "Private_Clean_kib": 704116,
+                  "Private_Dirty_kib": 827896,
+                  "Pss_Dirty_kib": 827896,
+                  "Pss_kib": 1623385,
+                  "Rss_kib": 1718004,
+                  "Shared_Clean_kib": 185992,
+                  "Shared_Dirty_kib": 0,
+                  "Swap_kib": 0
+                },
+                "ok": true
+              },
+              "status": {
+                "error": null,
+                "fields": {
+                  "Cpus_allowed_list": "0-191",
+                  "Mems_allowed_list": "0-3",
+                  "Name": "llama-server",
+                  "RssAnon": "999900 kB",
+                  "RssFile": "718104 kB",
+                  "RssShmem": "0 kB",
+                  "State": "S (sleeping)",
+                  "Threads": "196",
+                  "VmHWM": "37421188 kB",
+                  "VmPeak": "84224600 kB",
+                  "VmRSS": "1718004 kB",
+                  "VmSize": "49955236 kB",
+                  "VmSwap": "0 kB"
+                },
+                "ok": true
+              }
+            },
+            "rocm": {
+              "argv": [
+                "rocm-smi",
+                "--showpidgpus",
+                "--showmemuse",
+                "--showuse"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3639982686\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 67\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2291168562\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2311039 is using 1 DRM device(s):\n0 \nPID 2311038 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+            }
+          },
+          "minicpm": {
+            "phase": "minicpm_after_active",
+            "process": {
+              "captured_at": "2026-07-17T20:44:04.801160+00:00",
+              "pid": 2311039,
+              "ps": {
+                "argv": [
+                  "ps",
+                  "-p",
+                  "2311039",
+                  "-o",
+                  "pid=,comm=,rss=,vsz=,psr=,args="
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "2311039 llama-server    1264400 18950604 73 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf --mmproj /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf --host 127.0.0.1 --port 19321 -np 1 -c 8192 -t 24 --flash-attn on --device ROCm0 --reasoning off\n"
+              },
+              "smaps_rollup": {
+                "error": null,
+                "fields": {
+                  "AnonHugePages_kib": 157696,
+                  "Anonymous_kib": 733412,
+                  "Private_Clean_kib": 526104,
+                  "Private_Dirty_kib": 552328,
+                  "Pss_Dirty_kib": 552328,
+                  "Pss_kib": 1169811,
+                  "Rss_kib": 1264400,
+                  "Shared_Clean_kib": 185968,
+                  "Shared_Dirty_kib": 0,
+                  "Swap_kib": 0
+                },
+                "ok": true
+              },
+              "status": {
+                "error": null,
+                "fields": {
+                  "Cpus_allowed_list": "0-191",
+                  "Mems_allowed_list": "0-3",
+                  "Name": "llama-server",
+                  "RssAnon": "733412 kB",
+                  "RssFile": "530988 kB",
+                  "RssShmem": "0 kB",
+                  "State": "S (sleeping)",
+                  "Threads": "196",
+                  "VmHWM": "5314448 kB",
+                  "VmPeak": "19973524 kB",
+                  "VmRSS": "1264400 kB",
+                  "VmSize": "18950604 kB",
+                  "VmSwap": "0 kB"
+                },
+                "ok": true
+              }
+            },
+            "rocm": {
+              "argv": [
+                "rocm-smi",
+                "--showpidgpus",
+                "--showmemuse",
+                "--showuse"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3639982686\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 67\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2291168562\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2311039 is using 1 DRM device(s):\n0 \nPID 2311038 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+            }
+          },
+          "phase": "after_active:0:2048:receipt_doc_number"
+        },
+        {
+          "frontdoor": {
+            "phase": "frontdoor_after_active",
+            "process": {
+              "captured_at": "2026-07-17T20:44:13.719857+00:00",
+              "pid": 2311038,
+              "ps": {
+                "argv": [
+                  "ps",
+                  "-p",
+                  "2311038",
+                  "-o",
+                  "pid=,comm=,rss=,vsz=,psr=,args="
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "2311038 llama-server    1654752 49957420 21 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 19320 -np 1 -c 9728 -t 96 -ub 512 --metrics --slots --jinja --reasoning off --device ROCm0 -ngl 99 -ctk q8_0 -ctv q8_0 -fa on --spec-type none\n"
+              },
+              "smaps_rollup": {
+                "error": null,
+                "fields": {
+                  "AnonHugePages_kib": 428032,
+                  "Anonymous_kib": 936648,
+                  "Private_Clean_kib": 704116,
+                  "Private_Dirty_kib": 764644,
+                  "Pss_Dirty_kib": 764644,
+                  "Pss_kib": 1560133,
+                  "Rss_kib": 1654752,
+                  "Shared_Clean_kib": 185992,
+                  "Shared_Dirty_kib": 0,
+                  "Swap_kib": 0
+                },
+                "ok": true
+              },
+              "status": {
+                "error": null,
+                "fields": {
+                  "Cpus_allowed_list": "0-191",
+                  "Mems_allowed_list": "0-3",
+                  "Name": "llama-server",
+                  "RssAnon": "936648 kB",
+                  "RssFile": "718104 kB",
+                  "RssShmem": "0 kB",
+                  "State": "S (sleeping)",
+                  "Threads": "196",
+                  "VmHWM": "37421188 kB",
+                  "VmPeak": "84224600 kB",
+                  "VmRSS": "1654752 kB",
+                  "VmSize": "49957420 kB",
+                  "VmSwap": "0 kB"
+                },
+                "ok": true
+              }
+            },
+            "rocm": {
+              "argv": [
+                "rocm-smi",
+                "--showpidgpus",
+                "--showmemuse",
+                "--showuse"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3640845858\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 67\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2291318606\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2311039 is using 1 DRM device(s):\n0 \nPID 2311038 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+            }
+          },
+          "minicpm": {
+            "phase": "minicpm_after_active",
+            "process": {
+              "captured_at": "2026-07-17T20:44:13.814131+00:00",
+              "pid": 2311039,
+              "ps": {
+                "argv": [
+                  "ps",
+                  "-p",
+                  "2311039",
+                  "-o",
+                  "pid=,comm=,rss=,vsz=,psr=,args="
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "2311039 llama-server    1334372 19112748 73 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf --mmproj /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf --host 127.0.0.1 --port 19321 -np 1 -c 8192 -t 24 --flash-attn on --device ROCm0 --reasoning off\n"
+              },
+              "smaps_rollup": {
+                "error": null,
+                "fields": {
+                  "AnonHugePages_kib": 233472,
+                  "Anonymous_kib": 803384,
+                  "Private_Clean_kib": 526104,
+                  "Private_Dirty_kib": 622300,
+                  "Pss_Dirty_kib": 622300,
+                  "Pss_kib": 1239783,
+                  "Rss_kib": 1334372,
+                  "Shared_Clean_kib": 185968,
+                  "Shared_Dirty_kib": 0,
+                  "Swap_kib": 0
+                },
+                "ok": true
+              },
+              "status": {
+                "error": null,
+                "fields": {
+                  "Cpus_allowed_list": "0-191",
+                  "Mems_allowed_list": "0-3",
+                  "Name": "llama-server",
+                  "RssAnon": "803384 kB",
+                  "RssFile": "530988 kB",
+                  "RssShmem": "0 kB",
+                  "State": "S (sleeping)",
+                  "Threads": "196",
+                  "VmHWM": "5314448 kB",
+                  "VmPeak": "19973524 kB",
+                  "VmRSS": "1334372 kB",
+                  "VmSize": "19112748 kB",
+                  "VmSwap": "0 kB"
+                },
+                "ok": true
+              }
+            },
+            "rocm": {
+              "argv": [
+                "rocm-smi",
+                "--showpidgpus",
+                "--showmemuse",
+                "--showuse"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3640845858\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 67\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2291318606\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2311039 is using 1 DRM device(s):\n0 \nPID 2311038 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+            }
+          },
+          "phase": "after_active:0:8192:ocr_digit_7500"
+        },
+        {
+          "frontdoor": {
+            "phase": "frontdoor_after_active",
+            "process": {
+              "captured_at": "2026-07-17T20:44:22.900758+00:00",
+              "pid": 2311038,
+              "ps": {
+                "argv": [
+                  "ps",
+                  "-p",
+                  "2311038",
+                  "-o",
+                  "pid=,comm=,rss=,vsz=,psr=,args="
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "2311038 llama-server    1656908 50022956 10 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 19320 -np 1 -c 9728 -t 96 -ub 512 --metrics --slots --jinja --reasoning off --device ROCm0 -ngl 99 -ctk q8_0 -ctv q8_0 -fa on --spec-type none\n"
+              },
+              "smaps_rollup": {
+                "error": null,
+                "fields": {
+                  "AnonHugePages_kib": 428032,
+                  "Anonymous_kib": 938804,
+                  "Private_Clean_kib": 704116,
+                  "Private_Dirty_kib": 766800,
+                  "Pss_Dirty_kib": 766800,
+                  "Pss_kib": 1562291,
+                  "Rss_kib": 1656908,
+                  "Shared_Clean_kib": 185992,
+                  "Shared_Dirty_kib": 0,
+                  "Swap_kib": 0
+                },
+                "ok": true
+              },
+              "status": {
+                "error": null,
+                "fields": {
+                  "Cpus_allowed_list": "0-191",
+                  "Mems_allowed_list": "0-3",
+                  "Name": "llama-server",
+                  "RssAnon": "938804 kB",
+                  "RssFile": "718104 kB",
+                  "RssShmem": "0 kB",
+                  "State": "S (sleeping)",
+                  "Threads": "196",
+                  "VmHWM": "37421188 kB",
+                  "VmPeak": "84224600 kB",
+                  "VmRSS": "1656908 kB",
+                  "VmSize": "50022956 kB",
+                  "VmSwap": "0 kB"
+                },
+                "ok": true
+              }
+            },
+            "rocm": {
+              "argv": [
+                "rocm-smi",
+                "--showpidgpus",
+                "--showmemuse",
+                "--showuse"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3641724187\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 67\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2291474182\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2311039 is using 1 DRM device(s):\n0 \nPID 2311038 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+            }
+          },
+          "minicpm": {
+            "phase": "minicpm_after_active",
+            "process": {
+              "captured_at": "2026-07-17T20:44:22.997664+00:00",
+              "pid": 2311039,
+              "ps": {
+                "argv": [
+                  "ps",
+                  "-p",
+                  "2311039",
+                  "-o",
+                  "pid=,comm=,rss=,vsz=,psr=,args="
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "2311039 llama-server    1318332 19135220 73 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf --mmproj /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf --host 127.0.0.1 --port 19321 -np 1 -c 8192 -t 24 --flash-attn on --device ROCm0 --reasoning off\n"
+              },
+              "smaps_rollup": {
+                "error": null,
+                "fields": {
+                  "AnonHugePages_kib": 192512,
+                  "Anonymous_kib": 787344,
+                  "Private_Clean_kib": 526104,
+                  "Private_Dirty_kib": 606260,
+                  "Pss_Dirty_kib": 606260,
+                  "Pss_kib": 1223744,
+                  "Rss_kib": 1318332,
+                  "Shared_Clean_kib": 185968,
+                  "Shared_Dirty_kib": 0,
+                  "Swap_kib": 0
+                },
+                "ok": true
+              },
+              "status": {
+                "error": null,
+                "fields": {
+                  "Cpus_allowed_list": "0-191",
+                  "Mems_allowed_list": "0-3",
+                  "Name": "llama-server",
+                  "RssAnon": "787344 kB",
+                  "RssFile": "530988 kB",
+                  "RssShmem": "0 kB",
+                  "State": "S (sleeping)",
+                  "Threads": "196",
+                  "VmHWM": "5314448 kB",
+                  "VmPeak": "19973524 kB",
+                  "VmRSS": "1318332 kB",
+                  "VmSize": "19135220 kB",
+                  "VmSwap": "0 kB"
+                },
+                "ok": true
+              }
+            },
+            "rocm": {
+              "argv": [
+                "rocm-smi",
+                "--showpidgpus",
+                "--showmemuse",
+                "--showuse"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3641724187\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 67\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2291474182\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2311039 is using 1 DRM device(s):\n0 \nPID 2311038 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+            }
+          },
+          "phase": "after_active:0:8192:receipt_total_payable"
+        },
+        {
+          "frontdoor": {
+            "phase": "frontdoor_after_active",
+            "process": {
+              "captured_at": "2026-07-17T20:44:32.020404+00:00",
+              "pid": 2311038,
+              "ps": {
+                "argv": [
+                  "ps",
+                  "-p",
+                  "2311038",
+                  "-o",
+                  "pid=,comm=,rss=,vsz=,psr=,args="
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "2311038 llama-server    1659032 50090540 106 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 19320 -np 1 -c 9728 -t 96 -ub 512 --metrics --slots --jinja --reasoning off --device ROCm0 -ngl 99 -ctk q8_0 -ctv q8_0 -fa on --spec-type none\n"
+              },
+              "smaps_rollup": {
+                "error": null,
+                "fields": {
+                  "AnonHugePages_kib": 428032,
+                  "Anonymous_kib": 940928,
+                  "Private_Clean_kib": 704116,
+                  "Private_Dirty_kib": 768924,
+                  "Pss_Dirty_kib": 768924,
+                  "Pss_kib": 1564415,
+                  "Rss_kib": 1659032,
+                  "Shared_Clean_kib": 185992,
+                  "Shared_Dirty_kib": 0,
+                  "Swap_kib": 0
+                },
+                "ok": true
+              },
+              "status": {
+                "error": null,
+                "fields": {
+                  "Cpus_allowed_list": "0-191",
+                  "Mems_allowed_list": "0-3",
+                  "Name": "llama-server",
+                  "RssAnon": "940928 kB",
+                  "RssFile": "718104 kB",
+                  "RssShmem": "0 kB",
+                  "State": "S (sleeping)",
+                  "Threads": "196",
+                  "VmHWM": "37421188 kB",
+                  "VmPeak": "84224600 kB",
+                  "VmRSS": "1659032 kB",
+                  "VmSize": "50090540 kB",
+                  "VmSwap": "0 kB"
+                },
+                "ok": true
+              }
+            },
+            "rocm": {
+              "argv": [
+                "rocm-smi",
+                "--showpidgpus",
+                "--showmemuse",
+                "--showuse"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3642596114\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 67\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2291627344\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2311039 is using 1 DRM device(s):\n0 \nPID 2311038 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+            }
+          },
+          "minicpm": {
+            "phase": "minicpm_after_active",
+            "process": {
+              "captured_at": "2026-07-17T20:44:32.118340+00:00",
+              "pid": 2311039,
+              "ps": {
+                "argv": [
+                  "ps",
+                  "-p",
+                  "2311039",
+                  "-o",
+                  "pid=,comm=,rss=,vsz=,psr=,args="
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "2311039 llama-server    1353724 19217432 73 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf --mmproj /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf --host 127.0.0.1 --port 19321 -np 1 -c 8192 -t 24 --flash-attn on --device ROCm0 --reasoning off\n"
+              },
+              "smaps_rollup": {
+                "error": null,
+                "fields": {
+                  "AnonHugePages_kib": 206848,
+                  "Anonymous_kib": 822736,
+                  "Private_Clean_kib": 526104,
+                  "Private_Dirty_kib": 641652,
+                  "Pss_Dirty_kib": 641652,
+                  "Pss_kib": 1259135,
+                  "Rss_kib": 1353724,
+                  "Shared_Clean_kib": 185968,
+                  "Shared_Dirty_kib": 0,
+                  "Swap_kib": 0
+                },
+                "ok": true
+              },
+              "status": {
+                "error": null,
+                "fields": {
+                  "Cpus_allowed_list": "0-191",
+                  "Mems_allowed_list": "0-3",
+                  "Name": "llama-server",
+                  "RssAnon": "822736 kB",
+                  "RssFile": "530988 kB",
+                  "RssShmem": "0 kB",
+                  "State": "S (sleeping)",
+                  "Threads": "196",
+                  "VmHWM": "5314448 kB",
+                  "VmPeak": "19973524 kB",
+                  "VmRSS": "1353724 kB",
+                  "VmSize": "19217432 kB",
+                  "VmSwap": "0 kB"
+                },
+                "ok": true
+              }
+            },
+            "rocm": {
+              "argv": [
+                "rocm-smi",
+                "--showpidgpus",
+                "--showmemuse",
+                "--showuse"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3642596114\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 67\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2291627344\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2311039 is using 1 DRM device(s):\n0 \nPID 2311038 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+            }
+          },
+          "phase": "after_active:0:8192:chart_tanzania"
+        },
+        {
+          "frontdoor": {
+            "phase": "frontdoor_after_active",
+            "process": {
+              "captured_at": "2026-07-17T20:44:41.451764+00:00",
+              "pid": 2311038,
+              "ps": {
+                "argv": [
+                  "ps",
+                  "-p",
+                  "2311038",
+                  "-o",
+                  "pid=,comm=,rss=,vsz=,psr=,args="
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "2311038 llama-server    1661180 50158124 9 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 19320 -np 1 -c 9728 -t 96 -ub 512 --metrics --slots --jinja --reasoning off --device ROCm0 -ngl 99 -ctk q8_0 -ctv q8_0 -fa on --spec-type none\n"
+              },
+              "smaps_rollup": {
+                "error": null,
+                "fields": {
+                  "AnonHugePages_kib": 428032,
+                  "Anonymous_kib": 943076,
+                  "Private_Clean_kib": 704116,
+                  "Private_Dirty_kib": 771072,
+                  "Pss_Dirty_kib": 771072,
+                  "Pss_kib": 1566561,
+                  "Rss_kib": 1661180,
+                  "Shared_Clean_kib": 185992,
+                  "Shared_Dirty_kib": 0,
+                  "Swap_kib": 0
+                },
+                "ok": true
+              },
+              "status": {
+                "error": null,
+                "fields": {
+                  "Cpus_allowed_list": "0-191",
+                  "Mems_allowed_list": "0-3",
+                  "Name": "llama-server",
+                  "RssAnon": "943076 kB",
+                  "RssFile": "718104 kB",
+                  "RssShmem": "0 kB",
+                  "State": "S (sleeping)",
+                  "Threads": "196",
+                  "VmHWM": "37421188 kB",
+                  "VmPeak": "84224600 kB",
+                  "VmRSS": "1661180 kB",
+                  "VmSize": "50158124 kB",
+                  "VmSwap": "0 kB"
+                },
+                "ok": true
+              }
+            },
+            "rocm": {
+              "argv": [
+                "rocm-smi",
+                "--showpidgpus",
+                "--showmemuse",
+                "--showuse"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3643499293\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 67\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2291791948\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2311039 is using 1 DRM device(s):\n0 \nPID 2311038 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+            }
+          },
+          "minicpm": {
+            "phase": "minicpm_after_active",
+            "process": {
+              "captured_at": "2026-07-17T20:44:41.550703+00:00",
+              "pid": 2311039,
+              "ps": {
+                "argv": [
+                  "ps",
+                  "-p",
+                  "2311039",
+                  "-o",
+                  "pid=,comm=,rss=,vsz=,psr=,args="
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "2311039 llama-server    1350684 19227120 73 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf --mmproj /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf --host 127.0.0.1 --port 19321 -np 1 -c 8192 -t 24 --flash-attn on --device ROCm0 --reasoning off\n"
+              },
+              "smaps_rollup": {
+                "error": null,
+                "fields": {
+                  "AnonHugePages_kib": 161792,
+                  "Anonymous_kib": 819696,
+                  "Private_Clean_kib": 526104,
+                  "Private_Dirty_kib": 638612,
+                  "Pss_Dirty_kib": 638612,
+                  "Pss_kib": 1256095,
+                  "Rss_kib": 1350684,
+                  "Shared_Clean_kib": 185968,
+                  "Shared_Dirty_kib": 0,
+                  "Swap_kib": 0
+                },
+                "ok": true
+              },
+              "status": {
+                "error": null,
+                "fields": {
+                  "Cpus_allowed_list": "0-191",
+                  "Mems_allowed_list": "0-3",
+                  "Name": "llama-server",
+                  "RssAnon": "819696 kB",
+                  "RssFile": "530988 kB",
+                  "RssShmem": "0 kB",
+                  "State": "S (sleeping)",
+                  "Threads": "196",
+                  "VmHWM": "5314448 kB",
+                  "VmPeak": "19973524 kB",
+                  "VmRSS": "1350684 kB",
+                  "VmSize": "19227120 kB",
+                  "VmSwap": "0 kB"
+                },
+                "ok": true
+              }
+            },
+            "rocm": {
+              "argv": [
+                "rocm-smi",
+                "--showpidgpus",
+                "--showmemuse",
+                "--showuse"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3643499293\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 67\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2291791948\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2311039 is using 1 DRM device(s):\n0 \nPID 2311038 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+            }
+          },
+          "phase": "after_active:0:8192:receipt_doc_number"
+        }
+      ],
+      "status": "ok"
+    }
+  ],
+  "schema": "epyc.k35_minicpm_service_matrix.summary.v1",
+  "status": "ok"
+}

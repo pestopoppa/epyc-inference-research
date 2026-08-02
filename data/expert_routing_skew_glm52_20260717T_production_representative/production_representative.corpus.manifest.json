@@ -1,0 +1,58 @@
+{
+  "bytes": 118482,
+  "corpus_path": "/mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/production_representative.corpus.txt",
+  "created_at": "2026-07-17T05:41:50.504398+00:00",
+  "notes": [
+    "progress_interactive_objectives=80",
+    "manifest_source_added={\"benchmarks/prompts/debug/agentic.yaml\": 21, \"benchmarks/prompts/debug/coder.yaml\": 12, \"benchmarks/prompts/debug/long_context.yaml\": 10, \"benchmarks/prompts/debug/mode_advantage_hard.yaml\": 12, \"benchmarks/prompts/debug/thinking.yaml\": 10}",
+    "core_v2_ledger_prompts=37",
+    "retrieval_queries=6"
+  ],
+  "pitfalls_avoided": [
+    "Excluded question_pool.jsonl and benchmark results outputs.",
+    "Excluded raw autopilot_journal reasoning/hypothesis streams.",
+    "Excluded server/embedder logs.",
+    "Used core_v2 prompt field only; did not append duplicated context field."
+  ],
+  "purpose": "Production-representative corpus for GLM-5.2 imatrix expert-routing skew profile, based on sidecar-selected live orchestrator/eval prompt sources.",
+  "rough_word_count": 15732,
+  "section_count": 201,
+  "source_char_counts": {
+    "epyc-inference-research/benchmarks/root_workload/ab_tuning/optuna_20260222_014840/codex/manifest_seed_160.json": 29252,
+    "epyc-orchestrator/benchmarks/prompts/core_v2_ledger_20260703_min5.jsonl": 32414,
+    "epyc-orchestrator/logs/progress/2026-07-16.jsonl": 14644,
+    "epyc-orchestrator/orchestration/prompts/formalizer.md": 1215,
+    "epyc-orchestrator/orchestration/prompts/frontdoor.md": 1794,
+    "epyc-orchestrator/orchestration/prompts/plan_review.md": 309,
+    "epyc-orchestrator/orchestration/prompts/planning_agent.md": 1753,
+    "epyc-orchestrator/orchestration/prompts/roles/architect_general.md": 430,
+    "epyc-orchestrator/orchestration/prompts/roles/coder_escalation.md": 497,
+    "epyc-orchestrator/orchestration/prompts/roles/frontdoor.md": 1610,
+    "epyc-orchestrator/orchestration/prompts/roles/ingest_long_context.md": 122,
+    "epyc-orchestrator/orchestration/prompts/roles/worker_general.md": 393,
+    "epyc-orchestrator/orchestration/prompts/roles/worker_math.md": 206,
+    "epyc-orchestrator/orchestration/prompts/root_lm_system.md": 574,
+    "epyc-orchestrator/orchestration/prompts/rules.md": 6023,
+    "epyc-orchestrator/orchestration/prompts/tools.md": 1680,
+    "epyc-orchestrator/orchestration/reports/corpus_quality_gate_20260704T222948Z.json": 864
+  },
+  "source_counts": {
+    "epyc-inference-research/benchmarks/root_workload/ab_tuning/optuna_20260222_014840/codex/manifest_seed_160.json": 65,
+    "epyc-orchestrator/benchmarks/prompts/core_v2_ledger_20260703_min5.jsonl": 37,
+    "epyc-orchestrator/logs/progress/2026-07-16.jsonl": 80,
+    "epyc-orchestrator/orchestration/prompts/formalizer.md": 1,
+    "epyc-orchestrator/orchestration/prompts/frontdoor.md": 1,
+    "epyc-orchestrator/orchestration/prompts/plan_review.md": 1,
+    "epyc-orchestrator/orchestration/prompts/planning_agent.md": 1,
+    "epyc-orchestrator/orchestration/prompts/roles/architect_general.md": 1,
+    "epyc-orchestrator/orchestration/prompts/roles/coder_escalation.md": 1,
+    "epyc-orchestrator/orchestration/prompts/roles/frontdoor.md": 1,
+    "epyc-orchestrator/orchestration/prompts/roles/ingest_long_context.md": 1,
+    "epyc-orchestrator/orchestration/prompts/roles/worker_general.md": 1,
+    "epyc-orchestrator/orchestration/prompts/roles/worker_math.md": 1,
+    "epyc-orchestrator/orchestration/prompts/root_lm_system.md": 1,
+    "epyc-orchestrator/orchestration/prompts/rules.md": 1,
+    "epyc-orchestrator/orchestration/prompts/tools.md": 1,
+    "epyc-orchestrator/orchestration/reports/corpus_quality_gate_20260704T222948Z.json": 6
+  }
+}

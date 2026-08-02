@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Unit 2 Poems\nWarming Up\nDo you remember any little poems or songs you learned when you were a child? These little poems and songs you learned when you learned.\npoems and songs might have been some of the first poetry you learned.\n2 Do you remember any poems you have read in high school, either in Chinese or in English?\nCan you recite any?\n3 There are many reasons why people write poems. In small groups make a list of these reasons.\nThe list has been started for you.\nPeople write poems\nto tell a story\nto express feelings\nto recall an enjoyable or unpleasant incident\nPre-reading\nDo you have a favourite poem in Chinese or in English? Why is it your favourite poem?\n2 Skim the poems on the following pages and tick the correct box(es) for each question.\nWhich poem\nA\nB\nC\nD\nE\nF\nG\nH\ndescribes a person?\ntells a story?\ndescribes an aspect of a season?\nis about sport?\nis about things that don't make sense?\nis recited to a baby?\ndescribes a river scene?\nhas rhyming words at the end of lines?\nrepeats words or phrases?\n9",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784318560,
+  "id": "chatcmpl-3rJFOGzKFuAHDfJRoMIoz7nFFVsOGRDQ",
+  "model": "/mnt/raid0/llm/models/PaddleOCR-VL-1.6-GGUF/PaddleOCR-VL-1.6-GGUF.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 1119.913,
+    "predicted_n": 544,
+    "predicted_per_second": 485.75201823713087,
+    "predicted_per_token_ms": 2.0586636029411767,
+    "prompt_ms": 424.389,
+    "prompt_n": 1311,
+    "prompt_per_second": 3089.1469854308193,
+    "prompt_per_token_ms": 0.32371395881006865
+  },
+  "usage": {
+    "completion_tokens": 544,
+    "prompt_tokens": 1311,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1855
+  }
+}

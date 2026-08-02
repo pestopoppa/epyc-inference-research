@@ -1,0 +1,21 @@
+0.00.409.201 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.01.131.777 I mtmd_cli_context: chat template example:
+<|im_start|>system
+You are a helpful assistant<|im_end|>
+<|im_start|>user
+Hello<|im_end|>
+<|im_start|>assistant
+Hi there<|im_end|>
+<|im_start|>user
+How are you?<|im_end|>
+<|im_start|>assistant
+
+0.01.328.825 I main: loading model: /mnt/raid0/llm/models/Qwen3-VL-8B-Instruct-GGUF/Qwen3VL-8B-Instruct-Q4_K_M.gguf
+0.01.328.872 W WARN: This is an experimental CLI for testing multimodal capability.
+0.01.328.873 W       For normal use cases, please use the standard llama-cli
+0.01.371.156 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 3)
+0.01.665.508 I mtmd batch encoding done in 295 ms
+
+Hello World 123
+
+

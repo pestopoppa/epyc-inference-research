@@ -1,0 +1,1 @@
+Write a numbered glossary of GPU benchmarking terms, one item per line, with a short definition for each item. Keep going until stopped. Do not add a conclusion.

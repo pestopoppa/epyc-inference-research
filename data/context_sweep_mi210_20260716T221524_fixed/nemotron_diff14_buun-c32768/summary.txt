@@ -1,0 +1,10 @@
+context=32768
+repeats=1400
+finish_reason=stop
+prompt_tokens=22433
+completion_tokens=48
+total_tokens=22481
+prompt_tps=1456.3614814753262
+generation_tps=25.824084186514447
+content_chars=255
+content_preview=**Paragraph:**  \nWhen the context length was extended, the model’s inference throughput decreased. This occurred because the model had to process more tokens, w

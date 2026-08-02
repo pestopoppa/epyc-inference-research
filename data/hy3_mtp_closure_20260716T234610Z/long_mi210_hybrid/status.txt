@@ -1,0 +1,2 @@
+mi210_long_hybrid_nospec_exit=0
+mi210_long_hybrid_mtp_exit=0

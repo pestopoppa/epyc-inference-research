@@ -1,0 +1,39 @@
+0.00.033.585 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.033.916 W srv  llama_server: -----------------
+0.00.033.917 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.033.918 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.033.918 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.033.918 W srv  llama_server: -----------------
+0.00.035.192 I srv    load_model: loading model '/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf'
+0.00.356.395 E llama_init_from_model: failed to initialize the context: Gemma4Assistant requires ctx_other to be set (this warning is normal during memory fitting)
+0.00.429.178 W srv    load_model: [spec] failed to measure draft model memory: failed to create llama_context from model
+0.01.083.060 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.01.083.271 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.01.093.852 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=12 ne00=2816)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 n_as=128)
+0.03.788.707 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.03.788.923 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.03.800.109 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list
+0.03.872.641 W llama_kv_cache: layer   3: sharing with layer 29. k = 0x7e3bfabcf040, v = 0x7e3bfb5e7040
+0.03.872.702 W llama_kv_cache: layer   0: sharing with layer 28. k = 0x7e3bf54ae040, v = 0x7e3bf57de040
+0.03.872.706 W llama_kv_cache: layer   1: sharing with layer 28. k = 0x7e3bf54ae040, v = 0x7e3bf57de040
+0.03.872.706 W llama_kv_cache: layer   2: sharing with layer 28. k = 0x7e3bf54ae040, v = 0x7e3bf57de040
+0.03.967.389 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 9728, kv_unified = 'false'
+0.03.997.807 I srv  llama_server: model loaded
+0.03.997.815 I srv  llama_server: listening on http://127.0.0.1:19420
+0.05.010.265 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.05.010.330 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.12.310.714 I slot print_timing: id  0 | task 0 | prompt processing, n_tokens =   2049, progress = 0.30, t =   7.30 s / 280.67 tokens per second
+0.20.352.317 I slot print_timing: id  0 | task 0 | prompt processing, n_tokens =   4097, progress = 0.61, t =  15.34 s / 267.05 tokens per second
+0.28.952.029 I slot print_timing: id  0 | task 0 | prompt processing, n_tokens =   6145, progress = 0.91, t =  23.94 s / 256.67 tokens per second
+0.29.333.331 I slot print_timing: id  0 | task 0 | prompt processing, n_tokens =   6210, progress = 0.92, t =  24.32 s / 255.31 tokens per second
+0.31.611.891 I slot print_timing: id  0 | task 0 | prompt processing, n_tokens =   6722, progress = 1.00, t =  26.60 s / 252.69 tokens per second
+0.35.294.621 I slot print_timing: id  0 | task 0 | n_decoded =    158, tg =  45.01 t/s, tg_3s =  45.01 t/s
+0.37.618.207 I slot print_timing: id  0 | task 0 | prompt eval time =   26773.89 ms /  6726 tokens (    3.98 ms per token,   251.21 tokens per second)
+0.37.618.214 I slot print_timing: id  0 | task 0 |        eval time =    5833.94 ms /   512 tokens (   11.39 ms per token,    87.76 tokens per second)
+0.37.618.215 I slot print_timing: id  0 | task 0 |       total time =   32607.83 ms /  7238 tokens
+0.37.618.221 I slot print_timing: id  0 | task 0 |    graphs reused =         14
+0.37.618.238 I slot print_timing: id  0 | task 0 | draft acceptance = 0.73874 (  492 accepted /   666 generated), mean len = 26.89
+0.37.618.515 I slot      release: id  0 | task 0 | stop processing: n_tokens = 7237, truncated = 0
+0.37.619.559 I srv    operator(): operator(): cleaning up before exit...

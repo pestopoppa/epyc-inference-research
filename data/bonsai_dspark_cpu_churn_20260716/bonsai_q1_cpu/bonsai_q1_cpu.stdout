@@ -1,0 +1,40 @@
+
+
+Loading model... 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10077-da1bf5e2f
+model      : /mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-Q1_0.gguf
+ftype      : Q1_0
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> Return exactly: ok
+
+[Start thinking]
+
+Here's a thinking process:
+
+1.  **Analyze User Input:** The user said "Return exactly: ok". This is a direct instruction to output only the word "ok", without any additional text, explanations, or formatting.
+
+2.  **Identify Key Constraint:** "Return exactly: ok"
+
+[ Prompt: 12.6 t/s | Generation: 6.8 t/s ]
+
+
+Exiting...

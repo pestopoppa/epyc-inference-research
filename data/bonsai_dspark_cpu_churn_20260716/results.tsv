@@ -1,0 +1,5 @@
+case	status	exit_code	prompt_speed	gen_speed	coherence	stdout	stderr
+bonsai_q1_cpu	PASS	0			appears coherent	/mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/bonsai_q1_cpu/bonsai_q1_cpu.stdout	/mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/bonsai_q1_cpu/bonsai_q1_cpu.stderr
+bonsai_dspark_cpu_v7	FAIL	1			unknown	/mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/bonsai_dspark_cpu_v7/bonsai_dspark_cpu_v7.stdout	/mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/bonsai_dspark_cpu_v7/bonsai_dspark_cpu_v7.stderr
+ternary_bonsai_dspark_cpu_v7	FAIL	1			unknown	/mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/ternary_bonsai_dspark_cpu_v7/ternary_bonsai_dspark_cpu_v7.stdout	/mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/ternary_bonsai_dspark_cpu_v7/ternary_bonsai_dspark_cpu_v7.stderr
+bonsai_8b_cpu_v7	PASS	0			appears coherent	/mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/bonsai_8b_cpu_v7/bonsai_8b_cpu_v7.stdout	/mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/bonsai_8b_cpu_v7/bonsai_8b_cpu_v7.stderr

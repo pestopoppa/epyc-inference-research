@@ -1,0 +1,6 @@
+{
+  "error": "RuntimeError('HTTP 500: {\"error\":{\"code\":500,\"message\":\"The model produced output that does not match the expected peg-native format\",\"type\":\"server_error\"}}')",
+  "gt_image": "newspaper_5e266dfd9c498cab274e12a7b4a75755_4.jpg",
+  "latency_ms": 4413.961892947555,
+  "source_image": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images/newspaper_5e266dfd9c498cab274e12a7b4a75755_4.jpg"
+}

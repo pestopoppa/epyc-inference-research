@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "None of the countries listed in the chart have 7 years of compulsory education. The chart shows Moldova with 9 years, Tanzania with 7 years, Suriname with 6 years, and Madagascar with 5 years. Therefore, the correct answer is Tanzania.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784314423,
+  "id": "chatcmpl-rVM7Q1KmuEuXYiYa6EMDrlznVMaz5dWY",
+  "model": "/mnt/raid0/llm/models/Qwen3-VL-8B-Instruct-GGUF/Qwen3VL-8B-Instruct-Q4_K_M.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 5085.951,
+    "predicted_n": 55,
+    "predicted_per_second": 10.814103399737828,
+    "predicted_per_token_ms": 92.47183636363637,
+    "prompt_ms": 1445.729,
+    "prompt_n": 543,
+    "prompt_per_second": 375.58906268048855,
+    "prompt_per_token_ms": 2.662484346224678
+  },
+  "usage": {
+    "completion_tokens": 55,
+    "prompt_tokens": 543,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 598
+  }
+}

@@ -1,0 +1,10 @@
+context=8192
+repeats=400
+finish_reason=length
+prompt_tokens=6428
+completion_tokens=256
+total_tokens=6684
+prompt_tps=1964.0752667374932
+generation_tps=79.85140153246068
+content_chars=1479
+content_preview=<think>\nOkay, the user provided a long context filler sentence repeated many times, which seems to be for testing local inference throughput under long prompts.

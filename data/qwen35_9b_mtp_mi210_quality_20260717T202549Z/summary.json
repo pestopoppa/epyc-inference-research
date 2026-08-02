@@ -1,0 +1,186 @@
+{
+  "arms": [
+    {
+      "arm": "no_spec",
+      "cleanup": {
+        "killed": false,
+        "returncode": 0
+      },
+      "draft_accept_rate": null,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "mean_decode_tps": 124.76758964427798,
+      "pass_rate": 0.8333333333333334,
+      "passed": 5,
+      "spec_type": "none",
+      "tasks": [
+        {
+          "completion_tokens": 2,
+          "content": "ok",
+          "decode_tps": 169.548999660902,
+          "draft_n": null,
+          "draft_n_accepted": null,
+          "passed": true,
+          "prompt_tps": 169.44665078104316,
+          "reasoning_len": 0,
+          "score_error": null,
+          "task_id": "exact_ok"
+        },
+        {
+          "completion_tokens": 7,
+          "content": "{\"answer\":\"55\"}",
+          "decode_tps": 103.23570185529304,
+          "draft_n": null,
+          "draft_n_accepted": null,
+          "passed": true,
+          "prompt_tps": 578.4196873028116,
+          "reasoning_len": 0,
+          "score_error": null,
+          "task_id": "sum_json"
+        },
+        {
+          "completion_tokens": 2,
+          "content": "B",
+          "decode_tps": 169.63528413910095,
+          "draft_n": null,
+          "draft_n_accepted": null,
+          "passed": true,
+          "prompt_tps": 652.5340070607526,
+          "reasoning_len": 0,
+          "score_error": null,
+          "task_id": "letter"
+        },
+        {
+          "completion_tokens": 14,
+          "content": "{\"finish_24h\":\"10:35\"}",
+          "decode_tps": 99.96786747117,
+          "draft_n": null,
+          "draft_n_accepted": null,
+          "passed": true,
+          "prompt_tps": 789.9024141392532,
+          "reasoning_len": 0,
+          "score_error": null,
+          "task_id": "time_json"
+        },
+        {
+          "completion_tokens": 5,
+          "content": "prevent overfitting",
+          "decode_tps": 106.8330413230204,
+          "draft_n": null,
+          "draft_n_accepted": null,
+          "passed": false,
+          "prompt_tps": 539.102307705685,
+          "reasoning_len": 0,
+          "score_error": null,
+          "task_id": "five_words"
+        },
+        {
+          "completion_tokens": 12,
+          "content": "AR-2025-1847",
+          "decode_tps": 99.38464341618148,
+          "draft_n": null,
+          "draft_n_accepted": null,
+          "passed": true,
+          "prompt_tps": 845.3217701664032,
+          "reasoning_len": 0,
+          "score_error": null,
+          "task_id": "needle"
+        }
+      ],
+      "total": 6
+    },
+    {
+      "arm": "draft_mtp_n2",
+      "cleanup": {
+        "killed": false,
+        "returncode": 0
+      },
+      "draft_accept_rate": 1.0,
+      "draft_n": 30,
+      "draft_n_accepted": 30,
+      "mean_decode_tps": 109.28084782080835,
+      "pass_rate": 0.8333333333333334,
+      "passed": 5,
+      "spec_type": "draft-mtp",
+      "tasks": [
+        {
+          "completion_tokens": 2,
+          "content": "ok",
+          "decode_tps": 68.86578059362303,
+          "draft_n": 2,
+          "draft_n_accepted": 2,
+          "passed": true,
+          "prompt_tps": 156.4256733636408,
+          "reasoning_len": 0,
+          "score_error": null,
+          "task_id": "exact_ok"
+        },
+        {
+          "completion_tokens": 7,
+          "content": "{\"answer\":\"55\"}",
+          "decode_tps": 140.6300225008036,
+          "draft_n": 4,
+          "draft_n_accepted": 4,
+          "passed": true,
+          "prompt_tps": 541.6673505900891,
+          "reasoning_len": 0,
+          "score_error": null,
+          "task_id": "sum_json"
+        },
+        {
+          "completion_tokens": 2,
+          "content": "B",
+          "decode_tps": 86.2738331464067,
+          "draft_n": 2,
+          "draft_n_accepted": 2,
+          "passed": true,
+          "prompt_tps": 611.6687578419071,
+          "reasoning_len": 0,
+          "score_error": null,
+          "task_id": "letter"
+        },
+        {
+          "completion_tokens": 14,
+          "content": "{\"finish_24h\":\"10:35\"}",
+          "decode_tps": 124.90186282206837,
+          "draft_n": 10,
+          "draft_n_accepted": 10,
+          "passed": true,
+          "prompt_tps": 742.3560525216906,
+          "reasoning_len": 0,
+          "score_error": null,
+          "task_id": "time_json"
+        },
+        {
+          "completion_tokens": 5,
+          "content": "prevent overfitting",
+          "decode_tps": 102.96116304929781,
+          "draft_n": 4,
+          "draft_n_accepted": 4,
+          "passed": false,
+          "prompt_tps": 515.0528344520502,
+          "reasoning_len": 0,
+          "score_error": null,
+          "task_id": "five_words"
+        },
+        {
+          "completion_tokens": 12,
+          "content": "AR-2025-1847",
+          "decode_tps": 132.0524248126506,
+          "draft_n": 8,
+          "draft_n_accepted": 8,
+          "passed": true,
+          "prompt_tps": 788.4938307658612,
+          "reasoning_len": 0,
+          "score_error": null,
+          "task_id": "needle"
+        }
+      ],
+      "total": 6
+    }
+  ],
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "created_at": "2026-07-17T20:25:49.497844+00:00",
+  "model": "/mnt/raid0/llm/models/Qwen3.5-9B-MTP-GGUF/Qwen3.5-9B-Q4_K_M.gguf",
+  "schema": "qwen35_9b_mtp_mi210_quality_ab.v1"
+}

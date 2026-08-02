@@ -1,0 +1,37 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"status\":\"ok\",\"n\":3}"
+      }
+    }
+  ],
+  "created": 1784276400,
+  "model": "nemotron-diffusion-14b-Q8_0.gguf",
+  "system_fingerprint": "b0-unknown",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 10,
+    "prompt_tokens": 37,
+    "total_tokens": 47,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "id": "chatcmpl-qyKraIkSCuIb9RN9DpKf4iNJeqNRRqMD",
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 37,
+    "prompt_ms": 91.201,
+    "prompt_per_token_ms": 2.4648918918918916,
+    "prompt_per_second": 405.6973059505927,
+    "predicted_n": 10,
+    "predicted_ms": 118.08,
+    "predicted_per_token_ms": 11.808,
+    "predicted_per_second": 84.68834688346882,
+    "kv_bpv": 16.0
+  }
+}

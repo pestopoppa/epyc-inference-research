@@ -1,0 +1,14 @@
+WARNING: running non-GLM smoke while GLM-5.2 HF download is active (ALLOW_GLM_DOWNLOAD=1).
+0.00.018.066 E ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
+warning: no usable GPU found, --gpu-layers option will be ignored
+warning: one possible reason is that llama.cpp was compiled without GPU support
+warning: consult docs/build.md for compilation instructions
+0.00.210.126 E llama_model_load: error loading model: check_tensor_dims: tensor 'blk.0.attn_q.weight' has wrong shape; expected   5120,   5120, got   5120,   4096,      1,      1
+0.00.210.141 E llama_model_load_from_file_impl: failed to load model
+0.00.210.190 E common_fit_params: encountered an error while trying to fit params to free device memory: failed to load model
+0.00.380.197 E llama_model_load: error loading model: check_tensor_dims: tensor 'blk.0.attn_q.weight' has wrong shape; expected   5120,   5120, got   5120,   4096,      1,      1
+0.00.380.207 E llama_model_load_from_file_impl: failed to load model
+0.00.380.215 E cmn  common_init_: failed to load model '/mnt/raid0/llm/models/Nemotron-Labs-Diffusion-14B-Q8_0-GGUF/nemotron-diffusion-14b-Q8_0.gguf'
+0.00.380.225 E srv    load_model: failed to load model, '/mnt/raid0/llm/models/Nemotron-Labs-Diffusion-14B-Q8_0-GGUF/nemotron-diffusion-14b-Q8_0.gguf'
+0.00.382.896 E srv  llama_server: exiting due to model loading error
+llama_server exited with code 1

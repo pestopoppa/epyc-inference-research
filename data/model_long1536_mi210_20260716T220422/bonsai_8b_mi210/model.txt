@@ -1,0 +1,1 @@
+/mnt/raid0/llm/models/Bonsai-8B.gguf

@@ -1,0 +1,1942 @@
+{
+ "qwen25vl_7b": {
+  "label": "Qwen2.5-VL-7B Q4_K_M (INCUMBENT)",
+  "n": 42,
+  "strict": 29,
+  "lenient": 35,
+  "elapsed_s": 21.8,
+  "median_prompt_tokens": 365,
+  "rows": [
+   {
+    "id": "vl_ocr_0001",
+    "dataset": "ocrbench",
+    "expected": "FRIEND",
+    "got": "Friend",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 49
+   },
+   {
+    "id": "vl_ocr_0002",
+    "dataset": "ocrbench",
+    "expected": "CHAIN",
+    "got": "Chain",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 45
+   },
+   {
+    "id": "vl_ocr_0093",
+    "dataset": "ocrbench",
+    "expected": "CORONAD",
+    "got": "CORONADO",
+    "strict": false,
+    "lenient": true,
+    "prompt_tokens": 102
+   },
+   {
+    "id": "vl_ocr_0097",
+    "dataset": "ocrbench",
+    "expected": "SHOP",
+    "got": "SHOP",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 136
+   },
+   {
+    "id": "vl_ocr_0107",
+    "dataset": "ocrbench",
+    "expected": "Jasmine",
+    "got": "Jasmine",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 97
+   },
+   {
+    "id": "vl_ocr_0140",
+    "dataset": "ocrbench",
+    "expected": "NAILS",
+    "got": "NAILS",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 76
+   },
+   {
+    "id": "vl_ocr_0201",
+    "dataset": "ocrbench",
+    "expected": "1056",
+    "got": "1056",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 46
+   },
+   {
+    "id": "vl_ocr_0247",
+    "dataset": "ocrbench",
+    "expected": "76961",
+    "got": "76961",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 46
+   },
+   {
+    "id": "vl_ocr_0248",
+    "dataset": "ocrbench",
+    "expected": "31000",
+    "got": "31000.",
+    "strict": false,
+    "lenient": true,
+    "prompt_tokens": 52
+   },
+   {
+    "id": "vl_ocr_0158",
+    "dataset": "ocrbench",
+    "expected": "medium",
+    "got": "medium",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 53
+   },
+   {
+    "id": "vl_ocr_0164",
+    "dataset": "ocrbench",
+    "expected": "think",
+    "got": "think",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 69
+   },
+   {
+    "id": "vl_ocr_0277",
+    "dataset": "ocrbench",
+    "expected": "tniUs",
+    "got": "tniUs",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 45
+   },
+   {
+    "id": "vl_ocr_0287",
+    "dataset": "ocrbench",
+    "expected": "LEANDLEG",
+    "got": "LEANDLEG",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 61
+   },
+   {
+    "id": "vl_ocr_0323",
+    "dataset": "ocrbench",
+    "expected": "DEAD MAN TALKING",
+    "got": "DEAD MAN TALKING",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 365
+   },
+   {
+    "id": "vl_ocr_0355",
+    "dataset": "ocrbench",
+    "expected": "smart",
+    "got": "SMART",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 928
+   },
+   {
+    "id": "vl_ocr_0722",
+    "dataset": "ocrbench",
+    "expected": "NO. 33, JALAN HARMONIUM TAMAN DESA TEBRAU 81100 JOHOR BAHRU",
+    "got": "NO. 33, JALAN HARMONIUM TAMAN DESA TEBRAU 81100 JOHOR BAHRU",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 4075
+   },
+   {
+    "id": "vl_ocr_0839",
+    "dataset": "ocrbench",
+    "expected": "41.0g",
+    "got": "41.0g",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 187
+   },
+   {
+    "id": "vl_ocr_0913",
+    "dataset": "ocrbench",
+    "expected": "( 3 x + y ) ( 3 x - y ) = 0\n",
+    "got": "$$( 3 x + y ) ( 3 x - y ) = 0$$",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 137
+   },
+   {
+    "id": "vl_ocr_0994",
+    "dataset": "ocrbench",
+    "expected": "\\frac { 1 } { x + y } = \\frac { 1 } { 2 }\n",
+    "got": "$$\\frac { 1 } { x + y } = \\frac { 1 } { 2 }$$",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 57
+   },
+   {
+    "id": "vl_ocr_0531",
+    "dataset": "ocrbench",
+    "expected": "republic of south africa",
+    "got": "Republic of South Africa",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 4069
+   },
+   {
+    "id": "vl_ocr_0562",
+    "dataset": "ocrbench",
+    "expected": "63086",
+    "got": "63,086",
+    "strict": false,
+    "lenient": true,
+    "prompt_tokens": 1491
+   },
+   {
+    "id": "vl_ocr_0570",
+    "dataset": "ocrbench",
+    "expected": "891.59",
+    "got": "891.59 million U.S. dollars",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 631
+   },
+   {
+    "id": "vl_ocr_0632",
+    "dataset": "ocrbench",
+    "expected": "50.6",
+    "got": "48.2",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 238
+   },
+   {
+    "id": "vl_chart_test_1311",
+    "dataset": "chartqa",
+    "expected": "29",
+    "got": "29%",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 626
+   },
+   {
+    "id": "vl_chart_test_1315",
+    "dataset": "chartqa",
+    "expected": "5230",
+    "got": "5,230",
+    "strict": false,
+    "lenient": true,
+    "prompt_tokens": 629
+   },
+   {
+    "id": "vl_chart_test_1441",
+    "dataset": "chartqa",
+    "expected": "Netherlands",
+    "got": "Netherlands",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 1556
+   },
+   {
+    "id": "vl_chart_test_1697",
+    "dataset": "chartqa",
+    "expected": "Germany",
+    "got": "China",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 1496
+   },
+   {
+    "id": "vl_chart_test_1726",
+    "dataset": "chartqa",
+    "expected": "212536",
+    "got": "210,000",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 626
+   },
+   {
+    "id": "vl_chart_test_2114",
+    "dataset": "chartqa",
+    "expected": "517",
+    "got": "500",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 625
+   },
+   {
+    "id": "vl_chart_test_2459",
+    "dataset": "chartqa",
+    "expected": "4412",
+    "got": "4,412",
+    "strict": false,
+    "lenient": true,
+    "prompt_tokens": 1297
+   },
+   {
+    "id": "vl_chart_test_0051",
+    "dataset": "chartqa",
+    "expected": "4",
+    "got": "4",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 252
+   },
+   {
+    "id": "vl_chart_test_0228",
+    "dataset": "chartqa",
+    "expected": "Lithuania",
+    "got": "Lithuania",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 666
+   },
+   {
+    "id": "vl_chart_test_2284",
+    "dataset": "chartqa",
+    "expected": "282",
+    "got": "282",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 630
+   },
+   {
+    "id": "vl_chart_test_2482",
+    "dataset": "chartqa",
+    "expected": "Sofia Vergara",
+    "got": "Sofia Vergara",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 631
+   },
+   {
+    "id": "vl_chart_test_0109",
+    "dataset": "chartqa",
+    "expected": "37",
+    "got": "37",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 205
+   },
+   {
+    "id": "vl_chart_test_0178",
+    "dataset": "chartqa",
+    "expected": "Bad",
+    "got": "Bad",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 148
+   },
+   {
+    "id": "vl_chart_test_0209",
+    "dataset": "chartqa",
+    "expected": "203",
+    "got": "213",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 676
+   },
+   {
+    "id": "vl_chart_test_0285",
+    "dataset": "chartqa",
+    "expected": "0.235",
+    "got": "0.235",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 670
+   },
+   {
+    "id": "vl_chart_test_0457",
+    "dataset": "chartqa",
+    "expected": "2",
+    "got": "3",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 853
+   },
+   {
+    "id": "vl_chart_test_0501",
+    "dataset": "chartqa",
+    "expected": "72",
+    "got": "64",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 223
+   },
+   {
+    "id": "vl_chart_test_0563",
+    "dataset": "chartqa",
+    "expected": "0.11",
+    "got": "0.11 kWh",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 674
+   },
+   {
+    "id": "vl_chart_test_1116",
+    "dataset": "chartqa",
+    "expected": "1065731",
+    "got": "1,065,731",
+    "strict": false,
+    "lenient": true,
+    "prompt_tokens": 616
+   }
+  ]
+ },
+ "qwen3vl_4b": {
+  "label": "Qwen3-VL-4B Q8_0",
+  "n": 42,
+  "strict": 28,
+  "lenient": 28,
+  "elapsed_s": 14.4,
+  "median_prompt_tokens": 270,
+  "rows": [
+   {
+    "id": "vl_ocr_0001",
+    "dataset": "ocrbench",
+    "expected": "FRIEND",
+    "got": "Friend",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 36
+   },
+   {
+    "id": "vl_ocr_0002",
+    "dataset": "ocrbench",
+    "expected": "CHAIN",
+    "got": "Chain",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 34
+   },
+   {
+    "id": "vl_ocr_0093",
+    "dataset": "ocrbench",
+    "expected": "CORONAD",
+    "got": "ORONAD",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 70
+   },
+   {
+    "id": "vl_ocr_0097",
+    "dataset": "ocrbench",
+    "expected": "SHOP",
+    "got": "SHOP",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 106
+   },
+   {
+    "id": "vl_ocr_0107",
+    "dataset": "ocrbench",
+    "expected": "Jasmine",
+    "got": "Jasmine",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 78
+   },
+   {
+    "id": "vl_ocr_0140",
+    "dataset": "ocrbench",
+    "expected": "NAILS",
+    "got": "nails",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 59
+   },
+   {
+    "id": "vl_ocr_0201",
+    "dataset": "ocrbench",
+    "expected": "1056",
+    "got": "1056",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 35
+   },
+   {
+    "id": "vl_ocr_0247",
+    "dataset": "ocrbench",
+    "expected": "76961",
+    "got": "7696",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 35
+   },
+   {
+    "id": "vl_ocr_0248",
+    "dataset": "ocrbench",
+    "expected": "31000",
+    "got": "31000",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 39
+   },
+   {
+    "id": "vl_ocr_0158",
+    "dataset": "ocrbench",
+    "expected": "medium",
+    "got": "medium",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 40
+   },
+   {
+    "id": "vl_ocr_0164",
+    "dataset": "ocrbench",
+    "expected": "think",
+    "got": "think",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 47
+   },
+   {
+    "id": "vl_ocr_0277",
+    "dataset": "ocrbench",
+    "expected": "tniUs",
+    "got": "tniUs",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 34
+   },
+   {
+    "id": "vl_ocr_0287",
+    "dataset": "ocrbench",
+    "expected": "LEANDLEG",
+    "got": "LEANDLEG",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 46
+   },
+   {
+    "id": "vl_ocr_0323",
+    "dataset": "ocrbench",
+    "expected": "DEAD MAN TALKING",
+    "got": "DEAD MAN TALKING",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 270
+   },
+   {
+    "id": "vl_ocr_0355",
+    "dataset": "ocrbench",
+    "expected": "smart",
+    "got": "smart",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 701
+   },
+   {
+    "id": "vl_ocr_0722",
+    "dataset": "ocrbench",
+    "expected": "NO. 33, JALAN HARMONIUM TAMAN DESA TEBRAU 81100 JOHOR BAHRU",
+    "got": "IKEA Tebrau\nNo. 33, Jalan Harmonium\nTaman Desa Tebrau\n81100 Johor Bahru",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 4064
+   },
+   {
+    "id": "vl_ocr_0839",
+    "dataset": "ocrbench",
+    "expected": "41.0g",
+    "got": "41.0g",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 154
+   },
+   {
+    "id": "vl_ocr_0913",
+    "dataset": "ocrbench",
+    "expected": "( 3 x + y ) ( 3 x - y ) = 0\n",
+    "got": "$$(3x+y)(3x-y)=0$$",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 114
+   },
+   {
+    "id": "vl_ocr_0994",
+    "dataset": "ocrbench",
+    "expected": "\\frac { 1 } { x + y } = \\frac { 1 } { 2 }\n",
+    "got": "$$\\frac { 1 } { 2 } x + y = - \\frac { 1 } { 2 }$$",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 46
+   },
+   {
+    "id": "vl_ocr_0531",
+    "dataset": "ocrbench",
+    "expected": "republic of south africa",
+    "got": "South Africa",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 3276
+   },
+   {
+    "id": "vl_ocr_0562",
+    "dataset": "ocrbench",
+    "expected": "63086",
+    "got": "63086",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 1130
+   },
+   {
+    "id": "vl_ocr_0570",
+    "dataset": "ocrbench",
+    "expected": "891.59",
+    "got": "891.59",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 465
+   },
+   {
+    "id": "vl_ocr_0632",
+    "dataset": "ocrbench",
+    "expected": "50.6",
+    "got": "45.5",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 189
+   },
+   {
+    "id": "vl_chart_test_1311",
+    "dataset": "chartqa",
+    "expected": "29",
+    "got": "29",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 460
+   },
+   {
+    "id": "vl_chart_test_1315",
+    "dataset": "chartqa",
+    "expected": "5230",
+    "got": "5230",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 463
+   },
+   {
+    "id": "vl_chart_test_1441",
+    "dataset": "chartqa",
+    "expected": "Netherlands",
+    "got": "Netherlands",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 1187
+   },
+   {
+    "id": "vl_chart_test_1697",
+    "dataset": "chartqa",
+    "expected": "Germany",
+    "got": "United Kingdom",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 1135
+   },
+   {
+    "id": "vl_chart_test_1726",
+    "dataset": "chartqa",
+    "expected": "212536",
+    "got": "212000",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 460
+   },
+   {
+    "id": "vl_chart_test_2114",
+    "dataset": "chartqa",
+    "expected": "517",
+    "got": "550",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 459
+   },
+   {
+    "id": "vl_chart_test_2459",
+    "dataset": "chartqa",
+    "expected": "4412",
+    "got": "4412",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 964
+   },
+   {
+    "id": "vl_chart_test_0051",
+    "dataset": "chartqa",
+    "expected": "4",
+    "got": "3",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 192
+   },
+   {
+    "id": "vl_chart_test_0228",
+    "dataset": "chartqa",
+    "expected": "Lithuania",
+    "got": "Lithuania",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 538
+   },
+   {
+    "id": "vl_chart_test_2284",
+    "dataset": "chartqa",
+    "expected": "282",
+    "got": "282",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 464
+   },
+   {
+    "id": "vl_chart_test_2482",
+    "dataset": "chartqa",
+    "expected": "Sofia Vergara",
+    "got": "Sofia Vergara",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 465
+   },
+   {
+    "id": "vl_chart_test_0109",
+    "dataset": "chartqa",
+    "expected": "37",
+    "got": "32",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 159
+   },
+   {
+    "id": "vl_chart_test_0178",
+    "dataset": "chartqa",
+    "expected": "Bad",
+    "got": "Bad",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 109
+   },
+   {
+    "id": "vl_chart_test_0209",
+    "dataset": "chartqa",
+    "expected": "203",
+    "got": "124",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 548
+   },
+   {
+    "id": "vl_chart_test_0285",
+    "dataset": "chartqa",
+    "expected": "0.235",
+    "got": "0.235",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 542
+   },
+   {
+    "id": "vl_chart_test_0457",
+    "dataset": "chartqa",
+    "expected": "2",
+    "got": "3",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 668
+   },
+   {
+    "id": "vl_chart_test_0501",
+    "dataset": "chartqa",
+    "expected": "72",
+    "got": "64",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 162
+   },
+   {
+    "id": "vl_chart_test_0563",
+    "dataset": "chartqa",
+    "expected": "0.11",
+    "got": "0.11 kWh",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 546
+   },
+   {
+    "id": "vl_chart_test_1116",
+    "dataset": "chartqa",
+    "expected": "1065731",
+    "got": "1065731",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 450
+   }
+  ]
+ },
+ "qwen3vl_8b": {
+  "label": "Qwen3-VL-8B Q8_0",
+  "n": 42,
+  "strict": 31,
+  "lenient": 31,
+  "elapsed_s": 21.8,
+  "median_prompt_tokens": 270,
+  "rows": [
+   {
+    "id": "vl_ocr_0001",
+    "dataset": "ocrbench",
+    "expected": "FRIEND",
+    "got": "Friend",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 36
+   },
+   {
+    "id": "vl_ocr_0002",
+    "dataset": "ocrbench",
+    "expected": "CHAIN",
+    "got": "Chain",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 34
+   },
+   {
+    "id": "vl_ocr_0093",
+    "dataset": "ocrbench",
+    "expected": "CORONAD",
+    "got": "CORONAD",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 70
+   },
+   {
+    "id": "vl_ocr_0097",
+    "dataset": "ocrbench",
+    "expected": "SHOP",
+    "got": "shop",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 106
+   },
+   {
+    "id": "vl_ocr_0107",
+    "dataset": "ocrbench",
+    "expected": "Jasmine",
+    "got": "jasmine",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 78
+   },
+   {
+    "id": "vl_ocr_0140",
+    "dataset": "ocrbench",
+    "expected": "NAILS",
+    "got": "nails",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 59
+   },
+   {
+    "id": "vl_ocr_0201",
+    "dataset": "ocrbench",
+    "expected": "1056",
+    "got": "1056",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 35
+   },
+   {
+    "id": "vl_ocr_0247",
+    "dataset": "ocrbench",
+    "expected": "76961",
+    "got": "7696",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 35
+   },
+   {
+    "id": "vl_ocr_0248",
+    "dataset": "ocrbench",
+    "expected": "31000",
+    "got": "31000",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 39
+   },
+   {
+    "id": "vl_ocr_0158",
+    "dataset": "ocrbench",
+    "expected": "medium",
+    "got": "medium",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 40
+   },
+   {
+    "id": "vl_ocr_0164",
+    "dataset": "ocrbench",
+    "expected": "think",
+    "got": "think",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 47
+   },
+   {
+    "id": "vl_ocr_0277",
+    "dataset": "ocrbench",
+    "expected": "tniUs",
+    "got": "tniUs",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 34
+   },
+   {
+    "id": "vl_ocr_0287",
+    "dataset": "ocrbench",
+    "expected": "LEANDLEG",
+    "got": "LEANDLEG",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 46
+   },
+   {
+    "id": "vl_ocr_0323",
+    "dataset": "ocrbench",
+    "expected": "DEAD MAN TALKING",
+    "got": "DEAD MAN TALKING",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 270
+   },
+   {
+    "id": "vl_ocr_0355",
+    "dataset": "ocrbench",
+    "expected": "smart",
+    "got": "smart",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 701
+   },
+   {
+    "id": "vl_ocr_0722",
+    "dataset": "ocrbench",
+    "expected": "NO. 33, JALAN HARMONIUM TAMAN DESA TEBRAU 81100 JOHOR BAHRU",
+    "got": "IKEA Tebrau\nNo. 33, Jalan Harmonium\nTaman Desa Tebrau\n81100 Johor Bahru",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 4064
+   },
+   {
+    "id": "vl_ocr_0839",
+    "dataset": "ocrbench",
+    "expected": "41.0g",
+    "got": "41.0g",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 154
+   },
+   {
+    "id": "vl_ocr_0913",
+    "dataset": "ocrbench",
+    "expected": "( 3 x + y ) ( 3 x - y ) = 0\n",
+    "got": "(3x+y)(3x-y)=0",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 114
+   },
+   {
+    "id": "vl_ocr_0994",
+    "dataset": "ocrbench",
+    "expected": "\\frac { 1 } { x + y } = \\frac { 1 } { 2 }\n",
+    "got": "$$\\frac{1}{x + y} = \\frac{1}{2}$$",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 46
+   },
+   {
+    "id": "vl_ocr_0531",
+    "dataset": "ocrbench",
+    "expected": "republic of south africa",
+    "got": "South Africa",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 3276
+   },
+   {
+    "id": "vl_ocr_0562",
+    "dataset": "ocrbench",
+    "expected": "63086",
+    "got": "63086",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 1130
+   },
+   {
+    "id": "vl_ocr_0570",
+    "dataset": "ocrbench",
+    "expected": "891.59",
+    "got": "891.59",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 465
+   },
+   {
+    "id": "vl_ocr_0632",
+    "dataset": "ocrbench",
+    "expected": "50.6",
+    "got": "42.6",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 189
+   },
+   {
+    "id": "vl_chart_test_1311",
+    "dataset": "chartqa",
+    "expected": "29",
+    "got": "29",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 460
+   },
+   {
+    "id": "vl_chart_test_1315",
+    "dataset": "chartqa",
+    "expected": "5230",
+    "got": "5230",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 463
+   },
+   {
+    "id": "vl_chart_test_1441",
+    "dataset": "chartqa",
+    "expected": "Netherlands",
+    "got": "Netherlands",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 1187
+   },
+   {
+    "id": "vl_chart_test_1697",
+    "dataset": "chartqa",
+    "expected": "Germany",
+    "got": "Kingdom of Serbs, Croats and Slovenes (Yugoslavia)",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 1135
+   },
+   {
+    "id": "vl_chart_test_1726",
+    "dataset": "chartqa",
+    "expected": "212536",
+    "got": "213000",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 460
+   },
+   {
+    "id": "vl_chart_test_2114",
+    "dataset": "chartqa",
+    "expected": "517",
+    "got": "500",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 459
+   },
+   {
+    "id": "vl_chart_test_2459",
+    "dataset": "chartqa",
+    "expected": "4412",
+    "got": "4412",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 964
+   },
+   {
+    "id": "vl_chart_test_0051",
+    "dataset": "chartqa",
+    "expected": "4",
+    "got": "4",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 192
+   },
+   {
+    "id": "vl_chart_test_0228",
+    "dataset": "chartqa",
+    "expected": "Lithuania",
+    "got": "Lithuania",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 538
+   },
+   {
+    "id": "vl_chart_test_2284",
+    "dataset": "chartqa",
+    "expected": "282",
+    "got": "282",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 464
+   },
+   {
+    "id": "vl_chart_test_2482",
+    "dataset": "chartqa",
+    "expected": "Sofia Vergara",
+    "got": "Sofia Vergara",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 465
+   },
+   {
+    "id": "vl_chart_test_0109",
+    "dataset": "chartqa",
+    "expected": "37",
+    "got": "32",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 159
+   },
+   {
+    "id": "vl_chart_test_0178",
+    "dataset": "chartqa",
+    "expected": "Bad",
+    "got": "Bad",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 109
+   },
+   {
+    "id": "vl_chart_test_0209",
+    "dataset": "chartqa",
+    "expected": "203",
+    "got": "125",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 548
+   },
+   {
+    "id": "vl_chart_test_0285",
+    "dataset": "chartqa",
+    "expected": "0.235",
+    "got": "0.235",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 542
+   },
+   {
+    "id": "vl_chart_test_0457",
+    "dataset": "chartqa",
+    "expected": "2",
+    "got": "2",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 668
+   },
+   {
+    "id": "vl_chart_test_0501",
+    "dataset": "chartqa",
+    "expected": "72",
+    "got": "64",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 162
+   },
+   {
+    "id": "vl_chart_test_0563",
+    "dataset": "chartqa",
+    "expected": "0.11",
+    "got": "0.11",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 546
+   },
+   {
+    "id": "vl_chart_test_1116",
+    "dataset": "chartqa",
+    "expected": "1065731",
+    "got": "1065731",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 450
+   }
+  ]
+ },
+ "qwen3vl_30b": {
+  "label": "Qwen3-VL-30B-A3B Q4_K_M",
+  "n": 42,
+  "strict": 35,
+  "lenient": 36,
+  "elapsed_s": 23.0,
+  "median_prompt_tokens": 270,
+  "rows": [
+   {
+    "id": "vl_ocr_0001",
+    "dataset": "ocrbench",
+    "expected": "FRIEND",
+    "got": "friend",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 36
+   },
+   {
+    "id": "vl_ocr_0002",
+    "dataset": "ocrbench",
+    "expected": "CHAIN",
+    "got": "chain",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 34
+   },
+   {
+    "id": "vl_ocr_0093",
+    "dataset": "ocrbench",
+    "expected": "CORONAD",
+    "got": "CORONADO",
+    "strict": false,
+    "lenient": true,
+    "prompt_tokens": 70
+   },
+   {
+    "id": "vl_ocr_0097",
+    "dataset": "ocrbench",
+    "expected": "SHOP",
+    "got": "shop",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 106
+   },
+   {
+    "id": "vl_ocr_0107",
+    "dataset": "ocrbench",
+    "expected": "Jasmine",
+    "got": "jasmine",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 78
+   },
+   {
+    "id": "vl_ocr_0140",
+    "dataset": "ocrbench",
+    "expected": "NAILS",
+    "got": "nails",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 59
+   },
+   {
+    "id": "vl_ocr_0201",
+    "dataset": "ocrbench",
+    "expected": "1056",
+    "got": "1056",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 35
+   },
+   {
+    "id": "vl_ocr_0247",
+    "dataset": "ocrbench",
+    "expected": "76961",
+    "got": "7696",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 35
+   },
+   {
+    "id": "vl_ocr_0248",
+    "dataset": "ocrbench",
+    "expected": "31000",
+    "got": "31000",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 39
+   },
+   {
+    "id": "vl_ocr_0158",
+    "dataset": "ocrbench",
+    "expected": "medium",
+    "got": "medium",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 40
+   },
+   {
+    "id": "vl_ocr_0164",
+    "dataset": "ocrbench",
+    "expected": "think",
+    "got": "think",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 47
+   },
+   {
+    "id": "vl_ocr_0277",
+    "dataset": "ocrbench",
+    "expected": "tniUs",
+    "got": "tniUs",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 34
+   },
+   {
+    "id": "vl_ocr_0287",
+    "dataset": "ocrbench",
+    "expected": "LEANDLEG",
+    "got": "leandleg",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 46
+   },
+   {
+    "id": "vl_ocr_0323",
+    "dataset": "ocrbench",
+    "expected": "DEAD MAN TALKING",
+    "got": "DEAD MAN TALKING",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 270
+   },
+   {
+    "id": "vl_ocr_0355",
+    "dataset": "ocrbench",
+    "expected": "smart",
+    "got": "smart",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 701
+   },
+   {
+    "id": "vl_ocr_0722",
+    "dataset": "ocrbench",
+    "expected": "NO. 33, JALAN HARMONIUM TAMAN DESA TEBRAU 81100 JOHOR BAHRU",
+    "got": "NO. 33, JALAN HARMONIUM TAMAN DESA TEBRAU 81100 JOHOR BAHRU",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 4064
+   },
+   {
+    "id": "vl_ocr_0839",
+    "dataset": "ocrbench",
+    "expected": "41.0g",
+    "got": "41.0g",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 154
+   },
+   {
+    "id": "vl_ocr_0913",
+    "dataset": "ocrbench",
+    "expected": "( 3 x + y ) ( 3 x - y ) = 0\n",
+    "got": "$$( 3 x + y ) ( 3 x - y ) = 0$$",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 114
+   },
+   {
+    "id": "vl_ocr_0994",
+    "dataset": "ocrbench",
+    "expected": "\\frac { 1 } { x + y } = \\frac { 1 } { 2 }\n",
+    "got": "$$\\frac { 1 } { x + y } = \\frac { 1 } { 2 }$$",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 46
+   },
+   {
+    "id": "vl_ocr_0531",
+    "dataset": "ocrbench",
+    "expected": "republic of south africa",
+    "got": "South Africa",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 3276
+   },
+   {
+    "id": "vl_ocr_0562",
+    "dataset": "ocrbench",
+    "expected": "63086",
+    "got": "63086",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 1130
+   },
+   {
+    "id": "vl_ocr_0570",
+    "dataset": "ocrbench",
+    "expected": "891.59",
+    "got": "891.59",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 465
+   },
+   {
+    "id": "vl_ocr_0632",
+    "dataset": "ocrbench",
+    "expected": "50.6",
+    "got": "50.8",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 189
+   },
+   {
+    "id": "vl_chart_test_1311",
+    "dataset": "chartqa",
+    "expected": "29",
+    "got": "29",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 460
+   },
+   {
+    "id": "vl_chart_test_1315",
+    "dataset": "chartqa",
+    "expected": "5230",
+    "got": "5230",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 463
+   },
+   {
+    "id": "vl_chart_test_1441",
+    "dataset": "chartqa",
+    "expected": "Netherlands",
+    "got": "Netherlands",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 1187
+   },
+   {
+    "id": "vl_chart_test_1697",
+    "dataset": "chartqa",
+    "expected": "Germany",
+    "got": "United States",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 1135
+   },
+   {
+    "id": "vl_chart_test_1726",
+    "dataset": "chartqa",
+    "expected": "212536",
+    "got": "212800",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 460
+   },
+   {
+    "id": "vl_chart_test_2114",
+    "dataset": "chartqa",
+    "expected": "517",
+    "got": "517",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 459
+   },
+   {
+    "id": "vl_chart_test_2459",
+    "dataset": "chartqa",
+    "expected": "4412",
+    "got": "4412",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 964
+   },
+   {
+    "id": "vl_chart_test_0051",
+    "dataset": "chartqa",
+    "expected": "4",
+    "got": "4",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 192
+   },
+   {
+    "id": "vl_chart_test_0228",
+    "dataset": "chartqa",
+    "expected": "Lithuania",
+    "got": "Lithuania",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 538
+   },
+   {
+    "id": "vl_chart_test_2284",
+    "dataset": "chartqa",
+    "expected": "282",
+    "got": "282",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 464
+   },
+   {
+    "id": "vl_chart_test_2482",
+    "dataset": "chartqa",
+    "expected": "Sofia Vergara",
+    "got": "Sofia Vergara",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 465
+   },
+   {
+    "id": "vl_chart_test_0109",
+    "dataset": "chartqa",
+    "expected": "37",
+    "got": "37",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 159
+   },
+   {
+    "id": "vl_chart_test_0178",
+    "dataset": "chartqa",
+    "expected": "Bad",
+    "got": "Bad",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 109
+   },
+   {
+    "id": "vl_chart_test_0209",
+    "dataset": "chartqa",
+    "expected": "203",
+    "got": "203",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 548
+   },
+   {
+    "id": "vl_chart_test_0285",
+    "dataset": "chartqa",
+    "expected": "0.235",
+    "got": "0.235",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 542
+   },
+   {
+    "id": "vl_chart_test_0457",
+    "dataset": "chartqa",
+    "expected": "2",
+    "got": "2",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 668
+   },
+   {
+    "id": "vl_chart_test_0501",
+    "dataset": "chartqa",
+    "expected": "72",
+    "got": "64",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 162
+   },
+   {
+    "id": "vl_chart_test_0563",
+    "dataset": "chartqa",
+    "expected": "0.11",
+    "got": "0.11",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 546
+   },
+   {
+    "id": "vl_chart_test_1116",
+    "dataset": "chartqa",
+    "expected": "1065731",
+    "got": "1065731",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 450
+   }
+  ]
+ },
+ "minicpm_o": {
+  "label": "MiniCPM-o-4.5 Q8_0",
+  "n": 42,
+  "strict": 31,
+  "lenient": 31,
+  "elapsed_s": 16.4,
+  "median_prompt_tokens": 230,
+  "rows": [
+   {
+    "id": "vl_ocr_0001",
+    "dataset": "ocrbench",
+    "expected": "FRIEND",
+    "got": "Friend",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 94
+   },
+   {
+    "id": "vl_ocr_0002",
+    "dataset": "ocrbench",
+    "expected": "CHAIN",
+    "got": "Chain",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 94
+   },
+   {
+    "id": "vl_ocr_0093",
+    "dataset": "ocrbench",
+    "expected": "CORONAD",
+    "got": "CORONAD",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 94
+   },
+   {
+    "id": "vl_ocr_0097",
+    "dataset": "ocrbench",
+    "expected": "SHOP",
+    "got": "SHOP",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 94
+   },
+   {
+    "id": "vl_ocr_0107",
+    "dataset": "ocrbench",
+    "expected": "Jasmine",
+    "got": "Jasmine",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 94
+   },
+   {
+    "id": "vl_ocr_0140",
+    "dataset": "ocrbench",
+    "expected": "NAILS",
+    "got": "NAILS",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 94
+   },
+   {
+    "id": "vl_ocr_0201",
+    "dataset": "ocrbench",
+    "expected": "1056",
+    "got": "1056",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 95
+   },
+   {
+    "id": "vl_ocr_0247",
+    "dataset": "ocrbench",
+    "expected": "76961",
+    "got": "7696",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 95
+   },
+   {
+    "id": "vl_ocr_0248",
+    "dataset": "ocrbench",
+    "expected": "31000",
+    "got": "31000",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 95
+   },
+   {
+    "id": "vl_ocr_0158",
+    "dataset": "ocrbench",
+    "expected": "medium",
+    "got": "medium",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 94
+   },
+   {
+    "id": "vl_ocr_0164",
+    "dataset": "ocrbench",
+    "expected": "think",
+    "got": "think",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 94
+   },
+   {
+    "id": "vl_ocr_0277",
+    "dataset": "ocrbench",
+    "expected": "tniUs",
+    "got": "tniUs",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 94
+   },
+   {
+    "id": "vl_ocr_0287",
+    "dataset": "ocrbench",
+    "expected": "LEANDLEG",
+    "got": "LEANDLEG",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 94
+   },
+   {
+    "id": "vl_ocr_0323",
+    "dataset": "ocrbench",
+    "expected": "DEAD MAN TALKING",
+    "got": "Dead Man Talking",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 231
+   },
+   {
+    "id": "vl_ocr_0355",
+    "dataset": "ocrbench",
+    "expected": "smart",
+    "got": "SMART",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 362
+   },
+   {
+    "id": "vl_ocr_0722",
+    "dataset": "ocrbench",
+    "expected": "NO. 33, JALAN HARMONIUM TAMAN DESA TEBRAU 81100 JOHOR BAHRU",
+    "got": "IKFA Tebrau",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 635
+   },
+   {
+    "id": "vl_ocr_0839",
+    "dataset": "ocrbench",
+    "expected": "41.0g",
+    "got": "41.0g",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 114
+   },
+   {
+    "id": "vl_ocr_0913",
+    "dataset": "ocrbench",
+    "expected": "( 3 x + y ) ( 3 x - y ) = 0\n",
+    "got": "$$( 3 x + y ) ( 3 x - y ) = 0$$",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 234
+   },
+   {
+    "id": "vl_ocr_0994",
+    "dataset": "ocrbench",
+    "expected": "\\frac { 1 } { x + y } = \\frac { 1 } { 2 }\n",
+    "got": "$$\\frac { 1 } { x + y } = \\frac { 1 } { 2 }$$",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 102
+   },
+   {
+    "id": "vl_ocr_0531",
+    "dataset": "ocrbench",
+    "expected": "republic of south africa",
+    "got": "South Africa",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 690
+   },
+   {
+    "id": "vl_ocr_0562",
+    "dataset": "ocrbench",
+    "expected": "63086",
+    "got": "63086",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 496
+   },
+   {
+    "id": "vl_ocr_0570",
+    "dataset": "ocrbench",
+    "expected": "891.59",
+    "got": "891.59",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 240
+   },
+   {
+    "id": "vl_ocr_0632",
+    "dataset": "ocrbench",
+    "expected": "50.6",
+    "got": "45.2",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 230
+   },
+   {
+    "id": "vl_chart_test_1311",
+    "dataset": "chartqa",
+    "expected": "29",
+    "got": "29",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 235
+   },
+   {
+    "id": "vl_chart_test_1315",
+    "dataset": "chartqa",
+    "expected": "5230",
+    "got": "5230",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 238
+   },
+   {
+    "id": "vl_chart_test_1441",
+    "dataset": "chartqa",
+    "expected": "Netherlands",
+    "got": "Netherlands",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 503
+   },
+   {
+    "id": "vl_chart_test_1697",
+    "dataset": "chartqa",
+    "expected": "Germany",
+    "got": "United States",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 501
+   },
+   {
+    "id": "vl_chart_test_1726",
+    "dataset": "chartqa",
+    "expected": "212536",
+    "got": "210000",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 235
+   },
+   {
+    "id": "vl_chart_test_2114",
+    "dataset": "chartqa",
+    "expected": "517",
+    "got": "490",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 234
+   },
+   {
+    "id": "vl_chart_test_2459",
+    "dataset": "chartqa",
+    "expected": "4412",
+    "got": "4412",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 505
+   },
+   {
+    "id": "vl_chart_test_0051",
+    "dataset": "chartqa",
+    "expected": "4",
+    "got": "5",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 233
+   },
+   {
+    "id": "vl_chart_test_0228",
+    "dataset": "chartqa",
+    "expected": "Lithuania",
+    "got": "Lithuania",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 225
+   },
+   {
+    "id": "vl_chart_test_2284",
+    "dataset": "chartqa",
+    "expected": "282",
+    "got": "282",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 239
+   },
+   {
+    "id": "vl_chart_test_2482",
+    "dataset": "chartqa",
+    "expected": "Sofia Vergara",
+    "got": "Sofia Vergara",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 240
+   },
+   {
+    "id": "vl_chart_test_0109",
+    "dataset": "chartqa",
+    "expected": "37",
+    "got": "37",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 97
+   },
+   {
+    "id": "vl_chart_test_0178",
+    "dataset": "chartqa",
+    "expected": "Bad",
+    "got": "Bad",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 93
+   },
+   {
+    "id": "vl_chart_test_0209",
+    "dataset": "chartqa",
+    "expected": "203",
+    "got": "210",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 235
+   },
+   {
+    "id": "vl_chart_test_0285",
+    "dataset": "chartqa",
+    "expected": "0.235",
+    "got": "0.235",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 229
+   },
+   {
+    "id": "vl_chart_test_0457",
+    "dataset": "chartqa",
+    "expected": "2",
+    "got": "10",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 361
+   },
+   {
+    "id": "vl_chart_test_0501",
+    "dataset": "chartqa",
+    "expected": "72",
+    "got": "64",
+    "strict": false,
+    "lenient": false,
+    "prompt_tokens": 100
+   },
+   {
+    "id": "vl_chart_test_0563",
+    "dataset": "chartqa",
+    "expected": "0.11",
+    "got": "0.11",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 233
+   },
+   {
+    "id": "vl_chart_test_1116",
+    "dataset": "chartqa",
+    "expected": "1065731",
+    "got": "1065731",
+    "strict": true,
+    "lenient": true,
+    "prompt_tokens": 225
+   }
+  ]
+ }
+}

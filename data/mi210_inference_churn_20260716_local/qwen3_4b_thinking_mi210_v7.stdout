@@ -1,0 +1,40 @@
+
+
+Loading model... 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10077-da1bf5e2f
+model      : /mnt/raid0/llm/models/Qwen3-4B-Thinking-2507-GGUF/Qwen3-4B-Thinking-2507-Q8_0.gguf
+ftype      : Q8_0
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> Answer in one sentence: what is a proof assistant?
+
+[Start thinking]
+
+Hmm, the user is asking for a one-sentence definition of a proof assistant. They seem to want something concise and precise - probably a student or researcher who needs quick clarification without extra fluff. 
+
+I recall proof assistants are formal tools for verifying mathematical proofs. The key points to hit are: they're software, they check proofs for correctness, and they work with formal logic. Should avoid jargon like "type theory" since they want simplicity. 
+
+Wait - must emphasize
+
+[ Prompt: 974.8 t/s | Generation: 141.0 t/s ]
+
+
+Exiting...

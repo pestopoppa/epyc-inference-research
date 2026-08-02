@@ -1,0 +1,2 @@
+case	status	exit_code	stdout	stderr	timeout_s	log_cap_bytes
+bonsai_q1_cpu	pass	0	/mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/bonsai_q1_cpu/bonsai_q1_cpu.stdout	/mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/bonsai_q1_cpu/bonsai_q1_cpu.stderr	180	1048576

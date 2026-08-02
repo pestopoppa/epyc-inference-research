@@ -1,0 +1,3 @@
+case	status	exit_code	stdout	stderr	timeout_s	log_cap_bytes
+bonsai_q1_mi210_v7	pass	0	/mnt/raid0/llm/tmp/bonsai-dspark-mi210-churn-20260716/bonsai_q1_mi210_v7.stdout	/mnt/raid0/llm/tmp/bonsai-dspark-mi210-churn-20260716/bonsai_q1_mi210_v7.stderr	180	1048576
+bonsai_dspark_mi210_v7	fail	1	/mnt/raid0/llm/tmp/bonsai-dspark-mi210-churn-20260716/bonsai_dspark_mi210_v7.stdout	/mnt/raid0/llm/tmp/bonsai-dspark-mi210-churn-20260716/bonsai_dspark_mi210_v7.stderr	180	1048576

@@ -1,0 +1,8 @@
+finish_reason=length
+prompt_tokens=86
+completion_tokens=1536
+total_tokens=1622
+prompt_tps=415.0579150579151
+generation_tps=82.78324602916632
+content_chars=8373
+content_preview=<think>\nOkay, the user wants a detailed technical note on interpreting local LLM throughput measurements. Let me start by breaking down the key points they mentioned: prompt throug

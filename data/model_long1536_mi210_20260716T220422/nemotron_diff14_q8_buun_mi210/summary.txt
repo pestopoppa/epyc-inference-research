@@ -1,0 +1,8 @@
+finish_reason=stop
+prompt_tokens=91
+completion_tokens=1195
+total_tokens=1286
+prompt_tps=697.4355830101626
+generation_tps=29.04229707995135
+content_chars=6632
+content_preview=When evaluating the performance of a large language model (LLM), it is essential to understand the different metrics that capture how quickly the model can process inputs and produ

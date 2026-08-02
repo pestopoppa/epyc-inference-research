@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+        "content": "Part I Multiple Choice\nRead each question. Then fill in the correct answer on the answer sheet provided by your teacher or on a sheet of paper.\n1. Sancho picked up a handful of coins from a jar without looking. He got 7 pennies, 5 nickels, 3 dimes, and 2 quarters. What fraction of the coins that he picked were nickels?\n2. Paige cut a cake into 20 pieces. If 14 pieces have been eaten, what fraction of the cake remains?\n3. Natalie has washed the dishes 8 out of the last 12 nights. Which fraction shows the portion of time spent washing dishes?\n4. The table shows the number of bills of $5, which is the number of $10 or $20 bills per day. The total number of $10 and $20 is the total number of $10.\n5. Which is the total number of the } 32?\n6. The total number of } 4 is the total number of } 5. Which is the total number of } 6. The total number of } 7 is the total number of } 8. The total number of } 9 is the total number of } 10. The total number of } 11 is the total number of } 12. The total number of } 13 is the total number of } 14. The total number of } 15 is the total number of } 16. The total number of } 17 is the total number of } 18. The total number of } 19 is the total number of } 20. The total number of } 21 is the total number of } 22. The total number of } 23 is the total number of } 24. The total number of } 25 is the total number of } 26. The total number of } 27 is the total number of } 28. The total number of } 29 is the total number of } 30. The total number of } 31 is the total number of } 32. The total number of } 33 is the total number of } 34. The total number of } 35 is the total number of } 36. The total number of } 37 is the total number of } 38. The total number of } 39 is the total number of } 40. The total number of } 41. The total number of } 42 is the total number of } 43. The total number of } 44 is the total number of } 45. The total number of } 46 is the total number of } 47. The total number of } 48 is the total number of } 49. The total number of } 50 is the total number of } 51. The total number of } 53 is the total number of } 54. The total number of } 55 is the total number of } 56. The total number of } 57 is the total number of } 58. The total number of } 59 is the total number of } 60. The total number of } 61 is the total number of } 62. The total number of } 63 is the total number of } 64. The total number of } 66 is the total number of } 67. The total number of } 69 is the total number of } 70. The total number of } 72 is the total number of } 74. The total number of } 75 is the total number of } 77. The total number of } 79 is the total number of } 81. The total number of } 83 is the total number of } 85. The total number of } 87 is the total number of } 89. The total number of } 91 is the total number of } 93. The total number of } 95 is the total number of } 97. The total number of } 99 is the total number of } 101. The total number of } 103 is the total number of } 105. The total number of } 107 is the total number of } 109. The total number of } 111 is the total number of } 113. The total number of } 115 is the total number of } 117. The total number of } 119 is the total number of } 121. The total number of } 123 is the total number of } 125. The total number of } 127 is the total number of } 129. The total number of } 131 is the total number of } 133. The total number of } 135 is the total number of } 137. The total number of } 139 is the total number of } 141. The total number of } 143 is the total number of } 145. The total number of } 147 is the total number of } 149. The total number of } 151 is the total number of } 153. The total number of } 155 is the total number of } 157. The total number of } 159 is the total number of } 161. The total number of } 163 is the total number of } 165. The total number of } 169 is the total number of } 173. The total number of } 175 is the total number of } 179. The total number of } 181 is the total number of } 183. The total number of } 185 is the total number of } 189. The total number of } 191 is the total number of } 193. The total number of } 195 is the total number of } 199. The total number of } 201 is the total number of } 203. The total number of } 205 is the total number of } 209. The total number of } 213 is the total number of } 215. The total number of } 219 is the total number of } 221. The total number of } 223 is the total number of } 225. The total number of } 229 is the total number of } 233. The total number of } 235 is the total number of } 239. The total number of } 241 is the total number of } 243. The total number of } 245 is the total number of } 249. The total number of } 251 is the total number of } 253. The total number of } 255 is the total number of } 259. The total number of } 261 is the total number of } 263. The total number of } 265 is the total number of } 269. The total number of } 271 is the total number of } 273. The total number of } 275 is the total number of } 279. The total number of } 281 is the total number of } 283. The total number of } 285 is the total number of } 289. The total number of } 291 is the total number of } 293. The total number of } 295 is the total number of } 299. The total number of } 301 is the total number of } 303. The total number of } 305 is the total number of } 309. The total number of } 311 is the total number of } 313. The total number of } 315 is the total number of } 319. The total number of } 321 is the total number of } 323. The total number of } 325 is the total number of } 329. The total number of } 331 is the total number of } 333. The total number of } 335 is the total number of } 339. The total number of } 341 is the total number of } 343. The total number of } 345 is the total number of } 349. The total number of } 351 is the total number of } 353. The total number of } 355 is the total number of } 359. The total number of } 361 is the total number of } 363. The total number of } 365 is the total number of } 369. The total number of } 371 is the total number of } 373.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784319092,
+  "id": "chatcmpl-Gmo85RXyAk3Qau3ddUjCric8jmuLWSd3",
+  "model": "/mnt/raid0/llm/models/PaddleOCR-VL-1.6-GGUF/PaddleOCR-VL-1.6-GGUF.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 4282.923,
+    "predicted_n": 2048,
+    "predicted_per_second": 478.17810406584476,
+    "predicted_per_token_ms": 2.09127099609375,
+    "prompt_ms": 409.877,
+    "prompt_n": 1332,
+    "prompt_per_second": 3249.7554144292067,
+    "prompt_per_token_ms": 0.30771546546546547
+  },
+  "usage": {
+    "completion_tokens": 2048,
+    "prompt_tokens": 1332,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 3380
+  }
+}

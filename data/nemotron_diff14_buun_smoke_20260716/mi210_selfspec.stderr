@@ -1,0 +1,9 @@
+0.02.339.093 W llama_context: n_ctx_seq (512) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+0.02.371.326 I diffusion: self-spec mode, draft_length = 4, max_new_tokens = 16
+0.02.371.329 I 
+TCQ1 decode: K/V codebooks (K=baked-in V=baked-in) hotswap=0
+TCQ decode: context-adaptive V alpha enabled
+0.02.533.578 I self_spec: 1 cycles, avg 5.0 tokens/cycle, 100.0% draft accept rate
+0.02.533.592 I ok0.02.533.593 I 
+
+[1 tokens in 162.3ms, 6.2 t/s]

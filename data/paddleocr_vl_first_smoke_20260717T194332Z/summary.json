@@ -1,0 +1,206 @@
+{
+  "cleanup": {
+    "dead": true,
+    "killed": false,
+    "pid": 2274880,
+    "ps_after": {
+      "argv": [
+        "ps",
+        "-p",
+        "2274880",
+        "-o",
+        "pid=,comm=,args="
+      ],
+      "ok": false,
+      "returncode": 1,
+      "stderr": "",
+      "stdout": ""
+    },
+    "returncode": 0,
+    "terminated": true
+  },
+  "memory_after_health": {
+    "phase": "after_health",
+    "process": {
+      "captured_at": "2026-07-17T19:43:34.026201+00:00",
+      "pid": 2274880,
+      "ps": {
+        "argv": [
+          "ps",
+          "-p",
+          "2274880",
+          "-o",
+          "pid=,comm=,rss=,vsz=,psr=,args="
+        ],
+        "ok": true,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "2274880 llama-server    834932 13060120 28 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/PaddleOCR-VL-1.6-GGUF/PaddleOCR-VL-1.6-GGUF.gguf --mmproj /mnt/raid0/llm/models/PaddleOCR-VL-1.6-GGUF/PaddleOCR-VL-1.6-GGUF-mmproj.gguf --host 127.0.0.1 --port 19330 -np 1 -c 8192 -t 24 --flash-attn on --device ROCm0 -ngl 99 --reasoning off\n"
+      },
+      "smaps_rollup": {
+        "error": null,
+        "fields": {
+          "AnonHugePages_kib": 40960,
+          "Anonymous_kib": 445184,
+          "Private_Clean_kib": 511988,
+          "Private_Dirty_kib": 318240,
+          "Pss_Dirty_kib": 318240,
+          "Pss_kib": 831158,
+          "Rss_kib": 834932,
+          "Shared_Clean_kib": 4704,
+          "Shared_Dirty_kib": 0,
+          "Swap_kib": 0
+        },
+        "ok": true
+      },
+      "status": {
+        "error": null,
+        "fields": {
+          "Cpus_allowed_list": "0-191",
+          "Mems_allowed_list": "0-3",
+          "Name": "llama-server",
+          "RssAnon": "445184 kB",
+          "RssFile": "389748 kB",
+          "RssShmem": "0 kB",
+          "State": "S (sleeping)",
+          "Threads": "196",
+          "VmHWM": "1288148 kB",
+          "VmPeak": "13125656 kB",
+          "VmRSS": "834932 kB",
+          "VmSize": "13060120 kB",
+          "VmSwap": "0 kB"
+        },
+        "ok": true
+      }
+    },
+    "rocm": {
+      "argv": [
+        "rocm-smi",
+        "--showpidgpus",
+        "--showmemuse",
+        "--showuse"
+      ],
+      "ok": true,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3610127868\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 3\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2285000426\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 2274880 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    }
+  },
+  "mmproj": "/mnt/raid0/llm/models/PaddleOCR-VL-1.6-GGUF/PaddleOCR-VL-1.6-GGUF-mmproj.gguf",
+  "model": "/mnt/raid0/llm/models/PaddleOCR-VL-1.6-GGUF/PaddleOCR-VL-1.6-GGUF.gguf",
+  "output_dir": "/mnt/raid0/llm/tmp/paddleocr-vl-first-smoke-20260717T194332Z",
+  "post_rocm_smi": {
+    "argv": [
+      "rocm-smi",
+      "--showuse",
+      "--showmemuse",
+      "--showpidgpus"
+    ],
+    "ok": true,
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3610215371\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 0\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2285014886\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+  },
+  "results": [
+    {
+      "completion_tokens": 5,
+      "content_preview": "7500",
+      "decode_tps": 484.35532306500045,
+      "elapsed_s": 0.11260031792335212,
+      "fixture_id": "ocr_digit_7500",
+      "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0237.png",
+      "prompt": "What number is shown in the image? Answer with digits only.",
+      "prompt_tokens": 174,
+      "prompt_tps": 1822.142168977506,
+      "role": "document_extraction_candidate",
+      "scenario": "document_candidate_mi210_paddleocr_vl16",
+      "score": {
+        "expected_terms": [
+          "7500"
+        ],
+        "method": "all_substrings",
+        "missing_terms": [],
+        "normalized_content": "7500",
+        "normalized_expected_terms": [
+          "7500"
+        ],
+        "pass": true
+      },
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 174,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 179
+      }
+    },
+    {
+      "completion_tokens": 96,
+      "content_preview": "SYARIKAT PERNIAGAAN GIN KEE\n(81109-A)\nNO 290, JALAN AIR PANAS,\nSETAPAK,\n53200, KUALA LUMPUR.\n",
+      "decode_tps": 477.06367309211805,
+      "elapsed_s": 0.6693388291168958,
+      "fixture_id": "receipt_doc_number",
+      "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0734.png",
+      "prompt": "What is the Doc No. on the receipt? Answer with the document number only.",
+      "prompt_tokens": 1276,
+      "prompt_tps": 3031.944721659871,
+      "role": "document_extraction_candidate",
+      "scenario": "document_candidate_mi210_paddleocr_vl16",
+      "score": {
+        "expected_terms": [
+          "cs00012465"
+        ],
+        "method": "all_substrings",
+        "missing_terms": [
+          "cs00012465"
+        ],
+        "normalized_content": "syarikatperniagaanginkee81109ano290jalanairpanassetapak53200kualalumpur.",
+        "normalized_expected_terms": [
+          "cs00012465"
+        ],
+        "pass": false
+      },
+      "usage": {
+        "completion_tokens": 96,
+        "prompt_tokens": 1276,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 1372
+      }
+    },
+    {
+      "completion_tokens": 93,
+      "content_preview": "INVOICE  Date: 2025-12-16\nItem    Qty    Price    Amount\nWidget A  2    $15.00    $30.00\nWidget B  3    $25.00    $75.00\nService  1    $50.00    $50.00\nTOTAL: $155.00",
+      "decode_tps": 489.8242952850461,
+      "elapsed_s": 0.24256987194530666,
+      "fixture_id": "invoice_markdown_extraction",
+      "image": "/mnt/raid0/llm/epyc-inference-research/test_images/vl_rubric/doc_invoice.png",
+      "prompt": "Extract all visible text from this invoice as concise Markdown. Preserve labels, amounts, and document structure.",
+      "prompt_tokens": 186,
+      "prompt_tps": 4574.632922600163,
+      "role": "document_extraction_candidate",
+      "scenario": "document_candidate_mi210_paddleocr_vl16",
+      "score": {
+        "expected_terms": [],
+        "method": "all_substrings",
+        "missing_terms": [],
+        "normalized_content": "invoicedate20251216itemqtypriceamountwidgeta215.0030.00widgetb325.0075.00service150.0050.00total155.00",
+        "normalized_expected_terms": [],
+        "pass": true
+      },
+      "usage": {
+        "completion_tokens": 93,
+        "prompt_tokens": 186,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 279
+      }
+    }
+  ],
+  "scenario": "document_candidate_mi210_paddleocr_vl16",
+  "schema": "epyc.paddleocr_vl_first_smoke.v1",
+  "status": "ok"
+}

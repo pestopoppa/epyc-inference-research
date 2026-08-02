@@ -1,0 +1,37 @@
+
+
+Loading model... |-\|/-\|/ 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10077-da1bf5e2f
+model      : /mnt/raid0/llm/models/Bonsai-8B.gguf
+ftype      : Q1_0
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> Reply with OK only.
+OK
+
+[ Prompt: 349.9 t/s | Generation: 72.7 t/s ]
+
+
+Exiting...
+ELAPSED=1.08
+CPU_PCT=93%
+MAXRSS_KB=1539840
+EXIT=0

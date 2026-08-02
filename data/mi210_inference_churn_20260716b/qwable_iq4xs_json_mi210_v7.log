@@ -1,0 +1,54 @@
+
+
+Loading model... |-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\ 0.03.070.326 E common_sampler_init: error initializing grammar sampler for grammar:
+char ::= [^"\\\x7F\x00-\x1F] | [\\] (["\\bfnrt] | "u" [0-9a-fA-F]{4})
+integer ::= ("-"? integral-part)
+integral-part ::= [0] | [1-9] [0-9]{0,15}
+parity-kv ::= "\"parity\"" space ":" space string
+root ::= "{" space sum-kv "," space parity-kv space "}"
+space ::= | " " | "\n"{1,2} [ \t]{0,20}
+string ::= "\"" char* "\""
+sum-kv ::= "\"sum\"" space ":" space integer
+
+
+Generation prompt:
+'<|im_start|>assistant
+<think>
+'
+0.03.070.360 E srv    send_error: task id = 0, error: Failed to initialize samplers: std::exception
+0.03.070.370 E srv  process_sing: failed to launch slot with task, id_task = 0
+
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10077-da1bf5e2f
+model      : /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf
+ftype      : IQ4_XS - 4.25 bpw
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> Return a JSON object with keys sum and parity for 2+2.
+Error: Failed to initialize samplers: std::exception
+
+[ Prompt: 0.0 t/s | Generation: 0.0 t/s ]
+
+
+Exiting...
+ELAPSED=3.25
+CPU_PCT=100%
+MAXRSS_KB=19006760
+EXIT=0

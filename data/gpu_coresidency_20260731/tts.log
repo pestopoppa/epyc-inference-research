@@ -1,0 +1,1651 @@
+[Qwen] qwentts.cpp abab6b3 (2026-07-30)
+ggml_cuda_init: found 1 ROCm devices (Total VRAM: 65520 MiB):
+  Device 0: AMD Instinct MI210, gfx90a:sramecc+:xnack- (0x90a), VMM: no, Wave Size: 64, VRAM: 65520 MiB
+[Load] Talker backend: ROCm0 (CPU threads: 96)
+[GGUF] /mnt/raid0/llm/models/Qwen3-TTS-qwentts/qwen-talker-0.6b-base-Q8_0.gguf: 478 tensors, data at offset 5954368
+[WeightCtx] Loaded 316 tensors, 774.6 MB into backend
+[Talker] Loaded: 28 layers, hidden 1024, heads 16/8, head_dim 128, FFN 3072, RoPE theta 1000000, mrope sections [24,20,20] interleaved=0
+[WeightCtx] Loaded 86 tensors, 143.5 MB into backend
+[CodePredictor] Loaded: 5 layers, hidden 1024, heads 16/8, head_dim 128, FFN 3072, RoPE theta 1000000, 15 acoustic codebooks (vocab 2048 each), mtp_proj identity
+[GGUF] /mnt/raid0/llm/models/Qwen3-TTS-qwentts/qwen-tokenizer-12hz-Q8_0.gguf: 398 tensors, data at offset 29760
+[WeightCtx] Loaded 18 tensors, 33.0 MB into backend
+[Quantizer] Loaded: 16 codebooks (1 semantic + 15 acoustic), 2048 entries x 256 dim, hidden 512
+[WeightCtx] Loaded 93 tensors, 30.9 MB into backend
+[Transformer] Loaded: 8 layers, hidden 512, heads 16/16, head_dim 64, FFN 1024, RoPE theta 10000, sliding window 72
+[WeightCtx] Loaded 22 tensors, 33.1 MB into backend
+[Upsample] Loaded: 2 blocks (2x ratio per block), channels 1024, dwconv kernel 7
+[WeightCtx] Loaded 118 tensors, 142.9 MB into backend
+[DAC] Loaded: 4 blocks (strides 8/5/4/3), 24 kHz mono out, weights 142.9 MB
+[WeightCtx] Loaded 2 tensors, 3.0 MB into backend
+[Pipeline] Ready: hop 1920 samples @ 24000 Hz mono, 16 codebooks @ 12.5 Hz
+[KVCache] Allocated: 28 layers, 8 KV heads, head_dim 128, max_seq_len 4096, 1 sets -> 896 MB
+[KVCache] Allocated: 5 layers, 8 KV heads, head_dim 128, max_seq_len 16, 1 sets -> 0 MB
+[Pipeline] Loaded: arch=0b6 variant=base tokenizer=qwen3_tts_tokenizer_12hz codebooks=16 speaker_encoder=deferred speakers=0 fa=on clamp_fp16=off max_batch=1
+[BPE] Loaded from GGUF: 151676 vocab, 151291 merges, eos_id=151643
+[BPE] Registered 5 arch special tokens (total specials=6)
+[WAV-Stream] stdout: 24000 Hz, mono S16
+[Prompt] Built: 28 ids, N_text=20, N_instruct=0, T_ctx=29, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[KVCache] Allocated: 8 layers, 16 KV heads, head_dim 64, max_seq_len 128, 2 sets -> 16 MB
+[Pipeline] Codec stream state ready: 21 conv contexts, KV ring 128, 2 sets (1 staging)
+[Batch] Admit slot=0 T_ctx=29 prefill=20.4 ms build=4.0 ms (stall for 0 active slots)
+[Sample] step=0 c0=1221 u=0.6129598618 subseq=0
+[Sample] step=1 c0=1342 u=0.7741796374 subseq=16
+ggml_backend_cuda_graph_compute: CUDA graph warmup complete
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] Generated 64 frames (slot 0)
+[Pipeline] EOS at step 64, stopping (slot 0)
+[Pipeline] Generation done : 64 frames
+[Perf] PromptBuild 4.0 ms
+[Perf] Prefill 20.4 ms (T_ctx prefill)
+[Perf] TTFA 39.1 ms (first frame codes)
+[Perf] TalkerDecode 191.9 ms (64 frames, 3.00 ms/frame)
+[Perf] CodePredictor 613.2 ms (9.58 ms/frame)
+[Perf] HostCompose 2.0 ms (c0 sample + next emb)
+[Perf] CodecDecode 144.0 ms
+[Perf] Total 976.9 ms (64 frames, 12.61 ms/frame AR, audio 5.12 s, RTF 0.191)
+[Prompt] Built: 20 ids, N_text=12, N_instruct=0, T_ctx=21, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=21 prefill=9.2 ms build=5.6 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 51, stopping (slot 0)
+[Pipeline] Generation done : 51 frames
+[Perf] PromptBuild 5.6 ms
+[Perf] Prefill 9.2 ms (T_ctx prefill)
+[Perf] TTFA 29.9 ms (first frame codes)
+[Perf] TalkerDecode 254.0 ms (51 frames, 4.98 ms/frame)
+[Perf] CodePredictor 770.2 ms (15.10 ms/frame)
+[Perf] HostCompose 1.6 ms (c0 sample + next emb)
+[Perf] CodecDecode 87.2 ms
+[Perf] Total 1129.5 ms (51 frames, 20.11 ms/frame AR, audio 4.08 s, RTF 0.277)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=20.2 ms build=0.9 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 54, stopping (slot 0)
+[Pipeline] Generation done : 54 frames
+[Perf] PromptBuild 0.9 ms
+[Perf] Prefill 20.2 ms (T_ctx prefill)
+[Perf] TTFA 42.7 ms (first frame codes)
+[Perf] TalkerDecode 272.4 ms (54 frames, 5.05 ms/frame)
+[Perf] CodePredictor 826.1 ms (15.30 ms/frame)
+[Perf] HostCompose 1.6 ms (c0 sample + next emb)
+[Perf] CodecDecode 87.2 ms
+[Perf] Total 1211.1 ms (54 frames, 20.37 ms/frame AR, audio 4.32 s, RTF 0.280)
+[Prompt] Built: 17 ids, N_text=9, N_instruct=0, T_ctx=18, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=18 prefill=12.4 ms build=0.4 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=1028 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] EOS at step 45, stopping (slot 0)
+[Pipeline] Generation done : 45 frames
+[Perf] PromptBuild 0.4 ms
+[Perf] Prefill 12.4 ms (T_ctx prefill)
+[Perf] TTFA 27.3 ms (first frame codes)
+[Perf] TalkerDecode 225.6 ms (45 frames, 5.01 ms/frame)
+[Perf] CodePredictor 682.9 ms (15.18 ms/frame)
+[Perf] HostCompose 1.4 ms (c0 sample + next emb)
+[Perf] CodecDecode 74.1 ms
+[Perf] Total 998.7 ms (45 frames, 20.22 ms/frame AR, audio 3.60 s, RTF 0.277)
+[Prompt] Built: 18 ids, N_text=10, N_instruct=0, T_ctx=19, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=19 prefill=20.3 ms build=0.9 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 60, stopping (slot 0)
+[Pipeline] Generation done : 60 frames
+[Perf] PromptBuild 0.9 ms
+[Perf] Prefill 20.3 ms (T_ctx prefill)
+[Perf] TTFA 42.8 ms (first frame codes)
+[Perf] TalkerDecode 321.5 ms (60 frames, 5.36 ms/frame)
+[Perf] CodePredictor 951.4 ms (15.86 ms/frame)
+[Perf] HostCompose 1.9 ms (c0 sample + next emb)
+[Perf] CodecDecode 94.5 ms
+[Perf] Total 1394.1 ms (60 frames, 21.25 ms/frame AR, audio 4.80 s, RTF 0.290)
+[Prompt] Built: 21 ids, N_text=13, N_instruct=0, T_ctx=22, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=22 prefill=19.3 ms build=0.5 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 53, stopping (slot 0)
+[Pipeline] Generation done : 53 frames
+[Perf] PromptBuild 0.5 ms
+[Perf] Prefill 19.3 ms (T_ctx prefill)
+[Perf] TTFA 34.6 ms (first frame codes)
+[Perf] TalkerDecode 262.6 ms (53 frames, 4.96 ms/frame)
+[Perf] CodePredictor 795.5 ms (15.01 ms/frame)
+[Perf] HostCompose 1.7 ms (c0 sample + next emb)
+[Perf] CodecDecode 78.7 ms
+[Perf] Total 1160.9 ms (53 frames, 20.00 ms/frame AR, audio 4.24 s, RTF 0.274)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=12.3 ms build=0.4 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 61, stopping (slot 0)
+[Pipeline] Generation done : 61 frames
+[Perf] PromptBuild 0.4 ms
+[Perf] Prefill 12.3 ms (T_ctx prefill)
+[Perf] TTFA 27.3 ms (first frame codes)
+[Perf] TalkerDecode 303.1 ms (61 frames, 4.97 ms/frame)
+[Perf] CodePredictor 923.1 ms (15.13 ms/frame)
+[Perf] HostCompose 1.8 ms (c0 sample + next emb)
+[Perf] CodecDecode 90.9 ms
+[Perf] Total 1334.0 ms (61 frames, 20.13 ms/frame AR, audio 4.88 s, RTF 0.273)
+[Prompt] Built: 20 ids, N_text=12, N_instruct=0, T_ctx=21, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=21 prefill=11.9 ms build=0.5 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 51, stopping (slot 0)
+[Pipeline] Generation done : 51 frames
+[Perf] PromptBuild 0.5 ms
+[Perf] Prefill 11.9 ms (T_ctx prefill)
+[Perf] TTFA 30.1 ms (first frame codes)
+[Perf] TalkerDecode 269.7 ms (51 frames, 5.29 ms/frame)
+[Perf] CodePredictor 830.0 ms (16.27 ms/frame)
+[Perf] HostCompose 1.5 ms (c0 sample + next emb)
+[Perf] CodecDecode 89.1 ms
+[Perf] Total 1205.1 ms (51 frames, 21.59 ms/frame AR, audio 4.08 s, RTF 0.295)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=21.1 ms build=0.9 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 54, stopping (slot 0)
+[Pipeline] Generation done : 54 frames
+[Perf] PromptBuild 0.9 ms
+[Perf] Prefill 21.1 ms (T_ctx prefill)
+[Perf] TTFA 44.0 ms (first frame codes)
+[Perf] TalkerDecode 275.4 ms (54 frames, 5.10 ms/frame)
+[Perf] CodePredictor 829.8 ms (15.37 ms/frame)
+[Perf] HostCompose 1.7 ms (c0 sample + next emb)
+[Perf] CodecDecode 83.6 ms
+[Perf] Total 1215.5 ms (54 frames, 20.50 ms/frame AR, audio 4.32 s, RTF 0.281)
+[Prompt] Built: 17 ids, N_text=9, N_instruct=0, T_ctx=18, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=18 prefill=11.7 ms build=0.7 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=1028 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] EOS at step 45, stopping (slot 0)
+[Pipeline] Generation done : 45 frames
+[Perf] PromptBuild 0.7 ms
+[Perf] Prefill 11.7 ms (T_ctx prefill)
+[Perf] TTFA 26.8 ms (first frame codes)
+[Perf] TalkerDecode 227.1 ms (45 frames, 5.05 ms/frame)
+[Perf] CodePredictor 688.6 ms (15.30 ms/frame)
+[Perf] HostCompose 1.4 ms (c0 sample + next emb)
+[Perf] CodecDecode 71.4 ms
+[Perf] Total 1003.4 ms (45 frames, 20.38 ms/frame AR, audio 3.60 s, RTF 0.279)
+[Dedup] Previous line repeated 11 times total
+ggml_backend_cuda_graph_compute: CUDA graph warmup reset
+[Prompt] Built: 18 ids, N_text=10, N_instruct=0, T_ctx=19, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=19 prefill=20.6 ms build=0.4 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 60, stopping (slot 0)
+[Pipeline] Generation done : 60 frames
+[Perf] PromptBuild 0.4 ms
+[Perf] Prefill 20.6 ms (T_ctx prefill)
+[Perf] TTFA 40.2 ms (first frame codes)
+[Perf] TalkerDecode 312.5 ms (60 frames, 5.21 ms/frame)
+[Perf] CodePredictor 962.3 ms (16.04 ms/frame)
+[Perf] HostCompose 1.9 ms (c0 sample + next emb)
+[Perf] CodecDecode 92.5 ms
+[Perf] Total 1393.2 ms (60 frames, 21.28 ms/frame AR, audio 4.80 s, RTF 0.290)
+[Prompt] Built: 21 ids, N_text=13, N_instruct=0, T_ctx=22, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=22 prefill=13.8 ms build=0.4 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 53, stopping (slot 0)
+[Pipeline] Generation done : 53 frames
+[Perf] PromptBuild 0.4 ms
+[Perf] Prefill 13.8 ms (T_ctx prefill)
+[Perf] TTFA 29.2 ms (first frame codes)
+[Perf] TalkerDecode 261.0 ms (53 frames, 4.93 ms/frame)
+[Perf] CodePredictor 804.0 ms (15.17 ms/frame)
+[Perf] HostCompose 1.6 ms (c0 sample + next emb)
+[Perf] CodecDecode 78.4 ms
+[Perf] Total 1161.3 ms (53 frames, 20.12 ms/frame AR, audio 4.24 s, RTF 0.274)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=11.5 ms build=0.4 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 61, stopping (slot 0)
+[Pipeline] Generation done : 61 frames
+[Perf] PromptBuild 0.4 ms
+[Perf] Prefill 11.5 ms (T_ctx prefill)
+[Perf] TTFA 26.5 ms (first frame codes)
+[Perf] TalkerDecode 307.2 ms (61 frames, 5.04 ms/frame)
+[Perf] CodePredictor 920.3 ms (15.09 ms/frame)
+[Perf] HostCompose 1.9 ms (c0 sample + next emb)
+[Perf] CodecDecode 95.9 ms
+[Perf] Total 1339.3 ms (61 frames, 20.15 ms/frame AR, audio 4.88 s, RTF 0.274)
+[Prompt] Built: 20 ids, N_text=12, N_instruct=0, T_ctx=21, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=21 prefill=19.8 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 51, stopping (slot 0)
+[Pipeline] Generation done : 51 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 19.8 ms (T_ctx prefill)
+[Perf] TTFA 41.2 ms (first frame codes)
+[Perf] TalkerDecode 256.6 ms (51 frames, 5.03 ms/frame)
+[Perf] CodePredictor 785.5 ms (15.40 ms/frame)
+[Perf] HostCompose 1.6 ms (c0 sample + next emb)
+[Perf] CodecDecode 77.3 ms
+[Perf] Total 1143.5 ms (51 frames, 20.46 ms/frame AR, audio 4.08 s, RTF 0.280)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=19.3 ms build=0.4 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 54, stopping (slot 0)
+[Pipeline] Generation done : 54 frames
+[Perf] PromptBuild 0.4 ms
+[Perf] Prefill 19.3 ms (T_ctx prefill)
+[Perf] TTFA 34.1 ms (first frame codes)
+[Perf] TalkerDecode 268.4 ms (54 frames, 4.97 ms/frame)
+[Perf] CodePredictor 815.8 ms (15.11 ms/frame)
+[Perf] HostCompose 1.7 ms (c0 sample + next emb)
+[Perf] CodecDecode 83.6 ms
+[Perf] Total 1191.7 ms (54 frames, 20.11 ms/frame AR, audio 4.32 s, RTF 0.276)
+[Prompt] Built: 17 ids, N_text=9, N_instruct=0, T_ctx=18, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=18 prefill=12.0 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=1028 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] EOS at step 45, stopping (slot 0)
+[Pipeline] Generation done : 45 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 12.0 ms (T_ctx prefill)
+[Perf] TTFA 26.2 ms (first frame codes)
+[Perf] TalkerDecode 227.9 ms (45 frames, 5.07 ms/frame)
+[Perf] CodePredictor 678.2 ms (15.07 ms/frame)
+[Perf] HostCompose 1.4 ms (c0 sample + next emb)
+[Perf] CodecDecode 75.4 ms
+[Perf] Total 997.2 ms (45 frames, 20.17 ms/frame AR, audio 3.60 s, RTF 0.277)
+[Prompt] Built: 18 ids, N_text=10, N_instruct=0, T_ctx=19, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=19 prefill=20.0 ms build=0.4 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 60, stopping (slot 0)
+[Pipeline] Generation done : 60 frames
+[Perf] PromptBuild 0.4 ms
+[Perf] Prefill 20.0 ms (T_ctx prefill)
+[Perf] TTFA 39.7 ms (first frame codes)
+[Perf] TalkerDecode 320.3 ms (60 frames, 5.34 ms/frame)
+[Perf] CodePredictor 928.3 ms (15.47 ms/frame)
+[Perf] HostCompose 1.9 ms (c0 sample + next emb)
+[Perf] CodecDecode 120.6 ms
+[Perf] Total 1394.0 ms (60 frames, 20.84 ms/frame AR, audio 4.80 s, RTF 0.290)
+[Prompt] Built: 21 ids, N_text=13, N_instruct=0, T_ctx=22, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=22 prefill=38.4 ms build=0.6 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 53, stopping (slot 0)
+[Pipeline] Generation done : 53 frames
+[Perf] PromptBuild 0.6 ms
+[Perf] Prefill 38.4 ms (T_ctx prefill)
+[Perf] TTFA 53.9 ms (first frame codes)
+[Perf] TalkerDecode 280.3 ms (53 frames, 5.29 ms/frame)
+[Perf] CodePredictor 845.6 ms (15.96 ms/frame)
+[Perf] HostCompose 1.6 ms (c0 sample + next emb)
+[Perf] CodecDecode 82.8 ms
+[Perf] Total 1251.8 ms (53 frames, 21.27 ms/frame AR, audio 4.24 s, RTF 0.295)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=12.1 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 61, stopping (slot 0)
+[Pipeline] Generation done : 61 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 12.1 ms (T_ctx prefill)
+[Perf] TTFA 26.7 ms (first frame codes)
+[Perf] TalkerDecode 308.0 ms (61 frames, 5.05 ms/frame)
+[Perf] CodePredictor 924.0 ms (15.15 ms/frame)
+[Perf] HostCompose 1.9 ms (c0 sample + next emb)
+[Perf] CodecDecode 93.0 ms
+[Perf] Total 1341.6 ms (61 frames, 20.23 ms/frame AR, audio 4.88 s, RTF 0.275)
+[Prompt] Built: 20 ids, N_text=12, N_instruct=0, T_ctx=21, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=21 prefill=20.7 ms build=0.4 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 51, stopping (slot 0)
+[Pipeline] Generation done : 51 frames
+[Perf] PromptBuild 0.4 ms
+[Perf] Prefill 20.7 ms (T_ctx prefill)
+[Perf] TTFA 42.2 ms (first frame codes)
+[Perf] TalkerDecode 252.1 ms (51 frames, 4.94 ms/frame)
+[Perf] CodePredictor 783.7 ms (15.37 ms/frame)
+[Perf] HostCompose 1.5 ms (c0 sample + next emb)
+[Perf] CodecDecode 77.4 ms
+[Perf] Total 1137.9 ms (51 frames, 20.34 ms/frame AR, audio 4.08 s, RTF 0.279)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=20.4 ms build=0.4 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 54, stopping (slot 0)
+[Pipeline] Generation done : 54 frames
+[Perf] PromptBuild 0.4 ms
+[Perf] Prefill 20.4 ms (T_ctx prefill)
+[Perf] TTFA 41.8 ms (first frame codes)
+[Perf] TalkerDecode 307.1 ms (54 frames, 5.69 ms/frame)
+[Perf] CodePredictor 931.2 ms (17.24 ms/frame)
+[Perf] HostCompose 1.6 ms (c0 sample + next emb)
+[Perf] CodecDecode 86.9 ms
+[Perf] Total 1350.1 ms (54 frames, 22.96 ms/frame AR, audio 4.32 s, RTF 0.313)
+[Prompt] Built: 17 ids, N_text=9, N_instruct=0, T_ctx=18, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=18 prefill=12.2 ms build=0.5 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=1028 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] EOS at step 45, stopping (slot 0)
+[Pipeline] Generation done : 45 frames
+[Perf] PromptBuild 0.5 ms
+[Perf] Prefill 12.2 ms (T_ctx prefill)
+[Perf] TTFA 26.8 ms (first frame codes)
+[Perf] TalkerDecode 229.1 ms (45 frames, 5.09 ms/frame)
+[Perf] CodePredictor 699.5 ms (15.55 ms/frame)
+[Perf] HostCompose 1.4 ms (c0 sample + next emb)
+[Perf] CodecDecode 70.6 ms
+[Perf] Total 1015.4 ms (45 frames, 20.67 ms/frame AR, audio 3.60 s, RTF 0.282)
+[Prompt] Built: 18 ids, N_text=10, N_instruct=0, T_ctx=19, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=19 prefill=12.6 ms build=0.4 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 60, stopping (slot 0)
+[Pipeline] Generation done : 60 frames
+[Perf] PromptBuild 0.4 ms
+[Perf] Prefill 12.6 ms (T_ctx prefill)
+[Perf] TTFA 27.8 ms (first frame codes)
+[Perf] TalkerDecode 300.8 ms (60 frames, 5.01 ms/frame)
+[Perf] CodePredictor 916.4 ms (15.27 ms/frame)
+[Perf] HostCompose 1.9 ms (c0 sample + next emb)
+[Perf] CodecDecode 90.2 ms
+[Perf] Total 1324.3 ms (60 frames, 20.32 ms/frame AR, audio 4.80 s, RTF 0.276)
+[Prompt] Built: 21 ids, N_text=13, N_instruct=0, T_ctx=22, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=22 prefill=12.3 ms build=0.4 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 53, stopping (slot 0)
+[Pipeline] Generation done : 53 frames
+[Perf] PromptBuild 0.4 ms
+[Perf] Prefill 12.3 ms (T_ctx prefill)
+[Perf] TTFA 27.4 ms (first frame codes)
+[Perf] TalkerDecode 269.8 ms (53 frames, 5.09 ms/frame)
+[Perf] CodePredictor 819.8 ms (15.47 ms/frame)
+[Perf] HostCompose 1.8 ms (c0 sample + next emb)
+[Perf] CodecDecode 80.5 ms
+[Perf] Total 1186.8 ms (53 frames, 20.59 ms/frame AR, audio 4.24 s, RTF 0.280)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=20.4 ms build=0.4 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 61, stopping (slot 0)
+[Pipeline] Generation done : 61 frames
+[Perf] PromptBuild 0.4 ms
+[Perf] Prefill 20.4 ms (T_ctx prefill)
+[Perf] TTFA 42.2 ms (first frame codes)
+[Perf] TalkerDecode 550.8 ms (61 frames, 9.03 ms/frame)
+[Perf] CodePredictor 1596.6 ms (26.17 ms/frame)
+[Perf] HostCompose 2.0 ms (c0 sample + next emb)
+[Perf] CodecDecode 128.4 ms
+[Perf] Total 2301.1 ms (61 frames, 35.24 ms/frame AR, audio 4.88 s, RTF 0.472)
+[Prompt] Built: 20 ids, N_text=12, N_instruct=0, T_ctx=21, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=21 prefill=39.8 ms build=1.0 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 51, stopping (slot 0)
+[Pipeline] Generation done : 51 frames
+[Perf] PromptBuild 1.0 ms
+[Perf] Prefill 39.8 ms (T_ctx prefill)
+[Perf] TTFA 64.6 ms (first frame codes)
+[Perf] TalkerDecode 471.3 ms (51 frames, 9.24 ms/frame)
+[Perf] CodePredictor 1350.7 ms (26.48 ms/frame)
+[Perf] HostCompose 1.7 ms (c0 sample + next emb)
+[Perf] CodecDecode 127.5 ms
+[Perf] Total 1995.6 ms (51 frames, 35.76 ms/frame AR, audio 4.08 s, RTF 0.489)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=24.6 ms build=0.4 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 54, stopping (slot 0)
+[Pipeline] Generation done : 54 frames
+[Perf] PromptBuild 0.4 ms
+[Perf] Prefill 24.6 ms (T_ctx prefill)
+[Perf] TTFA 49.9 ms (first frame codes)
+[Perf] TalkerDecode 491.7 ms (54 frames, 9.11 ms/frame)
+[Perf] CodePredictor 1431.4 ms (26.51 ms/frame)
+[Perf] HostCompose 1.8 ms (c0 sample + next emb)
+[Perf] CodecDecode 151.9 ms
+[Perf] Total 2104.9 ms (54 frames, 35.65 ms/frame AR, audio 4.32 s, RTF 0.487)
+[Prompt] Built: 17 ids, N_text=9, N_instruct=0, T_ctx=18, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=18 prefill=44.0 ms build=0.8 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=1028 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] EOS at step 45, stopping (slot 0)
+[Pipeline] Generation done : 45 frames
+[Perf] PromptBuild 0.8 ms
+[Perf] Prefill 44.0 ms (T_ctx prefill)
+[Perf] TTFA 77.4 ms (first frame codes)
+[Perf] TalkerDecode 413.3 ms (45 frames, 9.19 ms/frame)
+[Perf] CodePredictor 1199.4 ms (26.65 ms/frame)
+[Perf] HostCompose 1.5 ms (c0 sample + next emb)
+[Perf] CodecDecode 113.4 ms
+[Perf] Total 1776.3 ms (45 frames, 35.87 ms/frame AR, audio 3.60 s, RTF 0.493)
+[Prompt] Built: 18 ids, N_text=10, N_instruct=0, T_ctx=19, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=19 prefill=25.4 ms build=0.7 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 60, stopping (slot 0)
+[Pipeline] Generation done : 60 frames
+[Perf] PromptBuild 0.7 ms
+[Perf] Prefill 25.4 ms (T_ctx prefill)
+[Perf] TTFA 51.1 ms (first frame codes)
+[Perf] TalkerDecode 549.1 ms (60 frames, 9.15 ms/frame)
+[Perf] CodePredictor 1605.5 ms (26.76 ms/frame)
+[Perf] HostCompose 2.0 ms (c0 sample + next emb)
+[Perf] CodecDecode 141.9 ms
+[Perf] Total 2327.6 ms (60 frames, 35.94 ms/frame AR, audio 4.80 s, RTF 0.485)
+[Prompt] Built: 21 ids, N_text=13, N_instruct=0, T_ctx=22, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=22 prefill=43.5 ms build=0.5 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 53, stopping (slot 0)
+[Pipeline] Generation done : 53 frames
+[Perf] PromptBuild 0.5 ms
+[Perf] Prefill 43.5 ms (T_ctx prefill)
+[Perf] TTFA 75.0 ms (first frame codes)
+[Perf] TalkerDecode 486.6 ms (53 frames, 9.18 ms/frame)
+[Perf] CodePredictor 1440.4 ms (27.18 ms/frame)
+[Perf] HostCompose 1.8 ms (c0 sample + next emb)
+[Perf] CodecDecode 128.4 ms
+[Perf] Total 2103.2 ms (53 frames, 36.39 ms/frame AR, audio 4.24 s, RTF 0.496)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=43.1 ms build=0.7 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 61, stopping (slot 0)
+[Pipeline] Generation done : 61 frames
+[Perf] PromptBuild 0.7 ms
+[Perf] Prefill 43.1 ms (T_ctx prefill)
+[Perf] TTFA 76.6 ms (first frame codes)
+[Perf] TalkerDecode 522.9 ms (61 frames, 8.57 ms/frame)
+[Perf] CodePredictor 1573.7 ms (25.80 ms/frame)
+[Perf] HostCompose 2.0 ms (c0 sample + next emb)
+[Perf] CodecDecode 137.6 ms
+[Perf] Total 2282.8 ms (61 frames, 34.40 ms/frame AR, audio 4.88 s, RTF 0.468)
+[Prompt] Built: 20 ids, N_text=12, N_instruct=0, T_ctx=21, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=21 prefill=22.8 ms build=1.1 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 51, stopping (slot 0)
+[Pipeline] Generation done : 51 frames
+[Perf] PromptBuild 1.1 ms
+[Perf] Prefill 22.8 ms (T_ctx prefill)
+[Perf] TTFA 49.6 ms (first frame codes)
+[Perf] TalkerDecode 473.6 ms (51 frames, 9.29 ms/frame)
+[Perf] CodePredictor 1365.3 ms (26.77 ms/frame)
+[Perf] HostCompose 1.7 ms (c0 sample + next emb)
+[Perf] CodecDecode 124.2 ms
+[Perf] Total 1991.9 ms (51 frames, 36.09 ms/frame AR, audio 4.08 s, RTF 0.488)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=26.5 ms build=0.5 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 54, stopping (slot 0)
+[Pipeline] Generation done : 54 frames
+[Perf] PromptBuild 0.5 ms
+[Perf] Prefill 26.5 ms (T_ctx prefill)
+[Perf] TTFA 51.2 ms (first frame codes)
+[Perf] TalkerDecode 500.6 ms (54 frames, 9.27 ms/frame)
+[Perf] CodePredictor 1466.8 ms (27.16 ms/frame)
+[Perf] HostCompose 1.8 ms (c0 sample + next emb)
+[Perf] CodecDecode 135.3 ms
+[Perf] Total 2134.6 ms (54 frames, 36.46 ms/frame AR, audio 4.32 s, RTF 0.494)
+[Prompt] Built: 17 ids, N_text=9, N_instruct=0, T_ctx=18, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=18 prefill=41.5 ms build=0.5 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=1028 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] EOS at step 45, stopping (slot 0)
+[Pipeline] Generation done : 45 frames
+[Perf] PromptBuild 0.5 ms
+[Perf] Prefill 41.5 ms (T_ctx prefill)
+[Perf] TTFA 71.0 ms (first frame codes)
+[Perf] TalkerDecode 435.5 ms (45 frames, 9.68 ms/frame)
+[Perf] CodePredictor 1249.6 ms (27.77 ms/frame)
+[Perf] HostCompose 1.5 ms (c0 sample + next emb)
+[Perf] CodecDecode 114.8 ms
+[Perf] Total 1846.5 ms (45 frames, 37.48 ms/frame AR, audio 3.60 s, RTF 0.513)
+[Prompt] Built: 18 ids, N_text=10, N_instruct=0, T_ctx=19, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=19 prefill=29.6 ms build=0.5 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 60, stopping (slot 0)
+[Pipeline] Generation done : 60 frames
+[Perf] PromptBuild 0.5 ms
+[Perf] Prefill 29.6 ms (T_ctx prefill)
+[Perf] TTFA 64.6 ms (first frame codes)
+[Perf] TalkerDecode 568.5 ms (60 frames, 9.47 ms/frame)
+[Perf] CodePredictor 1683.8 ms (28.06 ms/frame)
+[Perf] HostCompose 2.0 ms (c0 sample + next emb)
+[Perf] CodecDecode 139.1 ms
+[Perf] Total 2426.5 ms (60 frames, 37.57 ms/frame AR, audio 4.80 s, RTF 0.506)
+[Prompt] Built: 21 ids, N_text=13, N_instruct=0, T_ctx=22, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=22 prefill=47.2 ms build=0.9 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 53, stopping (slot 0)
+[Pipeline] Generation done : 53 frames
+[Perf] PromptBuild 0.9 ms
+[Perf] Prefill 47.2 ms (T_ctx prefill)
+[Perf] TTFA 79.5 ms (first frame codes)
+[Perf] TalkerDecode 498.9 ms (53 frames, 9.41 ms/frame)
+[Perf] CodePredictor 1441.7 ms (27.20 ms/frame)
+[Perf] HostCompose 1.7 ms (c0 sample + next emb)
+[Perf] CodecDecode 139.4 ms
+[Perf] Total 2134.8 ms (53 frames, 36.65 ms/frame AR, audio 4.24 s, RTF 0.503)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=26.3 ms build=0.6 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 61, stopping (slot 0)
+[Pipeline] Generation done : 61 frames
+[Perf] PromptBuild 0.6 ms
+[Perf] Prefill 26.3 ms (T_ctx prefill)
+[Perf] TTFA 53.0 ms (first frame codes)
+[Perf] TalkerDecode 570.3 ms (61 frames, 9.35 ms/frame)
+[Perf] CodePredictor 1644.6 ms (26.96 ms/frame)
+[Perf] HostCompose 2.0 ms (c0 sample + next emb)
+[Perf] CodecDecode 128.6 ms
+[Perf] Total 2375.8 ms (61 frames, 36.34 ms/frame AR, audio 4.88 s, RTF 0.487)
+[Prompt] Built: 20 ids, N_text=12, N_instruct=0, T_ctx=21, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=21 prefill=44.1 ms build=0.7 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 51, stopping (slot 0)
+[Pipeline] Generation done : 51 frames
+[Perf] PromptBuild 0.7 ms
+[Perf] Prefill 44.1 ms (T_ctx prefill)
+[Perf] TTFA 77.6 ms (first frame codes)
+[Perf] TalkerDecode 489.0 ms (51 frames, 9.59 ms/frame)
+[Perf] CodePredictor 1419.7 ms (27.84 ms/frame)
+[Perf] HostCompose 1.6 ms (c0 sample + next emb)
+[Perf] CodecDecode 115.0 ms
+[Perf] Total 2073.7 ms (51 frames, 37.46 ms/frame AR, audio 4.08 s, RTF 0.508)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=46.4 ms build=0.5 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 54, stopping (slot 0)
+[Pipeline] Generation done : 54 frames
+[Perf] PromptBuild 0.5 ms
+[Perf] Prefill 46.4 ms (T_ctx prefill)
+[Perf] TTFA 77.4 ms (first frame codes)
+[Perf] TalkerDecode 505.8 ms (54 frames, 9.37 ms/frame)
+[Perf] CodePredictor 1488.4 ms (27.56 ms/frame)
+[Perf] HostCompose 1.7 ms (c0 sample + next emb)
+[Perf] CodecDecode 153.8 ms
+[Perf] Total 2200.4 ms (54 frames, 36.96 ms/frame AR, audio 4.32 s, RTF 0.509)
+[Prompt] Built: 17 ids, N_text=9, N_instruct=0, T_ctx=18, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=18 prefill=43.4 ms build=0.9 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=1028 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] EOS at step 45, stopping (slot 0)
+[Pipeline] Generation done : 45 frames
+[Perf] PromptBuild 0.9 ms
+[Perf] Prefill 43.4 ms (T_ctx prefill)
+[Perf] TTFA 79.9 ms (first frame codes)
+[Perf] TalkerDecode 436.1 ms (45 frames, 9.69 ms/frame)
+[Perf] CodePredictor 1256.0 ms (27.91 ms/frame)
+[Perf] HostCompose 1.4 ms (c0 sample + next emb)
+[Perf] CodecDecode 105.8 ms
+[Perf] Total 1848.3 ms (45 frames, 37.63 ms/frame AR, audio 3.60 s, RTF 0.513)
+[Prompt] Built: 18 ids, N_text=10, N_instruct=0, T_ctx=19, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=19 prefill=24.9 ms build=0.7 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 60, stopping (slot 0)
+[Pipeline] Generation done : 60 frames
+[Perf] PromptBuild 0.7 ms
+[Perf] Prefill 24.9 ms (T_ctx prefill)
+[Perf] TTFA 52.3 ms (first frame codes)
+[Perf] TalkerDecode 581.5 ms (60 frames, 9.69 ms/frame)
+[Perf] CodePredictor 1696.4 ms (28.27 ms/frame)
+[Perf] HostCompose 2.0 ms (c0 sample + next emb)
+[Perf] CodecDecode 136.0 ms
+[Perf] Total 2445.8 ms (60 frames, 38.00 ms/frame AR, audio 4.80 s, RTF 0.510)
+[Prompt] Built: 21 ids, N_text=13, N_instruct=0, T_ctx=22, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=22 prefill=26.1 ms build=0.5 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 53, stopping (slot 0)
+[Pipeline] Generation done : 53 frames
+[Perf] PromptBuild 0.5 ms
+[Perf] Prefill 26.1 ms (T_ctx prefill)
+[Perf] TTFA 52.2 ms (first frame codes)
+[Perf] TalkerDecode 495.3 ms (53 frames, 9.34 ms/frame)
+[Perf] CodePredictor 1456.4 ms (27.48 ms/frame)
+[Perf] HostCompose 1.7 ms (c0 sample + next emb)
+[Perf] CodecDecode 141.9 ms
+[Perf] Total 2124.7 ms (53 frames, 36.86 ms/frame AR, audio 4.24 s, RTF 0.501)
+ggml_backend_cuda_graph_compute: CUDA graph warmup complete
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=45.3 ms build=1.0 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 61, stopping (slot 0)
+[Pipeline] Generation done : 61 frames
+[Perf] PromptBuild 1.0 ms
+[Perf] Prefill 45.3 ms (T_ctx prefill)
+[Perf] TTFA 79.7 ms (first frame codes)
+[Perf] TalkerDecode 433.6 ms (61 frames, 7.11 ms/frame)
+[Perf] CodePredictor 1314.0 ms (21.54 ms/frame)
+[Perf] HostCompose 2.0 ms (c0 sample + next emb)
+[Perf] CodecDecode 100.0 ms
+[Perf] Total 1899.4 ms (61 frames, 28.68 ms/frame AR, audio 4.88 s, RTF 0.389)
+ggml_backend_cuda_graph_compute: CUDA graph warmup reset
+[Prompt] Built: 20 ids, N_text=12, N_instruct=0, T_ctx=21, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=21 prefill=17.5 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 51, stopping (slot 0)
+[Pipeline] Generation done : 51 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 17.5 ms (T_ctx prefill)
+[Perf] TTFA 42.3 ms (first frame codes)
+[Perf] TalkerDecode 265.3 ms (51 frames, 5.20 ms/frame)
+[Perf] CodePredictor 812.6 ms (15.93 ms/frame)
+[Perf] HostCompose 1.7 ms (c0 sample + next emb)
+[Perf] CodecDecode 95.9 ms
+[Perf] Total 1194.9 ms (51 frames, 21.17 ms/frame AR, audio 4.08 s, RTF 0.293)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=11.4 ms build=0.5 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 54, stopping (slot 0)
+[Pipeline] Generation done : 54 frames
+[Perf] PromptBuild 0.5 ms
+[Perf] Prefill 11.4 ms (T_ctx prefill)
+[Perf] TTFA 26.1 ms (first frame codes)
+[Perf] TalkerDecode 278.1 ms (54 frames, 5.15 ms/frame)
+[Perf] CodePredictor 828.1 ms (15.34 ms/frame)
+[Perf] HostCompose 1.8 ms (c0 sample + next emb)
+[Perf] CodecDecode 91.5 ms
+[Perf] Total 1213.5 ms (54 frames, 20.52 ms/frame AR, audio 4.32 s, RTF 0.281)
+[Prompt] Built: 17 ids, N_text=9, N_instruct=0, T_ctx=18, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=18 prefill=19.9 ms build=0.5 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=1028 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] EOS at step 45, stopping (slot 0)
+[Pipeline] Generation done : 45 frames
+[Perf] PromptBuild 0.5 ms
+[Perf] Prefill 19.9 ms (T_ctx prefill)
+[Perf] TTFA 35.7 ms (first frame codes)
+[Perf] TalkerDecode 221.3 ms (45 frames, 4.92 ms/frame)
+[Perf] CodePredictor 677.5 ms (15.06 ms/frame)
+[Perf] HostCompose 1.4 ms (c0 sample + next emb)
+[Perf] CodecDecode 71.8 ms
+[Perf] Total 994.7 ms (45 frames, 20.01 ms/frame AR, audio 3.60 s, RTF 0.276)
+[Prompt] Built: 18 ids, N_text=10, N_instruct=0, T_ctx=19, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=19 prefill=20.5 ms build=0.6 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 60, stopping (slot 0)
+[Pipeline] Generation done : 60 frames
+[Perf] PromptBuild 0.6 ms
+[Perf] Prefill 20.5 ms (T_ctx prefill)
+[Perf] TTFA 41.8 ms (first frame codes)
+[Perf] TalkerDecode 302.2 ms (60 frames, 5.04 ms/frame)
+[Perf] CodePredictor 940.6 ms (15.68 ms/frame)
+[Perf] HostCompose 2.0 ms (c0 sample + next emb)
+[Perf] CodecDecode 86.7 ms
+[Perf] Total 1355.1 ms (60 frames, 20.75 ms/frame AR, audio 4.80 s, RTF 0.282)
+[Prompt] Built: 21 ids, N_text=13, N_instruct=0, T_ctx=22, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=22 prefill=12.2 ms build=0.4 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 53, stopping (slot 0)
+[Pipeline] Generation done : 53 frames
+[Perf] PromptBuild 0.4 ms
+[Perf] Prefill 12.2 ms (T_ctx prefill)
+[Perf] TTFA 26.2 ms (first frame codes)
+[Perf] TalkerDecode 276.6 ms (53 frames, 5.22 ms/frame)
+[Perf] CodePredictor 855.0 ms (16.13 ms/frame)
+[Perf] HostCompose 1.8 ms (c0 sample + next emb)
+[Perf] CodecDecode 97.2 ms
+[Perf] Total 1245.2 ms (53 frames, 21.39 ms/frame AR, audio 4.24 s, RTF 0.294)
+ggml_backend_cuda_graph_compute: CUDA graph warmup complete
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=25.1 ms build=1.1 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 61, stopping (slot 0)
+[Pipeline] Generation done : 61 frames
+[Perf] PromptBuild 1.1 ms
+[Perf] Prefill 25.1 ms (T_ctx prefill)
+[Perf] TTFA 45.7 ms (first frame codes)
+[Perf] TalkerDecode 304.8 ms (61 frames, 5.00 ms/frame)
+[Perf] CodePredictor 927.6 ms (15.21 ms/frame)
+[Perf] HostCompose 2.0 ms (c0 sample + next emb)
+[Perf] CodecDecode 94.2 ms
+[Perf] Total 1358.0 ms (61 frames, 20.24 ms/frame AR, audio 4.88 s, RTF 0.278)
+ggml_backend_cuda_graph_compute: CUDA graph warmup reset
+[Prompt] Built: 20 ids, N_text=12, N_instruct=0, T_ctx=21, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=21 prefill=12.1 ms build=0.5 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 51, stopping (slot 0)
+[Pipeline] Generation done : 51 frames
+[Perf] PromptBuild 0.5 ms
+[Perf] Prefill 12.1 ms (T_ctx prefill)
+[Perf] TTFA 27.0 ms (first frame codes)
+[Perf] TalkerDecode 261.8 ms (51 frames, 5.13 ms/frame)
+[Perf] CodePredictor 782.9 ms (15.35 ms/frame)
+[Perf] HostCompose 1.7 ms (c0 sample + next emb)
+[Perf] CodecDecode 78.8 ms
+[Perf] Total 1140.0 ms (51 frames, 20.52 ms/frame AR, audio 4.08 s, RTF 0.279)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=19.8 ms build=0.5 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 54, stopping (slot 0)
+[Pipeline] Generation done : 54 frames
+[Perf] PromptBuild 0.5 ms
+[Perf] Prefill 19.8 ms (T_ctx prefill)
+[Perf] TTFA 41.7 ms (first frame codes)
+[Perf] TalkerDecode 274.9 ms (54 frames, 5.09 ms/frame)
+[Perf] CodePredictor 821.1 ms (15.21 ms/frame)
+[Perf] HostCompose 1.7 ms (c0 sample + next emb)
+[Perf] CodecDecode 86.4 ms
+[Perf] Total 1207.4 ms (54 frames, 20.33 ms/frame AR, audio 4.32 s, RTF 0.279)
+[Prompt] Built: 17 ids, N_text=9, N_instruct=0, T_ctx=18, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=18 prefill=12.0 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=1028 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] EOS at step 45, stopping (slot 0)
+[Pipeline] Generation done : 45 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 12.0 ms (T_ctx prefill)
+[Perf] TTFA 26.3 ms (first frame codes)
+[Perf] TalkerDecode 207.8 ms (45 frames, 4.62 ms/frame)
+[Perf] CodePredictor 666.4 ms (14.81 ms/frame)
+[Perf] HostCompose 1.5 ms (c0 sample + next emb)
+[Perf] CodecDecode 65.0 ms
+[Perf] Total 954.9 ms (45 frames, 19.46 ms/frame AR, audio 3.60 s, RTF 0.265)
+[Prompt] Built: 18 ids, N_text=10, N_instruct=0, T_ctx=19, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=19 prefill=11.5 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 60, stopping (slot 0)
+[Pipeline] Generation done : 60 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 11.5 ms (T_ctx prefill)
+[Perf] TTFA 25.7 ms (first frame codes)
+[Perf] TalkerDecode 242.1 ms (60 frames, 4.03 ms/frame)
+[Perf] CodePredictor 742.9 ms (12.38 ms/frame)
+[Perf] HostCompose 1.9 ms (c0 sample + next emb)
+[Perf] CodecDecode 77.7 ms
+[Perf] Total 1078.5 ms (60 frames, 16.45 ms/frame AR, audio 4.80 s, RTF 0.225)
+[Prompt] Built: 21 ids, N_text=13, N_instruct=0, T_ctx=22, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=22 prefill=11.5 ms build=0.4 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 53, stopping (slot 0)
+[Pipeline] Generation done : 53 frames
+[Perf] PromptBuild 0.4 ms
+[Perf] Prefill 11.5 ms (T_ctx prefill)
+[Perf] TTFA 25.9 ms (first frame codes)
+[Perf] TalkerDecode 174.1 ms (53 frames, 3.29 ms/frame)
+[Perf] CodePredictor 547.9 ms (10.34 ms/frame)
+[Perf] HostCompose 1.7 ms (c0 sample + next emb)
+[Perf] CodecDecode 60.5 ms
+[Perf] Total 798.0 ms (53 frames, 13.66 ms/frame AR, audio 4.24 s, RTF 0.188)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=9.0 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 61, stopping (slot 0)
+[Pipeline] Generation done : 61 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 9.0 ms (T_ctx prefill)
+[Perf] TTFA 20.0 ms (first frame codes)
+[Perf] TalkerDecode 179.9 ms (61 frames, 2.95 ms/frame)
+[Perf] CodePredictor 565.7 ms (9.27 ms/frame)
+[Perf] HostCompose 1.9 ms (c0 sample + next emb)
+[Perf] CodecDecode 62.1 ms
+[Perf] Total 820.7 ms (61 frames, 12.25 ms/frame AR, audio 4.88 s, RTF 0.168)
+[Prompt] Built: 20 ids, N_text=12, N_instruct=0, T_ctx=21, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=21 prefill=9.3 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 51, stopping (slot 0)
+[Pipeline] Generation done : 51 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 9.3 ms (T_ctx prefill)
+[Perf] TTFA 20.3 ms (first frame codes)
+[Perf] TalkerDecode 150.6 ms (51 frames, 2.95 ms/frame)
+[Perf] CodePredictor 473.2 ms (9.28 ms/frame)
+[Perf] HostCompose 1.6 ms (c0 sample + next emb)
+[Perf] CodecDecode 51.5 ms
+[Perf] Total 688.3 ms (51 frames, 12.26 ms/frame AR, audio 4.08 s, RTF 0.169)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=9.0 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 54, stopping (slot 0)
+[Pipeline] Generation done : 54 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 9.0 ms (T_ctx prefill)
+[Perf] TTFA 20.0 ms (first frame codes)
+[Perf] TalkerDecode 159.3 ms (54 frames, 2.95 ms/frame)
+[Perf] CodePredictor 501.4 ms (9.29 ms/frame)
+[Perf] HostCompose 1.7 ms (c0 sample + next emb)
+[Perf] CodecDecode 58.4 ms
+[Perf] Total 731.7 ms (54 frames, 12.27 ms/frame AR, audio 4.32 s, RTF 0.169)
+[Prompt] Built: 17 ids, N_text=9, N_instruct=0, T_ctx=18, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=18 prefill=9.0 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=1028 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] EOS at step 45, stopping (slot 0)
+[Pipeline] Generation done : 45 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 9.0 ms (T_ctx prefill)
+[Perf] TTFA 19.8 ms (first frame codes)
+[Perf] TalkerDecode 133.0 ms (45 frames, 2.95 ms/frame)
+[Perf] CodePredictor 417.4 ms (9.28 ms/frame)
+[Perf] HostCompose 1.4 ms (c0 sample + next emb)
+[Perf] CodecDecode 48.5 ms
+[Perf] Total 611.2 ms (45 frames, 12.26 ms/frame AR, audio 3.60 s, RTF 0.170)
+ggml_backend_cuda_graph_compute: CUDA graph warmup complete
+[Prompt] Built: 18 ids, N_text=10, N_instruct=0, T_ctx=19, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=19 prefill=9.0 ms build=0.8 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 60, stopping (slot 0)
+[Pipeline] Generation done : 60 frames
+[Perf] PromptBuild 0.8 ms
+[Perf] Prefill 9.0 ms (T_ctx prefill)
+[Perf] TTFA 20.5 ms (first frame codes)
+[Perf] TalkerDecode 177.0 ms (60 frames, 2.95 ms/frame)
+[Perf] CodePredictor 556.0 ms (9.27 ms/frame)
+[Perf] HostCompose 1.9 ms (c0 sample + next emb)
+[Perf] CodecDecode 61.2 ms
+[Perf] Total 807.6 ms (60 frames, 12.25 ms/frame AR, audio 4.80 s, RTF 0.168)
+[Prompt] Built: 21 ids, N_text=13, N_instruct=0, T_ctx=22, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=22 prefill=9.2 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 53, stopping (slot 0)
+[Pipeline] Generation done : 53 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 9.2 ms (T_ctx prefill)
+[Perf] TTFA 20.4 ms (first frame codes)
+[Perf] TalkerDecode 156.3 ms (53 frames, 2.95 ms/frame)
+[Perf] CodePredictor 490.6 ms (9.26 ms/frame)
+[Perf] HostCompose 1.7 ms (c0 sample + next emb)
+[Perf] CodecDecode 55.3 ms
+[Perf] Total 715.1 ms (53 frames, 12.24 ms/frame AR, audio 4.24 s, RTF 0.169)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=8.9 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 61, stopping (slot 0)
+[Pipeline] Generation done : 61 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 8.9 ms (T_ctx prefill)
+[Perf] TTFA 19.8 ms (first frame codes)
+[Perf] TalkerDecode 180.1 ms (61 frames, 2.95 ms/frame)
+[Perf] CodePredictor 566.2 ms (9.28 ms/frame)
+[Perf] HostCompose 1.9 ms (c0 sample + next emb)
+[Perf] CodecDecode 62.0 ms
+[Perf] Total 821.1 ms (61 frames, 12.26 ms/frame AR, audio 4.88 s, RTF 0.168)
+[Prompt] Built: 20 ids, N_text=12, N_instruct=0, T_ctx=21, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=21 prefill=9.0 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 51, stopping (slot 0)
+[Pipeline] Generation done : 51 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 9.0 ms (T_ctx prefill)
+[Perf] TTFA 20.0 ms (first frame codes)
+[Perf] TalkerDecode 150.4 ms (51 frames, 2.95 ms/frame)
+[Perf] CodePredictor 472.7 ms (9.27 ms/frame)
+[Perf] HostCompose 1.6 ms (c0 sample + next emb)
+[Perf] CodecDecode 51.4 ms
+[Perf] Total 687.1 ms (51 frames, 12.25 ms/frame AR, audio 4.08 s, RTF 0.168)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=8.9 ms build=0.2 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 54, stopping (slot 0)
+[Pipeline] Generation done : 54 frames
+[Perf] PromptBuild 0.2 ms
+[Perf] Prefill 8.9 ms (T_ctx prefill)
+[Perf] TTFA 19.8 ms (first frame codes)
+[Perf] TalkerDecode 159.4 ms (54 frames, 2.95 ms/frame)
+[Perf] CodePredictor 501.2 ms (9.28 ms/frame)
+[Perf] HostCompose 1.7 ms (c0 sample + next emb)
+[Perf] CodecDecode 58.3 ms
+[Perf] Total 731.4 ms (54 frames, 12.27 ms/frame AR, audio 4.32 s, RTF 0.169)
+[Prompt] Built: 17 ids, N_text=9, N_instruct=0, T_ctx=18, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=18 prefill=9.0 ms build=0.2 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=1028 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] EOS at step 45, stopping (slot 0)
+[Pipeline] Generation done : 45 frames
+[Perf] PromptBuild 0.2 ms
+[Perf] Prefill 9.0 ms (T_ctx prefill)
+[Perf] TTFA 19.9 ms (first frame codes)
+[Perf] TalkerDecode 132.7 ms (45 frames, 2.95 ms/frame)
+[Perf] CodePredictor 417.0 ms (9.27 ms/frame)
+[Perf] HostCompose 1.4 ms (c0 sample + next emb)
+[Perf] CodecDecode 48.5 ms
+[Perf] Total 610.4 ms (45 frames, 12.25 ms/frame AR, audio 3.60 s, RTF 0.170)
+[Prompt] Built: 18 ids, N_text=10, N_instruct=0, T_ctx=19, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=19 prefill=8.9 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 60, stopping (slot 0)
+[Pipeline] Generation done : 60 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 8.9 ms (T_ctx prefill)
+[Perf] TTFA 19.9 ms (first frame codes)
+[Perf] TalkerDecode 176.9 ms (60 frames, 2.95 ms/frame)
+[Perf] CodePredictor 556.2 ms (9.27 ms/frame)
+[Perf] HostCompose 1.9 ms (c0 sample + next emb)
+[Perf] CodecDecode 61.3 ms
+[Perf] Total 807.2 ms (60 frames, 12.25 ms/frame AR, audio 4.80 s, RTF 0.168)
+[Prompt] Built: 21 ids, N_text=13, N_instruct=0, T_ctx=22, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=22 prefill=9.0 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 53, stopping (slot 0)
+[Pipeline] Generation done : 53 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 9.0 ms (T_ctx prefill)
+[Perf] TTFA 20.0 ms (first frame codes)
+[Perf] TalkerDecode 156.3 ms (53 frames, 2.95 ms/frame)
+[Perf] CodePredictor 491.4 ms (9.27 ms/frame)
+[Perf] HostCompose 1.7 ms (c0 sample + next emb)
+[Perf] CodecDecode 55.3 ms
+[Perf] Total 715.7 ms (53 frames, 12.25 ms/frame AR, audio 4.24 s, RTF 0.169)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=9.4 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 61, stopping (slot 0)
+[Pipeline] Generation done : 61 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 9.4 ms (T_ctx prefill)
+[Perf] TTFA 20.5 ms (first frame codes)
+[Perf] TalkerDecode 180.0 ms (61 frames, 2.95 ms/frame)
+[Perf] CodePredictor 565.9 ms (9.28 ms/frame)
+[Perf] HostCompose 1.9 ms (c0 sample + next emb)
+[Perf] CodecDecode 62.1 ms
+[Perf] Total 821.5 ms (61 frames, 12.26 ms/frame AR, audio 4.88 s, RTF 0.168)
+[Prompt] Built: 20 ids, N_text=12, N_instruct=0, T_ctx=21, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=21 prefill=9.3 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 51, stopping (slot 0)
+[Pipeline] Generation done : 51 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 9.3 ms (T_ctx prefill)
+[Perf] TTFA 20.6 ms (first frame codes)
+[Perf] TalkerDecode 150.6 ms (51 frames, 2.95 ms/frame)
+[Perf] CodePredictor 473.1 ms (9.28 ms/frame)
+[Perf] HostCompose 1.6 ms (c0 sample + next emb)
+[Perf] CodecDecode 51.5 ms
+[Perf] Total 688.4 ms (51 frames, 12.26 ms/frame AR, audio 4.08 s, RTF 0.169)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=9.1 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 54, stopping (slot 0)
+[Pipeline] Generation done : 54 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 9.1 ms (T_ctx prefill)
+[Perf] TTFA 20.2 ms (first frame codes)
+[Perf] TalkerDecode 159.7 ms (54 frames, 2.96 ms/frame)
+[Perf] CodePredictor 500.8 ms (9.27 ms/frame)
+[Perf] HostCompose 1.7 ms (c0 sample + next emb)
+[Perf] CodecDecode 58.4 ms
+[Perf] Total 731.8 ms (54 frames, 12.26 ms/frame AR, audio 4.32 s, RTF 0.169)
+[Prompt] Built: 17 ids, N_text=9, N_instruct=0, T_ctx=18, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=18 prefill=9.2 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=1028 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] EOS at step 45, stopping (slot 0)
+[Pipeline] Generation done : 45 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 9.2 ms (T_ctx prefill)
+[Perf] TTFA 20.3 ms (first frame codes)
+[Perf] TalkerDecode 133.1 ms (45 frames, 2.96 ms/frame)
+[Perf] CodePredictor 417.4 ms (9.28 ms/frame)
+[Perf] HostCompose 1.4 ms (c0 sample + next emb)
+[Perf] CodecDecode 48.7 ms
+[Perf] Total 612.0 ms (45 frames, 12.27 ms/frame AR, audio 3.60 s, RTF 0.170)
+[Prompt] Built: 18 ids, N_text=10, N_instruct=0, T_ctx=19, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=19 prefill=9.0 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 60, stopping (slot 0)
+[Pipeline] Generation done : 60 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 9.0 ms (T_ctx prefill)
+[Perf] TTFA 19.9 ms (first frame codes)
+[Perf] TalkerDecode 177.4 ms (60 frames, 2.96 ms/frame)
+[Perf] CodePredictor 555.4 ms (9.26 ms/frame)
+[Perf] HostCompose 1.9 ms (c0 sample + next emb)
+[Perf] CodecDecode 61.4 ms
+[Perf] Total 807.0 ms (60 frames, 12.24 ms/frame AR, audio 4.80 s, RTF 0.168)
+[Prompt] Built: 21 ids, N_text=13, N_instruct=0, T_ctx=22, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=22 prefill=9.1 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 53, stopping (slot 0)
+[Pipeline] Generation done : 53 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 9.1 ms (T_ctx prefill)
+[Perf] TTFA 20.2 ms (first frame codes)
+[Perf] TalkerDecode 156.6 ms (53 frames, 2.95 ms/frame)
+[Perf] CodePredictor 490.5 ms (9.25 ms/frame)
+[Perf] HostCompose 1.7 ms (c0 sample + next emb)
+[Perf] CodecDecode 55.2 ms
+[Perf] Total 715.2 ms (53 frames, 12.24 ms/frame AR, audio 4.24 s, RTF 0.169)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=9.0 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 61, stopping (slot 0)
+[Pipeline] Generation done : 61 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 9.0 ms (T_ctx prefill)
+[Perf] TTFA 20.1 ms (first frame codes)
+[Perf] TalkerDecode 180.4 ms (61 frames, 2.96 ms/frame)
+[Perf] CodePredictor 564.9 ms (9.26 ms/frame)
+[Perf] HostCompose 1.9 ms (c0 sample + next emb)
+[Perf] CodecDecode 62.1 ms
+[Perf] Total 820.6 ms (61 frames, 12.25 ms/frame AR, audio 4.88 s, RTF 0.168)
+[Prompt] Built: 20 ids, N_text=12, N_instruct=0, T_ctx=21, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=21 prefill=9.1 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 51, stopping (slot 0)
+[Pipeline] Generation done : 51 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 9.1 ms (T_ctx prefill)
+[Perf] TTFA 20.2 ms (first frame codes)
+[Perf] TalkerDecode 150.8 ms (51 frames, 2.96 ms/frame)
+[Perf] CodePredictor 473.2 ms (9.28 ms/frame)
+[Perf] HostCompose 1.6 ms (c0 sample + next emb)
+[Perf] CodecDecode 51.7 ms
+[Perf] Total 688.6 ms (51 frames, 12.27 ms/frame AR, audio 4.08 s, RTF 0.169)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=9.0 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 54, stopping (slot 0)
+[Pipeline] Generation done : 54 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 9.0 ms (T_ctx prefill)
+[Perf] TTFA 20.0 ms (first frame codes)
+[Perf] TalkerDecode 160.1 ms (54 frames, 2.96 ms/frame)
+[Perf] CodePredictor 500.2 ms (9.26 ms/frame)
+[Perf] HostCompose 1.7 ms (c0 sample + next emb)
+[Perf] CodecDecode 58.2 ms
+[Perf] Total 731.1 ms (54 frames, 12.26 ms/frame AR, audio 4.32 s, RTF 0.169)
+[Prompt] Built: 17 ids, N_text=9, N_instruct=0, T_ctx=18, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=18 prefill=8.9 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=1028 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] EOS at step 45, stopping (slot 0)
+[Pipeline] Generation done : 45 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 8.9 ms (T_ctx prefill)
+[Perf] TTFA 19.9 ms (first frame codes)
+[Perf] TalkerDecode 133.3 ms (45 frames, 2.96 ms/frame)
+[Perf] CodePredictor 416.6 ms (9.26 ms/frame)
+[Perf] HostCompose 1.4 ms (c0 sample + next emb)
+[Perf] CodecDecode 48.4 ms
+[Perf] Total 610.7 ms (45 frames, 12.25 ms/frame AR, audio 3.60 s, RTF 0.170)
+[Prompt] Built: 18 ids, N_text=10, N_instruct=0, T_ctx=19, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=19 prefill=9.3 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 60, stopping (slot 0)
+[Pipeline] Generation done : 60 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 9.3 ms (T_ctx prefill)
+[Perf] TTFA 20.6 ms (first frame codes)
+[Perf] TalkerDecode 177.0 ms (60 frames, 2.95 ms/frame)
+[Perf] CodePredictor 556.9 ms (9.28 ms/frame)
+[Perf] HostCompose 1.9 ms (c0 sample + next emb)
+[Perf] CodecDecode 61.3 ms
+[Perf] Total 809.0 ms (60 frames, 12.26 ms/frame AR, audio 4.80 s, RTF 0.169)
+[Prompt] Built: 21 ids, N_text=13, N_instruct=0, T_ctx=22, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=22 prefill=9.3 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 53, stopping (slot 0)
+[Pipeline] Generation done : 53 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 9.3 ms (T_ctx prefill)
+[Perf] TTFA 20.4 ms (first frame codes)
+[Perf] TalkerDecode 157.5 ms (53 frames, 2.97 ms/frame)
+[Perf] CodePredictor 491.4 ms (9.27 ms/frame)
+[Perf] HostCompose 1.7 ms (c0 sample + next emb)
+[Perf] CodecDecode 55.1 ms
+[Perf] Total 717.5 ms (53 frames, 12.27 ms/frame AR, audio 4.24 s, RTF 0.169)
+[Prompt] Built: 19 ids, N_text=11, N_instruct=0, T_ctx=20, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=20 prefill=9.0 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] Generated 56 frames (slot 0)
+[Pipeline] EOS at step 61, stopping (slot 0)
+[Pipeline] Generation done : 61 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 9.0 ms (T_ctx prefill)
+[Perf] TTFA 19.9 ms (first frame codes)
+[Perf] TalkerDecode 180.2 ms (61 frames, 2.95 ms/frame)
+[Perf] CodePredictor 566.0 ms (9.28 ms/frame)
+[Perf] HostCompose 1.9 ms (c0 sample + next emb)
+[Perf] CodecDecode 62.1 ms
+[Perf] Total 821.4 ms (61 frames, 12.27 ms/frame AR, audio 4.88 s, RTF 0.168)
+[Prompt] Built: 20 ids, N_text=12, N_instruct=0, T_ctx=21, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=21 prefill=9.0 ms build=0.3 ms (stall for 0 active slots)
+[Sample] step=0 c0=1995 u=0.6129598618 subseq=0
+[Sample] step=1 c0=215 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 51, stopping (slot 0)
+[Pipeline] Generation done : 51 frames
+[Perf] PromptBuild 0.3 ms
+[Perf] Prefill 9.0 ms (T_ctx prefill)
+[Perf] TTFA 20.0 ms (first frame codes)
+[Perf] TalkerDecode 151.8 ms (51 frames, 2.98 ms/frame)
+[Perf] CodePredictor 472.5 ms (9.26 ms/frame)
+[Perf] HostCompose 1.6 ms (c0 sample + next emb)
+[Perf] CodecDecode 51.6 ms
+[Perf] Total 688.6 ms (51 frames, 12.27 ms/frame AR, audio 4.08 s, RTF 0.169)

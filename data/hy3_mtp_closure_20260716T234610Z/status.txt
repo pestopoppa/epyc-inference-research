@@ -1,0 +1,3 @@
+OUT=/mnt/raid0/llm/tmp/hy3-mtp-closure-20260716T234610Z
+cpu_nospec_exit=0
+cpu_mtp_exit=0

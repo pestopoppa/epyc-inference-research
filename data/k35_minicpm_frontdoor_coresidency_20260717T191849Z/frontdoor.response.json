@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\n  \"status\": \"ok\",\n  \"checks\": [\n    \"API Gateway latency p99 < 200ms\",\n    \"API Gateway error rate < 0.1%\",\n    \"Database connection pool active < 80%\",\n    \"Database connection pool idle > 10%\",\n    \"Database replication lag < 1s\",\n    \"Database disk usage < 70%\",\n    \"Database CPU usage < 75%\",\n    \"Redis memory usage < 80%\",\n    \"Redis hit rate > 95%\",\n    \"Redis connection count < 1000\",\n    \"Redis latency p99 < 5ms\",\n    \"Kafka consumer lag < 1000\",\n    \"Kafka producer throughput stable\",\n    \"Kafka broker disk usage < 70%\",\n    \"Kafka under-replicated partitions = 0\",\n    \"Elasticsearch cluster health green\",\n    \"Elasticsearch JVM heap usage < 75%\",\n    \"Elasticsearch index rate stable\",\n    \"Elasticsearch shard allocation balanced\",\n    \"Message queue depth < threshold\",\n    \"Message queue processing rate > 0\",\n    \"Message queue dead letter queue empty\",\n    \"Load balancer health checks passing\",\n    \"Load balancer active connections < limit\",\n    \"Load balancer SSL certificate valid\",\n    \"CDN cache hit ratio > 90%\",\n    \"CDN bandwidth usage normal\",\n    \"CDN origin response time < 500ms\",\n    \"Container CPU usage < 80%\",\n    \"Container memory usage < 80%\",\n    \"Container restart count = 0\",\n    \"Container disk I/O wait < 20%\",\n    \"Pod readiness probes passing\",\n    \"Pod liveness probes passing\",\n    \"Service mesh sidecar health ok\",\n    \"Service mesh traffic routing correct\",\n    \"Authentication service response time < 100ms\",\n    \"Authorization cache hit rate > 90%\",\n    \"Token refresh rate normal\",\n    \"Session store availability 100%\",\n    \"Rate limiter counters reset correctly\",\n    \"Feature flag service reachable\",\n    \"Feature flag configuration valid\",\n    \"Config service sync status ok\",\n    \"Secrets manager access granted\",\n   "
+      }
+    }
+  ],
+  "created": 1784315942,
+  "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 512,
+    "prompt_tokens": 48,
+    "total_tokens": 560,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "id": "chatcmpl-9IfxLhZyugG2nJGuCCMggu8QX9eO3dHq",
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 48,
+    "prompt_ms": 186.517,
+    "prompt_per_token_ms": 3.8857708333333334,
+    "prompt_per_second": 257.34919605183444,
+    "predicted_n": 512,
+    "predicted_ms": 5121.551,
+    "predicted_per_token_ms": 10.003029296875,
+    "predicted_per_second": 99.96971620511052
+  }
+}

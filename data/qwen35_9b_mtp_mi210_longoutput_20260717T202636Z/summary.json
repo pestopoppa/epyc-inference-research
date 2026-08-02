@@ -1,0 +1,41 @@
+{
+  "arms": [
+    {
+      "all_benchmark": true,
+      "arm": "no_spec",
+      "cleanup": {
+        "killed": false,
+        "returncode": 0
+      },
+      "completion_tokens": 1024,
+      "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+      "decode_tps": 95.07920543496508,
+      "draft_n": null,
+      "draft_n_accepted": null,
+      "finish_reason": "length",
+      "prompt_tps": 422.90367631149314,
+      "spec_type": "none",
+      "word_count": 1024
+    },
+    {
+      "all_benchmark": true,
+      "arm": "draft_mtp_n2",
+      "cleanup": {
+        "killed": false,
+        "returncode": 0
+      },
+      "completion_tokens": 1024,
+      "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+      "decode_tps": 140.50430342453168,
+      "draft_n": 682,
+      "draft_n_accepted": 682,
+      "finish_reason": "length",
+      "prompt_tps": 392.1640157595214,
+      "spec_type": "draft-mtp",
+      "word_count": 1024
+    }
+  ],
+  "created_at": "2026-07-17T20:26:36.948502+00:00",
+  "model": "/mnt/raid0/llm/models/Qwen3.5-9B-MTP-GGUF/Qwen3.5-9B-Q4_K_M.gguf",
+  "schema": "qwen35_9b_mtp_mi210_longoutput_ab.v1"
+}

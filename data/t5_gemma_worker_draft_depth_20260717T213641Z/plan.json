@@ -1,0 +1,14 @@
+{
+  "base_scenario": "worker_general_cpu_composed_spec",
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "classification": "T5 CPU worker lane draft-depth sweep; production-shaped Gemma4 composed ngram-mod,draft-mtp; experimental v7 only",
+  "context": 8192,
+  "created_at": "2026-07-17T21:36:41.923736+00:00",
+  "depths": [
+    2,
+    3,
+    4
+  ],
+  "max_tokens": 512,
+  "schema": "t5.gemma_worker_draft_depth.plan.v1"
+}

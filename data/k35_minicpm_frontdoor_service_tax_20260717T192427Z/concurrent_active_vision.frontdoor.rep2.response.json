@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "[\n  \"ok\",\n  \"healthy\",\n  \"up\",\n  \"running\",\n  \"active\",\n  \"ready\",\n  \"available\",\n  \"connected\",\n  \"synced\",\n  \"online\",\n  \"live\",\n  \"serving\",\n  \"responding\",\n  \"listening\",\n  \"bound\",\n  \"attached\",\n  \"linked\",\n  \"paired\",\n  \"joined\",\n  \"merged\",\n  \"integrated\",\n  \"loaded\",\n  \"initialized\",\n  \"started\",\n  \"booted\",\n  \"launched\",\n  \"awake\",\n  \"alert\",\n  \"aware\",\n  \"present\",\n  \"here\",\n  \"there\",\n  \"everywhere\",\n  \"nowhere\",\n  \"somewhere\",\n  \"anywhere\",\n  \"inside\",\n  \"outside\",\n  \"above\",\n  \"below\",\n  \"left\",\n  \"right\",\n  \"front\",\n  \"back\",\n  \"top\",\n  \"bottom\",\n  \"center\",\n  \"edge\",\n  \"core\",\n  \"shell\",\n  \"skin\",\n  \"bone\",\n  \"muscle\",\n  \"nerve\",\n  \"blood\",\n  \"heart\",\n  \"lung\",\n  \"liver\",\n  \"kidney\",\n  \"spleen\",\n  \"pancreas\",\n  \"stomach\",\n  \"intestine\",\n  \"colon\",\n  \"rectum\",\n  \"bladder\",\n  \"ureter\",\n  \"urethra\",\n  \"prostate\",\n  \"testis\",\n  \"ovary\",\n  \"uterus\",\n  \"vagina\",\n  \"penis\",\n  \"clitoris\",\n  \"labia\",\n  \"scrotum\",\n  \"breast\",\n  \"nipple\",\n  \"areola\",\n  \"thorax\",\n  \"chest\",\n  \"rib\",\n  \"sternum\",\n  \"clavicle\",\n  \"scapula\",\n  \"humerus\",\n  \"radius\",\n  \"ulna\",\n  \"carpal\",\n  \"metacarpal\",\n  \"phalanx\",\n  \"pelvis\",\n  \"femur\",\n  \"patella\",\n  \"tibia\",\n  \"fibula\",\n  \"tarsal\",\n  \"metatarsal\",\n  \"calcaneus\",\n  \"talus\",\n  \"navicular\",\n  \"cuboid\",\n  \"lateral\",\n  \"medial\",\n  \"proximal\",\n  \"distal\",\n  \"superior\",\n  \"inferior\",\n  \"anterior\",\n  \"posterior\",\n  \"ventral\",\n  \"dorsal\",\n  \"cranial\",\n  \"caudal\",\n  \"rostral\",\n  \"ipsilateral\",\n  \"contralateral\",\n  \"bilateral\",\n  \"unilateral\",\n  \"midline\",\n  \"paramedian\",\n  \"parietal\",\n  \"occipital\",\n  \"temporal\",\n  \"frontal\",\n  \"sagittal\",\n  \"coronal\",\n  \"axial\",\n  \"transverse\",\n  \"horizontal\",\n  \"vertical\",\n  \"longitudinal\",\n  \"lateral\",\n  \"medial\",\n  \"superficial\",\n  \"deep\",\n  \"internal\",\n  \"external\",\n  \"inner\",\n  \"outer\",\n  \"upper\",\n  \"lower\",\n  \"left\",\n  \"right\",\n  \"head\",\n  \"neck\",\n  \"shoulder\",\n  \"arm\",\n  \"elbow\",\n  \"wrist\",\n  \"hand\",\n  \"finger\",\n  \"thumb\",\n  \"index\",\n  \"middle\",\n  \"ring\",\n  \"pinky\",\n  \"hip\",\n  \"thigh\",\n  \"knee\",\n  \"calf\",\n  \"ankle\",\n  \"foot\",\n  \"toe\",\n  \"heel\",\n  \"sole\",\n  \"arch\",\n  \"instep\",\n  \"ball\",\n  \"pad\",\n  \"nail\",\n  \"cuticle\",\n  \"matrix\",\n  \"bed\",\n  \"plate\",\n  \"fold\",\n  \"crease\",\n  \"wrinkle\",\n "
+      }
+    }
+  ],
+  "created": 1784316343,
+  "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 1024,
+    "prompt_tokens": 40,
+    "total_tokens": 1064,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "id": "chatcmpl-AglKDIkUUDgObTl17PJaEyeagWh7mvDi",
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 40,
+    "prompt_ms": 179.954,
+    "prompt_per_token_ms": 4.49885,
+    "prompt_per_second": 222.27902686242038,
+    "predicted_n": 1024,
+    "predicted_ms": 12745.213,
+    "predicted_per_token_ms": 12.4464970703125,
+    "predicted_per_second": 80.34389068272142
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "cells": [
+    {
+      "context": 16384,
+      "description": "Qwen3-VL-30B-A3B vision escalation candidate with the llama.cpp warned minimum 1024 image-token bound for better Qwen-VL accuracy.",
+      "fixtures": [
+        {
+          "expected_terms": [
+            "7500"
+          ],
+          "fixture_id": "ocr_digit_7500",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0237.png",
+          "prompt": "What number is shown in the image? Answer with digits only."
+        },
+        {
+          "expected_terms": [
+            "43.36"
+          ],
+          "fixture_id": "receipt_total_payable",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0713.png",
+          "prompt": "What is the total payable amount on the receipt? Answer with the amount only."
+        },
+        {
+          "expected_terms": [
+            "tanzania"
+          ],
+          "fixture_id": "chart_tanzania",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0619.png",
+          "prompt": "Which country has 7 years of compulsory education in the chart? Answer with the country name only."
+        },
+        {
+          "expected_terms": [
+            "cs00012465"
+          ],
+          "fixture_id": "receipt_doc_number",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0734.png",
+          "prompt": "What is the Doc No. on the receipt? Answer with the document number only."
+        }
+      ],
+      "mmproj": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf",
+      "model": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf",
+      "parallel": 1,
+      "port": 19250,
+      "prior_evidence": "Current production launch emitted llama.cpp Qwen-VL accuracy warning and failed chart_tanzania in /mnt/raid0/llm/tmp/k35-vision-matrix-20260717T1500Z/summary.json",
+      "role": "vision_escalation",
+      "scenario": "vision_escalation_cpu_qwen3vl30b_moe4_image1024",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "GGML_IQK=1",
+        "ROCR_VISIBLE_DEVICES=0",
+        "HIP_VISIBLE_DEVICES=0",
+        "OMP_NUM_THREADS=1",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf",
+        "--mmproj",
+        "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "19250",
+        "-np",
+        "1",
+        "-c",
+        "16384",
+        "-t",
+        "96",
+        "--flash-attn",
+        "on",
+        "--device",
+        "none",
+        "--override-kv",
+        "qwen3vlmoe.expert_used_count=int:4",
+        "--image-min-tokens",
+        "1024",
+        "--image-max-tokens",
+        "1024"
+      ],
+      "threads": 96
+    }
+  ],
+  "created_at": "2026-07-17T14:18:04.293113+00:00",
+  "execute": true,
+  "max_tokens": 96,
+  "schema": "epyc.k35_vision_matrix.plan.v1"
+}

@@ -1,0 +1,4 @@
+{"prompt_key": "p4", "decode_tps": 30.87230419060175, "predicted_n": 256, "predicted_ms": 8292.222, "prompt_n": 16, "prompt_per_second": 111.64919821919528, "wall_s": 8.539}
+{"prompt_key": "p5", "decode_tps": 30.868265216758523, "predicted_n": 256, "predicted_ms": 8293.307, "prompt_n": 22, "prompt_per_second": 141.26016912694794, "wall_s": 8.539}
+{"prompt_key": "p6", "decode_tps": 30.891840185891652, "predicted_n": 256, "predicted_ms": 8286.978, "prompt_n": 19, "prompt_per_second": 134.65913520485904, "wall_s": 8.52}
+{"summary": {"n": 3, "min": 30.868265216758523, "median": 30.87230419060175, "max": 30.891840185891652}}

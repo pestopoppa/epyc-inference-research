@@ -1,0 +1,109 @@
+{
+  "artifact_root": "/mnt/raid0/llm/tmp/t5-gemma-worker-draft-depth-20260717T213641Z",
+  "classification": "T5 CPU worker lane draft-depth sweep; production-shaped Gemma4 composed ngram-mod,draft-mtp; experimental v7 only",
+  "created_at": "2026-07-17T21:38:46.103165+00:00",
+  "post_cleanup": {
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "1849379 /usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh\n2337749 /usr/bin/bash -lc python3 - <<'PY' from __future__ import annotations import dataclasses, json, os, signal, subprocess, time, sys from datetime import UTC, datetime from pathlib import Path  sys.path.insert(0, '/mnt/raid0/llm/epyc-inference-research/scripts/benchmark') import k35_stack_context_matrix_runner as k35  OUT = Path('/mnt/raid0/llm/tmp') / f\"t5-gemma-worker-draft-depth-{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}\" OUT.mkdir(parents=True, exist_ok=True) BINARY = Path('/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server') BASE_PORT = 19420 CONTEXT = 8192 MAX_TOKENS = 512 MIN_COMPLETION = 256 DEPTHS = [2, 3, 4] base = k35.scenario_by_name('worker_general_cpu_composed_spec')  def write_json(path, obj):     path.parent.mkdir(parents=True, exist_ok=True)     path.write_text(json.dumps(obj, indent=2, sort_keys=True) + '\\n', encoding='utf-8')  def terminate(proc):     result = {'pid': proc.pid, 'terminated': False, 'killed': False}     if proc.poll() is None:         try:             os.killpg(os.getpgid(proc.pid), signal.SIGTERM)         except ProcessLookupError:             pass         deadline = time.monotonic() + 20         while proc.poll() is None and time.monotonic() < deadline:             time.sleep(0.25)     if proc.poll() is None:         try:             os.killpg(os.getpgid(proc.pid), signal.SIGKILL)         except ProcessLookupError:             pass         proc.wait(timeout=20)         result['killed'] = True     else:         result['terminated'] = True     result['returncode'] = proc.poll()     ps = subprocess.run(['ps','-p',str(proc.pid),'-o','pid=,comm=,args='], capture_output=True, text=True)     result['ps_after'] = {'returncode': ps.returncode, 'stdout': ps.stdout, 'stderr': ps.stderr}     result['dead'] = str(proc.pid) not in ps.stdout     return result  plan = {     'schema': 't5.gemma_worker_draft_depth.plan.v1',     'created_at': datetime.now(UTC).isoformat(),     'classification': 'T5 CPU worker lane draft-depth sweep; production-shaped Gemma4 composed ngram-mod,draft-mtp; experimental v7 only',     'binary': str(BINARY),     'base_scenario': base.name,     'context': CONTEXT,     'max_tokens': MAX_TOKENS,     'depths': DEPTHS, } write_json(OUT/'plan.json', plan) print(f'ARTIFACT_ROOT={OUT}', flush=True) results = [] for i, depth in enumerate(DEPTHS):     scenario = dataclasses.replace(base, name=f'{base.name}_draft{depth}', spec_draft_n_max=depth)     port = BASE_PORT + i     cell_dir = OUT / f'draft{depth}'     cell_dir.mkdir(parents=True, exist_ok=True)     argv = k35.build_server_argv(scenario, binary=BINARY, port=port, nominal_context=CONTEXT, max_tokens=MAX_TOKENS)     write_json(cell_dir/'server_argv.json', argv)     with (cell_dir/'server.stderr').open('w', encoding='utf-8') as stderr:         proc = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=stderr, text=True, start_new_session=True)     result = {'depth': depth, 'port': port, 'argv_path': str(cell_dir/'server_argv.json'), 'status': 'unknown'}     try:         k35.wait_for_health(port, 600)         prompt = k35.prompt_for_context(CONTEXT, MAX_TOKENS)         start = time.monotonic()         response = k35.query_chat(scenario, port, prompt, max_tokens=MAX_TOKENS, timeout_s=1800)         elapsed = time.monotonic() - start         write_json(cell_dir/'response.json', response)         summary = k35.summarize_response(scenario, CONTEXT, MAX_TOKENS, response, elapsed, MIN_COMPLETION)         result.update(summary)         result['status'] = 'ok' if summary.get('passed_min_completion') else 'short_completion'         print(f\"depth={depth} status={result['status']} decode={summary.get('decode_tps')} draft={summary.get('draft_n_accepted')}/{summary.get('draft_n')} completion={summary.get('completion_tokens')}\", flush=True)     except Exception as exc:         result.update({'status': 'error', 'error': repr(exc)})         print(f\"depth={depth} ERROR {exc!r}\", flush=True)     finally:         result['cleanup'] = terminate(proc)         write_json(cell_dir/'result.json', result)     results.append(result)     time.sleep(3) post = subprocess.run(['bash','-lc',\"pgrep -af 'llama-server|llama-cli|llama-bench' || true; rocm-smi --showuse --showmemuse --showpidgpus 2>/dev/null || true\"], capture_output=True, text=True) summary = {     'schema': 't5.gemma_worker_draft_depth.summary.v1',     'created_at': datetime.now(UTC).isoformat(),     'artifact_root': str(OUT),     'classification': plan['classification'],     'results': results,     'post_cleanup': {'returncode': post.returncode, 'stdout': post.stdout, 'stderr': post.stderr}, } write_json(OUT/'summary.json', summary) print(json.dumps({'artifact_root': str(OUT), 'results': [{k: r.get(k) for k in ['depth','status','decode_tps','draft_n','draft_n_accepted','completion_tokens']} for r in results]}, indent=2), flush=True) PY\n2340797 bash -lc pgrep -af 'llama-server|llama-cli|llama-bench' || true; rocm-smi --showuse --showmemuse --showpidgpus 2>/dev/null || true\n\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3652382244\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 0\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2293562921\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+  },
+  "results": [
+    {
+      "argv_path": "/mnt/raid0/llm/tmp/t5-gemma-worker-draft-depth-20260717T213641Z/draft2/server_argv.json",
+      "cleanup": {
+        "dead": true,
+        "killed": false,
+        "pid": 2337763,
+        "ps_after": {
+          "returncode": 1,
+          "stderr": "",
+          "stdout": ""
+        },
+        "returncode": 0,
+        "terminated": true
+      },
+      "completion_tokens": 512,
+      "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+      "decode_tps": 87.76227120530166,
+      "depth": 2,
+      "draft_n": 666,
+      "draft_n_accepted": 492,
+      "elapsed_s": 32.63790433993563,
+      "max_tokens": 512,
+      "min_completion_tokens": 256,
+      "nominal_context": 8192,
+      "passed_min_completion": true,
+      "port": 19420,
+      "prompt_tokens": 6726,
+      "prompt_tps": 251.21489630382436,
+      "role": "worker_general",
+      "scenario": "worker_general_cpu_composed_spec_draft2",
+      "status": "ok"
+    },
+    {
+      "argv_path": "/mnt/raid0/llm/tmp/t5-gemma-worker-draft-depth-20260717T213641Z/draft3/server_argv.json",
+      "cleanup": {
+        "dead": true,
+        "killed": false,
+        "pid": 2338837,
+        "ps_after": {
+          "returncode": 1,
+          "stderr": "",
+          "stdout": ""
+        },
+        "returncode": 0,
+        "terminated": true
+      },
+      "completion_tokens": 512,
+      "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+      "decode_tps": 76.38022193824958,
+      "depth": 3,
+      "draft_n": 812,
+      "draft_n_accepted": 492,
+      "elapsed_s": 32.90985788102262,
+      "max_tokens": 512,
+      "min_completion_tokens": 256,
+      "nominal_context": 8192,
+      "passed_min_completion": true,
+      "port": 19421,
+      "prompt_tokens": 6726,
+      "prompt_tps": 256.94431551386685,
+      "role": "worker_general",
+      "scenario": "worker_general_cpu_composed_spec_draft3",
+      "status": "ok"
+    },
+    {
+      "argv_path": "/mnt/raid0/llm/tmp/t5-gemma-worker-draft-depth-20260717T213641Z/draft4/server_argv.json",
+      "cleanup": {
+        "dead": true,
+        "killed": false,
+        "pid": 2339740,
+        "ps_after": {
+          "returncode": 1,
+          "stderr": "",
+          "stdout": ""
+        },
+        "returncode": 0,
+        "terminated": true
+      },
+      "completion_tokens": 512,
+      "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+      "decode_tps": 84.39662921181626,
+      "depth": 4,
+      "draft_n": 734,
+      "draft_n_accepted": 494,
+      "elapsed_s": 32.90960713010281,
+      "max_tokens": 512,
+      "min_completion_tokens": 256,
+      "nominal_context": 8192,
+      "passed_min_completion": true,
+      "port": 19422,
+      "prompt_tokens": 6726,
+      "prompt_tps": 250.84563434799512,
+      "role": "worker_general",
+      "scenario": "worker_general_cpu_composed_spec_draft4",
+      "status": "ok"
+    }
+  ],
+  "schema": "t5.gemma_worker_draft_depth.summary.v1"
+}

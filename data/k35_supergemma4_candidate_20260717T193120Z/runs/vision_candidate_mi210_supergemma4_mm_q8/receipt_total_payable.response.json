@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "43.36",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784316700,
+  "id": "chatcmpl-pCme660qzlhoLc2EnVDYEB4SEkG4sao0",
+  "model": "/mnt/raid0/llm/models/supergemma4-26b-abliterated-multimodal-8bit/supergemma4-26b-abliterated-multimodal-Q8_0.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 74.67,
+    "predicted_n": 6,
+    "predicted_per_second": 80.35355564483729,
+    "predicted_per_token_ms": 12.445,
+    "prompt_ms": 371.683,
+    "prompt_n": 284,
+    "prompt_per_second": 764.0919816079831,
+    "prompt_per_token_ms": 1.3087429577464789
+  },
+  "usage": {
+    "completion_tokens": 6,
+    "prompt_tokens": 284,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 290
+  }
+}

@@ -1,0 +1,226 @@
+[
+  {
+    "phase": "frontdoor_alone",
+    "rep": 1,
+    "kind": "frontdoor",
+    "ok": true,
+    "elapsed_s": 10.234134674072266,
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 39,
+      "prompt_ms": 153.325,
+      "prompt_per_token_ms": 3.931410256410256,
+      "prompt_per_second": 254.36165008967882,
+      "predicted_n": 1024,
+      "predicted_ms": 10070.374,
+      "predicted_per_token_ms": 9.834349609375,
+      "predicted_per_second": 101.684406160089
+    },
+    "usage": {
+      "completion_tokens": 1024,
+      "prompt_tokens": 39,
+      "total_tokens": 1063,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "content_preview": "[\n  \"health_check_001\",\n  \"health_check_002\",\n  \"health_check_003\",\n  \"health_check_004\",\n  \"health_check_005\",\n  \"health_check_006\",\n  \"health_check_007\",\n  \"health_check_008\",\n  \"health_check_009\",\n  \"health_check_010\",\n  \"health_check_011\",\n  \"health_check_012\",\n  \"health_check_013\",\n  \"health_ch",
+    "response_file": "/mnt/raid0/llm/tmp/k35-minicpm-frontdoor-service-tax-20260717T192427Z/frontdoor_alone.frontdoor.rep1.response.json"
+  },
+  {
+    "phase": "frontdoor_alone",
+    "rep": 2,
+    "kind": "frontdoor",
+    "ok": true,
+    "elapsed_s": 10.198179721832275,
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 39,
+      "prompt_ms": 111.531,
+      "prompt_per_token_ms": 2.859769230769231,
+      "prompt_per_second": 349.6785647039836,
+      "predicted_n": 1024,
+      "predicted_ms": 10055.45,
+      "predicted_per_token_ms": 9.819775390625,
+      "predicted_per_second": 101.83532313322625
+    },
+    "usage": {
+      "completion_tokens": 1024,
+      "prompt_tokens": 39,
+      "total_tokens": 1063,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "content_preview": "[\"/health\",\"/healthz\",\"/ready\",\"/live\",\"/status\",\"/ping\",\"/ok\",\"/alive\",\"/check\",\"/info\",\"/metrics\",\"/version\",\"/api/health\",\"/api/status\",\"/api/ready\",\"/api/live\",\"/svc/health\",\"/svc/status\",\"/svc/ready\",\"/svc/live\",\"/v1/health\",\"/v1/status\",\"/v1/ready\",\"/v1/live\",\"/v2/health\",\"/v2/status\",\"/v2/rea",
+    "response_file": "/mnt/raid0/llm/tmp/k35-minicpm-frontdoor-service-tax-20260717T192427Z/frontdoor_alone.frontdoor.rep2.response.json"
+  },
+  {
+    "phase": "frontdoor_with_minicpm_idle",
+    "rep": 1,
+    "kind": "frontdoor",
+    "ok": true,
+    "elapsed_s": 10.193625688552856,
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 40,
+      "prompt_ms": 113.093,
+      "prompt_per_token_ms": 2.827325,
+      "prompt_per_second": 353.6912098892062,
+      "predicted_n": 1024,
+      "predicted_ms": 10050.216,
+      "predicted_per_token_ms": 9.8146640625,
+      "predicted_per_second": 101.88835742435784
+    },
+    "usage": {
+      "completion_tokens": 1024,
+      "prompt_tokens": 40,
+      "total_tokens": 1064,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "content_preview": "[\n  \"health_check_001\",\n  \"health_check_002\",\n  \"health_check_003\",\n  \"health_check_004\",\n  \"health_check_005\",\n  \"health_check_006\",\n  \"health_check_007\",\n  \"health_check_008\",\n  \"health_check_009\",\n  \"health_check_010\",\n  \"health_check_011\",\n  \"health_check_012\",\n  \"health_check_013\",\n  \"health_ch",
+    "response_file": "/mnt/raid0/llm/tmp/k35-minicpm-frontdoor-service-tax-20260717T192427Z/frontdoor_with_minicpm_idle.frontdoor.rep1.response.json"
+  },
+  {
+    "phase": "frontdoor_with_minicpm_idle",
+    "rep": 2,
+    "kind": "frontdoor",
+    "ok": true,
+    "elapsed_s": 10.195204257965088,
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 40,
+      "prompt_ms": 112.52,
+      "prompt_per_token_ms": 2.8129999999999997,
+      "prompt_per_second": 355.49235691432636,
+      "predicted_n": 1024,
+      "predicted_ms": 10053.032,
+      "predicted_per_token_ms": 9.8174140625,
+      "predicted_per_second": 101.85981701838809
+    },
+    "usage": {
+      "completion_tokens": 1024,
+      "prompt_tokens": 40,
+      "total_tokens": 1064,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "content_preview": "[\n  \"ok\",\n  \"healthy\",\n  \"up\",\n  \"running\",\n  \"active\",\n  \"ready\",\n  \"available\",\n  \"connected\",\n  \"synced\",\n  \"online\",\n  \"live\",\n  \"serving\",\n  \"responding\",\n  \"processing\",\n  \"idle\",\n  \"waiting\",\n  \"listening\",\n  \"bound\",\n  \"attached\",\n  \"linked\",\n  \"paired\",\n  \"joined\",\n  \"merged\",\n  \"combined\",",
+    "response_file": "/mnt/raid0/llm/tmp/k35-minicpm-frontdoor-service-tax-20260717T192427Z/frontdoor_with_minicpm_idle.frontdoor.rep2.response.json"
+  },
+  {
+    "phase": "concurrent_active_vision",
+    "rep": 1,
+    "kind": "minicpm_o45",
+    "ok": true,
+    "elapsed_s": 6.074581623077393,
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 238,
+      "prompt_ms": 358.893,
+      "prompt_per_token_ms": 1.507953781512605,
+      "prompt_per_second": 663.150298278317,
+      "predicted_n": 512,
+      "predicted_ms": 5658.069,
+      "predicted_per_token_ms": 11.050916015625,
+      "predicted_per_second": 90.49023615654032
+    },
+    "usage": {
+      "completion_tokens": 512,
+      "prompt_tokens": 238,
+      "total_tokens": 750,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "content_preview": "The chart titled \"Duration of compulsory education, 2005 to 2014\" illustrates the number of years that children are legally obliged to attend school across four selected countries over a decade. The vertical axis represents the duration of compulsory education in years, ranging from 0 to 8 years, wi",
+    "response_file": "/mnt/raid0/llm/tmp/k35-minicpm-frontdoor-service-tax-20260717T192427Z/concurrent_active_vision.minicpm_o45.rep1.response.json"
+  },
+  {
+    "phase": "concurrent_active_vision",
+    "rep": 1,
+    "kind": "frontdoor",
+    "ok": true,
+    "elapsed_s": 12.947232007980347,
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 40,
+      "prompt_ms": 141.814,
+      "prompt_per_token_ms": 3.54535,
+      "prompt_per_second": 282.05959919330957,
+      "predicted_n": 1024,
+      "predicted_ms": 12775.186,
+      "predicted_per_token_ms": 12.475767578125,
+      "predicted_per_second": 80.15538873563172
+    },
+    "usage": {
+      "completion_tokens": 1024,
+      "prompt_tokens": 40,
+      "total_tokens": 1064,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "content_preview": "[\n  \"health_check_001\",\n  \"health_check_002\",\n  \"health_check_003\",\n  \"health_check_004\",\n  \"health_check_005\",\n  \"health_check_006\",\n  \"health_check_007\",\n  \"health_check_008\",\n  \"health_check_009\",\n  \"health_check_010\",\n  \"health_check_011\",\n  \"health_check_012\",\n  \"health_check_013\",\n  \"health_ch",
+    "response_file": "/mnt/raid0/llm/tmp/k35-minicpm-frontdoor-service-tax-20260717T192427Z/concurrent_active_vision.frontdoor.rep1.response.json"
+  },
+  {
+    "phase": "concurrent_active_vision",
+    "rep": 2,
+    "kind": "minicpm_o45",
+    "ok": true,
+    "elapsed_s": 6.063082218170166,
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 238,
+      "prompt_ms": 311.84,
+      "prompt_per_token_ms": 1.310252100840336,
+      "prompt_per_second": 763.2119035402771,
+      "predicted_n": 512,
+      "predicted_ms": 5674.29,
+      "predicted_per_token_ms": 11.08259765625,
+      "predicted_per_second": 90.23155319872619
+    },
+    "usage": {
+      "completion_tokens": 512,
+      "prompt_tokens": 238,
+      "total_tokens": 750,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "content_preview": "The chart titled \"Duration of compulsory education, 2005 to 2014\" illustrates the number of years that children are legally obliged to attend school across four selected countries over a decade. The vertical axis represents the duration of compulsory education in years, ranging from 0 to 8 years, wi",
+    "response_file": "/mnt/raid0/llm/tmp/k35-minicpm-frontdoor-service-tax-20260717T192427Z/concurrent_active_vision.minicpm_o45.rep2.response.json"
+  },
+  {
+    "phase": "concurrent_active_vision",
+    "rep": 2,
+    "kind": "frontdoor",
+    "ok": true,
+    "elapsed_s": 12.955116987228394,
+    "timings": {
+      "cache_n": 0,
+      "prompt_n": 40,
+      "prompt_ms": 179.954,
+      "prompt_per_token_ms": 4.49885,
+      "prompt_per_second": 222.27902686242038,
+      "predicted_n": 1024,
+      "predicted_ms": 12745.213,
+      "predicted_per_token_ms": 12.4464970703125,
+      "predicted_per_second": 80.34389068272142
+    },
+    "usage": {
+      "completion_tokens": 1024,
+      "prompt_tokens": 40,
+      "total_tokens": 1064,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "content_preview": "[\n  \"ok\",\n  \"healthy\",\n  \"up\",\n  \"running\",\n  \"active\",\n  \"ready\",\n  \"available\",\n  \"connected\",\n  \"synced\",\n  \"online\",\n  \"live\",\n  \"serving\",\n  \"responding\",\n  \"listening\",\n  \"bound\",\n  \"attached\",\n  \"linked\",\n  \"paired\",\n  \"joined\",\n  \"merged\",\n  \"integrated\",\n  \"loaded\",\n  \"initialized\",\n  \"star",
+    "response_file": "/mnt/raid0/llm/tmp/k35-minicpm-frontdoor-service-tax-20260717T192427Z/concurrent_active_vision.frontdoor.rep2.response.json"
+  }
+]

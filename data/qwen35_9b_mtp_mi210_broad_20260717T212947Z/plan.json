@@ -1,0 +1,47 @@
+{
+  "arms": [
+    {
+      "name": "no_spec_control",
+      "port": 19320,
+      "spec_type": "none"
+    },
+    {
+      "draft_n_max": 2,
+      "name": "draft_mtp_n2",
+      "port": 19321,
+      "spec_type": "draft-mtp"
+    },
+    {
+      "draft_n_max": 2,
+      "name": "ngram_then_draft_mtp_n2",
+      "port": 19322,
+      "spec_type": "ngram-mod,draft-mtp"
+    }
+  ],
+  "classification": "realistic MI210 task-quality/speed pass; no-spec is diagnostic control, draft-mtp and ngram-mod,draft-mtp are candidate serving lanes",
+  "created_at": "2026-07-17T21:29:47.530506+00:00",
+  "model": "/mnt/raid0/llm/models/Qwen3.5-9B-MTP-GGUF/Qwen3.5-9B-Q4_K_M.gguf",
+  "root": "/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z",
+  "schema": "qwen35_9b_mtp_mi210_broad_plan.v1",
+  "server": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "tasks": [
+    "arithmetic_sum_json",
+    "logic_transitive_json",
+    "time_addition_json",
+    "option_reasoning_letter",
+    "lowercase_five_words",
+    "sorted_keys_json",
+    "needle_catalog_exact",
+    "history_nullification_letter",
+    "rest_graphql_grpc_compare",
+    "solid_principles_json",
+    "markdown_table_languages",
+    "quicksort_sections",
+    "binary_search_code",
+    "plugin_architecture_terms",
+    "thread_safe_singleton_java",
+    "json_array_languages_format",
+    "multi_step_json",
+    "no_tool_discretion_json"
+  ]
+}

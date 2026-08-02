@@ -1,0 +1,37 @@
+{
+  "choices": [
+    {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+        "content": "",
+        "reasoning_content": "Got it, let me find the total payable amount on the receipt. Looking at the receipt details, there's a section that says \"Total Payable:\" with the amount. Let me check again. The numbers: Total 6% supplies (incl. GST) is 19.98, Total 0% supplies is 23.38, then Total Payable is 43.36. So the total payable amount is 4",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784315359,
+  "id": "chatcmpl-DaloKNXbqOi7eH22rVQv2PL9KB4TQ5bQ",
+  "model": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 884.342,
+    "predicted_n": 96,
+    "predicted_per_second": 108.555287434047,
+    "predicted_per_token_ms": 9.211895833333333,
+    "prompt_ms": 360.875,
+    "prompt_n": 290,
+    "prompt_per_second": 803.6023553862141,
+    "prompt_per_token_ms": 1.244396551724138
+  },
+  "usage": {
+    "completion_tokens": 96,
+    "prompt_tokens": 290,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 386
+  }
+}

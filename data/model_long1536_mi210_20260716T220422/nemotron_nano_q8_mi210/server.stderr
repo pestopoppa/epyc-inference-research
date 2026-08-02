@@ -1,0 +1,25 @@
+0.00.035.975 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.036.310 W srv  llama_server: -----------------
+0.00.036.312 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.036.312 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.036.312 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.036.312 W srv  llama_server: -----------------
+0.00.037.517 I srv    load_model: loading model '/mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-Q8_0.gguf'
+0.00.505.998 W load: special_eos_id is not in special_eog_ids - the tokenizer config may be incorrect
+0.01.906.426 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 8192, kv_unified = 'false'
+0.01.910.397 I srv  llama_server: model loaded
+0.01.910.404 I srv  llama_server: listening on http://127.0.0.1:18201
+0.02.128.683 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.02.128.827 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.05.346.398 I slot print_timing: id  0 | task 0 | n_decoded =    250, tg =  83.05 t/s, tg_3s =  83.05 t/s
+0.08.353.014 I slot print_timing: id  0 | task 0 | n_decoded =    499, tg =  82.93 t/s, tg_3s =  82.82 t/s
+0.11.362.267 I slot print_timing: id  0 | task 0 | n_decoded =    748, tg =  82.87 t/s, tg_3s =  82.74 t/s
+0.14.371.579 I slot print_timing: id  0 | task 0 | n_decoded =    997, tg =  82.84 t/s, tg_3s =  82.74 t/s
+0.17.382.854 I slot print_timing: id  0 | task 0 | n_decoded =   1246, tg =  82.81 t/s, tg_3s =  82.69 t/s
+0.20.394.952 I slot print_timing: id  0 | task 0 | n_decoded =   1495, tg =  82.78 t/s, tg_3s =  82.67 t/s
+0.20.890.528 I slot print_timing: id  0 | task 0 | prompt eval time =     207.20 ms /    86 tokens (    2.41 ms per token,   415.06 tokens per second)
+0.20.890.531 I slot print_timing: id  0 | task 0 |        eval time =   18554.48 ms /  1536 tokens (   12.08 ms per token,    82.78 tokens per second)
+0.20.890.532 I slot print_timing: id  0 | task 0 |       total time =   18761.68 ms /  1622 tokens
+0.20.890.537 I slot print_timing: id  0 | task 0 |    graphs reused =       1529
+0.20.890.623 I slot      release: id  0 | task 0 | stop processing: n_tokens = 1621, truncated = 0
+0.20.990.140 I srv    operator(): operator(): cleaning up before exit...

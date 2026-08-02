@@ -1,0 +1,37 @@
+{
+  "choices": [
+    {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+        "content": "",
+        "reasoning_content": "Got it, let's look at the chart. The question is asking which country has 7 years of compulsory education. Wait, let me check the lines. The y-axis has labels like 8 years, 6 years, etc. Wait, the lines: Moldova is at the top, maybe 9? Wait no, let me check again. Wait the chart's lines: the first line (purple) is Moldova, which is above 8 years",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784315342,
+  "id": "chatcmpl-hrA4z2So7GmreFMuysvtiveT01354deU",
+  "model": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 8819.453,
+    "predicted_n": 96,
+    "predicted_per_second": 10.885028810743705,
+    "predicted_per_token_ms": 91.86930208333332,
+    "prompt_ms": 1083.134,
+    "prompt_n": 226,
+    "prompt_per_second": 208.65377691033612,
+    "prompt_per_token_ms": 4.792628318584071
+  },
+  "usage": {
+    "completion_tokens": 96,
+    "prompt_tokens": 226,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 322
+  }
+}

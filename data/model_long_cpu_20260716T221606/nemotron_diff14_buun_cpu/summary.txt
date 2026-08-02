@@ -1,0 +1,8 @@
+finish_reason=length
+prompt_tokens=72
+completion_tokens=768
+total_tokens=840
+prompt_tps=109.93944169086862
+generation_tps=4.817421542613399
+content_chars=3741
+content_preview=**Interpreting Local LLM Throughput Measurements**\n\nWhen measuring throughput for a large language model (LLM) running on your own machine, you’re looking at ho

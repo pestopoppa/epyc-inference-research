@@ -1,0 +1,11 @@
+case=q4kv
+context=32768
+repeats=1400
+finish_reason=stop
+prompt_tokens=25225
+completion_tokens=112
+total_tokens=25337
+prompt_tps=659.7057359354202
+generation_tps=10.539388990215494
+content_chars=702
+content_preview=As context length increases, decode throughput typically decreases due to the quadratic scaling of attention computation and the growing memory bandwidth requir

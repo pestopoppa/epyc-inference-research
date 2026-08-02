@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+        "content": "SYARIKAT PERNIAGAAN GIN KEE\n(81109-A)\nNO 290, JALAN AIR PANAS,\nSETAPAK,\n53200, KUALA LUMPUR.\n",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784317414,
+  "id": "chatcmpl-jrANSSZHyMkUnBpiPk4kYZHfzrpWYuvE",
+  "model": "/mnt/raid0/llm/models/PaddleOCR-VL-1.6-GGUF/PaddleOCR-VL-1.6-GGUF.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 201.231,
+    "predicted_n": 96,
+    "predicted_per_second": 477.06367309211805,
+    "predicted_per_token_ms": 2.09615625,
+    "prompt_ms": 420.852,
+    "prompt_n": 1276,
+    "prompt_per_second": 3031.944721659871,
+    "prompt_per_token_ms": 0.32982131661442005
+  },
+  "usage": {
+    "completion_tokens": 96,
+    "prompt_tokens": 1276,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1372
+  }
+}

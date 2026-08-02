@@ -1,0 +1,8 @@
+finish_reason=length
+prompt_tokens=80
+completion_tokens=1536
+total_tokens=1616
+prompt_tps=1569.1197238349287
+generation_tps=102.73095805446829
+content_chars=7840
+content_preview=Interpreting local LLM Throughput Measurements: A Technical Guide\n\nWhen evaluating the performance of a locally deployed large language model (LLM), throughput is one of the most c

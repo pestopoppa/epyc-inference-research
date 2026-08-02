@@ -1,0 +1,10 @@
+context=8192
+repeats=400
+finish_reason=stop
+prompt_tokens=6433
+completion_tokens=107
+total_tokens=6540
+prompt_tps=1754.0836364965007
+generation_tps=26.180143364422456
+content_chars=653
+content_preview=As the context length increased, the model's attention mechanism had to process more tokens simultaneously, which raised computational overhead and memory deman

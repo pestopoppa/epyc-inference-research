@@ -1,0 +1,37 @@
+{
+  "choices": [
+    {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+        "content": "",
+        "reasoning_content": "Got it, let's look at the image. The image shows a handwritten number. Let me check each digit. The first digit is 7, then 5, then 0, then 0. So combining them, it's 7500. I need to make sure I didn't miss any digits. Let me count again: 7, 5, 0, 0. Yep, that's four digits. So the number is",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784315321,
+  "id": "chatcmpl-PO66ZrneLt1nUK1DKErxbBOmS8RVR0ED",
+  "model": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 8859.188,
+    "predicted_n": 96,
+    "predicted_per_second": 10.836207562137748,
+    "predicted_per_token_ms": 92.28320833333333,
+    "prompt_ms": 471.359,
+    "prompt_n": 87,
+    "prompt_per_second": 184.57269300045192,
+    "prompt_per_token_ms": 5.417919540229885
+  },
+  "usage": {
+    "completion_tokens": 96,
+    "prompt_tokens": 87,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 183
+  }
+}

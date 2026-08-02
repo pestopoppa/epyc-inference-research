@@ -1,0 +1,8 @@
+finish_reason=stop
+prompt_tokens=84
+completion_tokens=1197
+total_tokens=1281
+prompt_tps=487.55572065378897
+generation_tps=99.44021059725269
+content_chars=7164
+content_preview=Interpreting local large language model throughput measurements requires a nuanced understanding of the various metrics that define system performance, as raw numbers alone often f

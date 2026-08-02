@@ -1,0 +1,2 @@
+# CPU no-spec and MTP closure for Hy3 IQ1_M MTP on experimental v7.
+# Production v6 untouched. Run sequentially on quiet host.

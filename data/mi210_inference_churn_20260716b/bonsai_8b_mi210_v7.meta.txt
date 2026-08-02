@@ -1,0 +1,6 @@
+name=bonsai_8b_mi210_v7
+model=/mnt/raid0/llm/models/Bonsai-8B.gguf
+prompt=Return exactly: ok
+npredict=32
+ctx=1024
+extra_args='' 

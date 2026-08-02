@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "[\"/health\",\"/healthz\",\"/ready\",\"/live\",\"/status\",\"/ping\",\"/ok\",\"/alive\",\"/check\",\"/info\",\"/metrics\",\"/version\",\"/api/health\",\"/api/status\",\"/api/ready\",\"/api/live\",\"/svc/health\",\"/svc/status\",\"/svc/ready\",\"/svc/live\",\"/v1/health\",\"/v1/status\",\"/v1/ready\",\"/v1/live\",\"/v2/health\",\"/v2/status\",\"/v2/ready\",\"/v2/live\",\"/internal/health\",\"/internal/status\",\"/internal/ready\",\"/internal/live\",\"/debug/health\",\"/debug/status\",\"/debug/ready\",\"/debug/live\",\"/admin/health\",\"/admin/status\",\"/admin/ready\",\"/admin/live\",\"/monitor/health\",\"/monitor/status\",\"/monitor/ready\",\"/monitor/live\",\"/test/health\",\"/test/status\",\"/test/ready\",\"/test/live\",\"/probe/health\",\"/probe/status\",\"/probe/ready\",\"/probe/live\",\"/check/health\",\"/check/status\",\"/check/ready\",\"/check/live\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\"/healthz\",\""
+      }
+    }
+  ],
+  "created": 1784316294,
+  "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 1024,
+    "prompt_tokens": 39,
+    "total_tokens": 1063,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "id": "chatcmpl-YzttRkPi0j9Pu8pJ2MTRwrsQcZORJzkT",
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 39,
+    "prompt_ms": 111.531,
+    "prompt_per_token_ms": 2.859769230769231,
+    "prompt_per_second": 349.6785647039836,
+    "predicted_n": 1024,
+    "predicted_ms": 10055.45,
+    "predicted_per_token_ms": 9.819775390625,
+    "predicted_per_second": 101.83532313322625
+  }
+}

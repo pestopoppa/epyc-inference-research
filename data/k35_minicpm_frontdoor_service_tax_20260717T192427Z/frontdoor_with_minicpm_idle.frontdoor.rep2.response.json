@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "[\n  \"ok\",\n  \"healthy\",\n  \"up\",\n  \"running\",\n  \"active\",\n  \"ready\",\n  \"available\",\n  \"connected\",\n  \"synced\",\n  \"online\",\n  \"live\",\n  \"serving\",\n  \"responding\",\n  \"processing\",\n  \"idle\",\n  \"waiting\",\n  \"listening\",\n  \"bound\",\n  \"attached\",\n  \"linked\",\n  \"paired\",\n  \"joined\",\n  \"merged\",\n  \"combined\",\n  \"united\",\n  \"integrated\",\n  \"embedded\",\n  \"included\",\n  \"added\",\n  \"inserted\",\n  \"placed\",\n  \"set\",\n  \"configured\",\n  \"initialized\",\n  \"started\",\n  \"launched\",\n  \"booted\",\n  \"awake\",\n  \"alert\",\n  \"aware\",\n  \"conscious\",\n  \"mindful\",\n  \"focused\",\n  \"concentrated\",\n  \"attentive\",\n  \"watchful\",\n  \"vigilant\",\n  \"guarding\",\n  \"protecting\",\n  \"securing\",\n  \"locking\",\n  \"sealed\",\n  \"closed\",\n  \"finished\",\n  \"done\",\n  \"completed\",\n  \"ended\",\n  \"stopped\",\n  \"halted\",\n  \"paused\",\n  \"suspended\",\n  \"held\",\n  \"kept\",\n  \"maintained\",\n  \"preserved\",\n  \"saved\",\n  \"stored\",\n  \"cached\",\n  \"buffered\",\n  \"queued\",\n  \"pending\",\n  \"awaiting\",\n  \"expecting\",\n  \"looking\",\n  \"searching\",\n  \"finding\",\n  \"locating\",\n  \"discovering\",\n  \"detecting\",\n  \"noticing\",\n  \"seeing\",\n  \"viewing\",\n  \"watching\",\n  \"observing\",\n  \"monitoring\",\n  \"tracking\",\n  \"following\",\n  \"chasing\",\n  \"pursuing\",\n  \"hunting\",\n  \"seeking\",\n  \"wanting\",\n  \"needing\",\n  \"requiring\",\n  \"demanding\",\n  \"asking\",\n  \"requesting\",\n  \"calling\",\n  \"summoning\",\n  \"inviting\",\n  \"welcoming\",\n  \"greeting\",\n  \"meeting\",\n  \"encountering\",\n  \"facing\",\n  \"confronting\",\n  \"handling\",\n  \"managing\",\n  \"controlling\",\n  \"directing\",\n  \"guiding\",\n  \"leading\",\n  \"steering\",\n  \"driving\",\n  \"pushing\",\n  \"pulling\",\n  \"dragging\",\n  \"carrying\",\n  \"holding\",\n  \"supporting\",\n  \"backing\",\n  \"aiding\",\n  \"helping\",\n  \"assisting\",\n  \"serving\",\n  \"feeding\",\n  \"nourishing\",\n  \"feeding\",\n  \"watering\",\n  \"irrigating\",\n  \"flooding\",\n  \"drowning\",\n  \"submerging\",\n  \"covering\",\n  \"hiding\",\n  \"concealing\",\n  \"masking\",\n  \"disguising\",\n  \"camouflaging\",\n  \"blending\",\n  \"mixing\",\n  \"stirring\",\n  \"shaking\",\n  \"waving\",\n  \"flapping\",\n  \"fluttering\",\n  \"flying\",\n  \"soaring\",\n  \"gliding\",\n  \"floating\",\n  \"drifting\",\n  \"sailing\",\n  \"cruising\",\n  \"traveling\",\n  \"journeying\",\n  \"moving\",\n  \"going\",\n  \"coming\",\n  \"arriving\",\n  \"reaching\",\n  \"touching\",\n  \"feeling\",\n  \"sensing\",\n  \"perceiving\",\n  \"understanding\",\n  \"knowing\",\n  \"learning\",\n  \"studying\",\n  \"reading\",\n  \"writing\",\n  \"typing\",\n  \"coding\",\n  \"programming\",\n  \"developing\",\n  \"building\",\n  \"constructing\",\n  \"creating\",\n  \"making\",\n  \"forming\",\n  \"shaping\",\n  \"m"
+      }
+    }
+  ],
+  "created": 1784316317,
+  "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 1024,
+    "prompt_tokens": 40,
+    "total_tokens": 1064,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "id": "chatcmpl-FjhX6wJB5BOzJN0BPYQ5TbkjRlN2rUf9",
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 40,
+    "prompt_ms": 112.52,
+    "prompt_per_token_ms": 2.8129999999999997,
+    "prompt_per_second": 355.49235691432636,
+    "predicted_n": 1024,
+    "predicted_ms": 10053.032,
+    "predicted_per_token_ms": 9.8174140625,
+    "predicted_per_second": 101.85981701838809
+  }
+}

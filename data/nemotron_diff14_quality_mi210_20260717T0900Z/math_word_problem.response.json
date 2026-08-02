@@ -1,0 +1,37 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "The tray originally has 7 rows \u00d7 9 bolts = 63 bolts. After removing 18 bolts, the remaining count is 63 - 18 = 45 bolts.\n\n**Answer:** 45"
+      }
+    }
+  ],
+  "created": 1784276401,
+  "model": "nemotron-diffusion-14b-Q8_0.gguf",
+  "system_fingerprint": "b0-unknown",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 48,
+    "prompt_tokens": 44,
+    "total_tokens": 92,
+    "prompt_tokens_details": {
+      "cached_tokens": 8
+    }
+  },
+  "id": "chatcmpl-3nBpBpNarvqUO1wkdH0Ep6m78DaPAI7a",
+  "timings": {
+    "cache_n": 8,
+    "prompt_n": 36,
+    "prompt_ms": 41.613,
+    "prompt_per_token_ms": 1.1559166666666667,
+    "prompt_per_second": 865.1142671761229,
+    "predicted_n": 48,
+    "predicted_ms": 1285.697,
+    "predicted_per_token_ms": 26.785354166666664,
+    "predicted_per_second": 37.33383526600747,
+    "kv_bpv": 16.0
+  }
+}

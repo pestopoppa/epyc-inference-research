@@ -1,0 +1,29 @@
+0.00.018.603 E ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
+warning: no usable GPU found, --gpu-layers option will be ignored
+warning: one possible reason is that llama.cpp was compiled without GPU support
+warning: consult docs/build.md for compilation instructions
+0.00.019.606 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.019.936 W srv  llama_server: -----------------
+0.00.019.937 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.019.937 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.019.937 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.019.938 W srv  llama_server: -----------------
+0.00.021.128 I srv    load_model: loading model '/mnt/raid0/llm/models/Bonsai-8B.gguf'
+0.00.237.279 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.463.116 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 4096, kv_unified = 'false'
+0.00.467.758 I srv  llama_server: model loaded
+0.00.467.764 I srv  llama_server: listening on http://127.0.0.1:18712
+0.00.989.268 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.00.989.367 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.04.506.343 I slot print_timing: id  0 | task 0 | n_decoded =    100, tg =  31.03 t/s, tg_3s =  31.03 t/s
+0.07.515.308 I slot print_timing: id  0 | task 0 | n_decoded =    187, tg =  30.01 t/s, tg_3s =  28.91 t/s
+0.10.524.184 I slot print_timing: id  0 | task 0 | n_decoded =    280, tg =  30.30 t/s, tg_3s =  30.91 t/s
+0.13.526.164 I slot print_timing: id  0 | task 0 | n_decoded =    371, tg =  30.30 t/s, tg_3s =  30.31 t/s
+0.16.533.997 I slot print_timing: id  0 | task 0 | n_decoded =    461, tg =  30.23 t/s, tg_3s =  29.92 t/s
+0.19.534.445 I slot print_timing: id  0 | task 0 | n_decoded =    550, tg =  30.14 t/s, tg_3s =  29.66 t/s
+0.20.996.708 I slot print_timing: id  0 | task 0 | prompt eval time =     294.42 ms /    66 tokens (    4.46 ms per token,   224.17 tokens per second)
+0.20.996.712 I slot print_timing: id  0 | task 0 |        eval time =   19712.89 ms /   593 tokens (   33.24 ms per token,    30.08 tokens per second)
+0.20.996.713 I slot print_timing: id  0 | task 0 |       total time =   20007.31 ms /   659 tokens
+0.20.996.720 I slot print_timing: id  0 | task 0 |    graphs reused =        589
+0.20.996.762 I slot      release: id  0 | task 0 | stop processing: n_tokens = 658, truncated = 0
+0.21.004.192 I srv    operator(): operator(): cleaning up before exit...

@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "7500",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784317414,
+  "id": "chatcmpl-4h868pm14wFvXcHUMmLt5I5kwnJuWt65",
+  "model": "/mnt/raid0/llm/models/PaddleOCR-VL-1.6-GGUF/PaddleOCR-VL-1.6-GGUF.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 10.323,
+    "predicted_n": 5,
+    "predicted_per_second": 484.35532306500045,
+    "predicted_per_token_ms": 2.0646,
+    "prompt_ms": 95.492,
+    "prompt_n": 174,
+    "prompt_per_second": 1822.142168977506,
+    "prompt_per_token_ms": 0.5488045977011494
+  },
+  "usage": {
+    "completion_tokens": 5,
+    "prompt_tokens": 174,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 179
+  }
+}

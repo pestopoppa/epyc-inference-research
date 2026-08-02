@@ -1,0 +1,8 @@
+finish_reason=length
+prompt_tokens=62
+completion_tokens=768
+total_tokens=830
+prompt_tps=235.48536572396557
+generation_tps=7.692651103224831
+content_chars=0
+content_preview=

@@ -1,0 +1,838 @@
+{
+  "arm": "draft_mtp_n2",
+  "cleanup": {
+    "killed": true,
+    "returncode": 0
+  },
+  "completion_tokens": 1440,
+  "draft_accept_rate": 0.7396551724137931,
+  "draft_n": 1160,
+  "draft_n_accepted": 858,
+  "draft_n_max": 2,
+  "failed_tasks": [
+    "time_addition_json",
+    "lowercase_five_words",
+    "history_nullification_letter",
+    "quicksort_sections",
+    "no_tool_discretion_json"
+  ],
+  "mean_decode_tps": 114.09031635699583,
+  "mean_prompt_tps": 560.9907925803241,
+  "pass_rate": 0.7222222222222222,
+  "passed": 13,
+  "server_argv_path": "/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/draft_mtp_n2/server_argv.json",
+  "server_log_path": "/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/draft_mtp_n2/server.log",
+  "spec_type": "draft-mtp",
+  "tasks": [
+    {
+      "content": "{\"answer\":\"55\"}",
+      "passed": true,
+      "response_path": "/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/draft_mtp_n2/responses/arithmetic_sum_json.raw.json",
+      "score": {
+        "expected": {
+          "answer": "55"
+        },
+        "json_mode": "strict",
+        "normalized": "{\"answer\":\"55\"}",
+        "observed": {
+          "answer": "55"
+        },
+        "passed": true,
+        "scorer": "json_exact"
+      },
+      "task_id": "arithmetic_sum_json",
+      "timings": {
+        "cache_n": 0,
+        "draft_n": 6,
+        "draft_n_accepted": 3,
+        "predicted_ms": 75.911,
+        "predicted_n": 7,
+        "predicted_per_second": 92.21324972665357,
+        "predicted_per_token_ms": 10.84442857142857,
+        "prompt_ms": 145.57,
+        "prompt_n": 62,
+        "prompt_per_second": 425.91193240365465,
+        "prompt_per_token_ms": 2.3479032258064514
+      },
+      "usage": {
+        "completion_tokens": 7,
+        "prompt_tokens": 62,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 69
+      }
+    },
+    {
+      "content": "{\"answer\":\"yes\"}",
+      "passed": true,
+      "response_path": "/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/draft_mtp_n2/responses/logic_transitive_json.raw.json",
+      "score": {
+        "expected": {
+          "answer": "yes"
+        },
+        "json_mode": "strict",
+        "normalized": "{\"answer\":\"yes\"}",
+        "observed": {
+          "answer": "yes"
+        },
+        "passed": true,
+        "scorer": "json_exact"
+      },
+      "task_id": "logic_transitive_json",
+      "timings": {
+        "cache_n": 21,
+        "draft_n": 4,
+        "draft_n_accepted": 3,
+        "predicted_ms": 48.319,
+        "predicted_n": 6,
+        "predicted_per_second": 124.17475527225315,
+        "predicted_per_token_ms": 8.053166666666668,
+        "prompt_ms": 78.816,
+        "prompt_n": 51,
+        "prompt_per_second": 647.0767356881851,
+        "prompt_per_token_ms": 1.5454117647058825
+      },
+      "usage": {
+        "completion_tokens": 6,
+        "prompt_tokens": 72,
+        "prompt_tokens_details": {
+          "cached_tokens": 21
+        },
+        "total_tokens": 78
+      }
+    },
+    {
+      "content": "{\"finish_24h\":\"11:35\"}",
+      "passed": false,
+      "response_path": "/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/draft_mtp_n2/responses/time_addition_json.raw.json",
+      "score": {
+        "expected": {
+          "finish_24h": "10:35"
+        },
+        "json_mode": "strict",
+        "normalized": "{\"finish_24h\":\"11:35\"}",
+        "observed": {
+          "finish_24h": "11:35"
+        },
+        "passed": false,
+        "scorer": "json_exact"
+      },
+      "task_id": "time_addition_json",
+      "timings": {
+        "cache_n": 21,
+        "draft_n": 10,
+        "draft_n_accepted": 10,
+        "predicted_ms": 112.07,
+        "predicted_n": 14,
+        "predicted_per_second": 124.92192379762648,
+        "predicted_per_token_ms": 8.004999999999999,
+        "prompt_ms": 79.441,
+        "prompt_n": 50,
+        "prompt_per_second": 629.3979179516873,
+        "prompt_per_token_ms": 1.5888200000000001
+      },
+      "usage": {
+        "completion_tokens": 14,
+        "prompt_tokens": 71,
+        "prompt_tokens_details": {
+          "cached_tokens": 21
+        },
+        "total_tokens": 85
+      }
+    },
+    {
+      "content": "B",
+      "passed": true,
+      "response_path": "/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/draft_mtp_n2/responses/option_reasoning_letter.raw.json",
+      "score": {
+        "expected": "B",
+        "normalized": "B",
+        "observed": "B",
+        "passed": true,
+        "scorer": "exact"
+      },
+      "task_id": "option_reasoning_letter",
+      "timings": {
+        "cache_n": 21,
+        "draft_n": 2,
+        "draft_n_accepted": 2,
+        "predicted_ms": 23.178,
+        "predicted_n": 2,
+        "predicted_per_second": 86.28872206402623,
+        "predicted_per_token_ms": 11.589,
+        "prompt_ms": 79.34,
+        "prompt_n": 48,
+        "prompt_per_second": 604.991177211999,
+        "prompt_per_token_ms": 1.6529166666666668
+      },
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 69,
+        "prompt_tokens_details": {
+          "cached_tokens": 21
+        },
+        "total_tokens": 71
+      }
+    },
+    {
+      "content": "prevents overfitting",
+      "passed": false,
+      "response_path": "/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/draft_mtp_n2/responses/lowercase_five_words.raw.json",
+      "score": {
+        "expected_word_count": 5,
+        "normalized": "prevents overfitting",
+        "observed_words": [
+          "prevents",
+          "overfitting"
+        ],
+        "passed": false,
+        "scorer": "five_lowercase_words"
+      },
+      "task_id": "lowercase_five_words",
+      "timings": {
+        "cache_n": 21,
+        "draft_n": 4,
+        "draft_n_accepted": 4,
+        "predicted_ms": 48.645,
+        "predicted_n": 6,
+        "predicted_per_second": 123.34258402713536,
+        "predicted_per_token_ms": 8.1075,
+        "prompt_ms": 74.661,
+        "prompt_n": 31,
+        "prompt_per_second": 415.2100829080778,
+        "prompt_per_token_ms": 2.40841935483871
+      },
+      "usage": {
+        "completion_tokens": 6,
+        "prompt_tokens": 52,
+        "prompt_tokens_details": {
+          "cached_tokens": 21
+        },
+        "total_tokens": 58
+      }
+    },
+    {
+      "content": "{\"label\":\"qwable\",\"status\":\"ready\"}",
+      "passed": true,
+      "response_path": "/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/draft_mtp_n2/responses/sorted_keys_json.raw.json",
+      "score": {
+        "expected": {
+          "label": "qwable",
+          "status": "ready"
+        },
+        "json_mode": "strict",
+        "normalized": "{\"label\":\"qwable\",\"status\":\"ready\"}",
+        "observed": {
+          "label": "qwable",
+          "status": "ready"
+        },
+        "passed": true,
+        "scorer": "json_exact"
+      },
+      "task_id": "sorted_keys_json",
+      "timings": {
+        "cache_n": 21,
+        "draft_n": 8,
+        "draft_n_accepted": 7,
+        "predicted_ms": 91.145,
+        "predicted_n": 11,
+        "predicted_per_second": 120.68681770804761,
+        "predicted_per_token_ms": 8.28590909090909,
+        "prompt_ms": 77.832,
+        "prompt_n": 37,
+        "prompt_per_second": 475.3828759379176,
+        "prompt_per_token_ms": 2.1035675675675676
+      },
+      "usage": {
+        "completion_tokens": 11,
+        "prompt_tokens": 58,
+        "prompt_tokens_details": {
+          "cached_tokens": 21
+        },
+        "total_tokens": 69
+      }
+    },
+    {
+      "content": "AR-2025-1847",
+      "passed": true,
+      "response_path": "/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/draft_mtp_n2/responses/needle_catalog_exact.raw.json",
+      "score": {
+        "expected": "AR-2025-1847",
+        "normalized": "AR-2025-1847",
+        "observed": "AR-2025-1847",
+        "passed": true,
+        "scorer": "exact"
+      },
+      "task_id": "needle_catalog_exact",
+      "timings": {
+        "cache_n": 21,
+        "draft_n": 8,
+        "draft_n_accepted": 8,
+        "predicted_ms": 91.056,
+        "predicted_n": 12,
+        "predicted_per_second": 131.78703215603585,
+        "predicted_per_token_ms": 7.588,
+        "prompt_ms": 105.349,
+        "prompt_n": 110,
+        "prompt_per_second": 1044.1484969007772,
+        "prompt_per_token_ms": 0.9577181818181818
+      },
+      "usage": {
+        "completion_tokens": 12,
+        "prompt_tokens": 131,
+        "prompt_tokens_details": {
+          "cached_tokens": 21
+        },
+        "total_tokens": 143
+      }
+    },
+    {
+      "content": "A",
+      "passed": false,
+      "response_path": "/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/draft_mtp_n2/responses/history_nullification_letter.raw.json",
+      "score": {
+        "expected": "B",
+        "normalized": "A",
+        "observed": "A",
+        "passed": false,
+        "scorer": "exact"
+      },
+      "task_id": "history_nullification_letter",
+      "timings": {
+        "cache_n": 21,
+        "draft_n": 2,
+        "draft_n_accepted": 2,
+        "predicted_ms": 23.348,
+        "predicted_n": 2,
+        "predicted_per_second": 85.66044200788076,
+        "predicted_per_token_ms": 11.674,
+        "prompt_ms": 95.953,
+        "prompt_n": 74,
+        "prompt_per_second": 771.2109053390722,
+        "prompt_per_token_ms": 1.2966621621621621
+      },
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 95,
+        "prompt_tokens_details": {
+          "cached_tokens": 21
+        },
+        "total_tokens": 97
+      }
+    },
+    {
+      "content": "REST typically uses HTTP with JSON payloads and relies on resource-based URIs; it lacks a strict schema, often requiring clients to handle versioning manually. GraphQL operates over HTTP (usually POST) but enforces a strongly typed schema defined in SDL (Schema Definition Language), allowing clients to request exact data fields in a single query. gRPC uses HTTP/2 as its transport protocol and relies on Protocol Buffers (Protobuf) for a strictly typed, binary schema, enabling high-performance, bidirectional streaming between services. While REST is flexible and widely adopted for public APIs, GraphQL offers precise data fetching, and gRPC provides superior efficiency for internal microservices communication.",
+      "passed": true,
+      "response_path": "/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/draft_mtp_n2/responses/rest_graphql_grpc_compare.raw.json",
+      "score": {
+        "case_sensitive": false,
+        "expected_groups": [
+          [
+            "REST"
+          ],
+          [
+            "GraphQL"
+          ],
+          [
+            "gRPC"
+          ],
+          [
+            "HTTP"
+          ],
+          [
+            "schema"
+          ],
+          [
+            "Protocol Buffers",
+            "Protobuf",
+            "proto"
+          ]
+        ],
+        "matched_terms": [
+          "REST",
+          "GraphQL",
+          "gRPC",
+          "HTTP",
+          "schema",
+          "Protocol Buffers"
+        ],
+        "missing_groups": [],
+        "normalized": "REST typically uses HTTP with JSON payloads and relies on resource-based URIs; it lacks a strict schema, often requiring clients to handle versioning manually. GraphQL operates over HTTP (usually POST) but enforces a strongly typed schema defined in SDL (Schema Definition Language), allowing clients to request exact data fields in a single query. gRPC uses HTTP/2 as its transport protocol and relies on Protocol Buffers (Protobuf) for a strictly typed, binary schema, enabling high-performance, bidirectional streaming between services. While REST is flexible and widely adopted for public APIs, GraphQL offers precise data fetching, and gRPC provides superior efficiency for internal microservices communication.",
+        "passed": true,
+        "scorer": "contains_all_groups"
+      },
+      "task_id": "rest_graphql_grpc_compare",
+      "timings": {
+        "cache_n": 21,
+        "draft_n": 120,
+        "draft_n_accepted": 73,
+        "predicted_ms": 1277.508,
+        "predicted_n": 133,
+        "predicted_per_second": 104.10893708689103,
+        "predicted_per_token_ms": 9.605323308270677,
+        "prompt_ms": 78.066,
+        "prompt_n": 39,
+        "prompt_per_second": 499.57728076243177,
+        "prompt_per_token_ms": 2.001692307692308
+      },
+      "usage": {
+        "completion_tokens": 133,
+        "prompt_tokens": 60,
+        "prompt_tokens_details": {
+          "cached_tokens": 21
+        },
+        "total_tokens": 193
+      }
+    },
+    {
+      "content": "{\"S\":\"Single Responsibility Principle\",\"O\":\"Open/Closed Principle\",\"L\":\"Liskov Substitution Principle\",\"I\":\"Interface Segregation Principle\",\"D\":\"Dependency Inversion Principle\"}",
+      "passed": true,
+      "response_path": "/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/draft_mtp_n2/responses/solid_principles_json.raw.json",
+      "score": {
+        "expected": {
+          "D": [
+            "Dependency Inversion",
+            "Dependency Inversion Principle"
+          ],
+          "I": [
+            "Interface Segregation",
+            "Interface Segregation Principle"
+          ],
+          "L": [
+            "Liskov Substitution",
+            "Liskov Substitution Principle"
+          ],
+          "O": [
+            "Open/Closed",
+            "Open/Closed Principle"
+          ],
+          "S": [
+            "Single Responsibility",
+            "Single Responsibility Principle"
+          ]
+        },
+        "json_mode": "strict",
+        "mismatches": {},
+        "normalized": "{\"S\":\"Single Responsibility Principle\",\"O\":\"Open/Closed Principle\",\"L\":\"Liskov Substitution Principle\",\"I\":\"Interface Segregation Principle\",\"D\":\"Dependency Inversion Principle\"}",
+        "observed": {
+          "D": "Dependency Inversion Principle",
+          "I": "Interface Segregation Principle",
+          "L": "Liskov Substitution Principle",
+          "O": "Open/Closed Principle",
+          "S": "Single Responsibility Principle"
+        },
+        "passed": true,
+        "scorer": "json_exact_aliases"
+      },
+      "task_id": "solid_principles_json",
+      "timings": {
+        "cache_n": 21,
+        "draft_n": 28,
+        "draft_n_accepted": 23,
+        "predicted_ms": 303.095,
+        "predicted_n": 38,
+        "predicted_per_second": 125.37323281479404,
+        "predicted_per_token_ms": 7.976184210526316,
+        "prompt_ms": 78.104,
+        "prompt_n": 40,
+        "prompt_per_second": 512.1376626037079,
+        "prompt_per_token_ms": 1.9526
+      },
+      "usage": {
+        "completion_tokens": 38,
+        "prompt_tokens": 61,
+        "prompt_tokens_details": {
+          "cached_tokens": 21
+        },
+        "total_tokens": 99
+      }
+    },
+    {
+      "content": "| Language | Performance | Safety | Ecosystem | Learning Curve | Best For |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n| **Python** | Moderate | High (memory safety via GC) | Very Large | Low | Data Science, AI/ML, Scripting, Rapid Prototyping |\n| **Rust** | Very High | Very High (memory safety without GC) | Growing | High | Systems Programming, High-Performance Tools, WebAssembly |\n| **Go** | High | Moderate (no pointers, no GC pauses) | Large | Low | Cloud Services, Microservices, CLI Tools, DevOps |",
+      "passed": true,
+      "response_path": "/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/draft_mtp_n2/responses/markdown_table_languages.raw.json",
+      "score": {
+        "case_sensitive": false,
+        "expected_terms": [
+          "|",
+          "Language",
+          "Performance",
+          "Safety",
+          "Ecosystem",
+          "Learning Curve",
+          "Best For",
+          "Python",
+          "Rust",
+          "Go"
+        ],
+        "missing_terms": [],
+        "normalized": "| Language | Performance | Safety | Ecosystem | Learning Curve | Best For |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n| **Python** | Moderate | High (memory safety via GC) | Very Large | Low | Data Science, AI/ML, Scripting, Rapid Prototyping |\n| **Rust** | Very High | Very High (memory safety without GC) | Growing | High | Systems Programming, High-Performance Tools, WebAssembly |\n| **Go** | High | Moderate (no pointers, no GC pauses) | Large | Low | Cloud Services, Microservices, CLI Tools, DevOps |",
+        "passed": true,
+        "scorer": "contains_all"
+      },
+      "task_id": "markdown_table_languages",
+      "timings": {
+        "cache_n": 21,
+        "draft_n": 114,
+        "draft_n_accepted": 82,
+        "predicted_ms": 1215.05,
+        "predicted_n": 140,
+        "predicted_per_second": 115.22159581910209,
+        "predicted_per_token_ms": 8.678928571428571,
+        "prompt_ms": 78.876,
+        "prompt_n": 46,
+        "prompt_per_second": 583.1938739286982,
+        "prompt_per_token_ms": 1.7146956521739132
+      },
+      "usage": {
+        "completion_tokens": 140,
+        "prompt_tokens": 67,
+        "prompt_tokens_details": {
+          "cached_tokens": 21
+        },
+        "total_tokens": 207
+      }
+    },
+    {
+      "content": "## Algorithm\nQuicksort is a divide-and-conquer sorting algorithm. It works by selecting a 'pivot' element from the array and partitioning the other elements into two sub-arrays according to whether they are less than or greater than the pivot. The sub-arrays are then sorted recursively. This process repeats until the entire array is sorted.\n\n## Complexity\n- **Average Time Complexity**: $O(n \\log n)$\n- **Worst Case Time Complexity**: $O(n^2)$ (occurs when the pivot selection is poor, e.g., always picking the smallest or largest element)\n- **Best Case Time Complexity**: $O(n \\log n)$\n- **Space Complexity**: $O(\\log n)$ for the recursion stack (average case)\n\n## When to Use\n- When sorting large datasets where performance is critical.\n- When the data is nearly sorted or contains many duplicate elements (with optimized pivot selection).\n- When memory usage needs to be minimized compared to Merge Sort, as Quicksort sorts in-place.\n- It is generally the default choice for built-in sorting functions in many programming languages (e.g., Python's `list.sort()` uses Timsort, but C++'s `std::sort` uses Introsort, a variant of Quicksort).\n\n## Code Example\n```python\ndef quicksort(arr):\n    if len(arr) <= 1:\n        return arr\n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quicksort(left) + middle + quicksort(right)\n\n# Example usage\ndata = [10, 5, 2, 33, 19, 42]\nprint(quicksort(data))  # Output: [2, 5, 10, 19, 33, 42]\n```",
+      "passed": false,
+      "response_path": "/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/draft_mtp_n2/responses/quicksort_sections.raw.json",
+      "score": {
+        "case_sensitive": false,
+        "expected_terms": [
+          "## Algorithm",
+          "## Complexity",
+          "## When to Use",
+          "## Code Example",
+          "pivot",
+          "O(n log n)"
+        ],
+        "missing_terms": [
+          "O(n log n)"
+        ],
+        "normalized": "## Algorithm\nQuicksort is a divide-and-conquer sorting algorithm. It works by selecting a 'pivot' element from the array and partitioning the other elements into two sub-arrays according to whether they are less than or greater than the pivot. The sub-arrays are then sorted recursively. This process repeats until the entire array is sorted.\n\n## Complexity\n- **Average Time Complexity**: $O(n \\log n)$\n- **Worst Case Time Complexity**: $O(n^2)$ (occurs when the pivot selection is poor, e.g., always picking the smallest or largest element)\n- **Best Case Time Complexity**: $O(n \\log n)$\n- **Space Complexity**: $O(\\log n)$ for the recursion stack (average case)\n\n## When to Use\n- When sorting large datasets where performance is critical.\n- When the data is nearly sorted or contains many duplicate elements (with optimized pivot selection).\n- When memory usage needs to be minimized compared to Merge Sort, as Quicksort sorts in-place.\n- It is generally the default choice for built-in sorting functions in many programming languages (e.g., Python's `list.sort()` uses Timsort, but C++'s `std::sort` uses Introsort, a variant of Quicksort).\n\n## Code Example\n```python\ndef quicksort(arr):\n    if len(arr) <= 1:\n        return arr\n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quicksort(left) + middle + quicksort(right)\n\n# Example usage\ndata = [10, 5, 2, 33, 19, 42]\nprint(quicksort(data))  # Output: [2, 5, 10, 19, 33, 42]\n```",
+        "passed": false,
+        "scorer": "contains_all"
+      },
+      "task_id": "quicksort_sections",
+      "timings": {
+        "cache_n": 21,
+        "draft_n": 330,
+        "draft_n_accepted": 267,
+        "predicted_ms": 3513.372,
+        "predicted_n": 432,
+        "predicted_per_second": 122.95879855591723,
+        "predicted_per_token_ms": 8.132805555555555,
+        "prompt_ms": 81.342,
+        "prompt_n": 37,
+        "prompt_per_second": 454.869563079344,
+        "prompt_per_token_ms": 2.1984324324324325
+      },
+      "usage": {
+        "completion_tokens": 432,
+        "prompt_tokens": 58,
+        "prompt_tokens_details": {
+          "cached_tokens": 21
+        },
+        "total_tokens": 490
+      }
+    },
+    {
+      "content": "def binary_search(arr, target):\n    if not arr:\n        return -1\n    \n    left, right = 0, len(arr) - 1\n    \n    while left <= right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid + 1\n        else:\n            right = mid - 1\n            \n    return -1",
+      "passed": true,
+      "response_path": "/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/draft_mtp_n2/responses/binary_search_code.raw.json",
+      "score": {
+        "case_sensitive": true,
+        "expected_terms": [
+          "def binary_search",
+          "while",
+          "return -1"
+        ],
+        "missing_terms": [],
+        "normalized": "def binary_search(arr, target):\n    if not arr:\n        return -1\n    \n    left, right = 0, len(arr) - 1\n    \n    while left <= right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid + 1\n        else:\n            right = mid - 1\n            \n    return -1",
+        "passed": true,
+        "scorer": "contains_all"
+      },
+      "task_id": "binary_search_code",
+      "timings": {
+        "cache_n": 21,
+        "draft_n": 68,
+        "draft_n_accepted": 67,
+        "predicted_ms": 728.598,
+        "predicted_n": 100,
+        "predicted_per_second": 137.24989637632825,
+        "predicted_per_token_ms": 7.2859799999999995,
+        "prompt_ms": 78.254,
+        "prompt_n": 40,
+        "prompt_per_second": 511.1559792470672,
+        "prompt_per_token_ms": 1.95635
+      },
+      "usage": {
+        "completion_tokens": 100,
+        "prompt_tokens": 61,
+        "prompt_tokens_details": {
+          "cached_tokens": 21
+        },
+        "total_tokens": 161
+      }
+    },
+    {
+      "content": "**Plugin Architecture Plan**\n\n1.  **Interface**: Define a `Plugin` abstract class with mandatory methods `init()`, `onEvent(String type, Object data)`, and `destroy()`. Plugins must implement a `getManifest()` returning metadata (name, version, dependencies).\n2.  **Discovery**: Implement a file-system watcher scanning a dedicated `plugins/` directory for `.jar` or `.so` files; load manifests at startup and re-scan on hot-reload events.\n3.  **Lifecycle**: Manage state via a `PluginManager` singleton: `LOADING` (validation) \u2192 `ACTIVE` (dependency resolution) \u2192 `RUNNING` (hook registration) \u2192 `STOPPING` (resource cleanup) \u2192 `UNLOADED`.\n4.  **Event Hooks**: Establish a global `EventBus` where the core editor publishes actions (e.g., `TEXT_CHANGED`, `SAVE_REQUEST`); plugins subscribe via `onEvent()` to inject behavior without modifying core logic.",
+      "passed": true,
+      "response_path": "/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/draft_mtp_n2/responses/plugin_architecture_terms.raw.json",
+      "score": {
+        "case_sensitive": false,
+        "expected_groups": [
+          [
+            "interface"
+          ],
+          [
+            "discovery",
+            "scan",
+            "scans"
+          ],
+          [
+            "lifecycle"
+          ],
+          [
+            "event"
+          ]
+        ],
+        "matched_terms": [
+          "interface",
+          "discovery",
+          "lifecycle",
+          "event"
+        ],
+        "missing_groups": [],
+        "normalized": "**Plugin Architecture Plan**\n\n1.  **Interface**: Define a `Plugin` abstract class with mandatory methods `init()`, `onEvent(String type, Object data)`, and `destroy()`. Plugins must implement a `getManifest()` returning metadata (name, version, dependencies).\n2.  **Discovery**: Implement a file-system watcher scanning a dedicated `plugins/` directory for `.jar` or `.so` files; load manifests at startup and re-scan on hot-reload events.\n3.  **Lifecycle**: Manage state via a `PluginManager` singleton: `LOADING` (validation) \u2192 `ACTIVE` (dependency resolution) \u2192 `RUNNING` (hook registration) \u2192 `STOPPING` (resource cleanup) \u2192 `UNLOADED`.\n4.  **Event Hooks**: Establish a global `EventBus` where the core editor publishes actions (e.g., `TEXT_CHANGED`, `SAVE_REQUEST`); plugins subscribe via `onEvent()` to inject behavior without modifying core logic.",
+        "passed": true,
+        "scorer": "contains_all_groups"
+      },
+      "task_id": "plugin_architecture_terms",
+      "timings": {
+        "cache_n": 21,
+        "draft_n": 204,
+        "draft_n_accepted": 105,
+        "predicted_ms": 2185.491,
+        "predicted_n": 208,
+        "predicted_per_second": 95.1731212802981,
+        "predicted_per_token_ms": 10.50716826923077,
+        "prompt_ms": 75.268,
+        "prompt_n": 36,
+        "prompt_per_second": 478.29090715842057,
+        "prompt_per_token_ms": 2.090777777777778
+      },
+      "usage": {
+        "completion_tokens": 208,
+        "prompt_tokens": 57,
+        "prompt_tokens_details": {
+          "cached_tokens": 21
+        },
+        "total_tokens": 265
+      }
+    },
+    {
+      "content": "```java\npublic enum Singleton {\n    INSTANCE;\n\n    public void doSomething() {\n        // Singleton logic here\n    }\n}\n```",
+      "passed": true,
+      "response_path": "/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/draft_mtp_n2/responses/thread_safe_singleton_java.raw.json",
+      "score": {
+        "case_sensitive": false,
+        "expected_groups": [
+          [
+            "volatile",
+            "synchronized",
+            "getInstance"
+          ],
+          [
+            "static class",
+            "Holder",
+            "getInstance"
+          ],
+          [
+            "enum",
+            "INSTANCE"
+          ]
+        ],
+        "matched_group": [
+          "enum",
+          "INSTANCE"
+        ],
+        "normalized": "```java\npublic enum Singleton {\n    INSTANCE;\n\n    public void doSomething() {\n        // Singleton logic here\n    }\n}\n```",
+        "passed": true,
+        "scorer": "contains_any_group"
+      },
+      "task_id": "thread_safe_singleton_java",
+      "timings": {
+        "cache_n": 21,
+        "draft_n": 24,
+        "draft_n_accepted": 21,
+        "predicted_ms": 263.0,
+        "predicted_n": 33,
+        "predicted_per_second": 125.47528517110267,
+        "predicted_per_token_ms": 7.96969696969697,
+        "prompt_ms": 78.187,
+        "prompt_n": 38,
+        "prompt_per_second": 486.0142990522721,
+        "prompt_per_token_ms": 2.057552631578947
+      },
+      "usage": {
+        "completion_tokens": 33,
+        "prompt_tokens": 59,
+        "prompt_tokens_details": {
+          "cached_tokens": 21
+        },
+        "total_tokens": 92
+      }
+    },
+    {
+      "content": "[\n  {\n    \"rank\": 1,\n    \"name\": \"Python\",\n    \"reason\": \"Known for its readability and versatility, making it ideal for beginners and experts alike in fields like data science and AI.\"\n  },\n  {\n    \"rank\": 2,\n    \"name\": \"JavaScript\",\n    \"reason\": \"The only language that runs natively in web browsers, essential for creating interactive web pages and modern frontend development.\"\n  },\n  {\n    \"rank\": 3,\n    \"name\": \"Java\",\n    \"reason\": \"Famous for its 'write once, run anywhere' capability and robust ecosystem, widely used in enterprise applications and Android development.\"\n  },\n  {\n    \"rank\": 4,\n    \"name\": \"C++\",\n    \"reason\": \"Offers high performance and low-level memory manipulation, making it the standard for game development, system software, and competitive programming.\"\n  },\n  {\n    \"rank\": 5,\n    \"name\": \"Rust\",\n    \"reason\": \"Gaining popularity for its memory safety guarantees without garbage collection, providing a secure alternative to C and C++.\"\n  }\n]",
+      "passed": true,
+      "response_path": "/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/draft_mtp_n2/responses/json_array_languages_format.raw.json",
+      "score": {
+        "expected_length": 5,
+        "json_mode": "strict",
+        "normalized": "[\n  {\n    \"rank\": 1,\n    \"name\": \"Python\",\n    \"reason\": \"Known for its readability and versatility, making it ideal for beginners and experts alike in fields like data science and AI.\"\n  },\n  {\n    \"rank\": 2,\n    \"name\": \"JavaScript\",\n    \"reason\": \"The only language that runs natively in web browsers, essential for creating interactive web pages and modern frontend development.\"\n  },\n  {\n    \"rank\": 3,\n    \"name\": \"Java\",\n    \"reason\": \"Famous for its 'write once, run anywhere' capability and robust ecosystem, widely used in enterprise applications and Android development.\"\n  },\n  {\n    \"rank\": 4,\n    \"name\": \"C++\",\n    \"reason\": \"Offers high performance and low-level memory manipulation, making it the standard for game development, system software, and competitive programming.\"\n  },\n  {\n    \"rank\": 5,\n    \"name\": \"Rust\",\n    \"reason\": \"Gaining popularity for its memory safety guarantees without garbage collection, providing a secure alternative to C and C++.\"\n  }\n]",
+        "observed": [
+          {
+            "name": "Python",
+            "rank": 1,
+            "reason": "Known for its readability and versatility, making it ideal for beginners and experts alike in fields like data science and AI."
+          },
+          {
+            "name": "JavaScript",
+            "rank": 2,
+            "reason": "The only language that runs natively in web browsers, essential for creating interactive web pages and modern frontend development."
+          },
+          {
+            "name": "Java",
+            "rank": 3,
+            "reason": "Famous for its 'write once, run anywhere' capability and robust ecosystem, widely used in enterprise applications and Android development."
+          },
+          {
+            "name": "C++",
+            "rank": 4,
+            "reason": "Offers high performance and low-level memory manipulation, making it the standard for game development, system software, and competitive programming."
+          },
+          {
+            "name": "Rust",
+            "rank": 5,
+            "reason": "Gaining popularity for its memory safety guarantees without garbage collection, providing a secure alternative to C and C++."
+          }
+        ],
+        "passed": true,
+        "required_keys": [
+          "rank",
+          "name",
+          "reason"
+        ],
+        "scorer": "json_array_schema"
+      },
+      "task_id": "json_array_languages_format",
+      "timings": {
+        "cache_n": 21,
+        "draft_n": 200,
+        "draft_n_accepted": 161,
+        "predicted_ms": 2138.677,
+        "predicted_n": 262,
+        "predicted_per_second": 122.50564250702652,
+        "predicted_per_token_ms": 8.1628893129771,
+        "prompt_ms": 77.909,
+        "prompt_n": 37,
+        "prompt_per_second": 474.9130395718081,
+        "prompt_per_token_ms": 2.105648648648649
+      },
+      "usage": {
+        "completion_tokens": 262,
+        "prompt_tokens": 58,
+        "prompt_tokens_details": {
+          "cached_tokens": 21
+        },
+        "total_tokens": 320
+      }
+    },
+    {
+      "content": "{\"valid\":\"36\",\"review\":\"12\"}",
+      "passed": true,
+      "response_path": "/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/draft_mtp_n2/responses/multi_step_json.raw.json",
+      "score": {
+        "expected": {
+          "review": "12",
+          "valid": "36"
+        },
+        "json_mode": "strict",
+        "normalized": "{\"valid\":\"36\",\"review\":\"12\"}",
+        "observed": {
+          "review": "12",
+          "valid": "36"
+        },
+        "passed": true,
+        "scorer": "json_exact"
+      },
+      "task_id": "multi_step_json",
+      "timings": {
+        "cache_n": 21,
+        "draft_n": 10,
+        "draft_n_accepted": 7,
+        "predicted_ms": 114.238,
+        "predicted_n": 12,
+        "predicted_per_second": 105.04385580980059,
+        "predicted_per_token_ms": 9.519833333333333,
+        "prompt_ms": 80.574,
+        "prompt_n": 50,
+        "prompt_per_second": 620.5475711768064,
+        "prompt_per_token_ms": 1.61148
+      },
+      "usage": {
+        "completion_tokens": 12,
+        "prompt_tokens": 71,
+        "prompt_tokens_details": {
+          "cached_tokens": 21
+        },
+        "total_tokens": 83
+      }
+    },
+    {
+      "content": "{\"action\":\"answer_directly\",\"answer\":\"I do not have access to tools in this prompt.\"}",
+      "passed": false,
+      "response_path": "/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/draft_mtp_n2/responses/no_tool_discretion_json.raw.json",
+      "score": {
+        "expected": {
+          "action": "answer_directly"
+        },
+        "json_mode": "strict",
+        "normalized": "{\"action\":\"answer_directly\",\"answer\":\"I do not have access to tools in this prompt.\"}",
+        "observed": {
+          "action": "answer_directly",
+          "answer": "I do not have access to tools in this prompt."
+        },
+        "passed": false,
+        "scorer": "json_exact"
+      },
+      "task_id": "no_tool_discretion_json",
+      "timings": {
+        "cache_n": 21,
+        "draft_n": 18,
+        "draft_n_accepted": 13,
+        "predicted_ms": 197.416,
+        "predicted_n": 22,
+        "predicted_per_second": 111.43980224500547,
+        "predicted_per_token_ms": 8.973454545454546,
+        "prompt_ms": 77.619,
+        "prompt_n": 36,
+        "prompt_per_second": 463.8039655239053,
+        "prompt_per_token_ms": 2.156083333333333
+      },
+      "usage": {
+        "completion_tokens": 22,
+        "prompt_tokens": 57,
+        "prompt_tokens_details": {
+          "cached_tokens": 21
+        },
+        "total_tokens": 79
+      }
+    }
+  ],
+  "total": 18
+}

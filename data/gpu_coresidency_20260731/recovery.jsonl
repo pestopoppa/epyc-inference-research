@@ -1,0 +1,3 @@
+{"prompt_key": "p10", "decode_tps": 30.74463875349705, "predicted_n": 256, "predicted_ms": 8326.655, "prompt_n": 24, "prompt_per_second": 151.3040517964204, "wall_s": 8.583}
+{"prompt_key": "p11", "decode_tps": 30.768997782829288, "predicted_n": 256, "predicted_ms": 8320.063, "prompt_n": 19, "prompt_per_second": 130.16819100469291, "wall_s": 8.555}
+{"summary": {"n": 2, "min": 30.74463875349705, "median": 30.75681826816317, "max": 30.768997782829288}}

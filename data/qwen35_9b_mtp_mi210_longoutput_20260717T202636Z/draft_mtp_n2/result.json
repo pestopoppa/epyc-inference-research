@@ -1,0 +1,17 @@
+{
+  "all_benchmark": true,
+  "arm": "draft_mtp_n2",
+  "cleanup": {
+    "killed": false,
+    "returncode": 0
+  },
+  "completion_tokens": 1024,
+  "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+  "decode_tps": 140.50430342453168,
+  "draft_n": 682,
+  "draft_n_accepted": 682,
+  "finish_reason": "length",
+  "prompt_tps": 392.1640157595214,
+  "spec_type": "draft-mtp",
+  "word_count": 1024
+}

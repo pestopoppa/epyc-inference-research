@@ -1,0 +1,10 @@
+context=2048
+repeats=70
+finish_reason=length
+prompt_tokens=1148
+completion_tokens=256
+total_tokens=1404
+prompt_tps=1682.5073463136525
+generation_tps=80.67995553778076
+content_chars=1433
+content_preview=<think>\nOkay, the user provided a bunch of repeated sentences about measuring local inference throughput under long prompt conditions. They want a concise parag

@@ -1,0 +1,70 @@
+{
+  "artifact_dir": "/mnt/raid0/llm/tmp/k35-minicpm-frontdoor-coresidency-20260717T191849Z",
+  "frontdoor_health": {
+    "body": "{\"status\":\"ok\"}",
+    "elapsed_s": 6.008491516113281,
+    "status": 200
+  },
+  "minicpm_o45_health": {
+    "body": "{\"status\":\"ok\"}",
+    "elapsed_s": 2.001326322555542,
+    "status": 200
+  },
+  "requests": {
+    "frontdoor": {
+      "content_preview": "{\n  \"status\": \"ok\",\n  \"checks\": [\n    \"API Gateway latency p99 < 200ms\",\n    \"API Gateway error rate < 0.1%\",\n    \"Database connection pool active < 80%\",\n    \"Database connection pool idle > 10%\",\n    \"Database replication lag < 1s\",\n    \"Database disk usage < 70%\",\n    \"Database CPU usage < 75%\",\n    \"Redis memory usage < 80%\",\n    \"Redis hit rate > 95%\",\n    \"Redis connection count < 1000\",\n    \"Redis latency p99 < 5ms\",\n    \"Kafka consumer lag < 1000\",\n    \"Kafka producer throughput stable\",",
+      "elapsed_s": 5.319384336471558,
+      "ok": true,
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 5121.551,
+        "predicted_n": 512,
+        "predicted_per_second": 99.96971620511052,
+        "predicted_per_token_ms": 10.003029296875,
+        "prompt_ms": 186.517,
+        "prompt_n": 48,
+        "prompt_per_second": 257.34919605183444,
+        "prompt_per_token_ms": 3.8857708333333334
+      },
+      "usage": {
+        "completion_tokens": 512,
+        "prompt_tokens": 48,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 560
+      }
+    },
+    "minicpm_o45": {
+      "content_preview": "Tanzania",
+      "elapsed_s": 0.45423245429992676,
+      "ok": true,
+      "score_pass": true,
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 36.805,
+        "predicted_n": 4,
+        "predicted_per_second": 108.68088574921886,
+        "predicted_per_token_ms": 9.20125,
+        "prompt_ms": 361.214,
+        "prompt_n": 230,
+        "prompt_per_second": 636.7416545316627,
+        "prompt_per_token_ms": 1.570495652173913
+      },
+      "usage": {
+        "completion_tokens": 4,
+        "prompt_tokens": 230,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 234
+      }
+    }
+  },
+  "samples_file": "/mnt/raid0/llm/tmp/k35-minicpm-frontdoor-coresidency-20260717T191849Z/samples.json",
+  "server_argv_files": [
+    "/mnt/raid0/llm/tmp/k35-minicpm-frontdoor-coresidency-20260717T191849Z/frontdoor.server_argv.json",
+    "/mnt/raid0/llm/tmp/k35-minicpm-frontdoor-coresidency-20260717T191849Z/minicpm_o45.server_argv.json"
+  ],
+  "started_at": "2026-07-17T19:19:02.861704+00:00"
+}

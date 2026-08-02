@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "156 M.I.H. Helaleh et al. / J. Chromatogr. A 1083 (2005) 153\u2013160\n\nThe collected eluant was concentrated by rotary evaporator to 1 ml. The extracts were finally passed through a final column filled with 5 g silica + 3 g Al\\(_2\\)O\\(_3\\) to remove any co-extractive compounds that may cause instrumental interferences during the analysis. The extract was eluted with 120 ml of DCM:n-hexane (1:1), the first 18 ml of eluent was discarded and the rest were collected, which contains the analytes of interest. The extract was exchanged into n-hexane, concentrated to 1 ml to which 1 \\(\\mu\\)g/ml of internal standard was added.\n\n2.9. Removal of sulfur and lipids\n\nThe sulfur present in sewage sludges has to be removed before the GC\u2013EI\u2013MS and GC\u2013EI\u2013MS\u2013MS determination to avoid any interference.\n\nCopper bars (0.5 cm) were activated with 30% HCl for 30 s and then cleaned with acetone, n-hexane and the dried bars was added to the extract. Bio-Beads were used to remove the co-extracted lipids and other higher molecular weight substances which may interfere with the determination. Furthermore, adsorption chromatography of large and small mixed silica and alumina columns allow the removal of lipids and other organic compounds from the sewage sludge extract.\n\n3. Results and discussion\n\nConcern has been expressed over the transfer of toxic organics from the soil and into human food chain. Sewage sludge is a sink for contaminants present in municipal wastewater. There are four WWTPs in operation in Kuwait. All of these treatment plants receive domestic sewage in major quantities, such as 27,000 m\\(^2\\)/day for Reqqa, 70,000 m\\(^2\\)/day for Jahra and 27,000 m\\(^2\\)/day for Om Al-Haymann). Sewage sludge produces at Ardiya WWTP is disposed of, as liquid sludge without digestion to specific disposal sites. Riqqa and Om Al-Haymann are equipped with aerobic digesters and in Jahra thickened undigested sludge is only dried on sludge drying beds. So, the suitability for land application requires investigation since the likelihood for transfer of pollutants from wastewater to edible parts of the plants exists. Volatilization of organic matters, such as PAHs from sludge, due to the unique and extreme temperature in summer (\\(\\sim\\)55\u00b0C) may have adverse effect on the environment. At these temperatures, PAHs are likely to volatilize along with other semi-volatile organic compounds and as potential source of chemicals to the environment. It is questionable, however, whether these chemicals are likely to deposit at such temperatures, but may remain in the vapor phase and subjected to long range atmospheric transport. The eventual fate of chemicals in sludge requires a detailed assessment and probably other disposal options needed to be evaluated particularly for Kuwait and other countries in the region that experience such uniquely high temperatures.\n\nTable 3\nRecoveries and relative standard deviations (RSD, %) obtained from spiked sewage sludge samples (0.2 \\(\\mu\\)g/ml) analysed by GC\u2013EI\u2013MS\u2013MS, using three different extraction techniques\n\nPAHs compounds\n% Recovery \u00b1 RSD\nSoxletx\nSoxhlet\nPLE\nNAP\nACY\nACE\nFLU\nPHE\nANT\nFLT\nPYR\nBaA\nCHR\nBbF\nBkF\nBaP\nBPY\nDBA\nIND\n3.1. Soxhlet extraction\nMany agencies proposed that Soxhlet extraction is a method of choice for the extraction of nonpolar organic contaminants [12]. Extraction recoveries and relative standard deviations are summarized in Table 3.\n\nRecoveries are calculated from the increase in peak areas between the non-spiked and spiked chromatograms using the deuterated internal standard method. The extraction recoveries were satisfactory, since they ranged from 65.0 to 91.8%. The relative standard deviations (RSDs, %) varied from 0.59 to 7.0% for the PAHs, the high value in RSD, could be explained due to the multi-step process such as spiking, extraction and evaporation.\n\n3.2. Soxtcc extraction\nRecoveries varied from 61.5 to 90.5% with a relative standard deviations varied from 1.7 to 22.7%. The results obtained are presented in Table 3. The Soxtcc method appears to be more simple and efficient when compared to Soxhlet extraction.\n\n3.3. Pressurized liquid extraction\nPLE recoveries of sludge samples varied from 60.0 to 93.4% with a RSDs varying from 2.9 to 17.5%. Several papers have been successfully reported for the application of accelerated solvents extraction, such as for PAHs, OCPs, in environmental samples [13\u201317]. However, few papers have been published using ASE for determining PAHs in sewage sludge [13,15,17].\n\nThe use of higher extraction temperature and the role of high pressure for PLE reported to give comparable or higher extraction efficiencies compared with other extrac-",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784318538,
+  "id": "chatcmpl-lfgFR6uD51ABtT8dl6FZPQiSktHIgR9j",
+  "model": "/mnt/raid0/llm/models/PaddleOCR-VL-1.6-GGUF/PaddleOCR-VL-1.6-GGUF.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 2499.031,
+    "predicted_n": 1220,
+    "predicted_per_second": 488.18922214250244,
+    "predicted_per_token_ms": 2.0483860655737702,
+    "prompt_ms": 405.23,
+    "prompt_n": 1281,
+    "prompt_per_second": 3161.1677319053374,
+    "prompt_per_token_ms": 0.31633879781420765
+  },
+  "usage": {
+    "completion_tokens": 1220,
+    "prompt_tokens": 1281,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 2501
+  }
+}

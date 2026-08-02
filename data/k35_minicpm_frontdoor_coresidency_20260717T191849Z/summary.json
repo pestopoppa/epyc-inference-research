@@ -1,0 +1,89 @@
+{
+  "artifact_dir": "/mnt/raid0/llm/tmp/k35-minicpm-frontdoor-coresidency-20260717T191849Z",
+  "cleanup": [
+    {
+      "killed": false,
+      "name": "minicpm_o45",
+      "pid": 2262389,
+      "poll_before": null,
+      "ps_after": {
+        "output": "",
+        "returncode": 1
+      },
+      "returncode": 0,
+      "terminated": true
+    },
+    {
+      "killed": false,
+      "name": "frontdoor",
+      "pid": 2262157,
+      "poll_before": null,
+      "ps_after": {
+        "output": "",
+        "returncode": 1
+      },
+      "returncode": 0,
+      "terminated": true
+    }
+  ],
+  "final_process_scan": {
+    "output": "1849379 /usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh\n2262150 /usr/bin/bash -c python3 -u - <<'PY' import base64, json, mimetypes, os, signal, subprocess, sys, threading, time, urllib.error, urllib.request from datetime import datetime, timezone from pathlib import Path  BIN = Path('/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server') EXP_BIN = Path('/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin') OUT = Path('/mnt/raid0/llm/tmp/k35-minicpm-frontdoor-coresidency-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')) OUT.mkdir(parents=True, exist_ok=True) FRONT_PORT = 19310 VISION_PORT = 19311 FRONT_MODEL = Path('/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf') VISION_MODEL = Path('/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf') VISION_PROJ = Path('/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf') IMAGE = Path('/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0619.png')  front_argv = [     'env', f'LD_LIBRARY_PATH={EXP_BIN}', 'GGML_IQK=1', 'ROCR_VISIBLE_DEVICES=0', 'HIP_VISIBLE_DEVICES=0', 'OMP_NUM_THREADS=1',     'numactl', '--interleave=all', str(BIN),     '-m', str(FRONT_MODEL), '--host', '127.0.0.1', '--port', str(FRONT_PORT),     '-np', '1', '-c', '4096', '-t', '96', '-ub', '512', '--metrics', '--slots', '--jinja',     '--reasoning', 'off', '--device', 'ROCm0', '-ngl', '99', '-ctk', 'q8_0', '-ctv', 'q8_0', '-fa', 'on', '--spec-type', 'none' ] vision_argv = [     'env', f'LD_LIBRARY_PATH={EXP_BIN}', 'GGML_IQK=1', 'ROCR_VISIBLE_DEVICES=0', 'HIP_VISIBLE_DEVICES=0', 'OMP_NUM_THREADS=1',     'numactl', '--interleave=all', str(BIN),     '-m', str(VISION_MODEL), '--mmproj', str(VISION_PROJ), '--host', '127.0.0.1', '--port', str(VISION_PORT),     '-np', '1', '-c', '8192', '-t', '24', '--flash-attn', 'on', '--device', 'ROCm0', '--reasoning', 'off' ]  (OUT / 'frontdoor.server_argv.json').write_text(json.dumps(front_argv, indent=2) + '\\n') (OUT / 'minicpm_o45.server_argv.json').write_text(json.dumps(vision_argv, indent=2) + '\\n') (OUT / 'commands.sh').write_text('#!/bin/bash\\nset -euo pipefail\\n' + ' '.join(front_argv) + '\\n' + ' '.join(vision_argv) + '\\n')  procs = [] logs = [] samples = [] sample_stop = threading.Event() results = {}   def run_capture(argv, timeout=30):     try:         cp = subprocess.run(argv, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)         return {'returncode': cp.returncode, 'output': cp.stdout}     except Exception as e:         return {'error': repr(e)}   def sample(label):     entry = {'ts': datetime.now(timezone.utc).isoformat(), 'label': label}     entry['rocm'] = run_capture(['rocm-smi', '--showuse', '--showmemuse', '--showpidgpus'], timeout=20)     pids = [str(p.pid) for p in procs if p.poll() is None]     entry['pids'] = pids     if pids:         entry['ps'] = run_capture(['ps', '-o', 'pid=,comm=,rss=,vsz=,etimes=,args=', '-p', ','.join(pids)], timeout=10)         entry['smaps_rollup'] = {}         for pid in pids:             path = Path('/proc') / pid / 'smaps_rollup'             if path.exists():                 try:                     entry['smaps_rollup'][pid] = path.read_text(errors='replace')[:4000]                 except Exception as e:                     entry['smaps_rollup'][pid] = repr(e)     samples.append(entry)     (OUT / 'samples.json').write_text(json.dumps(samples, indent=2) + '\\n')   def sampler():     while not sample_stop.wait(2):         sample('during')   def health(port):     req = urllib.request.Request(f'http://127.0.0.1:{port}/health', method='GET')     with urllib.request.urlopen(req, timeout=5) as resp:         return resp.status, resp.read().decode('utf-8', errors='replace')   def wait_health(name, port, proc, timeout_s=900):     start = time.time()     last = None     while time.time() - start < timeout_s:         if proc.poll() is not None:             raise RuntimeError(f'{name} exited early rc={proc.returncode}')         try:             status, body = health(port)             if status == 200 and ('ok' in body.lower() or 'idle' in body.lower() or body.strip()):                 return {'status': status, 'body': body, 'elapsed_s': time.time() - start}         except Exception as e:             last = repr(e)         time.sleep(2)     raise TimeoutError(f'{name} health timeout; last={last}')   def data_url(path):     mime = mimetypes.guess_type(path.name)[0] or 'image/png'     return 'data:%s;base64,%s' % (mime, base64.b64encode(path.read_bytes()).decode('ascii'))   def post_json(port, body, timeout_s):     req = urllib.request.Request(         f'http://127.0.0.1:{port}/v1/chat/completions',         data=json.dumps(body).encode('utf-8'),         headers={'Content-Type': 'application/json'},         method='POST',     )     with urllib.request.urlopen(req, timeout=timeout_s) as resp:         return json.loads(resp.read().decode('utf-8'))   def content(resp):     try:         msg = resp['choices'][0]['message']         return str(msg.get('content') or '')     except Exception:         return ''   def run_frontdoor():     body = {         'messages': [{'role': 'user', 'content': 'Return a compact JSON object with keys status and checks. checks must be an array of 120 short strings, each describing a realistic production serving health check. No markdown.'}],         'max_tokens': 512,         'temperature': 0,         'seed': 35,         'stream': False,         'cache_prompt': False,         'chat_template_kwargs': {'enable_thinking': False},     }     t0 = time.time()     try:         resp = post_json(FRONT_PORT, body, 240)         elapsed = time.time() - t0         (OUT / 'frontdoor.response.json').write_text(json.dumps(resp, indent=2) + '\\n')         results['frontdoor'] = {'ok': True, 'elapsed_s': elapsed, 'content_preview': content(resp)[:500], 'timings': resp.get('timings'), 'usage': resp.get('usage')}     except Exception as e:         results['frontdoor'] = {'ok': False, 'error': repr(e), 'elapsed_s': time.time() - t0}   def run_vision():     body = {         'messages': [{             'role': 'user',             'content': [                 {'type': 'text', 'text': 'Which country has 7 years of compulsory education in the chart? Answer with the country name only.'},                 {'type': 'image_url', 'image_url': {'url': data_url(IMAGE)}},             ],         }],         'max_tokens': 96,         'temperature': 0,         'seed': 35,         'stream': False,         'cache_prompt': False,     }     t0 = time.time()     try:         resp = post_json(VISION_PORT, body, 240)         elapsed = time.time() - t0         (OUT / 'minicpm_o45.response.json').write_text(json.dumps(resp, indent=2) + '\\n')         txt = content(resp)         results['minicpm_o45'] = {'ok': True, 'elapsed_s': elapsed, 'content_preview': txt[:500], 'score_pass': 'tanzania' in ''.join(ch.lower() for ch in txt if ch.isalnum() or ch == '.'), 'timings': resp.get('timings'), 'usage': resp.get('usage')}     except Exception as e:         results['minicpm_o45'] = {'ok': False, 'error': repr(e), 'elapsed_s': time.time() - t0}   def terminate(proc, name, timeout_s=25):     out = {'name': name, 'pid': proc.pid, 'poll_before': proc.poll(), 'terminated': False, 'killed': False, 'ps_after': None}     if proc.poll() is None:         proc.send_signal(signal.SIGTERM)         try:             proc.wait(timeout=timeout_s)             out['terminated'] = True         except subprocess.TimeoutExpired:             proc.kill()             proc.wait(timeout=15)             out['killed'] = True     out['returncode'] = proc.poll()     out['ps_after'] = run_capture(['ps', '-p', str(proc.pid), '-o', 'pid=,comm=,args='], timeout=10)     return out  cleanup = [] try:     print(f'artifact_dir={OUT}', flush=True)     sample('before')     front_log = open(OUT / 'frontdoor.server.log', 'w', encoding='utf-8')     vision_log = open(OUT / 'minicpm_o45.server.log', 'w', encoding='utf-8')     logs.extend([front_log, vision_log])     front = subprocess.Popen(front_argv, stdout=front_log, stderr=subprocess.STDOUT, text=True)     procs.append(front)     print(f'started frontdoor pid={front.pid}', flush=True)     front_health = wait_health('frontdoor', FRONT_PORT, front, 900)     print(f'frontdoor healthy elapsed={front_health[\"elapsed_s\"]:.1f}s', flush=True)     sample('frontdoor_healthy')     vision = subprocess.Popen(vision_argv, stdout=vision_log, stderr=subprocess.STDOUT, text=True)     procs.append(vision)     print(f'started minicpm_o45 pid={vision.pid}', flush=True)     vision_health = wait_health('minicpm_o45', VISION_PORT, vision, 600)     print(f'minicpm_o45 healthy elapsed={vision_health[\"elapsed_s\"]:.1f}s', flush=True)     sample('both_healthy')     thread = threading.Thread(target=sampler, daemon=True)     thread.start()     workers = [threading.Thread(target=run_frontdoor), threading.Thread(target=run_vision)]     for w in workers:         w.start()     for w in workers:         w.join()     sample_stop.set()     thread.join(timeout=5)     sample('after_requests')     summary = {         'artifact_dir': str(OUT),         'started_at': datetime.now(timezone.utc).isoformat(),         'frontdoor_health': front_health,         'minicpm_o45_health': vision_health,         'requests': results,         'samples_file': str(OUT / 'samples.json'),         'server_argv_files': [str(OUT / 'frontdoor.server_argv.json'), str(OUT / 'minicpm_o45.server_argv.json')],     }     (OUT / 'summary.pre_cleanup.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\\n') finally:     sample_stop.set()     for proc, name in reversed(list(zip(procs, ['frontdoor', 'minicpm_o45']))):         cleanup.append(terminate(proc, name))     for log in logs:         try:             log.close()         except Exception:             pass     sample('after_cleanup')     final = {         'artifact_dir': str(OUT),         'finished_at': datetime.now(timezone.utc).isoformat(),         'requests': results,         'cleanup': cleanup,         'final_process_scan': run_capture(['bash', '-lc', \"pgrep -af 'llama-server|MiniCPM|Qwen3.6|k35-minicpm-frontdoor' || true\"], timeout=15),         'final_rocm': run_capture(['rocm-smi', '--showuse', '--showmemuse', '--showpidgpus'], timeout=20),     }     (OUT / 'summary.json').write_text(json.dumps(final, indent=2, sort_keys=True) + '\\n')     print(json.dumps(final, indent=2)[:4000], flush=True) PY\n2262656 bash -lc pgrep -af 'llama-server|MiniCPM|Qwen3.6|k35-minicpm-frontdoor' || true\n",
+    "returncode": 0
+  },
+  "final_rocm": {
+    "output": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 3603387070\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 54\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 1\nGPU[0]\t\t: Memory Activity: 2283341946\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n",
+    "returncode": 0
+  },
+  "finished_at": "2026-07-17T19:19:03.403678+00:00",
+  "requests": {
+    "frontdoor": {
+      "content_preview": "{\n  \"status\": \"ok\",\n  \"checks\": [\n    \"API Gateway latency p99 < 200ms\",\n    \"API Gateway error rate < 0.1%\",\n    \"Database connection pool active < 80%\",\n    \"Database connection pool idle > 10%\",\n    \"Database replication lag < 1s\",\n    \"Database disk usage < 70%\",\n    \"Database CPU usage < 75%\",\n    \"Redis memory usage < 80%\",\n    \"Redis hit rate > 95%\",\n    \"Redis connection count < 1000\",\n    \"Redis latency p99 < 5ms\",\n    \"Kafka consumer lag < 1000\",\n    \"Kafka producer throughput stable\",",
+      "elapsed_s": 5.319384336471558,
+      "ok": true,
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 5121.551,
+        "predicted_n": 512,
+        "predicted_per_second": 99.96971620511052,
+        "predicted_per_token_ms": 10.003029296875,
+        "prompt_ms": 186.517,
+        "prompt_n": 48,
+        "prompt_per_second": 257.34919605183444,
+        "prompt_per_token_ms": 3.8857708333333334
+      },
+      "usage": {
+        "completion_tokens": 512,
+        "prompt_tokens": 48,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 560
+      }
+    },
+    "minicpm_o45": {
+      "content_preview": "Tanzania",
+      "elapsed_s": 0.45423245429992676,
+      "ok": true,
+      "score_pass": true,
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 36.805,
+        "predicted_n": 4,
+        "predicted_per_second": 108.68088574921886,
+        "predicted_per_token_ms": 9.20125,
+        "prompt_ms": 361.214,
+        "prompt_n": 230,
+        "prompt_per_second": 636.7416545316627,
+        "prompt_per_token_ms": 1.570495652173913
+      },
+      "usage": {
+        "completion_tokens": 4,
+        "prompt_tokens": 230,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 234
+      }
+    }
+  }
+}

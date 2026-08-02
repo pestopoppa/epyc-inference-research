@@ -1,0 +1,179 @@
+{
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "cells": [
+    {
+      "candidate": true,
+      "context": 8192,
+      "description": "Local SuperGemma4-26B abliterated multimodal Q8_0 candidate, CPU-only. Tests the registered multimodal Gemma4 artifact on the fixed K35 OCR/chart fixtures before any role claim.",
+      "fixtures": [
+        {
+          "expected_terms": [
+            "7500"
+          ],
+          "fixture_id": "ocr_digit_7500",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0237.png",
+          "prompt": "What number is shown in the image? Answer with digits only."
+        },
+        {
+          "expected_terms": [
+            "43.36"
+          ],
+          "fixture_id": "receipt_total_payable",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0713.png",
+          "prompt": "What is the total payable amount on the receipt? Answer with the amount only."
+        },
+        {
+          "expected_terms": [
+            "tanzania"
+          ],
+          "fixture_id": "chart_tanzania",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0619.png",
+          "prompt": "Which country has 7 years of compulsory education in the chart? Answer with the country name only."
+        },
+        {
+          "expected_terms": [
+            "cs00012465"
+          ],
+          "fixture_id": "receipt_doc_number",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0734.png",
+          "prompt": "What is the Doc No. on the receipt? Answer with the document number only."
+        }
+      ],
+      "mmproj": "/mnt/raid0/llm/models/supergemma4-26b-abliterated-multimodal-8bit/mmproj-supergemma4-26b-abliterated-multimodal-f16.gguf",
+      "model": "/mnt/raid0/llm/models/supergemma4-26b-abliterated-multimodal-8bit/supergemma4-26b-abliterated-multimodal-Q8_0.gguf",
+      "parallel": 1,
+      "port": 19250,
+      "prior_evidence": "orchestration/model_registry.yaml: supergemma4_26b_mm_q8 had text/VL evidence but no K35 multimodal fixture matrix.",
+      "role": "vision_escalation_candidate",
+      "scenario": "vision_candidate_cpu_supergemma4_mm_q8",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "GGML_IQK=1",
+        "ROCR_VISIBLE_DEVICES=0",
+        "HIP_VISIBLE_DEVICES=0",
+        "OMP_NUM_THREADS=1",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/supergemma4-26b-abliterated-multimodal-8bit/supergemma4-26b-abliterated-multimodal-Q8_0.gguf",
+        "--mmproj",
+        "/mnt/raid0/llm/models/supergemma4-26b-abliterated-multimodal-8bit/mmproj-supergemma4-26b-abliterated-multimodal-f16.gguf",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "19250",
+        "-np",
+        "1",
+        "-c",
+        "8192",
+        "-t",
+        "96",
+        "--flash-attn",
+        "on",
+        "--device",
+        "none",
+        "--reasoning",
+        "off",
+        "-ctk",
+        "q8_0",
+        "-ctv",
+        "q8_0",
+        "--repeat-penalty",
+        "1.05"
+      ],
+      "threads": 96
+    },
+    {
+      "candidate": true,
+      "context": 8192,
+      "description": "Local SuperGemma4-26B abliterated multimodal Q8_0 candidate offloaded to MI210. Tests whether the heavier multimodal Gemma4 lane can beat the temporary Qwen2.5-VL alias or MiniCPM-o on quality/speed.",
+      "fixtures": [
+        {
+          "expected_terms": [
+            "7500"
+          ],
+          "fixture_id": "ocr_digit_7500",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0237.png",
+          "prompt": "What number is shown in the image? Answer with digits only."
+        },
+        {
+          "expected_terms": [
+            "43.36"
+          ],
+          "fixture_id": "receipt_total_payable",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0713.png",
+          "prompt": "What is the total payable amount on the receipt? Answer with the amount only."
+        },
+        {
+          "expected_terms": [
+            "tanzania"
+          ],
+          "fixture_id": "chart_tanzania",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0619.png",
+          "prompt": "Which country has 7 years of compulsory education in the chart? Answer with the country name only."
+        },
+        {
+          "expected_terms": [
+            "cs00012465"
+          ],
+          "fixture_id": "receipt_doc_number",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0734.png",
+          "prompt": "What is the Doc No. on the receipt? Answer with the document number only."
+        }
+      ],
+      "mmproj": "/mnt/raid0/llm/models/supergemma4-26b-abliterated-multimodal-8bit/mmproj-supergemma4-26b-abliterated-multimodal-f16.gguf",
+      "model": "/mnt/raid0/llm/models/supergemma4-26b-abliterated-multimodal-8bit/supergemma4-26b-abliterated-multimodal-Q8_0.gguf",
+      "parallel": 1,
+      "port": 19251,
+      "prior_evidence": "orchestration/model_registry.yaml: supergemma4_26b_mm_q8 is registered as a multimodal vision candidate with historical text/VL concerns.",
+      "role": "vision_escalation_candidate",
+      "scenario": "vision_candidate_mi210_supergemma4_mm_q8",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "GGML_IQK=1",
+        "ROCR_VISIBLE_DEVICES=0",
+        "HIP_VISIBLE_DEVICES=0",
+        "OMP_NUM_THREADS=1",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/supergemma4-26b-abliterated-multimodal-8bit/supergemma4-26b-abliterated-multimodal-Q8_0.gguf",
+        "--mmproj",
+        "/mnt/raid0/llm/models/supergemma4-26b-abliterated-multimodal-8bit/mmproj-supergemma4-26b-abliterated-multimodal-f16.gguf",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "19251",
+        "-np",
+        "1",
+        "-c",
+        "8192",
+        "-t",
+        "96",
+        "--flash-attn",
+        "on",
+        "--device",
+        "ROCm0",
+        "--reasoning",
+        "off",
+        "-ctk",
+        "q8_0",
+        "-ctv",
+        "q8_0",
+        "-ngl",
+        "99",
+        "--repeat-penalty",
+        "1.05"
+      ],
+      "threads": 96
+    }
+  ],
+  "created_at": "2026-07-17T19:31:20.570206+00:00",
+  "execute": true,
+  "max_tokens": 96,
+  "schema": "epyc.k35_vision_matrix.plan.v1"
+}

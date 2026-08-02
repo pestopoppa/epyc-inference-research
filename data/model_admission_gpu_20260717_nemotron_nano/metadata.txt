@@ -1,0 +1,5 @@
+timestamp=2026-07-17T08:55:48Z
+experimental_commit=2e79e10cc0e264f05146ffbe29b8ce129ca0bb83
+binary=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-cli
+model=/mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-Q8_0.gguf
+pwd=/workspace

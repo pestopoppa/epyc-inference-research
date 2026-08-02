@@ -1,0 +1,8 @@
+finish_reason=stop
+prompt_tokens=101
+completion_tokens=1344
+total_tokens=1445
+prompt_tps=1095.2546195887917
+generation_tps=66.16174686308895
+content_chars=7417
+content_preview=**Technical Note: Interpreting Local LLM Throughput Measurements**\n\n**1. Introduction**\n\nLocal Large Language Models (LLMs) have become increasingly popular due to their ability to

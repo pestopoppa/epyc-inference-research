@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "43.36",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784314433,
+  "id": "chatcmpl-IDDl6W5316QQ83xApAXqnNqEVIFo0dg6",
+  "model": "/mnt/raid0/llm/models/Qwen3-VL-8B-Instruct-GGUF/Qwen3VL-8B-Instruct-Q4_K_M.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 50.411,
+    "predicted_n": 6,
+    "predicted_per_second": 119.0216421019222,
+    "predicted_per_token_ms": 8.401833333333334,
+    "prompt_ms": 786.308,
+    "prompt_n": 1061,
+    "prompt_per_second": 1349.3440229528378,
+    "prompt_per_token_ms": 0.7411008482563619
+  },
+  "usage": {
+    "completion_tokens": 6,
+    "prompt_tokens": 1061,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1067
+  }
+}

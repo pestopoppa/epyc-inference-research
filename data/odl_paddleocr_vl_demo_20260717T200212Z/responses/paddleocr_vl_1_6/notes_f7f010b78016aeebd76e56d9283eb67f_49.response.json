@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "NO.\nDate\n\u2014Which hotel have you booked for your holiday?\n(\u4e3a\u4e86\u5ea6\u5047\u4f60\u9884\u8ba2\u4e86\u54ea\u5bb6\u65c5\u9986\uff1f)\n\u2014The biggest one in Haikou. (\u6d77\u53e3\u90a3\u5bb6\u6700\u5927\u7684\u65c5\u9986.)\n(4) \u7591\u95ee\u4ee3\u8bcd\u4e0d\u5206\u5355\u590d\u6570\uff0c\u90fd\u5b83\u6240\u66ff\u4ee3\u7684\u4eba\u6216\u4e8b\u7269\u51b3\u5b9a\u5355\u590d\u6570\uff0c\u4f46\u662f\u901a\u5e38\n\u7528\u5355\u6570\uff1b\u5982\u679c\u4fee\u9970\u540d\u8bcd\uff0c\u5219\u4ee5\u540d\u8bcd\u7684\u5355\u590d\u6570\u4e3a\u51c6\u3002\n\u5982\uff1aWho is (are) in that playhouse? (\u8c01\u5728\u6e38\u620f\u623f\u91cc\uff1f)\nWhat is that? (\u90a3\u662f\u4ec0\u4e48\uff1f)\nWhat are those? (\u90a3\u4e9b\u662f\u4ec0\u4e48\uff1f)\nWhat colours do they have? (\u5b83\u4eec\u6709\u54ea\u4e9b\u989c\u8272\uff1f)\n10. \u76f8\u4e92\u4ee3\u8bcd\uff1a\u8868\u793a\u76f8\u4e92\u5173\u7cfb\u7684\u8bcd\u53eb\u76f8\u4e92\u4ee3\u8bcd\u3002\neach other, one another \u662f\u76f8\u4e92\u4ee3\u8bcd\uff0c\u8bd1\u4e3a\u201c\u4e92\u76f8\u201d\uff0c\u53ef\u4ee5\u901a\u7528\u3002each\nother \u8868\u793a\u4e24\u8005\u4e4b\u95f4\uff0c\u800c one another \u8868\u793a\u8bb8\u591a\u4eba\u4e4b\u95f4\u3002\u5b83\u4eec\u6709\u6240\u6709\u683c\u5f62\u5f0f\uff1a\neach other's, one another's.\n\u5982\uff1awe must help each other when we are in trouble.\n(\u6211\u4eec\u8eab\u5904\u56f0\u5883\u65f6\u8981\u4e92\u76f8\u5e2e\u52a9\u3002)\nThey sat there without talking to one another/each other.\n(\u4ed6\u4eec\u5750\u5728\u90a3\u513f,\u4e92\u76f8\u90fd\u4e0d\u8bf4\u8bdd\u3002)\n\u56db\u3001\u6570\u8bcd\n1. \u5206\u7c7b\uff1a\u6570\u8bcd\u6709\u57fa\u6570\u8bcd\u548c\u5e8f\u6570\u8bcd\u4e24\u79cd\u3002\u82f1\u8bed\u7684\u6570\u8bcd\u53ef\u4f5c\u53e5\u5b50\u7684\u4e3b\u8bed\u3001\u5bbe\u8bed\u3002\n\u8868\u8bed\u548c\u5b9a\u8bed\u3002\n2.\u57fa\u6570\u8bcd\uff1a\u8868\u793a\u6570\u6708\u7684\u8bcd\u3002\n1 one\n5 five\n9 nine\n13th/teen\n17 seventeen\n30 thirty\n2 two\n6 six\n10 ten\n14 fourteen\n18 eighteen\n40 forty\n3 three\n7 seven\n11 eleven\n15 fifteen\n19 nineteen\n50 fifty\n4 four\n8 eight\n12 twelve\n16 sixteen\n20 twenty\nbe sixty\n44",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784318567,
+  "id": "chatcmpl-2E4st69kPRtlucgTRHq6jIidJND8VNQ0",
+  "model": "/mnt/raid0/llm/models/PaddleOCR-VL-1.6-GGUF/PaddleOCR-VL-1.6-GGUF.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 1633.651,
+    "predicted_n": 788,
+    "predicted_per_second": 482.3551664339568,
+    "predicted_per_token_ms": 2.0731611675126906,
+    "prompt_ms": 117.04,
+    "prompt_n": 519,
+    "prompt_per_second": 4434.381408065618,
+    "prompt_per_token_ms": 0.22551059730250483
+  },
+  "usage": {
+    "completion_tokens": 788,
+    "prompt_tokens": 519,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1307
+  }
+}

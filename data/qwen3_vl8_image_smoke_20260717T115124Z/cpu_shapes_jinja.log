@@ -1,0 +1,26 @@
+0.00.256.230 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.488.777 I mtmd_cli_context: chat template example:
+<|im_start|>system
+You are a helpful assistant<|im_end|>
+<|im_start|>user
+Hello<|im_end|>
+<|im_start|>assistant
+Hi there<|im_end|>
+<|im_start|>user
+How are you?<|im_end|>
+<|im_start|>assistant
+
+0.00.489.558 W load_hparams: Qwen-VL models require at minimum 1024 image tokens to function correctly on grounding tasks
+0.00.489.559 W load_hparams: if you encounter problems with accuracy, try adding --image-min-tokens 1024
+0.00.489.560 W load_hparams: more info: https://github.com/ggml-org/llama.cpp/issues/16842
+
+0.00.639.472 I main: loading model: /mnt/raid0/llm/models/Qwen3-VL-8B-Instruct-GGUF/Qwen3VL-8B-Instruct-Q4_K_M.gguf
+0.00.639.525 W WARN: This is an experimental CLI for testing multimodal capability.
+0.00.639.526 W       For normal use cases, please use the standard llama-cli
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=12 ne00=4096)
+0.00.739.078 I encoding mtmd batch, n_chunks = 1 (done = 1, total = 3)
+0.02.301.053 I mtmd batch encoding done in 1562 ms
+
+Circles Squares
+
+

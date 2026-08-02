@@ -1,0 +1,21 @@
+{
+  "commands_path": "/mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/commands.sh",
+  "created_at": "2026-07-16T21:51:56.251203+00:00",
+  "first_smoke": {
+    "arm": "standalone_iq4_gpu",
+    "command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 18700 --device ROCm0 -ngl 99 -t 96 -c 8192 -fa on -rea off",
+    "device": "ROCm0",
+    "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+    "ngl": 99,
+    "port": 18700,
+    "response_path": "/mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/responses/standalone_iq4_gpu.raw.json",
+    "response_sha256": "c1214b210593289d403c2ec0086bc00d10df1927e81330f0d157372c0f4636c5",
+    "role": "standalone_reasoner",
+    "server_pid": 15426,
+    "smoke_command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:18700/v1/chat/completions -H 'Content-Type: application/json' --data '{\"max_tokens\":64,\"messages\":[{\"content\":\"Return a compact JSON object with keys arm, quant, and role using values \\\"standalone_iq4_gpu\\\", \\\"IQ4_XS\\\", and \\\"reasoner\\\".\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'",
+    "status": "ok"
+  },
+  "mode": "execute",
+  "plan_path": "/mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/plan.json",
+  "schema": "qwable_reasoning_economics_execute.v1"
+}
