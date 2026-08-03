@@ -1,0 +1,28 @@
+{
+  "measurement": "mi210_mfma_peak_flops",
+  "grade": "OBSERVATION",
+  "protocol": null,
+  "utc": "2026-08-03T14:32:00Z",
+  "measured_TFLOPS_fp16_matrix": 172.21,
+  "derived_TFLOPS_spec": 181.0,
+  "fraction_of_derived": 0.9512,
+  "implied_sustained_clock_GHz": 1.617,
+  "boost_clock_assumed_GHz": 1.7,
+  "ridge_FLOP_per_byte": {
+    "spec_over_spec": 110.5,
+    "spec_over_measuredBW": 126.3,
+    "measured_over_measured": 120.1
+  },
+  "B_star_measured_basis": {
+    "Q4_K": 34,
+    "Q8_0": 64,
+    "bf16": 120
+  },
+  "notes": [
+    "Measured 172.21 TFLOPS fp16 matrix vs 181.0 derived from spec = 95.1%. The shortfall is CLOCK, not architecture: the implied sustained clock is 1.617 GHz against the 1.7 GHz boost the derivation assumed. The 104 CU x 1024 FLOP/clk arithmetic is CONFIRMED.",
+    "Occupancy sweep is FLAT from 104 blocks (416 waves, 1 wave/SIMD) to 3328 blocks: 172.13-172.32 TFLOPS. The matrix cores are ISSUE-limited, not occupancy-limited, so this is a genuine plateau rather than a grid artifact.",
+    "Correctness of the measurement itself: the emitted ISA contains exactly UNROLL=8 v_mfma_f32_16x16x16f16 instructions, confirming the timed loop was not optimized away. Operands are register-resident so no memory traffic enters the timed region.",
+    "THIS RETIRES THE MIXED-BASIS RIDGE. With both terms measured, the clean ridge is 120.2 FLOP/byte (172.27 TFLOPS / 1433.3 GB/s). The earlier 126.3 divided spec FLOPS by measured bandwidth and was labelled mixed-basis; it is superseded. The spec/spec ridge of 110.5 remains correct on its own basis.",
+    "Still does not discriminate the bf16 knee: measured knee is B~96-128 and the measured-basis B* is 120, inside that interval - as were both prior candidates. Narrowing the observed knee would settle it."
+  ]
+}

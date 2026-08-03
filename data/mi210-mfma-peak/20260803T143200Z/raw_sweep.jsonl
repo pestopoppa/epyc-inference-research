@@ -1,0 +1,7 @@
+# occupancy sweep
+blocks=104 {"arch":"gfx90a:sramecc+:xnack-","blocks":104,"waves_per_block":4,"iters":20000,"unroll":8,"timed_reps":6,"best_TFLOPS":172.18,"median_TFLOPS":172.17,"min_TFLOPS":172.13}
+blocks=208 {"arch":"gfx90a:sramecc+:xnack-","blocks":208,"waves_per_block":4,"iters":20000,"unroll":8,"timed_reps":6,"best_TFLOPS":172.33,"median_TFLOPS":172.32,"min_TFLOPS":172.29}
+blocks=416 {"arch":"gfx90a:sramecc+:xnack-","blocks":416,"waves_per_block":4,"iters":20000,"unroll":8,"timed_reps":6,"best_TFLOPS":172.36,"median_TFLOPS":172.35,"min_TFLOPS":172.34}
+blocks=832 {"arch":"gfx90a:sramecc+:xnack-","blocks":832,"waves_per_block":4,"iters":20000,"unroll":8,"timed_reps":6,"best_TFLOPS":172.27,"median_TFLOPS":172.26,"min_TFLOPS":172.24}
+blocks=1664 {"arch":"gfx90a:sramecc+:xnack-","blocks":1664,"waves_per_block":4,"iters":20000,"unroll":8,"timed_reps":6,"best_TFLOPS":172.22,"median_TFLOPS":172.20,"min_TFLOPS":172.19}
+blocks=3328 {"arch":"gfx90a:sramecc+:xnack-","blocks":3328,"waves_per_block":4,"iters":20000,"unroll":8,"timed_reps":6,"best_TFLOPS":172.18,"median_TFLOPS":172.17,"min_TFLOPS":172.15}
