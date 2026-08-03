@@ -67,18 +67,6 @@ This is the distinction worth keeping: *"the loader rejects it"* would be a prop
 which branch of `#if CUDART_VERSION >= 12080` is taken was previously *inferred* from source, and is
 now *observed* on the card.
 
-## Remediation options (operator decision, not taken here)
-
-1. **Pass `--check-tensors` in production launchers.** Restores the loader gate. Cost: validation
-   time at model load, on every model, for a defect that is currently unreachable.
-2. **Report upstream.** Two live decoders disagreeing at a reserved byte is an upstream bug, not
-   ours; production is FROZEN and we would not patch it locally regardless.
-3. **Do nothing, and rely on the sentinels.** Cheapest, and defensible *because* the sentinel fires
-   before an MXFP4 model can be served — the risk is bounded by a check rather than by memory.
-
-Recommendation: **3 now, 1 at the moment an MXFP4 model is proposed** — the sentinel makes that
-moment impossible to miss, which is what the first version of this document did not.
-
 ## Regenerating and re-verifying
 
 ```bash
@@ -90,3 +78,45 @@ uv run --with pytest python -m pytest conformance/ -q           # 15 tests
 The generator derives each contract from its **stated rule**, never by transcribing the
 implementation it describes — transcription produces vectors that can never fail. The harnesses do
 the opposite: they **call the real code**, so they track the frozen tree rather than restating it.
+
+## Remediation — DECIDED 2026-08-03
+
+| Axis | Decision | Implementation |
+|---|---|---|
+| Local mitigation | **Validate at acquisition, not at serve** | `scripts/models/validate_model_tensors.sh` |
+| Upstream report | **Only if we adopt MXFP4** | trigger is `test_no_mxfp4_model_is_served` |
+
+**Why not `--check-tensors` in production.** Validation reads every tensor linearly, so on an mmap'd
+model it forces **first-touch of every page** — adding a full model read to every server start *and*
+perturbing NUMA first-touch placement, a hazard this project has already been bitten by. Validating
+once at acquisition gets the same detection with the serving path untouched.
+
+It is also a **corrupt-download detector** beyond this issue: `ggml_validate_row_data` checks NaN/Inf
+in fp16 scale fields for Q4_K, Q8_0, IQ2_XXS, BF16 and F16 — every quant we serve. A corrupted scale
+in a 38 GB download produces garbage output rather than an error, which is exactly the failure mode
+that survives without a check.
+
+Both decisions are wired into the sentinel's failure message, so the moment an MXFP4 model appears
+the operator is told what was already decided rather than having to re-derive it.
+
+## `llama-cli --check-tensors` does not work for this, and the reason is worth recording
+
+The obvious implementation — shell out to `llama-cli --check-tensors` — is unusable. With a non-TTY
+stdin it enters an interactive loop and emits `> ` forever: **312 million lines and 895 MB of log**
+before the timeout fired, *with* `-no-cnv` set *and* stdin redirected from `/dev/null`.
+
+`scripts/models/validate_tensors_harness.c` calls `llama_model_load_from_file` with
+`check_tensors=true` instead. That returns `NULL` on rejection and nothing else happens — no token
+generation, no interactive mode, no unbounded output. **When a CLI will not yield a boolean, the API
+underneath it usually will.**
+
+Two further defects the first version had, both worth naming because they are the same shape as the
+retraction above — *a verdict produced by something other than the thing being measured*:
+
+- It took the **first** `llama-cli` it found. Eight of twelve builds on this host are stale and fail
+  with `undefined symbol: llama_apply_adapter_cvec`; the linkage error was reported as **"this model
+  is invalid"**. It now requires a build that runs, prefers the ratified production version, and
+  prefers non-HIP (validation is CPU-side and this host serves from the GPU).
+- It had **two** result states. A tool that cannot run has not found a bad model, and saying `FAIL`
+  would send someone to re-download a good 38 GB file. There are now three: `PASS`, `FAIL` (a
+  positive rejection), and `ERROR` (inconclusive, blocks nothing).

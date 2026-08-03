@@ -65,10 +65,14 @@ def test_no_mxfp4_model_is_served():
         "AN MXFP4 MODEL HAS APPEARED — the E8M0 CPU/GPU divergence is now REACHABLE.\n"
         f"  found: {hits}\n"
         "  At 0xFF the CPU MXFP4 path yields 2^127 (finite) and the GPU path yields +Inf.\n"
-        "  Before serving this model, do ONE of:\n"
-        "    (a) pass --check-tensors so 0xFF is rejected at load (it is OFF by default), or\n"
-        "    (b) confirm the producing quantizer cannot emit 0xFF, and record that, or\n"
-        "    (c) report upstream and pin a fix.\n"
+        "  OPERATOR DECISIONS ALREADY TAKEN (2026-08-03), both triggered by THIS test:\n"
+        "    1. Validate at acquisition, not at serve:\n"
+        "         bash scripts/models/validate_model_tensors.sh <model.gguf>\n"
+        "       (--check-tensors at serve would force first-touch of every page on\n"
+        "        mmap'd models and perturb NUMA placement; acquisition-time gets the\n"
+        "        same detection with the serving path untouched.)\n"
+        "    2. Report upstream NOW — the standing decision was 'report only if we\n"
+        "       adopt MXFP4', and this failure IS that moment.\n"
         "  See conformance/matrices/e8m0-conformance.md.")
 
 
