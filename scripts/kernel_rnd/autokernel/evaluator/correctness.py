@@ -52,7 +52,12 @@ WHICH PROTOCOL CLAUSES THIS FILE IMPLEMENTS
   * **"Preconditions (all enforced or attested per run)"**, precondition 4 — the
     anchor is named by source commit, binary SHA-256 and linkage SHA-256, and
     every comparison gate here declares `requires_anchor=True` and returns
-    `COULD_NOT_CHECK` when no anchor is bound.
+    `COULD_NOT_CHECK` when no anchor is bound. The EVIDENCE names it the same way:
+    `LinkageEvidence` and `CoherenceEvidence` carry all three components or none
+    (`_validate_anchor_triple`), and `compute_coherence` REFUSES — a raised
+    `CoherenceAnchorMismatch`, not a quiet downgrade — when the anchor it is
+    handed is not the anchor the capture was taken against, which is the failure
+    invariant 11's *"deterministic replay before regeneration"* path invites.
   * **"Controls — four mandatory, plus one accept-side control"** — control 3
     (degraded-negative: *"cheating, silently falling back, reducing work, or
     serving a cached result"*) is what `check_no_fallback_dispatch_proof` and
@@ -103,7 +108,8 @@ from . import api
 __all__ = [
     # errors
     "CorrectnessError", "T0EvidenceUnavailable", "CoherenceWithoutAnchor",
-    "CoherenceTampering", "GateCoverageGap", "ActorDeclaredScope",
+    "CoherenceTampering", "CoherenceAnchorMismatch", "GateCoverageGap",
+    "ActorDeclaredScope",
     # vocabularies
     "T0_GATE_IDS", "T0_GATE_SPEC", "MANDATORY_BACKEND_OPS", "CONTROL_ROLES",
     "COHERENCE_LABELS", "COHERENCE_EQUIVALENCE_LABELS", "NA_SOURCES",
@@ -166,6 +172,24 @@ class CoherenceWithoutAnchor(CorrectnessError):
 
 class CoherenceTampering(CorrectnessError):
     """A `CoherenceVerdict` carries a label its own evidence does not imply."""
+
+
+class CoherenceAnchorMismatch(CorrectnessError):
+    """A coherence capture was compared against an anchor it was not taken against.
+
+    Invariant 11 makes re-scoring SAVED outputs a first-class cost-control
+    mechanism: *"deterministic replay before regeneration"*. That is precisely the
+    path on which a `CoherenceEvidence` captured against anchor A can be handed to
+    `compute_coherence(anchor=B, ...)`, and without this refusal it would produce a
+    perfectly well-formed `byte_identical` verdict meaning nothing — the candidate
+    output agreed with an anchor output nobody claimed it came from.
+
+    This RAISES rather than returning `not_compared`, because the two are
+    different facts. `not_compared` says *no comparison was possible*, which is a
+    property of the evidence; a mismatch says *the caller replayed the wrong
+    material*, which is a defect in the replay path. Downgrading the second into
+    the first would leave the bug in place and the pipeline green.
+    """
 
 
 class GateCoverageGap(CorrectnessError):
@@ -265,6 +289,10 @@ PRODUCTION_TREE_ROOTS = (
 # =============================================================================
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+#: Mirrors `schemas._COMMIT_RE` and `api._COMMIT_RE`. A short commit is not a
+#: commit here: an abbreviation is ambiguous across a growing object store, and
+#: precondition 4 names the anchor so it can be resolved to ONE tree forever.
+_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
 def _req_str(value: Any, label: str) -> str:
@@ -281,6 +309,16 @@ def _req_sha256(value: Any, label: str) -> str:
 
 def _opt_sha256(value: Any, label: str) -> Optional[str]:
     return None if value is None else _req_sha256(value, label)
+
+
+def _req_commit(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not _COMMIT_RE.match(value):
+        raise ValueError(f"{label}: expected a full 40-hex git commit, got {value!r}")
+    return value
+
+
+def _opt_commit(value: Any, label: str) -> Optional[str]:
+    return None if value is None else _req_commit(value, label)
 
 
 def _req_bool(value: Any, label: str) -> bool:
@@ -345,6 +383,52 @@ def _req_producer(value: Any, label: str) -> str:
     if value not in EVIDENCE_PRODUCERS:
         raise ValueError(f"{label}: {value!r} is not one of {list(EVIDENCE_PRODUCERS)}")
     return value
+
+
+def _validate_anchor_triple(*, source_commit: Any, binary_sha256: Any, linkage_sha256: Any,
+                            label: str) -> None:
+    """Precondition 4's THREE components on a piece of evidence: all, or none.
+
+    *"names its anchor by source commit, binary SHA-256, and linkage SHA-256"* —
+    the same rule `schemas._check_anchor_block_v3` enforces on the record, applied
+    where the evidence that FEEDS the record is captured, so the two cannot say
+    different things about how completely the anchor was named.
+
+    Two refusals, and both are about a name that resolves to more than one thing:
+
+      * **Partial naming.** Two of three components is not a weaker name, it is a
+        different one: a rebuilt binary at the same commit and a binary rebuilt
+        from a different commit are both admissible under a two-component name.
+        Absent is a state this module can express (all three `None`, which reads
+        as COULD_NOT_CHECK downstream); partially named is not.
+      * **Placeholders.** `schemas.is_placeholder_digest` — `0`*64 in an anchor
+        field is a CLAIM that an anchor was resolved, and every downstream reader
+        takes it for one. Evidence with no anchor records none; it never fills the
+        fields in.
+    """
+    _opt_commit(source_commit, f"{label}.anchor_source_commit")
+    _opt_sha256(binary_sha256, f"{label}.anchor_binary_sha256")
+    _opt_sha256(linkage_sha256, f"{label}.anchor_linkage_sha256")
+    named = {
+        f"{label}.anchor_source_commit": source_commit,
+        f"{label}.anchor_binary_sha256": binary_sha256,
+        f"{label}.anchor_linkage_sha256": linkage_sha256,
+    }
+    present = sorted(name for name, value in named.items() if value is not None)
+    if present and len(present) != len(named):
+        missing = sorted(name for name, value in named.items() if value is None)
+        raise ValueError(
+            f"{label}: an anchor is named by source commit, binary SHA-256 AND linkage "
+            f"SHA-256 (precondition 4). This evidence names {present} and omits {missing}. "
+            "A partially named anchor is the defect: it resolves to more than one artifact, "
+            "so record all three components or none of them")
+    for name, value in sorted(named.items()):
+        if schemas.is_placeholder_digest(value):
+            raise ValueError(
+                f"{name}: {value!r} is a placeholder digest, not a measured identity. "
+                "Evidence that compared against no anchor omits all three components; it "
+                "never fills them in — a fabricated identity reads as a resolved one to "
+                "every downstream reader, which is strictly worse than an absent one")
 
 
 def _fail(*reasons: str) -> schemas.Check:
@@ -1204,6 +1288,16 @@ class CoherenceEvidence:
 
     Producing a label from this is `compute_coherence()`'s job and nothing else's;
     the whole point is that the label is derived, not attached at capture time.
+
+    The three `anchor_*` identity fields record WHICH anchor produced
+    `anchor_output_sha256`. Without them the capture says what the anchor produced
+    and not whose output it was, so a capture taken against anchor A could be
+    re-scored against anchor B — invariant 11's *"deterministic replay before
+    regeneration"* is the designed path where exactly that happens — and yield a
+    `byte_identical` label that names an agreement nobody claimed. They are
+    optional as a triple only: all three or none (`_validate_anchor_triple`), and
+    NONE means the identity was not recorded, which `compute_coherence` treats as
+    COULD_NOT_CHECK-shaped and never as agreement.
     """
 
     candidate_output_sha256: Optional[str]
@@ -1217,9 +1311,26 @@ class CoherenceEvidence:
     token_agreement_ratio: Optional[float]
     divergence_first_index: Optional[int]
     anchor_determinism_class: Optional[str]
+    anchor_source_commit: Optional[str]
+    anchor_binary_sha256: Optional[str]
+    anchor_linkage_sha256: Optional[str]
     prompt_ref: str
     receipt_ref: str
     produced_by: str
+
+    def recorded_anchor(self) -> Optional[api.AnchorIdentity]:
+        """The anchor this capture was taken AGAINST, or `None` if none was recorded.
+
+        `None` is not "any anchor" and not "the current one": it is the absence of
+        a record, and `compute_coherence` refuses to read it as agreement.
+        """
+        if self.anchor_source_commit is None:
+            return None
+        return api.AnchorIdentity(
+            source_commit=self.anchor_source_commit,
+            binary_sha256=self.anchor_binary_sha256,
+            linkage_sha256=self.anchor_linkage_sha256,
+        )
 
     def __post_init__(self) -> None:
         _opt_sha256(self.candidate_output_sha256, "coherence.candidate_output_sha256")
@@ -1239,6 +1350,11 @@ class CoherenceEvidence:
             raise ValueError(
                 f"coherence.anchor_determinism_class: {self.anchor_determinism_class!r} is not "
                 f"one of {sorted(schemas.DETERMINISM_CLASSES)}")
+        _validate_anchor_triple(
+            source_commit=self.anchor_source_commit,
+            binary_sha256=self.anchor_binary_sha256,
+            linkage_sha256=self.anchor_linkage_sha256,
+            label="coherence")
         _req_str(self.prompt_ref, "coherence.prompt_ref")
         _req_str(self.receipt_ref, "coherence.receipt_ref")
         _req_producer(self.produced_by, "coherence.produced_by")
@@ -1297,10 +1413,17 @@ class LinkageEvidence:
     the three production trees run three different ggml generations, and a binary
     that inherits another tree's ggml *"runs silently wrong"*. Silently wrong is
     exactly the failure a speed number cannot show.
+
+    The anchor side is named by all THREE of precondition 4's components. Two
+    digests without the commit named the anchor less completely here than in the
+    `evaluation_event.v3` record this evidence feeds, and this is the gate whose
+    whole subject is *"a rebuilt anchor is a different anchor"* — the component
+    that says which source a rebuild came from cannot be the missing one.
     """
 
     binary_sha256: str
     linkage_sha256: str
+    anchor_source_commit: Optional[str]
     anchor_binary_sha256: Optional[str]
     anchor_linkage_sha256: Optional[str]
     resolved_libraries: tuple      # ((soname, path, sha256), ...)
@@ -1312,8 +1435,11 @@ class LinkageEvidence:
     def __post_init__(self) -> None:
         _req_sha256(self.binary_sha256, "linkage.binary_sha256")
         _req_sha256(self.linkage_sha256, "linkage.linkage_sha256")
-        _opt_sha256(self.anchor_binary_sha256, "linkage.anchor_binary_sha256")
-        _opt_sha256(self.anchor_linkage_sha256, "linkage.anchor_linkage_sha256")
+        _validate_anchor_triple(
+            source_commit=self.anchor_source_commit,
+            binary_sha256=self.anchor_binary_sha256,
+            linkage_sha256=self.anchor_linkage_sha256,
+            label="linkage")
         for row in _req_tuple(self.resolved_libraries, "linkage.resolved_libraries"):
             if not (isinstance(row, tuple) and len(row) == 3):
                 raise TypeError("linkage.resolved_libraries rows must be (soname, path, sha256)")
@@ -1438,6 +1564,7 @@ _COHERENCE_MINT = object()
 
 
 def _derive_coherence(*, anchor_bound: bool,
+                      anchor_identity_recorded: bool,
                       candidate_output_sha256: Optional[str],
                       candidate_output_len: Optional[int],
                       anchor_output_sha256: Optional[str],
@@ -1455,10 +1582,15 @@ def _derive_coherence(*, anchor_bound: bool,
     2. **Then the anchor.** With no anchor, or no anchor output, the label is
        `not_compared`. It is NOT "coherent": *"Absence of a comparison is not
        evidence of equivalence."*
-    3. **Then the sampler.** Under a non-greedy sampler a byte difference proves
+    3. **Then WHOSE anchor output it is.** An anchor output that names no
+       capturing anchor cannot be attributed to the bound one, so the comparison
+       is `not_compared` — the same COULD_NOT_CHECK-shaped outcome, for the same
+       reason. It sits AFTER the digest check on purpose: with no anchor output
+       there is nothing to attribute, and that case already has its own reason.
+    4. **Then the sampler.** Under a non-greedy sampler a byte difference proves
        nothing and byte-identity proves nothing either, so the comparison is
        `undecidable_under_sampling` — a third outcome, not a pass and not a fail.
-    4. **Then the digests**, with a declared tolerance admitted ONLY when the
+    5. **Then the digests**, with a declared tolerance admitted ONLY when the
        anchor's own determinism class is `bitwise_unstable`, i.e. when byte
        identity is unattainable by construction rather than merely inconvenient.
     """
@@ -1474,6 +1606,11 @@ def _derive_coherence(*, anchor_bound: bool,
         return COHERENCE_NOT_COMPARED, (
             "one side of the comparison has no output digest; absence of a comparison is not "
             "evidence of equivalence",)
+    if not anchor_identity_recorded:
+        return COHERENCE_NOT_COMPARED, (
+            "the coherence capture records no anchor identity, so the anchor output it carries "
+            "cannot be attributed to the bound anchor; an unrecorded identity is not agreement "
+            "with the anchor that happens to be bound now",)
     if sampler_is_greedy is None:
         return COHERENCE_UNDECIDABLE, (
             "the sampler's determinism was not recorded, so neither a byte difference nor a "
@@ -1522,10 +1659,17 @@ class CoherenceVerdict:
     Plus a third that is specific to this class and to the defect it replaces: an
     equivalence label with `anchor_bound=False` raises `CoherenceWithoutAnchor`.
     `COH="coherent"` is not expressible here.
+
+    `anchor_identity_recorded` is stored rather than inferred because the second
+    lock re-derives from THIS object: a verdict whose evidence never named the
+    anchor it was captured against must not be able to carry an equivalence label,
+    and flipping the flag on a minted verdict re-derives to `not_compared` and
+    raises `CoherenceTampering`.
     """
 
     label: str
     anchor_bound: bool
+    anchor_identity_recorded: bool
     candidate_output_sha256: Optional[str]
     candidate_output_len: Optional[int]
     anchor_output_sha256: Optional[str]
@@ -1554,6 +1698,7 @@ class CoherenceVerdict:
             )
         derived_label, derived_reasons = _derive_coherence(
             anchor_bound=self.anchor_bound,
+            anchor_identity_recorded=self.anchor_identity_recorded,
             candidate_output_sha256=self.candidate_output_sha256,
             candidate_output_len=self.candidate_output_len,
             anchor_output_sha256=self.anchor_output_sha256,
@@ -1585,6 +1730,7 @@ class CoherenceVerdict:
         return {
             "label": self.label,
             "anchor_bound": self.anchor_bound,
+            "anchor_identity_recorded": self.anchor_identity_recorded,
             "candidate_output_sha256": self.candidate_output_sha256,
             "anchor_output_sha256": self.anchor_output_sha256,
             "sampler_is_greedy": self.sampler_is_greedy,
@@ -1601,10 +1747,35 @@ def compute_coherence(*,
                       tolerance_floor: Optional[float]) -> CoherenceVerdict:
     """Compute the coherence verdict. The ONLY constructor of `CoherenceVerdict`.
 
-    Precondition 4 is structural here: `anchor=None` can only ever produce
-    `not_compared` (or `empty_generation`, which is a statement about the
-    candidate alone), because `_derive_coherence` returns nothing else and
+    Precondition 4 is structural here in two directions.
+
+    *That* an anchor is bound: `anchor=None` can only ever produce `not_compared`
+    (or `empty_generation`, which is a statement about the candidate alone),
+    because `_derive_coherence` returns nothing else and
     `CoherenceVerdict.__post_init__` refuses an equivalence label without one.
+
+    *Which* anchor is bound: the identity recorded on the evidence — the anchor
+    whose output the capture actually holds — is compared against the anchor
+    passed here, by `api.AnchorIdentity.identity_matches`, which is the same
+    all-three-components comparator the record uses. Three outcomes, and no
+    fourth:
+
+      * **PASS** — the capture and the caller name the same anchor; derive.
+      * **FAIL** — they name different anchors. RAISES `CoherenceAnchorMismatch`.
+        Invariant 11 makes replaying saved outputs the normal path, so this is
+        where a wrong replay actually happens; returning `not_compared` would
+        record "no comparison was possible" for what is really "the caller
+        compared the wrong material", and the replay bug would survive.
+      * **COULD_NOT_CHECK** — the capture recorded no identity (it predates the
+        field, or the producer omitted it). No raise: nothing disagrees. But it
+        does not pass either — `anchor_identity_recorded=False` sends the
+        derivation to `not_compared`, because absence of a recorded identity is
+        not agreement.
+
+    The mismatch check runs BEFORE the derivation, including before the
+    empty-generation branch: material captured against another anchor is not this
+    run's material, and no label — not even one about the candidate alone — should
+    be minted from a mix-up the caller has not yet noticed.
     """
     if anchor is not None and not isinstance(anchor, api.AnchorIdentity):
         raise TypeError("anchor must be an api.AnchorIdentity or None")
@@ -1614,9 +1785,22 @@ def compute_coherence(*,
         _req_ratio(tolerance_floor, "tolerance_floor")
 
     anchor_bound = anchor is not None
+    recorded_anchor = None if evidence is None else evidence.recorded_anchor()
+    if anchor is not None and recorded_anchor is not None:
+        match = anchor.identity_matches(recorded_anchor)
+        if match.outcome == schemas.FAIL:
+            raise CoherenceAnchorMismatch(
+                f"this coherence capture was taken against anchor {recorded_anchor.short()} "
+                f"and is being compared against anchor {anchor.short()}: "
+                + "; ".join(match.reasons)
+                + ". A coherence label computed across that mismatch would assert agreement "
+                "with an anchor output this run never produced"
+            )
+
     if evidence is None:
         label, reasons = _derive_coherence(
-            anchor_bound=anchor_bound, candidate_output_sha256=None,
+            anchor_bound=anchor_bound, anchor_identity_recorded=False,
+            candidate_output_sha256=None,
             candidate_output_len=None, anchor_output_sha256=None,
             sampler_is_greedy=None, anchor_determinism_class=None,
             token_agreement_ratio=None, tolerance_floor=tolerance_floor)
@@ -1627,13 +1811,15 @@ def compute_coherence(*,
         # notes, not inside the derived verdict. `check_output_coherence` puts it
         # there.
         return CoherenceVerdict(
-            label=label, anchor_bound=anchor_bound, candidate_output_sha256=None,
+            label=label, anchor_bound=anchor_bound, anchor_identity_recorded=False,
+            candidate_output_sha256=None,
             candidate_output_len=None, anchor_output_sha256=None, sampler_is_greedy=None,
             anchor_determinism_class=None, token_agreement_ratio=None,
             tolerance_floor=tolerance_floor, reasons=reasons, mint=_COHERENCE_MINT)
 
     label, reasons = _derive_coherence(
         anchor_bound=anchor_bound,
+        anchor_identity_recorded=recorded_anchor is not None,
         candidate_output_sha256=evidence.candidate_output_sha256,
         candidate_output_len=evidence.candidate_output_len,
         anchor_output_sha256=evidence.anchor_output_sha256,
@@ -1645,6 +1831,7 @@ def compute_coherence(*,
     return CoherenceVerdict(
         label=label,
         anchor_bound=anchor_bound,
+        anchor_identity_recorded=recorded_anchor is not None,
         candidate_output_sha256=evidence.candidate_output_sha256,
         candidate_output_len=evidence.candidate_output_len,
         anchor_output_sha256=evidence.anchor_output_sha256,
@@ -2379,6 +2566,12 @@ def check_output_coherence(request: api.EvaluationRequest,
     one anchor property, never compared, is a second source of truth, and the
     tolerance branch is the only place in this module where a self-declared field
     can produce a PASS from differing outputs.
+
+    A capture taken against a DIFFERENT anchor than the record names does not
+    reach a gate result at all: `compute_coherence` raises
+    `CoherenceAnchorMismatch` and it propagates, exactly as `CoherenceTampering`
+    does. A report is a statement that seventeen surfaces were examined, and one
+    examined against the wrong anchor was not examined.
     """
     verdict = compute_coherence(anchor=request.anchor, evidence=evidence,
                                 tolerance_floor=policy.coherence_tolerance_floor)
@@ -2410,6 +2603,8 @@ def check_output_coherence(request: api.EvaluationRequest,
     else:
         notes.append(f"sampler={evidence.sampler_id}")
         notes.append(f"seed={evidence.seed}")
+        recorded = evidence.recorded_anchor()
+        notes.append(f"capture_anchor={'unrecorded' if recorded is None else recorded.short()}")
     gate = _gate(GID_COHERENCE, check,
                  evidence_ref=None if evidence is None else evidence.receipt_ref,
                  notes=notes)
@@ -2514,10 +2709,21 @@ def check_binary_and_linkage_identity(request: api.EvaluationRequest,
     if evidence.linkage_sha256 != request.artifact.linkage_sha256:
         reasons.append(f"the verified linkage {evidence.linkage_sha256[:12]} is not the "
                        f"linkage the record names ({request.artifact.linkage_sha256[:12]})")
-    if evidence.anchor_binary_sha256 is None or evidence.anchor_linkage_sha256 is None:
-        unknown.append("the anchor's binary/linkage digests were not captured at verification "
-                       "time, so anchor identity could not be re-verified here")
+    if evidence.anchor_source_commit is None:
+        # `_validate_anchor_triple` has already refused a partial naming, so one
+        # absent component means all three are absent: nothing was captured to
+        # re-verify, which is COULD_NOT_CHECK and never a pass.
+        unknown.append("the anchor's source commit and binary/linkage digests were not "
+                       "captured at verification time, so anchor identity could not be "
+                       "re-verified here")
     else:
+        if evidence.anchor_source_commit != request.anchor.source_commit:
+            reasons.append(
+                f"the anchor source commit verified ({evidence.anchor_source_commit[:12]}) is "
+                f"not the anchor the record names ({request.anchor.source_commit[:12]}); "
+                "precondition 4 names an anchor by all three of source commit, binary "
+                "SHA-256 and linkage SHA-256, and a different commit is a different anchor "
+                "even when a digest happens to agree")
         if evidence.anchor_binary_sha256 != request.anchor.binary_sha256:
             reasons.append(
                 f"the anchor binary verified ({evidence.anchor_binary_sha256[:12]}) is not the "

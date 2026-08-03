@@ -46,6 +46,11 @@ from autokernel.evaluator import correctness as C  # noqa: E402
 PASS = S.Check(S.PASS)
 NOW = "2026-08-03T12:00:00+00:00"
 V8_COMMIT = "67a433bf45a8a091d83b4ea0b32ff0735fd51800"
+#: v7, the rollback anchor. A REAL other commit, so an anchor-drift test compares
+#: two commits that both exist rather than one commit and one malformed string.
+V7_COMMIT = "6ad45fa3ff6718c07c000061dbc6e29c1771f6e3"
+#: The three anchor-naming component names, as they appear on both evidence types.
+ANCHOR_TRIPLE = ("anchor_source_commit", "anchor_binary_sha256", "anchor_linkage_sha256")
 
 
 def sha(tag: str) -> str:
@@ -287,6 +292,8 @@ def coherence(**overrides) -> C.CoherenceEvidence:
         sampler_id="greedy-topk1-temp0", sampler_is_greedy=True, seed=42,
         tokens_requested=160, token_agreement_ratio=1.0, divergence_first_index=None,
         anchor_determinism_class="bitwise_stable",
+        anchor_source_commit=V8_COMMIT, anchor_binary_sha256=sha("anchor-binary"),
+        anchor_linkage_sha256=sha("anchor-linkage"),
         prompt_ref="evaluator-bundle://prompts/coherence/v1",
         receipt_ref="data/ak/akc-0001/coherence.json", produced_by="evaluator")
     kwargs.update(overrides)
@@ -308,6 +315,7 @@ def determinism(**overrides) -> C.DeterminismEvidence:
 def linkage(**overrides) -> C.LinkageEvidence:
     kwargs = dict(
         binary_sha256=sha("cand-binary"), linkage_sha256=sha("cand-linkage"),
+        anchor_source_commit=V8_COMMIT,
         anchor_binary_sha256=sha("anchor-binary"), anchor_linkage_sha256=sha("anchor-linkage"),
         resolved_libraries=(("libggml-base.so", f"{LIBROOT}/libggml-base.so", sha("ggml-base")),
                             ("libggml-hip.so", f"{LIBROOT}/libggml-hip.so", sha("ggml-hip"))),
@@ -479,6 +487,7 @@ class TestCoherenceIsComputed(unittest.TestCase):
         with self.assertRaises(C.CoherenceTampering):
             C.CoherenceVerdict(
                 label=C.COHERENCE_BYTE_IDENTICAL, anchor_bound=True,
+                anchor_identity_recorded=True,
                 candidate_output_sha256=sha("x"), candidate_output_len=160,
                 anchor_output_sha256=sha("x"), sampler_is_greedy=True,
                 anchor_determinism_class="bitwise_stable", token_agreement_ratio=1.0,
@@ -490,6 +499,7 @@ class TestCoherenceIsComputed(unittest.TestCase):
         with self.assertRaises(C.CoherenceTampering) as ctx:
             C.CoherenceVerdict(
                 label=C.COHERENCE_BYTE_IDENTICAL, anchor_bound=True,
+                anchor_identity_recorded=True,
                 candidate_output_sha256=sha("a"), candidate_output_len=160,
                 anchor_output_sha256=sha("b"), sampler_is_greedy=True,
                 anchor_determinism_class="bitwise_stable", token_agreement_ratio=None,
@@ -500,6 +510,7 @@ class TestCoherenceIsComputed(unittest.TestCase):
         with self.assertRaises(C.CoherenceWithoutAnchor):
             C.CoherenceVerdict(
                 label=C.COHERENCE_BYTE_IDENTICAL, anchor_bound=False,
+                anchor_identity_recorded=True,
                 candidate_output_sha256=sha("x"), candidate_output_len=160,
                 anchor_output_sha256=sha("x"), sampler_is_greedy=True,
                 anchor_determinism_class="bitwise_stable", token_agreement_ratio=1.0,
@@ -586,6 +597,134 @@ class TestCoherenceIsComputed(unittest.TestCase):
         gate = report.gate(C.GID_COHERENCE)
         self.assertEqual(gate.check.outcome, S.COULD_NOT_CHECK)
         self.assertIn("no coherence evidence was captured for this candidate", gate.notes)
+
+
+# ---------------------------------------------------------------------------
+# WHICH anchor produced the anchor output. `CoherenceEvidence` recorded what the
+# anchor produced and not whose output it was, so a capture taken against anchor
+# A could be re-scored against anchor B and return `byte_identical`. Invariant 11
+# makes that replay the DESIGNED path — *"deterministic replay before
+# regeneration"* — so it is the path a mismatch would travel on.
+# ---------------------------------------------------------------------------
+
+UNRECORDED = {name: None for name in ANCHOR_TRIPLE}
+
+
+class TestCoherenceRecordsWhichAnchorProducedItsAnchorOutput(unittest.TestCase):
+
+    def test_two_of_three_components_is_rejected(self):
+        for omitted in ANCHOR_TRIPLE:
+            with self.subTest(omitted=omitted):
+                with self.assertRaises(ValueError) as ctx:
+                    coherence(**{omitted: None})
+                self.assertIn("A partially named anchor is the defect", str(ctx.exception))
+                self.assertIn(f"coherence.{omitted}", str(ctx.exception))
+
+    def test_a_placeholder_capture_anchor_is_refused(self):
+        with self.assertRaises(ValueError) as ctx:
+            coherence(anchor_binary_sha256="0" * 64)
+        self.assertIn("placeholder digest", str(ctx.exception))
+
+    def test_a_replay_against_a_different_anchor_is_refused_by_name(self):
+        with self.assertRaises(C.CoherenceAnchorMismatch) as ctx:
+            C.compute_coherence(
+                anchor=anchor(binary_sha256=sha("some-other-anchor-binary")),
+                evidence=coherence(), tolerance_floor=None)
+        message = str(ctx.exception)
+        self.assertIn("was taken against anchor", message)
+        self.assertIn("anchor.binary_sha256 moved", message)
+
+    def test_a_commit_only_mismatch_is_refused(self):
+        """Both digests still agree. This is the mismatch two-of-three cannot see."""
+        with self.assertRaises(C.CoherenceAnchorMismatch):
+            C.compute_coherence(anchor=anchor(source_commit=V7_COMMIT),
+                                evidence=coherence(), tolerance_floor=None)
+
+    def test_a_mismatched_replay_is_never_silently_downgraded(self):
+        """The refusal must not be expressible as a quiet `not_compared`."""
+        mismatched = coherence(anchor_linkage_sha256=sha("another-anchor-linkage"))
+        try:
+            verdict = C.compute_coherence(anchor=anchor(), evidence=mismatched,
+                                          tolerance_floor=None)
+        except C.CoherenceAnchorMismatch:
+            return
+        self.fail(f"a mismatched replay returned {verdict.label!r} instead of refusing")
+
+    def test_a_mismatched_replay_refuses_the_whole_report(self):
+        """The consumer, not only the function: `evaluate_t0` does not absorb it."""
+        with self.assertRaises(C.CoherenceAnchorMismatch):
+            run(ev=evidence(coherence=coherence(
+                anchor_binary_sha256=sha("some-other-anchor-binary"))))
+
+    def test_an_empty_generation_from_a_mismatched_capture_is_still_refused(self):
+        """Even the one label that needs no anchor is not minted from another
+        anchor's material: the mismatch is a defect in the replay, not a finding
+        about this candidate."""
+        with self.assertRaises(C.CoherenceAnchorMismatch):
+            C.compute_coherence(
+                anchor=anchor(),
+                evidence=coherence(candidate_output_len=0,
+                                   anchor_binary_sha256=sha("some-other-anchor-binary")),
+                tolerance_floor=None)
+
+    def test_measurement_event_ids_are_not_part_of_the_identity(self):
+        """Identity is the three components — the same rule
+        `api.AnchorIdentity.identity_matches` applies to the record."""
+        verdict = C.compute_coherence(
+            anchor=anchor(measurement_event_ids=("ake-anchor-0002", "ake-anchor-0003")),
+            evidence=coherence(), tolerance_floor=None)
+        self.assertEqual(verdict.label, C.COHERENCE_BYTE_IDENTICAL)
+
+    def test_an_unrecorded_capture_anchor_never_reads_as_a_match(self):
+        """Evidence that predates the field: identical digests, and still not a
+        comparison. Absence of a recorded identity is not agreement."""
+        verdict = C.compute_coherence(anchor=anchor(), evidence=coherence(**UNRECORDED),
+                                      tolerance_floor=None)
+        self.assertEqual(verdict.label, C.COHERENCE_NOT_COMPARED)
+        self.assertFalse(verdict.asserts_equivalence)
+        self.assertFalse(verdict.anchor_identity_recorded)
+        self.assertEqual(verdict.to_check().outcome, S.COULD_NOT_CHECK)
+        self.assertIn("records no anchor identity", " ".join(verdict.reasons))
+
+    def test_an_unrecorded_capture_anchor_is_could_not_check_at_the_gate(self):
+        report = run(ev=evidence(coherence=coherence(**UNRECORDED)))
+        gate = report.gate(C.GID_COHERENCE)
+        self.assertEqual(gate.check.outcome, S.COULD_NOT_CHECK)
+        self.assertIn("capture_anchor=unrecorded", gate.notes)
+
+    def test_an_unrecorded_capture_anchor_cannot_be_labelled_equivalent(self):
+        """The re-derivation lock covers the new field: minting a verdict that
+        claims byte identity while its capture named no anchor is tampering."""
+        verdict = C.compute_coherence(anchor=anchor(), evidence=coherence(),
+                                      tolerance_floor=None)
+        self.assertEqual(verdict.label, C.COHERENCE_BYTE_IDENTICAL)
+        with self.assertRaises(C.CoherenceTampering):
+            dataclasses.replace(verdict, anchor_identity_recorded=False)
+
+    def test_an_unrecorded_capture_anchor_raises_nothing(self):
+        """COULD_NOT_CHECK-shaped, not a refusal: nothing disagrees, so there is
+        no replay bug to surface — only a comparison that cannot be made."""
+        C.compute_coherence(anchor=anchor(), evidence=coherence(**UNRECORDED),
+                            tolerance_floor=None)
+
+    def test_a_correctly_matched_replay_still_passes(self):
+        """The compliant-path counterpart, at both altitudes: the new rule must
+        not be satisfiable by refusing everything."""
+        verdict = C.compute_coherence(anchor=anchor(), evidence=coherence(),
+                                      tolerance_floor=None)
+        self.assertEqual(verdict.label, C.COHERENCE_BYTE_IDENTICAL)
+        self.assertTrue(verdict.anchor_identity_recorded)
+        self.assertEqual(verdict.to_check().outcome, S.PASS)
+        report = run()
+        self.assertEqual(report.outcome(C.GID_COHERENCE), S.PASS)
+        self.assertIn(f"capture_anchor={anchor().short()}", report.gate(C.GID_COHERENCE).notes)
+
+    def test_an_anchor_less_run_still_needs_no_recorded_identity(self):
+        """`anchor=None` is `not_compared` for the ORIGINAL reason, and a capture
+        that does name an anchor does not smuggle a comparison in."""
+        verdict = C.compute_coherence(anchor=None, evidence=coherence(), tolerance_floor=None)
+        self.assertEqual(verdict.label, C.COHERENCE_NOT_COMPARED)
+        self.assertIn("no anchor is bound", " ".join(verdict.reasons))
 
     def test_candidate_self_reported_coherence_cannot_pass(self):
         report = run(ev=evidence(coherence=coherence(produced_by="candidate")))
@@ -1279,8 +1418,68 @@ class TestBinaryAndLinkageIdentity(unittest.TestCase):
 
     def test_uncaptured_anchor_digests_are_could_not_check(self):
         report = run(ev=evidence(linkage=linkage(
-            anchor_binary_sha256=None, anchor_linkage_sha256=None)))
+            anchor_source_commit=None, anchor_binary_sha256=None,
+            anchor_linkage_sha256=None)))
         self.assertEqual(report.outcome(C.GID_LINKAGE), S.COULD_NOT_CHECK)
+
+
+class TestLinkageNamesTheAnchorByAllThreeComponents(unittest.TestCase):
+    """Precondition 4: *"names its anchor by source commit, binary SHA-256, and
+    linkage SHA-256"*. `LinkageEvidence` carried two of the three, so the gate
+    whose subject is *"a rebuilt anchor is a different anchor"* was missing the
+    component that says what the anchor was rebuilt FROM — while the
+    `evaluation_event.v3` record it feeds requires all three."""
+
+    def test_two_of_three_components_is_rejected(self):
+        for omitted in ANCHOR_TRIPLE:
+            with self.subTest(omitted=omitted):
+                with self.assertRaises(ValueError) as ctx:
+                    linkage(**{omitted: None})
+                self.assertIn("A partially named anchor is the defect", str(ctx.exception))
+                self.assertIn(f"linkage.{omitted}", str(ctx.exception))
+
+    def test_one_of_three_components_is_rejected(self):
+        for kept in ANCHOR_TRIPLE:
+            with self.subTest(kept=kept):
+                dropped = {name: None for name in ANCHOR_TRIPLE if name != kept}
+                with self.assertRaises(ValueError):
+                    linkage(**dropped)
+
+    def test_all_three_absent_is_constructible_and_reads_as_unverified(self):
+        """Absent is sayable; partially named is not. The two are different states."""
+        ev = linkage(**{name: None for name in ANCHOR_TRIPLE})
+        self.assertIsNone(ev.anchor_source_commit)
+        report = run(ev=evidence(linkage=ev))
+        gate = report.gate(C.GID_LINKAGE)
+        self.assertEqual(gate.check.outcome, S.COULD_NOT_CHECK)
+        self.assertIn("source commit", " ".join(gate.check.reasons))
+
+    def test_a_drifted_anchor_commit_fails(self):
+        """Both digests agree; only the commit moved. Two-of-three could not see it."""
+        report = run(ev=evidence(linkage=linkage(anchor_source_commit=V7_COMMIT)))
+        gate = report.gate(C.GID_LINKAGE)
+        self.assertEqual(gate.check.outcome, S.FAIL)
+        self.assertIn("anchor source commit verified", " ".join(gate.check.reasons))
+
+    def test_a_placeholder_anchor_commit_is_refused(self):
+        with self.assertRaises(ValueError) as ctx:
+            linkage(anchor_source_commit="0" * 40)
+        self.assertIn("placeholder digest", str(ctx.exception))
+
+    def test_a_placeholder_anchor_digest_is_refused(self):
+        with self.assertRaises(ValueError) as ctx:
+            linkage(anchor_binary_sha256="f" * 64)
+        self.assertIn("placeholder digest", str(ctx.exception))
+
+    def test_a_short_commit_is_not_a_commit(self):
+        with self.assertRaises(ValueError) as ctx:
+            linkage(anchor_source_commit=V8_COMMIT[:12])
+        self.assertIn("40-hex git commit", str(ctx.exception))
+
+    def test_the_compliant_three_component_anchor_still_passes(self):
+        """The counterpart: the new rule must not pass by always failing."""
+        report = run()
+        self.assertEqual(report.outcome(C.GID_LINKAGE), S.PASS)
 
 
 # ---------------------------------------------------------------------------

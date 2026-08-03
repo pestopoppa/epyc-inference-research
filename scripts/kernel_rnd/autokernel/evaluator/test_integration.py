@@ -641,6 +641,9 @@ class EndToEndScenario(unittest.TestCase):
                 sampler_id="greedy-topk1-temp0", sampler_is_greedy=True, seed=42,
                 tokens_requested=160, token_agreement_ratio=1.0,
                 divergence_first_index=None, anchor_determinism_class="bitwise_stable",
+                anchor_source_commit=V8_COMMIT,
+                anchor_binary_sha256=cls.anchor_syms.file_sha256,
+                anchor_linkage_sha256=sha("anchor-linkage"),
                 prompt_ref="evaluator-bundle://prompts/coherence/v1",
                 receipt_ref="data/ak/akc-0001/coherence.json", produced_by="evaluator"),
             determinism=CO.DeterminismEvidence(
@@ -653,6 +656,7 @@ class EndToEndScenario(unittest.TestCase):
             linkage=CO.LinkageEvidence(
                 binary_sha256=cls.cand_syms.file_sha256,
                 linkage_sha256=sha("cand-linkage"),
+                anchor_source_commit=V8_COMMIT,
                 anchor_binary_sha256=cls.anchor_syms.file_sha256,
                 anchor_linkage_sha256=sha("anchor-linkage"),
                 resolved_libraries=(("libggml-base.so", f"{LIBROOT}/libggml-base.so",

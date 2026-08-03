@@ -351,13 +351,33 @@ none of it is closed by the suites above.
   `DiffPolicyEvidence` have no `produced_by` field, so `build_dir_was_fresh`,
   `incremental_objects_present` and `commit_was_pathspec_limited` are taken on
   faith. Every other evidence type has the field.
-- **Precondition 4 is enforced on two of its three components in `correctness`.**
-  `LinkageEvidence` carries `anchor_binary_sha256` and `anchor_linkage_sha256`
-  and no `anchor_source_commit`; `CoherenceEvidence` names no anchor at all, so a
-  `byte_identical` PASS is against *some* anchor output.
-  `api.AnchorIdentity.identity_matches()` compares all three and is never called
-  from `correctness.py`. `integrity.check_evidence_binding` does bind the ELF
-  tables, and registration tables carry no provenance digest at all.
+- **CLOSED 2026-08-03 — precondition 4 is enforced on all three components in
+  `correctness`, and a coherence capture now names the anchor it was taken
+  against.** `LinkageEvidence` and `CoherenceEvidence` each carry
+  `anchor_source_commit` + `anchor_binary_sha256` + `anchor_linkage_sha256` under
+  one rule (`_validate_anchor_triple`): all three or none — a partially named
+  anchor resolves to more than one artifact — and no placeholders
+  (`schemas.is_placeholder_digest`), which is the same rule
+  `evaluation_event.v3` applies to the record these feed. The linkage gate
+  compares the commit as well as the two digests, so an anchor rebuilt from a
+  different source at an identical digest is now visible. `compute_coherence`
+  compares the capture's recorded anchor against the anchor it is handed, using
+  `api.AnchorIdentity.identity_matches()` (which therefore now has a caller in
+  `correctness.py`), and RAISES `CoherenceAnchorMismatch` on disagreement rather
+  than downgrading to `not_compared`: invariant 11 makes re-scoring saved outputs
+  the normal path, so that is exactly where a capture taken against anchor A gets
+  scored against anchor B. A capture that recorded NO identity is
+  `not_compared` → COULD_NOT_CHECK, never an implicit match.
+  **What remains here:** the recorded identity is still the producer's
+  declaration — `produced_by` is checked, but nothing re-derives that the capture
+  really ran against the anchor it names. And three surfaces still carry
+  anchor-derived material under no anchor identity at all, so the same replay
+  mix-up is undetectable on them: `DeterminismEvidence`
+  (`anchor_output_digests`, `anchor_determinism_class`), `StaticAnalysisEvidence`
+  (`anchor_compiler_id`/`_version`, `anchor_warning_count`) and
+  `AntiRewardHackingEvidence.delivered_units_anchor`.
+  `integrity.check_evidence_binding` does bind the ELF tables, and registration
+  tables carry no provenance digest at all.
 - **The §8.5.1 (5) repair cap is enforced by nothing.** No gate consults a
   `RepairLedger` or `RepairPolicy`; `check_repair_from_clean_parent` accepts
   `attempt_index=99`, and `check_repair_from_clean_parent(None)` PASSes, which is
