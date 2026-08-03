@@ -17,7 +17,7 @@ benchmark, or runs inference.
 
 ---
 
-## What is implemented (AK1 + AK2 + AK3 partial + AK4)
+## What is implemented (AK1 + AK2 + AK3 partial + AK4 + AK5/AK6 + AK8/AK9)
 
 | Module | What it owns |
 |---|---|
@@ -44,6 +44,13 @@ benchmark, or runs inference.
 | `controller/composition.py` | **AK4.** §8.9 champion maintenance: the frontier and its mechanism-diversity floor, lineage proposal, `compose_champion` (which re-measures the COMBINED candidate and cites no member evidence), the re-anchor plan, and the ANCHOR_MOVED supersession sweep that kills comparisons while preserving source and correctness. |
 | `controller/oracles.py` | **AK4.** The §6.5 oracle registry, ONCE, at both granularities — the design's table row and the individual tree a port names — so the compiler renders ids the critic can gate on. |
 | `controller/fingerprint.py` | **AK4.** The one identity a filtered proposal is journaled under (§8.4). Prose-free by construction, because a blacklist a reworder can walk around is not a blacklist. |
+| `release/plan.py` | **AK5.** §10.1's release-plan compiler: the join from source tree → backends → stable production paths → live roles → distinct models/quants/contexts/KV/speculation/concurrency/placement/co-residency at the production-optimal recipe, plus the §3.2 per-backend unchanged test consumed as a RECORD (never re-implemented), §10.5 incumbent evidence, §10.6 diff-complexity ceilings, and the linkage requirement per tree. Every narrowing leaves a receipt; a role it cannot plan becomes an `UnplannableRole` rather than disappearing. |
+| `release/readiness.py` | **AK5.** The §9.7 T2 readiness ESTIMATOR — an advisory signal, `is_trigger = False` by class. Per-backend, per-phase, each phase under its own protocol; matrix coverage, capacity deltas, mechanism confirmation, the §1.6 phase-trade exception, and the `+25%/+20%` reference comparison **reported and never branched on**. `composite_readiness()` and `freeze_eligibility()` RAISE: a scalar folding two protocols cannot gate, and readiness is not eligibility. |
+| `release/t3.py` | **AK5.** The §10.2 release gate — nine phases in order (identity preflight incl. §3.2, build+linkage, backend correctness, the performance matrix, quality, stability, capacity/utility incl. the §1.6 objective, the transaction **dry run**, the seal), the §10.4 waiver verifier (hash-pinned, predicate-checked, scope resolved from the operator's own document), §9.1 rerun idempotence and cooldown, the seven-component sealed bundle, and PASS / FAIL / PASS_WITH_WAIVER. `T3Runner` implements AK4's `ReleaseGateRunner` seam. `calibration_request()` replays the preserved v8 and speech freezes as dry runs. |
+| `release/packager.py` | **AK6.** The §11.2 release PACKAGE a human executes: AK7's operator freeze request, `seal_champion`'s six refusals, the trusted-evaluator seam, the next version/branch/tag, the §10.5 archive + rollback plan, the drafted era rows and AutoPilot rebaseline note, the statically pre-validated operator command sequence, the §11.3 cutover ASK as a `session_bus` message, the §11.5 watch window, and the operator decision package. Twelve §11.2 "may not" doors that raise. |
+| `adapters/serving_runtime.py` | **AK8.** §13.5 — the backend that does **not** travel the kernel-freeze path. Owns the §11.6 three-gate stack-change package (registry guard → linkage/identity → live-vs-intended config), `task_rate` as the only admissible objective, and `refuse_kernel_freeze()`, which raises rather than degrading to a freeze-shaped package with empty kernel fields. |
+| `adapters/whisper_stt.py` | **AK9.** §13.3 — the STT backend: its frozen tree and binary inventory, the ggml-linkage verifier contract, the WER/RTF corpus and exclusion accounting, op-shape coverage, `assess_complexity` traced from the DIFF rather than a declared label, and `release_gate_readiness()`, which returns COULD_NOT_CHECK — never PASS — while `P-STT-*` remains a draft. |
+| `adapters/qwentts_tts.py` | **AK9.** §13.4 — the TTS backend: pipeline stages, stage attribution, numerical-safety and roundtrip-WER checks (measured THROUGH the frozen production STT binary, never through the champion), corpus identity, and the same draft-protocol release refusal. |
 
 ### AK3 — what the evaluator delivers
 
@@ -135,6 +142,126 @@ skipped test is silent, a registered seam is a list an auditor can count.
    unreadable file raises.
 
 ---
+
+### AK5/AK6/AK8/AK9 — what the release plane delivers
+
+**The cardinal rule: AutoKernel never freezes and never cuts over.** It produces a
+release PACKAGE that a human executes. A kernel freeze crosses four human-only
+trust boundaries (`MEASUREMENT.md:140-142` — the freeze, the era-registry rows,
+the AutoPilot baseline apply, and the pinned human-only path list), so there is no
+such authority here to hold, delegate, or flag. Every one of the twelve §11.2 "may
+not" capabilities is a function whose entire body is a `raise`, and
+`packager.audit_refusal_doors_raise_unconditionally()` walks the list and FAILs on
+a door that grew an `if`.
+
+That rule is *proved*, not documented, in four independent ways:
+
+- each module's own AST self-audit, anchored to its own module identity so the
+  guarantee is not obtainable by handing the auditor a different string;
+- `release/test_release_integration.py::TestNoProductionWritePathsAnywhere`,
+  which parses **every** module under `release/` and `adapters/` — enumerated from
+  the filesystem, so a module added tomorrow is covered by default — and proves
+  no write/spawn/signal call exists in any non-test module and that no call
+  anywhere names a production branch, a stable kernel path, `instrument_eras.yaml`
+  or `autopilot_baseline.yaml`. It parses calls rather than grepping text,
+  because both directories name all four targets in nearly every docstring;
+- `t3.TransactionPlan` refuses construction with `executed=True`, and the §10.2
+  phase-8 transaction is a DRY RUN by type;
+- `schemas.find_authority_flavoured_keys()` over the sealed bundle and over the
+  package's own record, enforced at construction.
+
+The release path is not the same for every backend, and that asymmetry is
+load-bearing (AK-D9/AK-D23): `llama_cpu`/`llama_gpu`/`whisper_stt`/`qwentts_tts`
+release through a kernel freeze; `serving_runtime` travels the §11.6 three-gate
+stack-change path and is refused **by name at all four release-plane doors** —
+`plan.ReleaseTarget`, `t3.ReleasePlanView`, `packager.OperatorFreezeRequest` and
+`readiness.ObjectiveSpec`.
+
+§10.4's calibration is wired and passing: the T3 dry run against the REAL
+`artifacts/operator/ratify_v8_final_freeze_20260725.json` predicts **FAIL without
+the waiver**, naming both Q8 pairs; with the waiver and a reconstructed N-1
+archive it is `PASS_WITH_WAIVER` with exactly those two claims suppressed by name
+and the forfeit recorded. The waiver alone never clears the integrity spine.
+
+## Integration seams reconciled — AK5/AK6/AK8/AK9 release plane (2026-08-03)
+
+Same pattern as AK3 and AK4, and the same lesson: `plan.py`, `readiness.py`,
+`t3.py`, `packager.py` and the three adapters were each written and red-teamed
+alone, each suite was green, and seven disagreements lived in the gaps. Every one
+of them passed both of the involved modules' own suites first, because each module
+was right *about itself*. `release/test_release_integration.py` is where they stay
+fixed.
+
+1. **A §3.2 drop verdict `plan.py` refuses and `t3.py` accepted.**
+   `plan.drop_verdict_contradictions()` re-derives `may_drop_cells` from stage 1,
+   stage 2, agreement, transfer scope and findings — because the boolean is a
+   plain FIELD and it deletes a backend's whole matrix. `t3.UnchangedView` READ
+   it, and guarded only `unchanged_outcome`. A view with `agreement=FAIL` and no
+   stage 2 was accepted and dropped the backend. `unchanged_view()` accepts a
+   hand-built view and a bare mapping by design, so the compiler is not the only
+   door; the same conditions now hold at both, as `UnchangedView.drop_contradictions()`.
+2. **§1.6's conjunction was adjudicated over standings nothing joined to the
+   matrix.** `phase_performance_matrix` measures cells; `phase_capacity_utility`
+   decides the whole per-phase objective from caller-supplied `PhaseStanding`
+   records. Nothing connected them: a standing with `cell_ids=()`, or citing a
+   correctness cell, or a diagnostic cell, or a cell of another phase, satisfied
+   it alone — and deleting every prefill CELL while keeping the prefill STANDING
+   left the release gate at **PASS**. A standing must now name at least one
+   planned, gating, production-optimal `performance_matrix` cell of its own
+   (backend, phase) that this run recorded a result for.
+3. **A conjunct could be deleted rather than failed.** `readiness.py`'s red-team
+   closed exactly this on the advisory signal (an objective naming only `decode`
+   reached `objective_met`); the release gate had the identical hole in
+   `phase_protocols`, where it decides a freeze. Both now read
+   `schemas.PHASES_BY_BACKEND`, the SSOT `plan.BackendBinding` already held itself
+   to.
+4. **`serving_runtime` was refused at three doors and admitted at the fourth.**
+   It is in `schemas.BACKENDS` but absent from both `SOURCE_TREE_BY_BACKEND` and
+   `PHASES_BY_BACKEND`, so in `readiness.py` the champion-lineage check and the
+   §1.6 conjunction check each degraded to a **no-op** on it while the signal
+   still rendered as a kernel backend's — and the readiness line is what a freeze
+   request cites.
+5. **A FAILing run licensed claims.** `compute_verdict` built
+   `ReleaseReceipt.claims` from every passing gating cell regardless of verdict,
+   and AK6 renders `len(receipt.claims)` onto the operator's first page as *"claims
+   licensed: N"* and copies the receipt into the durable package record. A release
+   that did not pass licenses nothing; the cells that did pass are kept, in
+   `withheld_claims`.
+6. **A `CellResult` could relabel the plan's cell.** `T3Request` cross-checked
+   only that the result's `cell_id` was in the plan, so every other facet was the
+   measured party's to restate. Flipping `co_resident` True satisfies the §10.2
+   phase 4 `llama_cpu` co-residency requirement with a run that was never
+   co-resident; flipping it False deletes the only cell class that measures the
+   machine the way production runs it. §12 derives scope MECHANICALLY, so the
+   scope facets must now agree. `reps` is deliberately exempt — the compiler runs
+   before anything is measured.
+7. **The machine-actor vocabulary and the waiver verifier were in different
+   modules.** AK6 guards five human-authority identity fields with
+   `MACHINE_ACTOR_TOKENS`; `t3.verify_waiver` accepted any non-empty
+   `authorized_by`, so a waiver attributed to `autokernel` verified as
+   human-attested and turned FAIL into PASS_WITH_WAIVER. The import direction is
+   packager → t3, so the check lands in the packager rather than forking the token
+   set downward — a self-granted waiver cannot reach a package a human executes.
+
+Two more, found in the same pass and outside the release plane proper:
+
+8. **`release/test_plan.py` and `test_readiness.py` loaded a SECOND copy of
+   `schemas` and `surface`.** The flat `sys.path.insert` + `from autokernel import …`
+   idiom binds to a different module object than the rest of the package uses
+   under `unittest discover -t .`, so every `isinstance` guard across that boundary
+   fails silently — `compile_release_plan` would refuse a genuine
+   `surface.BackendUnchangedResult` for being the other copy's. The README already
+   forbade the idiom; both release-plane suites now use relative imports.
+9. **`adapters/serving_runtime.py`'s self-audit was the one of three not anchored
+   to its own module.** Its two siblings bind the audited AST to their own
+   `BACKEND` and checker names; this one returned PASS for any clean text,
+   including a sibling adapter's source.
+
+One asymmetry was **pinned rather than "fixed"**: `t3.Cell` admits a `None`
+`workload_phase` while `readiness.T2Cell` requires one, because correctness,
+quality, stability and capacity cells are not throughput cells and have no phase
+to be non-inferior in. The performance-matrix cells that DO carry one are checked
+against `PHASES_BY_BACKEND` at the compiler and at the objective.
 
 ## Integration seams reconciled — AK4 controller (2026-08-03)
 
@@ -302,12 +429,13 @@ python3 -m unittest scripts/kernel_rnd/autokernel/evaluator/test_conformance.py
 python3 -m unittest scripts/kernel_rnd/autokernel/evaluator/test_integration.py
 python3 -m unittest scripts/kernel_rnd/autokernel/controller/test_ak4_conformance.py
 python3 -m unittest scripts/kernel_rnd/autokernel/controller/test_loop_integration.py
+python3 -m unittest scripts.kernel_rnd.autokernel.release.test_release_integration
 
 # As a plain script.
 python3 scripts/kernel_rnd/autokernel/test_integration.py
 ```
 
-Expected: **3042 tests, OK (expected failures=1)**. The one `expectedFailure` is
+Expected: **4066 tests, OK (expected failures=1)**. The one `expectedFailure` is
 `test_preflight.RealKernelLockEncodingTest.test_KNOWN_HOLE_unlinking_a_held_lock_
 file_hides_its_live_holder` — a real, documented hole (unlinking a held lock file
 hides its live holder from the `/proc/locks` witness), deliberately left visible
@@ -328,6 +456,14 @@ Import **through the package** (`from autokernel import journal`), not by puttin
 second copy of `schemas.py`, and the second one shadows the stdlib `resource`
 module for the rest of the process. The existing per-module test files still use
 the flat idiom for historical reasons; new code should not.
+
+This is not stylistic. Under `unittest discover -t .` the package is already
+imported as `scripts.kernel_rnd.autokernel`, so `from autokernel.evaluator import
+surface` creates a **second module object with different classes**, and every
+`isinstance` guard across that boundary returns False for an object that is
+genuinely of that type. The release plane's two flat suites were converted for
+exactly this reason (seam 8 above); the remaining ~23 are a live hazard for any
+future cross-suite fixture reuse.
 
 ---
 
@@ -502,12 +638,13 @@ none of it is closed by the suites above.
 - **`ControlPanelResult` has no mint token.** `api.Verdict` re-derives its own
   status and refuses a stamped one; a `ControlPanelResult` built by hand with an
   all-PASS panel yields `may_rank=True` with no control ever run.
-- **Readiness, composition and the campaign lifecycle are AK4/AK6.** The
-  evaluator computes per-record verdicts; nothing computes the advisory readiness
-  signal, recomputes calibration at a campaign boundary, drives the A/A cadence,
-  or composes a champion lineage.
-- **T3/T4 are refused, not implemented.** `api.ReleaseTierEvaluator` is the seam
-  AK5 fills.
+- **Calibration recomputation at a campaign boundary and the A/A cadence driver
+  are still nobody's.** `release/readiness.py` now computes the advisory signal
+  and `controller/composition.py` composes a champion lineage, but nothing
+  recomputes the calibration block at a boundary or drives the cadence.
+- **T3 is refused HERE and implemented in AK5.** `api.admit_tier("T3")` still
+  raises by name — that is the point — and `release/t3.T3Runner` is the
+  `ReleaseTierEvaluator` that fills the seam. T4 remains unimplemented.
 
 ### Remaining in AK4
 
@@ -543,14 +680,103 @@ none of it is closed by the suites above.
   `ContextManifest` — asserted in `test_loop_integration` — but a caller that
   hand-builds a `ContextManifest` from compiler sections has no total mapping.
 
+### Remaining in AK5/AK6 (the release plane)
+
+- **No runner, and no live release has been rehearsed.** Everything below the
+  gate is fixtures. Nothing has compiled a plan from the real
+  `orchestration/derived/stack_priors.yaml`, sealed a real candidate, held a real
+  compute window, or produced a package an operator has read. The chain is proved
+  to FIT; nothing here is evidence about a real freeze.
+- **`P-KERNEL-FREEZE-1` is a DRAFT.** `t3.phase_identity_preflight` raises
+  `ReleaseProtocolNotRatified` for `mode="release"` under an unratified protocol,
+  so **every** run this package can currently perform is a dry run. Ratification
+  is human-only and is the gate on AK5 being usable at all.
+- **The per-phase measurement protocols carry no ratification status.**
+  `ProtocolBinding` proves the FREEZE protocol is ratified; the protocols the
+  matrix cells are graded under (`P-BENCH-1`, `P-GPU-1`, `P-STT-*`, `P-TTS-*`)
+  arrive as bare ids in `phase_protocols`. The adapters know — `whisper_stt` and
+  `qwentts_tts` each expose `release_gate_readiness()`, which returns
+  COULD_NOT_CHECK while their families are drafts — and nothing in the release
+  plane calls it. Wiring it needs an adapter→gate edge `t3.py` deliberately does
+  not have; the honest fix is a per-phase `ProtocolBinding` in `T3Request`, which
+  is a request-shape change AK6 also depends on.
+- **`t3.verify_waiver` still accepts any non-empty `authorized_by`.** The
+  machine-actor refusal is enforced in the packager (seam 7), so a self-granted
+  waiver cannot reach a package — but T3's own verdict still reads
+  PASS_WITH_WAIVER. The correct home for `MACHINE_ACTOR_TOKENS` is `schemas.py`,
+  where both planes can read it; that file is the shared SSOT and was out of scope
+  for the integration pass.
+- **Waivers are structurally validated, not authenticated.** No signature, no
+  trust-boundary path check on `document_path`, and `WaiverBinding.pinned_sha256`
+  pins the document a caller supplied rather than one read from an operator-owned
+  path.
+- **`_transaction_elements` coverage is satisfied by a command that NAMES an
+  element**, not by proving it acts on it — a comment mentioning
+  `instrument_eras.yaml` covers the era-registry element. Tightening it needs a
+  verb vocabulary per element kind.
+- **`RollbackPlan.incumbent_libraries` carries no backend attribution**, because
+  `t3.ArchivedBuild.libraries` carries none either. On a three-ggml-generation
+  host that is the field a rollback would most want attributed.
+- **The `/kernel` dashboard JSON contract and the freshness/health fold** (AK6
+  checklist) are not built: an HTTP surface plus a panel→producer registry.
+- **`readiness.py` open items from its red-team** remain as reported:
+  `check_matrix_coverage()` accepts foreign-backend cells at its public entry
+  point; capacity/mechanism evidence is exempt from the lineage-ordering check and
+  `MechanismConfirmation` carries no timestamp at all; coverage/co-residency/
+  repetition checks count inadmissible cells and the `llama_cpu` co-residency
+  requirement can be closed by a sentinel; sub-floor estimates can still be
+  selected as weakest or best (an operator call — excluding them makes a phase
+  measured entirely at parity report "no figure").
+- **`t3.py` open items**: a phase trade's `expected_gain` is validated for
+  structure and never compared to any standing; `sealed_fingerprint` hashes the
+  active waiver's digest but not its coverage, so two runs whose waivers cover
+  different cells share a fingerprint (fail-closed today).
+
+### Remaining in AK8/AK9 (the adapters)
+
+- **Both speech release-protocol families are drafts**, so `whisper_stt` and
+  `qwentts_tts` are search-legal and release-blocked by design. Their phase
+  vocabularies are absent from `schemas.PHASES_BY_BACKEND` for the same reason.
+- **`serving_runtime`'s `kernels/production` pattern refuses the package from
+  reporting the normal launch command** — the stable symlink is also the path a
+  service legitimately executes, so a realistic §11.6 package cannot name its own
+  serving binary. Fixing it needs a pattern that distinguishes *executes a binary
+  under the path* from *mutates the path*.
+- **Gate 3 never checks `argv[0]` against `binary_path`** and never ties a
+  `LiveProcessFact.pid` to gate 2's observed pid.
+- **`check_device_evidence(expected_lane="gpu")` accepts `Device 0: CPU`** in both
+  speech adapters: it requires a `Device N: <name>` line and never checks the name
+  denotes a GPU. A correct fix needs a device-name vocabulary that belongs in the
+  evaluator bundle.
+- **`check_exclusion_rate(aa_dispersion=…)` has a unit hazard** (fraction vs
+  percentage-point, no suffix) and **`check_stage_attribution(tolerance_ms=…)` is
+  unbounded** — a tolerance larger than the measurement passes.
+- **One `EXPECTED_SHARED_LIBRARIES` set for the whole inventory**, so the §10.2
+  phase-2 gate is unrunnable for inventory members that link a subset.
+
+### Escalations raised by this work, for the operator
+
+- **The 2026-07-31 ggml-linkage remediation is not live in this container.**
+  `/etc/environment`, `.devcontainer/devcontainer.json` and `.devc/overrides.json`
+  were all cleaned, but the running container still exports the pre-remediation
+  `LD_LIBRARY_PATH`, under which all four frozen speech binaries resolve
+  `libggml*.so.0` from `/mnt/raid0/llm/llama.cpp/build/bin` (ggml 0.16.0) while
+  loading `libggml-hip.so.0` from their own tree. Any speech measurement taken
+  from an agent shell here without an explicit per-launcher `LD_LIBRARY_PATH` is
+  attributable to the wrong build. Operator action: container restart.
+- **`ratify_speech_kernel_freeze_20260731.json:27-28` anchors "whisper
+  large-v3-turbo f16" to `wer_pct: 2.35`**, which in
+  `/mnt/raid0/llm/tmp/stt_wer_results.json` belongs to *faster-whisper
+  large-v3-turbo int8 CPU 48t* (44/1870). The `whisper.cpp large-v3-turbo f16
+  MI210 GPU` arm is **3.37 % (63/1870)**. A ratified receipt is corrected by a
+  superseding receipt, which is human-only.
+
 ### Not started at all
 
-**AK5** (T2 scope and weights, readiness estimator, release-plan compiler, T3
-runner, waiver verification, the v8 dry-run). **AK6** (readiness reporting and
-the operator decision surface). `state_machine` declares the
-`SEAL -> T3_RELEASE_GATE -> PACKAGE` seam and REFUSES the tier via
-`evaluator.api.admit_tier("T3")`, which raises naming AK5 — so the two planes
-cannot drift into disagreeing about who owns T3.
+**AK7** beyond its entry point: `packager.OperatorFreezeRequest` is the door and
+`audit_no_clock_or_self_trigger()` proves the packager has no clock and never
+constructs one of its own, but the cadence policy AK7 describes has no
+implementation (deliberately — AK-D25 keeps cadence an operator policy).
 
 ### Known, documented holes in what *is* implemented
 

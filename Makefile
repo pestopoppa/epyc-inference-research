@@ -57,6 +57,21 @@ PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_hypotheses.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_planner_critic.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_selection.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_composition.py
+# AK5/AK6 — the release plane (plan, readiness, T3 gate, packager) and AK8/AK9 —
+# the backend adapters. Same ordering rule again, and it earns itself here more
+# than anywhere else: `test_release_integration.py` is the only suite that can see
+# a SEAM, and every defect it caught passed both of the modules' own suites first.
+# It also carries the cardinal-rule audit — no module in either plane can write a
+# production branch, move a stable kernel symlink, write an era-registry row or
+# apply an AutoPilot baseline — so it is the one that must not be skipped.
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_release_integration.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_plan.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_readiness.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_t3.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_packager.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/adapters/test_serving_runtime.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/adapters/test_whisper_stt.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/adapters/test_qwentts_tts.py
 
 help:
 	@printf '%s\n' 'Targets: setup lint test health docs docs-check analysis analysis-check security-check autopilot-gate'
