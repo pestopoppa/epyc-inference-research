@@ -1,0 +1,53 @@
+[runner] Waiting for server at http://127.0.0.1:18072...
+[runner] Server healthy
+
+[runner] Evaluating swebench_oracle (n=40, seed=42)...
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/v7_quality_gate_runner.py", line 959, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/v7_quality_gate_runner.py", line 901, in main
+    result = run_suite(
+        suite, url, args.n, args.seed,
+    ...<13 lines>...
+        live_status_out=live_status_out,
+    )
+  File "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/v7_quality_gate_runner.py", line 738, in run_suite
+    _apply(_work(it))
+           ~~~~~^^^^
+  File "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/v7_quality_gate_runner.py", line 606, in _work
+    meta = query_server_meta(
+        url, q["prompt"], max_tokens=max_tokens, temperature=temperature,
+        seed=rep_seed, endpoint=endpoint, top_p=top_p, top_k=top_k,
+        enable_thinking=enable_thinking)
+  File "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/v7_quality_gate_runner.py", line 310, in query_server_meta
+    with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT_S) as resp:
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/urllib/request.py", line 189, in urlopen
+    return opener.open(url, data, timeout)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/urllib/request.py", line 489, in open
+    response = self._open(req, data)
+  File "/usr/lib/python3.13/urllib/request.py", line 506, in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+                              '_open', req)
+  File "/usr/lib/python3.13/urllib/request.py", line 466, in _call_chain
+    result = func(*args)
+  File "/usr/lib/python3.13/urllib/request.py", line 1348, in http_open
+    return self.do_open(http.client.HTTPConnection, req)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/urllib/request.py", line 1323, in do_open
+    r = h.getresponse()
+  File "/usr/lib/python3.13/http/client.py", line 1450, in getresponse
+    response.begin()
+    ~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/http/client.py", line 336, in begin
+    version, status, reason = self._read_status()
+                              ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/http/client.py", line 297, in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+               ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/socket.py", line 719, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+KeyboardInterrupt

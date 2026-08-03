@@ -1,0 +1,1830 @@
+{
+  "endpoint": "/v1/chat/completions",
+  "body": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Answer the benchmark question using the retrieved medical documents. Select exactly one option and give one brief evidence sentence.\n\n[retrieved_document rank=1 patient=patient_01 id=text_0 passage=112]\n6 cycles of R-Pola-CHP\n[/retrieved_document]\n\n[retrieved_document rank=2 patient=patient_01 id=text_0 passage=197]\n**Oncology board decision: 6 cycles of R-Pola-CHP.**\n[/retrieved_document]\n\n[retrieved_document rank=3 patient=patient_01 id=text_0 passage=0]\n**Dear colleague, **\n[/retrieved_document]\n\n[retrieved_document rank=4 patient=patient_01 id=text_0 passage=1]\nWe wish to provide an update regarding Mrs. Anna Sample, born on\n01.01.1970. She was admitted to our clinic from 01/01/2017 to\n01/02/2017.\n[/retrieved_document]\n\n[retrieved_document rank=5 patient=patient_01 id=text_0 passage=2]\n**Diagnosis:** Diffuse large B-cell lymphoma of germinal center type; ID\n01/2017\n[/retrieved_document]\n\n[retrieved_document rank=6 patient=patient_01 id=text_0 passage=3]\n-   Ann-Arbor: Stage IV\n[/retrieved_document]\n\n[retrieved_document rank=7 patient=patient_01 id=text_0 passage=4]\n-   R-IPI: 2 (LDH, stage)\n[/retrieved_document]\n\n[retrieved_document rank=8 patient=patient_01 id=text_0 passage=5]\n-   CNS-IPI: 2\n[/retrieved_document]\n\n[retrieved_document rank=9 patient=patient_01 id=text_0 passage=6]\n-   Histology: Aggressive B-NHL (DLBCL, NOS); no evidence of t(14;18)\n    translocation. Ki-67 at 40%. Positive reaction to MUM1, numerous\n    CD68-positive macrophages. Negative reaction to ALK1 and TdT.\n[/retrieved_document]\n\n[retrieved_document rank=10 patient=patient_01 id=text_0 passage=7]\n-   cMRI: Chronic inflammatory lesions suggestive of Multiple Sclerosis (MS)\n[/retrieved_document]\n\n[retrieved_document rank=11 patient=patient_01 id=text_0 passage=8]\n-   CSF: no evidence of malignancy\n[/retrieved_document]\n\n[retrieved_document rank=12 patient=patient_01 id=text_0 passage=9]\n-   Bone marrow aspiration: no infiltration from the pre-existing\n    lymphoma.\n[/retrieved_document]\n\n[retrieved_document rank=13 patient=patient_01 id=text_0 passage=10]\n**Current treatment: **\n[/retrieved_document]\n\n[retrieved_document rank=14 patient=patient_01 id=text_0 passage=11]\nInitiated R-Pola-CHP regimen q21\n[/retrieved_document]\n\n[retrieved_document rank=15 patient=patient_01 id=text_0 passage=12]\n-   Polatuzumab vedotin: 1.8mg/kg on Day 1.\n[/retrieved_document]\n\n[retrieved_document rank=16 patient=patient_01 id=text_0 passage=13]\n-   Rituximab: 375mg/m\u00b2 on Day 0.\n[/retrieved_document]\n\n[retrieved_document rank=17 patient=patient_01 id=text_0 passage=14]\n-   Cyclophosphamide: 750mg/m\u00b2 on Day 1.\n[/retrieved_document]\n\n[retrieved_document rank=18 patient=patient_01 id=text_0 passage=15]\n-   Doxorubicin: 50mg/m on Day 1.\n[/retrieved_document]\n\n[retrieved_document rank=19 patient=patient_01 id=text_0 passage=16]\n-   Prednisone: 100mg orally from Day 1-5.\n[/retrieved_document]\n\n[retrieved_document rank=20 patient=patient_01 id=text_0 passage=17]\n**Previous therapy and course**\n[/retrieved_document]\n\n[retrieved_document rank=21 patient=patient_01 id=text_0 passage=18]\nFrom 12/01/2016: Discomfort in the dorsal calf and thoracic spine,\nweakness in the arms with limited ability to lift and grasp, occasional\ndizziness.\n[/retrieved_document]\n\n[retrieved_document rank=22 patient=patient_01 id=text_0 passage=19]\n12/19/2016 cMRI: chronic inflammatory marks indicative of MS. \n[/retrieved_document]\n\n[retrieved_document rank=23 patient=patient_01 id=text_0 passage=20]\n12/20/2016 MRI: thoracic/lumbar spinal cord: Indication of a\nmetastatic mass starting from the left pedicle T1 with a significant\nextraosseous tumor element and full spinal narrowing at the level of\nT10-L1 with pressure on the myelon and growth into the neuroforamen\nT11/T12 on the right and T12/L1 left. More lesions suggestive for\nmetastasis are L2, L3, and L4, once more with extraosseous tumor element\nand invasion of the left pedicle.\n[/retrieved_document]\n\n[retrieved_document rank=24 patient=patient_01 id=text_0 passage=21]\n12/21/2016 Fixed dorsal support T8-9 to L3-4. Decompression via\nlaminectomy T10 and partial laminectomy lumbar vertebra 3.\n[/retrieved_document]\n\n[retrieved_document rank=25 patient=patient_01 id=text_0 passage=22]\n12/24/2016 CT chest/abdomen/pelvis: Magnified left axillary lymph node.\nIn the ventral left upper lobe, indication of a round, loose, cloudy\ndeposit, i.e., of inflammatory origin, follow-up in 5-7 weeks.\nNodule-like deposit in the upper inner quadrant of the right breast,\nsenological examination suggested.\n[/retrieved_document]\n\n[retrieved_document rank=26 patient=patient_01 id=text_0 passage=23]\n**Pathology**: Aggressive B-NHL (DLBCL, NOS); no evidence of t(14;18)\ntranslocation. Ki-67 staining was at 40%. Positive reaction to MUM1.\nNumerous CD68-positive macrophages. No reaction to ALK1 and TdT.\n[/retrieved_document]\n\n[retrieved_document rank=27 patient=patient_01 id=text_0 passage=24]\n**Other diagnoses**\n[/retrieved_document]\n\n[retrieved_document rank=28 patient=patient_01 id=text_0 passage=25]\n-   Primary progressive type of multiple sclerosis (ID 03/02) \n[/retrieved_document]\n\n[retrieved_document rank=29 patient=patient_01 id=text_0 passage=26]\n-   Mood disorder.\n[/retrieved_document]\n\n[retrieved_document rank=30 patient=patient_01 id=text_0 passage=27]\n-   2-vessel CHD\n[/retrieved_document]\n\n[retrieved_document rank=31 patient=patient_01 id=text_0 passage=28]\n**Medical History**\n[/retrieved_document]\n\n[retrieved_document rank=32 patient=patient_01 id=text_0 passage=29]\nMrs. Sample was transferred inpatient from DC for the initiation of\nchemotherapy (R-Pola-CHP) for her DLBCL. In the context of her\npre-existing ALS, she presented on 12/19/2016 with acute pains and\nrestricted mobility in her upper limbs. After her admission to HK\nFlowermoon, an MRI was performed which revealed a thoracic neoplastic\ngrowth especially at the level of T10-L1, but also affecting lumbar\nvertebra 3, L4 and L6. Surgical intervention on 12/21/2016 at DC\nresulted in symptom relief. Presently, her complaints are restricted to\npost-operative spine discomfort, shoulder hypoesthesia, and intermittent\nhand numbness. She reported a weight loss of 5 kg during her\nhospitalization. She denied having respiratory symptoms, infections,\nsystemic symptoms, or gastrointestinal complaints. Mrs. Sample currently\nhas a urinary catheter in place.\n[/retrieved_document]\n\n[retrieved_document rank=33 patient=patient_01 id=text_0 passage=30]\n**Physical examination on admission**\n[/retrieved_document]\n\n[retrieved_document rank=34 patient=patient_01 id=text_0 passage=31]\nGeneral: The patient has a satisfactory nutritional status, normal\nweight, and is dependent on a walker. Her functional status is evaluated\nas ECOG 2. Cardiovascular: Regular heart rhythm at a normal rate. Heart\nsounds are clear with no detected murmurs. Respiratory: Normal alveolar\nbreath sounds. No wheezing, stridor, or other abnormal sounds.\nAbdominal: The abdomen is soft, non-tender, and non-distended with\nnormal bowel sounds in all quadrants. There is no palpable enlargement\nof the liver or spleen, and the kidneys are not palpable.\nMusculoskeletal: Tenderness noted in the cervical and thoracic spine\narea, but no other remarkable findings. This is consistent with her\npost-operative status. Lymphatic: No enlargement detected in the\ntemporal, occipital, cubital, or popliteal lymph nodes. Oral: The oral\nmucosa is moist and well-perfused. The oropharynx is unremarkable, and\nthe tongue appears normal. Peripheral Vascular: Pulses in the hands are\nstrong and regular. No edema observed. Neurological: Cranial nerves are\nintact. There is numbness in both hands and mild hypoesthesia in the\nshoulders. Motor strength is 3/5 in the right arm, attributed to her\nknown ALS diagnosis. No other motor or sensory deficits noted.\nOccasional bladder incontinence and intermittent gastrointestinal\ndisturbances are reported.\n[/retrieved_document]\n\n[retrieved_document rank=35 patient=patient_01 id=text_0 passage=32]\n**Medications on admission**\n[/retrieved_document]\n\n[retrieved_document rank=36 patient=patient_01 id=text_0 passage=33]\nAcetylsalicylic acid (Aspirin\u00ae) 100 mg: Take 1 tablet in the morning.\nAtorvastatin (Lipitor\u00ae) 40 mg: Take 1 tablet in the evening. Fingolimod\n(Gilenya\u00ae) 0.5 mg: Take 1 capsule in the evening. Sertraline (Zoloft\u00ae)\n50 mg: Take 2 tablets in the morning. Hydromorphone (Dilaudid\u00ae or\nExalgo\u00ae for extended-release) 2 mg: Take 1 capsule in the morning and 1\nin the evening. Lorazepam (Ativan\u00ae) 1 mg: 1 tablet as needed.\n[/retrieved_document]\n\n[retrieved_document rank=37 patient=patient_01 id=text_0 passage=34]\n**Radiology/Nuclear Medicine**\n[/retrieved_document]\n\n[retrieved_document rank=38 patient=patient_01 id=text_0 passage=35]\n**MR Head 3D unenhanced + contrast from 12/19/2016 10:30 AM**\n[/retrieved_document]\n\n[retrieved_document rank=39 patient=patient_01 id=text_0 passage=36]\n**Technique:** Sequences obtained include 3D FLAIR, 3D DIR, 3D T2, SWI,\nDTI/DWI, plain MPRAGE, and post-contrast MPRAGE. All images are of good\nquality. Imaging area: Brain.\n[/retrieved_document]\n\n[retrieved_document rank=40 patient=patient_01 id=text_0 passage=37]\nThere are 20 FLAIR hyperintense lesions in the brain parenchyma,\nspecifically located periventricularly and in the cortical/juxtacortical\nregions (right and left frontal, left temporal, and right and left\ninsular). No contrast-enhancing lesions are identified. There are also\nsubcortical/nonspecific lesions present, with some lesions appearing\nconfluent. The spinal cord is visualized up to the C4 level. No spinal\nlesions are noted.\n[/retrieved_document]\n\n[retrieved_document rank=41 patient=patient_01 id=text_0 passage=38]\n[Incidental findings:]{.underline}\n[/retrieved_document]\n\n[retrieved_document rank=42 patient=patient_01 id=text_0 passage=39]\n-   Brain volume assessment: no indication of reduced brain volume.\n[/retrieved_document]\n\n[retrieved_document rank=43 patient=patient_01 id=text_0 passage=40]\n-   CSF space: age-appropriate usual wide, moderate, and symmetric CSF\n    spacing with no signs of CSF flow abnormalities.\n[/retrieved_document]\n\n[retrieved_document rank=44 patient=patient_01 id=text_0 passage=41]\n-   Cortical-Subcortical Differentiation: Clear cortical-subcortical\n    distinction.\n[/retrieved_document]\n\n[retrieved_document rank=45 patient=patient_01 id=text_0 passage=42]\n-   RML-characteristic alterations: none detected.\n[/retrieved_document]\n\n[retrieved_document rank=46 patient=patient_01 id=text_0 passage=43]\n-   Eye socket: appears normal.\n[/retrieved_document]\n\n[retrieved_document rank=47 patient=patient_01 id=text_0 passage=44]\n-   Nasal cavities: Symmetric mucosal thickening with a focus on the\n    right ethmoidal sinus.\n[/retrieved_document]\n\n[retrieved_document rank=48 patient=patient_01 id=text_0 passage=45]\n-   Pituitary and peri-auricular region: no abnormalities.\n[/retrieved_document]\n\n[retrieved_document rank=49 patient=patient_01 id=text_0 passage=46]\n-   Subcutaneous lesion measuring 14.4 x 21.3 mm, right parietal likely\n    representing an inflamed cyst or abscess, differential includes soft\n    tissue growth.\n[/retrieved_document]\n\n[retrieved_document rank=50 patient=patient_01 id=text_0 passage=47]\n[Evaluation]{.underline}\n[/retrieved_document]\n\n[retrieved_document rank=51 patient=patient_01 id=text_0 passage=48]\nDissemination: MRI standards for spatial distribution are satisfied. MRI\ncriteria for temporal distribution are unfulfilled. Comprehensive\nneurological review: The findings are consistent with a chronic\ninflammatory CNS disease in the sense of Multiple Sclerosis.\n[/retrieved_document]\n\n[retrieved_document rank=52 patient=patient_01 id=text_0 passage=49]\n**MR Spine plain + post-contrast from 12/20/2016 10:00 AM**\n[/retrieved_document]\n\n[retrieved_document rank=53 patient=patient_01 id=text_0 passage=50]\n**Technique:** GE 3T MRI Scanner\n[/retrieved_document]\n\n[retrieved_document rank=54 patient=patient_01 id=text_0 passage=51]\nMRI was conducted under anesthesia due to claustrophobia.\n[/retrieved_document]\n\n[retrieved_document rank=55 patient=patient_01 id=text_0 passage=52]\n**Sequences**: Holospinal T2 Dixon sagittal, T1 pre-contrast, T1 fs\npost-contrast. The spine is visualized from the craniocervical junction\nto S2.\n[/retrieved_document]\n\n[retrieved_document rank=56 patient=patient_01 id=text_0 passage=53]\n**Thoracic spine: **\n[/retrieved_document]\n\n[retrieved_document rank=57 patient=patient_01 id=text_0 passage=54]\nOn T2-STIR and T2, there is a hyperintense signal of vertebral bodies T5\nand T6 with inconsistent delineation of the vertebral endplates,\nindicative of age-related changes. There is a reduction in the height of\nthe disc spaces T4/5 and T5/6 with subligamentous disc protrusion\nleading to a spongy appearance of the spinal cord at this location.\nMyelon atrophy is noted at T5/6, along with a T2 bright lesion\nsuggestive of MS at the level of T3 and also T4/5. Spine: A large\nintraspinal mass extends from T10-L1, causing an anterior spongy\nappearance of the spinal cord and resulting in complete spinal canal\nstenosis at this level. On fat-only imaging, there is almost total\nreplacement of the marrow space of vertebral body T11 with external\ntumor extension and infiltration into the lateral structures (more on\nthe left than the right) and neural foramen T11 on both sides. There is\nmild disc herniation at T8/9 with slight sponginess of the spinal cord.\nMS-characteristic spinal cord lesions are noted at segments T5 and T8/9.\n[/retrieved_document]\n\n[retrieved_document rank=58 patient=patient_01 id=text_0 passage=55]\n**Lumbar spine: **\n[/retrieved_document]\n\n[retrieved_document rank=59 patient=patient_01 id=text_0 passage=56]\nT2-DIXON shows bright signal intensity of the anterior part of lumbar\nvertebra 1, a patchy appearance of lumbar vertebra 2, and lumbar\nvertebra 4. Almost the entire marrow space is replaced in the fat-only\nimaging. There is an external tumor mass posterior to lumbar vertebra 4\nwithout significant spinal canal stenosis, which involves the left\nlateral structure and a pronounced appearance of the cauda equina at\nlumbar vertebra 1. A call to communicate the results was made at 11:15\na.m. to the on-duty orthopedic surgeon and to colleagues in neurology.\nEvaluation Evidence of a metastatic lesion originating from the left\npedicle of T10 with a significant extramedullary tumor mass and full\nspinal canal narrowing at the level of T10 with compression of the\nspinal cord and extension into the neural foramen T11-T12 on the right,\nand T12-L1 on the left. Additional sites suggestive of metastasis\ninclude L2, L3, and L4, again with extramedullary tumor components and\ninvasion of the left lateral structure. Contrast enhancement of the\ndistal cord is noted. There are MS-characteristic spinal cord lesions at\nthe levels of T3, T4-5, T5, and T8-9. The conus medullaris is not\nvisualized due to spinal cord displacement.\n[/retrieved_document]\n\n[retrieved_document rank=60 patient=patient_01 id=text_0 passage=57]\n**CT Thoracic Spine from 01/03/2017**\n[/retrieved_document]\n\n[retrieved_document rank=61 patient=patient_01 id=text_0 passage=58]\n[Clinical Findings]{.underline}\n[/retrieved_document]\n\n[retrieved_document rank=62 patient=patient_01 id=text_0 passage=59]\nLateral and medial alignment is stable. No sign of vertebral column\ndamage. Multiple segment degenerative alterations in the spine. No\nindications of mineralization in the recognized space at the level of\nT10/L2. Invasion of T10 and L4 with composite osteolytic-osteoblastic\ndefects starting from the left pedicle into the vertebral column. More\ncortical inconsistency with enhanced sclerosis at the endplate of L2.\nReview with prior MRI indicative of a different composite defect. Defect\npit at the endplate of lumbar vertebra 2.\n[/retrieved_document]\n\n[retrieved_document rank=63 patient=patient_01 id=text_0 passage=60]\nMinor pericardial effusion with nearby superior ventilation. Intubation\ntube placed. Mild cardiomediastinum. Splenomegaly. Standard display of\nthe tissue organs of the mid-abdomen, as naturally observed. Normal\nspleen. Thin adrenals. Tightly raised kidney bowls and leading ureter\nfrom both aspects, e.g., upon entry during the exhalation period after\ngadolinium inclusion in the earlier MRI. No bowel obstruction.\nIntestinal stasis. No sign of abnormally magnified lymphatic vessels.\nRemaining pin holes in the femoral head on both sides.\n[/retrieved_document]\n\n[retrieved_document rank=64 patient=patient_01 id=text_0 passage=61]\n[Evaluation]{.underline}\n[/retrieved_document]\n\n[retrieved_document rank=65 patient=patient_01 id=text_0 passage=62]\nComposite osteolytic-osteoblastic defects starting from the left pedicle\nin T10 and lumbar vertebra 4, and at the endplate of lumbar vertebra 2.\n[/retrieved_document]\n\n[retrieved_document rank=66 patient=patient_01 id=text_0 passage=63]\n**CT Thoracic Spine from 01/04/2017 **\n[/retrieved_document]\n\n[retrieved_document rank=67 patient=patient_01 id=text_0 passage=64]\nIntraoperative CT imaging for enhanced guidance.\n[/retrieved_document]\n\n[retrieved_document rank=68 patient=patient_01 id=text_0 passage=65]\nTwo intraoperative CT scans were undertaken in total.\n[/retrieved_document]\n\n[retrieved_document rank=69 patient=patient_01 id=text_0 passage=66]\nOn the concluding CT scan, recently implanted non-radiopaque pedicle\nscrews T8-9 to L2-L3 at tumor band T10. Regular screw placement. No\nevident sign of material breakage.\n[/retrieved_document]\n\n[retrieved_document rank=70 patient=patient_01 id=text_0 passage=67]\nApart from this, no notable alteration in findings from CT of\n01/03/2017.\n[/retrieved_document]\n\n[retrieved_document rank=71 patient=patient_01 id=text_0 passage=68]\nEvaluation Intraoperative CT imaging for better guidance. Recently\ninserted pedicle screws T8/T9 and L2/L3 in tumor indication T10,\nultimate standard screw positioning done transpedicular.\n[/retrieved_document]\n\n[retrieved_document rank=72 patient=patient_01 id=text_0 passage=69]\n**CT Chest/Abdomen/Pelvis + Contrast from 01/09/2017**\n[/retrieved_document]\n\n[retrieved_document rank=73 patient=patient_01 id=text_0 passage=70]\nResults: After uneventful intravenous administration of Omnipaque 320, a\nmulti-slice helical CT of the chest, abdomen, and pelvis was performed\nduring the venous phase of contrast enhancement. Additional oral\ncontrast was given using Gastrografin (diluted 1:35). Thin slice\nreconstructions were obtained, along with secondary coronal and sagittal\nreconstructions.\n[/retrieved_document]\n\n[retrieved_document rank=74 patient=patient_01 id=text_0 passage=71]\n[Thorax]{.underline}:\n[/retrieved_document]\n\n[retrieved_document rank=75 patient=patient_01 id=text_0 passage=72]\nUniform presentation of the apical thoracic sections when included. No \nevidence of subclavian lymphadenopathy. Uniform visualization of the pectoral \ntissues. No evidence of mediastinal lymphadenopathy. The anterior segment \nof the left upper lobe (series 205, image 88 of 389) shows a subpleural \nground-glass opaque solid consolidation. There is an enlarged lymph node \nin the left hilar region measuring approximately 1.2 cm laterally. Otherwise, \nthere are no signs of suspicious intrapulmonary markings, no new inflammatory \ninfiltrates, no pneumothorax, no pericardial effusion. In the upper inner \nquadrant of the right breast there is an oval mass, DD cystadenoma, \nDD glandular cluster (measuring 1.2 cm).\n[/retrieved_document]\n\n[retrieved_document rank=76 patient=patient_01 id=text_0 passage=73]\n[Abdomen/pelvis: ]{.underline}\n[/retrieved_document]\n\n[retrieved_document rank=77 patient=patient_01 id=text_0 passage=74]\nDominant display of the gastrocolic junction; absence of oral contrast\nin this zone prevents more detailed analysis. Uniformly displayed\nhepatic tissue with no signs of focal, density-varied lesions. Portal\nand liver veins are well filled. Liver with minor auxiliary liver.\nAdrenal nodes thin on both sides. Natural kidneys on both sides. Urinary\nsac with placed transurethral tube and intravesical gas pockets.\nGallbladder typical. Paravertebral and within vertebral and in the\ndomain of the superior hepatic artery multiple pronounced lymph nodes,\nthese up to a maximum of 8 mm. Typical representation of the organs in\nthe pelvic region.\n[/retrieved_document]\n\n[retrieved_document rank=78 patient=patient_01 id=text_0 passage=75]\n[Skeleton: ]{.underline}\n[/retrieved_document]\n\n[retrieved_document rank=79 patient=patient_01 id=text_0 passage=76]\nCondition post dorsal reinforcement (T8-T9-L2-L3). After surgery,\nepidermal air pockets and bloated tissue inflammation in the access path\nzone. Signs of a resin in a pre-spinal vessel anterior to T8 and T9.\nKnown mixed osteoblastic/osteolytic bony metastasis of lumbar vertebra 4\nand the cap plate of lumbar vertebra 2. State post-cutting of the\npedicle of T10. L5 also with slightly multiple solidified core\nosteolytic defects.\n[/retrieved_document]\n\n[retrieved_document rank=80 patient=patient_01 id=text_0 passage=77]\n[Evaluation:]{.underline}\n[/retrieved_document]\n\n[retrieved_document rank=81 patient=patient_01 id=text_0 passage=78]\n-   No sign of primary malignancy in the previously mentioned mixed\n    osteoblastic/osteolytic lesions in the vertebra (to be deemed\n    suspicious in coordination with the MR review of 12/20/2016).\n[/retrieved_document]\n\n[retrieved_document rank=82 patient=patient_01 id=text_0 passage=79]\n-   A magnified lymph node exists in the left hilar territory. In the\n    anterior left upper lobe, evidence of a solid cloudy consolidation,\n    i.e., of inflammatory origin, revisitation in 5-7 weeks recommended.\n[/retrieved_document]\n\n[retrieved_document rank=83 patient=patient_01 id=text_0 passage=80]\n-   Rounded consolidation in the upper inner quadrant of the right\n    breast, further breast examination advised.\n[/retrieved_document]\n\n[retrieved_document rank=84 patient=patient_01 id=text_0 passage=81]\n**Functional Diagnostics**\n[/retrieved_document]\n\n[retrieved_document rank=85 patient=patient_01 id=text_0 passage=82]\nExtended Respiratory Function (Diffusion) from 01/15/2017\n[/retrieved_document]\n\n[retrieved_document rank=86 patient=patient_01 id=text_0 passage=83]\n[Evaluation]{.underline}\n[/retrieved_document]\n\n[retrieved_document rank=87 patient=patient_01 id=text_0 passage=84]\nPatient cooperation: satisfactory. No detectable obstructive ventilation\nissue. No pulmonary over-expansion after RV/TLC. No identified\nrestrictive ventilation impairment. Standard O2 diffusion ability. No\nevidence of low oxygen levels, no blockage.\n[/retrieved_document]\n\n[retrieved_document rank=88 patient=patient_01 id=text_0 passage=85]\n[Consultations / Therapy Reports]{.underline}\n[/retrieved_document]\n\n[retrieved_document rank=89 patient=patient_01 id=text_0 passage=86]\nPsychological Support Consultation from 01/22/2017\n[/retrieved_document]\n\n[retrieved_document rank=90 patient=patient_01 id=text_0 passage=87]\n[Current Situation/History:]{.underline}\n[/retrieved_document]\n\n[retrieved_document rank=91 patient=patient_01 id=text_0 passage=88]\nThe patient initially discussed \\\"night episodes\\\" in the calves, which\nover time manifested during the day and were coupled with discomfort in\nthe cervical region. Prior, she had visited the Riverside Medical Center\nmultiple times before an MRI was executed. A \\\"mass in the neck\\\" was\nidentified. Since she suffers from fear of heights and fear of crowds,\nthe MRI could only be done under mild sedation. The phobias emerged\nabruptly in 2011 with no apparent cause, leading to multiple hospital\nvisits. She is now in outpatient care. Additionally, she battles with\nMS, with the most recent flare-up in 2012. She declined a procedure,\nwhich was set for the MRI is day, because \\\"two sedatives in one day\nfelt excessive.\\\" She anticipates avoiding a repeated procedure.\nCurrently, however, she still experiences spasms in her right hand and a\nnumbing sensation in her fingers. She still encounters discomfort (NRS\n5/10). She was previously informed that relief might be gradual, but she\nis \\\"historically been restless\\\". Therefore, \\\"resting and inactivity\\\"\nnegatively impact her spirits and rest.\n[/retrieved_document]\n\n[retrieved_document rank=92 patient=patient_01 id=text_0 passage=89]\n[Medical background:]{.underline}\n[/retrieved_document]\n\n[retrieved_document rank=93 patient=patient_01 id=text_0 passage=90]\nSeveral in-patient and day clinic admissions since 2011.\n[/retrieved_document]\n\n[retrieved_document rank=94 patient=patient_01 id=text_0 passage=91]\nNow, from 2015, continuous outpatient psychological counseling (CBT),\nsomatic therapy, particular sessions for driving anxieties. Also\nundergoing outpatient psychiatric care (fluoxetine 90mg).\n[/retrieved_document]\n\n[retrieved_document rank=95 patient=patient_01 id=text_0 passage=92]\n[Psychopathological Observations:]{.underline}\n[/retrieved_document]\n\n[retrieved_document rank=96 patient=patient_01 id=text_0 passage=93]\nPatient appears well-groomed, responsive and clear-minded, talkative and\nforthright. Aware of location, date, and identity. Adequate focus,\nrecall, and concentration. Mental organization is orderly. No evidence\nof delusional beliefs or identity disturbances. No compulsions, mentions\nfear of expansive spaces and fear of water. Emotional responsiveness\nintact, heightened psychomotor activity. Mood swings between despondent\nand irritable, lowered motivation. Diminished appetite, issues with\nsleep initiation and maintenance. Firm and believable denial of\nimmediate suicidal thoughts, patient appears cooperative. No current\nsigns of self-harm or threat to others.\n[/retrieved_document]\n\n[retrieved_document rank=97 patient=patient_01 id=text_0 passage=94]\n[Handling the Condition, Strengths:]{.underline}\n[/retrieved_document]\n\n[retrieved_document rank=98 patient=patient_01 id=text_0 passage=95]\nCurrently, her coping strategy seems to be proactive with some restless\nelements. Ms. S. says she remains \\\"optimistic\\\" and is well-backed by\nher communal links. Notably, she shares a close bond with her\n80-year-old aunt. Her other social bonds primarily arise from her\nassociation with a hockey enthusiasts club. Hockey has been a crucial\nsupport for her from a young age.\n[/retrieved_document]\n\n[retrieved_document rank=99 patient=patient_01 id=text_0 passage=96]\n[Evaluation Diagnoses:]{.underline}\n[/retrieved_document]\n\n[retrieved_document rank=100 patient=patient_01 id=text_0 passage=97]\nAdjustment disorder: anxiety and depressive reaction mixed\n[/retrieved_document]\n\n[retrieved_document rank=101 patient=patient_01 id=text_0 passage=98]\nAgoraphobia\n[/retrieved_document]\n\n[retrieved_document rank=102 patient=patient_01 id=text_0 passage=99]\nAcrophobia\n[/retrieved_document]\n\n[retrieved_document rank=103 patient=patient_01 id=text_0 passage=100]\n[Interventions, approaches:]{.underline}\n[/retrieved_document]\n\n[retrieved_document rank=104 patient=patient_01 id=text_0 passage=101]\nAn evaluative and assistive discussion was conducted. The patient has a\ndependable therapeutic community for post-hospitalization. Additionally,\nshe was provided the contact of the psychological support outpatient\ncenter. She mentioned finding the therapeutic conversation comforting,\nprompting an arranged check-in the subsequent week. We also suggest\nguidance in self-initiated physical activities to aid her recovery and\ntemper restlessness.\n[/retrieved_document]\n\n[retrieved_document rank=105 patient=patient_01 id=text_0 passage=102]\n**NC: Consultation of 01/15/2017**\n[/retrieved_document]\n\n[retrieved_document rank=106 patient=patient_01 id=text_0 passage=103]\n[Examination findings:]{.underline}\n[/retrieved_document]\n\n[retrieved_document rank=107 patient=patient_01 id=text_0 passage=104]\nPatient alert, fully oriented. Articulate and spontaneous speech.\nCranial nerve evaluation normal. No evident sensorimotor abnormalities.\nBDK with voiding challenges. Sphincter response diminished, but fecal\ncontrol maintained. KPPS at 85%. Wound site clean and non-irritated,\nexcept for the lower central portion.\n[/retrieved_document]\n\n[retrieved_document rank=108 patient=patient_01 id=text_0 passage=105]\n[Procedure:]{.underline}\n[/retrieved_document]\n\n[retrieved_document rank=109 patient=patient_01 id=text_0 passage=106]\nNeurosurgical intervention not required; no reassessment of the lower\nwound needed. Advise return if neurological symptoms intensify.\n[/retrieved_document]\n\n[retrieved_document rank=110 patient=patient_01 id=text_0 passage=107]\nThe patient, diagnosed with relapsing-remitting multiple sclerosis that\ninitially manifested aggressively, has been relapse-free on fingolimod\nsince 2009 and was generally well, barring a slight imbalance when\nwalking due to minor weakness in her left leg. She later experienced\nnumbness and weakness in her legs, reaching up to the hip, persisting\nfor several days and then faced challenges with urination and bowel\nmovements approximately 7 weeks prior. During a home examination, a\nlesion was identified in the T10 which was surgically addressed by our\nin-house neurosurgery team. Histology identified it as a DLBCL, leading\nto a chemotherapy plan inclusive of Rituximab. Post-surgery, her\nsymptoms have subsided somewhat, but the patient still has BDK and\nrelies on a wheelchair.\n[/retrieved_document]\n\n[retrieved_document rank=111 patient=patient_01 id=text_0 passage=108]\nOn clinical neurological assessment, a mild paraparesis was noted in her\nleft leg, accompanied by heightened reflex response and sporadic left\nfoot spasms, which were intense but temporary.\n[/retrieved_document]\n\n[retrieved_document rank=112 patient=patient_01 id=text_0 passage=109]\nTo conclude, the new neurological manifestations are not a recurrence of\nthe formerly stable multiple sclerosis. As Rituximab is also an\neffective third-phase drug for MS treatment and is essential,\ndiscontinuing fingolimod (second phase) was discussed with the patient.\nAfter a span of approximately 4-5 months following the last Rituximab\ntreatment, a radiological (cMRI) and clinical review is suggested. Based\non results, either resuming fingolimod or, if no adverse effects\npresent, potentially continuing Rituximab treatment is recommended (for\nthis, reach our neuroimmunology outpatient department). The primary\nneurologist was unavailable for comments.\n[/retrieved_document]\n\n[retrieved_document rank=113 patient=patient_01 id=text_0 passage=110]\n**Boards**\n[/retrieved_document]\n\n[retrieved_document rank=114 patient=patient_01 id=text_0 passage=111]\nOncology tumor board as of 01/22/2017\n[/retrieved_document]\n\n[retrieved_document rank=115 patient=patient_01 id=text_0 passage=113]\n[Pathology]{.underline}\n[/retrieved_document]\n\n[retrieved_document rank=116 patient=patient_01 id=text_0 passage=114]\nPathology. Findings from 01/05/2017\n[/retrieved_document]\n\n[retrieved_document rank=117 patient=patient_01 id=text_0 passage=115]\n[Clinical information/question:]{.underline}\n[/retrieved_document]\n\n[retrieved_document rank=118 patient=patient_01 id=text_0 passage=116]\nTumor cuff T10. dignity? Entity? Macroscopy:\n[/retrieved_document]\n\n[retrieved_document rank=119 patient=patient_01 id=text_0 passage=117]\n1st lamina T10: fixed. some assembled 0.7 x 0.5 x 0.2 cm calcareous\ntissue fragments. Complete embedding. Decalcify in EDTA. 2nd ligament:\nFix. some assembled 0.9 x 0.7 x 0.2 cm, coarse, partly also calcareous\ntissue fragments. Complete embedding. Decalcify overnight in EDTA.\n[/retrieved_document]\n\n[retrieved_document rank=120 patient=patient_01 id=text_0 passage=118]\n3\\. epidural tumor: Numerous beige-colored tissue fragments, 3.8 x 2.8 x\n0.6 cm. Embedding of exemplary sections after lamellation.\n[/retrieved_document]\n\n[retrieved_document rank=121 patient=patient_01 id=text_0 passage=119]\n[Processing]{.underline}: 1 block, HE. Microscopy:\n[/retrieved_document]\n\n[retrieved_document rank=122 patient=patient_01 id=text_0 passage=120]\n1\\. and 2. (lamina T10 and ligament) are still being decalcified.\n[/retrieved_document]\n\n[retrieved_document rank=123 patient=patient_01 id=text_0 passage=121]\n3rd epidural tumor: Paravertebral soft tissue with infiltrates of a\npartly lymphoid, partly blastic neoplasia. The tumor cells are diffuse,\nsometimes nodular in the tissue and have hyperchromatic nuclei with\ncoarse-grained chromatin and a narrow cytoplasmic border. There are also\nblastic cells with enlarged nuclei, vesicular chromatin, and sometimes\nprominent nucleoli. The stroma is loose and vacuolated. Clearly\npronounced crush artifacts.\n[/retrieved_document]\n\n[retrieved_document rank=124 patient=patient_01 id=text_0 passage=122]\nPreliminary report of critical findings:\n[/retrieved_document]\n\n[retrieved_document rank=125 patient=patient_01 id=text_0 passage=123]\n3\\. epidural tumor: paravertebral soft tissue with infiltrates of\nlymphoid and blastic cells compatible with hematologic neoplasia.\n[/retrieved_document]\n\n[retrieved_document rank=126 patient=patient_01 id=text_0 passage=124]\nAdditional immunohistochemical staining is being performed to further\ncharacterize the tumor. In addition, material 1 (lamina T10) and\nmaterial 2 (ligament) are still undergoing decalcification. A follow-up\nreport will be provided.\n[/retrieved_document]\n\n[retrieved_document rank=127 patient=patient_01 id=text_0 passage=125]\nProcessing: 2 blocks, decalcification, HE, Giemsa, IHC: CD20, PAX5,\nBcl2, Bcl6, CD5, CD3, CD23, CD21, Kappa, Lambda, CD10, c-Myc, CyclinD1,\nCD30, MIB1, EBV/EBER.\n[/retrieved_document]\n\n[retrieved_document rank=128 patient=patient_01 id=text_0 passage=126]\nMolecular pathology: testing for B-cell clonal expansion and IgH/Bcl2\ntranslocation.\n[/retrieved_document]\n\n[retrieved_document rank=129 patient=patient_01 id=text_0 passage=127]\n[Microscopy]{.underline}:\n[/retrieved_document]\n\n[retrieved_document rank=130 patient=patient_01 id=text_0 passage=128]\n1\\. Ligament: Scarred connective tissue and fragmented bone tissue\nwithout evidence of the tumor described in the preliminary findings\nunder 3.\n[/retrieved_document]\n\n[retrieved_document rank=131 patient=patient_01 id=text_0 passage=129]\n2\\. Lamina T10: Bone tissue without evidence of the tumor described in\nthe preliminary findings under 3.\n[/retrieved_document]\n\n[retrieved_document rank=132 patient=patient_01 id=text_0 passage=130]\n3\\. Epidural tumor: Immunohistochemically, blastic tumor cells show a\npositive reaction after incubation with antibodies against CD20, PAX5\nand BCL2. Partially positive reaction against Bcl-6 (\\<20%). Some\nisolated blastic cells staining positive for CD30. Lymphoid cells\npositive for CD3 and CD5. Some residual germinal centers with positive\nreaction to CD23 and CD21. Predominantly weak positive reaction of\nblasts and lymphoid cells to CD10. Some solitary cells with positive\nreaction to kappa, rather unspecific, flat reaction to lambda. No\noverexpression of c-Myc or cyclinD1. No\n[/retrieved_document]\n\n[retrieved_document rank=133 patient=patient_01 id=text_0 passage=131]\nNo reaction to EBV/EBER. The Ki-67 proliferation index is 40%, related\nto blastic tumor cells \\> 90%.\n[/retrieved_document]\n\n[retrieved_document rank=134 patient=patient_01 id=text_0 passage=132]\nSignificantly limited evaluability of immunohistochemical staining due\nto severe squeezing artifacts of the material.\n[/retrieved_document]\n\n[retrieved_document rank=135 patient=patient_01 id=text_0 passage=133]\n[Molecular pathology report:]{.underline}\n[/retrieved_document]\n\n[retrieved_document rank=136 patient=patient_01 id=text_0 passage=134]\nExamination for clonal B-cell expansion and t(14;18) translocation\nMethodology:\n[/retrieved_document]\n\n[retrieved_document rank=137 patient=patient_01 id=text_0 passage=135]\nDNA was isolated from the sent tissues and used in duplicate in specific\nPCRs (B-cell clonality analysis with Biomed-2 primer sets: IGHG1 gene:\nscaffold 2 and 3). The size distribution of the PCR products was further\nanalyzed by fragment analysis.\n[/retrieved_document]\n\n[retrieved_document rank=138 patient=patient_01 id=text_0 passage=136]\nTo detect a BCL2/IgH fusion corresponding to a t(14;18) translocation,\nDNA was inserted into a specific PCR (according to Stetler-Stevenson et\nal. Blood. 1998;72:1822-25).\n[/retrieved_document]\n\n[retrieved_document rank=139 patient=patient_01 id=text_0 passage=137]\nResults:\n[/retrieved_document]\n\n[retrieved_document rank=140 patient=patient_01 id=text_0 passage=138]\nAmplification of isolated DNA: good. B cell clonality analyses\n[/retrieved_document]\n\n[retrieved_document rank=141 patient=patient_01 id=text_0 passage=139]\nIGHG1 fragment 2: polyclonal signal pattern.\n[/retrieved_document]\n\n[retrieved_document rank=142 patient=patient_01 id=text_0 passage=140]\nIGHG1 frame 3: reproducible clonal signal at approximately 115/116 bp.\nt(14;18) translocation: negative.\n[/retrieved_document]\n\n[retrieved_document rank=143 patient=patient_01 id=text_0 passage=141]\n[Molecular pathology report:]{.underline}\n[/retrieved_document]\n\n[retrieved_document rank=144 patient=patient_01 id=text_0 passage=142]\nMolecular pathologic evidence of clonal B-cell expansion. No evidence of\nt(14;18) translocation in test material with normal control reactions.\n[/retrieved_document]\n\n[retrieved_document rank=145 patient=patient_01 id=text_0 passage=143]\nPreliminary critical findings report:\n[/retrieved_document]\n\n[retrieved_document rank=146 patient=patient_01 id=text_0 passage=144]\n1\\. Lamina TH 10: tumor-free bone tissue.\n[/retrieved_document]\n\n[retrieved_document rank=147 patient=patient_01 id=text_0 passage=145]\n2\\. Ligament: Tumor-free, scarred connective tissue and fragmented bone\ntissue.\n[/retrieved_document]\n\n[retrieved_document rank=148 patient=patient_01 id=text_0 passage=146]\n3\\. Epidural tumor: aggressive B non-Hodgkin\\'s lymphoma.\n[/retrieved_document]\n\n[retrieved_document rank=149 patient=patient_01 id=text_0 passage=147]\nFindings (continued)\n[/retrieved_document]\n\n[retrieved_document rank=150 patient=patient_01 id=text_0 passage=148]\nAdditional findings from 01/06/2017\n[/retrieved_document]\n\n[retrieved_document rank=151 patient=patient_01 id=text_0 passage=149]\nImmunohistochemical processing: MUM1, ALK1, CD68, TdT. Microscopy:\n[/retrieved_document]\n\n[retrieved_document rank=152 patient=patient_01 id=text_0 passage=150]\n3\\. Immunohistochemically, blastic tumor cells are positive for MUM1.\nNumerous CD68-positive macrophages. No reaction to ALK1 and TdT.\n[/retrieved_document]\n\n[retrieved_document rank=153 patient=patient_01 id=text_0 passage=151]\nCritical findings report:\n[/retrieved_document]\n\n[retrieved_document rank=154 patient=patient_01 id=text_0 passage=152]\n1\\. Lamina T10: Tumor-free bone tissue. 2: Tumor free, scarred connective\ntissue and fragmented bone tissue.\n[/retrieved_document]\n\n[retrieved_document rank=155 patient=patient_01 id=text_0 passage=153]\n3\\. epidural tumor: aggressive B-non-Hodgkin lymphoma, morphologically\nand immunohistochemically most compatible with diffuse large B-cell\nlymphoma (DLBCL, NOS) of germinal center type according to Hans\nclassifier (GCB).\n[/retrieved_document]\n\n[retrieved_document rank=156 patient=patient_01 id=text_0 passage=154]\n**Path. Findings from 01/05/2017**\n[/retrieved_document]\n\n[retrieved_document rank=157 patient=patient_01 id=text_0 passage=155]\nClinical Findings\n[/retrieved_document]\n\n[retrieved_document rank=158 patient=patient_01 id=text_0 passage=156]\nClinical data:\n[/retrieved_document]\n\n[retrieved_document rank=159 patient=patient_01 id=text_0 passage=157]\nInitial diagnosis of DLBCL with spinal involvement.\n[/retrieved_document]\n\n[retrieved_document rank=160 patient=patient_01 id=text_0 passage=158]\nPuncture Site(s): 1\n[/retrieved_document]\n\n[retrieved_document rank=161 patient=patient_01 id=text_0 passage=159]\nCollection date: 01/04/2017\n[/retrieved_document]\n\n[retrieved_document rank=162 patient=patient_01 id=text_0 passage=160]\nArrival at cytology lab: 01/04/2017, 8 PM. Material:\n[/retrieved_document]\n\n[retrieved_document rank=163 patient=patient_01 id=text_0 passage=161]\n1 Liquid Material: 2 mL colorless, clear Processing:\n[/retrieved_document]\n\n[retrieved_document rank=164 patient=patient_01 id=text_0 passage=162]\nMGG staining Microscopic:\n[/retrieved_document]\n\n[retrieved_document rank=165 patient=patient_01 id=text_0 passage=163]\nZTA:\n[/retrieved_document]\n\n[retrieved_document rank=166 patient=patient_01 id=text_0 passage=164]\nLiquid precipitate Erythrocytes\n[/retrieved_document]\n\n[retrieved_document rank=167 patient=patient_01 id=text_0 passage=165]\n(+) Lymphocytes (+) Granulocytes\n[/retrieved_document]\n\n[retrieved_document rank=168 patient=patient_01 id=text_0 passage=166]\nEosinophils Histiocytes Siderophages\n[/retrieved_document]\n\n[retrieved_document rank=169 patient=patient_01 id=text_0 passage=167]\n\\+ Monocytes\n[/retrieved_document]\n\n[retrieved_document rank=170 patient=patient_01 id=text_0 passage=168]\nOthers: Isolated evidence of fewer monocytes. No evidence of atypical\ncells. Critical report of findings:\n[/retrieved_document]\n\n[retrieved_document rank=171 patient=patient_01 id=text_0 passage=169]\nCSF sediment without evidence of inflammation or malignancy. Diagnostic\nGrading:\n[/retrieved_document]\n\n[retrieved_document rank=172 patient=patient_01 id=text_0 passage=170]\nNegative\n[/retrieved_document]\n\n[retrieved_document rank=173 patient=patient_01 id=text_0 passage=171]\nTherapy and course\n[/retrieved_document]\n\n[retrieved_document rank=174 patient=patient_01 id=text_0 passage=172]\nMrs. S was admitted from the neurosurgical department for chemotherapy\n(R-POLA-CHP) of suspected DLBCL with spinal/vertebral manifestations.\n[/retrieved_document]\n\n[retrieved_document rank=175 patient=patient_01 id=text_0 passage=173]\nAfter exclusion of clinical and laboratory contraindications,\nantineoplastic therapy was started on 01/08/2017. This was well\ntolerated under the usual supportive measures. There were no acute\ncomplications.\n[/retrieved_document]\n\n[retrieved_document rank=176 patient=patient_01 id=text_0 passage=174]\nDuring her hospitalization, Ms. S reported numbness in both vascular\nhemispheres. A neurosurgical and neurological presentation was made\nwithout acute need for action. In consultation with the neurology\ndepartment, the existing therapy with fingolimod should be discontinued\ndue to the concomitant use of rituximab and the associated risk of PML.\nIf necessary, re-exposure to fingolimod may be considered after\ncompletion of oncologic therapy.\n[/retrieved_document]\n\n[retrieved_document rank=177 patient=patient_01 id=text_0 passage=175]\nOn 01/07/2017, a port placement was performed by our vascular surgery\ndepartment without complications.\n[/retrieved_document]\n\n[retrieved_document rank=178 patient=patient_01 id=text_0 passage=176]\nOn 01/19/2017, a single administration of Pegfilgrastim 6 mg s.c. was\nperformed. With a latency of 10 days, G-CSF should not be repeated in\nthe meantime.\n[/retrieved_document]\n\n[retrieved_document rank=179 patient=patient_01 id=text_0 passage=177]\nWe are able to transfer Mrs. S to the Mountain Hospital Center\n(Neurological Initial Therapy & Recovery) on 02/01/2017. We thank you\nfor accommodating the patient and are available for any additional\ninquiries.\n[/retrieved_document]\n\n[retrieved_document rank=180 patient=patient_01 id=text_0 passage=178]\n**Medications at Discharge**\n[/retrieved_document]\n\n[retrieved_document rank=181 patient=patient_01 id=text_0 passage=179]\n**Aspirin (Aspirin\u00ae)** - 100mg, 1 tablet in the morning\n[/retrieved_document]\n\n[retrieved_document rank=182 patient=patient_01 id=text_0 passage=180]\n**Atorvastatin - 40mg -** 1 tablet at bedtime\n[/retrieved_document]\n\n[retrieved_document rank=183 patient=patient_01 id=text_0 passage=181]\n**Sertraline - 50mg** - 2 tablets in the morning\n[/retrieved_document]\n\n[retrieved_document rank=184 patient=patient_01 id=text_0 passage=182]\n**Lorazepam (Tavor\u00ae)** - 1mg, as needed\n[/retrieved_document]\n\n[retrieved_document rank=185 patient=patient_01 id=text_0 passage=183]\n**Fingolimod** - 0.5mg, 1 capsule at bedtime, Note: Take a break as\ndirected\n[/retrieved_document]\n\n[retrieved_document rank=186 patient=patient_01 id=text_0 passage=184]\n**Hydromorphone hydrochloride** - 2mg (extended-release), 2 capsules in\nthe morning and 2 capsules at bedtime\n[/retrieved_document]\n\n[retrieved_document rank=187 patient=patient_01 id=text_0 passage=185]\n**Melatonin -** 2mg (sustained-release), 1 tablet at bedtime\n[/retrieved_document]\n\n[retrieved_document rank=188 patient=patient_01 id=text_0 passage=186]\n**Baclofen (Lioresal\u00ae) -** 10mg, 1 tablet three times a day\n[/retrieved_document]\n\n[retrieved_document rank=189 patient=patient_01 id=text_0 passage=187]\n**Pregabalin -** 75mg, 1 capsule in the morning and 1 capsule at bedtime\n[/retrieved_document]\n\n[retrieved_document rank=190 patient=patient_01 id=text_0 passage=188]\n**MoviCOL\u00ae (Macrogol, Sodium chloride, Potassium chloride) -** 1 packet\nthree times a day, mixed with water for oral intake\n[/retrieved_document]\n\n[retrieved_document rank=191 patient=patient_01 id=text_0 passage=189]\n**Pantoprazole -** 40mg, 1 tablet in the morning\n[/retrieved_document]\n\n[retrieved_document rank=192 patient=patient_01 id=text_0 passage=190]\n**Colecalciferol (Vitamin D3) -** 20000 I.U., 1 capsule on Monday and\nThursday\n[/retrieved_document]\n\n[retrieved_document rank=193 patient=patient_01 id=text_0 passage=191]\n**Co-trimoxazole -** 960mg, 1 tablet on Monday, Wednesday, and Friday\n[/retrieved_document]\n\n[retrieved_document rank=194 patient=patient_01 id=text_0 passage=192]\n**Valaciclovir -** 500mg, 1 tablet in the morning and 1 tablet at\nbedtime\n[/retrieved_document]\n\n[retrieved_document rank=195 patient=patient_01 id=text_0 passage=193]\n**Prednisolone -** 50mg, 2 tablets in the morning, Continue through\n02/19/2017\n[/retrieved_document]\n\n[retrieved_document rank=196 patient=patient_01 id=text_0 passage=194]\n**Enoxaparin sodium (Clexane\u00ae) -** 40mg (4000 I.U.), 1 injection at\nbedtime, Note: Continue in case of immobility\n[/retrieved_document]\n\n[retrieved_document rank=197 patient=patient_01 id=text_0 passage=195]\n**Dimenhydrinate (Vomex A\u00ae)** - 150mg (sustained-release), as needed for\nnausea, up to 2 capsules daily.\n[/retrieved_document]\n\n[retrieved_document rank=198 patient=patient_01 id=text_0 passage=196]\n**Procedure**\n[/retrieved_document]\n\n[retrieved_document rank=199 patient=patient_01 id=text_0 passage=198]\n-   Fingolimod pause, re-evaluation in 4-5 months.\n[/retrieved_document]\n\n[retrieved_document rank=200 patient=patient_01 id=text_0 passage=199]\n-   Continuation of therapy near residence in the clinic as of\n    02/28/2017\n[/retrieved_document]\n\n[retrieved_document rank=201 patient=patient_01 id=text_0 passage=200]\n-   Bi-Weekly laboratory tests (electrolytes, blood count, kidney and\n    liver function tests)\n[/retrieved_document]\n\n[retrieved_document rank=202 patient=patient_01 id=text_0 passage=201]\n-   In case of fever \\>38.3 \u00b0C please report immediately to our\n    emergency room\n[/retrieved_document]\n\n[retrieved_document rank=203 patient=patient_01 id=text_0 passage=202]\n-   Immediate gynecological examination for nodular mass in the left\n    breast\n[/retrieved_document]\n\n[retrieved_document rank=204 patient=patient_01 id=text_0 passage=203]\nDates:\n[/retrieved_document]\n\n[retrieved_document rank=205 patient=patient_01 id=text_0 passage=204]\n-   From 03/01/2017 third cycle of R-Pola-CHP in the clinic. The patient\n    will be informed of the date by telephone.\n[/retrieved_document]\n\n[retrieved_document rank=206 patient=patient_01 id=text_0 passage=205]\nIf symptoms persist or exacerbate, we advocate for an urgent revisit.\nOutside standard working hours, emergencies can also be addressed at the\nemergency hub.\n[/retrieved_document]\n\n[retrieved_document rank=207 patient=patient_01 id=text_0 passage=206]\nDuring discharge management, the patient was extensively educated and\nassisted, and equipped with required appliances, medication scripts, and\nabsence from work notices.\n[/retrieved_document]\n\n[retrieved_document rank=208 patient=patient_01 id=text_0 passage=207]\nAll observations were thoroughly deliberated upon. Multiple alternate\ntherapy notions were considered before making a treatment proposition.\nThe opportunity for a second viewpoint and recommendation to our\nfacility was also emphasized.\n[/retrieved_document]\n\n[retrieved_document rank=209 patient=patient_01 id=text_0 passage=208]\n**Lab values at discharge: **\n[/retrieved_document]\n\n[retrieved_document rank=210 patient=patient_01 id=text_0 passage=209]\n**Metabolic Panel**\n[/retrieved_document]\n\n[retrieved_document rank=211 patient=patient_01 id=text_0 passage=210]\n  **Parameter**                      **Results**   **Reference Range**\n  ---------------------------------- ------------- ---------------------\n  Sodium                             136 mEq/L     135 - 145 mEq/L\n  Potassium                          3.9 mEq/L     3.5 - 5.0 mEq/L\n  Creatinine                         1.2 mg/dL     0.7 - 1.3 mg/dL\n  BUN (Blood Urea Nitrogen)          19 mg/dL      7 - 18 mg/dL\n  Alkaline Phosphatase               138 U/L       40 - 129 U/L\n  Total Bilirubin                    0.3 mg/dL     \\< 1.2 mg/dL\n  GGT (Gamma-Glutamyl Transferase)   82 U/L        \\< 66 U/L\n  ALT (Alanine Aminotransferase)     42 U/L        10 - 50 U/L\n  AST (Aspartate Aminotransferase)   34 U/L        10 - 50 U/L\n  LDH (Lactate Dehydrogenase)        366 U/L       \\< 244 U/L\n  Uric Acid                          4.1 mg/dL     3 - 7 mg/dL\n  Calcium                            9.0 mg/dL     8.8 - 10.6 mg/dL\n[/retrieved_document]\n\n[retrieved_document rank=212 patient=patient_01 id=text_0 passage=211]\n**Kidney Function**\n[/retrieved_document]\n\n[retrieved_document rank=213 patient=patient_01 id=text_0 passage=212]\n  **Parameter**                   **Results**   **Reference Range**\n  ------------------------------- ------------- ---------------------\n  GFR (MDRD)                      \\>60 mL/min   \\> 60 mL/min\n  GFR (CKD-EPI with Creatinine)   64 mL/min     \\> 90 mL/min\n[/retrieved_document]\n\n[retrieved_document rank=214 patient=patient_01 id=text_0 passage=213]\n**Inflammatory Markers**\n[/retrieved_document]\n\n[retrieved_document rank=215 patient=patient_01 id=text_0 passage=214]\n  **Parameter**              **Results**   **Reference Range**\n  -------------------------- ------------- ---------------------\n  CRP (C-Reactive Protein)   2.5 mg/dL     \\< 0.5 mg/dL\n[/retrieved_document]\n\n[retrieved_document rank=216 patient=patient_01 id=text_0 passage=215]\n**Coagulation Panel**\n[/retrieved_document]\n\n[retrieved_document rank=217 patient=patient_01 id=text_0 passage=216]\n  **Parameter**   **Results**   **Reference Range**\n  --------------- ------------- ---------------------\n  PT Percentage   103%          70 - 120%\n  INR             1.0           N/A\n  aPTT            25 sec        26 - 37 sec\n[/retrieved_document]\n\n[retrieved_document rank=218 patient=patient_01 id=text_0 passage=217]\n**Complete Blood Count**\n[/retrieved_document]\n\n[retrieved_document rank=219 patient=patient_01 id=text_0 passage=218]\n  **Parameter**   **Results**      **Reference Range**\n  --------------- ---------------- ---------------------\n  WBC             12.71 x10\\^9/L   4.0 - 9.0 x10\\^9/L\n  RBC             2.9 x10\\^12/L    4.5 - 6.0 x10\\^12/L\n  Hemoglobin      8.1 g/dL         14 - 18 g/dL\n  Hematocrit      24.7%            40 - 48%\n  MCH             28 pg            27 - 32 pg\n  MCV             86 fL            82 - 92 fL\n  MCHC            32.8 g/dL        32 - 36 g/dL\n  Platelets       257 x10\\^9/L     150 - 450 x10\\^9/L\n[/retrieved_document]\n\n[retrieved_document rank=220 patient=patient_01 id=text_0 passage=219]\n**Differential**\n[/retrieved_document]\n\n[retrieved_document rank=221 patient=patient_01 id=text_0 passage=220]\n  **Parameter**   **Results**   **Reference Range**\n  --------------- ------------- ---------------------\n  Neutrophils     77%           40 - 70%\n  Lymphocytes     4%            25 - 40%\n  Monocytes       18%           4 - 10%\n  Eosinophils     0%            2 - 4%\n  Basophils       0%            0 - 1%\n[/retrieved_document]\n\n[retrieved_document rank=222 patient=patient_01 id=text_1 passage=0]\n**Dear colleague, **\n[/retrieved_document]\n\n[retrieved_document rank=223 patient=patient_01 id=text_1 passage=1]\nI am writing to provide a follow-up report on our mutual patient, Mrs.\nAnna Sample, born on January 1st, 1970, post her recent visit to our\nclinic on October 9th, 2017.\n[/retrieved_document]\n\nQuestion: Which therapy regime does the oncology board recommend for Mrs. Sample?\nA. 5 cycles of T-Pola-RHP\nB. 7 cycles of R-Luna-CHT\nC. 6 cycles of L-Pola-CRP\nD. 6 cycles of R-Pola-CHP\nE. 8 cycles of M-Pola-CHZ\nAnswer:"
+      }
+    ],
+    "max_tokens": 32,
+    "temperature": 0.0,
+    "seed": 42,
+    "enable_thinking": false
+  },
+  "prepared_manifest": {
+    "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/np_context_study_v8_20260727/prefill_to_depth_rag.prepared.json",
+    "sha256": "e29fd6a0536c21ada180fcc929ba5b10da6fe498693abb9bf97459f374a2e7da"
+  },
+  "instrument": {
+    "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/np_context_study_v8_20260727/driver/prefill_to_depth_rag.py",
+    "sha256": "df2736d99be379f78452ebe8cbe2f85f676e67299340284acd513feaf0452590"
+  },
+  "model": {
+    "bytes": 37801097504,
+    "dflash": "off",
+    "inode": 96242023,
+    "kv_cache": {
+      "k": "f16",
+      "v": "f16"
+    },
+    "label": "A4_35b_a3b_v8_bridge",
+    "mtime_ns": 1782411254270412235,
+    "mtp_depth": 4,
+    "path": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+    "server_spec": {
+      "draft_n_max": 4,
+      "type": "draft-mtp"
+    },
+    "sha256": "c1283d8b80c3e38b2735ddbc9766d3b3126f44d6c484be419d4e101d09a76131"
+  },
+  "rendered_prompt_sha256": "0dc711f88afc010879cefc5cb557247a4d32f9afefbed848a4119008c605aa25",
+  "rendered_prompt_tokens": 16294,
+  "target_depth_ceiling": 16384,
+  "retrieved_rows": [
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 112,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": true,
+      "row_sha256": "2b31d502a452188e9446b1d5055114486d07ff2aff0389abd1fa32e07d052da5"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 197,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": true,
+      "row_sha256": "64428b60614b43182e526683295fbdd1c71f7766e86edf7d6c00a72aada66eb2"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 0,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "dcab4369391a6d6520c21c7b486edb98cd4a627bee8cdf9a806472e0aeda6a3c"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 1,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "2478bc9b2c2d2a041a3331e9fc5f36d3d8124077e56d6f9953aa6a02368bc27f"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 2,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "d9301cfa3c02bae97c87068c31c0250d246779b6f0c85df5cafcf326a3ffcd76"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 3,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "e6be38631c382753ebeb942761d84083e5c649f143082ec2ede662787791c059"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 4,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "4c83abe1eaf16613617ea41daf80f45294c22796624c2811c9769e59c79dd075"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 5,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "97e1bcb1ead0aff1ed58d0455e3de50ba060a2b49650ea3cdec9dfcedf9bd309"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 6,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "ea7938f7a762126ef24e0464c6fe6670c6782b3e5ee37302b639abff399c96d8"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 7,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "f7c04b12030f437a01bdf171d8e422a5cc9937b849f13a83061667be0e6d50ae"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 8,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "0397739a26c35e9508d98ac39373876dbc62defb6cf6d7ffa47b8accabd9543c"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 9,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "7215d29fb531f0f028943b6d5d2cbadaf2c854c19580e09aae3f3a012420ba14"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 10,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "514254e2f7bdfb2e7d8597560e93a2d78587a0fd37ae57e03be2615d28a9f0cc"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 11,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "96882261f4e352c46f636a8b5e41774d3b294640dfc1458bdfe5d24c77728b19"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 12,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "38d370423df4ed3ed699b9ce0f0bb67e31a46abec74af126730e77bcd12106db"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 13,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "d6fa0108ced471e7c1390cad61b9502214a9407c4a8172878ab06f4d57e6f696"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 14,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "af1b6ce6eb26908c759205af4b980ac1477faaf19305605edd23b0f96ae64c9d"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 15,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "4efc477950c5432b482f2c82d8b50bcf4039f89d3a96a6f044556534e6a79312"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 16,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "f1564926777314899b5bca0fca3c4c868957554ae2f8a593fadc4496d5647f54"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 17,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "57a437947974e9b3c1b930aa2abf6b8f651517eefab2b720525d808763750837"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 18,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "41002bc35bcb50b43a99a45fb6edf2359769852e84e2da49837d6d997bdb009d"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 19,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "98325d4042a7fb2e8016bdbe01d764caa1fdf5f633346ef4770556924a0a0633"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 20,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "b3dca75ebb655e59f872cef040f0d84a2f5a239b799eb6ffa4eff816268279be"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 21,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "5d1086563c9431a224e3702aac786048487cd68dc88b123ce2a9b2528b8c5d6c"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 22,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "8951fd400d33cccaf8a89e7115acba50a5e566a6c9bf43bead8c75224906a7ac"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 23,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "ee09577cae5cf388bbbcb46295e6a2549a39a7b5b7df2f345358dc5a3383470a"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 24,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "cc9c2d0b2de8e23805a96b82499ff0646e6d905287d3692235e21aa968064810"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 25,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "4c64d533aede0f068ad6c2b0a61072b241763c209b023b9ccaaba5fe13af6a53"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 26,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "efce641d824228f790eac3e4c0573ff7b64422587ac0743474cc7e02c7538ed2"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 27,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "3ded2f2934586d9e671d6d04d98bfd060b25103ad898cb402327fd96a537bca8"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 28,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "e76f033e6364ba1d0e6b1318af6c0129f213f775fcf4b9f5ec32c97ded890b05"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 29,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "a139077125477b112cdd3ef21370819b9f3bf94cac02a7dddc67933618e47eb8"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 30,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "0b173cedce4961a87de1a53035ab84bc7887b0e9f6e389d526a7c7b35d5c551d"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 31,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "432dbf2169ab4d779c397ad358b0ada0b438afc03d661cc643b99ccc426ed543"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 32,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "d39864d76ca5c60d89eedbbd35522b7f0e9bb5ef08cae04f182a574128acda75"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 33,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "722eca4c4e9ed8a526eb0abed438b01f3806d3fa70ab8520dcad7b26995b76aa"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 34,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "7f9461dea0cbfc41f83907d159a8bb953329b4c7784e50979a0935b425c82762"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 35,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "2cc8c84171b3e8f671678feb23d1bb8329750486b34405a6ca81e7b62598959b"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 36,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "9fe85462531ac3babc4bb28cc9fec8e489898b0b38cbe76bd26709618a7a5df7"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 37,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "55434791228fd9baf07aebef1fe50081d138d0565ec15ba8b369c4855d985944"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 38,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "8e825504fb2a4b7c19bc1ef90a1108b1055c8d035a2391b75fa500facfb4f1e7"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 39,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "fcde468a82455e9f8f3cbecf07612d1cd37989715852c206a673a40419202f75"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 40,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "9e4579b99202f58d2df311582e543265cd1a02822b252770fbda50538152cab4"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 41,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "9b1ad52037f3b8a70d1d8162d038bfe48f279c790d55b552a1e5805e8f9491b1"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 42,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "b66c160026f756c1f2d97b45df68e149984957ecf78ec9adbbafaa03c31355c3"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 43,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "8c14d2b99aab46a515e175a548e169e5600ddd9f41a2ab2e17151ea44c69bc96"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 44,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "0106a5a18066a132fbd7c118364ed006af109f4582f414d2d7bacde58abcfd97"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 45,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "0ac8b45ae886e690a7891e08ad5838b214900e6c72c5897824ce34ff82f11485"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 46,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "5cac720ec40614daf1c1849b7744a5ae87e26d37c9d9ad05caebbe432f1a44f6"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 47,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "b40a28221f88d5f1e6905889361636dde0de2a0318bf9cc9a6cd5c2782674c74"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 48,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "cad18f36bea5dcfbad4cf2ea84e689f72e74612393f81dc5fbf9e5f81b6a12d1"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 49,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "46db3b2736d7ad6df34d267eb579757c186c54ec3dd0006a4dba2fe28f48599a"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 50,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "302eaa6305aeae7d96ebbab2270a388b5610f1fe501340f1bd3332501eb4b858"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 51,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "3814f5699d91f88182c6d45bac0e3c87398b520b1830b08de78c8eefadaa213b"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 52,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "b60d67361490c1f18bb7299713a8cad1109e0d8007412c02c69de1d48bd2698e"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 53,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "3a9414fac61c37eb919b4c6d3ff8339cf4994dba5e3cb7bdd6a782704cfa5218"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 54,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "4334c5dbaf0c4f6f93200349e0d24becbe52134dfb3457e5f3ceed4e9f520568"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 55,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "d70a3c3b0f1101c5b9b49e84967324f5339e572050de6caedd7ba5353c2f9c62"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 56,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "0731bbf84695c466b2ae27323d37ff6867f95335660983985e1aaa04f25cb793"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 57,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "9e8fc901de6eaa2caaa01f4cf5db06630e2f52f623013bcfc44216cd48bfb6ae"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 58,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "7103eb737c1ec0bb74465c3062185590c981a5a4d66b897a2f9209cabd8a888a"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 59,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "d1ded63ae9918517922ad37c107cd84b6db0abf2f2a81af40d70dbfb7803eb6d"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 60,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "cd316ce3a4012505eb1685e39641611e45bc2bbe3e39dd2dbe733fd4bcbeb046"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 61,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "ed5ff1f284300355ca1bbece3037756b70ded12225eb75d278ab841e1d8c3e14"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 62,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "a4e030c7ac5f5ecd80d70ec0c8e3606163a0b5c9452292c30398a1b046e667cb"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 63,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "9c3fce0af63855f098c00b4fd4d22b5b686aa88b390ebc5cf4e27bde2f469cb5"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 64,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "e92ce4d523b5ffeae2a71ea4acd71b13277a86d9440929622dc4dccba6e706fc"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 65,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "b9039fa15e21c1c24f71e19d0e06e14fb39b5d6b66641acca80609c2e05f9176"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 66,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "c5d3562351e83974ef85a9ffae6a06de8bdbadc485ac8f9185a9464baf9a06cc"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 67,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "f2377f5425dbafeab6f071741d6f714a007b4d3030ba71d96d977df28ae84b02"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 68,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "4e09ee15c3797c4a593f3ed47da23ca69c3af0f18477be4d809df51488b5b816"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 69,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "45d27f64151644883b0841e5c16e79ca91e85599b00c4054e13a2240aecbda06"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 70,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "49f7eac75857a0bef553a3835ef314a588b576fe61e8942ffc56c56cce4bd94c"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 71,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "0d3f69cfc6c9b23e40c7b5d35525ce9c80f526f751c8213749f144e889d24b3c"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 72,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "ffa81a4ccdeb02ec118885a1292d638c1e39db6b3d53d60d5cd13e73c5884344"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 73,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "4fd023cf1681977be60cc1c25fbb2524f6629324aa576457ede9a2929dbc585f"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 74,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "4b312bbc20a4e6b23eba2530945468579ec1dca1a7ae2e11cf72d9aeaeb695e4"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 75,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "2b3575423a85421025c6616816e09f4813d5ce980e47a175bdbb0aabddee371f"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 76,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "98ac5fc5f96afe3b6d41dc97330c2bc17edcd5412b5f3f13de831e2185b6542f"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 77,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "59f734af113b061f08cd58869947feab3661edef023f16124bc42d67d295257c"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 78,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "5b3dd2dcc86782ba758c0eb47246d0bad57b6e38287d0682f47860e73e587ca5"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 79,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "4f8ed8b3046c6d53d5a7999ffeddebbba250080df89de57422b8f75f304a18e2"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 80,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "17d40c206d61c36a6b130a9e4590dc9e4b181ce0c73270b9f07fe38cbbfd6188"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 81,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "1ebf6ad7d425e053d55bc8e93ffab9e6bea8c6422b697bc6b3e2f445b542a8e7"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 82,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "ff56d1ada3b42630bc0767487f114f174443d1ecd2e5ba8cefd3db17603c500b"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 83,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "a7577e8292256b3a2ddc836969f93f1beacdf4e2e691ff015a8af2c45417def3"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 84,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "a50167c3470a8591cf574c13bbaa14bd97b6d45d8585135a3ef1ab5ccf67017e"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 85,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "dde0cb42d59dfc5d3ca171e1c40cf4cb341c97ec26182b397b0f9f97e053aa9a"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 86,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "5606f31b30e77b44e7f429d286f7fabaa1c67b16a65b2dd3ea50323d82f58261"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 87,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "a578b5f8dbd415787ab7b54c06bfd6324dc16456d5b49dad93608053ce44d173"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 88,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "129b89d9aeb23a01c67f99683bc746f9dbdf2ce8dee6b6a5dac561dbc323bed2"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 89,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "86b38b7934eba27e074e7a13ad18ee1724814b22be867ff221c05a3662afe773"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 90,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "28a339674a590fddc43373e60d5d5dd444b5fa926ab6997ceda2d9e035bf0837"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 91,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "712519e74b112c31ce5ab629b4185bad4e90431dabf90f84e9fdaff091a5b142"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 92,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "2822d422d0d74c714db20e3ae99f059182193893aeb0e176bd9b8f83d619ff28"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 93,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "53fe24d46304ee26f99a68c792f2c385b5261bdb60ae9d4f94795cf1b546162c"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 94,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "23200dc412411434bf42946c407ef94b7eb949fe43bb769679cfe53855e316ab"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 95,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "3ee9f008c00dfca9a478f623dfc4682a76fba3d249d2ff38756b88edbd31bb19"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 96,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "d6a1949546f03f0b6bb32f63dc4ba2084f9d13a7126d2976e421c46238163f05"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 97,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "29ae29fef013b998db0e5d96a908c9b403c37602e27e589348d93e62e9fad1ca"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 98,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "723118c49382ad0e32c1ce328327d573459d43507332ebd84546334dec90f80e"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 99,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "0f5260668e9ca12c43af3a1dbfeb9f5e7c4228be641d747c150a984ffeef891f"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 100,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "23c58916bad549804b1a1b0db2bf86f4eaeaa8c9dfce8d9be15cfaaa9398a064"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 101,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "4689a2eedad93f4510e507fd0e5eb69128b48e8a8bb025e5dcac274b85c0561e"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 102,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "dea962419e9a1136c19788ac72ff1f698f3f69337b0ec24e241ebf7b2a622bc3"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 103,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "9e9ca5748acd111c8e5ece659224ede1fc6cff5a5fcb28caf01f1a3f45a84a53"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 104,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "ddcc4b6225338daa73be7706a7fa5349f85bc4a53fb9d20e99bfe5b4b693bce2"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 105,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "32f8c973d5bc53797e8045f1988b362cb020706cf4264dabc8c0463a1c7f18ae"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 106,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "da5ab551653a5b45ec14fa0486fdc88ccbe787dec498c628ff72086f3e9bf04f"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 107,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "21af5639f0466a5468d10722fb1283d1e41173045e85f6960b125b3a78e1b13f"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 108,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "8dc3cc4132a928b4301c84bebedc8d9e68c34a56c57a807bc8ed5025dd69fa3e"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 109,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "5341fed6da7b0d50c2f29effeb2173a89f309f27177547eb6689da97dbbd3f27"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 110,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "4fcfd9d7d6af5cb01b4b975eac94eed7ce07563575e45e05b99287344dea3788"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 111,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "77f04cf52d65d99115623d66391bcab0da9a8edc128e552647269d8b3e856c6e"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 113,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "bed72e25c9ddb9c65faf8a99b1764352f399cf8898cdc7475b5506048eb0fcb8"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 114,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "7fa4e5112e4367228dea33edb4ed28d0b0c56acdc2290aa64dcb69502832e6ac"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 115,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "04981b96f84a18328ab183c9ae05c490c8d5c140f53536b700e066b8017495b3"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 116,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "c7694605578b96ea59c847670cde5ff4c9116755556160cabf13554e98405137"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 117,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "a16947ee3e415731d3c9ddc938e2e5d4dc94bcefc78e42d623b7b1f7a58782e1"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 118,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "eeb71a2eeee38c78ee7e848730a1f558e4907e3373273ac39f6ba4598c497945"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 119,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "5b2baba0768a65c1751297cbc5a80135035be53b0d99501f192a2841c56c511c"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 120,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "ee46c9a6074889b8ef593b97fba3fc4bd0d0c160a003359ceb98c9782f2d1b30"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 121,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "3372c6a114d1bc5222d1e41b7efab77247e95b4b6c9c769cc0ed9b08c11c4045"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 122,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "4afb096881e113e6ec689bcb876b01b2bb1aefa7bf47545798a2ec3eb1bb2c2a"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 123,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "3a0e75298f78c730769bf32e3ac770a2792983b635e1a02609ef9e8d69aa3504"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 124,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "e8a3769fe73a61695885827800b41a7fcc4a90c3c1a72ba4c5061a249438ef3b"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 125,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "1f68ba29e98382bfb19667aab8e0c589496d345ab0c9d5bd8cffba787b3411ac"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 126,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "1a43bd3c02e6dec1dede983c85a7982c0fd2ae9e165c83d4433d1513c303aa0b"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 127,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "42401582ea572f18c1357a07aee288fe49904312702af70172a7f306d5c7b64b"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 128,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "b302c722ae8e8f63c847be8c6d060d57d8507b472f925b4af44d09a469d2b2fe"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 129,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "7daaec836c7ff8a4849e57eff9c50e5ad362d03ce13959689e7f95fc3faae121"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 130,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "b7b6e1a69ccb35acaa7d91515e380b82cedfd649416d5eb75f88f3be77f53252"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 131,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "9b939c5c34070cef7cf452ceeee58f8d79e30c82a6d072ac6f4c9cfe7fc9059e"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 132,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "4efe0e69d728dbac77def6a2cc97767b75d22c93f57d832c94c3be2cc178273e"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 133,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "6c9697aaf8546b0675b1d5cdc350cc9db73a55874833ea117b6aa2fac6111ebe"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 134,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "e40d2278e12780b6d864febba5d86b77743ce31e0d7618a28da14805822ad0c4"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 135,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "866470bc5ada1fc64319da2963c80a3262f592257e4078c350f4078d89e3763d"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 136,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "2f063790748fa6e3f97c3c3ee0d21b192ecb5ead6a926b1b34806edfe308476f"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 137,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "1aab57e52318bdf5c05760d642e5ab55981274f27bb0a856f33e3f01b120e7d7"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 138,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "2529a473a9157b865cb4bf4ce4342281d82ad054534e5cff9afc2b1b277f81de"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 139,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "50bd7d3df769f16b6011cc769a6308b0e406d0b9a49dbbbcf8db2f9998857d1b"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 140,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "a6340fff0427c8db74175739d54678b2eb65a02cb1d5e48f58360658561af438"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 141,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "56c836466c817a8e86a4e12b1de72d33e3777b5f50a1edebfcd02aaa1942cdcd"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 142,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "ecf28e7fb43441c76aac9916563e72928d1783845013808758c834fba9afb3b2"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 143,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "382bf91766318acd4abae6b9a95e4aa6ba63fad094aab7bc6e4e1963f22c3f3a"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 144,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "73bf4d1999fe0be8a6724095908d9d65018bece61732970542f6bfc605e2c291"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 145,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "3b47475e8d7e4ec65a831ae206dffda8dcd0677d1702524b19e8d81fb93301f1"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 146,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "d80a65224ddf47a11b45e7c4362a34ed2a8ceb5a1d9b18283c909f4a07cea52a"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 147,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "2115e332c3cb7fef28ab54bf118f5f55ff32f0254ffb462df6cc249f02c4c83c"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 148,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "5d1ca5e2ae7399d035bfc6e543a2e8186928505c20f533f0ee66e1aa0549ba8a"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 149,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "d2e9fddc8c5059afaba63b33cfc27dd084977ee81341744e6452f8c618d29d27"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 150,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "077a891b687f9983628b744e6e00670d996322afabdb0429d7abc16db0690c8d"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 151,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "3c51342248e330c29309effb20f282ff83705f22ef45795b5681e84a3c39998c"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 152,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "9f931c47b168ea462a13c91e065a7c59d8d266eaa00d0d0ebbee90f78e5446e8"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 153,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "e6c9092f078ecb00f49e087981c600d3988b9dd65db2ea570a42a6485acc5189"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 154,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "d1eb0957408697100127955fdb2204256cffd1ffed70d66cd625f0ab44cb0599"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 155,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "32c7ca5c777a9cbea138826657b64e48e5e54c63c119dcb82cd4e1d066db22f2"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 156,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "fdbe3a67d10ce0de7870b8632fdaee571511c69bcc386fddf7085568c08a34c3"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 157,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "5bfc2390e691a11422cf2fe651c959a47b5542078c4fb678cf477b7369c40de3"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 158,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "172e68faf6222f69fcc4f9744ae0413de6832cf3ead25136accfe42bdf6836bd"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 159,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "c1a89f2fc40133c0424ed67b23e1f0a1d85f4408efbed000165e635b29337495"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 160,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "b74f3105c1215cc3f88911c168c47171d046751f567146b3efb690794c74e64b"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 161,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "02f964c818d7d5e997ef07d2fa066f4a6c01377f0be0a75cc66998689c077c81"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 162,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "f94f88b08cd9ad0c513634b2ed8796323bbd067d3939e6d82e15bb4a749c5eee"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 163,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "8f2835cc844abef4086771d12d5a862bc778eed3d8ebc38f48f9abbf17dc96dd"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 164,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "6c5a2751ba4658d3e33b99b4369cd64aece61caee8c41f95d24047bfe810a64b"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 165,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "4ff39103826b6406902e31191390d7335f6b332f89118e21fd81a31a4c971adc"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 166,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "86f53374e014f13f738e2a96599ae730891b91634a26b32865abacb889e3f2a8"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 167,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "19db4f1513ba26923e8ff220e4031192dda569909bfea01d33cb6a46c3535e8e"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 168,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "5f504988769aa1656e6fef06029c0223dd37862e09426d6f641ca006776350c5"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 169,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "eab7a16f99eadb77ecd412f398f4376447c6451215aff78b24bfc4215223e8c5"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 170,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "2722beee602f081213ec6feb15328f8864e8e1d810238fa655e2c59fe6894310"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 171,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "fcc2213a5f7eccc02038c3c6e089fc412d8944251093886824f72ed21baadf41"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 172,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "d40598ba85181789eb09e504e6e9cd379fcc400282f8b2d22a11d48a8a0e725f"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 173,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "a81bda4a91fbaed97e228a1f64e255b5026cc76893b90647db0dee8f1877f467"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 174,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "2dd2b0486681189e055f6fe65e1771028026bd28ed5361f8e8743503666df4f1"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 175,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "ffc212a05e0d71829b913d128706d54da88914f123da8614348c5ed6257a65af"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 176,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "6b139c0b33efae6e1012b52b1860327d9460107f08d5bdec103770c20b91e4c3"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 177,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "932ca045cc48dd531a8669d29d57f8480b1ff82829f395df85ce88aa73486a28"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 178,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "1210f75253c282d99c2627429fba463ace9dadcbb1000674b1763e287d267414"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 179,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "9da0e5183e0bda06eca0c672d919470deb4768b1d3e11a3536d6fb503e52a44a"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 180,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "6cd11347bfe44892292875e1c1beef164d8d91bdb98f7cfb8527441fdf17d2da"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 181,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "c7b2c40dbb7f0de57c072780ba846baf8428affa1147a2766371686ded90f275"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 182,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "46414345bf537a5f44a857e25ce49d8fb78b5693c29067f543337fa6c5798220"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 183,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "57df4790ca44285d93872b67d197e1283562b0ee1e9967d8ae0fc0b248c2ddaf"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 184,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "cf6bbfde895f0eb3453e15083e7b2d6d0050f39cad625ed519890e30cc02b8ca"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 185,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "6d299428b229f8875171731f02f343d6f344fa653b7ead5e0cf0d2bf7c3bcdce"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 186,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "643988b551ab569a53766333a7ef6798c006bb1e0b82105408b1e8bf6abb9088"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 187,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "f37fffb6c472a725f80dbcb703de4237954b2a0022000fd5f8a11942d7b9da87"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 188,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "67ce8ff03a340972e8ce6c3a43ac7a1796bfb5c3e76bad6b437e892de2fcc878"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 189,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "58190cd1c4384c99a57f999a0d22e767c0de31fb04ddf3ba282377e121b0fe30"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 190,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "704b51f471d5a7475b120505b83d40de6566cc79598612780a71f18698348ed0"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 191,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "0cb14a049343bd3054db3cb1b74d13f929e413b8cbcf2fc679eed43ae62676c1"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 192,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "727395529e91a99df4a74882f6cdef39de3eea72948a56826f1e792ed7649b70"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 193,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "8f68449c9d4ec3be2f18aa963ed94297a939cd135fb3a514052b8cacda9ed4d1"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 194,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "0f0f37a6574facfab34e083c41dcef4437e611a7d3aea534552c398d5afd2fbb"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 195,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "464afc3b54d20865b11b44e637f84aa081cd672e49d30205b4476cebf00dacc7"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 196,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "dbb76732479307868f8c9139b9240ab2b48b49e4153b5b73315dff2fa15be60f"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 198,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "130eacacaaa60c2741caff46215e3667bea61405999fad6c8feafb892d90f368"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 199,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "5f1ec057942d76f9a4bb32aeedb8a05f1cf407ea0dd9f3b7b0f0101da10bc579"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 200,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "14f9c82c54d656289ab45f89535e836b38943ae3fb722203d768dd6cd35a715c"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 201,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "1e89ed19669ba2b2bbfcc846a54e856acb1a57a6fdf18bd9fdf3c71c2e51b81f"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 202,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "0548b5fb6fd19a5e3c41614a7f78b86c07f53fba50671d0cef197f2321d25ad3"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 203,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "4dae6f21e41fc7b474c3499b19731e75a9af0ff3a1396862fe948df6d62d2e70"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 204,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "7cc9d1d06a4e1fea744d542832136aa52528f15bf669b28a0bdd89eaef3a1e47"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 205,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "194869390fab95a262402e61bcdc62a205b2620baa92d744e734ff9b5785ba0f"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 206,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "56a2ffec55dc10bfb0e1905423ffc195095d5ce7465a22f29ca5300b2505476d"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 207,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "cb7c5dde95f19262ed497031e43b914f1a7dd892b033235837cefa31996ae2a1"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 208,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "64d25cbc25ae146f1fdfe6ca2f2e859f75278b7fd333c433f508801e4f3e1ca9"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 209,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "11e711785ff7b8a84509eed538443e9038ac7215c19fb4595a0dbfb815b1edbd"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 210,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "dc6a8d0d310dfaee493acebafc9b80da130e2ef118362854a152088437100466"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 211,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "6aa615892de9c095516ad38ceaa4133587e51a6600b906a6fb6f654ae20698c0"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 212,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "cf2274c653b5443ad3d8e58145c57533a5b82930e8de40490867b4925a0677eb"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 213,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "6ea309145410cc3b77003b0a811a582742eae4c0c1ad072292fdc681a4152f53"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 214,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "2fd5ba968f2979ffab739d75c381d8d7c6fbd5b6c7966569e84efec63c99f7a6"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 215,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "7f09104966a86d914433ed88aced7385f1fa60356d0b534444d31b1fd5d47d90"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 216,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "33038dc1fa1e830979a6e60e9635d316f0d402a8a38d11e0724623b65166ce65"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 217,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "3fdca66a91dd709af5292b6f15262a69ca7ab591cd7704a0433c1643e68de214"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 218,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "577d7eedbbc489c37e825f301f7ae1274d7844e8b3b8070a1c4acb190c7045ec"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 219,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "2fcdc9358da91857444635c12032dfd6cb4636fc2242c0d863e90422c6eaffe5"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_0",
+      "passage_index": 220,
+      "source_document_sha256": "7bf5345e8b4ffd96b8024f823e46678c6e63af34717463bcfd2043c21cf1bde0",
+      "contains_pinned_answer": false,
+      "row_sha256": "818bdeb5f147b405cdadf6292ade065949bf47760fbb9ae526edf222f88a42a8"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_1",
+      "passage_index": 0,
+      "source_document_sha256": "8e200ec1c4190c515e498e709190399f21bad7ca26356e4b7539b1c6957c2b59",
+      "contains_pinned_answer": false,
+      "row_sha256": "a4bc20df8c0b1dfe3bbd4966bbcd042aaa487a5644d32f25200a6148a25e6f97"
+    },
+    {
+      "patient_id": "patient_01",
+      "document_id": "text_1",
+      "passage_index": 1,
+      "source_document_sha256": "8e200ec1c4190c515e498e709190399f21bad7ca26356e4b7539b1c6957c2b59",
+      "contains_pinned_answer": false,
+      "row_sha256": "d96a7a57d4b1bfa53a56007689e668da30b180da3134ea21610a23158fe4625d"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+0.00.040.724 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.041.111 W srv  llama_server: -----------------
+0.00.041.112 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.041.112 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.041.113 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.041.113 W srv  llama_server: -----------------
+0.00.042.336 I srv    load_model: loading model '/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/Laguna-S-2.1-UD-IQ2_M.gguf'
+0.00.368.718 W common_fit_params: failed to fit params to free device memory: n_gpu_layers already set by user to -2, abort
+0.00.397.377 W load_arch_hparams: missing sliding_window_pattern; using verified legacy Laguna-S.2 period-4 dense-first fallback
+0.00.435.112 W load: special_eos_id is not in special_eog_ids - the tokenizer config may be incorrect
+0.00.435.115 W load: special_eot_id is not in special_eog_ids - the tokenizer config may be incorrect
+0.04.112.152 E ggml_backend_cuda_buffer_type_alloc_buffer: allocating 11520.00 MiB on device 0: cudaMalloc failed: out of memory
+0.04.112.157 E alloc_tensor_range: failed to allocate ROCm0 buffer of size 12079595520
+0.04.112.621 E llama_init_from_model: failed to initialize the context: failed to allocate buffer for kv cache
+0.04.112.626 E cmn  common_init_: failed to create context with model '/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/Laguna-S-2.1-UD-IQ2_M.gguf'
+0.04.112.635 E cmn  common_init_: failed to create context with model '/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/Laguna-S-2.1-UD-IQ2_M.gguf'

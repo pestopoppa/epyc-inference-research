@@ -1,0 +1,74 @@
+{
+  "target_depth_ceiling": 2048,
+  "rendered_depth": 1928,
+  "np": 1,
+  "prepared_manifest": {
+    "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/np_context_study_v8_20260727/prefill_to_depth_rag.prepared.json",
+    "sha256": "e29fd6a0536c21ada180fcc929ba5b10da6fe498693abb9bf97459f374a2e7da"
+  },
+  "instrument": {
+    "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/np_context_study_v8_20260727/driver/prefill_to_depth_rag.py",
+    "sha256": "df2736d99be379f78452ebe8cbe2f85f676e67299340284acd513feaf0452590"
+  },
+  "model": {
+    "bytes": 29787701792,
+    "dflash": "off",
+    "inode": 100403411,
+    "kv_cache": {
+      "k": "f16",
+      "v": "f16"
+    },
+    "label": "A3_ff_fable_non_mtp_q8",
+    "mtime_ns": 1785073017838372605,
+    "mtp_depth": 0,
+    "path": "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-Q8_0.gguf",
+    "server_spec": {
+      "draft_n_max": 0,
+      "type": "none"
+    },
+    "sha256": "2fff409d4a22e0cb11fb0ecfafed1c669b9808f7e6bc499036c6e85297f14f4d"
+  },
+  "rows": [
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 30.70427940894262,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\nEvidence: \"Oncology board decision: 6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785217554,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-oun3x8RTajFBmiYKe9rFtiqIF08yBnEM",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 2145.882,
+          "prompt_per_token_ms": 1.1130093360995852,
+          "prompt_per_second": 898.4650600545604,
+          "predicted_n": 32,
+          "predicted_ms": 1042.2,
+          "predicted_per_token_ms": 32.56875,
+          "predicted_per_second": 30.70427940894262
+        }
+      }
+    }
+  ]
+}

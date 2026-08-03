@@ -1,0 +1,60 @@
+0.00.040.011 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.040.369 W srv  llama_server: -----------------
+0.00.040.370 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.040.370 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.040.371 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.040.371 W srv  llama_server: -----------------
+0.00.041.586 I srv    load_model: loading model '/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/Laguna-S-2.1-UD-IQ2_M.gguf'
+0.00.383.661 W load_arch_hparams: missing sliding_window_pattern; using verified legacy Laguna-S.2 period-4 dense-first fallback
+0.00.420.674 W load: special_eos_id is not in special_eog_ids - the tokenizer config may be incorrect
+0.00.420.676 W load: special_eot_id is not in special_eog_ids - the tokenizer config may be incorrect
+0.04.146.175 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 16384, kv_unified = 'false'
+0.04.154.153 I srv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+0.04.154.201 I srv  llama_server: model loaded
+0.04.154.207 I srv  llama_server: listening on http://127.0.0.1:18072
+0.08.770.348 I slot get_availabl: id  3 | task -1 | selected slot by LRU, t_last = -1
+0.08.770.394 I slot launch_slot_: id  3 | task 6 | processing task, is_child = 0
+0.08.770.396 I slot get_availabl: id  2 | task -1 | selected slot by LRU, t_last = -1
+0.08.770.402 I slot launch_slot_: id  2 | task 5 | processing task, is_child = 0
+0.08.770.404 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = -1
+0.08.770.409 I slot launch_slot_: id  1 | task 7 | processing task, is_child = 0
+0.08.887.145 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.08.887.189 I slot launch_slot_: id  0 | task 8 | processing task, is_child = 0
+0.16.686.301 I slot print_timing: id  1 | task 7 | n_decoded =    100, tg =  16.93 t/s, tg_3s =  16.93 t/s
+0.16.686.368 I slot print_timing: id  2 | task 5 | n_decoded =    100, tg =  16.93 t/s, tg_3s =  16.93 t/s
+0.16.686.428 I slot print_timing: id  3 | task 6 | n_decoded =    100, tg =  16.93 t/s, tg_3s =  16.93 t/s
+0.16.745.166 I slot print_timing: id  0 | task 8 | n_decoded =    100, tg =  17.10 t/s, tg_3s =  17.10 t/s
+0.19.704.408 I slot print_timing: id  1 | task 7 | n_decoded =    151, tg =  16.92 t/s, tg_3s =  16.90 t/s
+0.19.704.476 I slot print_timing: id  2 | task 5 | n_decoded =    151, tg =  16.92 t/s, tg_3s =  16.90 t/s
+0.19.704.542 I slot print_timing: id  3 | task 6 | n_decoded =    151, tg =  16.92 t/s, tg_3s =  16.90 t/s
+0.19.763.199 I slot print_timing: id  0 | task 8 | n_decoded =    151, tg =  17.03 t/s, tg_3s =  16.90 t/s
+0.22.715.050 I slot print_timing: id  1 | task 7 | n_decoded =    202, tg =  16.92 t/s, tg_3s =  16.94 t/s
+0.22.715.118 I slot print_timing: id  2 | task 5 | n_decoded =    202, tg =  16.92 t/s, tg_3s =  16.94 t/s
+0.22.715.181 I slot print_timing: id  3 | task 6 | n_decoded =    202, tg =  16.92 t/s, tg_3s =  16.94 t/s
+0.22.773.899 I slot print_timing: id  0 | task 8 | n_decoded =    202, tg =  17.01 t/s, tg_3s =  16.94 t/s
+0.25.386.137 I slot print_timing: id  0 | task 8 | prompt eval time =    2010.08 ms /   279 tokens (    7.20 ms per token,   138.80 tokens per second)
+0.25.386.141 I slot print_timing: id  0 | task 8 |        eval time =   14488.84 ms /   246 tokens (   58.90 ms per token,    16.98 tokens per second)
+0.25.386.142 I slot print_timing: id  0 | task 8 |       total time =   16498.92 ms /   525 tokens
+0.25.386.148 I slot print_timing: id  0 | task 8 |    graphs reused =        244
+0.25.386.208 I slot      release: id  0 | task 8 | stop processing: n_tokens = 524, truncated = 0
+0.25.722.690 I slot print_timing: id  1 | task 7 | n_decoded =    255, tg =  17.06 t/s, tg_3s =  17.62 t/s
+0.25.722.771 I slot print_timing: id  2 | task 5 | n_decoded =    255, tg =  17.06 t/s, tg_3s =  17.62 t/s
+0.25.722.854 I slot print_timing: id  3 | task 6 | n_decoded =    255, tg =  17.07 t/s, tg_3s =  17.62 t/s
+0.28.305.491 I slot print_timing: id  3 | task 6 | prompt eval time =    2009.55 ms /   127 tokens (   15.82 ms per token,    63.20 tokens per second)
+0.28.305.496 I slot print_timing: id  3 | task 6 |        eval time =   17525.47 ms /   319 tokens (   54.94 ms per token,    18.20 tokens per second)
+0.28.305.497 I slot print_timing: id  3 | task 6 |       total time =   19535.02 ms /   446 tokens
+0.28.305.499 I slot print_timing: id  3 | task 6 |    graphs reused =        314
+0.28.305.539 I slot      release: id  3 | task 6 | stop processing: n_tokens = 445, truncated = 0
+0.28.736.421 I slot print_timing: id  1 | task 7 | n_decoded =    333, tg =  18.54 t/s, tg_3s =  25.88 t/s
+0.28.736.509 I slot print_timing: id  2 | task 5 | n_decoded =    333, tg =  18.54 t/s, tg_3s =  25.88 t/s
+0.29.753.563 I slot print_timing: id  1 | task 7 | prompt eval time =    2008.93 ms /   208 tokens (    9.66 ms per token,   103.54 tokens per second)
+0.29.753.566 I slot print_timing: id  1 | task 7 |        eval time =   18974.20 ms /   366 tokens (   51.84 ms per token,    19.29 tokens per second)
+0.29.753.567 I slot print_timing: id  1 | task 7 |       total time =   20983.13 ms /   574 tokens
+0.29.753.568 I slot print_timing: id  1 | task 7 |    graphs reused =        360
+0.29.753.605 I slot      release: id  1 | task 7 | stop processing: n_tokens = 573, truncated = 0
+0.31.001.074 I slot print_timing: id  2 | task 5 | prompt eval time =    2009.25 ms /   136 tokens (   14.77 ms per token,    67.69 tokens per second)
+0.31.001.077 I slot print_timing: id  2 | task 5 |        eval time =   20221.37 ms /   424 tokens (   47.69 ms per token,    20.97 tokens per second)
+0.31.001.078 I slot print_timing: id  2 | task 5 |       total time =   22230.62 ms /   560 tokens
+0.31.001.079 I slot print_timing: id  2 | task 5 |    graphs reused =        416
+0.31.001.110 I slot      release: id  2 | task 5 | stop processing: n_tokens = 559, truncated = 0
+0.31.051.028 I srv    operator(): operator(): cleaning up before exit...

@@ -1,0 +1,1 @@
+/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf -np 1 -c 16384 -t 8 -tb 8 -b 2048 -ub 2048 -ctk f16 -ctv f16 --spec-type draft-mtp --spec-draft-n-max 4 

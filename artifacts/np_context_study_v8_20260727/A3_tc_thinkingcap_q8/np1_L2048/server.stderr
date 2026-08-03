@@ -1,0 +1,34 @@
+0.00.075.241 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.076.018 W srv  llama_server: -----------------
+0.00.076.020 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.076.020 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.076.020 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.076.021 W srv  llama_server: -----------------
+0.00.077.332 I srv    load_model: loading model '/mnt/raid0/llm/models/ThinkingCap-Qwen3.6-27B-GGUF/ThinkingCap-Qwen3.6-27B-Q8_0.gguf'
+0.06.218.355 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 2048, kv_unified = 'false'
+0.06.219.039 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.06.265.497 I srv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+0.06.265.562 I srv  llama_server: model loaded
+0.06.265.569 I srv  llama_server: listening on http://127.0.0.1:18072
+0.10.084.291 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.10.084.350 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.13.602.921 I slot print_timing: id  0 | task 0 | n_decoded =    153, tg =  50.74 t/s, tg_3s =  50.74 t/s
+0.16.606.722 I slot print_timing: id  0 | task 0 | n_decoded =    285, tg =  47.35 t/s, tg_3s =  43.94 t/s
+0.19.610.462 I slot print_timing: id  0 | task 0 | n_decoded =    422, tg =  46.77 t/s, tg_3s =  45.61 t/s
+0.22.645.826 I slot print_timing: id  0 | task 0 | n_decoded =    570, tg =  47.27 t/s, tg_3s =  48.76 t/s
+0.25.667.459 I slot print_timing: id  0 | task 0 | n_decoded =    716, tg =  47.48 t/s, tg_3s =  48.32 t/s
+0.28.690.699 I slot print_timing: id  0 | task 0 | n_decoded =    818, tg =  45.19 t/s, tg_3s =  33.74 t/s
+0.31.756.745 I slot print_timing: id  0 | task 0 | n_decoded =    924, tg =  43.65 t/s, tg_3s =  34.57 t/s
+0.34.780.651 I slot print_timing: id  0 | task 0 | n_decoded =   1056, tg =  43.65 t/s, tg_3s =  43.65 t/s
+0.37.788.733 I slot print_timing: id  0 | task 0 | n_decoded =   1191, tg =  43.78 t/s, tg_3s =  44.88 t/s
+0.40.812.427 I slot print_timing: id  0 | task 0 | n_decoded =   1331, tg =  44.04 t/s, tg_3s =  46.30 t/s
+0.43.817.177 I slot print_timing: id  0 | task 0 | n_decoded =   1450, tg =  43.64 t/s, tg_3s =  39.60 t/s
+0.46.843.888 I slot print_timing: id  0 | task 0 | n_decoded =   1560, tg =  43.03 t/s, tg_3s =  36.34 t/s
+0.49.847.121 I slot print_timing: id  0 | task 0 | n_decoded =   1670, tg =  42.54 t/s, tg_3s =  36.63 t/s
+0.52.553.072 I slot print_timing: id  0 | task 0 | prompt eval time =     502.94 ms /   260 tokens (    1.93 ms per token,   516.96 tokens per second)
+0.52.553.077 I slot print_timing: id  0 | task 0 |        eval time =   41965.73 ms /  1785 tokens (   23.51 ms per token,    42.53 tokens per second)
+0.52.553.078 I slot print_timing: id  0 | task 0 |       total time =   42468.67 ms /  2045 tokens
+0.52.553.103 I slot print_timing: id  0 | task 0 |    graphs reused =        535
+0.52.553.132 I slot print_timing: id  0 | task 0 | draft acceptance = 0.57453 ( 1245 accepted /  2167 generated), mean len =  3.30
+0.52.553.381 I slot      release: id  0 | task 0 | stop processing: n_tokens = 2047, truncated = 1
+0.54.422.630 I srv    operator(): operator(): cleaning up before exit...

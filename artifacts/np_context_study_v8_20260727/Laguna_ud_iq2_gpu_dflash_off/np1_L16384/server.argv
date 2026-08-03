@@ -1,0 +1,1 @@
+env GGML_IQK=1 LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp/build-hip/bin taskset -c 184-191 /mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Laguna-S-2.1-GGUF/Laguna-S-2.1-UD-IQ2_M.gguf --host 127.0.0.1 --port 18072 --metrics --slots --jinja --device ROCm0 -ngl all -fa on -np 1 -c 16384 -t 8 -tb 8 -b 2048 -ub 2048 -ctk f16 -ctv f16 --reasoning off 

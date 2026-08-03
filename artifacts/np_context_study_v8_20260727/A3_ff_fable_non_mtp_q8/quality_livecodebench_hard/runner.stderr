@@ -1,0 +1,9 @@
+[runner] Waiting for server at http://127.0.0.1:18072...
+[runner] Server healthy
+
+[runner] Evaluating livecodebench_hard (n=53, seed=42)...
+  [runner] livecodebench_hard: pass 1/1 25/53 (11/25 correct so far)
+  [runner] livecodebench_hard: pass 1/1 50/53 (23/50 correct so far)
+[runner] livecodebench_hard: 47.2% (25/53)
+
+[runner] Results written to /mnt/raid0/llm/epyc-inference-research/artifacts/np_context_study_v8_20260727/A3_ff_fable_non_mtp_q8/quality_livecodebench_hard/summary.json

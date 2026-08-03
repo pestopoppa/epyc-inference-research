@@ -1,0 +1,792 @@
+{
+  "expected": "184-191",
+  "pid": 1645553,
+  "rows": [
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645553
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645561
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645562
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645563
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645565
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645566
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645567
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645568
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645569
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645570
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645571
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645572
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645573
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645574
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645575
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645576
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645577
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645578
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645579
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645580
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645581
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645582
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645583
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645584
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645585
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645586
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645587
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645588
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645589
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645590
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645591
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645592
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645593
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645594
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645595
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645596
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645597
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645598
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645599
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645600
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645601
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645602
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645603
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645604
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645605
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645606
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645607
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645608
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645609
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645610
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645611
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645612
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645613
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645614
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645615
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645616
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645617
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645618
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645619
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645620
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645621
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645622
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645623
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645624
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645625
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645626
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645627
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645628
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645629
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645630
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645631
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645632
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645633
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645634
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645635
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645636
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645637
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645638
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645639
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645640
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645641
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645642
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645643
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645644
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645645
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645646
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645647
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645648
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645649
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645650
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645651
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645652
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645653
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645654
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645655
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645656
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645657
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645658
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645659
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645660
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645661
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645662
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645663
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645664
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645665
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645666
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645667
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645668
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645669
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645670
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645671
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645672
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645673
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645674
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645675
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645676
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645677
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645678
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645679
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645680
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645681
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645682
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645683
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645684
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645685
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645686
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645687
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645688
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645689
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645690
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645691
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645692
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645693
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645694
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645695
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645696
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645697
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645698
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645699
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645700
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645701
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645702
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645703
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645704
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645705
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645706
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645707
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645708
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645709
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645710
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645711
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645712
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645713
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645714
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645715
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645716
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645717
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645718
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645719
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645720
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645721
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645722
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645723
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645724
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645725
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645726
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645727
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645728
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645729
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645730
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645731
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645732
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645733
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645734
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645735
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645736
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645737
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645738
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645739
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645740
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645741
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645742
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645743
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645744
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645745
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645746
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645747
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645748
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645749
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645750
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645751
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645752
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645753
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645754
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645755
+    },
+    {
+      "cpus_allowed_list": "184-191",
+      "tid": 1645756
+    }
+  ],
+  "stable_thread_set": true,
+  "thread_count": 196
+}

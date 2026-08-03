@@ -1,0 +1,38 @@
+{
+  "schema": "np_context_controller_terminalization_repair.v1",
+  "label": "A3_tc_thinkingcap_q8",
+  "repaired_at_utc": "2026-07-27T16:31:47Z",
+  "scope": "terminal_marker_only",
+  "inference_rerun": false,
+  "controller_failure": {
+    "log": "../logs/thinkingcap-grid-resume.log",
+    "log_sha256": "798f92f0165a2bf200aa7a5deb63077bbde7e01e0aec3c74d83434bc419cf2d3",
+    "last_error": "line 243: t: command not found",
+    "disposition": "controller terminalization failure after all required inference cells completed"
+  },
+  "pre_marker_validation": {
+    "required_cells": {
+      "measured": 18,
+      "missing": 0,
+      "invalid": 0,
+      "skipped": 0,
+      "exit_code": 0
+    },
+    "swebench_oracle_capture": {
+      "result": "QUALITY_CAPTURE_VALID",
+      "exit_code": 0
+    },
+    "livecodebench_hard_capture": {
+      "result": "QUALITY_CAPTURE_VALID",
+      "exit_code": 0
+    }
+  },
+  "validator_sha256": "d91f3bfcf6ed3a5a7bc2279214492728bcdd099b1203a1bfb7edaa0cef54d208",
+  "driver_sha256": "2c08e2c685aa073a062a304880944c47b793d075f8a9d8c40633af176133404e",
+  "complete_marker_sha256": "eef46e129f699ed949aa467b79b48fafee342b483da5f91d338eb3853c34032c",
+  "post_marker_validation": {
+    "final_publishable": true,
+    "state": "terminal",
+    "exit_code": 0
+  }
+}

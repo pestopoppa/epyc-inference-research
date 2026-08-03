@@ -1,0 +1,11 @@
+instrument=canonical np_context_study_20260723 TB-6 continuation
+kernel=production-consolidated-v8 67a433bf45a8a091d83b4ea0b32ff0735fd51800
+server-load-semantics=one contiguous model block; static -np/-c requires reload per cell
+quality=SWE-oracle40 then LCB-hard53 before throughput grid
+mode=full grid=full mtp_depth=0 thinking=false
+affinity=hard cgroup-v2 cpuset 184-191 (disjoint from concurrent CPU instruments)
+grid_contract=cartesian24_v2
+prior_shape=triangular18
+new_contract=cartesian24_v2
+operator_directive=2026-07-27 cartesian full-grid expansion
+extension_containment=new_cells_use_hard_cgroup-v2_cpuset_184-191;per-cell-proofs-remain-authoritative

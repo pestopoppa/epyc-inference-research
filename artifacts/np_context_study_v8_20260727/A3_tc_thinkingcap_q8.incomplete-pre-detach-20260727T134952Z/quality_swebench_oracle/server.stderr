@@ -1,0 +1,17 @@
+0.00.082.313 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.083.169 W srv  llama_server: -----------------
+0.00.083.170 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.083.171 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.083.171 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.083.172 W srv  llama_server: -----------------
+0.00.084.601 I srv    load_model: loading model '/mnt/raid0/llm/models/ThinkingCap-Qwen3.6-27B-GGUF/ThinkingCap-Qwen3.6-27B-Q8_0.gguf'
+0.06.964.350 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 49152, kv_unified = 'false'
+0.06.965.409 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.07.048.086 I srv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+0.07.048.164 I srv  llama_server: model loaded
+0.07.048.170 I srv  llama_server: listening on http://127.0.0.1:18072
+0.07.334.495 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.07.334.692 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.13.119.386 I slot print_timing: id  0 | task 0 | n_decoded =    101, tg =  28.54 t/s, tg_3s =  28.54 t/s
+0.16.185.774 I slot print_timing: id  0 | task 0 | n_decoded =    189, tg =  28.61 t/s, tg_3s =  28.70 t/s
+0.19.246.892 I slot print_timing: id  0 | task 0 | n_decoded =    274, tg =  28.35 t/s, tg_3s =  27.77 t/s

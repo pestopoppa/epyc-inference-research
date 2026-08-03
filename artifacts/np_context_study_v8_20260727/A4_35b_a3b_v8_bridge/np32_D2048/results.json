@@ -1,0 +1,1409 @@
+{
+  "target_depth_ceiling": 2048,
+  "rendered_depth": 1928,
+  "np": 32,
+  "prepared_manifest": {
+    "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/np_context_study_v8_20260727/prefill_to_depth_rag.prepared.json",
+    "sha256": "e29fd6a0536c21ada180fcc929ba5b10da6fe498693abb9bf97459f374a2e7da"
+  },
+  "instrument": {
+    "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/np_context_study_v8_20260727/driver/prefill_to_depth_rag.py",
+    "sha256": "df2736d99be379f78452ebe8cbe2f85f676e67299340284acd513feaf0452590"
+  },
+  "model": {
+    "bytes": 37801097504,
+    "dflash": "off",
+    "inode": 96242023,
+    "kv_cache": {
+      "k": "f16",
+      "v": "f16"
+    },
+    "label": "A4_35b_a3b_v8_bridge",
+    "mtime_ns": 1782411254270412235,
+    "mtp_depth": 4,
+    "path": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+    "server_spec": {
+      "draft_n_max": 4,
+      "type": "draft-mtp"
+    },
+    "sha256": "c1283d8b80c3e38b2735ddbc9766d3b3126f44d6c484be419d4e101d09a76131"
+  },
+  "rows": [
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 9.592547549808554,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221410,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-8jSvm1z8kHiVn35mBE0cwmF6Ct1Pztw3",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3458.054,
+          "prompt_per_token_ms": 1.7935964730290457,
+          "prompt_per_second": 557.5390089339264,
+          "predicted_n": 32,
+          "predicted_ms": 3335.923,
+          "predicted_per_token_ms": 104.24759375,
+          "predicted_per_second": 9.592547549808554,
+          "draft_n": 35,
+          "draft_n_accepted": 22
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 24.98479441027687,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221410,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-A5eYRhHTakUz0m8mNPJEACjI0eFf2vdj",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 33645.543,
+          "prompt_per_token_ms": 17.451007780082985,
+          "prompt_per_second": 57.30328085357398,
+          "predicted_n": 32,
+          "predicted_ms": 1280.779,
+          "predicted_per_token_ms": 40.02434375,
+          "predicted_per_second": 24.98479441027687,
+          "draft_n": 27,
+          "draft_n_accepted": 24
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 27.06426324732254,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221410,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-i5mTWygaGjeab259TcNY9vHC5d65qCHb",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 2396.067,
+          "prompt_per_token_ms": 1.2427733402489627,
+          "prompt_per_second": 804.6519567274204,
+          "predicted_n": 32,
+          "predicted_ms": 1182.371,
+          "predicted_per_token_ms": 36.94909375,
+          "predicted_per_second": 27.06426324732254,
+          "draft_n": 39,
+          "draft_n_accepted": 21
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 21.56463561493917,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221410,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-6ep2duxbHTg4kZ0fLfHk3bQezcocdz6i",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3166.413,
+          "prompt_per_token_ms": 1.6423303941908713,
+          "prompt_per_second": 608.8908806273851,
+          "predicted_n": 32,
+          "predicted_ms": 1483.911,
+          "predicted_per_token_ms": 46.37221875,
+          "predicted_per_second": 21.56463561493917,
+          "draft_n": 35,
+          "draft_n_accepted": 22
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 3.034192600874815,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221399,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-e0UYQdiDuIF2IS3AetpngokPtTOj3oVC",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3455.386,
+          "prompt_per_token_ms": 1.7922126556016598,
+          "prompt_per_second": 557.9695003684104,
+          "predicted_n": 32,
+          "predicted_ms": 10546.463,
+          "predicted_per_token_ms": 329.57696875,
+          "predicted_per_second": 3.034192600874815,
+          "draft_n": 35,
+          "draft_n_accepted": 22
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 13.861754984817045,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221410,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-SpEBoIdZLXlU1MWcLxE9JEPJj7vAPVDM",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3437.608,
+          "prompt_per_token_ms": 1.7829917012448133,
+          "prompt_per_second": 560.8551062250262,
+          "predicted_n": 32,
+          "predicted_ms": 2308.51,
+          "predicted_per_token_ms": 72.1409375,
+          "predicted_per_second": 13.861754984817045,
+          "draft_n": 35,
+          "draft_n_accepted": 22
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 3.5622097633935748,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221409,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-eCuokbOfkiOLAsWgG8U7BRC5ubPQLc0s",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3431.384,
+          "prompt_per_token_ms": 1.7797634854771784,
+          "prompt_per_second": 561.8724106657838,
+          "predicted_n": 32,
+          "predicted_ms": 8983.188,
+          "predicted_per_token_ms": 280.724625,
+          "predicted_per_second": 3.5622097633935748,
+          "draft_n": 31,
+          "draft_n_accepted": 23
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 3.476351521278585,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221407,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-zCX0JeaGn3hfWT7d72y8mlmmx6uIjFIt",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3505.837,
+          "prompt_per_token_ms": 1.8183801867219918,
+          "prompt_per_second": 549.9400000627525,
+          "predicted_n": 32,
+          "predicted_ms": 9205.053,
+          "predicted_per_token_ms": 287.65790625,
+          "predicted_per_second": 3.476351521278585,
+          "draft_n": 31,
+          "draft_n_accepted": 23
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 4.372734633083154,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221409,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-HSfg6zOhbhYrI1TfJcyHMKbbgKebPSyo",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3328.274,
+          "prompt_per_token_ms": 1.726283195020747,
+          "prompt_per_second": 579.2792300153172,
+          "predicted_n": 32,
+          "predicted_ms": 7318.075,
+          "predicted_per_token_ms": 228.68984375,
+          "predicted_per_second": 4.372734633083154,
+          "draft_n": 31,
+          "draft_n_accepted": 23
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 3.1661390922501127,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221409,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-m5OV3IaZg4JNFZHH3a9COsYBh9IXTM4w",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3489.492,
+          "prompt_per_token_ms": 1.809902489626556,
+          "prompt_per_second": 552.5159536115858,
+          "predicted_n": 32,
+          "predicted_ms": 10106.947,
+          "predicted_per_token_ms": 315.84209375,
+          "predicted_per_second": 3.1661390922501127,
+          "draft_n": 35,
+          "draft_n_accepted": 22
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 5.653665297714064,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221410,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-8Zp7Hh1URhSLuBlogVCoucnFPh8Vs6id",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3391.253,
+          "prompt_per_token_ms": 1.7589486514522823,
+          "prompt_per_second": 568.5214285103469,
+          "predicted_n": 32,
+          "predicted_ms": 5660.045,
+          "predicted_per_token_ms": 176.87640625,
+          "predicted_per_second": 5.653665297714064,
+          "draft_n": 43,
+          "draft_n_accepted": 20
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 6.920201213500534,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221410,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-cHkYQP4nz7bVG8ioiR7LYmMU4Ou52mtK",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3466.231,
+          "prompt_per_token_ms": 1.7978376556016598,
+          "prompt_per_second": 556.2237485037783,
+          "predicted_n": 32,
+          "predicted_ms": 4624.143,
+          "predicted_per_token_ms": 144.50446875,
+          "predicted_per_second": 6.920201213500534,
+          "draft_n": 43,
+          "draft_n_accepted": 20
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 2.7479354846576753,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221401,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-NRobUnj1Dwi9UTnOG8uDKEcWlwlmT11e",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3486.758,
+          "prompt_per_token_ms": 1.8084844398340247,
+          "prompt_per_second": 552.949186608305,
+          "predicted_n": 32,
+          "predicted_ms": 11645.106,
+          "predicted_per_token_ms": 363.9095625,
+          "predicted_per_second": 2.7479354846576753,
+          "draft_n": 39,
+          "draft_n_accepted": 21
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 3.0679757975059276,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221404,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-mffrCguIj5JUeTT0xwDLxyUNwICMjrqx",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3434.303,
+          "prompt_per_token_ms": 1.781277489626556,
+          "prompt_per_second": 561.3948448928356,
+          "predicted_n": 32,
+          "predicted_ms": 10430.33,
+          "predicted_per_token_ms": 325.9478125,
+          "predicted_per_second": 3.0679757975059276,
+          "draft_n": 35,
+          "draft_n_accepted": 22
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 3.4390430690708156,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221401,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-LytY6Wh5WYZuSEUuOKmaummrG6kfFBJd",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3473.814,
+          "prompt_per_token_ms": 1.8017707468879667,
+          "prompt_per_second": 555.0095658547061,
+          "predicted_n": 32,
+          "predicted_ms": 9304.914,
+          "predicted_per_token_ms": 290.7785625,
+          "predicted_per_second": 3.4390430690708156,
+          "draft_n": 31,
+          "draft_n_accepted": 23
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 3.068702495046922,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221406,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-K77U6VO1flELULKcCsZdMmFUglgQaYpK",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3443.485,
+          "prompt_per_token_ms": 1.7860399377593361,
+          "prompt_per_second": 559.8978941392223,
+          "predicted_n": 32,
+          "predicted_ms": 10427.86,
+          "predicted_per_token_ms": 325.870625,
+          "predicted_per_second": 3.068702495046922,
+          "draft_n": 35,
+          "draft_n_accepted": 22
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 3.467924193778067,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221392,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-cc29hC0jBwxY6cN0X7TiGei0OfBOenZ7",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3004.192,
+          "prompt_per_token_ms": 1.5581908713692947,
+          "prompt_per_second": 641.7699001927972,
+          "predicted_n": 32,
+          "predicted_ms": 9227.422,
+          "predicted_per_token_ms": 288.3569375,
+          "predicted_per_second": 3.467924193778067,
+          "draft_n": 31,
+          "draft_n_accepted": 23
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 2.7243773797329993,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221398,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-dWCRdpzUt63PeVO5eERHA9vTzFrOImEU",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3317.391,
+          "prompt_per_token_ms": 1.7206384854771786,
+          "prompt_per_second": 581.1796077097936,
+          "predicted_n": 32,
+          "predicted_ms": 11745.803,
+          "predicted_per_token_ms": 367.05634375,
+          "predicted_per_second": 2.7243773797329993,
+          "draft_n": 39,
+          "draft_n_accepted": 21
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 2.8810110043816577,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221391,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-zaWYjZ4TC2hJigPcGiMwNqZgg9jq0SsO",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 2739.121,
+          "prompt_per_token_ms": 1.4207059128630706,
+          "prompt_per_second": 703.8754403328659,
+          "predicted_n": 32,
+          "predicted_ms": 11107.212,
+          "predicted_per_token_ms": 347.100375,
+          "predicted_per_second": 2.8810110043816577,
+          "draft_n": 39,
+          "draft_n_accepted": 21
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 2.7620763805613007,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221404,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-mwaFJEZtHrx1bGwtcLswfaC3StK37DWX",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3459.727,
+          "prompt_per_token_ms": 1.7944642116182572,
+          "prompt_per_second": 557.2694030482752,
+          "predicted_n": 32,
+          "predicted_ms": 11585.487,
+          "predicted_per_token_ms": 362.04646875,
+          "predicted_per_second": 2.7620763805613007,
+          "draft_n": 39,
+          "draft_n_accepted": 21
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 2.7979081439761564,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221393,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-ofkH87S8zLIingqM1pPNEQnmizUhUna4",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 2914.499,
+          "prompt_per_token_ms": 1.5116696058091286,
+          "prompt_per_second": 661.5202132510597,
+          "predicted_n": 32,
+          "predicted_ms": 11437.116,
+          "predicted_per_token_ms": 357.409875,
+          "predicted_per_second": 2.7979081439761564,
+          "draft_n": 39,
+          "draft_n_accepted": 21
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 3.7375994916864688,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221410,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-2GLnAd8uZ39XuSj4vosCwQqgsKMwoMIl",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3382.314,
+          "prompt_per_token_ms": 1.7543122406639002,
+          "prompt_per_second": 570.023954014914,
+          "predicted_n": 32,
+          "predicted_ms": 8561.645,
+          "predicted_per_token_ms": 267.55140625,
+          "predicted_per_second": 3.7375994916864688,
+          "draft_n": 39,
+          "draft_n_accepted": 21
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 2.7497945602704696,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221395,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-ABf3SOVuslJ3TneUupMgbJtXn11Lh4Hr",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3100.853,
+          "prompt_per_token_ms": 1.608326244813278,
+          "prompt_per_second": 621.7643983768337,
+          "predicted_n": 32,
+          "predicted_ms": 11637.233,
+          "predicted_per_token_ms": 363.66353125,
+          "predicted_per_second": 2.7497945602704696,
+          "draft_n": 38,
+          "draft_n_accepted": 21
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 3.386350172735606,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221387,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-m48MEjl5KkQHSbyOblzCitk9LKZeaBrL",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 1657.792,
+          "prompt_per_token_ms": 0.859850622406639,
+          "prompt_per_second": 1162.9927035478518,
+          "predicted_n": 32,
+          "predicted_ms": 9449.702,
+          "predicted_per_token_ms": 295.3031875,
+          "predicted_per_second": 3.386350172735606,
+          "draft_n": 35,
+          "draft_n_accepted": 22
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 2.4831822601459335,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221398,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-wnzqDFNVdc75FZOzixfNH5C9CozQ5mVf",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3223.44,
+          "prompt_per_token_ms": 1.671908713692946,
+          "prompt_per_second": 598.1187799369618,
+          "predicted_n": 32,
+          "predicted_ms": 12886.69,
+          "predicted_per_token_ms": 402.7090625,
+          "predicted_per_second": 2.4831822601459335,
+          "draft_n": 42,
+          "draft_n_accepted": 20
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 3.297514426367997,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221388,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-VLzOInIlAw3oww9JMk1Ymv5j4bV43Wwc",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 2568.738,
+          "prompt_per_token_ms": 1.332332987551867,
+          "prompt_per_second": 750.5631169858507,
+          "predicted_n": 32,
+          "predicted_ms": 9704.279,
+          "predicted_per_token_ms": 303.25871875,
+          "predicted_per_second": 3.297514426367997,
+          "draft_n": 35,
+          "draft_n_accepted": 22
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 3.1606982970256348,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221391,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-ALmBOiuVJ0EoeACm7RgJmNDhFcVVLHaC",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 2816.36,
+          "prompt_per_token_ms": 1.4607676348547718,
+          "prompt_per_second": 684.571574656649,
+          "predicted_n": 32,
+          "predicted_ms": 10124.345,
+          "predicted_per_token_ms": 316.38578125,
+          "predicted_per_second": 3.1606982970256348,
+          "draft_n": 35,
+          "draft_n_accepted": 22
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 5.19940700763078,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221409,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-FxZPR7HgcSWaCgLlRWXWZRiuZ8CEGr12",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3367.025,
+          "prompt_per_token_ms": 1.7463822614107885,
+          "prompt_per_second": 572.6123209658379,
+          "predicted_n": 32,
+          "predicted_ms": 6154.548,
+          "predicted_per_token_ms": 192.329625,
+          "predicted_per_second": 5.19940700763078,
+          "draft_n": 28,
+          "draft_n_accepted": 24
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 2.732516908515761,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221399,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-qO6YVMs4mgjibcJQ9Jurdt1nkckVqTUS",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3424.437,
+          "prompt_per_token_ms": 1.7761602697095435,
+          "prompt_per_second": 563.0122557372205,
+          "predicted_n": 32,
+          "predicted_ms": 11710.815,
+          "predicted_per_token_ms": 365.96296875,
+          "predicted_per_second": 2.732516908515761,
+          "draft_n": 39,
+          "draft_n_accepted": 21
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 3.058329024593744,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221401,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-dvif7ups0HlUz5aay1To5mw92LV3w55u",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3479.525,
+          "prompt_per_token_ms": 1.8047328838174275,
+          "prompt_per_second": 554.0986197828727,
+          "predicted_n": 32,
+          "predicted_ms": 10463.23,
+          "predicted_per_token_ms": 326.9759375,
+          "predicted_per_second": 3.058329024593744,
+          "draft_n": 35,
+          "draft_n_accepted": 22
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 3.075464596981508,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221407,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-NM7E89jRDl3Q9NMfCOYHNKlq3ms08vpf",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 3461.735,
+          "prompt_per_token_ms": 1.795505705394191,
+          "prompt_per_second": 556.9461556127202,
+          "predicted_n": 32,
+          "predicted_ms": 10404.932,
+          "predicted_per_token_ms": 325.154125,
+          "predicted_per_second": 3.075464596981508,
+          "draft_n": 35,
+          "draft_n_accepted": 22
+        }
+      }
+    },
+    {
+      "prompt_tokens": 1928,
+      "completion_tokens": 32,
+      "decode_tok_s": 4.3725595651926765,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221409,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1928,
+          "total_tokens": 1960,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-OJpsGVmKxfQ4g8UKTYdHFZ7oLaIBx1FX",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1928,
+          "prompt_ms": 2202.43,
+          "prompt_per_token_ms": 1.1423392116182571,
+          "prompt_per_second": 875.3967208946483,
+          "predicted_n": 32,
+          "predicted_ms": 7318.368,
+          "predicted_per_token_ms": 228.699,
+          "predicted_per_second": 4.3725595651926765,
+          "draft_n": 31,
+          "draft_n_accepted": 23
+        }
+      }
+    }
+  ]
+}

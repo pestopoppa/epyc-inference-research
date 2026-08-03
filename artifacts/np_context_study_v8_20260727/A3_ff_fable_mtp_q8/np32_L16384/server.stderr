@@ -1,0 +1,13 @@
+0.00.040.152 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.040.568 W srv  llama_server: -----------------
+0.00.040.569 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.040.569 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.040.570 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.040.570 W srv  llama_server: -----------------
+0.00.041.792 I srv    load_model: loading model '/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf'
+0.00.875.359 W common_fit_params: failed to fit params to free device memory: n_gpu_layers already set by user to -2, abort
+0.04.222.887 E ggml_backend_cuda_buffer_type_alloc_buffer: allocating 9576.00 MiB on device 0: cudaMalloc failed: out of memory
+0.04.222.892 E alloc_tensor_range: failed to allocate ROCm0 buffer of size 10041163776
+0.04.223.365 E llama_init_from_model: failed to initialize the context: failed to allocate buffer for rs cache
+0.04.223.369 E cmn  common_init_: failed to create context with model '/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf'
+0.04.223.377 E cmn  common_init_: failed to create context with model '/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf'

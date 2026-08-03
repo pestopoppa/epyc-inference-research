@@ -1,0 +1,1 @@
+/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 18072 --metrics --slots --jinja --device ROCm0 -ngl all -fa on -np 16 -c 33792 -t 8 -tb 8 -b 2048 -ub 2048 -ctk f16 -ctv f16 --reasoning off --spec-type draft-mtp --spec-draft-n-max 4

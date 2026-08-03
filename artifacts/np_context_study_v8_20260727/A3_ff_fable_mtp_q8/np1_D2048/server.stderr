@@ -1,0 +1,21 @@
+0.00.036.411 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.036.744 W srv  llama_server: -----------------
+0.00.036.745 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.036.745 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.036.746 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.036.746 W srv  llama_server: -----------------
+0.00.037.941 I srv    load_model: loading model '/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf'
+0.04.025.988 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 2304, kv_unified = 'false'
+0.04.026.113 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.04.054.166 I srv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+0.04.054.211 I srv  llama_server: model loaded
+0.04.054.216 I srv  llama_server: listening on http://127.0.0.1:18072
+0.08.598.226 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.08.598.292 I slot launch_slot_: id  0 | task 9 | processing task, is_child = 0
+0.11.901.209 I slot print_timing: id  0 | task 9 | prompt eval time =    2196.53 ms /  1928 tokens (    1.14 ms per token,   877.75 tokens per second)
+0.11.901.212 I slot print_timing: id  0 | task 9 |        eval time =    1106.35 ms /    32 tokens (   34.57 ms per token,    28.92 tokens per second)
+0.11.901.213 I slot print_timing: id  0 | task 9 |       total time =    3302.89 ms /  1960 tokens
+0.11.901.217 I slot print_timing: id  0 | task 9 |    graphs reused =         16
+0.11.901.220 I slot print_timing: id  0 | task 9 | draft acceptance = 0.93750 (   15 accepted /    16 generated), mean len =  1.94
+0.11.901.319 I slot      release: id  0 | task 9 | stop processing: n_tokens = 1959, truncated = 0
+0.11.902.502 I srv    operator(): operator(): cleaning up before exit...

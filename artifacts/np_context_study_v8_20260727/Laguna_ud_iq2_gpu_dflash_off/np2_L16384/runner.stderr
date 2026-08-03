@@ -1,0 +1,7 @@
+[runner] Waiting for server at http://127.0.0.1:18072...
+[runner] Server healthy
+
+[runner] Evaluating olympiadbench_hard (n=155, seed=42)...
+[runner] olympiadbench_hard: 50.0% (1/2)
+
+[runner] Results written to /mnt/raid0/llm/epyc-inference-research/artifacts/np_context_study_v8_20260727/Laguna_ud_iq2_gpu_dflash_off/np2_L16384/results.json

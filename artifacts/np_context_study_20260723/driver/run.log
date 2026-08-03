@@ -1,0 +1,25 @@
+=== np × L throughput surface (first pass) — A1 122B-IQ2 ===
+=== combine with existing 36864-ctx probe data: np1=58 np2=44 np4=62 (agg t/s) ===
+dead 3064015
+A1_122b_iq2 np=1 L=2048: agg=  54.7 | per-req med= 56.1 | err=0 | vram=39G
+dead 3064617
+A1_122b_iq2 np=2 L=2048: agg=  44.0 | per-req med= 22.5 | err=0 | vram=39G
+dead 3065738
+A1_122b_iq2 np=4 L=2048: agg=  63.1 | per-req med= 16.3 | err=0 | vram=40G
+dead 3068105
+A1_122b_iq2 np=8 L=2048: agg=  85.3 | per-req med= 11.1 | err=0 | vram=42G
+dead 3070417
+A1_122b_iq2 np=16 L=2048: agg=  99.9 | per-req med=  6.7 | err=0 | vram=46G
+dead 3074259
+A1_122b_iq2 np=32 L=2048: agg= 103.4 | per-req med=  3.7 | err=0 | vram=54G
+dead 3085623
+A1_122b_iq2 np=1 L=8192: agg=  52.7 | per-req med= 53.2 | err=0 | vram=39G
+dead 3087475
+A1_122b_iq2 np=2 L=8192: agg=  44.2 | per-req med= 22.8 | err=0 | vram=39G
+dead 3093442
+A1_122b_iq2 np=4 L=8192: agg=  60.9 | per-req med= 15.5 | err=0 | vram=41G
+dead 3102005
+A1_122b_iq2 np=8 L=8192: agg=  66.8 | per-req med=  9.6 | err=0 | vram=43G
+dead 3127493
+A1_122b_iq2 np=16 L=8192: agg=  86.2 | per-req med=  6.3 | err=0 | vram=49G
+=== NP-CONTEXT STUDY (first pass) COMPLETE ===

@@ -1,0 +1,15 @@
+{
+  "enable_thinking": false,
+  "max_tokens": 256,
+  "messages": [
+    {
+      "content": "State the next two integers after 98, separated by a comma and no other text.",
+      "role": "user"
+    }
+  ],
+  "seed": 42,
+  "stream": false,
+  "temperature": 0.0,
+  "top_k": 1,
+  "top_p": 1.0
+}

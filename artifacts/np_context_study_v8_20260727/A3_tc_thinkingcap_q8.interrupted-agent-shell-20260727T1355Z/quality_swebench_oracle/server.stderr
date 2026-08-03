@@ -1,0 +1,13 @@
+0.00.128.286 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.128.991 W srv  llama_server: -----------------
+0.00.128.992 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.128.992 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.128.993 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.128.993 W srv  llama_server: -----------------
+0.00.130.355 I srv    load_model: loading model '/mnt/raid0/llm/models/ThinkingCap-Qwen3.6-27B-GGUF/ThinkingCap-Qwen3.6-27B-Q8_0.gguf'
+0.09.039.103 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 49152, kv_unified = 'false'
+0.09.040.086 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.09.113.916 I srv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+0.09.113.996 I srv  llama_server: model loaded
+0.09.114.001 I srv  llama_server: listening on http://127.0.0.1:18072
+0.12.125.782 I srv    operator(): operator(): cleaning up before exit...

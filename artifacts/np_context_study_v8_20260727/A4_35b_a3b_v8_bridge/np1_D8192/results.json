@@ -1,0 +1,76 @@
+{
+  "target_depth_ceiling": 8192,
+  "rendered_depth": 8161,
+  "np": 1,
+  "prepared_manifest": {
+    "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/np_context_study_v8_20260727/prefill_to_depth_rag.prepared.json",
+    "sha256": "e29fd6a0536c21ada180fcc929ba5b10da6fe498693abb9bf97459f374a2e7da"
+  },
+  "instrument": {
+    "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/np_context_study_v8_20260727/driver/prefill_to_depth_rag.py",
+    "sha256": "df2736d99be379f78452ebe8cbe2f85f676e67299340284acd513feaf0452590"
+  },
+  "model": {
+    "bytes": 37801097504,
+    "dflash": "off",
+    "inode": 96242023,
+    "kv_cache": {
+      "k": "f16",
+      "v": "f16"
+    },
+    "label": "A4_35b_a3b_v8_bridge",
+    "mtime_ns": 1782411254270412235,
+    "mtp_depth": 4,
+    "path": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+    "server_spec": {
+      "draft_n_max": 4,
+      "type": "draft-mtp"
+    },
+    "sha256": "c1283d8b80c3e38b2735ddbc9766d3b3126f44d6c484be419d4e101d09a76131"
+  },
+  "rows": [
+    {
+      "prompt_tokens": 8161,
+      "completion_tokens": 32,
+      "decode_tok_s": 106.46296752214097,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\n\nEvidence: The oncology board decision explicitly states \"6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785221423,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 8161,
+          "total_tokens": 8193,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-rVELiBaGeWjECMMl1o2ucIwo67Z2qc1p",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 8161,
+          "prompt_ms": 3078.422,
+          "prompt_per_token_ms": 0.37721137115549563,
+          "prompt_per_second": 2651.0335490066013,
+          "predicted_n": 32,
+          "predicted_ms": 300.574,
+          "predicted_per_token_ms": 9.3929375,
+          "predicted_per_second": 106.46296752214097,
+          "draft_n": 31,
+          "draft_n_accepted": 23
+        }
+      }
+    }
+  ]
+}

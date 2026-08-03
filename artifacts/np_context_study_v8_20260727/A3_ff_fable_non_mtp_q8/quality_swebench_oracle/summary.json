@@ -1,0 +1,245 @@
+{
+  "meta": {
+    "kernel": "production-consolidated-v8",
+    "binary": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+    "models": "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-Q8_0.gguf",
+    "arm": "A3_ff_fable_non_mtp_q8_rb1024_swebench_oracle",
+    "timestamp": "2026-07-27T16:48:37.333773+00:00",
+    "elapsed_s": 984.8,
+    "n_per_suite": 40,
+    "seed": 42,
+    "stratify": false,
+    "endpoint": "chat",
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "enable_thinking": false,
+    "repeats": 1,
+    "max_tokens": 3072,
+    "questions_pinned": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/questions_swebench_oracle.json",
+    "capture_schema_version": "v7_quality_gate_capture.v4",
+    "runner_source_sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e"
+  },
+  "suites": [
+    {
+      "suite": "swebench_oracle",
+      "accuracy": 0.0,
+      "n": 40,
+      "n_questions": 40,
+      "repeats": 1,
+      "correct": 0,
+      "errors": 0,
+      "truncated": 2,
+      "per_tier": {
+        "3": {
+          "accuracy": 0.0,
+          "n": 40,
+          "correct": 0
+        }
+      },
+      "per_item": {
+        "django__django-10999": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11066": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11087": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11095": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11099": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11119": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11133": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11138": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11141": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11149": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11163": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11179": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11206": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11211": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11239": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11265": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11276": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11292": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11299": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11333": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11400": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11433": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11451": {
+          "correct": 0,
+          "n": 1
+        },
+        "django__django-11477": {
+          "correct": 0,
+          "n": 1
+        },
+        "matplotlib__matplotlib-13989": {
+          "correct": 0,
+          "n": 1
+        },
+        "matplotlib__matplotlib-14623": {
+          "correct": 0,
+          "n": 1
+        },
+        "matplotlib__matplotlib-20488": {
+          "correct": 0,
+          "n": 1
+        },
+        "matplotlib__matplotlib-20676": {
+          "correct": 0,
+          "n": 1
+        },
+        "scikit-learn__scikit-learn-10297": {
+          "correct": 0,
+          "n": 1
+        },
+        "scikit-learn__scikit-learn-10844": {
+          "correct": 0,
+          "n": 1
+        },
+        "scikit-learn__scikit-learn-10908": {
+          "correct": 0,
+          "n": 1
+        },
+        "scikit-learn__scikit-learn-11310": {
+          "correct": 0,
+          "n": 1
+        },
+        "sphinx-doc__sphinx-10323": {
+          "correct": 0,
+          "n": 1
+        },
+        "sphinx-doc__sphinx-10435": {
+          "correct": 0,
+          "n": 1
+        },
+        "sphinx-doc__sphinx-10449": {
+          "correct": 0,
+          "n": 1
+        },
+        "sphinx-doc__sphinx-10466": {
+          "correct": 0,
+          "n": 1
+        },
+        "sympy__sympy-11618": {
+          "correct": 0,
+          "n": 1
+        },
+        "sympy__sympy-12096": {
+          "correct": 0,
+          "n": 1
+        },
+        "sympy__sympy-12419": {
+          "correct": 0,
+          "n": 1
+        },
+        "sympy__sympy-12481": {
+          "correct": 0,
+          "n": 1
+        }
+      },
+      "capture": {
+        "schema_version": "v7_quality_gate_capture.v4",
+        "new_rows": 40,
+        "request_error_rows": 0,
+        "length_cap_rows": 2,
+        "response_chars": 83306,
+        "response_utf8_bytes": 83310,
+        "reasoning_chars": 0,
+        "reasoning_utf8_bytes": 0,
+        "swebench_search_replace": {
+          "applicable": true,
+          "new_rows": 40,
+          "resumed_rows": 0,
+          "resumed_rows_without_diagnostics": 0,
+          "resumed_rows_without_provenance": 0,
+          "resumed_rows_source_sha_mismatch": 0,
+          "rows_with_markers": 39,
+          "parseable_blocks": 61,
+          "malformed_rows": 1,
+          "zero_strict_block_rows": 1,
+          "partial_strict_block_rows": 1,
+          "state_counts": {
+            "strict_ready": 38,
+            "prompt_contract_candidate": 0,
+            "model_truncation_no_patch": 1,
+            "model_truncation_partial_patch": 1,
+            "request_error": 0
+          },
+          "summary_complete": true,
+          "converter_contract_ready": false,
+          "score_status": "terminal_no_prompt_contract_candidate"
+        }
+      },
+      "throughput": {
+        "concurrency": 1,
+        "wall_s": 984.8,
+        "completion_tokens": 20570,
+        "prompt_tokens": 138660,
+        "aggregate_decode_tok_s": 20.9,
+        "aggregate_total_tok_s": 161.7
+      }
+    }
+  ]
+}

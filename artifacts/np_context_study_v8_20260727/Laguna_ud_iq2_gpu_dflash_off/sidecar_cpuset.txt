@@ -1,0 +1,5 @@
+cgroup=/sys/fs/cgroup/epyc-v8-gpu-sidecar
+type=threaded
+cpus=184-191
+mems=0-3
+driver_pid=2345522

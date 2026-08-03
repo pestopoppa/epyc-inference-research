@@ -1,0 +1,22 @@
+0.00.036.429 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.036.762 W srv  llama_server: -----------------
+0.00.036.763 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.036.763 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.036.763 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.036.764 W srv  llama_server: -----------------
+0.00.037.960 I srv    load_model: loading model '/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/Laguna-S-2.1-UD-IQ2_M.gguf'
+0.00.360.054 W load_arch_hparams: missing sliding_window_pattern; using verified legacy Laguna-S.2 period-4 dense-first fallback
+0.00.394.857 W load: special_eos_id is not in special_eog_ids - the tokenizer config may be incorrect
+0.00.394.879 W load: special_eot_id is not in special_eog_ids - the tokenizer config may be incorrect
+0.03.767.397 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 2304, kv_unified = 'false'
+0.03.773.836 I srv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+0.03.773.882 I srv  llama_server: model loaded
+0.03.773.887 I srv  llama_server: listening on http://127.0.0.1:18072
+0.09.119.981 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.09.120.031 I slot launch_slot_: id  0 | task 11 | processing task, is_child = 0
+0.11.746.612 I slot print_timing: id  0 | task 11 | prompt eval time =    1949.70 ms /  1936 tokens (    1.01 ms per token,   992.97 tokens per second)
+0.11.746.616 I slot print_timing: id  0 | task 11 |        eval time =     676.86 ms /    32 tokens (   21.15 ms per token,    47.28 tokens per second)
+0.11.746.616 I slot print_timing: id  0 | task 11 |       total time =    2626.55 ms /  1968 tokens
+0.11.746.621 I slot print_timing: id  0 | task 11 |    graphs reused =         31
+0.11.746.707 I slot      release: id  0 | task 11 | stop processing: n_tokens = 1967, truncated = 0
+0.11.747.828 I srv    operator(): operator(): cleaning up before exit...

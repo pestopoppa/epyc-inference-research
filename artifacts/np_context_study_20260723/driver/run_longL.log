@@ -1,0 +1,18 @@
+waiting for current np×context study (PID 3064002) to finish before long-L sweep...
+=== np × L LONG-CONTEXT extension — A1 122B-IQ2 (L=16384, 32768) ===
+=== combine with existing 36864-ctx probe data: np1=58 np2=44 np4=62 (agg t/s) ===
+dead 3155918
+A1_122b_iq2 np=1 L=16384: agg=  57.1 | per-req med= 57.3 | err=0 | vram=39G
+dead 3162435
+A1_122b_iq2 np=2 L=16384: agg=  44.8 | per-req med= 22.7 | err=0 | vram=40G
+dead 3209455
+A1_122b_iq2 np=4 L=16384: agg=  55.6 | per-req med= 17.1 | err=0 | vram=42G
+dead 3245148
+A1_122b_iq2 np=8 L=16384: agg=  62.7 | per-req med= 10.2 | err=0 | vram=45G
+dead 3300128
+A1_122b_iq2 np=1 L=32768: agg=  52.0 | per-req med= 52.3 | err=0 | vram=39G
+dead 3302274
+A1_122b_iq2 np=2 L=32768: agg=  43.0 | per-req med= 23.1 | err=0 | vram=41G
+dead 3305595
+A1_122b_iq2 np=4 L=32768: agg=  45.7 | per-req med= 17.0 | err=0 | vram=43G
+=== NP-CONTEXT LONG-L EXTENSION COMPLETE ===

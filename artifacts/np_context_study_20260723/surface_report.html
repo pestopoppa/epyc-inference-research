@@ -1,0 +1,333 @@
+<title>GPU Architect Candidates — np×Context Throughput Surface</title>
+<style>
+  :root{
+    --bg:#f5f7f8; --panel:#ffffff; --panel-2:#eef2f4; --ink:#16202a; --muted:#5b6a77;
+    --line:#dbe3e8; --accent:#0f8f88; --accent-2:#c67d22; --warn:#c2701f; --good:#2f9e6f;
+    --shadow:0 1px 2px rgba(20,40,55,.06),0 8px 24px rgba(20,40,55,.05);
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root{--bg:#0d1418;--panel:#131c22;--panel-2:#0f171d;--ink:#e6edf1;--muted:#8b9aa6;--line:#24313a;--accent:#35c9bd;--accent-2:#f0a94a;--warn:#e0973a;--good:#43b487;--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);}}
+  :root[data-theme="light"]{--bg:#f5f7f8;--panel:#ffffff;--panel-2:#eef2f4;--ink:#16202a;--muted:#5b6a77;--line:#dbe3e8;--accent:#0f8f88;--accent-2:#c67d22;--warn:#c2701f;--good:#2f9e6f;--shadow:0 1px 2px rgba(20,40,55,.06),0 8px 24px rgba(20,40,55,.05);}
+  :root[data-theme="dark"]{--bg:#0d1418;--panel:#131c22;--panel-2:#0f171d;--ink:#e6edf1;--muted:#8b9aa6;--line:#24313a;--accent:#35c9bd;--accent-2:#f0a94a;--warn:#e0973a;--good:#43b487;--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);}
+
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;
+    -webkit-font-smoothing:antialiased;margin:0;}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 24px 72px;}
+  .mono{font-family:var(--mono)}
+  h1,h2,h3{text-wrap:balance;margin:0}
+  a{color:var(--accent);text-underline-offset:2px}
+
+  /* header */
+  header.top{border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:30px}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--accent);margin-bottom:12px}
+  h1{font-size:clamp(24px,3.4vw,34px);font-weight:680;letter-spacing:-.01em;line-height:1.12}
+  .sub{color:var(--muted);font-size:15.5px;margin-top:12px;max-width:66ch}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+  .chip{font-family:var(--mono);font-size:11.5px;color:var(--muted);background:var(--panel-2);
+    border:1px solid var(--line);border-radius:999px;padding:4px 11px;letter-spacing:.02em}
+  .chip b{color:var(--ink);font-weight:600}
+
+  section{margin-top:40px}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:10px}
+  .eyebrow::after{content:"";height:1px;flex:1;background:var(--line)}
+  h2{font-size:19px;font-weight:640;letter-spacing:-.005em}
+
+  /* peak strip */
+  .peaks{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .peakcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 16px 14px;
+    box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .peakcard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--arm)}
+  .arm-name{font-family:var(--mono);font-weight:640;font-size:14px;color:var(--ink)}
+  .arm-desc{font-size:12px;color:var(--muted);margin-top:3px;min-height:30px}
+  .peakrow{display:flex;justify-content:space-between;font-family:var(--mono);font-size:13px;
+    padding:5px 0;border-top:1px dashed var(--line)}
+  .peakrow:first-of-type{margin-top:10px}
+  .peakrow .v{font-weight:640;font-variant-numeric:tabular-nums}
+  .peakrow .np{color:var(--muted);font-size:11.5px}
+  .rankbadge{position:absolute;top:14px;right:14px;font-family:var(--mono);font-size:10.5px;
+    letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+
+  /* heatmaps */
+  .grids{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .gridcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;
+    box-shadow:var(--shadow)}
+  .gridcard h3{font-family:var(--mono);font-size:13px;font-weight:640;display:flex;align-items:center;gap:7px}
+  .dot{width:8px;height:8px;border-radius:2px;background:var(--arm)}
+  .gridcard .gsub{font-size:11px;color:var(--muted);margin:3px 0 10px}
+  table.hm{border-collapse:separate;border-spacing:3px;width:100%;font-family:var(--mono)}
+  table.hm th{font-size:10.5px;font-weight:500;color:var(--muted);padding:2px;font-variant-numeric:tabular-nums}
+  table.hm th.corner{text-align:left;color:var(--accent);font-size:10px}
+  table.hm td{text-align:center;font-size:12px;font-variant-numeric:tabular-nums;font-weight:600;
+    border-radius:5px;padding:6px 2px;color:#fff;background:var(--panel-2);min-width:34px}
+  table.hm td.empty{color:var(--muted);font-weight:400;background:repeating-linear-gradient(
+    -45deg,transparent,transparent 4px,var(--line) 4px,var(--line) 5px);border:1px solid var(--line)}
+  td.peak{outline:2px solid var(--ink);outline-offset:-2px}
+  .legend{display:flex;align-items:center;gap:10px;margin-top:16px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .ramp{height:9px;flex:1;border-radius:5px;max-width:280px;
+    background:linear-gradient(90deg,#26456a,#1b7f74,#2f9e6f,#e0a53c)}
+
+  /* findings */
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:17px 18px;box-shadow:var(--shadow)}
+  .card.wide{grid-column:1/-1}
+  .card.flag{border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+  .card h4{margin:0 0 7px;font-size:14.5px;font-weight:640;display:flex;align-items:center;gap:8px}
+  .card p{margin:0;color:var(--muted);font-size:13.5px}
+  .card p .mono,.card p b{color:var(--ink)}
+  .tag{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+    padding:2px 7px;border-radius:5px;background:var(--panel-2);border:1px solid var(--line);color:var(--muted)}
+  .tag.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,var(--line))}
+  .tag.good{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,var(--line))}
+
+  /* router plan */
+  .banner{display:flex;gap:12px;align-items:flex-start;background:color-mix(in srgb,var(--accent-2) 10%,var(--panel));
+    border:1px solid color-mix(in srgb,var(--accent-2) 40%,var(--line));border-radius:11px;padding:14px 16px;margin-bottom:18px}
+  .banner .ic{font-family:var(--mono);color:var(--accent-2);font-weight:700;font-size:15px;flex-shrink:0}
+  .banner p{margin:0;font-size:13.5px;color:var(--ink)}
+  .banner b{color:var(--accent-2)}
+  .layers{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .layer{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:15px;box-shadow:var(--shadow)}
+  .layer .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.08em}
+  .layer h4{margin:6px 0 6px;font-size:14px;font-weight:640}
+  .layer p{margin:0;font-size:12.8px;color:var(--muted)}
+
+  table.rule{width:100%;border-collapse:collapse;margin-top:18px;font-size:13.5px}
+  table.rule th,table.rule td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  table.rule thead th{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+  table.rule td.arm{font-family:var(--mono);font-weight:640;white-space:nowrap}
+  table.rule td .k{font-family:var(--mono);color:var(--accent);font-weight:640}
+  .arm-a1{--arm:#c67d22}.arm-a3{--arm:#3a7ec6}.arm-a4{--arm:#0f8f88}
+  :root[data-theme="dark"] .arm-a1{--arm:#f0a94a}:root[data-theme="dark"] .arm-a3{--arm:#5aa0e6}:root[data-theme="dark"] .arm-a4{--arm:#35c9bd}
+  @media (prefers-color-scheme:dark){.arm-a1{--arm:#f0a94a}.arm-a3{--arm:#5aa0e6}.arm-a4{--arm:#35c9bd}}
+
+  footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px}
+  footer .mono{color:var(--ink)}
+
+  @media (max-width:860px){.peaks,.grids,.layers{grid-template-columns:1fr}.cards{grid-template-columns:1fr}
+    .gridcard{max-width:420px}}
+  @media (prefers-reduced-motion:no-preference){td.hmv{transition:transform .12s ease}
+    td.hmv:hover{transform:scale(1.12);z-index:2;position:relative}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="kicker">Inference throughput · TB-6-exec</div>
+    <h1>GPU Architect Candidates: np × Context Throughput Surface</h1>
+    <p class="sub">Aggregate decode throughput for all three GPU architect candidates across concurrency
+      (<span class="mono">np</span>) and reasoning budget (<span class="mono">L</span> = per-slot context ≈
+      generation length, short-prompt regime). One wave per cell; each arm at its own max-opt MTP depth.</p>
+    <div class="chips">
+      <span class="chip">MI210 · <b>v7 kernel</b></span>
+      <span class="chip"><b>2026-07-23</b></span>
+      <span class="chip">GPU-only · CPU untouched</span>
+      <span class="chip">olympiadbench_hard prompts</span>
+      <span class="chip">metric: <b>throughput observation</b></span>
+    </div>
+  </header>
+
+  <section>
+    <div class="eyebrow">Peak aggregate per arm — the headline</div>
+    <div class="peaks">
+      <div class="peakcard arm-a4">
+        <span class="rankbadge">#1 throughput</span>
+        <div class="arm-name">A4 · 35B-A3B Q8</div>
+        <div class="arm-desc">Small-active MoE (~3B active), MTP-4. Batches best of all — no dip, scales to np=32+.</div>
+        <div class="peakrow"><span>L=2k</span><span class="v">243.5 <span class="np">np32</span></span></div>
+        <div class="peakrow"><span>L=8k</span><span class="v">207.1 <span class="np">np16</span></span></div>
+        <div class="peakrow"><span>L=16k</span><span class="v">159.5 <span class="np">np8</span></span></div>
+        <div class="peakrow"><span>L=32k</span><span class="v">131.5 <span class="np">np4</span></span></div>
+      </div>
+      <div class="peakcard arm-a3">
+        <span class="rankbadge">#2 throughput</span>
+        <div class="arm-name">A3 · 27B dense Q8</div>
+        <div class="arm-desc">Dense, MTP-4. Strong + robust via weight-reuse; sweet spot np=8, regresses past np=16.</div>
+        <div class="peakrow"><span>L=2k</span><span class="v">152.9 <span class="np">np16</span></span></div>
+        <div class="peakrow"><span>L=8k</span><span class="v">119.9 <span class="np">np8</span></span></div>
+        <div class="peakrow"><span>L=16k</span><span class="v">100.4 <span class="np">np8</span></span></div>
+        <div class="peakrow"><span>L=32k</span><span class="v">95.2 <span class="np">np4</span></span></div>
+      </div>
+      <div class="peakcard arm-a1">
+        <span class="rankbadge">the outlier</span>
+        <div class="arm-name">A1 · 122B-A10B IQ2</div>
+        <div class="arm-desc">Large-active MoE, IQ2, MTP-2. The dual-resident incumbent — but the sole collapse/dip arm.</div>
+        <div class="peakrow"><span>L=2k</span><span class="v">103.4 <span class="np">np32</span></span></div>
+        <div class="peakrow"><span>L=8k</span><span class="v">86.2 <span class="np">np16</span></span></div>
+        <div class="peakrow"><span>L=16k</span><span class="v">62.7 <span class="np">np8</span></span></div>
+        <div class="peakrow"><span>L=32k</span><span class="v">52.0 <span class="np">np1</span> ⚠</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">The full surface — aggregate decode t/s (shared color scale)</div>
+    <div class="grids" id="grids">
+      <div class="gridcard arm-a4">
+        <h3><span class="dot"></span>A4 · 35B-A3B MoE</h3>
+        <div class="gsub">mtp4 · hottest grid — batches everywhere</div>
+        <table class="hm" data-arm="A4"></table>
+      </div>
+      <div class="gridcard arm-a3">
+        <h3><span class="dot"></span>A3 · 27B dense</h3>
+        <div class="gsub">mtp4 · robust, plateaus at np=8</div>
+        <table class="hm" data-arm="A3"></table>
+      </div>
+      <div class="gridcard arm-a1">
+        <h3><span class="dot"></span>A1 · 122B-A10B IQ2</h3>
+        <div class="gsub">mtp2 · np=2 dip + long-L collapse</div>
+        <table class="hm" data-arm="A1"></table>
+      </div>
+    </div>
+    <div class="legend">
+      <span>slow</span><span class="ramp"></span><span>fast</span>
+      <span style="margin-left:auto">rows = np · cols = budget L · ▢ peak · ▨ not run (grid-cap / VRAM guard)</span>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">What the surface says</div>
+    <div class="cards">
+      <div class="card">
+        <h4><span class="tag good">ranking</span>A4 ≫ A3 &gt; A1, everywhere batched</h4>
+        <p>At every batched operating point the order holds. L=2k peaks: <b class="mono">243 / 153 / 103</b>.
+          The small-active MoE wins on both fronts — fewest active params <i>and</i> clean scaling.</p>
+      </div>
+      <div class="card flag">
+        <h4><span class="tag warn">correction</span>The dip &amp; collapse are A1-specific</h4>
+        <p>Earlier I called the <span class="mono">np=2</span> dip "MoE-specific" and long-CoT batching
+          "collapsing." <b>Both were over-generalized from A1.</b> A4 (also MoE) shows <b>no dip</b>
+          (<span class="mono">1.43×</span> at np=2) and batches fine at 32k. A1 alone collapses — confounded
+          across IQ2 / MTP-2 / large-active; cause not yet isolated.</p>
+      </div>
+      <div class="card">
+        <h4><span class="tag">mechanism</span>Why dense batches so well</h4>
+        <p>Dense amortizes weights across the batch — read the 27&nbsp;GB once, apply to all <span class="mono">np</span>
+          tokens. MoE tokens <i>scatter</i> to different experts, so its fewer-active-params edge only pays at
+          high np with expert reuse — exactly why A4 climbs to np=32 while A3 plateaus at np=8.</p>
+      </div>
+      <div class="card">
+        <h4><span class="tag">caveat</span>np=1 baselines are noisy</h4>
+        <p>Each cell runs one wave (<span class="mono">NREQ=np</span>), so <span class="mono">np=1</span> is an
+          n=1 sample (A4 ranged 72–99 across L). The <b>batched aggregates (n=np) are the reliable reads</b> —
+          policy is set from peaks, not np=1 ratios.</p>
+      </div>
+      <div class="card wide">
+        <h4><span class="tag">scope</span>Throughput ≠ quality — this is a tiebreaker, not a verdict</h4>
+        <p>Reasoning accuracy was a well-powered <b>NULL across A1/A3/A4</b> in the architect bench (six suites).
+          So throughput is a legitimate tiebreaker — and on GPU it favors <b>A4, then A3</b> — but the architect
+          decision also weighs deployment robustness and the 122B's dual-residency. This surface informs
+          <i>where and how</i> each arm runs, not which is "smarter."</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Router-integration plan</div>
+    <div class="banner">
+      <span class="ic">◧ GATED</span>
+      <p>The MI210 is today a <b>bench instrument, not a serving node</b> — production is CPU-only. This plan
+        activates only when the GPU is registered as a serving backend in <span class="mono">orchestrator_stack.py</span> /
+        <span class="mono">model_registry</span> — an operator-gated stack change. Until then it's a
+        parameterization staged and ready.</p>
+    </div>
+    <div class="layers">
+      <div class="layer">
+        <div class="n">LAYER 1 · launch-time</div>
+        <h4>Static server sizing</h4>
+        <p>Size each model's launch <span class="mono">-np</span> to its expected budget distribution
+          (from AutoPilot's realized token stats). Short-budget roles → high np; deep-reasoning architect →
+          low np. Never launch A1 at np=2.</p>
+      </div>
+      <div class="layer">
+        <div class="n">LAYER 2 · request-time</div>
+        <h4>Budget → concurrency co-decision</h4>
+        <p>Extend the learned router to emit a concurrency ceiling <i>alongside</i> the budget it already picks.
+          Don't admit a request into a slot pool that would exceed <span class="mono">np_ceiling(budget)</span>
+          for that arm.</p>
+      </div>
+      <div class="layer">
+        <div class="n">LAYER 3 · live</div>
+        <h4>Admission &amp; placement</h4>
+        <p>Track <span class="mono">Σ(budget·kv/token)</span> against both the VRAM cap and the bandwidth-collapse
+          ceiling. Near the edge, admit / queue / downgrade — or route to CPU — rather than pack another slot into
+          the collapse region.</p>
+      </div>
+    </div>
+
+    <table class="rule">
+      <thead><tr><th>Arm</th><th>Batching policy by reasoning budget</th><th>Character</th></tr></thead>
+      <tbody>
+        <tr class="arm-a4"><td class="arm">A4 · 35B-A3B</td>
+          <td>Batch aggressively at <b>every</b> budget — scales to <span class="k">np=32+</span>, no dip.</td>
+          <td>The throughput arm. Prefer under load.</td></tr>
+        <tr class="arm-a3"><td class="arm">A3 · 27B dense</td>
+          <td>Batch at every budget; sweet spot <span class="k">np=8</span> (regresses past np=16).</td>
+          <td>Strong + robust; predictable.</td></tr>
+        <tr class="arm-a1"><td class="arm">A1 · 122B IQ2</td>
+          <td>≤8k → <span class="k">np8–16</span>; 16k → <span class="k">np4–8</span>;
+            ≥32k → <span class="k">np1</span>. <b>Never np=2.</b></td>
+          <td>Batch short only; run long-CoT near-solo.</td></tr>
+      </tbody>
+    </table>
+    <p style="color:var(--muted);font-size:12.8px;margin-top:16px">
+      <b style="color:var(--ink)">Validate before activation:</b> re-measure under the production serving config
+      (real RAG-context prompts, not the short-prompt proxy — long prompts shift the collapse leftward) via the
+      prefill-to-depth variant, reconciled with AutoPilot's realized budget distribution.</p>
+  </section>
+
+  <footer>
+    <p class="mono">artifacts/np_context_study_20260723/ · reasoning-effort-levels.md §TB-6 · commit f733863e</p>
+    <p style="margin-top:6px">Throughput numbers are decision-support <i>observations</i> (single-wave, olympiadbench_hard,
+      seed 42) — not protocol-certified gating metrics. Quality parity (A1≈A3≈A4) is the architect bench's separate finding.</p>
+  </footer>
+</div>
+
+<script>
+(function(){
+  var DATA={
+    A1:{L:[2048,8192,16384,32768],np:[1,2,4,8,16,32],
+      v:[[54.7,52.7,57.1,52.0],[44.0,44.2,44.8,43.0],[63.1,60.9,55.6,45.7],[85.3,66.8,62.7,null],[99.9,86.2,null,null],[103.4,null,null,null]]},
+    A3:{L:[2048,8192,16384,32768],np:[1,2,4,8,16,32],
+      v:[[46.8,47.0,41.4,42.5],[79.1,64.3,64.0,65.2],[113.8,102.5,90.8,95.2],[151.2,119.9,100.4,null],[152.9,104.0,null,null],[128.7,null,null,null]]},
+    A4:{L:[2048,8192,16384,32768],np:[1,2,4,8,16,32],
+      v:[[72.4,94.0,99.4,73.3],[103.2,111.5,98.3,98.9],[147.2,159.0,126.9,131.5],[181.1,193.8,159.5,null],[220.9,207.1,null,null],[243.5,null,null,null]]}
+  };
+  // shared scale across all arms
+  var MIN=40, MAX=244;
+  var stops=[[0.0,[38,69,106]],[0.38,[27,127,116]],[0.66,[47,158,111]],[1.0,[224,165,60]]];
+  function lerp(a,b,t){return Math.round(a+(b-a)*t);}
+  function ramp(v){
+    var t=Math.max(0,Math.min(1,(v-MIN)/(MAX-MIN))),i=0;
+    for(;i<stops.length-1;i++){if(t<=stops[i+1][0])break;}
+    var s0=stops[i],s1=stops[Math.min(i+1,stops.length-1)];
+    var span=(s1[0]-s0[0])||1,lt=(t-s0[0])/span;
+    var c=[lerp(s0[1][0],s1[1][0],lt),lerp(s0[1][1],s1[1][1],lt),lerp(s0[1][2],s1[1][2],lt)];
+    return c;
+  }
+  function txt(c){return (0.299*c[0]+0.587*c[1]+0.114*c[2])>150?'#141b1f':'#ffffff';}
+  var Lbl={2048:'2k',8192:'8k',16384:'16k',32768:'32k'};
+  document.querySelectorAll('table.hm').forEach(function(tb){
+    var d=DATA[tb.getAttribute('data-arm')];
+    // find peak per column
+    var colPeak=d.L.map(function(_,ci){var m=-1,mr=-1;d.v.forEach(function(row,ri){if(row[ci]!=null&&row[ci]>m){m=row[ci];mr=ri;}});return mr;});
+    var html='<thead><tr><th class="corner">np\\L</th>';
+    d.L.forEach(function(L){html+='<th>'+Lbl[L]+'</th>';});
+    html+='</tr></thead><tbody>';
+    d.np.forEach(function(np,ri){
+      html+='<tr><th>'+np+'</th>';
+      d.v[ri].forEach(function(val,ci){
+        if(val==null){html+='<td class="empty">—</td>';return;}
+        var c=ramp(val),bg='rgb('+c[0]+','+c[1]+','+c[2]+')';
+        var pk=(colPeak[ci]===ri)?' peak':'';
+        html+='<td class="hmv'+pk+'" style="background:'+bg+';color:'+txt(c)+'">'+val.toFixed(0)+'</td>';
+      });
+      html+='</tr>';
+    });
+    html+='</tbody>';
+    tb.innerHTML=html;
+  });
+})();
+</script>

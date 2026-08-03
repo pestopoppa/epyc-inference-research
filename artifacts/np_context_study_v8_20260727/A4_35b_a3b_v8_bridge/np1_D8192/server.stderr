@@ -1,0 +1,22 @@
+0.00.036.023 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.036.358 W srv  llama_server: -----------------
+0.00.036.359 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.036.360 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.036.360 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.036.360 W srv  llama_server: -----------------
+0.00.037.563 I srv    load_model: loading model '/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf'
+0.04.096.614 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 8448, kv_unified = 'false'
+0.04.096.756 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.04.121.775 I srv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+0.04.121.818 I srv  llama_server: model loaded
+0.04.121.822 I srv  llama_server: listening on http://127.0.0.1:18072
+0.08.623.522 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.08.623.581 I slot launch_slot_: id  0 | task 10 | processing task, is_child = 0
+0.11.641.895 I slot print_timing: id  0 | task 10 | prompt processing, n_tokens =   8157, progress = 1.00, t =   3.02 s / 2702.52 tokens per second
+0.12.002.610 I slot print_timing: id  0 | task 10 | prompt eval time =    3078.42 ms /  8161 tokens (    0.38 ms per token,  2651.03 tokens per second)
+0.12.002.614 I slot print_timing: id  0 | task 10 |        eval time =     300.57 ms /    32 tokens (    9.39 ms per token,   106.46 tokens per second)
+0.12.002.614 I slot print_timing: id  0 | task 10 |       total time =    3379.00 ms /  8193 tokens
+0.12.002.620 I slot print_timing: id  0 | task 10 |    graphs reused =          7
+0.12.002.624 I slot print_timing: id  0 | task 10 | draft acceptance = 0.74194 (   23 accepted /    31 generated), mean len =  3.88
+0.12.002.906 I slot      release: id  0 | task 10 | stop processing: n_tokens = 8192, truncated = 0
+0.12.004.023 I srv    operator(): operator(): cleaning up before exit...

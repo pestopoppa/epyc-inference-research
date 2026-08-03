@@ -1,0 +1,77 @@
+=== np × L surface — A3_27b_dense (MTP=4) ===
+dead 3465136
+A3_27b_dense np=1 L=2048: agg=  46.8 | per-req med= 47.8 | err=0 | vram=28G
+dead 3466472
+A3_27b_dense np=2 L=2048: agg=  79.1 | per-req med= 41.2 | err=0 | vram=29G
+dead 3468825
+A3_27b_dense np=4 L=2048: agg= 113.8 | per-req med= 30.9 | err=0 | vram=30G
+dead 3478026
+A3_27b_dense np=8 L=2048: agg= 151.2 | per-req med= 20.5 | err=0 | vram=34G
+dead 3481327
+A3_27b_dense np=16 L=2048: agg= 152.9 | per-req med= 10.6 | err=0 | vram=41G
+dead 3488739
+A3_27b_dense np=32 L=2048: agg= 128.7 | per-req med=  5.1 | err=0 | vram=55G
+dead 3497546
+A3_27b_dense np=1 L=8192: agg=  47.0 | per-req med= 47.3 | err=0 | vram=28G
+dead 3503901
+A3_27b_dense np=2 L=8192: agg=  64.3 | per-req med= 43.5 | err=0 | vram=29G
+dead 3509692
+A3_27b_dense np=4 L=8192: agg= 102.5 | per-req med= 30.0 | err=0 | vram=32G
+dead 3519097
+A3_27b_dense np=8 L=8192: agg= 119.9 | per-req med= 20.8 | err=0 | vram=37G
+dead 3528001
+A3_27b_dense np=16 L=8192: agg= 104.0 | per-req med=  9.5 | err=0 | vram=47G
+dead 3551837
+A3_27b_dense np=1 L=16384: agg=  41.4 | per-req med= 41.6 | err=0 | vram=29G
+dead 3559094
+A3_27b_dense np=2 L=16384: agg=  64.0 | per-req med= 37.2 | err=0 | vram=30G
+dead 3565019
+A3_27b_dense np=4 L=16384: agg=  90.8 | per-req med= 27.9 | err=0 | vram=34G
+dead 3575006
+A3_27b_dense np=8 L=16384: agg= 100.4 | per-req med= 17.1 | err=0 | vram=41G
+dead 3615815
+A3_27b_dense np=1 L=32768: agg=  42.5 | per-req med= 42.7 | err=0 | vram=30G
+dead 3621445
+A3_27b_dense np=2 L=32768: agg=  65.2 | per-req med= 38.3 | err=0 | vram=33G
+dead 3628212
+A3_27b_dense np=4 L=32768: agg=  95.2 | per-req med= 28.9 | err=0 | vram=38G
+=== A3_27b_dense SURFACE COMPLETE ===
+=== np × L surface — A4_35b_a3b_moe (MTP=4) ===
+dead 3639737
+A4_35b_a3b_moe np=1 L=2048: agg=  72.4 | per-req med= 75.2 | err=0 | vram=36G
+dead 3640502
+A4_35b_a3b_moe np=2 L=2048: agg= 103.2 | per-req med= 53.5 | err=0 | vram=36G
+dead 3641204
+A4_35b_a3b_moe np=4 L=2048: agg= 147.2 | per-req med= 38.2 | err=0 | vram=37G
+dead 3642062
+A4_35b_a3b_moe np=8 L=2048: agg= 181.1 | per-req med= 24.4 | err=0 | vram=38G
+dead 3646565
+A4_35b_a3b_moe np=16 L=2048: agg= 220.9 | per-req med= 15.4 | err=0 | vram=41G
+dead 3655968
+A4_35b_a3b_moe np=32 L=2048: agg= 243.5 | per-req med=  9.3 | err=0 | vram=47G
+dead 3659123
+A4_35b_a3b_moe np=1 L=8192: agg=  94.0 | per-req med= 94.6 | err=0 | vram=36G
+dead 3660053
+A4_35b_a3b_moe np=2 L=8192: agg= 111.5 | per-req med= 67.0 | err=0 | vram=36G
+dead 3661557
+A4_35b_a3b_moe np=4 L=8192: agg= 159.0 | per-req med= 44.8 | err=0 | vram=37G
+dead 3663319
+A4_35b_a3b_moe np=8 L=8192: agg= 193.8 | per-req med= 32.3 | err=0 | vram=39G
+dead 3666412
+A4_35b_a3b_moe np=16 L=8192: agg= 207.1 | per-req med= 16.7 | err=0 | vram=43G
+dead 3671445
+A4_35b_a3b_moe np=1 L=16384: agg=  99.4 | per-req med=100.0 | err=0 | vram=36G
+dead 3672518
+A4_35b_a3b_moe np=2 L=16384: agg=  98.3 | per-req med= 59.2 | err=0 | vram=37G
+dead 3674605
+A4_35b_a3b_moe np=4 L=16384: agg= 126.9 | per-req med= 39.1 | err=0 | vram=38G
+dead 3677360
+A4_35b_a3b_moe np=8 L=16384: agg= 159.5 | per-req med= 24.3 | err=0 | vram=41G
+dead 3681289
+A4_35b_a3b_moe np=1 L=32768: agg=  73.3 | per-req med= 73.9 | err=0 | vram=36G
+dead 3682611
+A4_35b_a3b_moe np=2 L=32768: agg=  98.9 | per-req med= 52.9 | err=0 | vram=37G
+dead 3684673
+A4_35b_a3b_moe np=4 L=32768: agg= 131.5 | per-req med= 40.2 | err=0 | vram=39G
+=== A4_35b_a3b_moe SURFACE COMPLETE ===
+=== A3+A4 NP-CONTEXT SURFACE COMPLETE ===

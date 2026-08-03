@@ -1,0 +1,74 @@
+{
+  "target_depth_ceiling": 2048,
+  "rendered_depth": 1935,
+  "np": 1,
+  "prepared_manifest": {
+    "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/np_context_study_v8_20260727/prefill_to_depth_rag.prepared.json",
+    "sha256": "e29fd6a0536c21ada180fcc929ba5b10da6fe498693abb9bf97459f374a2e7da"
+  },
+  "instrument": {
+    "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/np_context_study_v8_20260727/driver/prefill_to_depth_rag.py",
+    "sha256": "df2736d99be379f78452ebe8cbe2f85f676e67299340284acd513feaf0452590"
+  },
+  "model": {
+    "bytes": 37268665376,
+    "dflash": "off",
+    "inode": 99615750,
+    "kv_cache": {
+      "k": "f16",
+      "v": "f16"
+    },
+    "label": "Laguna_ud_iq2_gpu_dflash_off",
+    "mtime_ns": 1784715969253268738,
+    "mtp_depth": 0,
+    "path": "/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/Laguna-S-2.1-UD-IQ2_M.gguf",
+    "server_spec": {
+      "draft_n_max": 0,
+      "type": "none"
+    },
+    "sha256": "1a0d44795f71044de1a9671bf70def4655f4ab7294b002263dfc8046820bfd2c"
+  },
+  "rows": [
+    {
+      "prompt_tokens": 1936,
+      "completion_tokens": 32,
+      "decode_tok_s": 47.27727233777247,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP.\n\n**Evidence:** The oncology board decision explicitly states \"6 cycles of R-Pola"
+            }
+          }
+        ],
+        "created": 1785220126,
+        "model": "/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/Laguna-S-2.1-UD-IQ2_M.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 1936,
+          "total_tokens": 1968,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-RU79Jd7S8V8YLSER3ayj1XeWagVO3Xgr",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 1936,
+          "prompt_ms": 1949.697,
+          "prompt_per_token_ms": 1.007074896694215,
+          "prompt_per_second": 992.9748058288033,
+          "predicted_n": 32,
+          "predicted_ms": 676.858,
+          "predicted_per_token_ms": 21.1518125,
+          "predicted_per_second": 47.27727233777247
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+[runner] Waiting for server at http://127.0.0.1:18072...
+[runner] Server healthy
+
+[runner] Evaluating swebench_oracle (n=40, seed=42)...
+[runner] WARNING swebench_oracle capture not converter-ready id=django__django-11138 state=model_truncation_partial_patch anomalies=length_cap,partial_strict_blocks markers={'search': 9, 'divider': 9, 'replace': 8} parseable=8
+  [runner] swebench_oracle: pass 1/1 25/40 (0/25 correct so far)
+[runner] WARNING swebench_oracle capture not converter-ready id=sympy__sympy-12419 state=model_truncation_no_patch anomalies=length_cap,zero_strict_blocks markers={'search': 0, 'divider': 0, 'replace': 0} parseable=0
+[runner] swebench_oracle: 0.0% (0/40)
+
+[runner] Results written to /mnt/raid0/llm/epyc-inference-research/artifacts/np_context_study_v8_20260727/A3_ff_fable_non_mtp_q8/quality_swebench_oracle/summary.json

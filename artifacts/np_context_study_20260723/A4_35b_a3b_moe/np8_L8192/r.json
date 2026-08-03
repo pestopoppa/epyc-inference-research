@@ -1,0 +1,87 @@
+{
+  "meta": {
+    "kernel": "v7-candidate",
+    "binary": "x",
+    "models": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+    "arm": "A4_35b_a3b_moe_np8_L8192",
+    "timestamp": "2026-07-23T21:13:33.362844+00:00",
+    "elapsed_s": 246.4,
+    "n_per_suite": 155,
+    "seed": 42,
+    "stratify": false,
+    "endpoint": "chat",
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "enable_thinking": false,
+    "repeats": 1,
+    "max_tokens": 8192,
+    "questions_pinned": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-bench-gpu-20260720/questions_olympiadbench_hard.json"
+  },
+  "suites": [
+    {
+      "suite": "olympiadbench_hard",
+      "accuracy": 0.75,
+      "n": 8,
+      "n_questions": 8,
+      "repeats": 1,
+      "correct": 6,
+      "errors": 0,
+      "truncated": 1,
+      "per_tier": {
+        "2": {
+          "accuracy": 0.75,
+          "n": 4,
+          "correct": 3
+        },
+        "3": {
+          "accuracy": 0.75,
+          "n": 4,
+          "correct": 3
+        }
+      },
+      "per_item": {
+        "olympiadbench_hard_combinatorics_2127": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_2574": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_2171": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_1659": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_1938": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_number_theory_1869": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_2230": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_1882": {
+          "correct": 0,
+          "n": 1
+        }
+      },
+      "throughput": {
+        "concurrency": 8,
+        "wall_s": 246.4,
+        "completion_tokens": 47755,
+        "prompt_tokens": 1167,
+        "aggregate_decode_tok_s": 193.8,
+        "aggregate_total_tok_s": 198.5
+      }
+    }
+  ]
+}

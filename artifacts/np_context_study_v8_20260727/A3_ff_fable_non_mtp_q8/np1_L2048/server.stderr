@@ -1,0 +1,40 @@
+0.00.069.680 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.070.329 W srv  llama_server: -----------------
+0.00.070.333 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.070.334 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.070.335 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.070.338 W srv  llama_server: -----------------
+0.00.071.638 I srv    load_model: loading model '/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-Q8_0.gguf'
+0.07.592.346 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 2048, kv_unified = 'false'
+0.07.625.603 I srv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+0.07.625.692 I srv  llama_server: model loaded
+0.07.625.699 I srv  llama_server: listening on http://127.0.0.1:18072
+0.12.706.384 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.12.706.450 I slot launch_slot_: id  0 | task 6 | processing task, is_child = 0
+0.16.951.881 I slot print_timing: id  0 | task 6 | n_decoded =    100, tg =  26.39 t/s, tg_3s =  26.39 t/s
+0.19.960.553 I slot print_timing: id  0 | task 6 | n_decoded =    179, tg =  26.33 t/s, tg_3s =  26.26 t/s
+0.22.987.829 I slot print_timing: id  0 | task 6 | n_decoded =    245, tg =  24.93 t/s, tg_3s =  21.80 t/s
+0.26.001.485 I slot print_timing: id  0 | task 6 | n_decoded =    322, tg =  25.08 t/s, tg_3s =  25.55 t/s
+0.29.013.309 I slot print_timing: id  0 | task 6 | n_decoded =    405, tg =  25.55 t/s, tg_3s =  27.56 t/s
+0.32.038.586 I slot print_timing: id  0 | task 6 | n_decoded =    495, tg =  26.22 t/s, tg_3s =  29.75 t/s
+0.35.063.137 I slot print_timing: id  0 | task 6 | n_decoded =    581, tg =  26.53 t/s, tg_3s =  28.43 t/s
+0.38.087.718 I slot print_timing: id  0 | task 6 | n_decoded =    666, tg =  26.72 t/s, tg_3s =  28.10 t/s
+0.41.088.112 I slot print_timing: id  0 | task 6 | n_decoded =    750, tg =  26.86 t/s, tg_3s =  28.00 t/s
+0.44.102.390 I slot print_timing: id  0 | task 6 | n_decoded =    833, tg =  26.92 t/s, tg_3s =  27.54 t/s
+0.47.134.453 I slot print_timing: id  0 | task 6 | n_decoded =    918, tg =  27.02 t/s, tg_3s =  28.03 t/s
+0.50.159.688 I slot print_timing: id  0 | task 6 | n_decoded =   1001, tg =  27.06 t/s, tg_3s =  27.44 t/s
+0.53.184.214 I slot print_timing: id  0 | task 6 | n_decoded =   1078, tg =  26.94 t/s, tg_3s =  25.46 t/s
+0.56.189.202 I slot print_timing: id  0 | task 6 | n_decoded =   1159, tg =  26.94 t/s, tg_3s =  26.96 t/s
+0.59.201.629 I slot print_timing: id  0 | task 6 | n_decoded =   1233, tg =  26.78 t/s, tg_3s =  24.56 t/s
+1.02.203.641 I slot print_timing: id  0 | task 6 | n_decoded =   1309, tg =  26.69 t/s, tg_3s =  25.32 t/s
+1.05.218.887 I slot print_timing: id  0 | task 6 | n_decoded =   1394, tg =  26.78 t/s, tg_3s =  28.19 t/s
+1.08.228.707 I slot print_timing: id  0 | task 6 | n_decoded =   1473, tg =  26.75 t/s, tg_3s =  26.25 t/s
+1.11.248.726 I slot print_timing: id  0 | task 6 | n_decoded =   1554, tg =  26.75 t/s, tg_3s =  26.82 t/s
+1.14.256.386 I slot print_timing: id  0 | task 6 | n_decoded =   1640, tg =  26.84 t/s, tg_3s =  28.59 t/s
+1.17.266.925 I slot print_timing: id  0 | task 6 | n_decoded =   1722, tg =  26.86 t/s, tg_3s =  27.24 t/s
+1.19.760.755 I slot print_timing: id  0 | task 6 | prompt eval time =     455.74 ms /   260 tokens (    1.75 ms per token,   570.51 tokens per second)
+1.19.760.765 I slot print_timing: id  0 | task 6 |        eval time =   66598.53 ms /  1788 tokens (   37.25 ms per token,    26.85 tokens per second)
+1.19.760.766 I slot print_timing: id  0 | task 6 |       total time =   67054.27 ms /  2048 tokens
+1.19.760.773 I slot print_timing: id  0 | task 6 |    graphs reused =       1781
+1.19.760.887 I slot      release: id  0 | task 6 | stop processing: n_tokens = 2047, truncated = 1
+1.20.383.624 I srv    operator(): operator(): cleaning up before exit...

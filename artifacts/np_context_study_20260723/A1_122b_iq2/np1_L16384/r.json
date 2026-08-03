@@ -1,0 +1,54 @@
+{
+  "meta": {
+    "kernel": "v7-candidate",
+    "binary": "x",
+    "models": "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf",
+    "arm": "A1_122b_iq2_np1_L16384",
+    "timestamp": "2026-07-23T16:01:13.172452+00:00",
+    "elapsed_s": 282.2,
+    "n_per_suite": 155,
+    "seed": 42,
+    "stratify": false,
+    "endpoint": "chat",
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "enable_thinking": false,
+    "repeats": 1,
+    "max_tokens": 16384,
+    "questions_pinned": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-bench-gpu-20260720/questions_olympiadbench_hard.json"
+  },
+  "suites": [
+    {
+      "suite": "olympiadbench_hard",
+      "accuracy": 0.0,
+      "n": 1,
+      "n_questions": 1,
+      "repeats": 1,
+      "correct": 0,
+      "errors": 0,
+      "truncated": 1,
+      "per_tier": {
+        "3": {
+          "accuracy": 0.0,
+          "n": 1,
+          "correct": 0
+        }
+      },
+      "per_item": {
+        "olympiadbench_hard_combinatorics_1882": {
+          "correct": 0,
+          "n": 1
+        }
+      },
+      "throughput": {
+        "concurrency": 1,
+        "wall_s": 282.2,
+        "completion_tokens": 16123,
+        "prompt_tokens": 260,
+        "aggregate_decode_tok_s": 57.1,
+        "aggregate_total_tok_s": 58.1
+      }
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+0.00.040.018 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.040.382 W srv  llama_server: -----------------
+0.00.040.383 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.040.383 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.040.383 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.040.384 W srv  llama_server: -----------------
+0.00.041.598 I srv    load_model: loading model '/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf'
+0.04.037.457 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 2048, kv_unified = 'false'
+0.04.037.625 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.04.062.314 I srv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+0.04.062.357 I srv  llama_server: model loaded
+0.04.062.361 I srv  llama_server: listening on http://127.0.0.1:18072
+0.08.174.316 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.08.174.400 I slot launch_slot_: id  0 | task 8 | processing task, is_child = 0
+0.11.471.011 I slot print_timing: id  0 | task 8 | n_decoded =    340, tg = 112.63 t/s, tg_3s = 112.63 t/s
+0.14.474.180 I slot print_timing: id  0 | task 8 | n_decoded =    632, tg = 104.95 t/s, tg_3s =  97.23 t/s
+0.17.485.756 I slot print_timing: id  0 | task 8 | n_decoded =    887, tg =  98.19 t/s, tg_3s =  84.67 t/s
+0.20.497.169 I slot print_timing: id  0 | task 8 | n_decoded =   1177, tg =  97.72 t/s, tg_3s =  96.30 t/s
+0.23.508.419 I slot print_timing: id  0 | task 8 | n_decoded =   1465, tg =  97.30 t/s, tg_3s =  95.64 t/s
+0.26.314.967 W decode: failed to find a memory slot for batch of size 1
+0.26.314.972 E spec        draft: llama_decode[3] returned 1
+0.26.341.918 I slot print_timing: id  0 | task 8 | prompt eval time =     277.77 ms /   260 tokens (    1.07 ms per token,   936.02 tokens per second)
+0.26.341.921 I slot print_timing: id  0 | task 8 |        eval time =   17889.71 ms /  1787 tokens (   10.01 ms per token,    99.89 tokens per second)
+0.26.341.922 I slot print_timing: id  0 | task 8 |       total time =   18167.48 ms /  2047 tokens
+0.26.341.927 I slot print_timing: id  0 | task 8 |    graphs reused =        518
+0.26.341.931 I slot print_timing: id  0 | task 8 | draft acceptance = 0.60181 ( 1262 accepted /  2097 generated), mean len =  3.40
+0.26.341.996 I slot      release: id  0 | task 8 | stop processing: n_tokens = 2047, truncated = 1
+0.26.503.062 I srv    operator(): operator(): cleaning up before exit...

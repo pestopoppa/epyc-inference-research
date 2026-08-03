@@ -1,0 +1,195 @@
+[
+  {
+    "completion_tokens": 9,
+    "content": "ff-mtp-equivalence-01",
+    "content_sha256": "1c5f3f5d2bb1995fa273d5d5530eb1ea3c62d0d9d9e33d8a4bc431008790a933",
+    "finish_reason": "stop",
+    "index": 1,
+    "output_token_ids": [
+      529,
+      1395,
+      765,
+      60162,
+      85735,
+      12,
+      15,
+      16
+    ],
+    "prompt": "Reply with exactly: ff-mtp-equivalence-01",
+    "request": {
+      "enable_thinking": false,
+      "max_tokens": 256,
+      "messages": [
+        {
+          "content": "Reply with exactly: ff-mtp-equivalence-01",
+          "role": "user"
+        }
+      ],
+      "seed": 42,
+      "stream": false,
+      "temperature": 0.0,
+      "top_k": 1,
+      "top_p": 1.0
+    },
+    "response_sha256": "d6a74dbceed00b0537305c42c5de2da0770b19872568c5255409a3742b6fc781"
+  },
+  {
+    "completion_tokens": 4,
+    "content": "323",
+    "content_sha256": "3949ac1596ec77106a709a618bf5adcb19b77537ce8bcbdf54ff830169cdd084",
+    "finish_reason": "stop",
+    "index": 2,
+    "output_token_ids": [
+      18,
+      17,
+      18
+    ],
+    "prompt": "Compute 17 * 19. Reply with the integer only.",
+    "request": {
+      "enable_thinking": false,
+      "max_tokens": 256,
+      "messages": [
+        {
+          "content": "Compute 17 * 19. Reply with the integer only.",
+          "role": "user"
+        }
+      ],
+      "seed": 42,
+      "stream": false,
+      "temperature": 0.0,
+      "top_k": 1,
+      "top_p": 1.0
+    },
+    "response_sha256": "048e5cda5721f5133b3c266ed2add071390f2a6841bc2672c905785f0a2128c8"
+  },
+  {
+    "completion_tokens": 37,
+    "content": "Deterministic decoding is useful for a comparison test because it ensures that identical inputs always produce identical outputs, allowing for reliable and reproducible evaluation of model performance without variability from sampling randomness.",
+    "content_sha256": "b3cf41c64783243e5c16b092d4df95856c5aa5abace7359893263f6f72a77d96",
+    "finish_reason": "stop",
+    "index": 3,
+    "output_token_ids": [
+      89454,
+      4384,
+      45543,
+      369,
+      5222,
+      364,
+      264,
+      11960,
+      1228,
+      1521,
+      424,
+      24546,
+      421,
+      18922,
+      10804,
+      2590,
+      7936,
+      18922,
+      15796,
+      11,
+      10377,
+      364,
+      14294,
+      321,
+      50949,
+      75600,
+      15977,
+      314,
+      1558,
+      4906,
+      1973,
+      51809,
+      494,
+      24102,
+      83698,
+      13
+    ],
+    "prompt": "Write exactly one sentence explaining why deterministic decoding is useful for a comparison test.",
+    "request": {
+      "enable_thinking": false,
+      "max_tokens": 256,
+      "messages": [
+        {
+          "content": "Write exactly one sentence explaining why deterministic decoding is useful for a comparison test.",
+          "role": "user"
+        }
+      ],
+      "seed": 42,
+      "stream": false,
+      "temperature": 0.0,
+      "top_k": 1,
+      "top_p": 1.0
+    },
+    "response_sha256": "4ad8b32ece650515afa99f3f2f1d25ea323a3ac6b0c40b75875e2b7748a5d1e0"
+  },
+  {
+    "completion_tokens": 11,
+    "content": "len([3, 1, 4])",
+    "content_sha256": "612b6c456f1843f8e1502179e41d9df046be012230ac6f369c444b46fdf4835c",
+    "finish_reason": "stop",
+    "index": 4,
+    "output_token_ids": [
+      2798,
+      2477,
+      18,
+      11,
+      220,
+      16,
+      11,
+      220,
+      19,
+      2387
+    ],
+    "prompt": "Given Python list [3, 1, 4], write the expression that returns its length. Reply with code only.",
+    "request": {
+      "enable_thinking": false,
+      "max_tokens": 256,
+      "messages": [
+        {
+          "content": "Given Python list [3, 1, 4], write the expression that returns its length. Reply with code only.",
+          "role": "user"
+        }
+      ],
+      "seed": 42,
+      "stream": false,
+      "temperature": 0.0,
+      "top_k": 1,
+      "top_p": 1.0
+    },
+    "response_sha256": "9453d52922dce03a047e9c31ba11075b76e1e739a551abf2d7cbb62fbcde9895"
+  },
+  {
+    "completion_tokens": 7,
+    "content": "99,100",
+    "content_sha256": "7ba339bccc2298fb1cf0566f89c5d4bb1b62ffc4c5168566dd6436c5758f3118",
+    "finish_reason": "stop",
+    "index": 5,
+    "output_token_ids": [
+      24,
+      24,
+      11,
+      16,
+      15,
+      15
+    ],
+    "prompt": "State the next two integers after 98, separated by a comma and no other text.",
+    "request": {
+      "enable_thinking": false,
+      "max_tokens": 256,
+      "messages": [
+        {
+          "content": "State the next two integers after 98, separated by a comma and no other text.",
+          "role": "user"
+        }
+      ],
+      "seed": 42,
+      "stream": false,
+      "temperature": 0.0,
+      "top_k": 1,
+      "top_p": 1.0
+    },
+    "response_sha256": "8077e012ea936296be7a4e41039167648ca56433fd45e72c22ef7695109fb5f2"
+  }
+]

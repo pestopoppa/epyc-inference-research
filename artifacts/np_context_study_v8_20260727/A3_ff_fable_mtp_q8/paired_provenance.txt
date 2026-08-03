@@ -1,0 +1,2 @@
+paired_with=A3_ff_fable_non_mtp_q8
+model_tensor_contract=851-base-plus-15-mtp

@@ -1,0 +1,15 @@
+{
+  "enable_thinking": false,
+  "max_tokens": 256,
+  "messages": [
+    {
+      "content": "Write exactly one sentence explaining why deterministic decoding is useful for a comparison test.",
+      "role": "user"
+    }
+  ],
+  "seed": 42,
+  "stream": false,
+  "temperature": 0.0,
+  "top_k": 1,
+  "top_p": 1.0
+}

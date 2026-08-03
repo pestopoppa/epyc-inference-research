@@ -1,0 +1,27 @@
+0.00.037.092 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.037.437 W srv  llama_server: -----------------
+0.00.037.438 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.037.438 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.037.438 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.037.439 W srv  llama_server: -----------------
+0.00.038.641 I srv    load_model: loading model '/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-Q8_0.gguf'
+0.03.582.591 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 16640, kv_unified = 'false'
+0.03.592.538 I srv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+0.03.592.586 I srv  llama_server: model loaded
+0.03.592.592 I srv  llama_server: listening on http://127.0.0.1:18072
+0.09.478.327 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.09.478.381 I slot launch_slot_: id  0 | task 11 | processing task, is_child = 0
+0.13.866.442 I slot print_timing: id  0 | task 11 | prompt processing, n_tokens =   6144, progress = 0.38, t =   4.39 s / 1400.17 tokens per second
+0.16.161.267 I slot print_timing: id  0 | task 11 | prompt processing, n_tokens =   8192, progress = 0.50, t =   6.68 s / 1225.82 tokens per second
+0.18.641.951 I slot print_timing: id  0 | task 11 | prompt processing, n_tokens =  10240, progress = 0.63, t =   9.16 s / 1117.47 tokens per second
+0.20.992.485 I slot print_timing: id  0 | task 11 | prompt processing, n_tokens =  12288, progress = 0.75, t =  11.51 s / 1067.22 tokens per second
+0.23.527.269 I slot print_timing: id  0 | task 11 | prompt processing, n_tokens =  14246, progress = 0.87, t =  14.05 s / 1014.03 tokens per second
+0.26.005.555 W srv          stop: cancel task, id_task = 33
+0.26.078.839 I slot print_timing: id  0 | task 11 | prompt processing, n_tokens =  16290, progress = 1.00, t =  16.60 s / 981.30 tokens per second
+0.28.685.515 W srv          stop: cancel task, id_task = 38
+0.29.949.442 I slot print_timing: id  0 | task 11 | prompt eval time =   19364.68 ms / 16294 tokens (    1.19 ms per token,   841.43 tokens per second)
+0.29.949.445 I slot print_timing: id  0 | task 11 |        eval time =    1106.36 ms /    32 tokens (   34.57 ms per token,    28.92 tokens per second)
+0.29.949.446 I slot print_timing: id  0 | task 11 |       total time =   20471.04 ms / 16326 tokens
+0.29.949.451 I slot print_timing: id  0 | task 11 |    graphs reused =         31
+0.29.949.874 I slot      release: id  0 | task 11 | stop processing: n_tokens = 16325, truncated = 0
+0.29.950.873 I srv    operator(): operator(): cleaning up before exit...

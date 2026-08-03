@@ -1,0 +1,396 @@
+<title>GPU Candidates — Throughput & Model-Selection Surface</title>
+<style>
+  :root{
+    --bg:#f5f7f8; --panel:#ffffff; --panel-2:#eef2f4; --ink:#16202a; --muted:#5b6a77;
+    --line:#dbe3e8; --accent:#0f8f88; --accent-2:#c67d22; --warn:#c2701f; --good:#2f9e6f; --bad:#c0483f;
+    --shadow:0 1px 2px rgba(20,40,55,.06),0 8px 24px rgba(20,40,55,.05);
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --a1:#c67d22; --a3:#3a7ec6; --a4:#0f8f88; --ff:#7c5cbf; --ffm:#a98fe0; --lag:#c85a4a;
+  }
+  @media (prefers-color-scheme:dark){:root{--bg:#0d1418;--panel:#131c22;--panel-2:#0f171d;--ink:#e6edf1;--muted:#8b9aa6;--line:#24313a;--accent:#35c9bd;--accent-2:#f0a94a;--warn:#e0973a;--good:#43b487;--bad:#e0736a;--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);--a1:#f0a94a;--a3:#5aa0e6;--a4:#35c9bd;--ff:#a98fe0;--ffm:#c3b0f0;--lag:#e0836f;}}
+  :root[data-theme="light"]{--bg:#f5f7f8;--panel:#ffffff;--panel-2:#eef2f4;--ink:#16202a;--muted:#5b6a77;--line:#dbe3e8;--accent:#0f8f88;--accent-2:#c67d22;--warn:#c2701f;--good:#2f9e6f;--bad:#c0483f;--shadow:0 1px 2px rgba(20,40,55,.06),0 8px 24px rgba(20,40,55,.05);--a1:#c67d22;--a3:#3a7ec6;--a4:#0f8f88;--ff:#7c5cbf;--ffm:#a98fe0;--lag:#c85a4a;}
+  :root[data-theme="dark"]{--bg:#0d1418;--panel:#131c22;--panel-2:#0f171d;--ink:#e6edf1;--muted:#8b9aa6;--line:#24313a;--accent:#35c9bd;--accent-2:#f0a94a;--warn:#e0973a;--good:#43b487;--bad:#e0736a;--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);--a1:#f0a94a;--a3:#5aa0e6;--a4:#35c9bd;--ff:#a98fe0;--ffm:#c3b0f0;--lag:#e0836f;}
+
+  *{box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;-webkit-font-smoothing:antialiased;margin:0}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 24px 72px}
+  .mono{font-family:var(--mono)}
+  h1,h2,h3,h4{text-wrap:balance;margin:0}
+  a{color:var(--accent);text-underline-offset:2px}
+
+  header.top{border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:14px}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+  h1{font-size:clamp(24px,3.4vw,34px);font-weight:680;letter-spacing:-.01em;line-height:1.12}
+  .sub{color:var(--muted);font-size:15.5px;margin-top:12px;max-width:70ch}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+  .chip{font-family:var(--mono);font-size:11.5px;color:var(--muted);background:var(--panel-2);border:1px solid var(--line);border-radius:999px;padding:4px 11px;letter-spacing:.02em}
+  .chip b{color:var(--ink);font-weight:600}
+
+  section{margin-top:40px}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:10px}
+  .eyebrow::after{content:"";height:1px;flex:1;background:var(--line)}
+  .grouplabel{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:22px 0 10px;display:flex;gap:8px;align-items:center}
+  .grouplabel b{color:var(--ink);font-weight:640;letter-spacing:0;text-transform:none;font-size:13px}
+  h2{font-size:19px;font-weight:640;letter-spacing:-.005em}
+
+  /* verdicts */
+  .verdicts{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .vc{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:17px 18px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .vc::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--arm,var(--line))}
+  .vc.ff{--arm:var(--ff)}.vc.lag{--arm:var(--lag)}.vc.a4{--arm:var(--a4)}.vc.mtp{--arm:var(--ffm)}
+  .vc h4{font-size:15px;font-weight:660;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .vc .who{font-family:var(--mono)}
+  .vc p{margin:9px 0 0;color:var(--muted);font-size:13.4px}
+  .vc p b{color:var(--ink)}
+  .pill{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:5px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+  .pill.drop{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,var(--line));background:color-mix(in srgb,var(--bad) 8%,transparent)}
+  .pill.keep{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,var(--line));background:color-mix(in srgb,var(--warn) 8%,transparent)}
+  .pill.hold{color:var(--good);border-color:color-mix(in srgb,var(--good) 45%,var(--line));background:color-mix(in srgb,var(--good) 8%,transparent)}
+  .pill.gate{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+
+  /* peak strip */
+  .peaks{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .peakcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 16px 14px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .peakcard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--arm)}
+  .arm-name{font-family:var(--mono);font-weight:640;font-size:14px;color:var(--ink)}
+  .arm-desc{font-size:12px;color:var(--muted);margin-top:3px;min-height:30px}
+  .peakrow{display:flex;justify-content:space-between;font-family:var(--mono);font-size:13px;padding:5px 0;border-top:1px dashed var(--line)}
+  .peakrow:first-of-type{margin-top:10px}
+  .peakrow .v{font-weight:640;font-variant-numeric:tabular-nums}
+  .peakrow .np{color:var(--muted);font-size:11.5px}
+  .rankbadge{position:absolute;top:14px;right:14px;font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+
+  /* heatmaps */
+  .grids{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .gridcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:var(--shadow)}
+  .gridcard h3{font-family:var(--mono);font-size:13px;font-weight:640;display:flex;align-items:center;gap:7px}
+  .dot{width:8px;height:8px;border-radius:2px;background:var(--arm)}
+  .gridcard .gsub{font-size:11px;color:var(--muted);margin:3px 0 10px}
+  table.hm{border-collapse:separate;border-spacing:3px;width:100%;font-family:var(--mono)}
+  table.hm th{font-size:10.5px;font-weight:500;color:var(--muted);padding:2px;font-variant-numeric:tabular-nums}
+  table.hm th.corner{text-align:left;color:var(--accent);font-size:10px}
+  table.hm th.name{text-align:left;color:var(--ink);font-weight:640;white-space:nowrap;padding-right:8px;font-size:11px}
+  table.hm td{text-align:center;font-size:12px;font-variant-numeric:tabular-nums;font-weight:600;border-radius:5px;padding:6px 2px;color:#fff;background:var(--panel-2);min-width:34px}
+  table.hm td.empty{color:var(--muted);font-weight:400;background:repeating-linear-gradient(-45deg,transparent,transparent 4px,var(--line) 4px,var(--line) 5px);border:1px solid var(--line)}
+  td.peak{outline:2px solid var(--ink);outline-offset:-2px}
+  .legend{display:flex;align-items:center;gap:10px;margin-top:16px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .ramp{height:9px;flex:1;border-radius:5px;max-width:280px;background:linear-gradient(90deg,#26456a,#1b7f74,#2f9e6f,#e0a53c)}
+
+  /* RAG heatmap (arm rows) */
+  .hmwrap{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px 12px;box-shadow:var(--shadow)}
+  table.hmrag{border-collapse:separate;border-spacing:4px;width:100%;font-family:var(--mono);min-width:440px}
+  table.hmrag th{font-size:11px;font-weight:500;color:var(--muted);padding:3px}
+  table.hmrag th.name{text-align:left;color:var(--ink);font-weight:640;white-space:nowrap;padding-right:10px}
+  table.hmrag th.corner{text-align:left;color:var(--accent);font-size:10.5px}
+  table.hmrag td{text-align:center;font-size:13px;font-variant-numeric:tabular-nums;font-weight:640;border-radius:6px;padding:9px 4px;color:#fff;min-width:56px}
+
+  /* data table */
+  .scroller{overflow-x:auto}
+  table.data{border-collapse:collapse;width:100%;font-size:13.5px}
+  table.data th,table.data td{padding:9px 12px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
+  table.data thead th{font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:500}
+  table.data td.name,table.data th.name{text-align:left;font-family:var(--mono);font-weight:640;white-space:nowrap}
+  table.data td .arm{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:7px;vertical-align:middle}
+  table.data td.lead{color:var(--good);font-weight:700}
+  table.data tr.dim td{color:var(--muted)}
+
+  /* findings + router */
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
+  .card.wide{grid-column:1/-1}
+  .card.flag{border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+  .card h4{margin:0 0 7px;font-size:14px;font-weight:640;display:flex;align-items:center;gap:8px}
+  .card p{margin:0;color:var(--muted);font-size:13.4px}
+  .card p .mono,.card p b{color:var(--ink)}
+  .tag{font-family:var(--mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:5px;background:var(--panel-2);border:1px solid var(--line);color:var(--muted)}
+  .tag.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,var(--line))}
+  .tag.good{color:var(--good);border-color:color-mix(in srgb,var(--good) 40%,var(--line))}
+
+  .banner{display:flex;gap:12px;align-items:flex-start;background:color-mix(in srgb,var(--accent-2) 10%,var(--panel));border:1px solid color-mix(in srgb,var(--accent-2) 40%,var(--line));border-radius:11px;padding:14px 16px;margin-bottom:18px}
+  .banner .ic{font-family:var(--mono);color:var(--accent-2);font-weight:700;font-size:15px;flex-shrink:0}
+  .banner p{margin:0;font-size:13.5px;color:var(--ink)}
+  .banner b{color:var(--accent-2)}
+  .layers{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .layer{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:15px;box-shadow:var(--shadow)}
+  .layer .n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.08em}
+  .layer h4{margin:6px 0 6px;font-size:14px;font-weight:640}
+  .layer p{margin:0;font-size:12.8px;color:var(--muted)}
+  table.rule{width:100%;border-collapse:collapse;margin-top:18px;font-size:13.5px}
+  table.rule th,table.rule td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  table.rule thead th{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+  table.rule td.arm{font-family:var(--mono);font-weight:640;white-space:nowrap}
+  table.rule td .k{font-family:var(--mono);color:var(--accent);font-weight:640}
+  .arm-a1{--arm:var(--a1)}.arm-a3{--arm:var(--a3)}.arm-a4{--arm:var(--a4)}.arm-ff{--arm:var(--ff)}.arm-ffm{--arm:var(--ffm)}.arm-lag{--arm:var(--lag)}
+
+  .note{color:var(--muted);font-size:12.6px;margin-top:14px;max-width:82ch}
+  .note b{color:var(--ink)}
+  footer{margin-top:44px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:12.4px}
+  footer .mono{color:var(--ink)}
+
+  @media (max-width:860px){.peaks,.grids,.layers,.verdicts,.cards{grid-template-columns:1fr}.gridcard{max-width:420px}}
+  @media (prefers-reduced-motion:no-preference){td:hover{transition:transform .12s ease}table.hm td:hover,table.hmrag td:hover{transform:scale(1.1);z-index:2;position:relative}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="kicker">Inference throughput · model-selection surface</div>
+    <h1>GPU Candidates: Throughput &amp; Model-Selection Surface</h1>
+    <p class="sub">One place for every GPU candidate we've measured on the MI210. The <b>architect trio</b> —
+      A4 (35B-A3B), A3 (27B dense), A1 (122B-A10B IQ2) — on the <b>v7</b> kernel (2026-07-23), and the newer
+      <b>27B finetunes</b> (Fable-Fusion, ThinkingCap) and <b>Laguna-S-2.1 (IQ2)</b> on <b>v8</b> (2026-07-28), now
+      with coding-quality and RAG-at-depth axes. Kernel era is labeled per surface — we document, we don't
+      re-collect unless a kernel jump warrants it.</p>
+    <div class="chips">
+      <span class="chip">MI210 · <b>v7 + v8</b> kernels (labeled)</span>
+      <span class="chip">architect trio <b>2026-07-23</b> · new candidates <b>2026-07-28</b></span>
+      <span class="chip">GPU-only · CPU untouched</span>
+      <span class="chip">metric: <b>decision-support observation</b></span>
+    </div>
+  </header>
+
+  <section>
+    <div class="eyebrow">New-candidate verdict — read this first</div>
+    <div class="verdicts">
+      <div class="vc ff">
+        <h4><span class="who">Fable-Fusion / ThinkingCap 27B</span> <span class="pill drop">don't deploy</span></h4>
+        <p><b>No decisive quality win.</b> Against stock 27B the finetunes are a wash — FF <i>loses</i> SWE-oracle-40
+          (<b>47.5%</b> vs <b>57.5%</b>) but marginally <i>edges</i> LCB-hard (<b>47.2%</b> vs 45.3%); TC ties stock on
+          LCB (45.3%). No suite shows a clear finetune gain, and Q8-dense decode is slow (<b>~30 t/s</b> single-stream).
+          Keep FF as a scaffold / pre-processing candidate only; TC's license gate stays operator-waived with no quality
+          reason to advance.</p>
+      </div>
+      <div class="vc lag">
+        <h4><span class="who">Laguna-S-2.1 · IQ2</span> <span class="pill keep">no coding role · parked</span></h4>
+        <p><b>The FG program already ruled it out.</b> <b>FG-1</b>: Laguna adds <b>zero unique SWE solves</b> beyond
+          A3∪A4 — redundant, not additive. <b>FG-4</b>: at <b>44.6 t/s</b> it's <b>~2× slower than the A4 incumbent</b>
+          (94.5) — the "fast small" story holds only against the slow FF 27Bs and <i>inverts</i> against the real
+          alternative. <b>FG-2</b>: its 26.4% LCB is partly a truncation artifact (5 format-spirals + a loop), but no
+          coding-route case survives even remediated. Its only remaining shot is a <i>non-coding</i> niche (FG-5,
+          unproven). Park it — don't deploy for coding.</p>
+      </div>
+      <div class="vc a4">
+        <h4><span class="who">A4 · 35B-A3B MoE</span> <span class="pill hold">role confirmed</span></h4>
+        <p><b>Throughput king across both eras.</b> The v8 bridge re-confirms v7: <b>124 t/s</b> single-stream RAG,
+          <b>270 t/s</b> batched at 2k — ~4× the FF 27Bs. Coding is mixed (bottoms SWE-40 at 32.5% yet <b>tops LCB-hard
+          at 54.7%</b>), and reasoning is <b>statistically NULL</b> across A1/A3/A4 — so no real quality gap to hold against it.</p>
+      </div>
+      <div class="vc mtp">
+        <h4><span class="who">MTP speculative decode</span> <span class="pill gate">workload-gate</span></h4>
+        <p><b>Not a free win — workload-dependent.</b> MTP lifts <i>batched short-prompt</i> throughput (FF 2k:
+          <b>135</b> vs 102 t/s, +33%), but on <i>single-stream deep-RAG</i> it goes <b>net-negative</b> (FF+MTP 19.8
+          vs FF 26.4 t/s at 32k) — the draft rarely lands on long contexts. Deploy per-workload, never blanket.</p>
+      </div>
+    </div>
+    <p class="note"><b>Bottom line:</b> nothing new displaces the lineup on merit — finetunes lateral-or-worse on quality, Laguna
+      ruled out for coding (zero unique solves, 2× slower than A4), A4 the throughput arm, MTP a conditional lever. Decision-support, not a gate;
+      no lineup change is authorized here.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Axis — coding &amp; reasoning ladders · everything we've measured</div>
+
+    <div class="grouplabel">▸ <b>Coding ladder</b> · executable pass@1 (LCB/BCB) · SWE FAIL_TO_PASS oracle</div>
+    <div class="scroller">
+      <table class="data">
+        <thead><tr><th class="name">Model</th><th>LCB-hard <span style="font-weight:400;text-transform:none">n=53</span></th>
+          <th>BCB-hard <span style="font-weight:400;text-transform:none">n=90</span></th>
+          <th>SWE-40 <span style="font-weight:400;text-transform:none">n=40</span></th><th style="text-align:left">Note</th></tr></thead>
+        <tbody>
+          <tr><td class="name"><span class="arm" style="background:var(--a4)"></span>A4 · 35B-A3B</td>
+            <td class="lead">54.7% <span class="mono" style="color:var(--muted)">29/53</span></td>
+            <td>27.8% <span class="mono" style="color:var(--muted)">25/90</span></td>
+            <td>32.5% <span class="mono" style="color:var(--muted)">13/40</span></td>
+            <td style="text-align:left;color:var(--muted)">Tops LCB, bottoms SWE — the disagreement in person.</td></tr>
+          <tr><td class="name"><span class="arm" style="background:var(--a1)"></span>A1 · 122B-IQ2</td>
+            <td>47.2% <span class="mono" style="color:var(--muted)">25/53</span></td>
+            <td>26.7% <span class="mono" style="color:var(--muted)">24/90</span></td>
+            <td>37.5% <span class="mono" style="color:var(--muted)">15/40</span></td>
+            <td style="text-align:left;color:var(--muted)">Mid on all three.</td></tr>
+          <tr><td class="name"><span class="arm" style="background:var(--ff)"></span>Fable-Fusion 27B</td>
+            <td>47.2% <span class="mono" style="color:var(--muted)">25/53</span></td>
+            <td>—</td>
+            <td>47.5% <span class="mono" style="color:var(--muted)">19/40</span></td>
+            <td style="text-align:left;color:var(--muted)">Below stock on SWE; ties A1 on LCB. No win.</td></tr>
+          <tr><td class="name"><span class="arm" style="background:#7a8a97"></span>Stock 27B dense</td>
+            <td>45.3% <span class="mono" style="color:var(--muted)">24/53</span></td>
+            <td class="lead">31.1% <span class="mono" style="color:var(--muted)">28/90</span></td>
+            <td class="lead">57.5% <span class="mono" style="color:var(--muted)">23/40</span></td>
+            <td style="text-align:left;color:var(--muted)">Tops SWE + BCB — the coding bar to beat.</td></tr>
+          <tr><td class="name"><span class="arm" style="background:var(--ffm)"></span>ThinkingCap 27B</td>
+            <td>45.3% <span class="mono" style="color:var(--muted)">24/53</span></td>
+            <td>—</td>
+            <td>52.5% <span class="mono" style="color:var(--muted)">21/40†</span></td>
+            <td style="text-align:left;color:var(--muted)">Clean no-think SWE lands 2nd†; still below stock.</td></tr>
+          <tr><td class="name"><span class="arm" style="background:var(--lag)"></span>Laguna-S-2.1 IQ2</td>
+            <td style="color:var(--bad);font-weight:700">26.4% <span class="mono" style="color:var(--muted)">14/53</span></td>
+            <td>—</td>
+            <td>42.5% <span class="mono" style="color:var(--muted)">17/40</span></td>
+            <td style="text-align:left;color:var(--muted)"><b style="color:var(--ink)">LCB partly truncation</b> (FG-2); SWE adds <b style="color:var(--ink)">zero unique solves</b> vs A3∪A4 (FG-1).</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note"><b>The ladder disagrees across benchmarks</b> — no arm sweeps. A4 tops LCB (54.7%) yet bottoms SWE (32.5%); stock-27B tops
+      SWE + BCB but is mid-LCB; Laguna's SWE looks fine (42.5%) but its LCB collapses to <b>26.4%</b>. BCB-hard is near-flat across the trio
+      (27–31%) — it's <b>non-discriminating</b> on this family (why it's filed as a conditional regression screen, not a ranking run). LCB=A4
+      lead and FF≈A1, TC≈stock are exact n=53 ties (small-n coincidence, not identity). †TC's SWE-40 is the FG-3 <b>clean no-think
+      validation sealed 2026-07-28</b> (21/40); it supersedes the earlier confounded 45.0% row whose <span class="mono">--enable-thinking</span>
+      capture produced 15/16 reasoning-channel cap truncations. <b>Laguna quant axis:</b> Q4_K_M was
+      screened vs IQ2 on SWE-40 — <b>Q4 19/40 vs IQ2 17/40</b> (overlap 13, discordants 6:4, paired p=0.75, n=40) — a <b>non-resolving</b>
+      difference, so the quant doesn't rescue Laguna's coding case; the Q4 LCB run was stopped once FG-1/FG-4 had already killed it.</p>
+
+    <div class="grouplabel" style="margin-top:24px">▸ <b>Reasoning ladder</b> · architect trio only (the finetunes &amp; Laguna were never reasoning-benched)</div>
+    <div class="scroller">
+      <table class="data">
+        <thead><tr><th class="name">Model</th><th>GPQA-D letter <span style="font-weight:400;text-transform:none">rescored, no-CoT</span></th>
+          <th>GPQA-D CoT <span style="font-weight:400;text-transform:none">n=50</span></th>
+          <th>AIME'25 avg@4 <span style="font-weight:400;text-transform:none">n=30</span></th><th style="text-align:left">Note</th></tr></thead>
+        <tbody>
+          <tr><td class="name"><span class="arm" style="background:#7a8a97"></span>Stock 27B (A3)</td>
+            <td>51.0%</td><td class="mono" style="color:var(--muted)">—</td>
+            <td class="lead">74.2%</td><td style="text-align:left;color:var(--muted)">Edges the larger arms on AIME.</td></tr>
+          <tr><td class="name"><span class="arm" style="background:var(--a1)"></span>A1 · 122B-IQ2</td>
+            <td class="lead">55.1%</td><td class="lead">90.0%</td>
+            <td>71.7%</td><td style="text-align:left;color:var(--muted)">IQ2 reasoning penalty bounded small (~3–6pp, CI incl. 0).</td></tr>
+          <tr><td class="name"><span class="arm" style="background:var(--a4)"></span>A4 · 35B-A3B</td>
+            <td>53.0%</td><td>84.0%</td>
+            <td>70.8%</td><td style="text-align:left;color:var(--muted)">3B-active MoE ties both larger arms.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note"><b>Reasoning is a well-powered NULL across A1/A3/A4</b> — four independent measurements agree (letter-only GPQA, CoT-GPQA,
+      AIME'25, AXA-1 knowledge Δ0.0pp). GPQA-CoT saturates ~84–90% (A1's 90.0% exceeds A4's <i>published</i> 86.0%), so it can't separate them;
+      AIME'25 at n=30 has a 3.4pp band (A3 74.2 ≥ A4 70.8 ≈ A1 71.7), all p ≥ 0.50. Net: at ≤AIME difficulty these three reason equivalently, so
+      the architect choice falls to <b>throughput + deployment robustness</b>, not accuracy. All figures observation-grade.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Axis — RAG-at-depth decode (new candidates, v8) · production-representative</div>
+    <div class="hmwrap">
+      <div style="font-family:var(--mono);font-size:12.5px;color:var(--muted);margin-bottom:12px">
+        Single-stream (np1) decode <b style="color:var(--ink)">t/s</b> on real LongHealth prefill-to-depth RAG prompts, by retrieved-context depth — what one user waits on.</div>
+      <div class="scroller"><table class="hmrag" id="hm-rag"></table></div>
+      <div class="legend"><span>slow</span><span class="ramp"></span><span>fast</span>
+        <span style="margin-left:auto">rows = model · cols = RAG depth · shared scale with the grid below</span></div>
+    </div>
+    <div class="cards" style="margin-top:16px">
+      <div class="card"><h4><span class="tag good">signal</span>A4 laps the field on real prompts too</h4>
+        <p>124 → 109 t/s across 2k–32k depth — <b>~4×</b> the FF 27Bs, <b>~2.5×</b> Laguna. Small-active MoE decode isn't a short-prompt artifact.</p></div>
+      <div class="card"><h4><span class="tag">signal</span>Laguna's speed edge is intra-small-model only</h4>
+        <p>IQ2 lets Laguna decode <b>47 vs 30 t/s</b> against the FF 27Bs — but A4 runs <b>124</b>, ~2.5× faster. So the "fast small" edge holds only within the small-model bucket and <b>inverts vs the real alternative</b> (FG-4).</p></div>
+      <div class="card wide flag"><h4><span class="tag warn">the MTP reversal</span>Batched peak ≠ what a RAG user feels</h4>
+        <p>Peak <b>batched</b> RAG favors MTP (FF+MTP 2k: <b>73</b>@np32 vs FF 60@np16). But <b>single-stream</b> — the real shape of a routed RAG
+          query — MTP <b>loses at every depth</b>, gap widening with context: <b class="mono">28.9/26.7/24.0/19.8</b> (MTP) vs
+          <b class="mono">30.7/30.0/28.9/26.4</b> (non-MTP). The short-prompt grid alone would've sold MTP as a clean win.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">The full throughput surface — aggregate decode t/s (shared color scale)</div>
+
+    <div class="grouplabel">▸ <b>New candidates</b> · v8 kernel · 2026-07-28 · full 24-cell Cartesian (A4 as 2k/8k bridge)</div>
+    <div class="grids">
+      <div class="gridcard arm-ffm"><h3><span class="dot"></span>FF 27B + MTP</h3><div class="gsub">finetune · mtp1 · best of the 27Bs when batched</div><table class="hm" data-arm="FFM"></table></div>
+      <div class="gridcard arm-ff"><h3><span class="dot"></span>FF 27B (non-MTP)</h3><div class="gsub">finetune · Q8 dense · slow, flat</div><table class="hm" data-arm="FF"></table></div>
+      <div class="gridcard arm-lag"><h3><span class="dot"></span>Laguna · IQ2</h3><div class="gsub">iq2 · fast vs FF only, poor batching</div><table class="hm" data-arm="LAG"></table></div>
+    </div>
+
+    <div class="grouplabel" style="margin-top:26px">▸ <b>Architect trio</b> · v7 kernel · 2026-07-23 · preserved reference surface</div>
+    <div class="grids">
+      <div class="gridcard arm-a4"><h3><span class="dot"></span>A4 · 35B-A3B MoE</h3><div class="gsub">mtp4 · hottest grid — batches everywhere</div><table class="hm" data-arm="A4"></table></div>
+      <div class="gridcard arm-a3"><h3><span class="dot"></span>A3 · 27B dense</h3><div class="gsub">mtp4 · robust, plateaus at np=8</div><table class="hm" data-arm="A3"></table></div>
+      <div class="gridcard arm-a1"><h3><span class="dot"></span>A1 · 122B-A10B IQ2</h3><div class="gsub">mtp2 · np=2 dip + long-L collapse</div><table class="hm" data-arm="A1"></table></div>
+    </div>
+
+    <div class="legend"><span>slow</span><span class="ramp"></span><span>fast</span>
+      <span style="margin-left:auto">rows = np · cols = budget L · ▢ peak · ▨ not run (grid-cap / VRAM guard)</span></div>
+    <p class="note"><b>One shared scale across all six</b> (and the RAG heatmap above) so cross-arm reads are honest: A4 runs hot, the FF 27Bs
+      run cool, Laguna sits between. The short-prompt grid flatters MTP and high-np batching — the RAG-at-depth axis is the truer production read.</p>
+  </section>
+
+  <section>
+    <div class="eyebrow">What the architect surface says (v7)</div>
+    <div class="cards">
+      <div class="card"><h4><span class="tag good">ranking</span>A4 ≫ A3 &gt; A1, everywhere batched</h4>
+        <p>At every batched point the order holds. L=2k peaks: <b class="mono">243 / 153 / 103</b>. The small-active MoE wins on both fronts — fewest active params <i>and</i> clean scaling.</p></div>
+      <div class="card flag"><h4><span class="tag warn">correction</span>The dip &amp; collapse are A1-specific</h4>
+        <p>The <span class="mono">np=2</span> dip and long-CoT "collapse" were <b>over-generalized from A1</b>. A4 (also MoE) shows <b>no dip</b> (1.43× at np=2) and batches fine at 32k. A1 alone collapses — confounded across IQ2 / MTP-2 / large-active.</p></div>
+      <div class="card"><h4><span class="tag">mechanism</span>Why dense batches so well</h4>
+        <p>Dense amortizes weights across the batch — read 27&nbsp;GB once, apply to all <span class="mono">np</span> tokens. MoE tokens scatter to experts, so its edge pays only at high np with reuse — why A4 climbs to np=32 while A3 plateaus at np=8.</p></div>
+      <div class="card"><h4><span class="tag">scope</span>Throughput ≠ quality</h4>
+        <p>Reasoning accuracy was a well-powered <b>NULL across A1/A3/A4</b> (six suites). Throughput is a legitimate tiebreaker favoring A4 then A3 — but the decision also weighs deployment robustness and the 122B's dual-residency.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Router-integration plan (architect trio)</div>
+    <div class="banner"><span class="ic">◧ GATED</span>
+      <p>The MI210 is today a <b>bench instrument, not a serving node</b> — production is CPU-only. This plan activates only when the GPU is
+        registered as a serving backend in <span class="mono">orchestrator_stack.py</span> / <span class="mono">model_registry</span> — an
+        operator-gated stack change. Until then it's a parameterization staged and ready.</p></div>
+    <div class="layers">
+      <div class="layer"><div class="n">LAYER 1 · launch-time</div><h4>Static server sizing</h4>
+        <p>Size each model's launch <span class="mono">-np</span> to its expected budget distribution. Short-budget roles → high np; deep-reasoning architect → low np. Never launch A1 at np=2.</p></div>
+      <div class="layer"><div class="n">LAYER 2 · request-time</div><h4>Budget → concurrency co-decision</h4>
+        <p>Extend the learned router to emit a concurrency ceiling alongside the budget. Don't admit a request into a slot pool that would exceed <span class="mono">np_ceiling(budget)</span> for that arm.</p></div>
+      <div class="layer"><div class="n">LAYER 3 · live</div><h4>Admission &amp; placement</h4>
+        <p>Track <span class="mono">Σ(budget·kv/token)</span> against the VRAM cap and the bandwidth-collapse ceiling. Near the edge, admit / queue / downgrade — or route to CPU — rather than pack another slot into collapse.</p></div>
+    </div>
+    <table class="rule">
+      <thead><tr><th>Arm</th><th>Batching policy by reasoning budget</th><th>Character</th></tr></thead>
+      <tbody>
+        <tr class="arm-a4"><td class="arm">A4 · 35B-A3B</td><td>Batch aggressively at <b>every</b> budget — scales to <span class="k">np=32+</span>, no dip.</td><td>The throughput arm. Prefer under load.</td></tr>
+        <tr class="arm-a3"><td class="arm">A3 · 27B dense</td><td>Batch at every budget; sweet spot <span class="k">np=8</span> (regresses past np=16).</td><td>Strong + robust; predictable.</td></tr>
+        <tr class="arm-a1"><td class="arm">A1 · 122B IQ2</td><td>≤8k → <span class="k">np8–16</span>; 16k → <span class="k">np4–8</span>; ≥32k → <span class="k">np1</span>. <b>Never np=2.</b></td><td>Batch short only; run long-CoT near-solo.</td></tr>
+      </tbody>
+    </table>
+    <p class="note"><b>New candidates layer in cleanly:</b> the FF 27Bs behave like A3 (dense, plateau ~np8–16) but slower and without a quality reason to
+      route to; Laguna earns no coding slot at all — FG-1/FG-4 kill the case (zero unique SWE solves, ~2× slower than A4), leaving only an unproven non-coding niche.</p>
+  </section>
+
+  <footer>
+    <p class="mono">architect trio: artifacts/np_context_study_20260723/ · v7 · commit f733863e &nbsp;|&nbsp; new candidates: artifacts/np_context_study_v8_20260727/ · production-consolidated-v8 @67a433bf4</p>
+    <p style="margin-top:6px">A living surface — new candidates fold into the architect-trio reference rather than replacing it; each block is kernel-era labeled.
+      All throughput and quality figures are decision-support <b>observations</b> (single/one-wave, LongHealth + SWE/LCB + olympiadbench, seed 42) —
+      not protocol-certified gating metrics. No lineup, registry, or production change is authorized by this surface.</p>
+  </footer>
+</div>
+
+<script>
+(function(){
+  var GRID={
+    A1:{v:[[54.7,52.7,57.1,52.0],[44.0,44.2,44.8,43.0],[63.1,60.9,55.6,45.7],[85.3,66.8,62.7,null],[99.9,86.2,null,null],[103.4,null,null,null]]},
+    A3:{v:[[46.8,47.0,41.4,42.5],[79.1,64.3,64.0,65.2],[113.8,102.5,90.8,95.2],[151.2,119.9,100.4,null],[152.9,104.0,null,null],[128.7,null,null,null]]},
+    A4:{v:[[72.4,94.0,99.4,73.3],[103.2,111.5,98.3,98.9],[147.2,159.0,126.9,131.5],[181.1,193.8,159.5,null],[220.9,207.1,null,null],[243.5,null,null,null]]},
+    FF:{v:[[26.5,25.1,26.0,26.3],[29.8,29.6,29.6,28.2],[51.4,45.2,44.6,50.7],[79.7,47.2,52.8,52.5],[102.0,52.5,60.0,57.2],[81.5,53.8,null,null]]},
+    FFM:{v:[[27.3,26.7,26.5,26.6],[49.1,41.5,39.3,39.5],[82.9,65.8,52.4,63.2],[116.2,84.1,59.3,45.2],[135.1,75.5,58.3,null],[114.0,66.7,null,null]]},
+    LAG:{v:[[43.2,42.5,40.6,43.2],[53.9,51.0,55.6,52.3],[52.4,47.8,60.9,57.1],[58.0,62.6,46.7,62.0],[68.3,48.5,54.4,null],[73.7,88.2,null,null]]}
+  };
+  var NP=[1,2,4,8,16,32], LBL=["2k","8k","16k","32k"], MIN=25, MAX=270;
+  var stops=[[0,[38,69,106]],[.38,[27,127,116]],[.66,[47,158,111]],[1,[224,165,60]]];
+  function ramp(v){var t=Math.max(0,Math.min(1,(v-MIN)/(MAX-MIN))),i=0;for(;i<stops.length-1;i++){if(t<=stops[i+1][0])break;}var a=stops[i],b=stops[Math.min(i+1,stops.length-1)],sp=(b[0]-a[0])||1,lt=(t-a[0])/sp;return[0,1,2].map(function(k){return Math.round(a[1][k]+(b[1][k]-a[1][k])*lt)});}
+  function ink(c){return (0.299*c[0]+0.587*c[1]+0.114*c[2])>150?'#141b1f':'#fff'}
+  document.querySelectorAll('table.hm').forEach(function(tb){
+    var d=GRID[tb.getAttribute('data-arm')].v;
+    var colPeak=LBL.map(function(_,ci){var m=-1,mr=-1;d.forEach(function(row,ri){if(row[ci]!=null&&row[ci]>m){m=row[ci];mr=ri;}});return mr;});
+    var h='<thead><tr><th class="corner">np\\L</th>';LBL.forEach(function(L){h+='<th>'+L+'</th>'});h+='</tr></thead><tbody>';
+    NP.forEach(function(np,ri){h+='<tr><th>'+np+'</th>';d[ri].forEach(function(val,ci){
+      if(val==null){h+='<td class="empty">—</td>';return;}
+      var c=ramp(val),pk=(colPeak[ci]===ri)?' peak':'';
+      h+='<td class="'+pk.trim()+'" style="background:rgb('+c[0]+','+c[1]+','+c[2]+');color:'+ink(c)+'">'+val.toFixed(0)+'</td>';
+    });h+='</tr>';});
+    tb.innerHTML=h+'</tbody>';
+  });
+  // RAG-at-depth (arm rows)
+  var RAG=[
+    {n:"A4 · 35B-A3B",c:"--a4",v:[123.6,106.5,116.4,109.2]},
+    {n:"Laguna · IQ2",c:"--lag",v:[47.3,45.8,45.0,41.4]},
+    {n:"Fable-Fusion",c:"--ff",v:[30.7,30.0,28.9,26.4]},
+    {n:"FF + MTP",c:"--ffm",v:[28.9,26.7,24.0,19.8]}
+  ];
+  var rt=document.getElementById('hm-rag');
+  var h='<thead><tr><th class="corner">model \\ depth</th>';LBL.forEach(function(L){h+='<th>'+L+'</th>'});h+='</tr></thead><tbody>';
+  RAG.forEach(function(r){h+='<tr><th class="name">'+r.n+'</th>';r.v.forEach(function(val){var c=ramp(val);h+='<td style="background:rgb('+c[0]+','+c[1]+','+c[2]+');color:'+ink(c)+'">'+val.toFixed(0)+'</td>';});h+='</tr>';});
+  rt.innerHTML=h+'</tbody>';
+})();
+</script>

@@ -1,0 +1,23 @@
+0.00.040.570 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.040.943 W srv  llama_server: -----------------
+0.00.040.944 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.040.945 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.040.945 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.040.945 W srv  llama_server: -----------------
+0.00.042.162 I srv    load_model: loading model '/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/Laguna-S-2.1-UD-IQ2_M.gguf'
+0.00.388.862 W load_arch_hparams: missing sliding_window_pattern; using verified legacy Laguna-S.2 period-4 dense-first fallback
+0.00.428.714 W load: special_eos_id is not in special_eog_ids - the tokenizer config may be incorrect
+0.00.428.717 W load: special_eot_id is not in special_eog_ids - the tokenizer config may be incorrect
+0.04.209.466 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 16384, kv_unified = 'false'
+0.04.216.288 I srv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+0.04.216.344 I srv  llama_server: model loaded
+0.04.216.350 I srv  llama_server: listening on http://127.0.0.1:18072
+0.08.918.681 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.08.918.724 I slot launch_slot_: id  0 | task 8 | processing task, is_child = 0
+0.12.710.373 I slot print_timing: id  0 | task 8 | n_decoded =    145, tg =  48.18 t/s, tg_3s =  48.18 t/s
+0.15.100.500 I slot print_timing: id  0 | task 8 | prompt eval time =     782.38 ms /   279 tokens (    2.80 ms per token,   356.60 tokens per second)
+0.15.100.506 I slot print_timing: id  0 | task 8 |        eval time =    5399.36 ms /   258 tokens (   20.93 ms per token,    47.78 tokens per second)
+0.15.100.507 I slot print_timing: id  0 | task 8 |       total time =    6181.74 ms /   537 tokens
+0.15.100.517 I slot print_timing: id  0 | task 8 |    graphs reused =        256
+0.15.100.600 I slot      release: id  0 | task 8 | stop processing: n_tokens = 536, truncated = 0
+0.15.314.737 I srv    operator(): operator(): cleaning up before exit...

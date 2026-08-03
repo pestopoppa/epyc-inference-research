@@ -1,0 +1,45 @@
+{
+  "arms": {
+    "mtp": {
+      "bytes": 30239022560,
+      "label": "A3_ff_fable_mtp_q8",
+      "path": "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf",
+      "sha256": "041c175f03b76adb70077ba470258f6b916ec4f5f066077377ef96396c3dd1d0",
+      "spec": [
+        "--spec-type",
+        "draft-mtp",
+        "--spec-draft-n-max",
+        "1"
+      ],
+      "tensors": 866
+    },
+    "non_mtp": {
+      "bytes": 29787701792,
+      "label": "A3_ff_fable_non_mtp_q8",
+      "path": "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-Q8_0.gguf",
+      "sha256": "2fff409d4a22e0cb11fb0ecfafed1c669b9808f7e6bc499036c6e85297f14f4d",
+      "spec": [],
+      "tensors": 851
+    }
+  },
+  "determinism": {
+    "seed": 42,
+    "temperature": 0.0,
+    "thinking": false,
+    "top_k": 1,
+    "top_p": 1.0
+  },
+  "identity": {
+    "binary_sha256": "112c560f1c978c584a9899539851348a0ce1e05cde458061c281758aff066882",
+    "kernel_commit": "67a433bf45a8a091d83b4ea0b32ff0735fd51800",
+    "model_contract": "851-base-plus-15-mtp"
+  },
+  "instrument": "FF MTP exact-equivalence spot-check",
+  "prompts": [
+    "Reply with exactly: ff-mtp-equivalence-01",
+    "Compute 17 * 19. Reply with the integer only.",
+    "Write exactly one sentence explaining why deterministic decoding is useful for a comparison test.",
+    "Given Python list [3, 1, 4], write the expression that returns its length. Reply with code only.",
+    "State the next two integers after 98, separated by a comma and no other text."
+  ]
+}

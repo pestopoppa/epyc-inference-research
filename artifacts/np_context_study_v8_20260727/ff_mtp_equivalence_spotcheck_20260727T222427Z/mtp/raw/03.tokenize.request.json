@@ -1,0 +1,3 @@
+{
+  "content": "Deterministic decoding is useful for a comparison test because it ensures that identical inputs always produce identical outputs, allowing for reliable and reproducible evaluation of model performance without variability from sampling randomness."
+}

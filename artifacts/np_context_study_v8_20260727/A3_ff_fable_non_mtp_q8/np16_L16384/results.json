@@ -1,0 +1,154 @@
+{
+  "meta": {
+    "kernel": "production-consolidated-v8",
+    "binary": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+    "models": "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-Q8_0.gguf",
+    "arm": "A3_ff_fable_non_mtp_q8_np16_L16384",
+    "timestamp": "2026-07-28T04:52:04.875185+00:00",
+    "elapsed_s": 2153.5,
+    "n_per_suite": 155,
+    "seed": 42,
+    "stratify": false,
+    "endpoint": "chat",
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "enable_thinking": false,
+    "repeats": 1,
+    "max_tokens": 16384,
+    "questions_pinned": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-bench-gpu-20260720/questions_olympiadbench_hard.json",
+    "capture_schema_version": "v7_quality_gate_capture.v4",
+    "runner_source_sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e"
+  },
+  "suites": [
+    {
+      "suite": "olympiadbench_hard",
+      "accuracy": 0.5,
+      "n": 16,
+      "n_questions": 16,
+      "repeats": 1,
+      "correct": 8,
+      "errors": 0,
+      "truncated": 1,
+      "per_tier": {
+        "2": {
+          "accuracy": 0.8,
+          "n": 5,
+          "correct": 4
+        },
+        "3": {
+          "accuracy": 0.36363636363636365,
+          "n": 11,
+          "correct": 4
+        }
+      },
+      "per_item": {
+        "olympiadbench_hard_algebra_2524": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_2127": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_1938": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_number_theory_2415": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_number_theory_1869": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_1664": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_1659": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_geometry_2099": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_2151": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_1662": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_1818": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_2230": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_2171": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_1882": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_1820": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_2574": {
+          "correct": 0,
+          "n": 1
+        }
+      },
+      "capture": {
+        "schema_version": "v7_quality_gate_capture.v4",
+        "new_rows": 16,
+        "request_error_rows": 0,
+        "length_cap_rows": 1,
+        "response_chars": 293486,
+        "response_utf8_bytes": 294226,
+        "reasoning_chars": 0,
+        "reasoning_utf8_bytes": 0,
+        "swebench_search_replace": {
+          "applicable": false,
+          "new_rows": 0,
+          "resumed_rows": 0,
+          "resumed_rows_without_diagnostics": 0,
+          "resumed_rows_without_provenance": 0,
+          "resumed_rows_source_sha_mismatch": 0,
+          "rows_with_markers": 0,
+          "parseable_blocks": 0,
+          "malformed_rows": 0,
+          "zero_strict_block_rows": 0,
+          "partial_strict_block_rows": 0,
+          "state_counts": {
+            "strict_ready": 0,
+            "prompt_contract_candidate": 0,
+            "model_truncation_no_patch": 0,
+            "model_truncation_partial_patch": 0,
+            "request_error": 0
+          },
+          "summary_complete": true,
+          "converter_contract_ready": false,
+          "score_status": "not_applicable"
+        }
+      },
+      "throughput": {
+        "concurrency": 16,
+        "wall_s": 2153.5,
+        "completion_tokens": 129261,
+        "prompt_tokens": 2464,
+        "aggregate_decode_tok_s": 60.0,
+        "aggregate_total_tok_s": 61.2
+      }
+    }
+  ]
+}

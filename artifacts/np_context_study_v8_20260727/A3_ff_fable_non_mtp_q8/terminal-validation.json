@@ -1,0 +1,318 @@
+{
+  "final_publishable": true,
+  "instrument": "np_context_study_v8_20260727",
+  "root": "/mnt/raid0/llm/epyc-inference-research/artifacts/np_context_study_v8_20260727",
+  "surfaces": [
+    {
+      "cells": [
+        {
+          "length": 2048,
+          "np": 1,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 26.5,
+            "aggregate_total_tok_s": 30.3,
+            "completion_tokens": 1788,
+            "concurrency": 1,
+            "prompt_tokens": 260,
+            "wall_s": 67.5
+          }
+        },
+        {
+          "length": 2048,
+          "np": 2,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 29.8,
+            "aggregate_total_tok_s": 32.9,
+            "completion_tokens": 3719,
+            "concurrency": 2,
+            "prompt_tokens": 377,
+            "wall_s": 124.6
+          }
+        },
+        {
+          "length": 2048,
+          "np": 4,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 51.4,
+            "aggregate_total_tok_s": 56.0,
+            "completion_tokens": 7516,
+            "concurrency": 4,
+            "prompt_tokens": 676,
+            "wall_s": 146.2
+          }
+        },
+        {
+          "length": 2048,
+          "np": 8,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 79.7,
+            "aggregate_total_tok_s": 85.8,
+            "completion_tokens": 15217,
+            "concurrency": 8,
+            "prompt_tokens": 1167,
+            "wall_s": 190.9
+          }
+        },
+        {
+          "length": 2048,
+          "np": 16,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 102.0,
+            "aggregate_total_tok_s": 110.4,
+            "completion_tokens": 29877,
+            "concurrency": 16,
+            "prompt_tokens": 2464,
+            "wall_s": 293.0
+          }
+        },
+        {
+          "length": 2048,
+          "np": 32,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 81.5,
+            "aggregate_total_tok_s": 88.4,
+            "completion_tokens": 55470,
+            "concurrency": 32,
+            "prompt_tokens": 4690,
+            "wall_s": 680.4
+          }
+        },
+        {
+          "length": 8192,
+          "np": 1,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 25.1,
+            "aggregate_total_tok_s": 25.9,
+            "completion_tokens": 7932,
+            "concurrency": 1,
+            "prompt_tokens": 260,
+            "wall_s": 316.4
+          }
+        },
+        {
+          "length": 8192,
+          "np": 2,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 29.6,
+            "aggregate_total_tok_s": 30.3,
+            "completion_tokens": 16007,
+            "concurrency": 2,
+            "prompt_tokens": 377,
+            "wall_s": 541.0
+          }
+        },
+        {
+          "length": 8192,
+          "np": 4,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 45.2,
+            "aggregate_total_tok_s": 46.2,
+            "completion_tokens": 30505,
+            "concurrency": 4,
+            "prompt_tokens": 676,
+            "wall_s": 675.2
+          }
+        },
+        {
+          "length": 8192,
+          "np": 8,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 47.2,
+            "aggregate_total_tok_s": 48.4,
+            "completion_tokens": 47383,
+            "concurrency": 8,
+            "prompt_tokens": 1167,
+            "wall_s": 1003.2
+          }
+        },
+        {
+          "length": 8192,
+          "np": 16,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 52.5,
+            "aggregate_total_tok_s": 53.9,
+            "completion_tokens": 98331,
+            "concurrency": 16,
+            "prompt_tokens": 2464,
+            "wall_s": 1871.6
+          }
+        },
+        {
+          "length": 8192,
+          "np": 32,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 53.8,
+            "aggregate_total_tok_s": 55.3,
+            "completion_tokens": 167952,
+            "concurrency": 32,
+            "prompt_tokens": 4690,
+            "wall_s": 3122.5
+          }
+        },
+        {
+          "length": 16384,
+          "np": 1,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 26.0,
+            "aggregate_total_tok_s": 26.7,
+            "completion_tokens": 9135,
+            "concurrency": 1,
+            "prompt_tokens": 260,
+            "wall_s": 351.4
+          }
+        },
+        {
+          "length": 16384,
+          "np": 2,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 29.6,
+            "aggregate_total_tok_s": 30.2,
+            "completion_tokens": 17085,
+            "concurrency": 2,
+            "prompt_tokens": 377,
+            "wall_s": 577.3
+          }
+        },
+        {
+          "length": 16384,
+          "np": 4,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 44.6,
+            "aggregate_total_tok_s": 45.6,
+            "completion_tokens": 30274,
+            "concurrency": 4,
+            "prompt_tokens": 676,
+            "wall_s": 679.0
+          }
+        },
+        {
+          "length": 16384,
+          "np": 8,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 52.8,
+            "aggregate_total_tok_s": 53.7,
+            "completion_tokens": 74582,
+            "concurrency": 8,
+            "prompt_tokens": 1167,
+            "wall_s": 1411.9
+          }
+        },
+        {
+          "length": 16384,
+          "np": 16,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 60.0,
+            "aggregate_total_tok_s": 61.2,
+            "completion_tokens": 129261,
+            "concurrency": 16,
+            "prompt_tokens": 2464,
+            "wall_s": 2153.5
+          }
+        },
+        {
+          "length": 16384,
+          "np": 32,
+          "reason": "SKIP capacity_start signature=allocation_failure stderr_sha256=24f00d3630ac235610a31d0a57a8d13053adf39e70414ad703c9d1dc7eea9b70 server_argv_sha256=aac3742cba2c2359002fbb04745b004a0ae62cf86d6b4335fd521e85aad6bc07 requested_np=32 requested_L=16384 requested_ctx=524288",
+          "state": "skipped"
+        },
+        {
+          "length": 32768,
+          "np": 1,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 26.3,
+            "aggregate_total_tok_s": 27.1,
+            "completion_tokens": 9135,
+            "concurrency": 1,
+            "prompt_tokens": 260,
+            "wall_s": 347.0
+          }
+        },
+        {
+          "length": 32768,
+          "np": 2,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 28.2,
+            "aggregate_total_tok_s": 28.8,
+            "completion_tokens": 17085,
+            "concurrency": 2,
+            "prompt_tokens": 377,
+            "wall_s": 605.8
+          }
+        },
+        {
+          "length": 32768,
+          "np": 4,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 50.7,
+            "aggregate_total_tok_s": 51.9,
+            "completion_tokens": 29423,
+            "concurrency": 4,
+            "prompt_tokens": 676,
+            "wall_s": 580.1
+          }
+        },
+        {
+          "length": 32768,
+          "np": 8,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 52.5,
+            "aggregate_total_tok_s": 53.7,
+            "completion_tokens": 50974,
+            "concurrency": 8,
+            "prompt_tokens": 1167,
+            "wall_s": 970.8
+          }
+        },
+        {
+          "length": 32768,
+          "np": 16,
+          "state": "measured",
+          "throughput": {
+            "aggregate_decode_tok_s": 57.2,
+            "aggregate_total_tok_s": 58.3,
+            "completion_tokens": 126573,
+            "concurrency": 16,
+            "prompt_tokens": 2464,
+            "wall_s": 2213.3
+          }
+        },
+        {
+          "length": 32768,
+          "np": 32,
+          "reason": "SKIP capacity_start signature=allocation_failure stderr_sha256=3e27a1690ac24de103a2393bbd1ef90494ab17d2bc9d235fd8ea17a147b4a7ac server_argv_sha256=b6899a8deb7071b4834cfb56fb1dd142b7197a3948181b62f45acf5491a87723 requested_np=32 requested_L=32768 requested_ctx=1048576",
+          "state": "skipped"
+        }
+      ],
+      "complete_marker": true,
+      "grid": "full",
+      "invalid_cells": 0,
+      "label": "A3_ff_fable_non_mtp_q8",
+      "measured_cells": 22,
+      "missing_cells": 0,
+      "mode": "full",
+      "skipped_cells": 2,
+      "state": "terminal"
+    }
+  ]
+}

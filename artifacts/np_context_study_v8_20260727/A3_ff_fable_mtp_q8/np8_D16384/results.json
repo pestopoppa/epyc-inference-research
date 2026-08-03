@@ -1,0 +1,377 @@
+{
+  "target_depth_ceiling": 16384,
+  "rendered_depth": 16294,
+  "np": 8,
+  "prepared_manifest": {
+    "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/np_context_study_v8_20260727/prefill_to_depth_rag.prepared.json",
+    "sha256": "e29fd6a0536c21ada180fcc929ba5b10da6fe498693abb9bf97459f374a2e7da"
+  },
+  "instrument": {
+    "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/np_context_study_v8_20260727/driver/prefill_to_depth_rag.py",
+    "sha256": "df2736d99be379f78452ebe8cbe2f85f676e67299340284acd513feaf0452590"
+  },
+  "model": {
+    "bytes": 30239022560,
+    "dflash": "off",
+    "inode": 100403115,
+    "kv_cache": {
+      "k": "f16",
+      "v": "f16"
+    },
+    "label": "A3_ff_fable_mtp_q8",
+    "mtime_ns": 1785070237444833121,
+    "mtp_depth": 1,
+    "path": "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf",
+    "server_spec": {
+      "draft_n_max": 1,
+      "type": "draft-mtp"
+    },
+    "sha256": "041c175f03b76adb70077ba470258f6b916ec4f5f066077377ef96396c3dd1d0"
+  },
+  "rows": [
+    {
+      "prompt_tokens": 16294,
+      "completion_tokens": 32,
+      "decode_tok_s": 0.6975728497671142,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\nEvidence: \"Oncology board decision: 6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785219694,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 16294,
+          "total_tokens": 16326,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-oNihY5PT7DxXarDNKZlDw7TqJqsl7Xd7",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 16294,
+          "prompt_ms": 29815.33,
+          "prompt_per_token_ms": 1.8298349085552965,
+          "prompt_per_second": 546.4973890948045,
+          "predicted_n": 32,
+          "predicted_ms": 45873.345,
+          "predicted_per_token_ms": 1433.54203125,
+          "predicted_per_second": 0.6975728497671142,
+          "draft_n": 16,
+          "draft_n_accepted": 14
+        }
+      }
+    },
+    {
+      "prompt_tokens": 16294,
+      "completion_tokens": 32,
+      "decode_tok_s": 0.7857739168339833,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\nEvidence: \"Oncology board decision: 6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785219751,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 16294,
+          "total_tokens": 16326,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-wHp0skCb9FUCb5Ow8LAkqRdE5PPffraQ",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 16294,
+          "prompt_ms": 30178.985,
+          "prompt_per_token_ms": 1.8521532465938382,
+          "prompt_per_second": 539.9121275947485,
+          "predicted_n": 32,
+          "predicted_ms": 40724.182,
+          "predicted_per_token_ms": 1272.6306875,
+          "predicted_per_second": 0.7857739168339833,
+          "draft_n": 16,
+          "draft_n_accepted": 14
+        }
+      }
+    },
+    {
+      "prompt_tokens": 16294,
+      "completion_tokens": 32,
+      "decode_tok_s": 19.48528404368357,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\nEvidence: \"Oncology board decision: 6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785219753,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 16294,
+          "total_tokens": 16326,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-ONbUHEXKeZBCxok3pKy8s5dCVTyiaW27",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 16294,
+          "prompt_ms": 27263.983,
+          "prompt_per_token_ms": 1.6732529151835032,
+          "prompt_per_second": 597.6382834452324,
+          "predicted_n": 32,
+          "predicted_ms": 1642.265,
+          "predicted_per_token_ms": 51.32078125,
+          "predicted_per_second": 19.48528404368357,
+          "draft_n": 15,
+          "draft_n_accepted": 15
+        }
+      }
+    },
+    {
+      "prompt_tokens": 16294,
+      "completion_tokens": 32,
+      "decode_tok_s": 0.701948668731317,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\nEvidence: \"Oncology board decision: 6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785219672,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 16294,
+          "total_tokens": 16326,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-nejQUAbR0IEO6DQGQKbGgUpqdam4h3bN",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 16294,
+          "prompt_ms": 29214.498,
+          "prompt_per_token_ms": 1.792960476248926,
+          "prompt_per_second": 557.7367784994971,
+          "predicted_n": 32,
+          "predicted_ms": 45587.379,
+          "predicted_per_token_ms": 1424.60559375,
+          "predicted_per_second": 0.701948668731317,
+          "draft_n": 17,
+          "draft_n_accepted": 14
+        }
+      }
+    },
+    {
+      "prompt_tokens": 16294,
+      "completion_tokens": 32,
+      "decode_tok_s": 0.6949278325046717,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\nEvidence: \"Oncology board decision: 6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785219735,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 16294,
+          "total_tokens": 16326,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-hPl7EymR8Ibc50suvNlKszgWOHaMkpbt",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 16294,
+          "prompt_ms": 107999.153,
+          "prompt_per_token_ms": 6.628154719528661,
+          "prompt_per_second": 150.871553594499,
+          "predicted_n": 32,
+          "predicted_ms": 46047.947,
+          "predicted_per_token_ms": 1438.99834375,
+          "predicted_per_second": 0.6949278325046717,
+          "draft_n": 16,
+          "draft_n_accepted": 14
+        }
+      }
+    },
+    {
+      "prompt_tokens": 16294,
+      "completion_tokens": 32,
+      "decode_tok_s": 0.6954262662022639,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\nEvidence: \"Oncology board decision: 6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785219716,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 16294,
+          "total_tokens": 16326,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-iBQmWTHzsAm1LfUbi0VgN9dC3FNw7tUQ",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 16294,
+          "prompt_ms": 30074.533,
+          "prompt_per_token_ms": 1.8457427887565976,
+          "prompt_per_second": 541.7872989083488,
+          "predicted_n": 32,
+          "predicted_ms": 46014.943,
+          "predicted_per_token_ms": 1437.96696875,
+          "predicted_per_second": 0.6954262662022639,
+          "draft_n": 16,
+          "draft_n_accepted": 14
+        }
+      }
+    },
+    {
+      "prompt_tokens": 16294,
+      "completion_tokens": 32,
+      "decode_tok_s": 0.750720280919529,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\nEvidence: \"Oncology board decision: 6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785219648,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 16294,
+          "total_tokens": 16326,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-5NoNefEPhWyd9LvZsbnEwpmZAzZLTWZM",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 16294,
+          "prompt_ms": 22369.592,
+          "prompt_per_token_ms": 1.3728729593715479,
+          "prompt_per_second": 728.3995166295389,
+          "predicted_n": 32,
+          "predicted_ms": 42625.73,
+          "predicted_per_token_ms": 1332.0540625,
+          "predicted_per_second": 0.750720280919529,
+          "draft_n": 15,
+          "draft_n_accepted": 15
+        }
+      }
+    },
+    {
+      "prompt_tokens": 16294,
+      "completion_tokens": 32,
+      "decode_tok_s": 1.6102020793545828,
+      "response": {
+        "choices": [
+          {
+            "finish_reason": "length",
+            "index": 0,
+            "message": {
+              "role": "assistant",
+              "content": "D. 6 cycles of R-Pola-CHP\nEvidence: \"Oncology board decision: 6 cycles of R-Pola-CHP"
+            }
+          }
+        ],
+        "created": 1785219752,
+        "model": "/mnt/raid0/llm/models/Qwen3.6-27B-Fable-Fusion-711-GGUF/Qwen3.6-27B-Fable-Fus-711-UnHeretic-NM-DAU-NEO-MAX-NEO-MTP-Q8_0.gguf",
+        "system_fingerprint": "b10107-67a433bf4",
+        "object": "chat.completion",
+        "usage": {
+          "completion_tokens": 32,
+          "prompt_tokens": 16294,
+          "total_tokens": 16326,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          }
+        },
+        "id": "chatcmpl-qDzcRgT9QXI5oqfvv6ii1o1GEs5fN22q",
+        "timings": {
+          "cache_n": 0,
+          "prompt_n": 16294,
+          "prompt_ms": 30252.378,
+          "prompt_per_token_ms": 1.8566575426537375,
+          "prompt_per_second": 538.6022877275961,
+          "predicted_n": 32,
+          "predicted_ms": 19873.282,
+          "predicted_per_token_ms": 621.0400625,
+          "predicted_per_second": 1.6102020793545828,
+          "draft_n": 16,
+          "draft_n_accepted": 14
+        }
+      }
+    }
+  ]
+}

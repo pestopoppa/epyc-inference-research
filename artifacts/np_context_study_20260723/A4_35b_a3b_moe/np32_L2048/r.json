@@ -1,0 +1,183 @@
+{
+  "meta": {
+    "kernel": "v7-candidate",
+    "binary": "x",
+    "models": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+    "arm": "A4_35b_a3b_moe_np32_L2048",
+    "timestamp": "2026-07-23T21:02:43.748240+00:00",
+    "elapsed_s": 224.6,
+    "n_per_suite": 155,
+    "seed": 42,
+    "stratify": false,
+    "endpoint": "chat",
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "enable_thinking": false,
+    "repeats": 1,
+    "max_tokens": 2048,
+    "questions_pinned": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-bench-gpu-20260720/questions_olympiadbench_hard.json"
+  },
+  "suites": [
+    {
+      "suite": "olympiadbench_hard",
+      "accuracy": 0.09375,
+      "n": 32,
+      "n_questions": 32,
+      "repeats": 1,
+      "correct": 3,
+      "errors": 0,
+      "truncated": 23,
+      "per_tier": {
+        "2": {
+          "accuracy": 0.15384615384615385,
+          "n": 13,
+          "correct": 2
+        },
+        "3": {
+          "accuracy": 0.05263157894736842,
+          "n": 19,
+          "correct": 1
+        }
+      },
+      "per_item": {
+        "olympiadbench_hard_combinatorics_1664": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_2235": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_2346": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_geometry_2397": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_2443": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_2950": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_number_theory_2684": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_number_theory_2415": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_2524": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_2318": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_number_theory_2111": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_2486": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_number_theory_1869": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_number_theory_2544": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_2127": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_geometry_2099": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_1938": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_2574": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_2230": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_1659": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_1969": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_1879": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_1614": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_1818": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_number_theory_1964": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_1662": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_2151": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_2171": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_2040": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_1882": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_1820": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_1997": {
+          "correct": 0,
+          "n": 1
+        }
+      },
+      "throughput": {
+        "concurrency": 32,
+        "wall_s": 224.6,
+        "completion_tokens": 54693,
+        "prompt_tokens": 4690,
+        "aggregate_decode_tok_s": 243.5,
+        "aggregate_total_tok_s": 264.4
+      }
+    }
+  ]
+}

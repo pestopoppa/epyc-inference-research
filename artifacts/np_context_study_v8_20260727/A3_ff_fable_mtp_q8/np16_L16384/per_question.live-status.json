@@ -1,0 +1,28 @@
+{
+  "schema_version": "v7_quality_gate_capture.v4",
+  "runner_source_sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e",
+  "suite": "olympiadbench_hard",
+  "arm": "A3_ff_fable_mtp_q8_np16_L16384",
+  "updated_at": "2026-07-28T01:30:56.369013+00:00",
+  "completed_draws": 16,
+  "expected_draws": 16,
+  "complete": true,
+  "request_error_rows": 0,
+  "length_cap_rows": 0,
+  "swebench_search_replace": {
+    "applicable": false,
+    "state_counts": {
+      "strict_ready": 0,
+      "prompt_contract_candidate": 0,
+      "model_truncation_no_patch": 0,
+      "model_truncation_partial_patch": 0,
+      "request_error": 0
+    },
+    "zero_strict_block_rows": 0,
+    "partial_strict_block_rows": 0,
+    "summary_complete": true,
+    "score_status": "terminal_no_prompt_contract_candidate"
+  },
+  "provisional": false,
+  "artifact_integrity_fail_closed": false
+}

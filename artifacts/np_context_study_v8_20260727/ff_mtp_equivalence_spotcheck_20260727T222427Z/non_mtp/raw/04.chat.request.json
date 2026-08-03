@@ -1,0 +1,15 @@
+{
+  "enable_thinking": false,
+  "max_tokens": 256,
+  "messages": [
+    {
+      "content": "Given Python list [3, 1, 4], write the expression that returns its length. Reply with code only.",
+      "role": "user"
+    }
+  ],
+  "seed": 42,
+  "stream": false,
+  "temperature": 0.0,
+  "top_k": 1,
+  "top_p": 1.0
+}
