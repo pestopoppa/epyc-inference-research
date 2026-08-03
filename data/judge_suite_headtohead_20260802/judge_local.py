@@ -41,6 +41,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import random
 import re
 import sys
@@ -121,6 +122,8 @@ def main() -> int:
                     help="NAME=/path/to/capture.jsonl (repeatable)")
     ap.add_argument("--outdir", required=True)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--resume", action="store_true",
+                    help="reload judgements.jsonl and skip triples already scored")
     args = ap.parse_args()
 
     arms = {}
@@ -148,6 +151,36 @@ def main() -> int:
     rubrics: dict[str, str] = {}
     t0 = time.time()
 
+    # INCREMENTAL PERSISTENCE. Every judgement is appended to a JSONL as it is
+    # produced, before the CSVs are written at the end. This harness previously
+    # wrote nothing until the final loop iteration, so a transport error or a
+    # kill at judgement 139 of 140 discarded ~35 minutes of judge inference with
+    # nothing recoverable — and the project's own rule is that each persisted
+    # unit is a drain point.
+    #
+    # The JSONL is also the resume source: a rerun reloads it and skips
+    # (arm, suite, question_id) triples already scored, so an interrupted run
+    # costs only the judgements it had not reached.
+    ledger_path = outdir / "judgements.jsonl"
+    done: set[tuple[str, str, str]] = set()
+    if args.resume and ledger_path.exists():
+        for line in ledger_path.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except Exception:  # noqa: BLE001
+                continue  # a torn final line from a hard kill: skip, re-judge it
+            arm = rec.get("arm")
+            if arm in results:
+                results[arm].append({k: v for k, v in rec.items() if k != "arm"})
+                done.add((arm, rec.get("suite"), rec.get("question_id")))
+        if done:
+            print(f"resume: {len(done)} judgements reloaded from {ledger_path}")
+
+    ledger = ledger_path.open("a", encoding="utf-8")
+
     for i, key in enumerate(keys, 1):
         suite, qid = key
         if suite not in rubrics:
@@ -155,9 +188,11 @@ def main() -> int:
         order = list(arms)
         rng.shuffle(order)  # blind + positional-bias control
         for name in order:
+            if (name, suite, qid) in done:
+                continue
             row = arms[name][key]
             score, reason = judge_one(rubrics[suite], row, row.get("response") or "")
-            results[name].append({
+            record = {
                 "suite": suite,
                 "question_id": qid,
                 "tokens_per_second": row.get("tokens_per_second"),
@@ -165,13 +200,21 @@ def main() -> int:
                 "score_reason": reason,
                 "finish_reason": row.get("finish_reason"),
                 "failure_class": row.get("failure_class"),
-            })
+            }
+            results[name].append(record)
+            # Durable BEFORE the next request is issued. flush + fsync, because
+            # a kill -9 discards Python's buffer and the OS page cache both.
+            ledger.write(json.dumps({"arm": name, **record}) + "\n")
+            ledger.flush()
+            os.fsync(ledger.fileno())
         if i % 10 == 0 or i == len(keys):
             tally = "  ".join(
                 f"{n} {sum(r['claude_score'] for r in results[n] if r['claude_score'] >= 0)}"
                 for n in arms
             )
             print(f"  {i}/{len(keys)}  {tally}  {int(time.time() - t0)}s", flush=True)
+
+    ledger.close()
 
     summary = {"judge": "Qwen3.5-122B-A10B :8074", "seed": SEED,
                "questions_scored": len(keys), "arms": {}}
