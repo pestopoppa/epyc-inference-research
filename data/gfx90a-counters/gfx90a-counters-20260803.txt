@@ -1,0 +1,1655 @@
+
+  gfx90a:0 : SQ_WAIT_INST_LDS : Number of wave-cycles spent waiting for LDS instruction issue. In units of 4 cycles. (per-simd, nondeterministic)
+ : Number of wave-cycles spent waiting for LDS instruction issue. In units of 4 cycles. (per-simd, nondeterministic)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : TCP_TCP_TA_DATA_STALL_CYCLES : TCP stalls TA data interface. Now Windowed.
+[0-15] : TCP stalls TA data interface. Now Windowed.
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : GRBM_COUNT : Tie High - Count Number of Clocks
+ : Tie High - Count Number of Clocks
+      block GRBM can only handle 2 counters at a time
+
+  gfx90a:0 : GRBM_GUI_ACTIVE : The GUI is Active
+ : The GUI is Active
+      block GRBM can only handle 2 counters at a time
+
+  gfx90a:0 : GRBM_CP_BUSY : Any of the Command Processor (CPG/CPC/CPF) blocks are busy.
+ : Any of the Command Processor (CPG/CPC/CPF) blocks are busy.
+      block GRBM can only handle 2 counters at a time
+
+  gfx90a:0 : GRBM_SPI_BUSY : Any of the Shader Pipe Interpolators (SPI) are busy in the shader engine(s).
+ : Any of the Shader Pipe Interpolators (SPI) are busy in the shader engine(s).
+      block GRBM can only handle 2 counters at a time
+
+  gfx90a:0 : GRBM_TA_BUSY : Any of the Texture Pipes (TA) are busy in the shader engine(s).
+ : Any of the Texture Pipes (TA) are busy in the shader engine(s).
+      block GRBM can only handle 2 counters at a time
+
+  gfx90a:0 : GRBM_TC_BUSY : Any of the Texture Cache Blocks (TCP/TCI/TCA/TCC) are busy.
+ : Any of the Texture Cache Blocks (TCP/TCI/TCA/TCC) are busy.
+      block GRBM can only handle 2 counters at a time
+
+  gfx90a:0 : GRBM_CPC_BUSY : The Command Processor Compute (CPC) is busy.
+ : The Command Processor Compute (CPC) is busy.
+      block GRBM can only handle 2 counters at a time
+
+  gfx90a:0 : GRBM_CPF_BUSY : The Command Processor Fetchers (CPF) is busy.
+ : The Command Processor Fetchers (CPF) is busy.
+      block GRBM can only handle 2 counters at a time
+
+  gfx90a:0 : GRBM_UTCL2_BUSY : The Unified Translation Cache Level-2 (UTCL2) block is busy.
+ : The Unified Translation Cache Level-2 (UTCL2) block is busy.
+      block GRBM can only handle 2 counters at a time
+
+  gfx90a:0 : GRBM_EA_BUSY : The Efficiency Arbiter (EA) block is busy.
+ : The Efficiency Arbiter (EA) block is busy.
+      block GRBM can only handle 2 counters at a time
+
+  gfx90a:0 : CPC_ME1_BUSY_FOR_PACKET_DECODE : Me1 busy for packet decode.
+ : Me1 busy for packet decode.
+      block CPC can only handle 2 counters at a time
+
+  gfx90a:0 : CPC_UTCL1_STALL_ON_TRANSLATION : One of the UTCL1s is stalled waiting on translation, XNACK or PENDING response.
+ : One of the UTCL1s is stalled waiting on translation, XNACK or PENDING response.
+      block CPC can only handle 2 counters at a time
+
+  gfx90a:0 : CPC_CPC_STAT_BUSY : CPC Busy.
+ : CPC Busy.
+      block CPC can only handle 2 counters at a time
+
+  gfx90a:0 : CPC_CPC_STAT_IDLE : CPC Idle.
+ : CPC Idle.
+      block CPC can only handle 2 counters at a time
+
+  gfx90a:0 : CPC_CPC_STAT_STALL : CPC Stalled.
+ : CPC Stalled.
+      block CPC can only handle 2 counters at a time
+
+  gfx90a:0 : CPC_CPC_TCIU_BUSY : CPC TCIU interface Busy.
+ : CPC TCIU interface Busy.
+      block CPC can only handle 2 counters at a time
+
+  gfx90a:0 : CPC_CPC_TCIU_IDLE : CPC TCIU interface Idle.
+ : CPC TCIU interface Idle.
+      block CPC can only handle 2 counters at a time
+
+  gfx90a:0 : CPC_CPC_UTCL2IU_BUSY : CPC UTCL2 interface Busy.
+ : CPC UTCL2 interface Busy.
+      block CPC can only handle 2 counters at a time
+
+  gfx90a:0 : CPC_CPC_UTCL2IU_IDLE : CPC UTCL2 interface Idle.
+ : CPC UTCL2 interface Idle.
+      block CPC can only handle 2 counters at a time
+
+  gfx90a:0 : CPC_CPC_UTCL2IU_STALL : CPC UTCL2 interface Stalled waiting on Free, Tags or Translation.
+ : CPC UTCL2 interface Stalled waiting on Free, Tags or Translation.
+      block CPC can only handle 2 counters at a time
+
+  gfx90a:0 : CPC_ME1_DC0_SPI_BUSY : CPC Me1 Processor Busy.
+ : CPC Me1 Processor Busy.
+      block CPC can only handle 2 counters at a time
+
+  gfx90a:0 : CPF_CMP_UTCL1_STALL_ON_TRANSLATION : One of the Compute UTCL1s is stalled waiting on translation, XNACK or PENDING response.
+ : One of the Compute UTCL1s is stalled waiting on translation, XNACK or PENDING response.
+      block CPF can only handle 2 counters at a time
+
+  gfx90a:0 : CPF_CPF_STAT_BUSY : CPF Busy.
+ : CPF Busy.
+      block CPF can only handle 2 counters at a time
+
+  gfx90a:0 : CPF_CPF_STAT_IDLE : CPF Idle.
+ : CPF Idle.
+      block CPF can only handle 2 counters at a time
+
+  gfx90a:0 : CPF_CPF_STAT_STALL : CPF Stalled.
+ : CPF Stalled.
+      block CPF can only handle 2 counters at a time
+
+  gfx90a:0 : CPF_CPF_TCIU_BUSY : CPF TCIU interface Busy.
+ : CPF TCIU interface Busy.
+      block CPF can only handle 2 counters at a time
+
+  gfx90a:0 : CPF_CPF_TCIU_IDLE : CPF TCIU interface Idle.
+ : CPF TCIU interface Idle.
+      block CPF can only handle 2 counters at a time
+
+  gfx90a:0 : CPF_CPF_TCIU_STALL : CPF TCIU interface Stalled waiting on Free, Tags.
+ : CPF TCIU interface Stalled waiting on Free, Tags.
+      block CPF can only handle 2 counters at a time
+
+  gfx90a:0 : SPI_CSN_WINDOW_VALID : Clock count enabled by perfcounter_start event. Requires SPI_DEBUG_CNTL.DEBUG_PIPE_SEL to select source, DEBUG_PIPE_SEL = 1, source is CS1; DEBUG_PIPE_SEL = 2, source is CS2; DEBUG_PIPE_SEL = 3, source is CS3; default, source is CS0;
+ : Clock count enabled by perfcounter_start event. Requires SPI_DEBUG_CNTL.DEBUG_PIPE_SEL to select source, DEBUG_PIPE_SEL = 1, source is CS1; DEBUG_PIPE_SEL = 2, source is CS2; DEBUG_PIPE_SEL = 3, source is CS3; default, source is CS0;
+      block SPI can only handle 6 counters at a time
+
+  gfx90a:0 : SPI_CSN_BUSY : Number of clocks with outstanding waves (SPI or SH). Requires SPI_DEBUG_CNTL.DEBUG_PIPE_SEL to select source, DEBUG_PIPE_SEL = 1, source is CS1; DEBUG_PIPE_SEL = 2, source is CS2; DEBUG_PIPE_SEL = 3, source is CS3; default, source is CS0;
+ : Number of clocks with outstanding waves (SPI or SH). Requires SPI_DEBUG_CNTL.DEBUG_PIPE_SEL to select source, DEBUG_PIPE_SEL = 1, source is CS1; DEBUG_PIPE_SEL = 2, source is CS2; DEBUG_PIPE_SEL = 3, source is CS3; default, source is CS0;
+      block SPI can only handle 6 counters at a time
+
+  gfx90a:0 : SPI_CSN_NUM_THREADGROUPS : Number of threadgroups launched. Requires SPI_DEBUG_CNTL.DEBUG_PIPE_SEL to select source, DEBUG_PIPE_SEL = 1, source is CS1; DEBUG_PIPE_SEL = 2, source is CS2; DEBUG_PIPE_SEL = 3, source is CS3; default, source is CS0;
+ : Number of threadgroups launched. Requires SPI_DEBUG_CNTL.DEBUG_PIPE_SEL to select source, DEBUG_PIPE_SEL = 1, source is CS1; DEBUG_PIPE_SEL = 2, source is CS2; DEBUG_PIPE_SEL = 3, source is CS3; default, source is CS0;
+      block SPI can only handle 6 counters at a time
+
+  gfx90a:0 : SPI_CSN_WAVE : Number of waves. Requires SPI_DEBUG_CNTL.DEBUG_PIPE_SEL to select source, DEBUG_PIPE_SEL = 1, source is CS1; DEBUG_PIPE_SEL = 2, source is CS2; DEBUG_PIPE_SEL = 3, source is CS3; default, source is CS0;
+ : Number of waves. Requires SPI_DEBUG_CNTL.DEBUG_PIPE_SEL to select source, DEBUG_PIPE_SEL = 1, source is CS1; DEBUG_PIPE_SEL = 2, source is CS2; DEBUG_PIPE_SEL = 3, source is CS3; default, source is CS0;
+      block SPI can only handle 6 counters at a time
+
+  gfx90a:0 : SPI_RA_REQ_NO_ALLOC : Arb cycles with requests but no allocation. Source is RA0
+ : Arb cycles with requests but no allocation. Source is RA0
+      block SPI can only handle 6 counters at a time
+
+  gfx90a:0 : SPI_RA_REQ_NO_ALLOC_CSN : Arb cycles with CSn req and no CSn alloc. Source is RA0
+ : Arb cycles with CSn req and no CSn alloc. Source is RA0
+      block SPI can only handle 6 counters at a time
+
+  gfx90a:0 : SPI_RA_RES_STALL_CSN : Arb cycles with CSn req and no CSn fits. Source is RA0
+ : Arb cycles with CSn req and no CSn fits. Source is RA0
+      block SPI can only handle 6 counters at a time
+
+  gfx90a:0 : SPI_RA_TMP_STALL_CSN : Cycles where csn wants to req but does not fit in temp space.
+ : Cycles where csn wants to req but does not fit in temp space.
+      block SPI can only handle 6 counters at a time
+
+  gfx90a:0 : SPI_RA_WAVE_SIMD_FULL_CSN : Sum of SIMD where WAVE can't take csn wave when !fits. Source is RA0
+ : Sum of SIMD where WAVE can't take csn wave when !fits. Source is RA0
+      block SPI can only handle 6 counters at a time
+
+  gfx90a:0 : SPI_RA_VGPR_SIMD_FULL_CSN : Sum of SIMD where VGPR can't take csn wave when !fits. Source is RA0
+ : Sum of SIMD where VGPR can't take csn wave when !fits. Source is RA0
+      block SPI can only handle 6 counters at a time
+
+  gfx90a:0 : SPI_RA_SGPR_SIMD_FULL_CSN : Sum of SIMD where SGPR can't take csn wave when !fits. Source is RA0
+ : Sum of SIMD where SGPR can't take csn wave when !fits. Source is RA0
+      block SPI can only handle 6 counters at a time
+
+  gfx90a:0 : SPI_RA_LDS_CU_FULL_CSN : Sum of CU where LDS can't take csn wave when !fits. Source is RA0
+ : Sum of CU where LDS can't take csn wave when !fits. Source is RA0
+      block SPI can only handle 6 counters at a time
+
+  gfx90a:0 : SPI_RA_BAR_CU_FULL_CSN : Sum of CU where BARRIER can't take csn wave when !fits. Source is RA0
+ : Sum of CU where BARRIER can't take csn wave when !fits. Source is RA0
+      block SPI can only handle 6 counters at a time
+
+  gfx90a:0 : SPI_RA_BULKY_CU_FULL_CSN : Sum of CU where BULKY can't take csn wave when !fits. Source is RA0
+ : Sum of CU where BULKY can't take csn wave when !fits. Source is RA0
+      block SPI can only handle 6 counters at a time
+
+  gfx90a:0 : SPI_RA_TGLIM_CU_FULL_CSN : Cycles where csn wants to req but all CU are at tg_limit
+ : Cycles where csn wants to req but all CU are at tg_limit
+      block SPI can only handle 6 counters at a time
+
+  gfx90a:0 : SPI_RA_WVLIM_STALL_CSN : Number of clocks csn is stalled due to WAVE LIMIT.
+ : Number of clocks csn is stalled due to WAVE LIMIT.
+      block SPI can only handle 6 counters at a time
+
+  gfx90a:0 : SPI_SWC_CSC_WR : Number of clocks to write CSC waves to SGPRs (need to multiply this value by 4) Requires SPI_DEBUG_CNTL.DEBUG_PIPE_SEL to select source, DEBUG_PIPE_SEL = 1, source is CS1; DEBUG_PIPE_SEL = 2, source is CS2; DEBUG_PIPE_SEL = 3, source is CS3; default, source is CS0;
+ : Number of clocks to write CSC waves to SGPRs (need to multiply this value by 4) Requires SPI_DEBUG_CNTL.DEBUG_PIPE_SEL to select source, DEBUG_PIPE_SEL = 1, source is CS1; DEBUG_PIPE_SEL = 2, source is CS2; DEBUG_PIPE_SEL = 3, source is CS3; default, source is CS0;
+      block SPI can only handle 6 counters at a time
+
+  gfx90a:0 : SPI_VWC_CSC_WR : Number of clocks to write CSC waves to VGPRs (need to multiply this value by 4) Requires SPI_DEBUG_CNTL.DEBUG_PIPE_SEL to select source, DEBUG_PIPE_SEL = 1, source is CS1; DEBUG_PIPE_SEL = 2, source is CS2; DEBUG_PIPE_SEL = 3, source is CS3; default, source is CS0;
+ : Number of clocks to write CSC waves to VGPRs (need to multiply this value by 4) Requires SPI_DEBUG_CNTL.DEBUG_PIPE_SEL to select source, DEBUG_PIPE_SEL = 1, source is CS1; DEBUG_PIPE_SEL = 2, source is CS2; DEBUG_PIPE_SEL = 3, source is CS3; default, source is CS0;
+      block SPI can only handle 6 counters at a time
+
+  gfx90a:0 : SQ_ACCUM_PREV : For counter N, increment by the value of counter N-1. Only accumulates once every 4 cycles.
+ : For counter N, increment by the value of counter N-1. Only accumulates once every 4 cycles.
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_CYCLES : Clock cycles. (nondeterministic, per-simd, global)
+ : Clock cycles. (nondeterministic, per-simd, global)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_BUSY_CYCLES : Clock cycles while SQ is reporting that it is busy. (nondeterministic, per-simd, global)
+ : Clock cycles while SQ is reporting that it is busy. (nondeterministic, per-simd, global)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_WAVES : Count number of waves sent to SQs. (per-simd, emulated, global)
+ : Count number of waves sent to SQs. (per-simd, emulated, global)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_LEVEL_WAVES : Track the number of waves. Set ACCUM_PREV for the next counter to use this. (level, per-simd, global)
+ : Track the number of waves. Set ACCUM_PREV for the next counter to use this. (level, per-simd, global)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_WAVES_EQ_64 : Count number of waves with exactly 64 active threads sent to SQs. (per-simd, emulated, global)
+ : Count number of waves with exactly 64 active threads sent to SQs. (per-simd, emulated, global)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_WAVES_LT_64 : Count number of waves with <64 active threads sent to SQs. (per-simd, emulated, global)
+ : Count number of waves with <64 active threads sent to SQs. (per-simd, emulated, global)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_WAVES_LT_48 : Count number of waves with <48 active threads sent to SQs. (per-simd, emulated, global)
+ : Count number of waves with <48 active threads sent to SQs. (per-simd, emulated, global)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_WAVES_LT_32 : Count number of waves sent <32 active threads sent to SQs. (per-simd, emulated, global)
+ : Count number of waves sent <32 active threads sent to SQs. (per-simd, emulated, global)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_WAVES_LT_16 : Count number of waves sent <16 active threads sent to SQs. (per-simd, emulated, global)
+ : Count number of waves sent <16 active threads sent to SQs. (per-simd, emulated, global)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_BUSY_CU_CYCLES : Count quad-cycles each CU is busy. (nondeterministic, per-simd)
+ : Count quad-cycles each CU is busy. (nondeterministic, per-simd)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_ITEMS : Number of valid items per wave. (per-simd, global)
+ : Number of valid items per wave. (per-simd, global)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS : Number of instructions issued. (per-simd, emulated)
+ : Number of instructions issued. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU : Number of VALU instructions issued. (per-simd, emulated)
+ : Number of VALU instructions issued. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_ADD_F16 : Number of VALU ADD/SUB instructions on float16. (per-simd, emulated)
+ : Number of VALU ADD/SUB instructions on float16. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_MUL_F16 : Number of VALU MUL instructions on float16. (per-simd, emulated)
+ : Number of VALU MUL instructions on float16. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_FMA_F16 : Number of VALU FMA/MAD instructions on float16. (per-simd, emulated)
+ : Number of VALU FMA/MAD instructions on float16. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_TRANS_F16 : Number of VALU transcendental instructions on float16. (per-simd, emulated)
+ : Number of VALU transcendental instructions on float16. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_ADD_F32 : Number of VALU ADD/SUB instructions on float32. (per-simd, emulated)
+ : Number of VALU ADD/SUB instructions on float32. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_MUL_F32 : Number of VALU MUL instructions on float32. (per-simd, emulated)
+ : Number of VALU MUL instructions on float32. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_FMA_F32 : Number of VALU FMA/MAD instructions on float32. (per-simd, emulated)
+ : Number of VALU FMA/MAD instructions on float32. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_TRANS_F32 : Number of VALU transcendental instructions on float32. (per-simd, emulated)
+ : Number of VALU transcendental instructions on float32. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_ADD_F64 : Number of VALU ADD/SUB instructions on float64. (per-simd, emulated)
+ : Number of VALU ADD/SUB instructions on float64. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_MUL_F64 : Number of VALU MUL instructions on float64. (per-simd, emulated)
+ : Number of VALU MUL instructions on float64. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_FMA_F64 : Number of VALU FMA/MAD instructions on float64. (per-simd, emulated)
+ : Number of VALU FMA/MAD instructions on float64. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_TRANS_F64 : Number of VALU transcendental instructions on float64. (per-simd, emulated)
+ : Number of VALU transcendental instructions on float64. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_INT32 : Number of VALU 32-bit integer (signed or unsigned) instructions. (per-simd, emulated)
+ : Number of VALU 32-bit integer (signed or unsigned) instructions. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_INT64 : Number of VALU 64-bit integer (signed or unsigned) instructions. (per-simd, emulated)
+ : Number of VALU 64-bit integer (signed or unsigned) instructions. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_CVT : Number of VALU data conversion instructions. (per-simd, emulated)
+ : Number of VALU data conversion instructions. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_MFMA_I8 : Number of VALU V_MFMA_*_I8 instructions. (per-simd, emulated)
+ : Number of VALU V_MFMA_*_I8 instructions. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_MFMA_F16 : Number of VALU V_MFMA_*_F16 instructions. (per-simd, emulated)
+ : Number of VALU V_MFMA_*_F16 instructions. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_MFMA_BF16 : Number of VALU V_MFMA_*_BF16 instructions. (per-simd, emulated)
+ : Number of VALU V_MFMA_*_BF16 instructions. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_MFMA_F32 : Number of VALU V_MFMA_*_F32 instructions. (per-simd, emulated)
+ : Number of VALU V_MFMA_*_F32 instructions. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_MFMA_F64 : Number of VALU V_MFMA_*_F64 instructions. (per-simd, emulated)
+ : Number of VALU V_MFMA_*_F64 instructions. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_MFMA_MOPS_I8 : Number of VALU matrix math operations (add or mul) performed dividied by 512, assuming a full EXEC mask, of data type I8. (per-simd, emulated)
+ : Number of VALU matrix math operations (add or mul) performed dividied by 512, assuming a full EXEC mask, of data type I8. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_MFMA_MOPS_F16 : Number of VALU matrix math operations (add or mul) performed dividied by 512, assuming a full EXEC mask, of data type F16. (per-simd, emulated)
+ : Number of VALU matrix math operations (add or mul) performed dividied by 512, assuming a full EXEC mask, of data type F16. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_MFMA_MOPS_BF16 : Number of VALU matrix math operations (add or mul) performed dividied by 512, assuming a full EXEC mask, of data type BF16. (per-simd, emulated)
+ : Number of VALU matrix math operations (add or mul) performed dividied by 512, assuming a full EXEC mask, of data type BF16. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_MFMA_MOPS_F32 : Number of VALU matrix math operations (add or mul) performed dividied by 512, assuming a full EXEC mask, of data type F32. (per-simd, emulated)
+ : Number of VALU matrix math operations (add or mul) performed dividied by 512, assuming a full EXEC mask, of data type F32. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VALU_MFMA_MOPS_F64 : Number of VALU matrix math operations (add or mul) performed dividied by 512, assuming a full EXEC mask, of data type F64. (per-simd, emulated)
+ : Number of VALU matrix math operations (add or mul) performed dividied by 512, assuming a full EXEC mask, of data type F64. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_MFMA : Number of MFMA instructions issued. (per-simd, emulated)
+ : Number of MFMA instructions issued. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VMEM_WR : Number of VMEM write instructions issued (including FLAT). (per-simd, emulated)
+ : Number of VMEM write instructions issued (including FLAT). (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VMEM_RD : Number of VMEM read instructions issued (including FLAT). (per-simd, emulated)
+ : Number of VMEM read instructions issued (including FLAT). (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VMEM : Number of VMEM instructions issued. (per-simd, emulated)
+ : Number of VMEM instructions issued. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_SALU : Number of SALU instructions issued. (per-simd, emulated)
+ : Number of SALU instructions issued. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_SMEM : Number of SMEM instructions issued. (per-simd, emulated)
+ : Number of SMEM instructions issued. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_FLAT : Number of FLAT instructions issued. (per-simd, emulated)
+ : Number of FLAT instructions issued. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_FLAT_LDS_ONLY : Number of FLAT instructions issued that read/wrote only from/to LDS (only works if EARLY_TA_DONE is enabled). (per-simd, emulated)
+ : Number of FLAT instructions issued that read/wrote only from/to LDS (only works if EARLY_TA_DONE is enabled). (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_LDS : Number of LDS instructions issued (including FLAT). (per-simd, emulated)
+ : Number of LDS instructions issued (including FLAT). (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_GDS : Number of GDS instructions issued. (per-simd, emulated)
+ : Number of GDS instructions issued. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_EXP_GDS : Number of EXP and GDS instructions issued, excluding skipped export instructions. (per-simd, emulated)
+ : Number of EXP and GDS instructions issued, excluding skipped export instructions. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_BRANCH : Number of Branch instructions issued. (per-simd, emulated)
+ : Number of Branch instructions issued. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_SENDMSG : Number of Sendmsg instructions issued. (per-simd, emulated)
+ : Number of Sendmsg instructions issued. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_VSKIPPED : Number of vector instructions skipped. (per-simd, emulated)
+ : Number of vector instructions skipped. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INST_LEVEL_VMEM : Number of in-flight VMEM instructions. Set next counter to ACCUM_PREV and divide by INSTS_VMEM for average latency. Includes FLAT instructions. (per-simd, level, nondeterministic)
+ : Number of in-flight VMEM instructions. Set next counter to ACCUM_PREV and divide by INSTS_VMEM for average latency. Includes FLAT instructions. (per-simd, level, nondeterministic)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INST_LEVEL_SMEM : Number of in-flight SMEM instructions (*2 load/store; *2 atomic; *2 memtime; *4 wb/inv). Set next counter to ACCUM_PREV and divide by INSTS_SMEM for average latency per smem request. Falls slightly short of total request latency because some fetches are divided into two requests that may finish at different times and this counter collects the average latency of the two. (per-simd, level, nondeterministic)
+ : Number of in-flight SMEM instructions (*2 load/store; *2 atomic; *2 memtime; *4 wb/inv). Set next counter to ACCUM_PREV and divide by INSTS_SMEM for average latency per smem request. Falls slightly short of total request latency because some fetches are divided into two requests that may finish at different times and this counter collects the average latency of the two. (per-simd, level, nondeterministic)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INST_LEVEL_LDS : Number of in-flight LDS instructions. Set next counter to ACCUM_PREV and divide by INSTS_LDS for average latency. Includes FLAT instructions. (per-simd, level, nondeterministic)
+ : Number of in-flight LDS instructions. Set next counter to ACCUM_PREV and divide by INSTS_LDS for average latency. Includes FLAT instructions. (per-simd, level, nondeterministic)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_VALU_MFMA_BUSY_CYCLES : Number of cycles the MFMA ALU is busy (per-simd, emulated)
+ : Number of cycles the MFMA ALU is busy (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_WAVE_CYCLES : Number of wave-cycles spent by waves in the CUs (per-simd, nondeterministic). Units in quad-cycles(4 cycles)
+ : Number of wave-cycles spent by waves in the CUs (per-simd, nondeterministic). Units in quad-cycles(4 cycles)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_WAIT_ANY : Number of wave-cycles spent waiting for anything (per-simd, nondeterministic). Units in quad-cycles(4 cycles)
+ : Number of wave-cycles spent waiting for anything (per-simd, nondeterministic). Units in quad-cycles(4 cycles)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_WAIT_INST_ANY : Number of wave-cycles spent waiting for any instruction issue. In units of 4 cycles. (per-simd, nondeterministic)
+ : Number of wave-cycles spent waiting for any instruction issue. In units of 4 cycles. (per-simd, nondeterministic)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_ACTIVE_INST_ANY : Number of cycles each wave is working on an instruction. (per-simd, emulated). Units in quad-cycles(4 cycles)
+ : Number of cycles each wave is working on an instruction. (per-simd, emulated). Units in quad-cycles(4 cycles)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_ACTIVE_INST_VMEM : Number of cycles the SQ instruction arbiter is working on a VMEM instruction. (per-simd, emulated). Units in quad-cycles(4 cycles)
+ : Number of cycles the SQ instruction arbiter is working on a VMEM instruction. (per-simd, emulated). Units in quad-cycles(4 cycles)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_ACTIVE_INST_LDS : Number of cycles the SQ instruction arbiter is working on a LDS instruction. (per-simd, emulated). Units in quad-cycles(4 cycles)
+ : Number of cycles the SQ instruction arbiter is working on a LDS instruction. (per-simd, emulated). Units in quad-cycles(4 cycles)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_ACTIVE_INST_VALU : Number of cycles the SQ instruction arbiter is working on a VALU instruction. (per-simd, emulated). Units in quad-cycles(4 cycles)
+ : Number of cycles the SQ instruction arbiter is working on a VALU instruction. (per-simd, emulated). Units in quad-cycles(4 cycles)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_ACTIVE_INST_SCA : Number of cycles the SQ instruction arbiter is working on a SALU or SMEM instruction. (per-simd, emulated). Units in quad-cycles(4 cycles)
+ : Number of cycles the SQ instruction arbiter is working on a SALU or SMEM instruction. (per-simd, emulated). Units in quad-cycles(4 cycles)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_ACTIVE_INST_EXP_GDS : Number of cycles the SQ instruction arbiter is working on an EXPORT or GDS instruction. (per-simd, emulated). Units in quad-cycles(4 cycles)
+ : Number of cycles the SQ instruction arbiter is working on an EXPORT or GDS instruction. (per-simd, emulated). Units in quad-cycles(4 cycles)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_ACTIVE_INST_MISC : Number of cycles the SQ instruction aribter is working on a BRANCH or SENDMSG instruction. (per-simd, emulated). Units in quad-cycles(4 cycles)
+ : Number of cycles the SQ instruction aribter is working on a BRANCH or SENDMSG instruction. (per-simd, emulated). Units in quad-cycles(4 cycles)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_ACTIVE_INST_FLAT : Number of cycles the SQ instruction arbiter is working on a FLAT instruction. (per-simd, emulated). Units in quad-cycles(4 cycles)
+ : Number of cycles the SQ instruction arbiter is working on a FLAT instruction. (per-simd, emulated). Units in quad-cycles(4 cycles)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INST_CYCLES_VMEM_WR : Number of cycles needed to send addr and cmd data for VMEM write instructions. (per-simd, emulated). Units in quad-cycles(4 cycles)
+ : Number of cycles needed to send addr and cmd data for VMEM write instructions. (per-simd, emulated). Units in quad-cycles(4 cycles)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INST_CYCLES_VMEM_RD : Number of cycles needed to send addr and cmd data for VMEM read instructions. (per-simd, emulated). Units in quad-cycles(4 cycles)
+ : Number of cycles needed to send addr and cmd data for VMEM read instructions. (per-simd, emulated). Units in quad-cycles(4 cycles)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INST_CYCLES_SMEM : Number of cycles needed to execute scalar memory reads. (per-simd, emulated)
+ : Number of cycles needed to execute scalar memory reads. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INST_CYCLES_SALU : Number of cycles needed to execute non-memory read scalar operations. (per-simd, emulated). Units in quad-cycles(4 cycles)
+ : Number of cycles needed to execute non-memory read scalar operations. (per-simd, emulated). Units in quad-cycles(4 cycles)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_THREAD_CYCLES_VALU : Number of thread-cycles used to execute VALU operations (similar to INST_CYCLES_VALU but multiplied by # of active threads). (per-simd)
+ : Number of thread-cycles used to execute VALU operations (similar to INST_CYCLES_VALU but multiplied by # of active threads). (per-simd)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_IFETCH : Number of instruction fetch requests from cache. (per-simd, emulated)
+ : Number of instruction fetch requests from cache. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_IFETCH_LEVEL : Number of instruction fetch requests from cache. (per-simd, level)
+ : Number of instruction fetch requests from cache. (per-simd, level)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_LDS_BANK_CONFLICT : Number of cycles LDS is stalled by bank conflicts. (emulated)
+ : Number of cycles LDS is stalled by bank conflicts. (emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_LDS_ADDR_CONFLICT : Number of cycles LDS is stalled by address conflicts. (emulated,nondeterministic)
+ : Number of cycles LDS is stalled by address conflicts. (emulated,nondeterministic)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_LDS_UNALIGNED_STALL : Number of cycles LDS is stalled processing flat unaligned load/store ops. (emulated)
+ : Number of cycles LDS is stalled processing flat unaligned load/store ops. (emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_LDS_MEM_VIOLATIONS : Number of threads that have a memory violation in the LDS.(emulated)
+ : Number of threads that have a memory violation in the LDS.(emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_LDS_ATOMIC_RETURN : Number of atomic return cycles in LDS. (per-simd, emulated)
+ : Number of atomic return cycles in LDS. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_LDS_IDX_ACTIVE : Number of cycles LDS is used for indexed (non-direct,non-interpolation) operations. (per-simd, emulated)
+ : Number of cycles LDS is used for indexed (non-direct,non-interpolation) operations. (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_ACCUM_PREV_HIRES : For counter N, increment by the value of counter N-1.
+ : For counter N, increment by the value of counter N-1.
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_WAVES_RESTORED : Count number of context-restored waves sent to SQs. (per-simd, emulated, global)
+ : Count number of context-restored waves sent to SQs. (per-simd, emulated, global)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_WAVES_SAVED : Count number of context-saved waves. (per-simd, emulated, global)
+ : Count number of context-saved waves. (per-simd, emulated, global)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQ_INSTS_SMEM_NORM : Number of SMEM instructions issued normalized to match smem_level (*2 load/store; *2 atomic; *2 memtime; *4 wb/inv). (per-simd, emulated)
+ : Number of SMEM instructions issued normalized to match smem_level (*2 load/store; *2 atomic; *2 memtime; *4 wb/inv). (per-simd, emulated)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQC_DCACHE_INPUT_VALID_READYB : Input stalled by SQC (per-SQ, nondeterministic, unwindowed)
+ : Input stalled by SQC (per-SQ, nondeterministic, unwindowed)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQC_TC_REQ : Total number of TC requests that were issued by instruction and constant caches. (No-Masking, nondeterministic)
+ : Total number of TC requests that were issued by instruction and constant caches. (No-Masking, nondeterministic)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQC_TC_INST_REQ : Number of insruction requests to the TC (No-Masking, nondeterministic)
+ : Number of insruction requests to the TC (No-Masking, nondeterministic)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQC_TC_DATA_READ_REQ : Number of data read requests to the TC (No-Masking, nondeterministic)
+ : Number of data read requests to the TC (No-Masking, nondeterministic)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQC_TC_DATA_WRITE_REQ : Number of data write requests to the TC (No-Masking, nondeterministic)
+ : Number of data write requests to the TC (No-Masking, nondeterministic)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQC_TC_DATA_ATOMIC_REQ : Number of data atomic requests to the TC (No-Masking, nondeterministic)
+ : Number of data atomic requests to the TC (No-Masking, nondeterministic)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQC_TC_STALL : Valid request stalled TC request interface (no-credits). (No-Masking, nondeterministic, unwindowed)
+ : Valid request stalled TC request interface (no-credits). (No-Masking, nondeterministic, unwindowed)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQC_ICACHE_REQ : Number of requests. (per-SQ, per-Bank)
+ : Number of requests. (per-SQ, per-Bank)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQC_ICACHE_HITS : Number of cache hits. (per-SQ, per-Bank, nondeterministic)
+ : Number of cache hits. (per-SQ, per-Bank, nondeterministic)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQC_ICACHE_MISSES : Number of cache misses, includes uncached requests. (per-SQ, per-Bank, nondeterministic)
+ : Number of cache misses, includes uncached requests. (per-SQ, per-Bank, nondeterministic)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQC_ICACHE_MISSES_DUPLICATE : Number of misses that were duplicates (access to a non-resident, miss pending CL). (per-SQ, per-Bank, nondeterministic)
+ : Number of misses that were duplicates (access to a non-resident, miss pending CL). (per-SQ, per-Bank, nondeterministic)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQC_DCACHE_REQ : Number of requests (post-bank-serialization). (per-SQ, per-Bank)
+ : Number of requests (post-bank-serialization). (per-SQ, per-Bank)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQC_DCACHE_HITS : Number of cache hits. (per-SQ, per-Bank, nondeterministic)
+ : Number of cache hits. (per-SQ, per-Bank, nondeterministic)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQC_DCACHE_MISSES : Number of cache misses, includes uncached requests. (per-SQ, per-Bank, nondeterministic)
+ : Number of cache misses, includes uncached requests. (per-SQ, per-Bank, nondeterministic)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQC_DCACHE_MISSES_DUPLICATE : Number of misses that were duplicates (access to a non-resident, miss pending CL). (per-SQ, per-Bank, nondeterministic)
+ : Number of misses that were duplicates (access to a non-resident, miss pending CL). (per-SQ, per-Bank, nondeterministic)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQC_DCACHE_ATOMIC : Number of atomic requests. (per-SQ, per-Bank)
+ : Number of atomic requests. (per-SQ, per-Bank)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQC_DCACHE_REQ_READ_1 : Number of constant cache 1 dw read requests. (per-SQ)
+ : Number of constant cache 1 dw read requests. (per-SQ)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQC_DCACHE_REQ_READ_2 : Number of constant cache 2 dw read requests. (per-SQ)
+ : Number of constant cache 2 dw read requests. (per-SQ)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQC_DCACHE_REQ_READ_4 : Number of constant cache 4 dw read requests. (per-SQ)
+ : Number of constant cache 4 dw read requests. (per-SQ)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQC_DCACHE_REQ_READ_8 : Number of constant cache 8 dw read requests. (per-SQ)
+ : Number of constant cache 8 dw read requests. (per-SQ)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : SQC_DCACHE_REQ_READ_16 : Number of constant cache 16 dw read requests. (per-SQ)
+ : Number of constant cache 16 dw read requests. (per-SQ)
+      block SQ can only handle 8 counters at a time
+
+  gfx90a:0 : TA_TA_BUSY : TA block is busy. Perf_Windowing not supported for this counter.
+[0-15] : TA block is busy. Perf_Windowing not supported for this counter.
+      block TA can only handle 2 counters at a time
+
+  gfx90a:0 : TA_TOTAL_WAVEFRONTS : Total number of wavefronts processed by TA.
+[0-15] : Total number of wavefronts processed by TA.
+      block TA can only handle 2 counters at a time
+
+  gfx90a:0 : TA_BUFFER_WAVEFRONTS : Number of buffer wavefronts processed by TA.
+[0-15] : Number of buffer wavefronts processed by TA.
+      block TA can only handle 2 counters at a time
+
+  gfx90a:0 : TA_BUFFER_READ_WAVEFRONTS : Number of buffer read wavefronts processed by TA.
+[0-15] : Number of buffer read wavefronts processed by TA.
+      block TA can only handle 2 counters at a time
+
+  gfx90a:0 : TA_BUFFER_WRITE_WAVEFRONTS : Number of buffer write wavefronts processed by TA.
+[0-15] : Number of buffer write wavefronts processed by TA.
+      block TA can only handle 2 counters at a time
+
+  gfx90a:0 : TA_BUFFER_ATOMIC_WAVEFRONTS : Number of buffer atomic wavefronts processed by TA.
+[0-15] : Number of buffer atomic wavefronts processed by TA.
+      block TA can only handle 2 counters at a time
+
+  gfx90a:0 : TA_BUFFER_TOTAL_CYCLES : Number of buffer cycles issued to TC.
+[0-15] : Number of buffer cycles issued to TC.
+      block TA can only handle 2 counters at a time
+
+  gfx90a:0 : TA_BUFFER_COALESCED_READ_CYCLES : Number of buffer coalesced read cycles issued to TC.
+[0-15] : Number of buffer coalesced read cycles issued to TC.
+      block TA can only handle 2 counters at a time
+
+  gfx90a:0 : TA_BUFFER_COALESCED_WRITE_CYCLES : Number of buffer coalesced write cycles issued to TC.
+[0-15] : Number of buffer coalesced write cycles issued to TC.
+      block TA can only handle 2 counters at a time
+
+  gfx90a:0 : TA_ADDR_STALLED_BY_TC_CYCLES : Number of cycles addr path stalled by TC. Perf_Windowing not supported for this counter.
+[0-15] : Number of cycles addr path stalled by TC. Perf_Windowing not supported for this counter.
+      block TA can only handle 2 counters at a time
+
+  gfx90a:0 : TA_ADDR_STALLED_BY_TD_CYCLES : Number of cycles addr path stalled by TD. Perf_Windowing not supported for this counter.
+[0-15] : Number of cycles addr path stalled by TD. Perf_Windowing not supported for this counter.
+      block TA can only handle 2 counters at a time
+
+  gfx90a:0 : TA_DATA_STALLED_BY_TC_CYCLES : Number of cycles data path stalled by TC. Perf_Windowing not supported for this counter.
+[0-15] : Number of cycles data path stalled by TC. Perf_Windowing not supported for this counter.
+      block TA can only handle 2 counters at a time
+
+  gfx90a:0 : TA_FLAT_WAVEFRONTS : Number of flat opcode wavfronts processed by the TA.
+[0-15] : Number of flat opcode wavfronts processed by the TA.
+      block TA can only handle 2 counters at a time
+
+  gfx90a:0 : TA_FLAT_READ_WAVEFRONTS : Number of flat opcode reads processed by the TA.
+[0-15] : Number of flat opcode reads processed by the TA.
+      block TA can only handle 2 counters at a time
+
+  gfx90a:0 : TA_FLAT_WRITE_WAVEFRONTS : Number of flat opcode writes processed by the TA.
+[0-15] : Number of flat opcode writes processed by the TA.
+      block TA can only handle 2 counters at a time
+
+  gfx90a:0 : TA_FLAT_ATOMIC_WAVEFRONTS : Number of flat opcode atomics processed by the TA.
+[0-15] : Number of flat opcode atomics processed by the TA.
+      block TA can only handle 2 counters at a time
+
+  gfx90a:0 : TD_TD_BUSY : TD is processing or waiting for data. Perf_Windowing not supported for this counter.
+[0-15] : TD is processing or waiting for data. Perf_Windowing not supported for this counter.
+      block TD can only handle 2 counters at a time
+
+  gfx90a:0 : TD_TC_STALL : TD is stalled waiting for TC data.
+[0-15] : TD is stalled waiting for TC data.
+      block TD can only handle 2 counters at a time
+
+  gfx90a:0 : TD_SPI_STALL : TD is stalled SPI vinit
+[0-15] : TD is stalled SPI vinit
+      block TD can only handle 2 counters at a time
+
+  gfx90a:0 : TD_LOAD_WAVEFRONT : Count the wavefronts with opcode = load, include atomics and store.
+[0-15] : Count the wavefronts with opcode = load, include atomics and store.
+      block TD can only handle 2 counters at a time
+
+  gfx90a:0 : TD_ATOMIC_WAVEFRONT : Count the wavefronts with opcode = atomic.
+[0-15] : Count the wavefronts with opcode = atomic.
+      block TD can only handle 2 counters at a time
+
+  gfx90a:0 : TD_STORE_WAVEFRONT : Count the wavefronts with opcode = store.
+[0-15] : Count the wavefronts with opcode = store.
+      block TD can only handle 2 counters at a time
+
+  gfx90a:0 : TD_COALESCABLE_WAVEFRONT : Count wavefronts that TA finds coalescable.
+[0-15] : Count wavefronts that TA finds coalescable.
+      block TD can only handle 2 counters at a time
+
+  gfx90a:0 : TCP_GATE_EN1 : TCP interface clocks are turned on. Not Windowed.
+[0-15] : TCP interface clocks are turned on. Not Windowed.
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_GATE_EN2 : TCP core clocks are turned on. Not Windowed.
+[0-15] : TCP core clocks are turned on. Not Windowed.
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TD_TCP_STALL_CYCLES : TD stalls TCP
+[0-15] : TD stalls TCP
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TCR_TCP_STALL_CYCLES : TCR stalls TCP_TCR_req interface
+[0-15] : TCR stalls TCP_TCR_req interface
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_READ_TAGCONFLICT_STALL_CYCLES : Tagram conflict stall on a read
+[0-15] : Tagram conflict stall on a read
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_WRITE_TAGCONFLICT_STALL_CYCLES : Tagram conflict stall on a write
+[0-15] : Tagram conflict stall on a write
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_ATOMIC_TAGCONFLICT_STALL_CYCLES : Tagram conflict stall on an atomic
+[0-15] : Tagram conflict stall on an atomic
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_PENDING_STALL_CYCLES : Stall due to data pending from L2
+[0-15] : Stall due to data pending from L2
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TA_TCP_STATE_READ : Number of state reads
+[0-15] : Number of state reads
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_VOLATILE : Total number of L1 volatile pixels/buffers from TA
+[0-15] : Total number of L1 volatile pixels/buffers from TA
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TOTAL_ACCESSES : Total number of pixels/buffers from TA. Equals TCP_PERF_SEL_TOTAL_READ+TCP_PERF_SEL_TOTAL_NONREAD
+[0-15] : Total number of pixels/buffers from TA. Equals TCP_PERF_SEL_TOTAL_READ+TCP_PERF_SEL_TOTAL_NONREAD
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TOTAL_READ : Total number of read pixels/buffers from TA. Equals TCP_PERF_SEL_TOTAL_HIT_LRU_READ + TCP_PERF_SEL_TOTAL_MISS_LRU_READ + TCP_PERF_SEL_TOTAL_MISS_EVICT_READ
+[0-15] : Total number of read pixels/buffers from TA. Equals TCP_PERF_SEL_TOTAL_HIT_LRU_READ + TCP_PERF_SEL_TOTAL_MISS_LRU_READ + TCP_PERF_SEL_TOTAL_MISS_EVICT_READ
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TOTAL_WRITE : Total number of local write pixels/buffers from TA. Equals TCP_PERF_SEL_TOTAL_MISS_LRU_WRITE+ TCP_PERF_SEL_TOTAL_MISS_EVICT_WRITE
+[0-15] : Total number of local write pixels/buffers from TA. Equals TCP_PERF_SEL_TOTAL_MISS_LRU_WRITE+ TCP_PERF_SEL_TOTAL_MISS_EVICT_WRITE
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TOTAL_ATOMIC_WITH_RET : Total number of atomic with return pixels/buffers from TA
+[0-15] : Total number of atomic with return pixels/buffers from TA
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TOTAL_ATOMIC_WITHOUT_RET : Total number of atomic without return pixels/buffers from TA
+[0-15] : Total number of atomic without return pixels/buffers from TA
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TOTAL_WRITEBACK_INVALIDATES : Total number of cache invalidates. Equals TCP_PERF_SEL_TOTAL_WBINVL1+ TCP_PERF_SEL_TOTAL_WBINVL1_VOL+ TCP_PERF_SEL_CP_TCP_INVALIDATE+ TCP_PERF_SEL_SQ_TCP_INVALIDATE_VOL. Not Windowed.
+[0-15] : Total number of cache invalidates. Equals TCP_PERF_SEL_TOTAL_WBINVL1+ TCP_PERF_SEL_TOTAL_WBINVL1_VOL+ TCP_PERF_SEL_CP_TCP_INVALIDATE+ TCP_PERF_SEL_SQ_TCP_INVALIDATE_VOL. Not Windowed.
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_UTCL1_REQUEST : Total CLIENT_UTCL1 NORMAL requests
+[0-15] : Total CLIENT_UTCL1 NORMAL requests
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_UTCL1_TRANSLATION_MISS : Total utcl1 translation misses
+[0-15] : Total utcl1 translation misses
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_UTCL1_TRANSLATION_HIT : Total utcl1 translation hits
+[0-15] : Total utcl1 translation hits
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_UTCL1_PERMISSION_MISS : Total utcl1 permission misses
+[0-15] : Total utcl1 permission misses
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TOTAL_CACHE_ACCESSES : Count of total cache line (tag) accesses (includes hits and misses).
+[0-15] : Count of total cache line (tag) accesses (includes hits and misses).
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TCP_LATENCY : Total TCP wave latency (from first clock of wave entering to first clock of wave leaving), divide by TA_TCP_STATE_READ to avg wave latency
+[0-15] : Total TCP wave latency (from first clock of wave entering to first clock of wave leaving), divide by TA_TCP_STATE_READ to avg wave latency
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TCC_READ_REQ_LATENCY : Total TCP->TCC request latency for reads and atomics with return. Not Windowed.
+[0-15] : Total TCP->TCC request latency for reads and atomics with return. Not Windowed.
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TCC_WRITE_REQ_LATENCY : Total TCP->TCC request latency for writes and atomics without return. Not Windowed.
+[0-15] : Total TCP->TCC request latency for writes and atomics without return. Not Windowed.
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TCC_READ_REQ : Total read requests from TCP to all TCCs
+[0-15] : Total read requests from TCP to all TCCs
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TCC_WRITE_REQ : Total write requests from TCP to all TCCs
+[0-15] : Total write requests from TCP to all TCCs
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TCC_ATOMIC_WITH_RET_REQ : Total atomic with return requests from TCP to all TCCs
+[0-15] : Total atomic with return requests from TCP to all TCCs
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TCC_ATOMIC_WITHOUT_RET_REQ : Total atomic without return requests from TCP to all TCCs
+[0-15] : Total atomic without return requests from TCP to all TCCs
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TCC_NC_READ_REQ : Total read requests with NC mtype from this TCP to all TCCs
+[0-15] : Total read requests with NC mtype from this TCP to all TCCs
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TCC_NC_WRITE_REQ : Total write requests with NC mtype from this TCP to all TCCs
+[0-15] : Total write requests with NC mtype from this TCP to all TCCs
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TCC_NC_ATOMIC_REQ : Total atomic requests with NC mtype from this TCP to all TCCs
+[0-15] : Total atomic requests with NC mtype from this TCP to all TCCs
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TCC_UC_READ_REQ : Total read requests with UC mtype from this TCP to all TCCs
+[0-15] : Total read requests with UC mtype from this TCP to all TCCs
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TCC_UC_WRITE_REQ : Total write requests with UC mtype from this TCP to all TCCs
+[0-15] : Total write requests with UC mtype from this TCP to all TCCs
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TCC_UC_ATOMIC_REQ : Total atomic requests with UC mtype from this TCP to all TCCs
+[0-15] : Total atomic requests with UC mtype from this TCP to all TCCs
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TCC_CC_READ_REQ : Total write requests with CC mtype from this TCP to all TCCs
+[0-15] : Total write requests with CC mtype from this TCP to all TCCs
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TCC_CC_WRITE_REQ : Total write requests with CC mtype from this TCP to all TCCs
+[0-15] : Total write requests with CC mtype from this TCP to all TCCs
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TCC_CC_ATOMIC_REQ : Total atomic requests with CC mtype from this TCP to all TCCs
+[0-15] : Total atomic requests with CC mtype from this TCP to all TCCs
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TCC_RW_READ_REQ : Total write requests with RW mtype from this TCP to all TCCs
+[0-15] : Total write requests with RW mtype from this TCP to all TCCs
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TCC_RW_WRITE_REQ : Total write requests with RW mtype from this TCP to all TCCs
+[0-15] : Total write requests with RW mtype from this TCP to all TCCs
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCP_TCC_RW_ATOMIC_REQ : Total atomic requests with RW mtype from this TCP to all TCCs
+[0-15] : Total atomic requests with RW mtype from this TCP to all TCCs
+      block TCP can only handle 4 counters at a time
+
+  gfx90a:0 : TCA_CYCLE : Number of cycles. Not windowable.
+[0-31] : Number of cycles. Not windowable.
+      block TCA can only handle 4 counters at a time
+
+  gfx90a:0 : TCA_BUSY : Number of cycles we have a request pending. Not windowable.
+[0-31] : Number of cycles we have a request pending. Not windowable.
+      block TCA can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_CYCLE : Number of cycles. Not windowable.
+[0-31] : Number of cycles. Not windowable.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_BUSY : Number of cycles we have a request pending. Not windowable.
+[0-31] : Number of cycles we have a request pending. Not windowable.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_REQ : Number of requests of all types. This is measured at the tag block. This may be more than the number of requests arriving at the TCC, but it is a good indication of the total amount of work that needs to be performed.
+[0-31] : Number of requests of all types. This is measured at the tag block. This may be more than the number of requests arriving at the TCC, but it is a good indication of the total amount of work that needs to be performed.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_STREAMING_REQ : Number of streaming requests. This is measured at the tag block.
+[0-31] : Number of streaming requests. This is measured at the tag block.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_NC_REQ : The number of noncoherently cached requests. This is measured at the tag block.
+[0-31] : The number of noncoherently cached requests. This is measured at the tag block.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_UC_REQ : The number of uncached requests. This is measured at the tag block.
+[0-31] : The number of uncached requests. This is measured at the tag block.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_CC_REQ : The number of coherently cached requests. This is measured at the tag block.
+[0-31] : The number of coherently cached requests. This is measured at the tag block.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_RW_REQ : The number of RW requests. This is measured at the tag block.
+[0-31] : The number of RW requests. This is measured at the tag block.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_PROBE : Number of probe requests. Not windowable.
+[0-31] : Number of probe requests. Not windowable.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_PROBE_ALL : Number of external probe requests with with EA_TCC_preq_all== 1. Not windowable.
+[0-31] : Number of external probe requests with with EA_TCC_preq_all== 1. Not windowable.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_READ : Number of read requests. Compressed reads are included in this, but metadata reads are not included.
+[0-31] : Number of read requests. Compressed reads are included in this, but metadata reads are not included.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_WRITE : Number of write requests.
+[0-31] : Number of write requests.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_ATOMIC : Number of atomic requests of all types.
+[0-31] : Number of atomic requests of all types.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_HIT : Number of cache hits.
+[0-31] : Number of cache hits.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_MISS : Number of cache misses. UC reads count as misses.
+[0-31] : Number of cache misses. UC reads count as misses.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_WRITEBACK : Number of lines written back to main memory. This includes writebacks of dirty lines and uncached write/atomic requests.
+[0-31] : Number of lines written back to main memory. This includes writebacks of dirty lines and uncached write/atomic requests.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_EA_WRREQ : Number of transactions (either 32-byte or 64-byte) going over the TC_EA_wrreq interface. Atomics may travel over the same interface and are generally classified as write requests. This does not include probe commands.
+[0-31] : Number of transactions (either 32-byte or 64-byte) going over the TC_EA_wrreq interface. Atomics may travel over the same interface and are generally classified as write requests. This does not include probe commands.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_EA_WRREQ_64B : Number of 64-byte transactions going (64-byte write or CMPSWAP) over the TC_EA_wrreq interface.
+[0-31] : Number of 64-byte transactions going (64-byte write or CMPSWAP) over the TC_EA_wrreq interface.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_EA_WR_UNCACHED_32B : Number of 32-byte write/atomic going over the TC_EA_wrreq interface due to uncached traffic. Note that CC mtypes can produce uncached requests, and those are included in this. A 64-byte request will be counted as 2
+[0-31] : Number of 32-byte write/atomic going over the TC_EA_wrreq interface due to uncached traffic. Note that CC mtypes can produce uncached requests, and those are included in this. A 64-byte request will be counted as 2
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_EA_WRREQ_STALL : Number of cycles a write request was stalled.
+[0-31] : Number of cycles a write request was stalled.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_EA_WRREQ_IO_CREDIT_STALL : Number of cycles a EA write request was stalled because the interface was out of IO credits.
+[0-31] : Number of cycles a EA write request was stalled because the interface was out of IO credits.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_EA_WRREQ_GMI_CREDIT_STALL : Number of cycles a EA write request was stalled because the interface was out of GMI credits.
+[0-31] : Number of cycles a EA write request was stalled because the interface was out of GMI credits.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_EA_WRREQ_DRAM_CREDIT_STALL : Number of cycles a EA write request was stalled because the interface was out of DRAM credits.
+[0-31] : Number of cycles a EA write request was stalled because the interface was out of DRAM credits.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_TOO_MANY_EA_WRREQS_STALL : Number of cycles the TCC could not send a EA write request because it already reached its maximum number of pending EA write requests.
+[0-31] : Number of cycles the TCC could not send a EA write request because it already reached its maximum number of pending EA write requests.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_EA_WRREQ_LEVEL : The sum of the number of EA write requests in flight. This is primarily meant for measure average EA write latency. Average write latency = TCC_PERF_SEL_EA_WRREQ_LEVEL/TCC_PERF_SEL_EA_WRREQ.
+[0-31] : The sum of the number of EA write requests in flight. This is primarily meant for measure average EA write latency. Average write latency = TCC_PERF_SEL_EA_WRREQ_LEVEL/TCC_PERF_SEL_EA_WRREQ.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_EA_ATOMIC : Number of transactions going over the TC_EA_wrreq interface that are actually atomic requests.
+[0-31] : Number of transactions going over the TC_EA_wrreq interface that are actually atomic requests.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_EA_ATOMIC_LEVEL : The sum of the number of EA atomics in flight. This is primarily meant for measure average EA atomic latency. Average atomic latency = TCC_PERF_SEL_EA_WRREQ_ATOMIC_LEVEL/TCC_PERF_SEL_EA_WRREQ_ATOMIC.
+[0-31] : The sum of the number of EA atomics in flight. This is primarily meant for measure average EA atomic latency. Average atomic latency = TCC_PERF_SEL_EA_WRREQ_ATOMIC_LEVEL/TCC_PERF_SEL_EA_WRREQ_ATOMIC.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_EA_RDREQ : Number of TCC/EA read requests (either 32-byte or 64-byte)
+[0-31] : Number of TCC/EA read requests (either 32-byte or 64-byte)
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_EA_RDREQ_32B : Number of 32-byte TCC/EA read requests
+[0-31] : Number of 32-byte TCC/EA read requests
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_EA_RD_UNCACHED_32B : Number of 32-byte TCC/EA read due to uncached traffic. A 64-byte request will be counted as 2
+[0-31] : Number of 32-byte TCC/EA read due to uncached traffic. A 64-byte request will be counted as 2
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_EA_RDREQ_IO_CREDIT_STALL : Number of cycles there was a stall because the read request interface was out of IO credits. Stalls occur regardless of whether a read needed to be performed or not.
+[0-31] : Number of cycles there was a stall because the read request interface was out of IO credits. Stalls occur regardless of whether a read needed to be performed or not.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_EA_RDREQ_GMI_CREDIT_STALL : Number of cycles there was a stall because the read request interface was out of GMI credits. Stalls occur regardless of whether a read needed to be performed or not.
+[0-31] : Number of cycles there was a stall because the read request interface was out of GMI credits. Stalls occur regardless of whether a read needed to be performed or not.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_EA_RDREQ_DRAM_CREDIT_STALL : Number of cycles there was a stall because the read request interface was out of DRAM credits. Stalls occur regardless of whether a read needed to be performed or not.
+[0-31] : Number of cycles there was a stall because the read request interface was out of DRAM credits. Stalls occur regardless of whether a read needed to be performed or not.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_EA_RDREQ_LEVEL : The sum of the number of TCC/EA read requests in flight. This is primarily meant for measure average EA read latency. Average read latency = TCC_PERF_SEL_EA_RDREQ_LEVEL/TCC_PERF_SEL_EA_RDREQ.
+[0-31] : The sum of the number of TCC/EA read requests in flight. This is primarily meant for measure average EA read latency. Average read latency = TCC_PERF_SEL_EA_RDREQ_LEVEL/TCC_PERF_SEL_EA_RDREQ.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_TAG_STALL : Number of cycles the normal request pipeline in the tag was stalled for any reason. Normally, stalls of this nature are measured exactly from one point the pipeline, but that is not the case for this counter. Probes can stall the pipeline at a variety of places, and there is no single point that can reasonably measure the total stalls accurately.
+[0-31] : Number of cycles the normal request pipeline in the tag was stalled for any reason. Normally, stalls of this nature are measured exactly from one point the pipeline, but that is not the case for this counter. Probes can stall the pipeline at a variety of places, and there is no single point that can reasonably measure the total stalls accurately.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_NORMAL_WRITEBACK : Number of writebacks due to requests that are not writeback requests.
+[0-31] : Number of writebacks due to requests that are not writeback requests.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_ALL_TC_OP_WB_WRITEBACK : Number of writebacks due to all TC_OP writeback requests.
+[0-31] : Number of writebacks due to all TC_OP writeback requests.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_NORMAL_EVICT : Number of evictions due to requests that are not invalidate or probe requests.
+[0-31] : Number of evictions due to requests that are not invalidate or probe requests.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_ALL_TC_OP_INV_EVICT : Number of evictions due to all TC_OP invalidate requests.
+[0-31] : Number of evictions due to all TC_OP invalidate requests.
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_EA_RDREQ_DRAM : Number of TCC/EA read requests (either 32-byte or 64-byte) destined for DRAM (MC).
+[0-31] : Number of TCC/EA read requests (either 32-byte or 64-byte) destined for DRAM (MC).
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : TCC_EA_WRREQ_DRAM : Number of TCC/EA write requests (either 32-byte of 64-byte) destined for DRAM (MC).
+[0-31] : Number of TCC/EA write requests (either 32-byte of 64-byte) destined for DRAM (MC).
+      block TCC can only handle 4 counters at a time
+
+  gfx90a:0 : MeanOccupancyPerCU : Mean occupancy per compute unit.
+      MeanOccupancyPerCU = SQ_LEVEL_WAVES*0+SQ_ACCUM_PREV_HIRES/GRBM_GUI_ACTIVE/CU_NUM
+
+  gfx90a:0 : MeanOccupancyPerActiveCU : Mean occupancy per active compute unit.
+      MeanOccupancyPerActiveCU = SQ_LEVEL_WAVES*0+SQ_ACCUM_PREV_HIRES*4/SQ_BUSY_CYCLES/CU_NUM
+
+  gfx90a:0 : TA_BUSY_avr : TA block is busy. Average over TA instances.
+      TA_BUSY_avr = avr(TA_TA_BUSY,16)
+
+  gfx90a:0 : TA_BUSY_max : TA block is busy. Max over TA instances.
+      TA_BUSY_max = max(TA_TA_BUSY,16)
+
+  gfx90a:0 : TA_BUSY_min : TA block is busy. Min over TA instances.
+      TA_BUSY_min = min(TA_TA_BUSY,16)
+
+  gfx90a:0 : TA_TA_BUSY_sum : TA block is busy. Perf_Windowing not supported for this counter. Sum over TA instances.
+      TA_TA_BUSY_sum = sum(TA_TA_BUSY,16)
+
+  gfx90a:0 : TA_TOTAL_WAVEFRONTS_sum : Total number of wavefronts processed by TA. Sum over TA instances.
+      TA_TOTAL_WAVEFRONTS_sum = sum(TA_TOTAL_WAVEFRONTS,16)
+
+  gfx90a:0 : TA_ADDR_STALLED_BY_TC_CYCLES_sum : Number of cycles addr path stalled by TC. Perf_Windowing not supported for this counter. Sum over TA instances.
+      TA_ADDR_STALLED_BY_TC_CYCLES_sum = sum(TA_ADDR_STALLED_BY_TC_CYCLES,16)
+
+  gfx90a:0 : TA_ADDR_STALLED_BY_TD_CYCLES_sum : Number of cycles addr path stalled by TD. Perf_Windowing not supported for this counter. Sum over TA instances.
+      TA_ADDR_STALLED_BY_TD_CYCLES_sum = sum(TA_ADDR_STALLED_BY_TD_CYCLES,16)
+
+  gfx90a:0 : TA_DATA_STALLED_BY_TC_CYCLES_sum : Number of cycles data path stalled by TC. Perf_Windowing not supported for this counter. Sum over TA instances.
+      TA_DATA_STALLED_BY_TC_CYCLES_sum = sum(TA_DATA_STALLED_BY_TC_CYCLES,16)
+
+  gfx90a:0 : TA_FLAT_WAVEFRONTS_sum : Number of flat opcode wavfronts processed by the TA. Sum over TA instances.
+      TA_FLAT_WAVEFRONTS_sum = sum(TA_FLAT_WAVEFRONTS,16)
+
+  gfx90a:0 : TA_FLAT_READ_WAVEFRONTS_sum : Number of flat opcode reads processed by the TA. Sum over TA instances.
+      TA_FLAT_READ_WAVEFRONTS_sum = sum(TA_FLAT_READ_WAVEFRONTS,16)
+
+  gfx90a:0 : TA_FLAT_WRITE_WAVEFRONTS_sum : Number of flat opcode writes processed by the TA. Sum over TA instances.
+      TA_FLAT_WRITE_WAVEFRONTS_sum = sum(TA_FLAT_WRITE_WAVEFRONTS,16)
+
+  gfx90a:0 : TA_FLAT_ATOMIC_WAVEFRONTS_sum : Number of flat opcode atomics processed by the TA. Sum over TA instances.
+      TA_FLAT_ATOMIC_WAVEFRONTS_sum = sum(TA_FLAT_ATOMIC_WAVEFRONTS,16)
+
+  gfx90a:0 : TA_BUFFER_WAVEFRONTS_sum : Number of buffer wavefronts processed by TA. Sum over TA instances.
+      TA_BUFFER_WAVEFRONTS_sum = sum(TA_BUFFER_WAVEFRONTS,16)
+
+  gfx90a:0 : TA_BUFFER_READ_WAVEFRONTS_sum : Number of buffer read wavefronts processed by TA. Sum over TA instances.
+      TA_BUFFER_READ_WAVEFRONTS_sum = sum(TA_BUFFER_READ_WAVEFRONTS,16)
+
+  gfx90a:0 : TA_BUFFER_WRITE_WAVEFRONTS_sum : Number of buffer write wavefronts processed by TA. Sum over TA instances.
+      TA_BUFFER_WRITE_WAVEFRONTS_sum = sum(TA_BUFFER_WRITE_WAVEFRONTS,16)
+
+  gfx90a:0 : TA_BUFFER_ATOMIC_WAVEFRONTS_sum : Number of buffer atomic wavefronts processed by TA. Sum over TA instances.
+      TA_BUFFER_ATOMIC_WAVEFRONTS_sum = sum(TA_BUFFER_ATOMIC_WAVEFRONTS,16)
+
+  gfx90a:0 : TA_BUFFER_TOTAL_CYCLES_sum : Number of buffer cycles issued to TC. Sum over TA instances.
+      TA_BUFFER_TOTAL_CYCLES_sum = sum(TA_BUFFER_TOTAL_CYCLES,16)
+
+  gfx90a:0 : TA_BUFFER_COALESCED_READ_CYCLES_sum : Number of buffer coalesced read cycles issued to TC. Sum over TA instances.
+      TA_BUFFER_COALESCED_READ_CYCLES_sum = sum(TA_BUFFER_COALESCED_READ_CYCLES,16)
+
+  gfx90a:0 : TA_BUFFER_COALESCED_WRITE_CYCLES_sum : Number of buffer coalesced write cycles issued to TC. Sum over TA instances.
+      TA_BUFFER_COALESCED_WRITE_CYCLES_sum = sum(TA_BUFFER_COALESCED_WRITE_CYCLES,16)
+
+  gfx90a:0 : TD_TD_BUSY_sum : TD is processing or waiting for data. Perf_Windowing not supported for this counter. Sum over TD instances.
+      TD_TD_BUSY_sum = sum(TD_TD_BUSY,16)
+
+  gfx90a:0 : TD_TC_STALL_sum : TD is stalled waiting for TC data. Sum over TD instances.
+      TD_TC_STALL_sum = sum(TD_TC_STALL,16)
+
+  gfx90a:0 : TD_LOAD_WAVEFRONT_sum : Count the wavefronts with opcode = load, include atomics and store. Sum over TD instances.
+      TD_LOAD_WAVEFRONT_sum = sum(TD_LOAD_WAVEFRONT,16)
+
+  gfx90a:0 : TD_ATOMIC_WAVEFRONT_sum : Count the wavefronts with opcode = atomic. Sum over TD instances.
+      TD_ATOMIC_WAVEFRONT_sum = sum(TD_ATOMIC_WAVEFRONT,16)
+
+  gfx90a:0 : TD_STORE_WAVEFRONT_sum : Count the wavefronts with opcode = store. Sum over TD instances.
+      TD_STORE_WAVEFRONT_sum = sum(TD_STORE_WAVEFRONT,16)
+
+  gfx90a:0 : TD_COALESCABLE_WAVEFRONT_sum : Count wavefronts that TA finds coalescable. Sum over TD instances.
+      TD_COALESCABLE_WAVEFRONT_sum = sum(TD_COALESCABLE_WAVEFRONT,16)
+
+  gfx90a:0 : TD_SPI_STALL_sum : TD is stalled SPI vinit, sum of TCP instances
+      TD_SPI_STALL_sum = sum(TD_SPI_STALL,16)
+
+  gfx90a:0 : TCP_GATE_EN1_sum : TCP interface clocks are turned on. Not Windowed. Sum over TCP instances.
+      TCP_GATE_EN1_sum = sum(TCP_GATE_EN1,16)
+
+  gfx90a:0 : TCP_GATE_EN2_sum : TCP core clocks are turned on. Not Windowed. Sum over TCP instances.
+      TCP_GATE_EN2_sum = sum(TCP_GATE_EN2,16)
+
+  gfx90a:0 : TCP_TD_TCP_STALL_CYCLES_sum : TD stalls TCP. Sum over TCP instances.
+      TCP_TD_TCP_STALL_CYCLES_sum = sum(TCP_TD_TCP_STALL_CYCLES,16)
+
+  gfx90a:0 : TCP_TCR_TCP_STALL_CYCLES_sum : TCR stalls TCP_TCR_req interface. Sum over TCP instances.
+      TCP_TCR_TCP_STALL_CYCLES_sum = sum(TCP_TCR_TCP_STALL_CYCLES,16)
+
+  gfx90a:0 : TCP_READ_TAGCONFLICT_STALL_CYCLES_sum : Tagram conflict stall on a read. Sum over TCP instances.
+      TCP_READ_TAGCONFLICT_STALL_CYCLES_sum = sum(TCP_READ_TAGCONFLICT_STALL_CYCLES,16)
+
+  gfx90a:0 : TCP_WRITE_TAGCONFLICT_STALL_CYCLES_sum : Tagram conflict stall on a write. Sum over TCP instances.
+      TCP_WRITE_TAGCONFLICT_STALL_CYCLES_sum = sum(TCP_WRITE_TAGCONFLICT_STALL_CYCLES,16)
+
+  gfx90a:0 : TCP_ATOMIC_TAGCONFLICT_STALL_CYCLES_sum : Tagram conflict stall on an atomic. Sum over TCP instances.
+      TCP_ATOMIC_TAGCONFLICT_STALL_CYCLES_sum = sum(TCP_ATOMIC_TAGCONFLICT_STALL_CYCLES,16)
+
+  gfx90a:0 : TCP_VOLATILE_sum : Total number of L1 volatile pixels/buffers from TA. Sum over TCP instances.
+      TCP_VOLATILE_sum = sum(TCP_VOLATILE,16)
+
+  gfx90a:0 : TCP_TOTAL_ACCESSES_sum : Total number of pixels/buffers from TA. Equals TCP_PERF_SEL_TOTAL_READ+TCP_PERF_SEL_TOTAL_NONREAD. Sum over TCP instances.
+      TCP_TOTAL_ACCESSES_sum = sum(TCP_TOTAL_ACCESSES,16)
+
+  gfx90a:0 : TCP_TOTAL_READ_sum : Total number of read pixels/buffers from TA. Equals TCP_PERF_SEL_TOTAL_HIT_LRU_READ + TCP_PERF_SEL_TOTAL_MISS_LRU_READ + TCP_PERF_SEL_TOTAL_MISS_EVICT_READ. Sum over TCP instances.
+      TCP_TOTAL_READ_sum = sum(TCP_TOTAL_READ,16)
+
+  gfx90a:0 : TCP_TOTAL_WRITE_sum : Total number of local write pixels/buffers from TA. Equals TCP_PERF_SEL_TOTAL_MISS_LRU_WRITE+ TCP_PERF_SEL_TOTAL_MISS_EVICT_WRITE. Sum over TCP instances.
+      TCP_TOTAL_WRITE_sum = sum(TCP_TOTAL_WRITE,16)
+
+  gfx90a:0 : TCP_TOTAL_ATOMIC_WITH_RET_sum : Total number of atomic with return pixels/buffers from TA. Sum over TCP instances.
+      TCP_TOTAL_ATOMIC_WITH_RET_sum = sum(TCP_TOTAL_ATOMIC_WITH_RET,16)
+
+  gfx90a:0 : TCP_TOTAL_ATOMIC_WITHOUT_RET_sum : Total number of atomic without return pixels/buffers from TA Sum over TCP instances.
+      TCP_TOTAL_ATOMIC_WITHOUT_RET_sum = sum(TCP_TOTAL_ATOMIC_WITHOUT_RET,16)
+
+  gfx90a:0 : TCP_TOTAL_WRITEBACK_INVALIDATES_sum : Total number of cache invalidates. Equals TCP_PERF_SEL_TOTAL_WBINVL1+ TCP_PERF_SEL_TOTAL_WBINVL1_VOL+ TCP_PERF_SEL_CP_TCP_INVALIDATE+ TCP_PERF_SEL_SQ_TCP_INVALIDATE_VOL. Not Windowed. Sum over TCP instances.
+      TCP_TOTAL_WRITEBACK_INVALIDATES_sum = sum(TCP_TOTAL_WRITEBACK_INVALIDATES,16)
+
+  gfx90a:0 : TCP_UTCL1_REQUEST_sum : Total CLIENT_UTCL1 NORMAL requests Sum over TCP instances.
+      TCP_UTCL1_REQUEST_sum = sum(TCP_UTCL1_REQUEST,16)
+
+  gfx90a:0 : TCP_UTCL1_TRANSLATION_MISS_sum : Total utcl1 translation misses Sum over TCP instances.
+      TCP_UTCL1_TRANSLATION_MISS_sum = sum(TCP_UTCL1_TRANSLATION_MISS,16)
+
+  gfx90a:0 : TCP_UTCL1_TRANSLATION_HIT_sum : Total utcl1 translation hits Sum over TCP instances.
+      TCP_UTCL1_TRANSLATION_HIT_sum = sum(TCP_UTCL1_TRANSLATION_HIT,16)
+
+  gfx90a:0 : TCP_UTCL1_PERMISSION_MISS_sum : Total utcl1 permission misses Sum over TCP instances.
+      TCP_UTCL1_PERMISSION_MISS_sum = sum(TCP_UTCL1_PERMISSION_MISS,16)
+
+  gfx90a:0 : TCP_TOTAL_CACHE_ACCESSES_sum : Count of total cache line (tag) accesses (includes hits and misses). Sum over TCP instances.
+      TCP_TOTAL_CACHE_ACCESSES_sum = sum(TCP_TOTAL_CACHE_ACCESSES,16)
+
+  gfx90a:0 : TCP_TCP_LATENCY_sum : Total TCP wave latency (from first clock of wave entering to first clock of wave leaving), divide by TA_TCP_STATE_READ to avg wave latency Sum over TCP instances.
+      TCP_TCP_LATENCY_sum = sum(TCP_TCP_LATENCY,16)
+
+  gfx90a:0 : TCP_TA_TCP_STATE_READ_sum : Number of state reads Sum over TCP instances.
+      TCP_TA_TCP_STATE_READ_sum = sum(TCP_TA_TCP_STATE_READ,16)
+
+  gfx90a:0 : TCP_TCC_READ_REQ_LATENCY_sum : Total TCP->TCC request latency for reads and atomics with return. Not Windowed. Sum over TCP instances.
+      TCP_TCC_READ_REQ_LATENCY_sum = sum(TCP_TCC_READ_REQ_LATENCY,16)
+
+  gfx90a:0 : TCP_TCC_WRITE_REQ_LATENCY_sum : Total TCP->TCC request latency for writes and atomics without return. Not Windowed. Sum over TCP instances.
+      TCP_TCC_WRITE_REQ_LATENCY_sum = sum(TCP_TCC_WRITE_REQ_LATENCY,16)
+
+  gfx90a:0 : TCP_TCC_READ_REQ_sum : Total read requests from TCP to all TCCs Sum over TCP instances.
+      TCP_TCC_READ_REQ_sum = sum(TCP_TCC_READ_REQ,16)
+
+  gfx90a:0 : TCP_TCC_WRITE_REQ_sum : Total write requests from TCP to all TCCs Sum over TCP instances.
+      TCP_TCC_WRITE_REQ_sum = sum(TCP_TCC_WRITE_REQ,16)
+
+  gfx90a:0 : TCP_TCC_ATOMIC_WITH_RET_REQ_sum : Total atomic with return requests from TCP to all TCCs Sum over TCP instances.
+      TCP_TCC_ATOMIC_WITH_RET_REQ_sum = sum(TCP_TCC_ATOMIC_WITH_RET_REQ,16)
+
+  gfx90a:0 : TCP_TCC_ATOMIC_WITHOUT_RET_REQ_sum : Total atomic without return requests from TCP to all TCCs Sum over TCP instances.
+      TCP_TCC_ATOMIC_WITHOUT_RET_REQ_sum = sum(TCP_TCC_ATOMIC_WITHOUT_RET_REQ,16)
+
+  gfx90a:0 : TCP_TCC_NC_READ_REQ_sum : Total read requests with NC mtype from this TCP to all TCCs Sum over TCP instances.
+      TCP_TCC_NC_READ_REQ_sum = sum(TCP_TCC_NC_READ_REQ,16)
+
+  gfx90a:0 : TCP_TCC_NC_WRITE_REQ_sum : Total write requests with NC mtype from this TCP to all TCCs Sum over TCP instances.
+      TCP_TCC_NC_WRITE_REQ_sum = sum(TCP_TCC_NC_WRITE_REQ,16)
+
+  gfx90a:0 : TCP_TCC_NC_ATOMIC_REQ_sum : Total atomic requests with NC mtype from this TCP to all TCCs Sum over TCP instances.
+      TCP_TCC_NC_ATOMIC_REQ_sum = sum(TCP_TCC_NC_ATOMIC_REQ,16)
+
+  gfx90a:0 : TCP_TCC_UC_READ_REQ_sum : Total read requests with UC mtype from this TCP to all TCCs Sum over TCP instances.
+      TCP_TCC_UC_READ_REQ_sum = sum(TCP_TCC_UC_READ_REQ,16)
+
+  gfx90a:0 : TCP_TCC_UC_WRITE_REQ_sum : Total write requests with UC mtype from this TCP to all TCCs Sum over TCP instances.
+      TCP_TCC_UC_WRITE_REQ_sum = sum(TCP_TCC_UC_WRITE_REQ,16)
+
+  gfx90a:0 : TCP_TCC_UC_ATOMIC_REQ_sum : Total atomic requests with UC mtype from this TCP to all TCCs Sum over TCP instances.
+      TCP_TCC_UC_ATOMIC_REQ_sum = sum(TCP_TCC_UC_ATOMIC_REQ,16)
+
+  gfx90a:0 : TCP_TCC_CC_READ_REQ_sum : Total write requests with CC mtype from this TCP to all TCCs Sum over TCP instances.
+      TCP_TCC_CC_READ_REQ_sum = sum(TCP_TCC_CC_READ_REQ,16)
+
+  gfx90a:0 : TCP_TCC_CC_WRITE_REQ_sum : Total write requests with CC mtype from this TCP to all TCCs Sum over TCP instances.
+      TCP_TCC_CC_WRITE_REQ_sum = sum(TCP_TCC_CC_WRITE_REQ,16)
+
+  gfx90a:0 : TCP_TCC_CC_ATOMIC_REQ_sum : Total atomic requests with CC mtype from this TCP to all TCCs Sum over TCP instances.
+      TCP_TCC_CC_ATOMIC_REQ_sum = sum(TCP_TCC_CC_ATOMIC_REQ,16)
+
+  gfx90a:0 : TCP_TCC_RW_READ_REQ_sum : Total write requests with RW mtype from this TCP to all TCCs. Sum over TCP instances.
+      TCP_TCC_RW_READ_REQ_sum = sum(TCP_TCC_RW_READ_REQ,16)
+
+  gfx90a:0 : TCP_TCC_RW_WRITE_REQ_sum : Total write requests with RW mtype from this TCP to all TCCs. Sum over TCP instances.
+      TCP_TCC_RW_WRITE_REQ_sum = sum(TCP_TCC_RW_WRITE_REQ,16)
+
+  gfx90a:0 : TCP_TCC_RW_ATOMIC_REQ_sum : Total atomic requests with RW mtype from this TCP to all TCCs. Sum over TCP instances.
+      TCP_TCC_RW_ATOMIC_REQ_sum = sum(TCP_TCC_RW_ATOMIC_REQ,16)
+
+  gfx90a:0 : TCP_PENDING_STALL_CYCLES_sum : Stall due to data pending from L2. Sum over TCP instances.
+      TCP_PENDING_STALL_CYCLES_sum = sum(TCP_PENDING_STALL_CYCLES,16)
+
+  gfx90a:0 : TCP_TCR_TCP_STALL_CYCLES_PERCENT : Percentage of time TCP is stalled by TCR.
+      TCP_TCR_TCP_STALL_CYCLES_PERCENT = 100*TCP_TCR_TCP_STALL_CYCLES_sum/TCP_GATE_EN1_sum
+
+  gfx90a:0 : TCA_CYCLE_sum : Number of cycles. Sum over all TCA instances 
+      TCA_CYCLE_sum = sum(TCA_CYCLE,16)
+
+  gfx90a:0 : TCA_BUSY_sum : Number of cycles we have a request pending. Sum over all TCA instances.
+      TCA_BUSY_sum = sum(TCA_BUSY,16)
+
+  gfx90a:0 : TCC_BUSY_avr : TCC_BUSY avr over all memory channels.
+      TCC_BUSY_avr = avr(TCC_BUSY,32)
+
+  gfx90a:0 : TCC_WRREQ_STALL_max : Number of cycles a write request was stalled. Max over TCC instances.
+      TCC_WRREQ_STALL_max = max(TCC_EA_WRREQ_STALL,32)
+
+  gfx90a:0 : TCC_CYCLE_sum : Number of cycles. Not windowable. Sum over TCC instances.
+      TCC_CYCLE_sum = sum(TCC_CYCLE,32)
+
+  gfx90a:0 : TCC_BUSY_sum : Number of cycles we have a request pending. Not windowable. Sum over TCC instances.
+      TCC_BUSY_sum = sum(TCC_BUSY,32)
+
+  gfx90a:0 : TCC_REQ_sum : Number of requests of all types. This is measured at the tag block. This may be more than the number of requests arriving at the TCC, but it is a good indication of the total amount of work that needs to be performed. Sum over TCC instances.
+      TCC_REQ_sum = sum(TCC_REQ,32)
+
+  gfx90a:0 : TCC_STREAMING_REQ_sum : Number of streaming requests. This is measured at the tag block. Sum over TCC instances.
+      TCC_STREAMING_REQ_sum = sum(TCC_STREAMING_REQ,32)
+
+  gfx90a:0 : TCC_NC_REQ_sum : The number of noncoherently cached requests. This is measured at the tag block. Sum over TCC instances.
+      TCC_NC_REQ_sum = sum(TCC_NC_REQ,32)
+
+  gfx90a:0 : TCC_UC_REQ_sum : The number of uncached requests. This is measured at the tag block. Sum over TCC instances.
+      TCC_UC_REQ_sum = sum(TCC_UC_REQ,32)
+
+  gfx90a:0 : TCC_CC_REQ_sum : The number of coherently cached requests. This is measured at the tag block. Sum over TCC instances.
+      TCC_CC_REQ_sum = sum(TCC_CC_REQ,32)
+
+  gfx90a:0 : TCC_RW_REQ_sum : The number of RW requests. This is measured at the tag block. Sum over TCC instances.
+      TCC_RW_REQ_sum = sum(TCC_RW_REQ,32)
+
+  gfx90a:0 : TCC_PROBE_sum : Number of probe requests. Not windowable. Sum over TCC instances.
+      TCC_PROBE_sum = sum(TCC_PROBE,32)
+
+  gfx90a:0 : TCC_PROBE_ALL_sum : Number of external probe requests with with EA_TCC_preq_all== 1. Not windowable. Sum over TCC instances.
+      TCC_PROBE_ALL_sum = sum(TCC_PROBE_ALL,32)
+
+  gfx90a:0 : TCC_READ_sum : Number of read requests. Compressed reads are included in this, but metadata reads are not included. Sum over TCC instances.
+      TCC_READ_sum = sum(TCC_READ,32)
+
+  gfx90a:0 : TCC_WRITE_sum : Number of write requests. Sum over TCC instances.
+      TCC_WRITE_sum = sum(TCC_WRITE,32)
+
+  gfx90a:0 : TCC_ATOMIC_sum : Number of atomic requests of all types. Sum over TCC instances.
+      TCC_ATOMIC_sum = sum(TCC_ATOMIC,32)
+
+  gfx90a:0 : TCC_HIT_sum : Number of cache hits. Sum over TCC instances.
+      TCC_HIT_sum = sum(TCC_HIT,32)
+
+  gfx90a:0 : TCC_MISS_sum : Number of cache misses. UC reads count as misses. Sum over TCC instances.
+      TCC_MISS_sum = sum(TCC_MISS,32)
+
+  gfx90a:0 : TCC_WRITEBACK_sum : Number of lines written back to main memory. This includes writebacks of dirty lines and uncached write/atomic requests. Sum over TCC instances.
+      TCC_WRITEBACK_sum = sum(TCC_WRITEBACK,32)
+
+  gfx90a:0 : TCC_EA_WRREQ_sum : Number of transactions (either 32-byte or 64-byte) going over the TC_EA_wrreq interface. Atomics may travel over the same interface and are generally classified as write requests. This does not include probe commands. Sum over TCC instances.
+      TCC_EA_WRREQ_sum = sum(TCC_EA_WRREQ,32)
+
+  gfx90a:0 : TCC_EA_WRREQ_64B_sum : Number of 64-byte transactions going (64-byte write or CMPSWAP) over the TC_EA_wrreq interface. Sum over TCC instances.
+      TCC_EA_WRREQ_64B_sum = sum(TCC_EA_WRREQ_64B,32)
+
+  gfx90a:0 : TCC_EA_WR_UNCACHED_32B_sum : Number of 32-byte write/atomic going over the TC_EA_wrreq interface due to uncached traffic. Note that CC mtypes can produce uncached requests, and those are included in this. A 64-byte request will be counted as 2. Sum over TCC instances.
+      TCC_EA_WR_UNCACHED_32B_sum = sum(TCC_EA_WR_UNCACHED_32B,32)
+
+  gfx90a:0 : TCC_EA_WRREQ_STALL_sum : Number of cycles a write request was stalled. Sum over TCC instances.
+      TCC_EA_WRREQ_STALL_sum = sum(TCC_EA_WRREQ_STALL,32)
+
+  gfx90a:0 : TCC_EA_WRREQ_IO_CREDIT_STALL_sum : Number of cycles a EA write request was stalled because the interface was out of IO credits. Sum over TCC instances.
+      TCC_EA_WRREQ_IO_CREDIT_STALL_sum = sum(TCC_EA_WRREQ_IO_CREDIT_STALL,32)
+
+  gfx90a:0 : TCC_EA_WRREQ_GMI_CREDIT_STALL_sum : Number of cycles a EA write request was stalled because the interface was out of GMI credits. Sum over TCC instances.
+      TCC_EA_WRREQ_GMI_CREDIT_STALL_sum = sum(TCC_EA_WRREQ_GMI_CREDIT_STALL,32)
+
+  gfx90a:0 : TCC_EA_WRREQ_DRAM_CREDIT_STALL_sum : Number of cycles a EA write request was stalled because the interface was out of DRAM credits. Sum over TCC instances.
+      TCC_EA_WRREQ_DRAM_CREDIT_STALL_sum = sum(TCC_EA_WRREQ_DRAM_CREDIT_STALL,32)
+
+  gfx90a:0 : TCC_TOO_MANY_EA_WRREQS_STALL_sum : Number of cycles the TCC could not send a EA write request because it already reached its maximum number of pending EA write requests. Sum over TCC instances.
+      TCC_TOO_MANY_EA_WRREQS_STALL_sum = sum(TCC_TOO_MANY_EA_WRREQS_STALL,32)
+
+  gfx90a:0 : TCC_EA_WRREQ_LEVEL_sum : The sum of the number of EA write requests in flight. This is primarily meant for measure average EA write latency. Average write latency = TCC_PERF_SEL_EA_WRREQ_LEVEL/TCC_PERF_SEL_EA_WRREQ. Sum over TCC instances.
+      TCC_EA_WRREQ_LEVEL_sum = sum(TCC_EA_WRREQ_LEVEL,32)
+
+  gfx90a:0 : TCC_EA_RDREQ_LEVEL_sum : The sum of the number of TCC/EA read requests in flight. This is primarily meant for measure average EA read latency. Average read latency = TCC_PERF_SEL_EA_RDREQ_LEVEL/TCC_PERF_SEL_EA_RDREQ. Sum over TCC instances.
+      TCC_EA_RDREQ_LEVEL_sum = sum(TCC_EA_RDREQ_LEVEL,32)
+
+  gfx90a:0 : TCC_EA_ATOMIC_sum : Number of transactions going over the TC_EA_wrreq interface that are actually atomic requests. Sum over TCC instances.
+      TCC_EA_ATOMIC_sum = sum(TCC_EA_ATOMIC,32)
+
+  gfx90a:0 : TCC_EA_ATOMIC_LEVEL_sum : The sum of the number of EA atomics in flight. This is primarily meant for measure average EA atomic latency. Average atomic latency = TCC_PERF_SEL_EA_WRREQ_ATOMIC_LEVEL/TCC_PERF_SEL_EA_WRREQ_ATOMIC. Sum over TCC instances.
+      TCC_EA_ATOMIC_LEVEL_sum = sum(TCC_EA_ATOMIC_LEVEL,32)
+
+  gfx90a:0 : TCC_EA_RDREQ_sum : Number of TCC/EA read requests (either 32-byte or 64-byte) Sum over TCC instances.
+      TCC_EA_RDREQ_sum = sum(TCC_EA_RDREQ,32)
+
+  gfx90a:0 : TCC_EA_RDREQ_32B_sum : Number of 32-byte TCC/EA read requests Sum over TCC instances.
+      TCC_EA_RDREQ_32B_sum = sum(TCC_EA_RDREQ_32B,32)
+
+  gfx90a:0 : TCC_EA_RD_UNCACHED_32B_sum : Number of 32-byte TCC/EA read due to uncached traffic. A 64-byte request will be counted as 2 Sum over TCC instances.
+      TCC_EA_RD_UNCACHED_32B_sum = sum(TCC_EA_RD_UNCACHED_32B,32)
+
+  gfx90a:0 : TCC_EA_RDREQ_IO_CREDIT_STALL_sum : Number of cycles there was a stall because the read request interface was out of IO credits. Stalls occur regardless of whether a read needed to be performed or not. Sum over TCC instances.
+      TCC_EA_RDREQ_IO_CREDIT_STALL_sum = sum(TCC_EA_RDREQ_IO_CREDIT_STALL,32)
+
+  gfx90a:0 : TCC_EA_RDREQ_GMI_CREDIT_STALL_sum : Number of cycles there was a stall because the read request interface was out of GMI credits. Stalls occur regardless of whether a read needed to be performed or not. Sum over TCC instances.
+      TCC_EA_RDREQ_GMI_CREDIT_STALL_sum = sum(TCC_EA_RDREQ_GMI_CREDIT_STALL,32)
+
+  gfx90a:0 : TCC_EA_RDREQ_DRAM_CREDIT_STALL_sum : Number of cycles there was a stall because the read request interface was out of DRAM credits. Stalls occur regardless of whether a read needed to be performed or not. Sum over TCC instances.
+      TCC_EA_RDREQ_DRAM_CREDIT_STALL_sum = sum(TCC_EA_RDREQ_DRAM_CREDIT_STALL,32)
+
+  gfx90a:0 : TCC_TAG_STALL_sum : .
+      TCC_TAG_STALL_sum = sum(TCC_TAG_STALL,32)
+
+  gfx90a:0 : TCC_TAG_STALL_PERCENT : Percentage of time the TCC tag lookup pipeline is stalled.
+      TCC_TAG_STALL_PERCENT = 100*TCC_TAG_STALL_sum/TCC_CYCLE_sum
+
+  gfx90a:0 : TCC_NORMAL_WRITEBACK_sum : Number of writebacks due to requests that are not writeback requests. Sum over TCC instances.
+      TCC_NORMAL_WRITEBACK_sum = sum(TCC_NORMAL_WRITEBACK,32)
+
+  gfx90a:0 : TCC_ALL_TC_OP_WB_WRITEBACK_sum : Number of writebacks due to all TC_OP writeback requests. Sum over TCC instances.
+      TCC_ALL_TC_OP_WB_WRITEBACK_sum = sum(TCC_ALL_TC_OP_WB_WRITEBACK,32)
+
+  gfx90a:0 : TCC_NORMAL_EVICT_sum : Number of evictions due to requests that are not invalidate or probe requests. Sum over TCC instances.
+      TCC_NORMAL_EVICT_sum = sum(TCC_NORMAL_EVICT,32)
+
+  gfx90a:0 : TCC_ALL_TC_OP_INV_EVICT_sum : Number of evictions due to all TC_OP invalidate requests. Sum over TCC instances.
+      TCC_ALL_TC_OP_INV_EVICT_sum = sum(TCC_ALL_TC_OP_INV_EVICT,32)
+
+  gfx90a:0 : TCC_EA_RDREQ_DRAM_sum : Number of TCC/EA read requests (either 32-byte or 64-byte) destined for DRAM (MC). Sum over TCC instances.
+      TCC_EA_RDREQ_DRAM_sum = sum(TCC_EA_RDREQ_DRAM,32)
+
+  gfx90a:0 : TCC_EA_WRREQ_DRAM_sum : Number of TCC/EA write requests (either 32-byte of 64-byte) destined for DRAM (MC). Sum over TCC instances.
+      TCC_EA_WRREQ_DRAM_sum = sum(TCC_EA_WRREQ_DRAM,32)
+
+  gfx90a:0 : FETCH_SIZE : The total kilobytes fetched from the video memory. This is measured with all extra fetches and any cache or memory effects taken into account.
+      FETCH_SIZE = (TCC_EA_RDREQ_32B_sum*32+(TCC_EA_RDREQ_sum-TCC_EA_RDREQ_32B_sum)*64)/1024
+
+  gfx90a:0 : WRITE_SIZE : The total kilobytes written to the video memory. This is measured with all extra fetches and any cache or memory effects taken into account.
+      WRITE_SIZE = ((TCC_EA_WRREQ_sum-TCC_EA_WRREQ_64B_sum)*32+TCC_EA_WRREQ_64B_sum*64)/1024
+
+  gfx90a:0 : WRITE_REQ_32B : The total number of 32-byte effective memory writes.
+      WRITE_REQ_32B = TCC_EA_WRREQ_64B_sum*2+(TCC_EA_WRREQ_sum-TCC_EA_WRREQ_64B_sum)
+
+  gfx90a:0 : CU_OCCUPANCY : The ratio of active waves on a CU to the maximum number of active waves supported by the CU
+      CU_OCCUPANCY = (SQ_CYCLES/(SQ_WAVE_CYCLES*4))/MAX_WAVE_SIZE
+
+  gfx90a:0 : CU_UTILIZATION : The total number of active cycles divided by total number of elapsed cycles
+      CU_UTILIZATION = GRBM_GUI_ACTIVE/GRBM_COUNT
+
+  gfx90a:0 : TOTAL_16_OPS : The number of 16 bits OPS executed
+      TOTAL_16_OPS = (SQ_INSTS_VALU_FMA_F16*2+SQ_INSTS_VALU_ADD_F16+SQ_INSTS_VALU_MUL_F16+SQ_INSTS_VALU_TRANS_F16)*64+((SQ_INSTS_VALU_MFMA_MOPS_F16+SQ_INSTS_VALU_MFMA_MOPS_BF16)*512)
+
+  gfx90a:0 : TOTAL_32_OPS : The number of 32 bits OPS executed
+      TOTAL_32_OPS = (SQ_INSTS_VALU_FMA_F32*2+SQ_INSTS_VALU_INT32+SQ_INSTS_VALU_ADD_F32+SQ_INSTS_VALU_MUL_F32+SQ_INSTS_VALU_TRANS_F32)*64+(SQ_INSTS_VALU_MFMA_MOPS_F32*512)
+
+  gfx90a:0 : TOTAL_64_OPS : The number of 64 bits OPS executed
+      TOTAL_64_OPS = (SQ_INSTS_VALU_FMA_F64*2+SQ_INSTS_VALU_INT64+SQ_INSTS_VALU_ADD_F64+SQ_INSTS_VALU_MUL_F64)*64+(SQ_INSTS_VALU_MFMA_MOPS_F64*512)
+
+  gfx90a:0 : AggSysCycles : Unit: cycles
+      AggSysCycles = GRBM_GUI_ACTIVE*CU_NUM
+
+  gfx90a:0 : GpuUtil : Unit: percent
+      GpuUtil = 100*GRBM_GUI_ACTIVE/GRBM_COUNT
+
+  gfx90a:0 : CpUtil : Unit: percent
+      CpUtil = 100*GRBM_CP_BUSY/GRBM_GUI_ACTIVE
+
+  gfx90a:0 : SpiUtil : Unit: percent
+      SpiUtil = 100*GRBM_SPI_BUSY/GRBM_GUI_ACTIVE
+
+  gfx90a:0 : TaUtil : Unit: percent
+      TaUtil = 100*GRBM_TA_BUSY/GRBM_GUI_ACTIVE
+
+  gfx90a:0 : TcUtil : Unit: percent
+      TcUtil = 100*GRBM_TC_BUSY/GRBM_GUI_ACTIVE
+
+  gfx90a:0 : EaUtil : Unit: percent
+      EaUtil = 100*GRBM_EA_BUSY/GRBM_GUI_ACTIVE
+
+  gfx90a:0 : InstrFetchLatency : Unit: cycles
+      InstrFetchLatency = SQ_ACCUM_PREV_HIRES/SQ_IFETCH
+
+  gfx90a:0 : WaveOccupancy : Unit: wavefronts
+      WaveOccupancy = SQ_ACCUM_PREV_HIRES/GRBM_GUI_ACTIVE
+
+  gfx90a:0 : WaveDuration : Unit: cycles
+      WaveDuration = 4*SQ_WAVE_CYCLES/SQ_WAVES
+
+  gfx90a:0 : WaveDepWait : Unit: percent
+      WaveDepWait = 100*SQ_WAIT_ANY/SQ_WAVE_CYCLES
+
+  gfx90a:0 : WaveIssueWait : Unit: percent
+      WaveIssueWait = 100*SQ_WAIT_INST_ANY/SQ_WAVE_CYCLES
+
+  gfx90a:0 : WaveExec : Unit: percent
+      WaveExec = 100*SQ_ACTIVE_INST_ANY/SQ_WAVE_CYCLES
+
+  gfx90a:0 : ValuIops : Unit: IOP
+      ValuIops = (SQ_INSTS_VALU_INT32+SQ_INSTS_VALU_INT64)*64
+
+  gfx90a:0 : MfmaFlops : Unit: FLOP
+      MfmaFlops = (SQ_INSTS_VALU_MFMA_MOPS_F16+SQ_INSTS_VALU_MFMA_MOPS_BF16+SQ_INSTS_VALU_MFMA_MOPS_F32+SQ_INSTS_VALU_MFMA_MOPS_F64)*512
+
+  gfx90a:0 : MfmaFlopsF16 : Unit: FLOP
+      MfmaFlopsF16 = SQ_INSTS_VALU_MFMA_MOPS_F16*512
+
+  gfx90a:0 : MfmaFlopsBF16 : Unit: FLOP
+      MfmaFlopsBF16 = SQ_INSTS_VALU_MFMA_MOPS_BF16*512
+
+  gfx90a:0 : MfmaFlopsF32 : Unit: FLOP
+      MfmaFlopsF32 = SQ_INSTS_VALU_MFMA_MOPS_F32*512
+
+  gfx90a:0 : MfmaFlopsF64 : Unit: IOP
+      MfmaFlopsF64 = SQ_INSTS_VALU_MFMA_MOPS_F64*512
+
+  gfx90a:0 : ScaPipeIssueUtil : Unit: percent
+      ScaPipeIssueUtil = 100*SQ_ACTIVE_INST_SCA/(GRBM_GUI_ACTIVE*CU_NUM)
+
+  gfx90a:0 : ValuPipeIssueUtil : Unit: percent
+      ValuPipeIssueUtil = 100*SQ_ACTIVE_INST_VALU/(GRBM_GUI_ACTIVE*CU_NUM)
+
+  gfx90a:0 : VmemPipeIssueUtil : Unit: percent
+      VmemPipeIssueUtil = 100*4*(SQ_ACTIVE_INST_VMEM+SQ_ACTIVE_INST_FLAT)/(GRBM_GUI_ACTIVE*CU_NUM)
+
+  gfx90a:0 : MfmaUtil : Unit: percent
+      MfmaUtil = 100*SQ_VALU_MFMA_BUSY_CYCLES/(GRBM_GUI_ACTIVE*CU_NUM*4)
+
+  gfx90a:0 : AvgNumActiveThreads : Unit: percent
+      AvgNumActiveThreads = SQ_THREAD_CYCLES_VALU/SQ_ACTIVE_INST_VALU
+
+  gfx90a:0 : VmemLatency : Unit: cycles
+      VmemLatency = SQ_ACCUM_PREV_HIRES/SQ_INSTS_VMEM
+
+  gfx90a:0 : SmemLatency : Unit: cycles
+      SmemLatency = SQ_ACCUM_PREV_HIRES/SQ_INSTS_SMEM_NORM
+
+  gfx90a:0 : LdsUtil : Unit: percent
+      LdsUtil = 100*SQ_LDS_IDX_ACTIVE/(GRBM_GUI_ACTIVE*CU_NUM)
+
+  gfx90a:0 : LdsPipeIssueUtil : Unit: percent
+      LdsPipeIssueUtil = 100*4*SQ_ACTIVE_INST_LDS/(GRBM_GUI_ACTIVE*CU_NUM*2)
+
+  gfx90a:0 : LdsLatency : Unit: cycles
+      LdsLatency = SQ_ACCUM_PREV_HIRES/SQ_INSTS_LDS
+
+  gfx90a:0 : LdsBankConflict : Unit: conflicts/access
+      LdsBankConflict = SQ_LDS_BANK_CONFLICT/(SQ_LDS_IDX_ACTIVE-SQ_LDS_BANK_CONFLICT)
+
+  gfx90a:0 : L1iCacheHitRate : Unit: percent
+      L1iCacheHitRate = 100*SQC_ICACHE_HITS/SQC_ICACHE_REQ
+
+  gfx90a:0 : sL1dCacheHitRate : Unit: percent
+      sL1dCacheHitRate = 100*SQC_DCACHE_HITS/SQC_DCACHE_REQ
+
+  gfx90a:0 : vL1dBufCoalesceRate : Unit: percent
+      vL1dBufCoalesceRate = 100*64*TA_TOTAL_WAVEFRONTS_sum/(TCP_TOTAL_ACCESSES_sum*4)
+
+  gfx90a:0 : vL1dCacheUtil : Unit: percent
+      vL1dCacheUtil = 100*TCP_GATE_EN2_sum/TCP_GATE_EN1_sum
+
+  gfx90a:0 : vL1dCacheTcbHitRate : Unit: percent
+      vL1dCacheTcbHitRate = 100*TCP_UTCL1_TRANSLATION_HIT_sum/TCP_UTCL1_REQUEST_sum
+
+  gfx90a:0 : vL1dCacheWaveLatency : Unit: cycles
+      vL1dCacheWaveLatency = TCP_TCP_LATENCY_sum/TCP_TA_TCP_STATE_READ_sum
+
+  gfx90a:0 : vL1dReadFromL2Latency : Unit: cycles
+      vL1dReadFromL2Latency = TCP_TCC_READ_REQ_LATENCY_sum/(TCP_TCC_READ_REQ_sum+TCP_TCC_ATOMIC_WITH_RET_REQ_sum)
+
+  gfx90a:0 : vL1dWriteToL2Latency : Unit: cycles
+      vL1dWriteToL2Latency = TCP_TCC_WRITE_REQ_LATENCY_sum/(TCP_TCC_WRITE_REQ_sum+TCP_TCC_ATOMIC_WITHOUT_RET_REQ_sum)
+
+  gfx90a:0 : vL1dRdTagConfStallRate : Unit: percent
+      vL1dRdTagConfStallRate = 100*TCP_READ_TAGCONFLICT_STALL_CYCLES_sum/TCP_GATE_EN2_sum
+
+  gfx90a:0 : vL1dWrTagConfStallRate : Unit: percent
+      vL1dWrTagConfStallRate = 100*TCP_WRITE_TAGCONFLICT_STALL_CYCLES_sum/TCP_GATE_EN2_sum
+
+  gfx90a:0 : vL1dAtomicTagConfStallRate : Unit: percent
+      vL1dAtomicTagConfStallRate = 100*TCP_ATOMIC_TAGCONFLICT_STALL_CYCLES_sum/TCP_GATE_EN2_sum
+
+  gfx90a:0 : vL1dMissReqStallRate : Unit: percent
+      vL1dMissReqStallRate = 100*TCP_TCR_TCP_STALL_CYCLES_sum/TCP_GATE_EN2_sum
+
+  gfx90a:0 : vL1dDataPendRate : Unit: percent
+      vL1dDataPendRate = 100*TCP_PENDING_STALL_CYCLES_sum/TCP_GATE_EN2_sum
+
+  gfx90a:0 : vL1dDataRetStallRate : Unit: percent
+      vL1dDataRetStallRate = 100*TD_TC_STALL_sum/TD_TD_BUSY_sum
+
+  gfx90a:0 : L2CacheHitRate : Unit: percent
+      L2CacheHitRate = 100*TCC_HIT_sum/(TCC_HIT_sum+TCC_MISS_sum)
+
+  gfx90a:0 : L2CacheTagRamStallRate : Unit: percent
+      L2CacheTagRamStallRate = 100*TCC_TAG_STALL_sum/TCC_BUSY_sum
+
+  gfx90a:0 : EaRdLatency : Unit: cycles
+      EaRdLatency = TCC_EA_RDREQ_LEVEL_sum/TCC_EA_RDREQ_sum
+
+  gfx90a:0 : EaRdIoStallRate : Unit: percent
+      EaRdIoStallRate = 100*TCC_EA_RDREQ_IO_CREDIT_STALL_sum/TCC_BUSY_sum
+
+  gfx90a:0 : EaRdGmiStallRate : Unit: percent
+      EaRdGmiStallRate = 100*TCC_EA_RDREQ_GMI_CREDIT_STALL_sum/TCC_BUSY_sum
+
+  gfx90a:0 : EaRdDramStallRate : Unit: percent
+      EaRdDramStallRate = 100*TCC_EA_RDREQ_DRAM_CREDIT_STALL_sum/TCC_BUSY_sum
+
+  gfx90a:0 : EaWrLatency : Unit: cycles
+      EaWrLatency = TCC_EA_WRREQ_LEVEL_sum/TCC_EA_WRREQ_sum
+
+  gfx90a:0 : EaWrIoStallRate : Unit: percent
+      EaWrIoStallRate = 100*TCC_EA_WRREQ_IO_CREDIT_STALL_sum/TCC_BUSY_sum
+
+  gfx90a:0 : EaWrGmiStallRate : Unit: percent
+      EaWrGmiStallRate = 100*TCC_EA_WRREQ_GMI_CREDIT_STALL_sum/TCC_BUSY_sum
+
+  gfx90a:0 : EaWrDramStallRate : Unit: percent
+      EaWrDramStallRate = 100*TCC_EA_WRREQ_DRAM_CREDIT_STALL_sum/TCC_BUSY_sum
+
+  gfx90a:0 : EaWrStarveRate : Unit: percent
+      EaWrStarveRate = 100*TCC_TOO_MANY_EA_WRREQS_STALL_sum/TCC_BUSY_sum
+
+  gfx90a:0 : EaAtomicLatency : Unit: cycles
+      EaAtomicLatency = TCC_EA_ATOMIC_LEVEL_sum/TCC_EA_ATOMIC_sum
+
+  gfx90a:0 : KERNEL_DURATION : The duration of the kernel dispatch
+      KERNEL_DURATION = 1
+
+  gfx90a:0 : TCP_TCP_TA_DATA_STALL_CYCLES_sum : Total number of TCP stalls TA data interface.
+      TCP_TCP_TA_DATA_STALL_CYCLES_sum = sum(TCP_TCP_TA_DATA_STALL_CYCLES,16)
+
+  gfx90a:0 : TCP_TCP_TA_DATA_STALL_CYCLES_max : Maximum number of TCP stalls TA data interface.
+      TCP_TCP_TA_DATA_STALL_CYCLES_max = max(TCP_TCP_TA_DATA_STALL_CYCLES,16)
+
+  gfx90a:0 : VFetchInsts : The average number of vector fetch instructions from the video memory executed per work-item (affected by flow control). Excludes FLAT instructions that fetch from video memory.
+      VFetchInsts = (SQ_INSTS_VMEM_RD-TA_FLAT_READ_WAVEFRONTS_sum)/SQ_WAVES
+
+  gfx90a:0 : VWriteInsts : The average number of vector write instructions to the video memory executed per work-item (affected by flow control). Excludes FLAT instructions that write to video memory.
+      VWriteInsts = (SQ_INSTS_VMEM_WR-TA_FLAT_WRITE_WAVEFRONTS_sum)/SQ_WAVES
+
+  gfx90a:0 : FlatVMemInsts : The average number of FLAT instructions that read from or write to the video memory executed per work item (affected by flow control). Includes FLAT instructions that read from or write to scratch.
+      FlatVMemInsts = (SQ_INSTS_FLAT-SQ_INSTS_FLAT_LDS_ONLY)/SQ_WAVES
+
+  gfx90a:0 : LDSInsts : The average number of LDS read or LDS write instructions executed per work item (affected by flow control).  Excludes FLAT instructions that read from or write to LDS.
+      LDSInsts = (SQ_INSTS_LDS-SQ_INSTS_FLAT_LDS_ONLY)/SQ_WAVES
+
+  gfx90a:0 : FlatLDSInsts : The average number of FLAT instructions that read or write to LDS executed per work item (affected by flow control).
+      FlatLDSInsts = SQ_INSTS_FLAT_LDS_ONLY/SQ_WAVES
+
+  gfx90a:0 : VALUUtilization : The percentage of active vector ALU threads in a wave. A lower number can mean either more thread divergence in a wave or that the work-group size is not a multiple of 64. Value range: 0% (bad), 100% (ideal - no thread divergence).
+      VALUUtilization = 100*SQ_THREAD_CYCLES_VALU/(SQ_ACTIVE_INST_VALU*MAX_WAVE_SIZE)
+
+  gfx90a:0 : VALUBusy : The percentage of GPUTime vector ALU instructions are processed. Value range: 0% (bad) to 100% (optimal).
+      VALUBusy = 100*SQ_ACTIVE_INST_VALU*4/SIMD_NUM/GRBM_GUI_ACTIVE
+
+  gfx90a:0 : SALUBusy : The percentage of GPUTime scalar ALU instructions are processed. Value range: 0% (bad) to 100% (optimal).
+      SALUBusy = 100*SQ_INST_CYCLES_SALU*4/SIMD_NUM/GRBM_GUI_ACTIVE
+
+  gfx90a:0 : FetchSize : The total kilobytes fetched from the video memory. This is measured with all extra fetches and any cache or memory effects taken into account.
+      FetchSize = FETCH_SIZE
+
+  gfx90a:0 : WriteSize : The total kilobytes written to the video memory. This is measured with all extra fetches and any cache or memory effects taken into account.
+      WriteSize = WRITE_SIZE
+
+  gfx90a:0 : MemWrites32B : The total number of effective 32B write transactions to the memory
+      MemWrites32B = WRITE_REQ_32B
+
+  gfx90a:0 : L2CacheHit : The percentage of fetch, write, atomic, and other instructions that hit the data in L2 cache. Value range: 0% (no hit) to 100% (optimal).
+      L2CacheHit = 100*sum(TCC_HIT,16)/(sum(TCC_HIT,16)+sum(TCC_MISS,16))
+
+  gfx90a:0 : MemUnitStalled : The percentage of GPUTime the memory unit is stalled. Try reducing the number or size of fetches and writes if possible. Value range: 0% (optimal) to 100% (bad).
+      MemUnitStalled = 100*TCP_TCP_TA_DATA_STALL_CYCLES_max/GRBM_GUI_ACTIVE/SE_NUM
+
+  gfx90a:0 : WriteUnitStalled : The percentage of GPUTime the Write unit is stalled. Value range: 0% to 100% (bad).
+      WriteUnitStalled = 100*TCC_WRREQ_STALL_max/GRBM_GUI_ACTIVE
+
+  gfx90a:0 : LDSBankConflict : The percentage of GPUTime LDS is stalled by bank conflicts. Value range: 0% (optimal) to 100% (bad).
+      LDSBankConflict = 100*SQ_LDS_BANK_CONFLICT/GRBM_GUI_ACTIVE/CU_NUM
+
+  gfx90a:0 : GPUBusy : The percentage of time GPU was busy.
+      GPUBusy = 100*GRBM_GUI_ACTIVE/GRBM_COUNT
+
+  gfx90a:0 : Wavefronts : Total wavefronts.
+      Wavefronts = SQ_WAVES
+
+  gfx90a:0 : VALUInsts : The average number of vector ALU instructions executed per work-item (affected by flow control).
+      VALUInsts = SQ_INSTS_VALU/SQ_WAVES
+
+  gfx90a:0 : SALUInsts : The average number of scalar ALU instructions executed per work-item (affected by flow control).
+      SALUInsts = SQ_INSTS_SALU/SQ_WAVES
+
+  gfx90a:0 : SFetchInsts : The average number of scalar fetch instructions from the video memory executed per work-item (affected by flow control).
+      SFetchInsts = SQ_INSTS_SMEM/SQ_WAVES
+
+  gfx90a:0 : GDSInsts : The average number of GDS read or GDS write instructions executed per work item (affected by flow control).
+      GDSInsts = SQ_INSTS_GDS/SQ_WAVES
+
+  gfx90a:0 : MemUnitBusy : The percentage of GPUTime the memory unit is active. The result includes the stall time (MemUnitStalled). This is measured with all extra fetches and writes and any cache or memory effects taken into account. Value range: 0% to 100% (fetch-bound).
+      MemUnitBusy = 100*max(TA_TA_BUSY,16)/GRBM_GUI_ACTIVE/SE_NUM
+
+  gfx90a:0 : ALUStalledByLDS : The percentage of GPUTime ALU units are stalled by the LDS input queue being full or the output queue being not ready. If there are LDS bank conflicts, reduce them. Otherwise, try reducing the number of LDS accesses if possible. Value range: 0% (optimal) to 100% (bad).
+      ALUStalledByLDS = 100*SQ_WAIT_INST_LDS*4/SQ_WAVES/GRBM_GUI_ACTIVE
