@@ -45,6 +45,18 @@ PYTEST_SMOKE += scripts/kernel_rnd/autokernel/evaluator/test_integrity.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/evaluator/test_recipes.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/evaluator/test_statistics.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/evaluator/test_surface.py
+# AK4 — the planner/critic/controller plane. Same ordering rule as AK3: the two
+# cross-module suites come first, because they are the ones that fail when two
+# modules that are each green disagree at the seam between them.
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_ak4_conformance.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_loop_integration.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_state_machine.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_guards.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_context.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_hypotheses.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_planner_critic.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_selection.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_composition.py
 
 help:
 	@printf '%s\n' 'Targets: setup lint test health docs docs-check analysis analysis-check security-check autopilot-gate'

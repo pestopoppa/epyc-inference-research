@@ -17,7 +17,7 @@ benchmark, or runs inference.
 
 ---
 
-## What is implemented (AK1 + AK2 + AK3, partial)
+## What is implemented (AK1 + AK2 + AK3 partial + AK4)
 
 | Module | What it owns |
 |---|---|
@@ -34,6 +34,16 @@ benchmark, or runs inference.
 | `evaluator/statistics.py` | **AK3.** The calibration block in its normative solve order — `φ`, `B_min`, the α budgets and their thresholds, the anchor-gate band — the anytime-valid e-process (two bundle-fixed constructions), the pre-committed stopping rule with bounded extension, the MDE, order control, the selection/confirmation split, and the reducer that produces a conforming `api.EffectEstimate`. |
 | `evaluator/controls.py` | **AK3.** The five controls as hashed data (definitions AND predicates), the A/A cadence scheduler, the historical-win-replay declared contract with its normative unavailable branch and operator escalation, and the projection into `api.WindowAttestations`. |
 | `evaluator/recipes.py` | **AK3.** The codified recipe constructors — every measurement argv is emitted by one, carrying its constructor id and content hash — for `test-backend-ops`, `test-quantize-perf` and `llama-bench`, CPU and GPU. |
+| `controller/state_machine.py` | **AK4.** §8.1's explicit machine: 17 live states, 13 stop states, the declared edge table, journal-then-act transitions, the operator-control latch (invariant 19), §8.2 BOOTSTRAP with its consistency assertion and deliberate-rebase escape, §8.9 anchor re-verification, and §8.10's stop-evidence table. **Owns disposition — no model output decides a transition.** |
+| `controller/guards.py` | **AK4.** The fifteen §8.10 guards and their precedence, the directive vocabulary, the operator decision package (§18 item 7), the accept-side control's three statuses, and `dispose()` — the reduction that turns a round's guard verdicts into one disposition. A STOP is validated against `check_stop_evidence` AT CONSTRUCTION. |
+| `controller/context.py` | **AK4.** §6.1's planner and critic briefs: fifteen sections, every item CITED to a journal event, a bounded render, §8.3.1 roofline utilisation with both denominators, the §19.2 do-not-repeat surface, the §6.5 oracle registry, and the quarantine block imported content is rendered inside. Refuses to leak the confirmation stratum or planner narrative. |
+| `controller/hypotheses.py` | **AK4.** §8.4.0 operator hypotheses: the operator-facing store, the append-only hypothesis ledger, still-open tracking, the resolution record, and `check_do_not_repeat`. Every origin enters at `design_prior` and **the gate cannot see who stated the hypothesis** (AK-D38). |
+| `controller/planner.py` | **AK4.** The provider-agnostic planner adapter: prompt bundles, the quarantine fence, the response contract, `assemble_proposal` (the controller-owned fields a model may not write), `ReplayProvider` for invariant 11, and cost attribution. |
+| `controller/critic.py` | **AK4.** §6.3's pre-run critic (ten questions, deterministic gates, revisions the critic owns and gates it cannot waive) and §8.8's post-run critic (classification reconciled against the raw gates, the durable lesson, the next experiment). Severity only ever goes UP. |
+| `controller/selection.py` | **AK4.** §8.3's cost hierarchy and its receipted skips, §8.4's twenty-two rejection codes and the journaled skip, the §19.2 ledger match, the fingerprint blacklist, §8.4.1's HARVEST/EXPLORE phase decision with a derived yield calibration, and the arm-budget partition. |
+| `controller/composition.py` | **AK4.** §8.9 champion maintenance: the frontier and its mechanism-diversity floor, lineage proposal, `compose_champion` (which re-measures the COMBINED candidate and cites no member evidence), the re-anchor plan, and the ANCHOR_MOVED supersession sweep that kills comparisons while preserving source and correctness. |
+| `controller/oracles.py` | **AK4.** The §6.5 oracle registry, ONCE, at both granularities — the design's table row and the individual tree a port names — so the compiler renders ids the critic can gate on. |
+| `controller/fingerprint.py` | **AK4.** The one identity a filtered proposal is journaled under (§8.4). Prose-free by construction, because a blacklist a reworder can walk around is not a blacklist. |
 
 ### AK3 — what the evaluator delivers
 
@@ -69,6 +79,40 @@ Obligations whose subject is a real measurement are registered in `SEAM_ONLY`
 with the reason they cannot be asserted directly: a **declared** state, never a
 silent skip.
 
+### AK4 — what the controller delivers
+
+AK1–AK3 built the substrate; **AK4 is the half that WALKS the loop.** It is also
+the half where the project's two most expensive AutoPilot scars live, and each is
+answered structurally rather than by a check somebody remembers to call:
+
+- **A control that was requested but never verified.** AutoPilot's pause was a
+  silent no-op for months because the run state was cached in memory and written
+  back over the operator's change. Here the latch is a FILE, re-read from disk at
+  the top of every iteration under the journal write lock; no object holds a
+  `ControlLatch` as attribute state; `ControllerStateMachine.__slots__` has no
+  slot for one, so a future edit that tries to cache it fails at runtime; and
+  `audit_no_cached_control_state()` proves it from the object rather than from a
+  comment. A halt survives restart, and an ack without its latch — the
+  crash-between-ack-and-latch window — is a HARD failure rather than "no control
+  pending".
+- **A restart that came up empty with nothing objecting.** 232 trials and ~16
+  days of compute vanished because a rebuilt derived view disagreed with the
+  record and nothing refused to start. §8.2 step 10 refuses, and the deliberate
+  rebase is an explicit escape that lands its reason in the journal, so an
+  intentional wipe is never indistinguishable from the loss.
+
+The authority rule the whole plane rests on: **the LLM proposes and interprets; a
+deterministic controller disposes every gate and stop condition.** `check_stop_
+evidence` takes no `origin` parameter and `check_do_not_repeat` takes no author,
+so there is no argument along which trust could be extended; a critic disposition
+can only make a proposal's fate WORSE; and an operator's stop request meets the
+same evidence table as an internally generated one. `test_ak4_conformance.py`
+asserts this per obligation — the five things P-AK-SEARCH-1 authorizes, the nine
+it denies, its eight preconditions, and §4's twenty invariants, one test each.
+Obligations that cannot be checked without taking a measurement are registered in
+that file's `SEAM_ONLY` table with the reason and the owner, never skipped: a
+skipped test is silent, a registered seam is a list an auditor can count.
+
 ### Guarantees the package as a whole makes
 
 1. **Nothing is lost by crashing.** Every append is fsynced before it returns; a
@@ -91,6 +135,57 @@ silent skip.
    unreadable file raises.
 
 ---
+
+## Integration seams reconciled — AK4 controller (2026-08-03)
+
+Six AK4 modules were built in parallel against one state machine. Each was green
+on its own; a suite of individually-green modules is precisely the shape in which
+a seam defect survives, because every module is consistent with itself and the
+disagreement lives in the gap. The integration pass found six, and
+`controller/test_loop_integration.py` is where they stay fixed.
+
+1. **Two `proposal_fingerprint` implementations writing one journal field.** The
+   planner adapter hashed `change.conceptual_change` — free prose — and the
+   screener did not. Both wrote `PROPOSAL_SKIPPED.payload["fingerprint"]`, and
+   `read_skip_history()` counts them in ONE dict against a threshold of two, so
+   two skips of one concept counted 1 + 1: §8.4's auto-blacklist never fired and
+   §8.10's degradation run was computed over a key the record did not use. Now
+   one algorithm in `controller/fingerprint.py`, and it is the PROSE-FREE one —
+   the planner-side test that asserted rewording minted a new fingerprint was
+   asserting attempt 119 looking novel, and has been inverted.
+2. **Two §6.5 oracle registries sharing ONE id out of nineteen.** The compiler
+   rendered `upstream llama.cpp / ggml` into the planner brief; the critic gated
+   on `llama.cpp_upstream` and rejected the citation as *"not in the declared
+   registry"* — a refusal that blamed the planner for the controller's own
+   disagreement. `controller/oracles.py` now holds the table once, at both
+   granularities (the §6.5 row and the tree a port names), and both consumers
+   derive.
+3. **Two harvest-class vocabularies.** The critic had three classes and the
+   compiler four, so §6.5's own FlashAttention/FlashInfer row (`conditional`)
+   was inexpressible in the plane that gates it.
+4. **Two hypothesis-origin vocabularies.** `hypotheses` opens at `controller` and
+   `import`; `context` accepted neither, and offered a `record` origin the store
+   cannot produce. A controller-opened hypothesis raised `ContextInputError` on
+   its way into the very brief §8.4.0 requires it to appear in.
+5. **A reserved closure word the DISPOSER did not know.** `guards` refused
+   "exhausted"; `state_machine.check_stop_evidence` did not — and `stop()` and
+   `dispose_stop_request()` are both public, so a stop that never met a guard
+   reached the record on the word §8.10 names first. The machine now owns the
+   vocabulary AND the matcher, `guards` compiles nothing of its own, and the scan
+   covers the enumeration as well as the reason.
+6. **Three budget units and no converter.** §7.1's manifest declares HOURS, a
+   §7.2 proposal declares MINUTES, and `context.reduce_budget_ledger()`
+   accumulates SECONDS. The obvious wiring makes the budget gate 60x too
+   permissive, in the direction that overspends.
+   `selection.budget_remaining_from_caps()` is now the only sanctioned crossing,
+   and a missing cap raises rather than defaulting.
+
+One apparent disagreement was **deliberate and has been pinned rather than
+"fixed"**: `SUPERSEDED_FACT` rejects in `selection` and is advisory in
+`hypotheses`, because §19.2 says *"do not execute the stale PROPOSAL; regenerate
+from current source"* — it closes the proposal, not the question. Making the two
+equal would close research the design keeps open, so a test asserts the asymmetry
+and says why.
 
 ## Integration seams reconciled — AK3 evaluator (2026-08-03)
 
@@ -202,15 +297,17 @@ python3 -W error::ResourceWarning -m unittest discover \
 python3 -m unittest scripts.kernel_rnd.autokernel.test_integration
 python3 -m unittest scripts.kernel_rnd.autokernel.resource.test_claim_witness
 
-# The two AK3 cross-module suites — the ones that fail when two modules disagree.
+# The cross-module suites — the ones that fail when two modules disagree.
 python3 -m unittest scripts/kernel_rnd/autokernel/evaluator/test_conformance.py
 python3 -m unittest scripts/kernel_rnd/autokernel/evaluator/test_integration.py
+python3 -m unittest scripts/kernel_rnd/autokernel/controller/test_ak4_conformance.py
+python3 -m unittest scripts/kernel_rnd/autokernel/controller/test_loop_integration.py
 
 # As a plain script.
 python3 scripts/kernel_rnd/autokernel/test_integration.py
 ```
 
-Expected: **1945 tests, OK (expected failures=1)**. The one `expectedFailure` is
+Expected: **3042 tests, OK (expected failures=1)**. The one `expectedFailure` is
 `test_preflight.RealKernelLockEncodingTest.test_KNOWN_HOLE_unlinking_a_held_lock_
 file_hides_its_live_holder` — a real, documented hole (unlinking a held lock file
 hides its live holder from the `/proc/locks` witness), deliberately left visible
@@ -412,12 +509,48 @@ none of it is closed by the suites above.
 - **T3/T4 are refused, not implemented.** `api.ReleaseTierEvaluator` is the seam
   AK5 fills.
 
+### Remaining in AK4
+
+- **No runner.** AK4 is the plane that DECIDES; nothing yet drives a real
+  campaign end to end against the real evaluator, holds a real device claim for
+  a window, or calls a real model. `test_loop_integration.py` walks the whole
+  loop against fakes, which proves the seams fit and proves nothing about a
+  live host.
+- **`stop_policy.max_consecutive_proposal_skips` has no declared home.**
+  `selection.planner_health_stop_request()` requires it and rightly refuses to
+  invent one, but `schemas.validate_campaign` does not name it, so a
+  §7.1-conforming manifest can omit the single input `PLANNER_DEGRADED` needs
+  and the loop discovers it by raising. The schema is AK1's;
+  `test_ak4_conformance.TestDeclaredCampaignControls` is the record of the gap
+  and FAILS the day it is closed.
+- **`mechanism_class` on `composition.admit_to_frontier` is a caller parameter**
+  bound to nothing but the planner-authored `change_class`, so the §8.9 diversity
+  floor is decided by a label a model wrote. Closing it needs a signature change
+  (resolve it from the proposal via `views`), which is a design call.
+- **Several unbounded reads.** `ProposalScreener.screen` folds the whole journal
+  per proposal (O(journal) per call, O(N²) per campaign) and
+  `hypotheses.planner_round_block` re-surfaces every attempt of every hypothesis
+  forever. `journal.read_since(reader_id)` exists and is unused. Bounding either
+  needs a counted, receipted truncation — a silent slice would be exactly the
+  discard §8.4 forbids.
+- **The prose fields that are still primary keys.** `selection.mechanism` is
+  free text and is both the ledger's key and part of the blacklist fingerprint;
+  `hierarchy_layer` is self-declared, so the actor chooses how many §8.3 receipts
+  it owes. Both need a campaign-declared vocabulary.
+- **`context` and `planner` section vocabularies do not match** (nine shared, six
+  and ten unshared). Harmless today because the compiler's bundle binds to the
+  adapter directly by `manifest_sha256` rather than round-tripping through
+  `ContextManifest` — asserted in `test_loop_integration` — but a caller that
+  hand-builds a `ContextManifest` from compiler sections has no total mapping.
+
 ### Not started at all
 
-**AK4** (state machine, context compiler, planner/critic adapters, selection,
-composition, guards). **AK5** (T2 scope and weights, readiness estimator,
-release-plan compiler, T3 runner, waiver verification, the v8 dry-run).
-**AK6** (readiness reporting and the operator decision surface).
+**AK5** (T2 scope and weights, readiness estimator, release-plan compiler, T3
+runner, waiver verification, the v8 dry-run). **AK6** (readiness reporting and
+the operator decision surface). `state_machine` declares the
+`SEAL -> T3_RELEASE_GATE -> PACKAGE` seam and REFUSES the tier via
+`evaluator.api.admit_tier("T3")`, which raises naming AK5 — so the two planes
+cannot drift into disagreeing about who owns T3.
 
 ### Known, documented holes in what *is* implemented
 
