@@ -16,6 +16,61 @@
 # =============================================================================
 
 # =============================================================================
+# EVIDENCE CITATIONS MUST RESOLVE  (2026-08-02; retargeted 2026-08-03)
+# =============================================================================
+#
+# Every path in this file that backs a MEASUREMENT must RESOLVE on this host to a
+# readable artifact that is not in a scratch directory. That is a hard rule,
+# enforced by
+#
+#     python3 scripts/validate/check_evidence_durability.py
+#
+# It now runs automatically, four ways: `make evidence-check`; `make test` and
+# `make lint` (it is in PYTEST_SMOKE and PYTHON_SMOKE); `scripts/session/
+# health_check.sh`; and a scoped `.git/hooks/pre-commit.extras` that checks the
+# STAGED blob whenever this file is committed. Until 2026-08-03 this comment was
+# the only reference to it anywhere, so it had never run without being remembered
+# — which is the failure mode it exists to catch, applied to itself.
+#
+# WHY. On 2026-08-02 this registry cited 157 distinct artifacts under the scratch
+# root (`llm/tmp`) as the evidence behind ratified, production-affecting claims.
+# Nothing had been lost yet; the whole set was one `rm -rf` away. They were copied
+# into data/<campaign>/ (byte-for-byte, sha256 verified both ends, each campaign
+# carrying a README.md and SHA256SUMS) and every citation here was repointed.
+#
+# MEASUREMENT.md:139-141 requires evidence HASHES in the apply-time ratification
+# bundle but says nothing about whether the artifact must still be there. A bundle
+# can therefore hash a file in /tmp, be signed, and become unverifiable the moment
+# that file is swept — a hash proves nothing with no artifact to check it
+# against. The validator closes that gap. It enforces a CONVENTION; it does not
+# amend the constitution, which is human-amendment-only.
+#
+# WHAT CHANGED 2026-08-03. This block used to read "lives inside this repository,
+# as a repo-relative `data/...` path", and the validator graded that. The operator
+# then ruled that research material reaches GitHub ONLY as distilled knowledge and
+# references in the wiki — never as raw material, REGARDLESS OF SIZE. Benchmark
+# suites, benchmark data, campaign output, run bundles and logs stay on local disk
+# and gitignored; a clone carries the FINDINGS, not the substrate. So in-repo,
+# out-of-repo, tracked and gitignored are now all equally fine here, and whole
+# campaign trees cited below are deliberately gitignored (see .gitignore). What
+# is NOT fine, and is not negotiable, is a citation that resolves nowhere or
+# resolves into scratch: that is the hash-with-no-artifact failure above, and it
+# is precisely BECAUSE the substrate is no longer carried by git that something
+# has to keep proving the local artifact is still there.
+#
+# Two exceptions, both explicit and both machine-recognised:
+#   * `ARTIFACT LOST` — the artifact is gone. Four build-tree binaries under two
+#     throwaway llama.cpp source trees in scratch were already absent. Build
+#     products, not measurement results, so nothing reproducible was lost. The
+#     dead path is kept VERBATIM so provenance survives, with the marker on the
+#     same line. Do not delete it, and do not invent a replacement.
+#   * `.gguf.sha256` sidecars — two ~1079 MiB imatrix blobs are intentionally not
+#     carried (`*.gguf` is .gitignored). The citation points at a sidecar holding
+#     the sha256, size and scratch origin, so the hash stays in-tree.
+#
+# =============================================================================
+
+# =============================================================================
 # CANONICAL: speculative-decoding recipe policy
 # =============================================================================
 #
@@ -669,6 +724,67 @@ server_mode:
   # Do NOT pick 8084 or 8071 for a new role: they belonged to architect_coding (removed
   # 2026-05-06) and scripts/validate/stack_change_guard.py L326/L346 reject them in
   # scripts/autopilot/program.md and scripts/server/*.sh.
+  #
+  # ===========================================================================
+  # `serving_shape:` — THE KV-FEASIBILITY GROUP (2026-08-02, operator-ratified)
+  # ===========================================================================
+  # THREE FIELDS THAT ARE NOT INDEPENDENT KNOBS, so they are declared as ONE
+  # block and validated together:
+  #
+  #     n_ctx           total context the server is launched with (-c)
+  #     slots_by_shape  concurrent slots per INSTANCE SHAPE CLASS (-np)
+  #     kv_quant        KV cache element types (-ctk / -ctv)
+  #
+  # They are coupled by two identities:
+  #     KV bytes      = KiB_per_token(model, kv_quant) * n_ctx
+  #     per-slot ctx  = n_ctx / slots
+  # Edited in isolation, three fields can be walked into an infeasible
+  # combination one commit at a time — each edit locally reasonable, the
+  # combination out of memory. Edited as one block they cannot, because
+  # `stack_manifest.validate_serving_shape_capacity()` recomputes the whole
+  # device footprint from the block at IMPORT and refuses an oversubscribed
+  # lineup. That check is the reason the grouping exists; do not split them
+  # back out into flat keys "for readability".
+  #
+  # WHY THIS DOES NOT VIOLATE THE MODEL/PLACEMENT BOUNDARY. `full` and `half`
+  # are shape CLASSES, not cpusets. This file never learns which CPUs a half
+  # instance owns, how many threads it gets, or which NUMA nodes it spans —
+  # that stays in epyc-orchestrator/orchestration/stack_topology.yaml, which in
+  # turn never learns which model runs on it. "How many concurrent slots does
+  # THIS model want on a half-size instance" is a MODEL x SHAPE fact and has no
+  # other home: the topology cannot answer it (it knows no models) and a flat
+  # per-role `slots` cannot express it (one role, three differently-sized
+  # instances). `src/registry/stack_priors.py` is the compiler that JOINS the
+  # two per instance.
+  #
+  # SHAPE CLASSES: `full` (NUMA_FULL), `half` (NUMA_HALF_A/B), `quarter`
+  # (NUMA_Q*), `gpu_host_lane` (GPU_HOST_LANE). A role whose instances are all
+  # one class needs no `slots_by_shape` at all — the flat `slots` below is the
+  # single value and still works. A class absent from `slots_by_shape` falls
+  # back to flat `slots`, which is how the GPU roles are declared.
+  #
+  # FUTURE-PROOFING (deliberately NOT built): the join reads `kv_quant` through
+  # the same per-shape resolver as `slots_by_shape`, so a `kv_quant_by_shape`
+  # (e.g. f16 on the full, q8_0 on the halves under memory pressure) is a
+  # schema addition, not a migration. There is no measured case for it today,
+  # so it does not exist yet.
+  #
+  # BACK-COMPAT: flat `slots:` and `kv_quant:` keys are still READ (many
+  # consumers index them directly). The grouped block is the declaration going
+  # forward; when both are present the group wins and the parity guard requires
+  # the flat scalar to equal the group's value for the role's primary shape.
+  #
+  # MEASURED INPUTS carried in the block, marked as facts rather than knobs:
+  #   kv_kib_per_token_f16  read out of the GGUF header —
+  #       block_count * head_count_kv * (key_length + value_length) * 2 / 1024.
+  #       q8_0 halves the side it is applied to; q4_0 quarters it; K and V are
+  #       quantised independently. Verified 2026-08-02 by direct GGUF header
+  #       read for all six production models.
+  #   vram_non_kv_gib       GPU roles only: everything resident that is NOT KV
+  #       (weights + mmproj + graph/compute buffers). Measured 2026-08-02 from
+  #       /sys/class/kfd per-process VRAM minus the computed KV at the then-live
+  #       -c 16384. Do NOT use the `vram_gib:` figures for this — those are
+  #       KV-INCLUSIVE totals at some past context and would double-count.
 
   # HOT tier - always resident (~40GB total)
   frontdoor:
@@ -682,7 +798,17 @@ server_mode:
     no_mmap: true
     url: http://localhost:8070
     port: 8070
-    slots: 2  # v6 shared MTP process; logical role still advertises NUMA quarter fanout below
+    # 2026-08-02: was 2. This is now the COMPAT SCALAR for `serving_shape.slots_by_shape`
+    # and must equal the value of the role's primary (endpoint) instance, which is the
+    # full one on :8070. The guard enforces that equality.
+    slots: 4
+    serving_shape:
+      n_ctx: 262144
+      slots_by_shape: {full: 4, half: 1}   # 262144/4 = 65536 per slot on the full,
+                                            # 262144/1 = 262144 per slot on each half
+      kv_quant: {k: q8_0, v: q8_0}          # Q8 KV (lean parity) — moved here from the flat key
+      kv_kib_per_token_f16: 82.0            # qwen35moe: 41 blocks x 2 kv-heads x (256+256) x 2 / 1024
+                                            # => 41.0 KiB/token at q8_0/q8_0, 10.25 GiB per instance
     chat_template_kwargs:
       enable_thinking: false  # Qwen3.6 thinking OFF for task suites (lean parity; +33pp empirically)
     model_role: qwen36_q8_0
@@ -701,7 +827,10 @@ server_mode:
     model: Qwen3.6-35B-A3B-MTP-Q8_0.gguf
     model_path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
     draft_model: Qwen3.6-35B-A3B-MTP-Q8_0.gguf
-    kv_quant: {k: q8_0, v: q8_0}  # Q8 KV (lean parity)
+    # kv_quant MOVED 2026-08-02 into `serving_shape` above — it is one third of the
+    # KV-feasibility group, not a free-standing knob. The flat key is still READ for
+    # rows that have not migrated; leaving a second copy here would be the duplication
+    # the group exists to remove.
     memory_gb: 37
     tier: hot
     # 2026-07-30: quarters retired. These are the SUB-FULL instances only —
@@ -763,6 +892,11 @@ server_mode:
     benchmark_score: null  # was "170/183 (93%)" = Qwen3.6-35B-A3B May-4 Claude-as-Judge; belongs to frontdoor's model, NOT this one
     model: Qwen3.6-27B-MTP-Q8_0.gguf
     model_path: /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf
+    # FLAT `kv_quant` DELIBERATELY RETAINED (not migrated into `serving_shape`).
+    # coder_escalation is an ALIAS on architect_general's :8083 process — it launches
+    # no server, so it HAS no serving shape of its own; giving it a `serving_shape`
+    # block would assert one. This row is the back-compat read path the group's
+    # migration note describes, and it is exercised by the derived kv_quant table.
     kv_quant: {k: q8_0, v: q8_0}
     memory_gb: 27   # Qwen3.6-27B Q8 weights (27.05 GiB); GPU-resident on ROCm0 — VRAM, not host RAM
     vram_gib: 36.70 # shared with architect_general: ONE process, ONE allocation. This alias adds ZERO cost.
@@ -789,9 +923,37 @@ server_mode:
   worker:
     url: http://localhost:8072
     port: 8072
-    slots: 1
+    # 2026-08-02: was 1. Compat scalar for `serving_shape.slots_by_shape`; must equal
+    # the primary (endpoint) instance's value, i.e. the full on :8072.
+    slots: 4
+    serving_shape:
+      n_ctx: 262144
+      slots_by_shape: {full: 4, half: 1}   # 65536 per slot on the full, 262144 on each half
+      # RECORDED, NOT CHANGED (2026-08-02): the live :8072/:8082/:8182 processes were
+      # already running `-ctk q8_0 -ctv q8_0`; verified from /proc/<pid>/cmdline before
+      # writing this row. It moved here from launch_manifest.yaml, which was the only
+      # place that declared it.
+      kv_quant: {k: q8_0, v: q8_0}
+      # gemma4: 30 blocks x 8 kv-heads x (512+512) x 2 / 1024 = 480.0 KiB/token at f16,
+      # 240.0 at q8_0/q8_0 => 60 GiB per instance at n_ctx 262144, 180 GiB across the
+      # three instances. THAT IS 6x THE NEXT MODEL and 74% of the whole host KV budget
+      # (244 GiB). gemma4's 8 kv-heads x 512-wide K/V is an outlier for a 26B; every
+      # other production model here is 2-4 kv-heads x 256. If host memory pressure ever
+      # appears, THIS is the first thing to cap — halving worker's n_ctx frees 90 GiB,
+      # more than every other role's KV combined.
+      kv_kib_per_token_f16: 480.0
     model_role: worker_general
-    shared_with: [worker_math, toolrunner]
+    shared_with: [worker_explore, worker_math, toolrunner]  # 2026-08-02: worker_explore ADDED.
+                       # It was missing here while being demonstrably live: src/roles.py:332 and
+                       # src/api/routes/health.py:30 canonicalise it, src/config/models.py gives it
+                       # its own server_url, three orchestration/lab_jobs.yaml jobs run
+                       # `model_role: worker_explore`, runtime_defaults.timeouts.roles declares 60s
+                       # for it, and the compiled priors carry a worker_explore record that exists
+                       # ONLY because the launcher attaches the alias.
+                       # The launcher had it and master did not, so the launcher looked like the
+                       # drifted side. Master was the incomplete one. Declaring it here lets the
+                       # phase-2 parity guard derive `shared_with_first_n` from master instead of
+                       # carrying worker_explore as a documented launcher-only exception.
     description: Try-cheap-first worker — gemma4-26B-A4B Q4_K_M MTP (swapped 2026-05-08 from Qwen3-Coder-30B-A3B; tool_compliance 96% vs 78%, full suite 90% vs 84%)
     model: gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf
     draft_model: gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf
@@ -834,7 +996,40 @@ server_mode:
   worker_vision:
     url: http://localhost:8086
     port: 8086
+    # 2026-08-02: was 1. Single GPU_HOST_LANE instance, so there is no per-shape
+    # split — the flat scalar IS the declaration and `slots_by_shape` is absent.
     slots: 1
+    serving_shape:
+      # 65536, NOT 131072, and NOT ctx_max 262144. DELIBERATE CAP — see the
+      # arithmetic on server_mode.architect_general.serving_shape, which shares
+      # this card. 65536/1 = 65536 per slot. NOTE: the MMMU-250 cutover measured this
+      # model at 16384 per slot (65536/4); the 2026-08-03 -np/4 directive widened it.
+      n_ctx: 65536
+      # SUPERSEDED 2026-08-02 (same day). The note here read "NO kv_quant KEY:
+      # vision stays at the f16 default ... a q8_0 KV quality check is running
+      # separately; do not pre-empt it by declaring q8_0 here." That check has now
+      # RUN and returned ADOPT, so the declaration below is the measured outcome,
+      # not a pre-emption.
+      #
+      # MMMU-val 250 paired A/B, same instrument and question set as the cutover:
+      #   f16 153/250 (61.2%)  vs  q8_0 155/250 (62.0%)
+      #   delta +0.80 pp, exact 95% CI [-1.90, +3.03], McNemar p=0.7539, d=10
+      # Non-inferior at the PRE-REGISTERED 3.0 pp margin. It does NOT show the arms
+      # are identical: exact power at n=250 is 0.041 for a true 1 pp degradation —
+      # the nominal type-I rate. A null here is not evidence of no harm, and this
+      # must not be restated as "q8_0 is free".
+      # Caveat: the arms run DIFFERENT attention kernels (f16 decode -> TILE,
+      # q8_0 -> VEC), so the delta bundles quantisation error with a kernel change.
+      #
+      # Saves 2880 MiB, server-reported: 6144.00 -> 3264.00 MiB at n_ctx 65536.
+      # Evidence: data/vision_kv_q8_ab_20260802/
+      kv_quant: {k: q8_0, v: q8_0}
+      kv_kib_per_token_f16: 96.0   # qwen3vlmoe: 48 blocks x 4 kv-heads x (128+128) x 2 / 1024
+                                   # => 6.0 GiB of KV at n_ctx 65536, f16
+      vram_non_kv_gib: 19.26       # 20.76 GiB resident (/sys/class/kfd, pid 2021852, 2026-08-02)
+                                   # minus the 1.50 GiB of f16 KV it was then holding at -c 16384.
+                                   # Weights+mmproj on disk are 17.28+1.01 = 18.29 GiB, so ~0.97 GiB
+                                   # is graph/image-preprocessing buffers.
     shared_with: [vision_escalation]
     description: Vision — Qwen3-VL-30B-A3B-Instruct Q4_K_M on MI210 (MMMU-250 63.6% vs Qwen2.5-VL-7B 52.4%, +11.2 pp, paired exact McNemar p=0.0011)
     model:
@@ -847,8 +1042,12 @@ server_mode:
       ctx_max: 262144
     previous_model: Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf  # swapped 2026-07-31
     memory_gb: 0        # host RAM: weights are fully offloaded (-ngl 999)
-    vram_mb: 21049      # measured, MI210, 2026-07-31, at n_ctx 16384, np=1, LOAD TIME
-    n_ctx: 16384        # the deployed/measured shape (NOT ctx_max)
+    vram_mb: 21049      # measured, MI210, 2026-07-31, at n_ctx 16384, np=1, LOAD TIME.
+                        # KV-INCLUSIVE at that context — do NOT feed it to the capacity
+                        # check; `serving_shape.vram_non_kv_gib` is the KV-free figure.
+    # n_ctx MOVED 2026-08-02 into `serving_shape` above (16384 -> 65536). It is one
+    # third of the KV-feasibility group; a flat copy here could be edited without the
+    # group's capacity check ever seeing it, which is the failure mode being closed.
     tier: hot
     device: ROCm0
     acceleration:
@@ -903,13 +1102,40 @@ server_mode:
     no_mmap: true
     url: http://localhost:8083
     port: 8083
-    slots: 2  # UNCHANGED 2026-07-31. Verified viable at the GPU shape: the 36.70 GiB measurement
-              # was taken at n_slots = 4, n_ctx_slot = 262144, kv_unified = 'true'
-              # (/mnt/raid0/llm/tmp/gpu_coresidency/qwen27b.log:8). KV is UNIFIED — it does not
-              # scale per slot, so a per-slot KV cost cannot be derived from this figure and
-              # slots:2 is strictly inside what was already measured resident.
-              # REAL BUDGET: four-model steady state 62.59 of 63.98 GiB, headroom 1.40 GiB.
-              # The binding constraint is total residency, not slot count.
+    # 2026-08-02: was 2. Single GPU_HOST_LANE instance, so no per-shape split — the
+    # flat scalar IS the declaration and `slots_by_shape` is absent. KV is UNIFIED on
+    # this server, so slot count does not scale KV; -c does. 65536/2 = 32768 per slot.
+    slots: 2
+    serving_shape:
+      # ── THE GPU CAP IS DELIBERATE. DO NOT RAISE IT. ──────────────────────────
+      # This card holds BOTH GPU roles. 63.98 GiB usable (rocm-smi, 68702699520 B).
+      #
+      #   non-KV resident   27B 27.33 + VL 19.26                  = 46.59 GiB
+      #   KV @ -c  65536    27B  8.13 (q8_0) + VL  6.00 (f16)     = 14.13 GiB
+      #                                                      TOTAL  60.72 GiB  FITS
+      #   KV @ -c 131072    27B 16.25       + VL 12.00            = 28.25 GiB
+      #                                                      TOTAL  74.84 GiB  DOES NOT
+      #
+      # 131072 is not "tight", it is 11 GiB past the end of the card. The next
+      # person to read `ctx_max: 262144` and helpfully raise this will OOM the
+      # GPU. `stack_manifest.validate_serving_shape_capacity()` now recomputes
+      # exactly this sum at import and refuses, so the mistake fails loudly
+      # instead of at model-load time.
+      n_ctx: 65536
+      kv_quant: {k: q8_0, v: q8_0}   # RECORDED, NOT CHANGED: the live :8083 process was
+                                     # already running -ctk q8_0 -ctv q8_0 (verified from
+                                     # /proc/2019908/cmdline, 2026-08-02). Declared only in
+                                     # launch_manifest.yaml until now.
+      kv_kib_per_token_f16: 260.0    # qwen35 dense: 65 blocks x 4 kv-heads x (256+256) x 2 / 1024
+                                     # => 130.0 KiB/token at q8_0/q8_0, 8.13 GiB at n_ctx 65536.
+                                     # 65 blocks x 4 kv-heads makes this the KV-densest model in
+                                     # the fleet per parameter — 3x the 35B's 82.
+      vram_non_kv_gib: 27.33         # 29.36 GiB resident (/sys/class/kfd, pid 2019908, 2026-08-02)
+                                     # minus the 2.03 GiB of q8_0 KV it was then holding at -c 16384.
+                                     # GGUF on disk is 27.05 GiB, so ~0.28 GiB is graph buffers.
+                                     # NOT `vram_gib: 36.70` below — that figure is KV-INCLUSIVE
+                                     # and its "at 262144 ctx" provenance is arithmetically
+                                     # impossible (KV alone would be 32.5 GiB); see the note there.
     chat_template_kwargs:
       enable_thinking: false
     model_role: qwen36_27b_mtp_q8_local
@@ -926,6 +1152,14 @@ server_mode:
     draft_model: /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf  # MTP self-draft = same file; launcher omits -md
     memory_gb: 27   # Qwen3.6-27B Q8 weights (27.05 GiB) — VRAM, not host RAM
     vram_gib: 36.70 # measured total incl. q8_0 KV at 262144 ctx, n_slots=4, kv_unified=true (MI210, 2026-07-31)
+    # ⚠ 2026-08-02 — THE PROVENANCE STRING ABOVE IS INTERNALLY INCONSISTENT. Left as
+    # found (this is a measured figure and correcting it is not this change's business),
+    # but flagged so nobody builds on it: at n_ctx 262144 with q8_0 KV this model's KV
+    # ALONE is 130.0 KiB/token x 262144 = 32.50 GiB, which with 27.05 GiB of weights is
+    # 59.55 GiB — not 36.70. 36.70 is what weights + q8_0 KV at n_ctx 65536 comes to
+    # (27.33 + 8.13 + rounding), so the figure looks right and the stated context looks
+    # wrong. The capacity check uses `serving_shape.vram_non_kv_gib` instead, which was
+    # measured directly from /sys/class/kfd and carries no context ambiguity.
     # WARNING for whoever changes memory_gb: src/registry/stack_priors.py thresholds on
     # model.mem_gb at 64.0 (POLICY_TAP_SAFE_NON_STREAM_MIN_MEM_GB) and 60.0
     # (POLICY_HIGH_COST_MIN_MEM_GB). Dropping 69 -> 27 silently removes architect_general from
@@ -963,9 +1197,9 @@ server_mode:
                        # short ctx. Long ctx 36.71. Source: published stack measurement record §01.
                        # q_scorer.registry_baseline_tps_by_role reads THIS FIRST.
                        # BASELINE (spec OFF) is 30.87 — verified, zero draft/spec occurrences in
-                       # /mnt/raid0/llm/tmp/gpu_coresidency/qwen27b.log. Never a headline.
+                       # data/gpu_coresidency_20260731/qwen27b.log. Never a headline.
                        # CONTENDED: 19.81 (-35.8%) with vision+whisper+TTS active on the same
-                       # MI210, fully reversible (/mnt/raid0/llm/tmp/gpu_coresidency_results.json).
+                       # MI210, fully reversible (data/gpu_coresidency_20260731/gpu_coresidency_results.json).
                        # THE ENTIRE 122B RECORD BELOW MOVED TO server_mode.architect_critic —
                        # relocated, not deleted: 24.00 short / 15.76 long (OPTIMUM, draft-mtp),
                        # 11.30 spec-off, 12.19 (2026-05-04 NO-MTP probe), live prod 2026-07-05
@@ -997,7 +1231,25 @@ server_mode:
     no_mmap: true
     url: http://localhost:8074
     port: 8074
-    slots: 2  # Serial admission with -np 2 to keep draft-mtp KV slot semantics valid
+    # 2026-08-02: was 2. Compat scalar for `serving_shape.slots_by_shape`; the role has
+    # exactly one instance and it is the full, so the two agree trivially.
+    slots: 1
+    serving_shape:
+      n_ctx: 262144
+      # ONE INSTANCE, ONE CLASS. `slots_by_shape` is written out rather than left to the
+      # flat scalar because this role's single full instance on 0-95 holds all four CPU
+      # region locks, and a future reader adding a half here must be forced to state its
+      # slot count rather than inherit the full's.
+      slots_by_shape: {full: 1}            # 262144/1 = 262144 per slot
+      kv_quant: {k: q4_0, v: f16}          # RECORDED, NOT CHANGED: the live :8074 process was
+                                           # already running -ctk q4_0 -ctv f16 (verified from
+                                           # /proc/2020129/cmdline, 2026-08-02). Asymmetric on
+                                           # purpose — K quarters cleanly, V at f16 preserves
+                                           # critic quality. Declared only in launch_manifest
+                                           # until now.
+      kv_kib_per_token_f16: 98.0           # qwen35moe: 49 blocks x 2 kv-heads x (256+256) x 2 / 1024
+                                           # => K 12.25 + V 49.0 = 61.25 KiB/token as quantised,
+                                           # 15.31 GiB at n_ctx 262144
     chat_template_kwargs:
       enable_thinking: false
     model_role: qwen35_122b_q4km
@@ -1076,7 +1328,28 @@ server_mode:
     # placement.py:186, cpu_region_lock.py:641 yields no lock at all).
     numa_instances: 2  # 2×48t NUMA-half instances (nodes 0,1 and 2,3)
     numa_ports: [8185, 8285]
-    slots: 1  # Serial — admission=1, no wasted KV
+    # 2026-08-02: was 1. Compat scalar for `serving_shape.slots_by_shape`; must equal the
+    # primary (endpoint) instance's value, i.e. the full on :8085.
+    slots: 1
+    serving_shape:
+      n_ctx: 262144
+      # This is the ONE role whose split shape beats its full under load (aggregate tok/s
+      # at T=8: half 86.17 vs full 72.53), so the halves get the same slot count as the
+      # full rather than a reduced one — they are the preferred shape here, not a fallback.
+      slots_by_shape: {full: 1, half: 1}   # 262144 per slot on every instance
+      kv_quant: {k: q4_0, v: q4_0}         # RECORDED, NOT CHANGED: :8085/:8185/:8285 were already
+                                           # running -ctk q4_0 -ctv q4_0 (verified from
+                                           # /proc/<pid>/cmdline, 2026-08-02).
+      # ⚠ UPPER BOUND, NOT AN EXACT FIGURE — and deliberately left conservative.
+      # qwen3next is an SSM/MoE HYBRID: the formula below assumes all 48 blocks carry
+      # attention KV, but in a hybrid only a fraction do (the rest hold a recurrent
+      # state whose size is context-INDEPENDENT). The real footprint is therefore
+      # LOWER than 6.0 GiB per instance. Do NOT "correct" this downward without
+      # measuring the actual per-block layout — over-stating the model that is not the
+      # binding constraint (gemma4 is, at 30x this role's KV) is the safe direction,
+      # and a capacity gate that under-states is worse than useless.
+      kv_kib_per_token_f16: 96.0           # qwen3next: 48 blocks x 2 kv-heads x (256+256) x 2 / 1024
+                                           # => 24.0 KiB/token at q4_0/q4_0, <= 6.0 GiB per instance
     model_role: ingest_long_context
     thinking_control:
       mode: template_ignores_enable_thinking
@@ -1762,7 +2035,9 @@ roles:
     tier: B
     description: Large document ingestion, synthesis & summarization - SSM+MoE hybrid
     # Phase 3 compliance gate (2026-05-07): medium passes; aggressive fails procedure (89%
-    # baseline). Compliance pinned 0.933, recall 0.93-1.00. Source: data/compliance/2026-05-07-ingest_long_context-curve/SUMMARY.md.
+    # baseline). Compliance pinned 0.933, recall 0.93-1.00. Source: /mnt/raid0/llm/epyc-root/data/compliance/2026-05-07-ingest_long_context-curve/SUMMARY.md
+    # (2026-08-02: absolutised. The bare repo-relative form reads as a path in THIS repo and
+    # resolved nowhere; the agent-file compression gates are epyc-root's evidence, not ours.)
     agent_file_compression_operating_point: medium
     model:
       name: Qwen3-Next-80B-A3B-Instruct
@@ -1894,7 +2169,7 @@ roles:
       # --- CURRENT MODEL: Qwen3.6-27B dense Q8, MI210 ROCm0 ---
       baseline_tps: 30.87                          # category=BASELINE: spec OFF. Verified — zero
                                                    # draft/spec occurrences in
-                                                   # /mnt/raid0/llm/tmp/gpu_coresidency/qwen27b.log.
+                                                   # data/gpu_coresidency_20260731/qwen27b.log.
       optimized_tps: 47.79                         # category=OPTIMUM: draft-mtp, short ctx
       optimized_tps_long_context: 36.71            # category=OPTIMUM: draft-mtp, long ctx
       optimized_tps_attest: "[published stack measurement record §01, 2026-07-31, production-optimal rows]"
@@ -1904,7 +2179,8 @@ roles:
                                                    # six routing_hints now land code traffic here.
       speedup: 1.55x                               # 47.79 / 30.87
       vram_gib: 36.70                              # measured at n_slots=4, n_ctx 262144, q8_0 KV,
-                                                   # kv_unified=true (qwen27b.log:8)
+                                                   # kv_unified=true
+                                                   # (data/gpu_coresidency_20260731/qwen27b.log:8)
       # 2026-08-01 CORRECTION. The 2026-07-31 note here read "27B not measured on the
       # architect suite". That was WRONG — ratified evidence existed and was not looked up.
       # FROZEN AUTHORITY (status FINAL_FOR_THIS_ERA_PER_OPERATOR_DIRECTIVE):
@@ -3338,7 +3614,8 @@ roles:
     # recall 1.00); mild and aggressive fail procedure (92% baseline). Best curve in stack
     # alongside architect_general. Tested with chat_template_kwargs.enable_thinking=False
     # (mandatory — without it model returns 0 visible chars). Source:
-    # data/compliance/2026-05-07-frontdoor-curve/SUMMARY.md.
+    # /mnt/raid0/llm/epyc-root/data/compliance/2026-05-07-frontdoor-curve/SUMMARY.md
+    # (2026-08-02: absolutised — the bare relative form resolved nowhere in this repo.)
     agent_file_compression_operating_point: medium
     model:
       name: Qwen3.6-35B-A3B
@@ -3973,19 +4250,19 @@ roles:
         `tg512 5.395 t/s` over 512 generated tokens. MI210 decode is about
         15.5x faster than these CPU controls for comparable tg512 rows.
       evidence:
-      - /mnt/raid0/llm/tmp/nemotron-nano-admission-smoke-20260716/summary.tsv
-      - /mnt/raid0/llm/tmp/nemotron-nano-admission-smoke-20260716/nemotron_nano_9b_q8_cpu_v7.stdout
-      - /mnt/raid0/llm/tmp/nemotron-nano-admission-smoke-20260716/nemotron_nano_9b_q8_mi210_v7.stdout
-      - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/nemotron_nano_q8_cpu/summary.txt
-      - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/nemotron_nano_q8_mi210/summary.txt
-      - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_nano_q8-c2048/summary.txt
-      - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_nano_q8-c8192/summary.txt
-      - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_nano_q8-c32768/summary.txt
-      - /mnt/raid0/llm/tmp/model-admission-gpu-20260717-nemotron-nano/stdout.txt
-      - /mnt/raid0/llm/tmp/nemotron-nano-protocol-probe-20260717T215806Z/
-      - /mnt/raid0/llm/tmp/nemotron-nano-reasoning-extract-20260717T215851Z/summary.json
-      - /mnt/raid0/llm/tmp/nemotron-nano-cli-deepseek-20260717T215912Z/
-      - /mnt/raid0/llm/tmp/nemotron-nano-cli-deepseek-budget0-20260717T220002Z/
+      - data/nemotron_nano_admission_smoke_20260716/summary.tsv
+      - data/nemotron_nano_admission_smoke_20260716/nemotron_nano_9b_q8_cpu_v7.stdout
+      - data/nemotron_nano_admission_smoke_20260716/nemotron_nano_9b_q8_mi210_v7.stdout
+      - data/model_long_cpu_20260716T221606/nemotron_nano_q8_cpu/summary.txt
+      - data/model_long1536_mi210_20260716T220422/nemotron_nano_q8_mi210/summary.txt
+      - data/context_sweep_mi210_20260716T221524_fixed/nemotron_nano_q8-c2048/summary.txt
+      - data/context_sweep_mi210_20260716T221524_fixed/nemotron_nano_q8-c8192/summary.txt
+      - data/context_sweep_mi210_20260716T221524_fixed/nemotron_nano_q8-c32768/summary.txt
+      - data/model_admission_gpu_20260717_nemotron_nano/stdout.txt
+      - data/nemotron_nano_protocol_probe_20260717T215806Z/
+      - data/nemotron_nano_reasoning_extract_20260717T215851Z/summary.json
+      - data/nemotron_nano_cli_deepseek_20260717T215912Z/
+      - data/nemotron_nano_cli_deepseek_budget0_20260717T220002Z/
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron_nano_task_quality/nemotron-nano-quality-20260717T221952Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron_nano_task_quality/protocol-matrix-mi210-512tok-20260718T001900Z/summary.json
@@ -4399,7 +4676,7 @@ roles:
       baseline_tps: 21.1
       optimized_tps: 21.1
       quad_aggregate_tps: 35.3
-      k35_vision_observation: "2026-07-17 K35 fixed OCR/chart candidate gate at /mnt/raid0/llm/tmp/k35-supergemma4-candidate-20260717T193120Z/: SuperGemma4-26B multimodal Q8_0 + F16 projector passed CPU (`4/4`, 25.58-31.76 t/s decode, ~26.4 GiB PSS) and MI210 (`4/4`, 80.35-83.87 t/s decode, ~42% VRAM). Quality-clean on this small fixture set, but not the preferred active vision_escalation replacement because MiniCPM-o is faster on MI210, much smaller, and has frontdoor co-residency/service-tax evidence. — SUPERSEDED 2026-07-31: MiniCPM-o is DEPRECATED and its weights are deleted, so it is no longer the comparator this sentence defers to. A 42-question OCRBench+ChartQA measurement on the MI210 scored MiniCPM-o 31/42 against the Qwen2.5-VL-7B incumbent's 35/42 — a quality downgrade. Speed was never the binding constraint. If vision_escalation is revisited, the forward candidate is Qwen3-VL-30B-A3B Q4_K_M (36/42), not MiniCPM-o. — RESOLVED 2026-07-31 (same day, later): 'if vision_escalation is revisited' is no longer conditional. Qwen3-VL-30B-A3B Q4_K_M was gated on MMMU-250 (159/250 vs 131/250, +11.2 pp, paired exact McNemar p=0.0011) and DEPLOYED to BOTH worker_vision and vision_escalation as one MI210 process on :8086. This entry is a historical arm, not a vision candidate."
+      k35_vision_observation: "2026-07-17 K35 fixed OCR/chart candidate gate at data/k35_supergemma4_candidate_20260717T193120Z/: SuperGemma4-26B multimodal Q8_0 + F16 projector passed CPU (`4/4`, 25.58-31.76 t/s decode, ~26.4 GiB PSS) and MI210 (`4/4`, 80.35-83.87 t/s decode, ~42% VRAM). Quality-clean on this small fixture set, but not the preferred active vision_escalation replacement because MiniCPM-o is faster on MI210, much smaller, and has frontdoor co-residency/service-tax evidence. — SUPERSEDED 2026-07-31: MiniCPM-o is DEPRECATED and its weights are deleted, so it is no longer the comparator this sentence defers to. A 42-question OCRBench+ChartQA measurement on the MI210 scored MiniCPM-o 31/42 against the Qwen2.5-VL-7B incumbent's 35/42 — a quality downgrade. Speed was never the binding constraint. If vision_escalation is revisited, the forward candidate is Qwen3-VL-30B-A3B Q4_K_M (36/42), not MiniCPM-o. — RESOLVED 2026-07-31 (same day, later): 'if vision_escalation is revisited' is no longer conditional. Qwen3-VL-30B-A3B Q4_K_M was gated on MMMU-250 (159/250 vs 131/250, +11.2 pp, paired exact McNemar p=0.0011) and DEPLOYED to BOTH worker_vision and vision_escalation as one MI210 process on :8086. This entry is a historical arm, not a vision candidate."
       quality_score: {pct: 65.4, raw: "159/243"}  # Claude-as-Judge 0-3 scale
       quality_pass_rate: 67.9  # 55/81 scored >= 2
       quality_by_suite:  # pass rates (score >= 2)
@@ -4609,7 +4886,7 @@ roles:
       optimized_tps_attest: "[P-BENCH-PLACEMENT-1, n=3, 2026-07-30, attest data/numa_placement/20260730-P-BENCH-PLACEMENT-1/prodopt_results.txt]"
       quality_pct: 90
       tool_compliance_pct: 96
-      draft_depth_sweep_observation: "2026-07-17 T5 production-shaped CPU worker sweep at /mnt/raid0/llm/tmp/t5-gemma-worker-draft-depth-20260717T213641Z/summary.json confirms draft_max=2: depth2 87.76 t/s with 492/666 accepted; depth3 76.38 t/s with 492/812 accepted; depth4 84.40 t/s with 494/734 accepted."
+      draft_depth_sweep_observation: "2026-07-17 T5 production-shaped CPU worker sweep at data/t5_gemma_worker_draft_depth_20260717T213641Z/summary.json confirms draft_max=2: depth2 87.76 t/s with 492/666 accepted; depth3 76.38 t/s with 492/812 accepted; depth4 84.40 t/s with 494/734 accepted."
       mi210_ngram_mtp_repetition_observation: "2026-07-19 current-v7 MI210 strict repetitive JSON/tool-shaped fixture: no-spec passed at 74.15 t/s, draft-mtp passed at 113.45 t/s with 465/474 drafts accepted, and ngram-mod,draft-mtp passed at 183.50 t/s with 625/1454 accepted. Artifact: /mnt/raid0/llm/epyc-inference-research/data/k11_gemma4_determinism/k11_gemma4_mi210_modes_20260719T004400Z/summary.json."
       mi210_ngram_mtp_prompt_diverse_observation: "2026-07-19 prompt-diverse MI210 follow-up: ngram-mod,draft-mtp reproduced the large repetitive-output speedup (330.57 t/s vs draft-mtp 143.58 and no-spec 85.77) but did not improve non-repetitive coding explanation speed and failed the required-heading contract under the 640-token cap; short edit was only marginally faster than draft-mtp and all modes failed the exact patch contract. Treat ngram-mod,draft-mtp as a task-specific token-reuse lane, not the broad worker default. Artifact: /mnt/raid0/llm/epyc-inference-research/data/k11_gemma4_determinism/k11_gemma4_mi210_prompt_diverse_20260719T004626Z/compact_summary.json."
     memory:
@@ -4720,8 +4997,12 @@ roles:
       vl_score: {pct: 63.6, raw: "159/250"}
       vl_score_protocol: "MMMU-val, 250 multiple-choice single-image questions, MI210 (ROCm0), 2026-07-31. Paired exact McNemar vs Qwen2.5-VL-7B (131/250): +11.2 pp, p=0.0011."
       benchmark_date: 2026-07-31
-      evidence: /mnt/raid0/llm/tmp/vision_final_results.json
-      evidence_harness: /mnt/raid0/llm/tmp/vision_final.py
+      evidence: data/vision_mmmu_cutover_20260731/results.json  # sha256 2b93616fa2eba838…
+      # 2026-08-02: REPOINTED from /mnt/raid0/llm/tmp/vision_final_results.json. Ratified
+      # evidence for a live production model swap was living in a scratch directory; a /tmp
+      # sweep would have destroyed the only artifact behind a deployed decision. Copied
+      # byte-for-byte into the research data tree with hashes and a README.
+      evidence_harness: data/vision_mmmu_cutover_20260731/harness.py  # sha256 1334461599c6fa2a…
       cutover_observation: >
         2026-07-31 MMMU validation, 250 multiple-choice single-image questions, MI210 (ROCm0),
         llama.cpp-experimental build-v8-hip, one arm at a time, `--image-min-tokens 1024` on
@@ -4801,7 +5082,11 @@ roles:
       vl_score: {pct: 63.6, raw: "159/250"}
       vl_score_protocol: "MMMU-val, 250 multiple-choice single-image questions, MI210 (ROCm0), 2026-07-31. Paired exact McNemar vs Qwen2.5-VL-7B (131/250): +11.2 pp, p=0.0011."
       benchmark_date: 2026-07-31
-      evidence: /mnt/raid0/llm/tmp/vision_final_results.json
+      evidence: data/vision_mmmu_cutover_20260731/results.json  # sha256 2b93616fa2eba838…
+      # 2026-08-02: REPOINTED from /mnt/raid0/llm/tmp/vision_final_results.json. Ratified
+      # evidence for a live production model swap was living in a scratch directory; a /tmp
+      # sweep would have destroyed the only artifact behind a deployed decision. Copied
+      # byte-for-byte into the research data tree with hashes and a README.
     memory:
       residency: hot
       pinned: false
@@ -4842,14 +5127,14 @@ roles:
       POST-CUTOVER CHECK (owner: the session performing the live flip; cutover is not closed
       until recorded): re-run the four K35 fixtures against the LIVE :8086 process — GPU, default
       experts, --image-min-tokens 1024 — and record chart_tanzania explicitly.
-        Fixtures: /mnt/raid0/llm/tmp/k35-vision-matrix-20260717T1500Z/ (commands.sh, plan.json)
+        Fixtures: data/k35_vision_matrix_20260717T1500Z/ (commands.sh, plan.json)
         Chart fixture: epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0619.png
           prompt "Which country has 7 years of compulsory education in the chart? Answer with
           the country name only." expected `Tanzania`
         Prior CPU artifacts (all 3/4):
-          /mnt/raid0/llm/tmp/k35-vision-matrix-20260717T1500Z/runs/vision_escalation_cpu_qwen3vl30b_moe4/result.json
-          /mnt/raid0/llm/tmp/k35-vision-escalation-image1024-20260717T1518Z/
-          /mnt/raid0/llm/tmp/k35-vision-escalation-default-experts-20260717T1520Z/
+          data/k35_vision_matrix_20260717T1500Z/runs/vision_escalation_cpu_qwen3vl30b_moe4/result.json
+          data/k35_vision_escalation_image1024_20260717T1518Z/
+          data/k35_vision_escalation_default_experts_20260717T1520Z/
         DECISION RULE, fixed in advance: 4/4 -> configuration-bound, close the item. 3/4 with
         chart_tanzania still wrong -> record as a bounded single-fixture blind spot on a model
         that is +11.2 pp better overall. NOT grounds to roll back; IS grounds to carry a
@@ -4870,9 +5155,22 @@ roles:
       disable_thinking: true
       reasoning: auto
       max_tokens_multiplier: 4
+    # 2026-08-02: ordered to lead with the role's ACTUAL job. `coder` was first,
+    # and the per-axis quality resolver walks candidate_roles in order taking the
+    # first RANKABLE axis — so `coder` -> coding -> livecodebench_v6 scored
+    # worker_summarize 0.804 on a CODING yardstick, for a summarization alias.
+    # With `summarization` first it resolves long_context (not rankable today —
+    # no two fleet models share a long-context benchmark) and falls back to
+    # reasoning/mmlu_pro 0.852, matching frontdoor as it should. It runs
+    # frontdoor's GGUF on frontdoor's server.
+    #
+    # 2026-08-03: this fix was originally written into the GENERATED lean
+    # registry (epyc-orchestrator/orchestration/model_registry.yaml) and was
+    # therefore reverted by the very next `stack_change_pipeline.py update`,
+    # one day later. The chain is master -> lean -> descriptors -> stack_priors,
+    # so it only survives HERE. Do not re-apply it downstream.
     candidate_roles:
-    - coder
-    - frontdoor
+    - summarization
     - ingest
     - general
     acceleration:
@@ -5685,7 +5983,7 @@ roles:
     validation:
       smoke_date: 2026-06-13
       smoke_status: load_and_generation_pass
-      smoke_artifact: /mnt/raid0/llm/tmp/goedel_q4_smoke_20260613.json
+      smoke_artifact: data/goedel_q4_smoke_20260613/goedel_q4_smoke_20260613.json
       formal_verifier_status: not_run
     notes: 'Downloaded from Goedel-LM/Goedel-Code-Prover-8B revision 858f3b5e04bf24aca3a1a113ea1889a4de9ed4ef,
       converted to GGUF f16, and quantized to Q4_K_M on 2026-06-13. Smoke
@@ -6081,7 +6379,8 @@ roles:
     description: Draft model - Qwen2.5-Coder-1.5B.Q4_K_M
     # Phase 3 compliance gate (2026-05-07): BLOCKED. Tested directly as worker_fast role.
     # Baseline recall 0.333 < 0.90 absolute floor. 1.5B size lacks working memory for a
-    # 700-word agent file. Source: data/compliance/2026-05-07-worker_fast-curve/SUMMARY.md.
+    # 700-word agent file. Source: /mnt/raid0/llm/epyc-root/data/compliance/2026-05-07-worker_fast-curve/SUMMARY.md
+    # (2026-08-02: absolutised — the bare relative form resolved nowhere in this repo.)
     agent_file_compression_operating_point: none
     model:
       name: Qwen2.5-Coder-1.5B.Q4_K_M
@@ -7123,7 +7422,7 @@ roles:
         Hadamard rotation tensors. Validation passed test-llama-archs
         --arch glm-dsa, test-llama-archs --arch deepseek32, ASAN glm-dsa,
         and rebuilt build-hip server/CLI. Current-source exact READY smoke at
-        /mnt/raid0/llm/tmp/glm52-current-source-ready-smoke-20260717T092344/
+        data/glm52_current_source_ready_smoke_20260717T092344/
         logged main + indexer DSA caches and Lightning Indexer enabled. This
         closes GLM DSA cache/runtime wiring, not sparse final-attention or
         long-context quality.
@@ -7137,7 +7436,7 @@ roles:
         evidence, but it does not close the true >64K actual-token gate.
       dsa_true64k_observation: >
         2026-07-17 stale-binary CPU-only experimental v7 run at
-        /mnt/raid0/llm/tmp/glm52-dsa-true64k-probe-20260717T0125/
+        data/glm52_dsa_true64k_probe_20260717T0125/
         used --long-context 90000 --min-prompt-tokens 65536
         --request-timeout 21600 and completed. The runner counted 65957
         prompt tokens, while llama-server processed 65969 prompt tokens and
@@ -7151,7 +7450,7 @@ roles:
         >64K behavior, sparse-compute scaling, or long-context quality.
       dsa_blind_96k_process_failure: >
         2026-07-17 current-source 96K attempt at
-        /mnt/raid0/llm/tmp/glm52-current-source-96k-quality-20260717T144022Z/plan.json
+        data/glm52_current_source_96k_quality_20260717T144022Z/plan.json
         is excluded from quality, throughput, and kernel evidence. It used
         execute mode with --log-disable, no --metrics endpoint, a non-streaming
         busy request, and only max_tokens=32; no response artifact was produced.
@@ -7163,10 +7462,10 @@ roles:
       current_source_16k_throughput_observation: >
         2026-07-17 current-source CPU-only long-output controls used streaming
         requests and server-log timing extraction. Baseline/no-spec at
-        /mnt/raid0/llm/tmp/glm52-current-source-16k-streaming-20260717Tpostfix/
+        data/glm52_current_source_16k_streaming_20260717Tpostfix/
         processed 11952 server-side prompt tokens at 18.50 t/s and decoded
         512 tokens at 2.53 t/s. The ngram-mod arm at
-        /mnt/raid0/llm/tmp/glm52-current-source-16k-ngram-20260717Trealistic/
+        data/glm52_current_source_16k_ngram_20260717Trealistic/
         processed 11952 server-side prompt tokens at 18.75 t/s and decoded
         512 tokens at 2.54 t/s. The ngram-mod server initialized, but final
         common_specu stats reported zero generated drafts, zero accepted drafts,
@@ -7176,12 +7475,12 @@ roles:
       current_source_32k_needle_observation: >
         2026-07-17 current-source CPU-only 32K needle/coherence probes failed
         in both default-reasoning and reasoning-off modes. The default arm at
-        /mnt/raid0/llm/tmp/glm52-current-source-32k-needle-20260717T1723Z/
+        data/glm52_current_source_32k_needle_20260717T1723Z/
         processed 24041 server-side prompt tokens at 15.00 t/s and decoded 64
         tokens at 2.49 t/s before llama-server returned HTTP 500 because the
         generated text did not match the expected peg-native format. The
         reasoning-off arm at
-        /mnt/raid0/llm/tmp/glm52-current-source-32k-needle-reasoning-off-20260717T1755Z/plan.json
+        data/glm52_current_source_32k_needle_reasoning_off_20260717T1755Z/plan.json
         processed 24034 server-side prompt tokens at 15.41 t/s and decoded 64
         tokens at 2.50 t/s, then failed the same peg-native parse path; the
         expected substring GLM52-NEEDLE-7F3A was absent. Tracked summary:
@@ -7190,13 +7489,13 @@ roles:
         serving-throughput evidence.
       current_source_short_runner_controls: >
         2026-07-17 exact tiny chat smoke still returned READY at
-        /mnt/raid0/llm/tmp/glm52-current-source-ready-smoke-20260717T092344/,
+        data/glm52_current_source_ready_smoke_20260717T092344/,
         but short runner-shaped controls show the output-format issue occurs
         before long context. Raw /completion without the chat template at
-        /mnt/raid0/llm/tmp/glm52-raw-completion-smoke-20260717T210058Z/plan.json
+        data/glm52_raw_completion_smoke_20260717T210058Z/plan.json
         processed 1383 prompt tokens and decoded 64 tokens at 2.69 t/s into
         gibberish. Templated chat with the same runner-shaped filler at
-        /mnt/raid0/llm/tmp/glm52-chat-short-runner-control-20260717T210356Z/plan.json
+        data/glm52_chat_short_runner_control_20260717T210356Z/plan.json
         processed 1389 server prompt tokens and decoded 64 tokens at 2.69 t/s
         into gibberish. Do not schedule more long baseline GLM passes without
         the recovered top-k schedule and reviewer-serving chat channel. This
@@ -7350,15 +7649,19 @@ roles:
         failed C-CRAB patch-review gate.
       expert_activation_stats_observation: >
         2026-07-17 first expert-routing-skew attempt rebuilt stale
-        experimental-v7 llama-imatrix, calibrated
-        /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/expert-routing-skew.imatrix.gguf,
+        experimental-v7 llama-imatrix, calibrated an imatrix whose sha256 is
+        recorded at
+        data/expert_routing_skew_glm52_20260717T0520Z_rebuilt/expert-routing-skew.imatrix.gguf.sha256
+        (the 1.13 GB .imatrix.gguf itself was NEVER migrated out of the scratch root
+        and survives only at /mnt/raid0/llm/tmp/ — the hash is durable, the artifact
+        it attests is not),
         and captured --show-statistics to
-        /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/expert-routing-skew.imatrix.stats.txt.
+        data/expert_routing_skew_glm52_20260717T0520Z_rebuilt/expert-routing-skew.imatrix.stats.txt.
         The output summarizes activation tensors, including ffn_down_exps,
         ffn_gate_exps, and ffn_up_exps. Follow-up extraction with
         scripts/benchmark/extract_imatrix_expert_counts.py read the persisted
         ffn_down_exps.weight.counts tensors and produced
-        /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/expert-routing-skew.counts.json
+        data/expert_routing_skew_glm52_20260717T0520Z_rebuilt/expert-routing-skew.counts.json
         plus .md. First signal is near-uniform globally (top_32=17.1%,
         entropy_norm=0.996) but moderately skewed within layers (median layer
         top_32=55.6%, max=70.5%). Treat it as hypothesis-only because the
@@ -7369,9 +7672,10 @@ roles:
         interactive objectives, core-v2 ledger prompts, Optuna root-workload
         prompts, current orchestrator prompt files, and retrieval queries
         (manifest at
-        /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/production_representative.corpus.manifest.json).
-        Extracted ffn_down_exps.weight.counts from
-        /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/expert-routing-skew.imatrix.gguf
+        data/expert_routing_skew_glm52_20260717T_production_representative/production_representative.corpus.manifest.json).
+        Extracted ffn_down_exps.weight.counts from the imatrix attested by
+        data/expert_routing_skew_glm52_20260717T_production_representative/expert-routing-skew.imatrix.gguf.sha256
+        (artifact itself scratch-only, as above)
         show near-uniform global expert use: 19,123,200 selections, all 256
         experts nonzero in every layer, aggregate top_32=15.19%,
         entropy_norm=0.9987, Gini=0.0664. Layer-local skew weakened vs the tiny
@@ -7478,36 +7782,36 @@ roles:
         evidence: /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc3-why-natural-repair2-20260718Tglm52/summary.json
       evidence:
       - /mnt/raid0/llm/models/glm52_clean.log
-      - /mnt/raid0/llm/tmp/glm52-dsa-preflight-20260716T2303/plan.json
-      - /mnt/raid0/llm/tmp/glm52-short-smoke-20260716T2305/summary.json
-      - /mnt/raid0/llm/tmp/glm52-short-smoke-20260716T2305/server.log
-      - /mnt/raid0/llm/tmp/glm52-short-smoke-20260716T2308-reasoning-off/summary.json
-      - /mnt/raid0/llm/tmp/glm52-short-smoke-20260716T2308-reasoning-off/server.log
-      - /mnt/raid0/llm/tmp/glm52-dsa-long-probe-20260716T2340/plan.json
-      - /mnt/raid0/llm/tmp/glm52-dsa-long-probe-20260716T2340/logs/long_context_dsa_probe.server.log
-      - /mnt/raid0/llm/tmp/glm52-dsa-kv-scaling-20260716T2350/plan.json
-      - /mnt/raid0/llm/tmp/glm52-dsa-kv-scaling-20260716T2350/logs/kv_length_scaling_4096.server.log
-      - /mnt/raid0/llm/tmp/glm52-dsa-kv-scaling-20260716T2350/logs/kv_length_scaling_8192.server.log
-      - /mnt/raid0/llm/tmp/glm52-dsa-64k-probe-20260716T235329Z/plan.json
-      - /mnt/raid0/llm/tmp/glm52-dsa-64k-probe-20260716T235329Z/logs/long_context_dsa_probe.server.log
-      - /mnt/raid0/llm/tmp/glm52-dsa-true64k-probe-20260717T0125/plan.json
-      - /mnt/raid0/llm/tmp/glm52-dsa-true64k-probe-20260717T0125/logs/long_context_dsa_probe.server.log
-      - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/expert-routing-skew.imatrix.gguf
-      - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/expert-routing-skew.imatrix.stats.txt
-      - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/expert-routing-skew.counts.json
-      - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/expert-routing-skew.counts.md
-      - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/production_representative.corpus.txt
-      - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/production_representative.corpus.manifest.json
-      - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/expert-routing-skew.imatrix.gguf
-      - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/expert-routing-skew.stats.txt
-      - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/expert-routing-skew.counts.json
-      - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/expert-routing-skew.counts.md
+      - data/glm52_dsa_preflight_20260716T2303/plan.json
+      - data/glm52_short_smoke_20260716T2305/summary.json
+      - data/glm52_short_smoke_20260716T2305/server.log
+      - data/glm52_short_smoke_20260716T2308_reasoning_off/summary.json
+      - data/glm52_short_smoke_20260716T2308_reasoning_off/server.log
+      - data/glm52_dsa_long_probe_20260716T2340/plan.json
+      - data/glm52_dsa_long_probe_20260716T2340/logs/long_context_dsa_probe.server.log
+      - data/glm52_dsa_kv_scaling_20260716T2350/plan.json
+      - data/glm52_dsa_kv_scaling_20260716T2350/logs/kv_length_scaling_4096.server.log
+      - data/glm52_dsa_kv_scaling_20260716T2350/logs/kv_length_scaling_8192.server.log
+      - data/glm52_dsa_64k_probe_20260716T235329Z/plan.json
+      - data/glm52_dsa_64k_probe_20260716T235329Z/logs/long_context_dsa_probe.server.log
+      - data/glm52_dsa_true64k_probe_20260717T0125/plan.json
+      - data/glm52_dsa_true64k_probe_20260717T0125/logs/long_context_dsa_probe.server.log
+      - data/expert_routing_skew_glm52_20260717T0520Z_rebuilt/expert-routing-skew.imatrix.gguf.sha256
+      - data/expert_routing_skew_glm52_20260717T0520Z_rebuilt/expert-routing-skew.imatrix.stats.txt
+      - data/expert_routing_skew_glm52_20260717T0520Z_rebuilt/expert-routing-skew.counts.json
+      - data/expert_routing_skew_glm52_20260717T0520Z_rebuilt/expert-routing-skew.counts.md
+      - data/expert_routing_skew_glm52_20260717T_production_representative/production_representative.corpus.txt
+      - data/expert_routing_skew_glm52_20260717T_production_representative/production_representative.corpus.manifest.json
+      - data/expert_routing_skew_glm52_20260717T_production_representative/expert-routing-skew.imatrix.gguf.sha256
+      - data/expert_routing_skew_glm52_20260717T_production_representative/expert-routing-skew.stats.txt
+      - data/expert_routing_skew_glm52_20260717T_production_representative/expert-routing-skew.counts.json
+      - data/expert_routing_skew_glm52_20260717T_production_representative/expert-routing-skew.counts.md
       excluded_process_observations:
-      - /mnt/raid0/llm/tmp/glm52-current-source-96k-quality-20260717T144022Z/plan.json
+      - data/glm52_current_source_96k_quality_20260717T144022Z/plan.json
       current_source_throughput_controls:
-      - /mnt/raid0/llm/tmp/glm52-current-source-16k-streaming-20260717Tpostfix/logs/long_context_dsa_probe.server.log
-      - /mnt/raid0/llm/tmp/glm52-current-source-16k-ngram-20260717Trealistic/plan.json
-      - /mnt/raid0/llm/tmp/glm52-current-source-16k-ngram-20260717Trealistic/logs/long_context_dsa_probe.server.log
+      - data/glm52_current_source_16k_streaming_20260717Tpostfix/logs/long_context_dsa_probe.server.log
+      - data/glm52_current_source_16k_ngram_20260717Trealistic/plan.json
+      - data/glm52_current_source_16k_ngram_20260717Trealistic/logs/long_context_dsa_probe.server.log
       topk_sensitivity:
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/plan.json
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-short-20260717T230024Z/plan.json
@@ -7591,9 +7895,9 @@ roles:
         commit: 98a1ad8cf
         binaries:
         - llama-cli
-        notes: "Experimental v7 now loads the AngelSlim GGUF after Hy3-specific router-bias tensor fix: `LLM_TENSOR_FFN_EXP_PROBS_B` must use the `bias` suffix to match `blk.N.exp_probs_b.bias`. Follow-up CPU and MI210-hybrid A/Bs on 2026-07-16 showed no-spec and `draft-mtp` both produce coherent output; `draft-mtp` was slower than no-spec on the longer CPU and hybrid samples. The 2026-07-18 task-quality / architecture-fit first slice passed 5/6 on both CPU no-spec and MI210-hybrid no-spec, failing only exact six-word instruction. A later CPU-only strict slice reproduced 5/6, failed exact word count, and exposed a code-only/no-fence strictness smell; a bounded CPU prompt-repair probe passed 2/2 repaired six-word variants, then a CPU repaired strict-suite probe passed 7/7 including an explicit code-only/no-fence prompt. The production-shaped MI210-hybrid repaired strict-suite gate also passed 7/7 at mean prompt 22.33 t/s and mean decode 11.43 t/s. The older patched throwaway build at /mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716/build/bin remains a reference/fallback only."
+        notes: "Experimental v7 now loads the AngelSlim GGUF after Hy3-specific router-bias tensor fix: `LLM_TENSOR_FFN_EXP_PROBS_B` must use the `bias` suffix to match `blk.N.exp_probs_b.bias`. Follow-up CPU and MI210-hybrid A/Bs on 2026-07-16 showed no-spec and `draft-mtp` both produce coherent output; `draft-mtp` was slower than no-spec on the longer CPU and hybrid samples. The 2026-07-18 task-quality / architecture-fit first slice passed 5/6 on both CPU no-spec and MI210-hybrid no-spec, failing only exact six-word instruction. A later CPU-only strict slice reproduced 5/6, failed exact word count, and exposed a code-only/no-fence strictness smell; a bounded CPU prompt-repair probe passed 2/2 repaired six-word variants, then a CPU repaired strict-suite probe passed 7/7 including an explicit code-only/no-fence prompt. The production-shaped MI210-hybrid repaired strict-suite gate also passed 7/7 at mean prompt 22.33 t/s and mean decode 11.43 t/s. The older patched throwaway build at /mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716/build/bin remains a reference/fallback only. ARTIFACT LOST (build tree, not a measurement result) — recorded 2026-08-02: the path no longer exists on disk; it is kept verbatim so provenance survives, and it is a build tree, not a measurement result, so nothing reproducible is lost."
       runtime_observations:
-        evidence_dir: /mnt/raid0/llm/tmp/hy3-mtp-closure-20260716T234610Z
+        evidence_dir: data/hy3_mtp_closure_20260716T234610Z
         current_source_cpuonly_load_probe: "2026-07-18 rebuilt experimental-v7 `d1e5a20eb` CPU-only n=0 load probe with `-dev none -ngl 0 --no-op-offload -nkvo` reached about 175 GiB RSS and timed out after 300s without reproducing the old tensor-count mismatch; no decode/quality claim. Artifact: /mnt/raid0/llm/epyc-inference-research/data/hy3_current_v7/hy3-iq1m-mtp-load-n0-cpuonly-20260718T162550Z/summary.json"
         cpu_no_spec_generation_tps: 3.9
         cpu_draft_mtp_generation_tps: 3.6
@@ -7793,7 +8097,7 @@ roles:
         observations, not stock-v7 support.
       quiet_gpu_quality_throughput_observation: >
         2026-07-17 quiet MI210 fork-loader pass at
-        /mnt/raid0/llm/tmp/nemotron-diff14-quality-mi210-20260717T0900Z/
+        data/nemotron_diff14_quality_mi210_20260717T0900Z/
         used the scratch buun HIP llama-server with diffusion self-spec enabled
         and no concurrent llama/AutoPilot/Firefox/MegaSync load. Four
         deterministic probes passed: exact minified JSON at 84.69 t/s over 10
@@ -7809,29 +8113,29 @@ roles:
         with 1153 prompt tokens, 26.18 t/s with 6433 prompt tokens, and
         25.82 t/s with 22433 prompt tokens.
       evidence:
-      - /mnt/raid0/llm/tmp/nemotron-admission-smoke-20260716/nemotron_diff14_q8_cpu_v7.stderr
+      - data/nemotron_admission_smoke_20260716/nemotron_diff14_q8_cpu_v7.stderr
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/content_control_mi210_20260718T191331Z/report.md
-      - /mnt/raid0/llm/tmp/nemotron-admission-smoke-20260716-mi210-confirm/nemotron_diff14_q8_mi210_v7.stderr
-      - /mnt/raid0/llm/tmp/nemotron-diff14-buun-smoke-20260716/cpu_selfspec.stderr
-      - /mnt/raid0/llm/tmp/nemotron-diff14-buun-smoke-20260716/mi210_selfspec.stderr
-      - /mnt/raid0/llm/tmp/nemotron-diff14-buun-smoke-20260716/mi210_server.stderr
-      - /mnt/raid0/llm/tmp/nemotron-diff14-buun-smoke-20260716/mi210_server_response.json
-      - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/nemotron_diff14_buun_cpu/summary.txt
-      - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/nemotron_diff14_q8_buun_mi210/summary.txt
-      - /mnt/raid0/llm/tmp/nemotron-diff14-quality-mi210-20260717T0900Z/summary.json
+      - data/nemotron_admission_smoke_20260716_mi210_confirm/nemotron_diff14_q8_mi210_v7.stderr
+      - data/nemotron_diff14_buun_smoke_20260716/cpu_selfspec.stderr
+      - data/nemotron_diff14_buun_smoke_20260716/mi210_selfspec.stderr
+      - data/nemotron_diff14_buun_smoke_20260716/mi210_server.stderr
+      - data/nemotron_diff14_buun_smoke_20260716/mi210_server_response.json
+      - data/model_long_cpu_20260716T221606/nemotron_diff14_buun_cpu/summary.txt
+      - data/model_long1536_mi210_20260716T220422/nemotron_diff14_q8_buun_mi210/summary.txt
+      - data/nemotron_diff14_quality_mi210_20260717T0900Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/mi210_dream_fix_local_20260718T165819Z
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/mi210_cli_dream_fix_local_20260718T170018Z
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/cpu_dream_fix_clean_local_20260718T171131Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/content_control_repair_sourcehead_mi210_20260719T020722Z/summary.json
-      - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_diff14_buun-c2048/summary.txt
-      - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_diff14_buun-c8192/summary.txt
-      - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_diff14_buun-c32768/summary.txt
+      - data/context_sweep_mi210_20260716T221524_fixed/nemotron_diff14_buun-c2048/summary.txt
+      - data/context_sweep_mi210_20260716T221524_fixed/nemotron_diff14_buun-c8192/summary.txt
+      - data/context_sweep_mi210_20260716T221524_fixed/nemotron_diff14_buun-c32768/summary.txt
       scratch_loader:
-        source: /mnt/raid0/llm/tmp/buun-llama-cpp-src
+        source: /mnt/raid0/llm/tmp/buun-llama-cpp-src  # ARTIFACT LOST (build tree, not a measurement result) — recorded 2026-08-02
         branch: rocm-fused-turbo-port
-        cpu_cli: /mnt/raid0/llm/tmp/buun-llama-cpp-src/build-cpu/bin/llama-diffusion-cli
-        hip_cli: /mnt/raid0/llm/tmp/buun-llama-cpp-src/build-hip/bin/llama-diffusion-cli
-        hip_server: /mnt/raid0/llm/tmp/buun-llama-cpp-src/build-hip/bin/llama-server
+        cpu_cli: /mnt/raid0/llm/tmp/buun-llama-cpp-src/build-cpu/bin/llama-diffusion-cli  # ARTIFACT LOST (build tree, not a measurement result) — recorded 2026-08-02
+        hip_cli: /mnt/raid0/llm/tmp/buun-llama-cpp-src/build-hip/bin/llama-diffusion-cli  # ARTIFACT LOST (build tree, not a measurement result) — recorded 2026-08-02
+        hip_server: /mnt/raid0/llm/tmp/buun-llama-cpp-src/build-hip/bin/llama-server  # ARTIFACT LOST (build tree, not a measurement result) — recorded 2026-08-02
         local_patch: "Gate HIP FP8 aliases in ggml/src/ggml-cuda/vendors/hip.h behind defined(CDNA3) for ROCm 6.2/gfx90a."
     memory:
       residency: cold
@@ -7918,15 +8222,15 @@ roles:
       cpu_prompt_control_n6_observation: "2026-07-18 bounded CPU-only six-prompt control at /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/bonsai27_q1_cpu_prompt_control_n6_20260718T200059Z/ scored direct prompts 0/6, repaired prompts 1/6, overall 1/12. CLI generation was roughly 10.4-12.3 t/s. This weakens the prompt-repair path; do not spend near-term role-readiness cycles on Bonsai Q1_0 without a new quality hypothesis."
       related_dspark_observation: "Bonsai-27B-dspark-Q4_1 failed on CPU and MI210 with `unknown model architecture: 'dspark'`; unsupported until dspark architecture support is added."
       evidence:
-      - /mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/bonsai_q1_cpu/bonsai_q1_cpu.stdout
-      - /mnt/raid0/llm/tmp/bonsai-dspark-mi210-churn-20260716/bonsai_q1_mi210_v7.stdout
-      - /mnt/raid0/llm/tmp/bonsai-dspark-mi210-churn-20260716/bonsai_dspark_mi210_v7.stderr
-      - /mnt/raid0/llm/tmp/model-long-cpu-remaining2-20260716T224231/bonsai_27b_q1_cpu/summary.txt
-      - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/bonsai_27b_q1_mi210/summary.txt
-      - /mnt/raid0/llm/tmp/bonsai-q1-kv-sweep-mi210-20260716T221907/default_kv-c2048/summary.txt
-      - /mnt/raid0/llm/tmp/bonsai-q1-kv-sweep-mi210-20260716T221907/q4kv-c2048/summary.txt
-      - /mnt/raid0/llm/tmp/bonsai-q1-kv-sweep-mi210-20260716T221907/default_kv-c32768/summary.txt
-      - /mnt/raid0/llm/tmp/bonsai-q1-kv-sweep-mi210-20260716T221907/q4kv-c32768/summary.txt
+      - data/bonsai_dspark_cpu_churn_20260716/bonsai_q1_cpu/bonsai_q1_cpu.stdout
+      - data/bonsai_dspark_mi210_churn_20260716/bonsai_q1_mi210_v7.stdout
+      - data/bonsai_dspark_mi210_churn_20260716/bonsai_dspark_mi210_v7.stderr
+      - data/model_long_cpu_remaining2_20260716T224231/bonsai_27b_q1_cpu/summary.txt
+      - data/model_long1536_mi210_20260716T220422/bonsai_27b_q1_mi210/summary.txt
+      - data/bonsai_q1_kv_sweep_mi210_20260716T221907/default_kv-c2048/summary.txt
+      - data/bonsai_q1_kv_sweep_mi210_20260716T221907/q4kv-c2048/summary.txt
+      - data/bonsai_q1_kv_sweep_mi210_20260716T221907/default_kv-c32768/summary.txt
+      - data/bonsai_q1_kv_sweep_mi210_20260716T221907/q4kv-c32768/summary.txt
       - /mnt/raid0/llm/epyc-inference-research/data/bonsai_q1_quality_gate/bonsai_q1_quality_clean_20260717T0755Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/bonsai27_q1_mi210_llama_bench_20260718T150243Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/bonsai27_q1_cpu_prompt_repair_20260718T191220Z/report.md
@@ -8002,10 +8306,10 @@ roles:
       q2_0_observation: "Read-only audit classified the Q2_0 failure as artifact/layout incompatibility: loader rejects `output_norm.weight` offset 337715200 vs expected 357580800 before prompt execution. Header parses as GGUF v3 with structured tensor offsets and local file size matches HF metadata (7,165,121,600 bytes; LFS hash 868c117...), so evidence favors noncanonical Q2_0 packing under standard GGML_TYPE_Q2_0 rather than simple truncation or a bad harness. 2026-07-18 raw GGUF layout verifier confirmed the diagnosis without `gguf-py` tensor reshape or llama.cpp model loading: Q2_0 has 498/498 Q2_0 tensors physically short under current-v7 standard 18-byte/block `Q2_0`, while sibling Q2_g64 has 0/498 mismatches. 2026-07-18 decision memo: treat this as a producer/export contract bug first, not a v7 loader bug; the first mismatch (`output.weight`) is short by exactly one byte per 64-value block, so overloading shared `GGML_TYPE_Q2_0` with a second physical layout would risk corrupting gguf size accounting, quant/dequant, vec-dot, CPU dispatch, and GPU/offload assumptions. Next step is to request or recreate a canonical GGUF where type 42 uses the upstream 18-byte block contract, or publish the 17-byte layout under a distinct type/metadata contract. Blind padding transcode is unsafe until semantics are documented; compatibility-loader work is high-risk and ordinary loader retries remain closed."
       dspark_observation: "Ternary-Bonsai-27B-dspark-Q4_1 failed on CPU and MI210 with GGUF tensor offset mismatch at `dspark.fc.weight`."
       evidence:
-      - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716b/ternary_bonsai_q2_0_mi210_v7.log
+      - data/mi210_inference_churn_20260716b/ternary_bonsai_q2_0_mi210_v7.log
       - /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/ternary_bonsai_q2_layout_contract_20260718Tcodex.json
-      - /mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/ternary_bonsai_dspark_cpu_v7/ternary_bonsai_dspark_cpu_v7.stderr
-      - /mnt/raid0/llm/tmp/bonsai-dspark-mi210-churn-20260716-ternary-dspark/ternary_bonsai_dspark_mi210_v7.stderr
+      - data/bonsai_dspark_cpu_churn_20260716/ternary_bonsai_dspark_cpu_v7/ternary_bonsai_dspark_cpu_v7.stderr
+      - data/bonsai_dspark_mi210_churn_20260716_ternary_dspark/ternary_bonsai_dspark_mi210_v7.stderr
     memory:
       residency: cold
       pinned: false
@@ -8051,7 +8355,7 @@ roles:
       observed_date: 2026-07-18
       runtime_observation: >
         Pinned experimental-v7 direct `llama-cli` smoke at
-        /mnt/raid0/llm/tmp/ternary-q2-g64-smoke-20260717T113848Z/ loaded
+        data/ternary_q2_g64_smoke_20260717T113848Z/ loaded
         Ternary-Bonsai-27B-Q2_g64 on CPU and MI210 and returned exact `ok`
         from both arms. Smoke stdout reports build `b10088-d1e5a20eb`; pinned
         version artifact reports `10088 (d1e5a20eb)`. Timing was intentionally
@@ -8077,11 +8381,11 @@ roles:
         class: observation
         note: "Raw p512/tg128 control for apples-to-apples kernel sanity, not a realistic serving verdict."
         mi210:
-          artifact: /mnt/raid0/llm/tmp/ternary-q2-g64-throughput-20260717Tcodex/mi210_p512_tg128_r1.json
+          artifact: data/ternary_q2_g64_throughput_20260717Tcodex/mi210_p512_tg128_r1.json
           prompt_tps: 25.686052
           decode_tps: 10.530261
         cpu:
-          artifact: /mnt/raid0/llm/tmp/ternary-q2-g64-throughput-20260717Tcodex/cpu_p512_tg128_r1.json
+          artifact: data/ternary_q2_g64_throughput_20260717Tcodex/cpu_p512_tg128_r1.json
           prompt_tps: 25.268101
           decode_tps: 8.3872
       evidence:
@@ -8092,24 +8396,24 @@ roles:
         class: observation
         note: "120-row JSON-copy prompt; speed-only because both MI210 arms retained empty <think> tags despite reasoning-off."
         mi210_baseline:
-          artifact: /mnt/raid0/llm/tmp/ternary-q2-g64-throughput-20260717Tcodex/cli_realistic/mi210_cli_baseline.stdout
+          artifact: data/ternary_q2_g64_throughput_20260717Tcodex/cli_realistic/mi210_cli_baseline.stdout
           spec_type: none
           prompt_tps: 25.5
           generation_tps: 9.8
         mi210_ngram_mod:
-          artifact: /mnt/raid0/llm/tmp/ternary-q2-g64-throughput-20260717Tcodex/cli_realistic/mi210_cli_ngram_mod.stdout
+          artifact: data/ternary_q2_g64_throughput_20260717Tcodex/cli_realistic/mi210_cli_ngram_mod.stdout
           spec_type: ngram-mod
           prompt_tps: 25.6
           generation_tps: 22.9
           generation_speedup_vs_cli_baseline: 2.3367
         cpu_baseline:
-          artifact: /mnt/raid0/llm/tmp/ternary-q2-g64-throughput-20260717Tcodex/cli_realistic/cpu_cli_baseline.stdout
+          artifact: data/ternary_q2_g64_throughput_20260717Tcodex/cli_realistic/cpu_cli_baseline.stdout
           result: timed_out_before_timing_line
           timeout_s: 600
       evidence:
-      - /mnt/raid0/llm/tmp/ternary-q2-g64-smoke-20260717T113848Z/cpu.stdout
-      - /mnt/raid0/llm/tmp/ternary-q2-g64-smoke-20260717T113848Z/mi210.stdout
-      - /mnt/raid0/llm/tmp/ternary-q2-g64-smoke-20260717T113848Z/version.pinned.txt
+      - data/ternary_q2_g64_smoke_20260717T113848Z/cpu.stdout
+      - data/ternary_q2_g64_smoke_20260717T113848Z/mi210.stdout
+      - data/ternary_q2_g64_smoke_20260717T113848Z/version.pinned.txt
       - data/ternary_q2_g64_quality_gate/ternary_q2_g64_quality_20260717Tcodex/summary.json
       - data/ternary_q2_g64_quality_gate/ternary_q2_g64_quality_20260717Tcodex/throughput_observation.json
     memory:
@@ -8161,10 +8465,10 @@ roles:
         This refreshes throughput hypotheses only; provenance remains unresolved
         and the model stays catalogue-only.
       evidence:
-      - /mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/bonsai_8b_cpu_v7/bonsai_8b_cpu_v7.stdout
-      - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716b/bonsai_8b_mi210_v7_final.log
-      - /mnt/raid0/llm/tmp/model-long-cpu-remaining2-20260716T224231/bonsai_8b_cpu/summary.txt
-      - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/bonsai_8b_mi210/summary.txt
+      - data/bonsai_dspark_cpu_churn_20260716/bonsai_8b_cpu_v7/bonsai_8b_cpu_v7.stdout
+      - data/mi210_inference_churn_20260716b/bonsai_8b_mi210_v7_final.log
+      - data/model_long_cpu_remaining2_20260716T224231/bonsai_8b_cpu/summary.txt
+      - data/model_long1536_mi210_20260716T220422/bonsai_8b_mi210/summary.txt
       - /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/bonsai8b_mi210_context_6a8dd5ea68_20260719T052624Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/bonsai8b_mi210_context_6a8dd5ea68_20260719T052624Z/summary.md
     memory:
@@ -8387,11 +8691,11 @@ roles:
         verdict: scaffold_repair_hypothesis_only
         evidence: /mnt/raid0/llm/epyc-inference-research/data/reviewer_model_ablations/rm2-fast-b-qwen36-27b-q8-plus-qwable-iq4xs-scaffold-ccrab-p-rev1-20260719T162958Z
       evidence:
-      - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/summary.json
-      - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/responses/standalone_iq4_gpu.raw.json
-      - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/logs/standalone_iq4_gpu.server.log
-      - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/summary.json
-      - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/responses/strict_iq4_json_gpu.raw.json
+      - data/qwable_reasoning_economics_20260716Tcheckpoint/summary.json
+      - data/qwable_reasoning_economics_20260716Tcheckpoint/responses/standalone_iq4_gpu.raw.json
+      - data/qwable_reasoning_economics_20260716Tcheckpoint/logs/standalone_iq4_gpu.server.log
+      - data/qwable_reasoning_economics_20260716T2300_selector/summary.json
+      - data/qwable_reasoning_economics_20260716T2300_selector/responses/strict_iq4_json_gpu.raw.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/results/strict_iq4_json_gpu.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_schema_fixed_quiet_20260717T0718Z/summary.json
@@ -8410,11 +8714,11 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_start24_20260718T193035Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_start48_20260718T194032Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_replay_full96_20260718T203101Z/summary.json
-      - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/qwable_iq4xs_cpu/summary.txt
-      - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwable_iq4xs_mi210/summary.txt
-      - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/qwable_iq4xs-c2048/summary.txt
-      - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/qwable_iq4xs-c8192/summary.txt
-      - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/qwable_iq4xs-c32768/summary.txt
+      - data/model_long_cpu_20260716T221606/qwable_iq4xs_cpu/summary.txt
+      - data/model_long1536_mi210_20260716T220422/qwable_iq4xs_mi210/summary.txt
+      - data/context_sweep_mi210_20260716T221524_fixed/qwable_iq4xs-c2048/summary.txt
+      - data/context_sweep_mi210_20260716T221524_fixed/qwable_iq4xs-c8192/summary.txt
+      - data/context_sweep_mi210_20260716T221524_fixed/qwable_iq4xs-c32768/summary.txt
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_iq4xs_cpu_v7_llama_bench_20260718T155234Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_iq4xs_mi210_context_6a8dd5ea68_20260719T050043Z/summary.json
@@ -8510,13 +8814,13 @@ roles:
         and decode-only `tg512 86.18 t/s`. Speed-only evidence; MI210 remains
         the primary Qwable execution lane when available.
       evidence:
-      - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/summary.json
-      - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/responses/standalone_q8_gpu.raw.json
+      - data/qwable_reasoning_economics_20260716T2300_selector/summary.json
+      - data/qwable_reasoning_economics_20260716T2300_selector/responses/standalone_q8_gpu.raw.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/results/standalone_q8_gpu.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_task_quality_20260717T113232Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_task_quality_cpu_20260717T113317Z/summary.json
-      - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/qwable_q8_cpu/summary.txt
-      - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwable_q8_mi210/summary.txt
+      - data/model_long_cpu_20260716T221606/qwable_q8_cpu/summary.txt
+      - data/model_long1536_mi210_20260716T220422/qwable_q8_mi210/summary.txt
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_q8_mi210_llama_bench_20260718T145119Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwable_q8_mi210_llama_bench_20260718T220220Z_rebuilt_cf051d3e1/bench.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_q8_cpu_v7_context_run2_20260718T224956Z/summary.json
@@ -8617,12 +8921,12 @@ roles:
     performance:
       benchmark_status: mi210_document_extraction_smoke_pass_odl_comparison_table_blocked
       observed_date: 2026-07-18
-      mi210_observation: "PaddleOCR-VL loaded through experimental-v7 llama-server with model+mmproj. First smoke at /mnt/raid0/llm/tmp/paddleocr-vl-first-smoke-20260717T194332Z/ passed digit OCR at 484.36 t/s and invoice markdown extraction at 489.82 t/s. Narrow receipt QA under a 96-token cap emitted broad OCR text and failed the exact doc-number check, but the realistic full-extraction follow-up at /mnt/raid0/llm/tmp/paddleocr-vl-receipt-extract-20260717T194415Z/ included CS00012465 at 487.55 t/s over 768 completion tokens. The guarded odl_bench Wave-3 producer at /mnt/raid0/llm/tmp/odl-paddleocr-vl-demo-20260717T200212Z/model_gated_row_set.json wrote/scored 18/18 demo pages, captured one peg-native model error as an empty prediction, and reported median decode 485.30 t/s, median page latency 2918.78 ms, text-block edit distance 0.343019, reading-order edit distance 0.337318, and table TEDS 0.0. The html_tables prompt-profile follow-up at /mnt/raid0/llm/tmp/odl-paddleocr-vl-htmltables-20260717T201106Z/model_gated_row_set.json completed 18/18 with no model errors and improved reading-order edit distance to 0.285753, but emitted 0 HTML <table> tags, kept table TEDS at 0.0, worsened text-block edit distance to 0.429062, and slowed median page latency to 3245.60 ms. A no-inference post-process rescore at /mnt/raid0/llm/tmp/odl-paddleocr-vl-postprocess-rescore-20260717T211432Z/postprocess_rescore_summary.json converted aligned pipe table rows to escaped HTML in 2/18 existing prediction files; table TEDS improved 0.0 -> 0.058333 and structure-only TEDS to 0.066667, while text-block edit distance moved 0.343019 -> 0.343540 and reading-order edit distance 0.337318 -> 0.350138. The no-inference comparison at /mnt/raid0/llm/epyc-inference-research/data/odl_existing_comparison/paddleocr_vl_existing_20260718T035107Z/existing_comparison.md shows existing ODL end-to-end is much stronger on table TEDS (0.783813) and reading order (0.216996) than PaddleOCR default, html_tables, or postprocessed rows. Cleanup proof showed no llama-server/AutoPilot process, 0% VRAM, and no KFD PIDs. Keep PaddleOCR-VL as a fast document/OCR specialist, but it is not table-quality-clean yet."
+      mi210_observation: "PaddleOCR-VL loaded through experimental-v7 llama-server with model+mmproj. First smoke at data/paddleocr_vl_first_smoke_20260717T194332Z/ passed digit OCR at 484.36 t/s and invoice markdown extraction at 489.82 t/s. Narrow receipt QA under a 96-token cap emitted broad OCR text and failed the exact doc-number check, but the realistic full-extraction follow-up at data/paddleocr_vl_receipt_extract_20260717T194415Z/ included CS00012465 at 487.55 t/s over 768 completion tokens. The guarded odl_bench Wave-3 producer at data/odl_paddleocr_vl_demo_20260717T200212Z/model_gated_row_set.json wrote/scored 18/18 demo pages, captured one peg-native model error as an empty prediction, and reported median decode 485.30 t/s, median page latency 2918.78 ms, text-block edit distance 0.343019, reading-order edit distance 0.337318, and table TEDS 0.0. The html_tables prompt-profile follow-up at data/odl_paddleocr_vl_htmltables_20260717T201106Z/model_gated_row_set.json completed 18/18 with no model errors and improved reading-order edit distance to 0.285753, but emitted 0 HTML <table> tags, kept table TEDS at 0.0, worsened text-block edit distance to 0.429062, and slowed median page latency to 3245.60 ms. A no-inference post-process rescore at data/odl_paddleocr_vl_postprocess_rescore_20260717T211432Z/postprocess_rescore_summary.json converted aligned pipe table rows to escaped HTML in 2/18 existing prediction files; table TEDS improved 0.0 -> 0.058333 and structure-only TEDS to 0.066667, while text-block edit distance moved 0.343019 -> 0.343540 and reading-order edit distance 0.337318 -> 0.350138. The no-inference comparison at /mnt/raid0/llm/epyc-inference-research/data/odl_existing_comparison/paddleocr_vl_existing_20260718T035107Z/existing_comparison.md shows existing ODL end-to-end is much stronger on table TEDS (0.783813) and reading order (0.216996) than PaddleOCR default, html_tables, or postprocessed rows. Cleanup proof showed no llama-server/AutoPilot process, 0% VRAM, and no KFD PIDs. Keep PaddleOCR-VL as a fast document/OCR specialist, but it is not table-quality-clean yet."
       evidence:
-      - /mnt/raid0/llm/tmp/paddleocr-vl-first-smoke-20260717T194332Z/summary.json
-      - /mnt/raid0/llm/tmp/paddleocr-vl-receipt-extract-20260717T194415Z/summary.json
-      - /mnt/raid0/llm/tmp/odl-paddleocr-vl-demo-20260717T200212Z/model_gated_row_set.json
-      - /mnt/raid0/llm/tmp/odl-paddleocr-vl-htmltables-20260717T201106Z/model_gated_row_set.json
+      - data/paddleocr_vl_first_smoke_20260717T194332Z/summary.json
+      - data/paddleocr_vl_receipt_extract_20260717T194415Z/summary.json
+      - data/odl_paddleocr_vl_demo_20260717T200212Z/model_gated_row_set.json
+      - data/odl_paddleocr_vl_htmltables_20260717T201106Z/model_gated_row_set.json
       - /mnt/raid0/llm/epyc-inference-research/data/odl_existing_comparison/paddleocr_vl_existing_20260718T035107Z/existing_comparison.json
     memory:
       residency: cold
@@ -8653,7 +8957,7 @@ roles:
       Qwen3-VL-8B Q8_0 33/42; MiniCPM-o-4.5 Q8_0 31/42; Qwen3-VL-4B Q8_0 29/42.
       MiniCPM-o ranks 4th of 5 and is 4 questions BELOW the deployed incumbent, so the
       vision-promotion case is closed. Raw per-question results
-      `/mnt/raid0/llm/tmp/vlquality_results.json`, harness `/mnt/raid0/llm/tmp/vlquality.py`.
+      `data/vision_quality_42q_20260731/vlquality_results.json`, harness `data/vision_quality_42q_20260731/vlquality.py`.
 
       (2) The earlier "+10pp" that motivated promotion (M-1, n=10) was ONE discordant
       question and that question was a SCORING ARTIFACT — the incumbent answered
@@ -8723,26 +9027,26 @@ roles:
     performance:
       benchmark_status: deprecated_2026_07_31_vision_downgrade_confirmed  # was: k35_vision_activation_policy_approved_live_flip_pending
       observed_date: 2026-07-18
-      vision_quality_supersede_20260731: "2026-07-31 MI210, 42 questions (OCRBench + ChartQA), best-on-disk quant per arm, offline unit/whitespace-normalizing scorer: Qwen3-VL-30B-A3B Q4_K_M `36/42`, Qwen2.5-VL-7B Q4_K_M incumbent `35/42`, Qwen3-VL-8B Q8_0 `33/42`, MiniCPM-o-4.5 Q8_0 `31/42`, Qwen3-VL-4B Q8_0 `29/42`. MiniCPM-o is 4 questions BELOW the deployed incumbent and 4th of 5 arms. This SUPERSEDES every k35_* and M-1 observation in this entry as the basis for any promotion decision: the earlier n=10 `+10pp` rested on one discordant question (`vl_chart_test_0563`) that was a scoring artifact (incumbent said `0.11 kWh`, accepted answer `0.11`); corrected, the arms tied 7/10. Raw: /mnt/raid0/llm/tmp/vlquality_results.json; harness: /mnt/raid0/llm/tmp/vlquality.py."
+      vision_quality_supersede_20260731: "2026-07-31 MI210, 42 questions (OCRBench + ChartQA), best-on-disk quant per arm, offline unit/whitespace-normalizing scorer: Qwen3-VL-30B-A3B Q4_K_M `36/42`, Qwen2.5-VL-7B Q4_K_M incumbent `35/42`, Qwen3-VL-8B Q8_0 `33/42`, MiniCPM-o-4.5 Q8_0 `31/42`, Qwen3-VL-4B Q8_0 `29/42`. MiniCPM-o is 4 questions BELOW the deployed incumbent and 4th of 5 arms. This SUPERSEDES every k35_* and M-1 observation in this entry as the basis for any promotion decision: the earlier n=10 `+10pp` rested on one discordant question (`vl_chart_test_0563`) that was a scoring artifact (incumbent said `0.11 kWh`, accepted answer `0.11`); corrected, the arms tied 7/10. Raw: data/vision_quality_42q_20260731/vlquality_results.json; harness: data/vision_quality_42q_20260731/vlquality.py."
       cpu_observation: "Text smoke passed during active GLM download: prompt 67.6 t/s, generation 9.5 t/s, returned `ok`."
       mi210_observation: "Text smoke passed during active GLM download: prompt 423.3 t/s, generation 107.2 t/s, returned `ok` plus stray `</think>`."
       long_cpu_observation: "2026-07-16 longer CPU server run generated 768 completion tokens at 7.69 t/s after a 62-token prompt; response had empty message.content despite nonzero completion tokens, so treat as throughput-only."
       long_mi210_observation: "2026-07-16 longer MI210 server run generated 1472 tokens at 107.20 t/s after an 84-token prompt."
       k35_vision_observation: "2026-07-17 K35 fixed OCR/chart candidate gate: default reasoning mode routed correct answers into reasoning_content and failed message.content scoring (`0/4`) on CPU and MI210. With --reasoning off, CPU passed `4/4` at 11.98-14.13 t/s decode, and MI210 passed `4/4` at 110.81-122.18 t/s decode with 11% VRAM and ~0.96-1.20 GiB host RSS. This is the first quality-clean fast MiniCPM-o vision candidate."
-      k35_coresidency_observation: "2026-07-17 targeted service-policy smoke passed at /mnt/raid0/llm/tmp/k35-minicpm-frontdoor-coresidency-20260717T191849Z/: MiniCPM-o reasoning-off MI210 server co-resided with the fastest validated MI210 frontdoor Qwen3.6 lane at 66% VRAM, both handled concurrent requests, MiniCPM-o answered the chart fixture as Tanzania, frontdoor decoded 512 text tokens at 99.97 t/s, and post-cleanup verification showed no llama-server/AutoPilot process plus 0% VRAM/no KFD PIDs. Follow-up service-tax probe at /mnt/raid0/llm/tmp/k35-minicpm-frontdoor-service-tax-20260717T192427Z/ showed frontdoor alone 101.68/101.84 t/s, frontdoor with MiniCPM resident but idle 101.89/101.86 t/s, and active concurrent MiniCPM vision frontdoor 80.16/80.34 t/s while MiniCPM decoded 90.49/90.23 t/s. Broader service matrix at /mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/summary.json then tested all four K35 fixtures at 2K/8K: frontdoor alone averaged 96.33 t/s, frontdoor with MiniCPM resident but idle averaged 96.48 t/s, active overlap averaged 94.77 t/s frontdoor and 85.22 t/s MiniCPM, and all 8/8 active fixture/context pairs passed. K35.13 recorded the 2026-07-18 activation policy: MiniCPM-o should become the next MI210 vision_escalation lane with --reasoning off, resident-loaded/on-demand scheduling, a one-active-vision-request capacity cap while frontdoor is resident, and Qwen2.5-VL rollback verification during the controlled live-stack flip."
+      k35_coresidency_observation: "2026-07-17 targeted service-policy smoke passed at data/k35_minicpm_frontdoor_coresidency_20260717T191849Z/: MiniCPM-o reasoning-off MI210 server co-resided with the fastest validated MI210 frontdoor Qwen3.6 lane at 66% VRAM, both handled concurrent requests, MiniCPM-o answered the chart fixture as Tanzania, frontdoor decoded 512 text tokens at 99.97 t/s, and post-cleanup verification showed no llama-server/AutoPilot process plus 0% VRAM/no KFD PIDs. Follow-up service-tax probe at data/k35_minicpm_frontdoor_service_tax_20260717T192427Z/ showed frontdoor alone 101.68/101.84 t/s, frontdoor with MiniCPM resident but idle 101.89/101.86 t/s, and active concurrent MiniCPM vision frontdoor 80.16/80.34 t/s while MiniCPM decoded 90.49/90.23 t/s. Broader service matrix at data/k35_minicpm_service_matrix_20260717T2045Z/summary.json then tested all four K35 fixtures at 2K/8K: frontdoor alone averaged 96.33 t/s, frontdoor with MiniCPM resident but idle averaged 96.48 t/s, active overlap averaged 94.77 t/s frontdoor and 85.22 t/s MiniCPM, and all 8/8 active fixture/context pairs passed. K35.13 recorded the 2026-07-18 activation policy: MiniCPM-o should become the next MI210 vision_escalation lane with --reasoning off, resident-loaded/on-demand scheduling, a one-active-vision-request capacity cap while frontdoor is resident, and Qwen2.5-VL rollback verification during the controlled live-stack flip."
       k35_vs_worker_longdecode_observation: "2026-07-19 bounded MI210 comparison against the current Qwen2.5-VL safety alias: MiniCPM-o reasoning-off passed the same four OCR/chart fixtures (`4/4`) with quality decode mean `120.54 t/s` and generated a 506-token chart-description sample at `109.18 t/s`; Qwen2.5-VL also passed `4/4` and was faster on this run (`133.29 t/s` quality mean, `118.50 t/s` long decode). This keeps MiniCPM-o candidate evidence positive but does not by itself flip the live `vision_escalation` alias."
       evidence:
-      - /mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/minicpm_q4_cpu_text_v7/minicpm_q4_cpu_text_v7.stdout
-      - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-minicpm_q4_mi210_text_v7/minicpm_q4_mi210_text_v7.stdout
-      - /mnt/raid0/llm/tmp/model-long-cpu-remaining-20260716T223834/minicpm_q4_cpu/summary.txt
-      - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/minicpm_q4_mi210/summary.txt
-      - /mnt/raid0/llm/tmp/k35-minicpm-o45-candidate-20260717T1909Z/summary.json
-      - /mnt/raid0/llm/tmp/k35-minicpm-o45-reasoning-off-20260717T1911Z/summary.json
-      - /mnt/raid0/llm/tmp/k35-minicpm-frontdoor-coresidency-20260717T191849Z/summary.json
-      - /mnt/raid0/llm/tmp/k35-minicpm-frontdoor-coresidency-20260717T191849Z/post_cleanup_verification.txt
-      - /mnt/raid0/llm/tmp/k35-minicpm-frontdoor-service-tax-20260717T192427Z/summary.json
-      - /mnt/raid0/llm/tmp/k35-minicpm-frontdoor-service-tax-20260717T192427Z/post_cleanup_verification.txt
-      - /mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/summary.json
+      - data/cpu_inference_churn_20260716b/minicpm_q4_cpu_text_v7/minicpm_q4_cpu_text_v7.stdout
+      - data/mi210_inference_churn_20260716_local_minicpm_q4_mi210_text_v7/minicpm_q4_mi210_text_v7.stdout
+      - data/model_long_cpu_remaining_20260716T223834/minicpm_q4_cpu/summary.txt
+      - data/model_long1536_mi210_20260716T220422/minicpm_q4_mi210/summary.txt
+      - data/k35_minicpm_o45_candidate_20260717T1909Z/summary.json
+      - data/k35_minicpm_o45_reasoning_off_20260717T1911Z/summary.json
+      - data/k35_minicpm_frontdoor_coresidency_20260717T191849Z/summary.json
+      - data/k35_minicpm_frontdoor_coresidency_20260717T191849Z/post_cleanup_verification.txt
+      - data/k35_minicpm_frontdoor_service_tax_20260717T192427Z/summary.json
+      - data/k35_minicpm_frontdoor_service_tax_20260717T192427Z/post_cleanup_verification.txt
+      - data/k35_minicpm_service_matrix_20260717T2045Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/k35_vision_matrix/k35_worker_vs_escalation_mi210_longdecode_20260719T004016Z/summary.json
     memory:
       residency: cold
@@ -8785,8 +9089,8 @@ roles:
       cpu_observation: "CPU smoke passed during active GLM download: prompt 57.2 t/s, generation 4.5 t/s."
       mi210_observation: "Long MI210 smoke passed during active GLM download: prompt 854.0 t/s, generation 66.7 t/s; live poll observed 99% GPU use and 14% VRAM."
       evidence:
-      - /mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/qwen25_coder14_cpu_v7/qwen25_coder14_cpu_v7.stdout
-      - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local/qwen25_coder14_mi210_long/stdout.log
+      - data/cpu_inference_churn_20260716b/qwen25_coder14_cpu_v7/qwen25_coder14_cpu_v7.stdout
+      - data/mi210_inference_churn_20260716_local/qwen25_coder14_mi210_long/stdout.log
     memory:
       residency: cold
       pinned: false
@@ -8836,13 +9140,13 @@ roles:
       quiet_mi210_long_structured_ab: "2026-07-17 reasoning-off matched long-output A/B: no-spec 95.08 t/s vs draft-mtp n=2 140.50 t/s over 1024 completion tokens; both produced all requested repeated tokens; MTP draft acceptance 682/682."
       quiet_mi210_broader_task_ab: "2026-07-17 broader default+expanded deterministic slice: no-spec, draft-mtp n=2, and ngram-mod,draft-mtp n=2 all passed 13/18 with identical failed task ids; mean decode no-spec 105.88 t/s, draft-mtp 114.09 t/s, combined ngram->MTP 113.24 t/s; MTP acceptance 858/1160."
       evidence:
-      - /mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/qwen35_9b_mtp_cpu_v7/qwen35_9b_mtp_cpu_v7.stdout
-      - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-qwen35_9b_mtp_mi210_v7/qwen35_9b_mtp_mi210_v7.stdout
-      - /mnt/raid0/llm/tmp/model-long-cpu-remaining-20260716T223834/qwen35_9b_mtp_cpu/summary.txt
-      - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwen35_9b_mtp_mi210/summary.txt
-      - /mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-quality-20260717T202549Z/summary.json
-      - /mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-longoutput-20260717T202636Z/summary.json
-      - /mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/summary.json
+      - data/cpu_inference_churn_20260716b/qwen35_9b_mtp_cpu_v7/qwen35_9b_mtp_cpu_v7.stdout
+      - data/mi210_inference_churn_20260716_local_qwen35_9b_mtp_mi210_v7/qwen35_9b_mtp_mi210_v7.stdout
+      - data/model_long_cpu_remaining_20260716T223834/qwen35_9b_mtp_cpu/summary.txt
+      - data/model_long1536_mi210_20260716T220422/qwen35_9b_mtp_mi210/summary.txt
+      - data/qwen35_9b_mtp_mi210_quality_20260717T202549Z/summary.json
+      - data/qwen35_9b_mtp_mi210_longoutput_20260717T202636Z/summary.json
+      - data/qwen35_9b_mtp_mi210_broad_20260717T212947Z/summary.json
     memory:
       residency: cold
       pinned: false
@@ -8895,14 +9199,14 @@ roles:
       image_mi210_observation: "2026-07-17 MI210 mtmd image smoke with --image-min/max-tokens 1024 and mmproj offload read the generated OCR fixture as `Hello World 123`; this is runtime/coherence evidence, not throughput or quality-gate evidence."
       k35_candidate_observation: "2026-07-17 K35 vision-candidate A/B: CPU local Qwen3-VL-8B passed the four fixed OCR/chart fixtures (`4/4`) but was slower than the active Qwen2.5-VL alias at 10.81-13.39 t/s decode and answered the chart fixture verbosely. MI210 Qwen3-VL-8B was fast at 109.61-125.72 t/s decode but failed the chart fixture (`Moldova`) with both 1024 image-token and default-image-token launch shapes (`3/4` each). Do not use as the active `vision_escalation` replacement."
       evidence:
-      - /mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/qwen3_vl8_cpu_text_v7/qwen3_vl8_cpu_text_v7.stdout
-      - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-remaining/qwen3_vl8_mi210_text_v7.stdout
-      - /mnt/raid0/llm/tmp/model-long-cpu-remaining2-20260716T224231/qwen3_vl8_text_cpu/summary.txt
-      - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwen3_vl8_text_mi210/summary.txt
-      - /mnt/raid0/llm/tmp/qwen3-vl8-image-smoke-20260717T115124Z/cpu_shapes_jinja.log
-      - /mnt/raid0/llm/tmp/qwen3-vl8-image-smoke-20260717T115124Z/gpu_text.log
-      - /mnt/raid0/llm/tmp/k35-qwen3vl8-candidate-20260717T185330Z/summary.json
-      - /mnt/raid0/llm/tmp/k35-qwen3vl8-mi210-default-image-20260717T185459Z/summary.json
+      - data/cpu_inference_churn_20260716b/qwen3_vl8_cpu_text_v7/qwen3_vl8_cpu_text_v7.stdout
+      - data/mi210_inference_churn_20260716_local_remaining/qwen3_vl8_mi210_text_v7.stdout
+      - data/model_long_cpu_remaining2_20260716T224231/qwen3_vl8_text_cpu/summary.txt
+      - data/model_long1536_mi210_20260716T220422/qwen3_vl8_text_mi210/summary.txt
+      - data/qwen3_vl8_image_smoke_20260717T115124Z/cpu_shapes_jinja.log
+      - data/qwen3_vl8_image_smoke_20260717T115124Z/gpu_text.log
+      - data/k35_qwen3vl8_candidate_20260717T185330Z/summary.json
+      - data/k35_qwen3vl8_mi210_default_image_20260717T185459Z/summary.json
     memory:
       residency: cold
       pinned: false
@@ -8950,8 +9254,8 @@ roles:
       cpu_observation: "CPU smoke passed during active GLM download: prompt 119.7 t/s, generation 8.8 t/s; emitted reasoning preamble despite `--reasoning off`."
       mi210_observation: "MI210 smoke passed during active GLM download: prompt 974.8 t/s, generation 141.0 t/s; emitted reasoning preamble despite `--reasoning off`."
       evidence:
-      - /mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/qwen3_4b_thinking_cpu_v7/qwen3_4b_thinking_cpu_v7.stdout
-      - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local/qwen3_4b_thinking_mi210_v7.stdout
+      - data/cpu_inference_churn_20260716b/qwen3_4b_thinking_cpu_v7/qwen3_4b_thinking_cpu_v7.stdout
+      - data/mi210_inference_churn_20260716_local/qwen3_4b_thinking_mi210_v7.stdout
     memory:
       residency: cold
       pinned: false
@@ -9189,10 +9493,10 @@ roles:
       optimized_tps: 47.79        # category=OPTIMUM, draft-mtp, MI210, short ctx
       optimized_tps_long_context: 36.71
       baseline_tps: 30.87         # category=BASELINE, spec OFF (verified: zero draft/spec in
-                                  # /mnt/raid0/llm/tmp/gpu_coresidency/qwen27b.log). Never a headline.
+                                  # data/gpu_coresidency_20260731/qwen27b.log). Never a headline.
       contended_tps: 19.81        # median with vision+whisper+TTS active on the same MI210 (-35.8%)
       vram_gib: 36.70             # measured at n_slots=4, n_ctx 262144, q8_0 KV, kv_unified=true
-      attest: "published stack measurement record §01, 2026-07-31; co-residency /mnt/raid0/llm/tmp/gpu_coresidency_results.json"
+      attest: "published stack measurement record §01, 2026-07-31; co-residency data/gpu_coresidency_20260731/gpu_coresidency_results.json"
     model:
       name: Qwen3.6-27B-MTP-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf
@@ -9712,7 +10016,7 @@ routing_hints:
 # that was free: coder_escalation WAS frontdoor's :8070 process. It is now an alias on the
 # MI210 (:8083), which also hosts the vision server. MEASURED CONTENTION: 27B decode falls
 # 30.87 -> 19.81 t/s (-35.8%) when the other GPU tenants are active, fully reversible
-# (/mnt/raid0/llm/tmp/gpu_coresidency_results.json). The throughput priors below are
+# (data/gpu_coresidency_20260731/gpu_coresidency_results.json). The throughput priors below are
 # ALONE figures; no derate is applied anywhere. Two external-API fallbacks (L9099, L9155)
 # add to the same lane.
 - if: task_type == 'code'
