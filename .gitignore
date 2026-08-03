@@ -73,3 +73,28 @@ data/cpu_optimization/**/*.so.[0-9].bolted
 
 # Nested external repos (cloned checkout, not a submodule)
 data/external/
+
+# ---------------------------------------------------------------------------
+# 2026-08-03 — heavy campaign output. NOT a preference: 30 of these files
+# exceed GitHub's 100 MB HARD limit, so a push containing them is REJECTED.
+# 29 GB of untracked campaign output had accumulated; committing it would also
+# make every future clone carry it.
+#
+# What still BELONGS in git: the evidence a claim cites — README.md,
+# SHA256SUMS, summary.json/md, per-question CSV/JSONL under ~1 MB. Those are
+# what MEASUREMENT.md §5 durability requires and they are unaffected below.
+# ---------------------------------------------------------------------------
+*.perf.data
+perf*.data
+benchmarks/prompts/question_pool*.jsonl
+benchmarks/prompts/pool_rebuild_*/
+data/cpu_prefill_compute/*/
+data/streaming_llm_v7/
+data/hy3_current_v7/
+
+# 2026-08-03 operator ruling: research reaches GitHub only as DISTILLED KNOWLEDGE
+# AND REFERENCES in the wiki — never as raw material, at any size. Campaign
+# output stays on local disk; the wiki entry that cites it IS the durable
+# citation MEASUREMENT.md §5 requires.
+data/judge_suite_headtohead_20260802/
+data/swe_verified_preliminary_20260724/
