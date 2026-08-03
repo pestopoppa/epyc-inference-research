@@ -1,0 +1,63 @@
+{
+  "measurement": "mi210_achievable_bandwidth",
+  "grade": "OBSERVATION",
+  "protocol": null,
+  "note": "Substrate-constant probe, not a protocol-bound benchmark. No P-GPU-1 claim, no era row, no promotion authority. Supplies the SECOND denominator required by autokernel-research-loop.md 8.3.1.",
+  "utc": "20260803T124401Z",
+  "rocm": "6.2.0-66",
+  "config": {
+    "size_pow": 26,
+    "warmup": 10,
+    "timed_iters": 50
+  },
+  "raw": {
+    "device_name": "gfx90a:sramecc+:xnack-",
+    "elements": 67108864,
+    "bytes_per_array": 536870912,
+    "warmup": 10,
+    "timed_iters": 50,
+    "correctness_passed": true,
+    "correctness_max_abs_error": 0.0,
+    "kernels": {
+      "copy": {
+        "bytes_moved": 1073741824,
+        "best_GBps": 1433.34,
+        "median_GBps": 1412.52,
+        "p20_GBps": 1404.54,
+        "p80_GBps": 1420.06,
+        "best_GiBps": 1334.9
+      },
+      "mul": {
+        "bytes_moved": 1073741824,
+        "best_GBps": 1428.16,
+        "median_GBps": 1413.86,
+        "p20_GBps": 1408.31,
+        "p80_GBps": 1421.5,
+        "best_GiBps": 1330.07
+      },
+      "add": {
+        "bytes_moved": 1610612736,
+        "best_GBps": 1377.82,
+        "median_GBps": 1362.25,
+        "p20_GBps": 1353.59,
+        "p80_GBps": 1370.43,
+        "best_GiBps": 1283.2
+      },
+      "triad": {
+        "bytes_moved": 1610612736,
+        "best_GBps": 1371.06,
+        "median_GBps": 1362.07,
+        "p20_GBps": 1357.42,
+        "p80_GBps": 1366.93,
+        "best_GiBps": 1276.9
+      }
+    }
+  },
+  "denominators": {
+    "datasheet_peak_GBps": 1638.0,
+    "measured_achievable_GBps": 1433.34,
+    "measured_triad_GBps": 1371.06,
+    "achievable_fraction_of_spec": 0.8751
+  },
+  "reading": "Every MI210 roofline percentage this project holds was computed against 1638 GB/s. Against the measured achievable figure of 1433.3 GB/s they all scale by 1.143x."
+}

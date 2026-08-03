@@ -1,0 +1,15 @@
+{
+  "device_name": "gfx90a:sramecc+:xnack-",
+  "elements": 67108864,
+  "bytes_per_array": 536870912,
+  "warmup": 10,
+  "timed_iters": 50,
+  "correctness_passed": true,
+  "correctness_max_abs_error": 0.000e+00,
+  "kernels": {
+    "copy": { "bytes_moved": 1073741824, "best_GBps": 1433.34, "median_GBps": 1412.52, "p20_GBps": 1404.54, "p80_GBps": 1420.06, "best_GiBps": 1334.90 },
+    "mul": { "bytes_moved": 1073741824, "best_GBps": 1428.16, "median_GBps": 1413.86, "p20_GBps": 1408.31, "p80_GBps": 1421.50, "best_GiBps": 1330.07 },
+    "add": { "bytes_moved": 1610612736, "best_GBps": 1377.82, "median_GBps": 1362.25, "p20_GBps": 1353.59, "p80_GBps": 1370.43, "best_GiBps": 1283.20 },
+    "triad": { "bytes_moved": 1610612736, "best_GBps": 1371.06, "median_GBps": 1362.07, "p20_GBps": 1357.42, "p80_GBps": 1366.93, "best_GiBps": 1276.90 }
+  }
+}
