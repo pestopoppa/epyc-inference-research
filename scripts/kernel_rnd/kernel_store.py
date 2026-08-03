@@ -85,7 +85,9 @@ def _is_correct(rec):
 def ingest(db, path):
     c = _connect(db)
     n = dup = bad = 0
-    for line in open(path):
+    with open(path) as fh:
+        lines = fh.readlines()
+    for line in lines:
         line = line.strip()
         if not line:
             continue
@@ -126,6 +128,7 @@ def ingest(db, path):
           f"{bad} unparseable line(s). store={db}")
     cur = c.execute("SELECT COUNT(*), SUM(correct) FROM runs")
     tot, cok = cur.fetchone()
+    c.close()
     print(f"store now holds {tot} runs ({cok or 0} correctness-passing).")
     return n, dup, bad
 
@@ -153,6 +156,7 @@ def purge(db, git_sha, force):
     c = _connect(db)
     c.execute("DELETE FROM runs WHERE git_sha=?", (git_sha,))
     c.commit()
+    c.close()
     print(f"purge: deleted {cnt} row(s) with git_sha={git_sha}. store={db}")
     return cnt
 
@@ -197,6 +201,7 @@ def rewind(db, git_sha, boundary_id, force):
     c = _connect(db)
     c.execute("DELETE FROM runs WHERE id>?", (boundary,))
     c.commit()
+    c.close()
     print(f"rewind: removed {cnt} row(s); store rolled back to {desc}. store={db}")
     return cnt
 
@@ -208,7 +213,10 @@ def _rows(db, model):
     if model:
         q += " WHERE model=?"
         args = (model,)
-    return c.execute(q + " ORDER BY ts", args).fetchall()
+    try:
+        return c.execute(q + " ORDER BY ts", args).fetchall()
+    finally:
+        c.close()
 
 
 def _pareto(rows):
@@ -294,6 +302,7 @@ def export(db, out):
         for r in c.execute("SELECT label,ts,git_sha,single_tps_baseline,mechanism FROM runs"):
             mech[(r[0], r[1], r[2])] = _mech(r[4])
             base[(r[0], r[1], r[2])] = r[3]
+        c.close()
         for r in rows:
             k = (r[0], r[1], r[2])
             runs.append({

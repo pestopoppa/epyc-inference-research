@@ -15,6 +15,44 @@
 # MemUnitStalled reduction on mul_mat_vec_q8_0_prefetch. See fixes vs the first draft inline (FIX:).
 set -euo pipefail
 
+# ============================================================================
+# DEPRECATED 2026-08-02 — DO NOT RUN. Superseded by the AutoKernel trusted
+# evaluator (handoffs/active/autokernel-research-loop.md, phase AK3).
+#
+# WHY THIS IS FENCED OFF RATHER THAN LEFT AVAILABLE: this harness never gated on
+# coherence. It sets COH="coherent" for ANY non-empty generation, runs the
+# baseline comparison only when --baseline-env is passed, and then emits
+# "status":"OK" unconditionally. kernel_store.py:81 admits
+# coherence in ("byte-identical","coherent") into its CORRECT-ONLY Pareto view,
+# so every anchor-less run here has been entering the frontier as if it were
+# verified. The store's existing rows are quarantined as legacy_unverified for
+# exactly this reason; running this again would add more of them.
+#
+# It also gates GPU exclusivity with rocm-smi idle sensing (gpu_idle(), below),
+# which the measurement protocols forbid as a substitute for a device claim, and
+# it builds llama-bench argv by hand rather than through a codified recipe.
+#
+# Kept in the tree as the historical record of the async-prefetch validation and
+# as the reference for what AK3 must replace. To run it anyway for archaeology,
+# set KERNEL_EVAL_ALLOW_DEPRECATED=1 and understand that anything it emits is
+# inadmissible.
+# ============================================================================
+if [[ "${KERNEL_EVAL_ALLOW_DEPRECATED:-0}" != "1" ]]; then
+    cat >&2 <<'DEPRECATED'
+kernel_eval.sh is DEPRECATED and must not be run.
+
+It never gated on coherence: any non-empty generation is recorded "coherent",
+the baseline compare is optional, and status is always "OK" — so its records
+contaminate kernel_store.py's correct-only Pareto view.
+
+Superseded by the AutoKernel trusted evaluator (phase AK3). See
+handoffs/active/autokernel-research-loop.md §2 and §14.
+
+Override for archaeology only: KERNEL_EVAL_ALLOW_DEPRECATED=1
+DEPRECATED
+    exit 2
+fi
+
 # ---- defaults (the campaign's proven env + gotchas) ----
 BIN="${BIN:-/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin}"
 ROCV2="${ROCV2:-/mnt/raid0/llm/tmp/mi210-build/campaign/prof/rocprof-prefix/opt/rocm-6.2.0/bin/rocprofv2}"
