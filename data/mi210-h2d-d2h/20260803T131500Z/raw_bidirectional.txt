@@ -1,0 +1,112 @@
+# bidirectional node 0 <-> MI210 (pass 1)
+..
+          RocmBandwidthTest Version: 2.6.0
+
+          Launch Command is: rocm-bandwidth-test -b 0,4 -m 128
+
+
+================    Bidirectional Benchmark Result    ================
+================ Src Device Id: 0 Src Device Type: Cpu ================
+================ Dst Device Id: 4 Dst Device Type: Gpu ================
+
+Data Size      Avg Time(us)   Avg BW(GB/s)   Min Time(us)   Peak BW(GB/s)  
+128 MB         5274.481       50.893         5274.431       50.894         
+
+# bidirectional node 1 <-> MI210 (pass 1)
+..
+          RocmBandwidthTest Version: 2.6.0
+
+          Launch Command is: rocm-bandwidth-test -b 1,4 -m 128
+
+
+================    Bidirectional Benchmark Result    ================
+================ Src Device Id: 1 Src Device Type: Cpu ================
+================ Dst Device Id: 4 Dst Device Type: Gpu ================
+
+Data Size      Avg Time(us)   Avg BW(GB/s)   Min Time(us)   Peak BW(GB/s)  
+128 MB         7921.069       33.889         7909.839       33.937         
+
+# bidirectional node 2 <-> MI210 (pass 1)
+..
+          RocmBandwidthTest Version: 2.6.0
+
+          Launch Command is: rocm-bandwidth-test -b 2,4 -m 128
+
+
+================    Bidirectional Benchmark Result    ================
+================ Src Device Id: 2 Src Device Type: Cpu ================
+================ Dst Device Id: 4 Dst Device Type: Gpu ================
+
+Data Size      Avg Time(us)   Avg BW(GB/s)   Min Time(us)   Peak BW(GB/s)  
+128 MB         8097.082       33.152         8053.861       33.330         
+
+# bidirectional node 3 <-> MI210 (pass 1)
+..
+          RocmBandwidthTest Version: 2.6.0
+
+          Launch Command is: rocm-bandwidth-test -b 3,4 -m 128
+
+
+================    Bidirectional Benchmark Result    ================
+================ Src Device Id: 3 Src Device Type: Cpu ================
+================ Dst Device Id: 4 Dst Device Type: Gpu ================
+
+Data Size      Avg Time(us)   Avg BW(GB/s)   Min Time(us)   Peak BW(GB/s)  
+128 MB         6638.237       40.438         6636.087       40.451         
+
+# bidirectional node 3 <-> MI210 (pass 2, reversed order)
+..
+          RocmBandwidthTest Version: 2.6.0
+
+          Launch Command is: rocm-bandwidth-test -b 3,4 -m 128
+
+
+================    Bidirectional Benchmark Result    ================
+================ Src Device Id: 3 Src Device Type: Cpu ================
+================ Dst Device Id: 4 Dst Device Type: Gpu ================
+
+Data Size      Avg Time(us)   Avg BW(GB/s)   Min Time(us)   Peak BW(GB/s)  
+128 MB         6464.137       41.527         6449.346       41.622         
+
+# bidirectional node 2 <-> MI210 (pass 2, reversed order)
+..
+          RocmBandwidthTest Version: 2.6.0
+
+          Launch Command is: rocm-bandwidth-test -b 2,4 -m 128
+
+
+================    Bidirectional Benchmark Result    ================
+================ Src Device Id: 2 Src Device Type: Cpu ================
+================ Dst Device Id: 4 Dst Device Type: Gpu ================
+
+Data Size      Avg Time(us)   Avg BW(GB/s)   Min Time(us)   Peak BW(GB/s)  
+128 MB         8035.864       33.405         7962.153       33.714         
+
+# bidirectional node 1 <-> MI210 (pass 2, reversed order)
+..
+          RocmBandwidthTest Version: 2.6.0
+
+          Launch Command is: rocm-bandwidth-test -b 1,4 -m 128
+
+
+================    Bidirectional Benchmark Result    ================
+================ Src Device Id: 1 Src Device Type: Cpu ================
+================ Dst Device Id: 4 Dst Device Type: Gpu ================
+
+Data Size      Avg Time(us)   Avg BW(GB/s)   Min Time(us)   Peak BW(GB/s)  
+128 MB         7772.174       34.538         7689.993       34.907         
+
+# bidirectional node 0 <-> MI210 (pass 2, reversed order)
+..
+          RocmBandwidthTest Version: 2.6.0
+
+          Launch Command is: rocm-bandwidth-test -b 0,4 -m 128
+
+
+================    Bidirectional Benchmark Result    ================
+================ Src Device Id: 0 Src Device Type: Cpu ================
+================ Dst Device Id: 4 Dst Device Type: Gpu ================
+
+Data Size      Avg Time(us)   Avg BW(GB/s)   Min Time(us)   Peak BW(GB/s)  
+128 MB         5586.495       48.051         5562.786       48.256         
+

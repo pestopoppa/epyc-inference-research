@@ -1,0 +1,53 @@
+{
+  "measurement": "mi210_h2d_d2h_pcie",
+  "grade": "OBSERVATION",
+  "protocol": null,
+  "utc": "2026-08-03T13:15:00Z",
+  "link": {
+    "generation": "PCIe Gen4 x16",
+    "theoretical_GBps": 31.5
+  },
+  "h2d_peak_GBps": {
+    "numa_node_0": 28.895,
+    "numa_node_1": 28.887,
+    "numa_node_2": 28.891,
+    "numa_node_3": 28.866
+  },
+  "d2h_peak_GBps": {
+    "numa_node_0": 28.199,
+    "numa_node_1": 28.201,
+    "numa_node_2": 28.201,
+    "numa_node_3": 28.201
+  },
+  "bidirectional_avg_GBps": {
+    "numa_node_0": [
+      50.893,
+      48.051
+    ],
+    "numa_node_1": [
+      33.889,
+      34.538
+    ],
+    "numa_node_2": [
+      33.152,
+      33.405
+    ],
+    "numa_node_3": [
+      40.438,
+      41.527
+    ]
+  },
+  "co_residency": "three llama/whisper servers resident and idle; operator declared the system idle and authorized the window",
+  "notes": [
+    "SOLID: unidirectional H2D 28.89 GB/s and D2H 28.20 GB/s, agreeing across all four NUMA nodes to within 0.1%, with a clean saturation curve (25.40 at 1 MB rising to 28.89 at 128 MB). Bulk host<->device transfer is NUMA-node-INDEPENDENT on this system.",
+    "SOLID: this settles the link generation. 28.89/31.5 = 91.7% of PCIe Gen4 x16 theoretical. The ~64 GB/s (Gen5) figure circulating in our docs is wrong by 2.2x; the ~26 GB/s figure was approximately right.",
+    "NOT A FINDING, an open question: bidirectional aggregate shows NUMA node 0 consistently high (50.89, 48.05) while the others are NOISY across passes - node 1 (33.89, 34.54), node 2 (33.15, 33.41), node 3 (40.44, 41.53, and 33.85/36.40/48.31 in an earlier unmatched pass). With n=2-3 per node and no CI this does not support a per-node ranking. Only the node-0 outlier is reproducible.",
+    "The node-0 outlier is NOT explained by device locality: the MI210 is on NUMA node 1, verified three ways (/sys/class/drm/card2/device 0x740f, /sys/bus/pci/devices/0000:43:00.0/numa_node = 1, KFD topology node 4). Hypotheses NOT tested: independent placement of the two concurrent copy threads by the runtime; differing free-memory/fragmentation state per node (node 0 had 2266 MB free vs node 1's 22839 MB at measurement time); IOMMU path differences.",
+    "Buffers capped at 128 MB because only ~0.4 GiB VRAM was free with three servers resident. H2D/D2H saturate far below that, so the plateau is real and the cap does not bound the result.",
+    "Agent-index-to-NUMA-node mapping VERIFIED 1:1 via rocminfo (Agent 1 = Node 0 ... Agent 4 = Node 3, GPU = Node 4) rather than assumed."
+  ],
+  "open_questions": [
+    "Why is bidirectional aggregate from NUMA node 0 ~48% higher than from the device-local node 1? Needs repeated passes with a stated n and CI before it is treated as a placement input."
+  ],
+  "relevance_to_G1": "The GPU lane's host threads are pinned at CPUs 184-191, which numactl places on NUMA node 3 - neither the device-local node (1) nor the bidirectional-fastest node (0). Unidirectional transfer being node-independent means that placement costs nothing on the BULK TRANSFER path; it says nothing about host-side memory access during serving, which is the regime G1 actually targets."
+}

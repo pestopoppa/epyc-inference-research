@@ -1,0 +1,127 @@
+# H2D unidirectional, all NUMA nodes -> MI210
+................................................................
+          RocmBandwidthTest Version: 2.6.0
+
+          Launch Command is: rocm-bandwidth-test -s 0,1,2,3 -d 4 -m 1,2,4,8,16,32,64,128
+
+
+================    Unidirectional Benchmark Result    ================
+================ Src Device Id: 0 Src Device Type: Cpu ================
+================ Dst Device Id: 4 Dst Device Type: Gpu ================
+
+Data Size      Avg Time(us)   Avg BW(GB/s)   Min Time(us)   Peak BW(GB/s)  
+1 MB           41.240         25.426         41.120         25.500         
+2 MB           77.600         27.025         77.600         27.025         
+4 MB           151.160        27.747         150.561        27.858         
+8 MB           296.321        28.309         296.321        28.309         
+16 MB          586.162        28.622         586.082        28.626         
+32 MB          1166.005       28.777         1165.925       28.779         
+64 MB          2325.809       28.854         2325.609       28.856         
+128 MB         4645.136       28.894         4644.975       28.895         
+
+================    Unidirectional Benchmark Result    ================
+================ Src Device Id: 1 Src Device Type: Cpu ================
+================ Dst Device Id: 4 Dst Device Type: Gpu ================
+
+Data Size      Avg Time(us)   Avg BW(GB/s)   Min Time(us)   Peak BW(GB/s)  
+1 MB           41.360         25.352         41.280         25.402         
+2 MB           77.560         27.039         77.441         27.081         
+4 MB           151.160        27.747         150.720        27.828         
+8 MB           296.281        28.313         296.161        28.324         
+16 MB          586.202        28.620         586.082        28.626         
+32 MB          1166.084       28.775         1166.084       28.775         
+64 MB          2326.048       28.851         2325.928       28.853         
+128 MB         4646.416       28.886         4646.256       28.887         
+
+================    Unidirectional Benchmark Result    ================
+================ Src Device Id: 2 Src Device Type: Cpu ================
+================ Dst Device Id: 4 Dst Device Type: Gpu ================
+
+Data Size      Avg Time(us)   Avg BW(GB/s)   Min Time(us)   Peak BW(GB/s)  
+1 MB           41.360         25.352         41.280         25.402         
+2 MB           77.560         27.039         77.440         27.081         
+4 MB           151.081        27.762         150.560        27.858         
+8 MB           296.241        28.317         296.161        28.324         
+16 MB          586.202        28.620         586.082        28.626         
+32 MB          1165.884       28.780         1165.764       28.783         
+64 MB          2325.687       28.855         2325.447       28.858         
+128 MB         4645.695       28.891         4645.615       28.891         
+
+================    Unidirectional Benchmark Result    ================
+================ Src Device Id: 3 Src Device Type: Cpu ================
+================ Dst Device Id: 4 Dst Device Type: Gpu ================
+
+Data Size      Avg Time(us)   Avg BW(GB/s)   Min Time(us)   Peak BW(GB/s)  
+1 MB           41.280         25.402         41.280         25.402         
+2 MB           77.560         27.039         77.440         27.081         
+4 MB           151.240        27.733         150.720        27.828         
+8 MB           296.521        28.290         296.481        28.294         
+16 MB          586.762        28.593         586.722        28.595         
+32 MB          1167.164       28.749         1167.044       28.752         
+64 MB          2327.929       28.828         2327.848       28.829         
+128 MB         4649.737       28.866         4649.617       28.866         
+
+
+# D2H unidirectional, MI210 -> all NUMA nodes
+................................................................
+          RocmBandwidthTest Version: 2.6.0
+
+          Launch Command is: rocm-bandwidth-test -s 4 -d 0,1,2,3 -m 1,2,4,8,16,32,64,128
+
+
+================    Unidirectional Benchmark Result    ================
+================ Src Device Id: 4 Src Device Type: Gpu ================
+================ Dst Device Id: 0 Dst Device Type: Cpu ================
+
+Data Size      Avg Time(us)   Avg BW(GB/s)   Min Time(us)   Peak BW(GB/s)  
+1 MB           41.760         25.110         41.600         25.206         
+2 MB           78.880         26.587         78.880         26.587         
+4 MB           154.320        27.179         153.921        27.250         
+8 MB           302.801        27.703         302.721        27.711         
+16 MB          600.082        27.958         599.842        27.969         
+32 MB          1194.285       28.096         1194.085       28.101         
+64 MB          2382.650       28.166         2382.570       28.167         
+128 MB         4759.697       28.199         4759.696       28.199         
+
+================    Unidirectional Benchmark Result    ================
+================ Src Device Id: 4 Src Device Type: Gpu ================
+================ Dst Device Id: 1 Dst Device Type: Cpu ================
+
+Data Size      Avg Time(us)   Avg BW(GB/s)   Min Time(us)   Peak BW(GB/s)  
+1 MB           41.800         25.086         41.600         25.206         
+2 MB           79.001         26.546         78.880         26.587         
+4 MB           154.280        27.186         153.920        27.250         
+8 MB           302.881        27.696         302.721        27.711         
+16 MB          599.962        27.964         599.842        27.969         
+32 MB          1194.244       28.097         1194.244       28.097         
+64 MB          2382.608       28.166         2382.408       28.169         
+128 MB         4759.456       28.200         4759.375       28.201         
+
+================    Unidirectional Benchmark Result    ================
+================ Src Device Id: 4 Src Device Type: Gpu ================
+================ Dst Device Id: 2 Dst Device Type: Cpu ================
+
+Data Size      Avg Time(us)   Avg BW(GB/s)   Min Time(us)   Peak BW(GB/s)  
+1 MB           41.760         25.110         41.760         25.110         
+2 MB           78.880         26.586         78.880         26.587         
+4 MB           154.161        27.207         153.921        27.250         
+8 MB           302.601        27.722         302.561        27.725         
+16 MB          599.962        27.964         599.842        27.969         
+32 MB          1194.365       28.094         1194.245       28.097         
+64 MB          2382.770       28.164         2382.730       28.165         
+128 MB         4759.580       28.199         4759.381       28.201         
+
+================    Unidirectional Benchmark Result    ================
+================ Src Device Id: 4 Src Device Type: Gpu ================
+================ Dst Device Id: 3 Dst Device Type: Cpu ================
+
+Data Size      Avg Time(us)   Avg BW(GB/s)   Min Time(us)   Peak BW(GB/s)  
+1 MB           41.800         25.086         41.760         25.110         
+2 MB           78.960         26.560         78.880         26.587         
+4 MB           154.240        27.193         154.080        27.222         
+8 MB           302.881        27.696         302.881        27.696         
+16 MB          600.082        27.958         599.843        27.969         
+32 MB          1194.284       28.096         1194.084       28.101         
+64 MB          2382.609       28.166         2382.409       28.168         
+128 MB         4759.538       28.200         4759.378       28.201         
+
