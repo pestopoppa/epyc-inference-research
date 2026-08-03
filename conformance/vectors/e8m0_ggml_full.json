@@ -1,0 +1,55 @@
+{
+  "format": "E8M0",
+  "contract": "e8m0_ggml_full",
+  "spec": "ggml ggml_e8m0_to_fp32 (ggml/src/ggml-impl.h:439)",
+  "note": "DOCUMENTED DIVERGENCE FROM SPEC, not a bug: the 0xFF->NaN branch is present but commented out, so 0xFF decodes to +Inf. Legitimate because 0xFF is REJECTED AT LOAD by validate_e_e8m0 (ggml/src/ggml-quants.c:5366), so a GGUF carrying it is refused -- 0xFF is treated as reserved, which is what the MX spec intends. NOTE: this function has ZERO call sites in the tree.",
+  "checked_by": "conformance/test_e8m0_vectors.py::test_contract_matches_reference",
+  "coverage": "edge-weighted: both boundaries, the identity point (127 -> 2^0), and one step either side of each",
+  "cases": [
+    {
+      "code": 0,
+      "bits": "0x00400000",
+      "value": "5.877471754111438e-39"
+    },
+    {
+      "code": 1,
+      "bits": "0x00800000",
+      "value": "1.1754943508222875e-38"
+    },
+    {
+      "code": 2,
+      "bits": "0x01000000",
+      "value": "2.350988701644575e-38"
+    },
+    {
+      "code": 126,
+      "bits": "0x3f000000",
+      "value": "0.5"
+    },
+    {
+      "code": 127,
+      "bits": "0x3f800000",
+      "value": "1.0"
+    },
+    {
+      "code": 128,
+      "bits": "0x40000000",
+      "value": "2.0"
+    },
+    {
+      "code": 253,
+      "bits": "0x7e800000",
+      "value": "8.507059173023462e+37"
+    },
+    {
+      "code": 254,
+      "bits": "0x7f000000",
+      "value": "1.7014118346046923e+38"
+    },
+    {
+      "code": 255,
+      "bits": "0x7f800000",
+      "value": "Infinity"
+    }
+  ]
+}

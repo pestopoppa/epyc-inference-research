@@ -1,0 +1,21 @@
+{
+  "format": "E8M0",
+  "byte": "0xFF",
+  "why_it_matters": "Three different answers for the same byte across seven backend sites, undetected because nothing compared them.",
+  "answers": {
+    "mx_spec": {
+      "bits": "0x7fc00000",
+      "value": "NaN"
+    },
+    "ggml_e8m0_to_fp32 (CPU/Metal/SYCL/Vulkan/OpenCL/HIP fallback)": {
+      "bits": "0x7f800000",
+      "value": "Infinity"
+    },
+    "ggml_e8m0_to_fp32_half (CPU MXFP4, the live path)": {
+      "bits": "0x7f000000",
+      "value": "1.7014118346046923e+38"
+    }
+  },
+  "cuda_note": "CUDA >= 12.8 uses __nv_cvt_e8m0_to_bf16raw and matches the SPEC (NaN); below that, and on our HIP build where CUDART_VERSION is undefined, the fallback matches ggml_e8m0_to_fp32 (+Inf). Site: ggml/src/ggml-cuda/common.cuh:814-822.",
+  "legitimising_fact": "validate_e_e8m0 (ggml/src/ggml-quants.c:5366) REJECTS 0xFF at load, wired for MXFP4 and called from llama-model-loader.cpp. A GGUF carrying 0xFF is refused, so the divergence is unreachable in practice -- documented-divergent, not broken."
+}
