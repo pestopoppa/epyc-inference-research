@@ -26,6 +26,13 @@ PYTEST_SMOKE += scripts/benchmark/test_capture_integrity_watchdog.py
 PYTEST_SMOKE += scripts/benchmark/test_agentic_swe_harness.py
 PYTEST_SMOKE += scripts/kernel_rnd/test_kernel_store.py
 PYTEST_SMOKE += scripts/kernel_rnd/test_c6_reward_integrity.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_schemas.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_journal.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_storage.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_integration.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/resource/test_device_claim.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/resource/test_preflight.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/resource/test_claim_witness.py
 
 help:
 	@printf '%s\n' 'Targets: setup lint test health docs docs-check analysis analysis-check security-check autopilot-gate'
