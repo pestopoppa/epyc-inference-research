@@ -1,77 +1,92 @@
 # E8M0 cross-backend conformance matrix
 
 **Instrument:** `CONFORMANCE-VECTORS-1` (ratified 2026-08-03, `epyc-root/MEASUREMENT.md`).
-**Vectors:** `conformance/vectors/e8m0_*.json` · **Consumer:** `conformance/test_e8m0_vectors.py`
+**Vectors:** `conformance/vectors/` · **Consumers:** `conformance/test_e8m0_vectors.py`,
+`conformance/test_e8m0_reachability.py` · **Harnesses:** `conformance/harness/`
 **Generated:** 2026-08-03.
 
-## The reading rule, before the table
+## The finding
 
-**A row is `VERIFIED` only if a test in this repo actually consumes the vectors against that
-backend.** Everything else is an observation from reading source and is marked `ASSERTED`. This
-distinction is the whole instrument: committed vectors nobody runs look exactly like coverage, and
-that is the failure mode being prevented — the divergence below survived for months precisely
-because nothing compared the backends.
+**Two LIVE decode paths give different answers for the same byte.**
+
+| Path | Composition | `0xFF` decodes to |
+|---|---|---|
+| CPU MXFP4 | `GGML_E8M0_TO_FP32_HALF(e)` — fused half | `0x7f000000` = 2^127, **finite** |
+| GPU MXFP4 (HIP) | `ggml_cuda_e8m0_to_fp32(e) * 0.5f` at each call site | `+Inf * 0.5` = **+Inf** |
+| OCP MX spec | — | NaN |
+
+They agree on every other code. The disagreement is structural: `+Inf × 0.5` is still `+Inf`, while
+the fused half yields a finite value. Both paths are live and heavily called.
+
+## Classification: LATENT DEFECT — and the first justification was wrong
+
+**RETRACTED 2026-08-03.** An earlier version of this matrix called the divergence
+*"documented-divergent, not a defect"*, justified by `validate_e_e8m0` rejecting `0xFF` at load.
+**That justification is false.** The gate runs only under `check_tensors`, which
+**defaults to `false`** (`common/common.h:585`) and is **passed by none of our launchers**. The
+loader does not protect us.
+
+**What actually bounds the risk is much weaker: we serve no MXFP4 model** — none in the registry,
+none on disk. So the path is never exercised. That holds only until an MXFP4 model is adopted, at
+which point CPU and GPU would silently disagree on any `0xFF` scale byte, with no error raised.
+
+This is the distinction worth keeping: *"the loader rejects it"* would be a property of the code.
+*"we don't use the format"* is a property of the current fleet, and fleets change.
+
+## Reachability sentinels — the claim is now checked, not asserted
+
+`test_e8m0_reachability.py` fails the moment a precondition stops holding:
+
+| Sentinel | Fails when | Consequence |
+|---|---|---|
+| `test_no_mxfp4_model_is_served` | an MXFP4 model enters the registry or lands on disk | **the divergence goes live** — the one that matters |
+| `test_cpu_nonhalf_decoder_still_has_no_call_sites` | `ggml_e8m0_to_fp32` gains a caller | a **third** live answer appears |
+| `test_cpu_live_path_still_uses_the_half_decoder` | the CPU MXFP4 path stops using `_half` | vectors need re-deriving |
+| `test_gpu_live_path_still_composes_full_times_half` | GPU call sites stop applying `*0.5f` | the divergence may have closed; re-analyse |
+| `test_check_tensors_is_still_off_by_default…` | upstream flips the default to `true` | **good news** — the gate would then protect us |
 
 ## Contracts
 
-| Contract | 0xFF decodes to | Status | Checked by |
+| Contract | `0xFF` | Status | Checked by |
 |---|---|---|---|
-| `e8m0_mx_spec` — OCP MX v1.0 | `0x7fc00000` NaN | **VERIFIED** | `test_contract_matches_reference` |
-| `e8m0_ggml_full` — `ggml_e8m0_to_fp32` | `0x7f800000` +Inf | **VERIFIED** | `test_contract_matches_reference` |
-| `e8m0_ggml_half` — `ggml_e8m0_to_fp32_half` | `0x7f000000` 2^127, finite | **VERIFIED** | `test_contract_matches_reference` |
-
-"VERIFIED" here means the **reference decoder** matches its pinned vectors bit-exactly. It does not
-mean any compiled backend has been executed — see the next table.
+| `e8m0_mx_spec` | `0x7fc00000` NaN | **VERIFIED** | `test_contract_matches_reference` |
+| `e8m0_ggml_full` | `0x7f800000` +Inf | **VERIFIED** | `test_contract_matches_reference` |
+| `e8m0_ggml_half` | `0x7f000000` 2^127 | **VERIFIED** | `test_contract_matches_reference` |
 
 ## Backends
 
-| Backend | Expected contract | Status | Why |
+| Backend | Expected | Status | Evidence |
 |---|---|---|---|
-| CPU (MXFP4 live path) | `e8m0_ggml_half` | `ASSERTED` | read from `ggml/src/ggml-impl.h:477`; no harness links the real decoder |
-| CPU (`ggml_e8m0_to_fp32`) | `e8m0_ggml_full` | `ASSERTED` | **has zero call sites in the tree** — reachable only if something starts calling it |
-| HIP / ROCm (our MI210) | `e8m0_ggml_full` | `ASSERTED` | `ggml-cuda/common.cuh:814-822`; `CUDART_VERSION` undefined on this build, so the fallback is taken |
-| CUDA ≥ 12.8 | `e8m0_mx_spec` | `ASSERTED` | uses `__nv_cvt_e8m0_to_bf16raw`; we do not build this path |
+| **CPU `_half`** (MXFP4 live path) | `e8m0_ggml_half` | **VERIFIED** | `harness/e8m0_cpu_harness.c` **executed**; includes the frozen `ggml-impl.h` and calls the real decoder |
+| **CPU `ggml_e8m0_to_fp32`** | `e8m0_ggml_full` | **VERIFIED** (dead code) | same harness; zero call sites, so verified but unreached |
+| **HIP / ROCm (MI210)** | `e8m0_ggml_full` | **VERIFIED** | `harness/e8m0_hip_harness.hip` **executed on gfx90a**; `cudart_version_defined: false` confirmed *by execution*, not by reading the `#if` |
+| CUDA ≥ 12.8 | `e8m0_mx_spec` | `ASSERTED` | we do not build this path |
 | Metal / SYCL / Vulkan / OpenCL | `e8m0_ggml_full` | `ASSERTED` | read from source; none is a path we build or serve |
 
-**No backend row is VERIFIED.** Moving any of them requires a harness that links the real decoder and
-feeds it the vectors — follow-on work, deliberately not claimed here.
+**Three rows moved ASSERTED → VERIFIED** by executing the real decoders. The HIP row matters most:
+which branch of `#if CUDART_VERSION >= 12080` is taken was previously *inferred* from source, and is
+now *observed* on the card.
 
-## Why the divergence is documented-divergent rather than a defect
+## Remediation options (operator decision, not taken here)
 
-`validate_e_e8m0` (`ggml/src/ggml-quants.c:5366`) **rejects `0xFF` at load**, wired for MXFP4 and
-called from `llama-model-loader.cpp`. A GGUF carrying `0xFF` is refused outright, so the three-way
-divergence is **unreachable in practice** — `0xFF` is treated as reserved, which is what the MX spec
-intends.
+1. **Pass `--check-tensors` in production launchers.** Restores the loader gate. Cost: validation
+   time at model load, on every model, for a defect that is currently unreachable.
+2. **Report upstream.** Two live decoders disagreeing at a reserved byte is an upstream bug, not
+   ours; production is FROZEN and we would not patch it locally regardless.
+3. **Do nothing, and rely on the sentinels.** Cheapest, and defensible *because* the sentinel fires
+   before an MXFP4 model can be served — the risk is bounded by a check rather than by memory.
 
-That is exactly the situation the dual-contract design exists for: the ggml behaviour is recorded as
-its own contract rather than as a bug against the spec, and a backend cannot satisfy one contract by
-breaking another.
+Recommendation: **3 now, 1 at the moment an MXFP4 model is proposed** — the sentinel makes that
+moment impossible to miss, which is what the first version of this document did not.
 
-## What the consumer checks beyond value equality
-
-Three structural properties, because a vector set can pass every value check while testing nothing:
-
-- **`test_coverage_is_edge_weighted`** — the edges must still be present. They are the only place the
-  three contracts disagree; losing them silently would leave a green suite over a vacuous test.
-- **`test_the_contracts_actually_disagree`** — asserts three *distinct* answers at `0xFF`. If a future
-  edit collapsed the contracts onto one behaviour, every other test would still pass while the
-  instrument quietly stopped discriminating anything.
-- **`test_contracts_agree_away_from_the_edge`** — the converse. Divergence anywhere other than `0xFF`
-  means either a decoder changed or a vector is wrong, and both need a human.
-
-## Known limitation, recorded at adoption
-
-These vectors are hand-written and will drift from the implementations they describe — the same
-failure mode they exist to document. The `VERIFIED`/`ASSERTED` column is what makes that drift
-visible rather than silent. Nothing here re-reads the frozen tree automatically; a source change to
-any decoder will not be caught until someone re-runs the derivation.
-
-## Regenerating
+## Regenerating and re-verifying
 
 ```bash
-python3 conformance/generate_e8m0_vectors.py                       # derive vectors
-uv run --with pytest python -m pytest conformance/ -q              # consume them
+python3 conformance/generate_e8m0_vectors.py                    # derive vectors from stated rules
+bash    conformance/harness/run_backend_conformance.sh          # build + execute real decoders
+uv run --with pytest python -m pytest conformance/ -q           # 15 tests
 ```
 
-The generator derives each contract from its **stated rule**, not by transcribing the implementation
-it describes. Transcribing would produce vectors that can never fail.
+The generator derives each contract from its **stated rule**, never by transcribing the
+implementation it describes — transcription produces vectors that can never fail. The harnesses do
+the opposite: they **call the real code**, so they track the frozen tree rather than restating it.

@@ -1,0 +1,6 @@
+# Built harness binaries and executed output: reproducible from source via
+# run_backend_conformance.sh, so they are not tracked. The vectors, harness
+# SOURCE, and the matrix are.
+harness/e8m0_cpu_harness
+harness/e8m0_hip_harness
+harness/result_*.json

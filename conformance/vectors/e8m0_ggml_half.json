@@ -2,7 +2,7 @@
   "format": "E8M0",
   "contract": "e8m0_ggml_half",
   "spec": "ggml ggml_e8m0_to_fp32_half (ggml/src/ggml-impl.h:477)",
-  "note": "The path CPU MXFP4 decode actually takes. 0xFF -> 2^127, FINITE -- a third distinct answer for the same byte. Also legitimate under the load gate.",
+  "note": "The path CPU MXFP4 decode actually takes (4 call sites incl. the ggml_table_f32_e8m0_half lookup table). 0xFF -> 2^127, FINITE. The live GPU path computes full(e)*0.5f instead, which agrees everywhere EXCEPT 0xFF, where it yields +Inf. Two LIVE paths, one byte, two answers.",
   "checked_by": "conformance/test_e8m0_vectors.py::test_contract_matches_reference",
   "coverage": "edge-weighted: both boundaries, the identity point (127 -> 2^0), and one step either side of each",
   "cases": [

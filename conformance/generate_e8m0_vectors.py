@@ -97,18 +97,18 @@ CONTRACTS = {
     "e8m0_ggml_full": dict(
         fn=ggml_full,
         spec="ggml ggml_e8m0_to_fp32 (ggml/src/ggml-impl.h:439)",
-        note=("DOCUMENTED DIVERGENCE FROM SPEC, not a bug: the 0xFF->NaN branch is present "
-              "but commented out, so 0xFF decodes to +Inf. Legitimate because 0xFF is "
-              "REJECTED AT LOAD by validate_e_e8m0 (ggml/src/ggml-quants.c:5366), so a GGUF "
-              "carrying it is refused -- 0xFF is treated as reserved, which is what the MX "
-              "spec intends. NOTE: this function has ZERO call sites in the tree."),
+        note=("Diverges from spec at 0xFF: the 0xFF->NaN branch is present but commented "
+              "out, so 0xFF decodes to +Inf. This CPU-side function has ZERO call sites; the "
+              "GPU-side ggml_cuda_e8m0_to_fp32 implements the same rule and IS live."),
         checked_by="conformance/test_e8m0_vectors.py::test_contract_matches_reference",
     ),
     "e8m0_ggml_half": dict(
         fn=ggml_half,
         spec="ggml ggml_e8m0_to_fp32_half (ggml/src/ggml-impl.h:477)",
-        note=("The path CPU MXFP4 decode actually takes. 0xFF -> 2^127, FINITE -- a third "
-              "distinct answer for the same byte. Also legitimate under the load gate."),
+        note=("The path CPU MXFP4 decode actually takes (4 call sites incl. the "
+              "ggml_table_f32_e8m0_half lookup table). 0xFF -> 2^127, FINITE. The live GPU "
+              "path computes full(e)*0.5f instead, which agrees everywhere EXCEPT 0xFF, where "
+              "it yields +Inf. Two LIVE paths, one byte, two answers."),
         checked_by="conformance/test_e8m0_vectors.py::test_contract_matches_reference",
     ),
 }
@@ -147,10 +147,24 @@ def main() -> None:
                       "below that, and on our HIP build where CUDART_VERSION is undefined, the "
                       "fallback matches ggml_e8m0_to_fp32 (+Inf). "
                       "Site: ggml/src/ggml-cuda/common.cuh:814-822."),
-        "legitimising_fact": ("validate_e_e8m0 (ggml/src/ggml-quants.c:5366) REJECTS 0xFF at load, "
-                              "wired for MXFP4 and called from llama-model-loader.cpp. A GGUF "
-                              "carrying 0xFF is refused, so the divergence is unreachable in "
-                              "practice -- documented-divergent, not broken."),
+        "classification": "LATENT DEFECT — not currently reachable in OUR stack, and not for the reason first recorded.",
+        "correction_20260803": (
+            "An earlier version of this file claimed the divergence was legitimised by the load "
+            "gate. That was WRONG and is retracted. validate_e_e8m0 does reject 0xFF, but it runs "
+            "only under `check_tensors`, which DEFAULTS TO FALSE (common/common.h:585) and is "
+            "passed by none of our launchers. The gate does not protect us."),
+        "what_actually_bounds_it": (
+            "We serve NO MXFP4 model — none in the registry, none on disk — so the affected decode "
+            "path is not exercised. That is a much weaker guarantee than a loader rejection: it "
+            "holds only until an MXFP4 model is adopted, at which point CPU and GPU would silently "
+            "disagree on any 0xFF scale byte."),
+        "live_path_composition": {
+            "cpu": "GGML_E8M0_TO_FP32_HALF(e) — fused half; 0xFF -> 0x7f000000 (2^127, finite)",
+            "gpu": "ggml_cuda_e8m0_to_fp32(e) * 0.5f at each call site; 0xFF -> +Inf * 0.5 = +Inf"},
+        "reopen_when": [
+            "any MXFP4 model enters the registry or lands on disk",
+            "`--check-tensors` semantics or default change",
+            "the CPU `_half` call sites or the GPU `*0.5f` composition change"],
     }
     p = OUT / "e8m0_divergence.json"
     p.write_text(json.dumps(div, indent=2) + "\n")

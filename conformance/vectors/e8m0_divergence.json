@@ -17,5 +17,16 @@
     }
   },
   "cuda_note": "CUDA >= 12.8 uses __nv_cvt_e8m0_to_bf16raw and matches the SPEC (NaN); below that, and on our HIP build where CUDART_VERSION is undefined, the fallback matches ggml_e8m0_to_fp32 (+Inf). Site: ggml/src/ggml-cuda/common.cuh:814-822.",
-  "legitimising_fact": "validate_e_e8m0 (ggml/src/ggml-quants.c:5366) REJECTS 0xFF at load, wired for MXFP4 and called from llama-model-loader.cpp. A GGUF carrying 0xFF is refused, so the divergence is unreachable in practice -- documented-divergent, not broken."
+  "classification": "LATENT DEFECT \u2014 not currently reachable in OUR stack, and not for the reason first recorded.",
+  "correction_20260803": "An earlier version of this file claimed the divergence was legitimised by the load gate. That was WRONG and is retracted. validate_e_e8m0 does reject 0xFF, but it runs only under `check_tensors`, which DEFAULTS TO FALSE (common/common.h:585) and is passed by none of our launchers. The gate does not protect us.",
+  "what_actually_bounds_it": "We serve NO MXFP4 model \u2014 none in the registry, none on disk \u2014 so the affected decode path is not exercised. That is a much weaker guarantee than a loader rejection: it holds only until an MXFP4 model is adopted, at which point CPU and GPU would silently disagree on any 0xFF scale byte.",
+  "live_path_composition": {
+    "cpu": "GGML_E8M0_TO_FP32_HALF(e) \u2014 fused half; 0xFF -> 0x7f000000 (2^127, finite)",
+    "gpu": "ggml_cuda_e8m0_to_fp32(e) * 0.5f at each call site; 0xFF -> +Inf * 0.5 = +Inf"
+  },
+  "reopen_when": [
+    "any MXFP4 model enters the registry or lands on disk",
+    "`--check-tensors` semantics or default change",
+    "the CPU `_half` call sites or the GPU `*0.5f` composition change"
+  ]
 }
