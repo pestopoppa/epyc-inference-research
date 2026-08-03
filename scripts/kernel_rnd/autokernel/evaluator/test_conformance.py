@@ -1359,7 +1359,9 @@ class TestCorrectnessPrecedence(unittest.TestCase):
                 cache_state="whatever", correctness_verdict_source="evaluator",
                 candidate_output_used_as_oracle=False, oracle_ids=("ref",),
                 delivered_unit_name="generated_tokens", delivered_units_candidate=1,
-                delivered_units_anchor=1, environment_probe_findings=(),
+                delivered_units_anchor=1, anchor_source_commit=None,
+                anchor_binary_sha256=None, anchor_linkage_sha256=None,
+                environment_probe_findings=(),
                 timing_dependent_branch_findings=(), receipt_ref="r")
 
 

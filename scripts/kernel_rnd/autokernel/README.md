@@ -210,7 +210,7 @@ python3 -m unittest scripts/kernel_rnd/autokernel/evaluator/test_integration.py
 python3 scripts/kernel_rnd/autokernel/test_integration.py
 ```
 
-Expected: **1846 tests, OK (expected failures=1)**. The one `expectedFailure` is
+Expected: **1945 tests, OK (expected failures=1)**. The one `expectedFailure` is
 `test_preflight.RealKernelLockEncodingTest.test_KNOWN_HOLE_unlinking_a_held_lock_
 file_hides_its_live_holder` — a real, documented hole (unlinking a held lock file
 hides its live holder from the `/proc/locks` witness), deliberately left visible
@@ -352,30 +352,39 @@ none of it is closed by the suites above.
   `incremental_objects_present` and `commit_was_pathspec_limited` are taken on
   faith. Every other evidence type has the field.
 - **CLOSED 2026-08-03 — precondition 4 is enforced on all three components in
-  `correctness`, and a coherence capture now names the anchor it was taken
-  against.** `LinkageEvidence` and `CoherenceEvidence` each carry
+  `correctness`, and every piece of evidence carrying anchor-derived material now
+  names the anchor it was captured against.** Five evidence types —
+  `LinkageEvidence`, `CoherenceEvidence`, `DeterminismEvidence`,
+  `StaticAnalysisEvidence`, `AntiRewardHackingEvidence` — each carry
   `anchor_source_commit` + `anchor_binary_sha256` + `anchor_linkage_sha256` under
-  one rule (`_validate_anchor_triple`): all three or none — a partially named
+  ONE rule (`_validate_anchor_triple`): all three or none — a partially named
   anchor resolves to more than one artifact — and no placeholders
   (`schemas.is_placeholder_digest`), which is the same rule
   `evaluation_event.v3` applies to the record these feed. The linkage gate
   compares the commit as well as the two digests, so an anchor rebuilt from a
-  different source at an identical digest is now visible. `compute_coherence`
-  compares the capture's recorded anchor against the anchor it is handed, using
-  `api.AnchorIdentity.identity_matches()` (which therefore now has a caller in
-  `correctness.py`), and RAISES `CoherenceAnchorMismatch` on disagreement rather
-  than downgrading to `not_compared`: invariant 11 makes re-scoring saved outputs
-  the normal path, so that is exactly where a capture taken against anchor A gets
-  scored against anchor B. A capture that recorded NO identity is
-  `not_compared` → COULD_NOT_CHECK, never an implicit match.
+  different source at an identical digest is visible. Every consumer compares the
+  capture's recorded anchor against the anchor it is handed, using
+  `api.AnchorIdentity.identity_matches()` (which therefore now has callers in
+  `correctness.py`), and RAISES an `EvidenceAnchorMismatch` subclass —
+  `CoherenceAnchorMismatch`, `DeterminismAnchorMismatch`,
+  `StaticAnalysisAnchorMismatch`, `AntiRewardHackingAnchorMismatch` — rather than
+  downgrading: invariant 11 makes re-scoring saved outputs the normal path, so
+  that is exactly where a capture taken against anchor A gets scored against
+  anchor B. Evidence that recorded NO identity is COULD_NOT_CHECK on every
+  surface, never an implicit match, and never a downgraded FAIL either.
+  The live consequence is closed with it: `check_output_coherence`'s
+  reconciliation of the anchor's determinism class now requires the coherence
+  capture and `DeterminismEvidence` to name the SAME anchor before their
+  agreement counts as corroboration — a mismatch raises, and an unrecorded
+  determinism identity is COULD_NOT_CHECK, because two records agreeing does not
+  establish they describe one anchor.
   **What remains here:** the recorded identity is still the producer's
-  declaration — `produced_by` is checked, but nothing re-derives that the capture
-  really ran against the anchor it names. And three surfaces still carry
-  anchor-derived material under no anchor identity at all, so the same replay
-  mix-up is undetectable on them: `DeterminismEvidence`
-  (`anchor_output_digests`, `anchor_determinism_class`), `StaticAnalysisEvidence`
-  (`anchor_compiler_id`/`_version`, `anchor_warning_count`) and
-  `AntiRewardHackingEvidence.delivered_units_anchor`.
+  declaration — `produced_by` is checked, but nothing re-derives that a capture
+  really ran against the anchor it names, so this binds an honest producer's
+  replay and not a lying one's capture. `LinkageEvidence` reads its triple
+  field-by-field (per-component reason texts) rather than through
+  `recorded_anchor()`, so the linkage gate FAILs on a drifted anchor where the
+  other four raise — the outcome differs by design, the binding does not.
   `integrity.check_evidence_binding` does bind the ELF tables, and registration
   tables carry no provenance digest at all.
 - **The §8.5.1 (5) repair cap is enforced by nothing.** No gate consults a

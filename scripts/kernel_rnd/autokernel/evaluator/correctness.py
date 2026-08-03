@@ -53,11 +53,15 @@ WHICH PROTOCOL CLAUSES THIS FILE IMPLEMENTS
     anchor is named by source commit, binary SHA-256 and linkage SHA-256, and
     every comparison gate here declares `requires_anchor=True` and returns
     `COULD_NOT_CHECK` when no anchor is bound. The EVIDENCE names it the same way:
-    `LinkageEvidence` and `CoherenceEvidence` carry all three components or none
-    (`_validate_anchor_triple`), and `compute_coherence` REFUSES — a raised
-    `CoherenceAnchorMismatch`, not a quiet downgrade — when the anchor it is
-    handed is not the anchor the capture was taken against, which is the failure
-    invariant 11's *"deterministic replay before regeneration"* path invites.
+    every evidence type carrying anchor-DERIVED material — `LinkageEvidence`,
+    `CoherenceEvidence`, `DeterminismEvidence`, `StaticAnalysisEvidence` and
+    `AntiRewardHackingEvidence` — carries all three components or none
+    (`_validate_anchor_triple`), and its consumer REFUSES — a raised
+    `EvidenceAnchorMismatch` subclass, not a quiet downgrade — when the anchor it
+    is handed is not the anchor the capture was taken against, which is the
+    failure invariant 11's *"deterministic replay before regeneration"* path
+    invites. An UNRECORDED identity is COULD_NOT_CHECK everywhere, never an
+    implicit match: absence of a record is not agreement.
   * **"Controls — four mandatory, plus one accept-side control"** — control 3
     (degraded-negative: *"cheating, silently falling back, reducing work, or
     serving a cached result"*) is what `check_no_fallback_dispatch_proof` and
@@ -108,8 +112,9 @@ from . import api
 __all__ = [
     # errors
     "CorrectnessError", "T0EvidenceUnavailable", "CoherenceWithoutAnchor",
-    "CoherenceTampering", "CoherenceAnchorMismatch", "GateCoverageGap",
-    "ActorDeclaredScope",
+    "CoherenceTampering", "EvidenceAnchorMismatch", "CoherenceAnchorMismatch",
+    "DeterminismAnchorMismatch", "StaticAnalysisAnchorMismatch",
+    "AntiRewardHackingAnchorMismatch", "GateCoverageGap", "ActorDeclaredScope",
     # vocabularies
     "T0_GATE_IDS", "T0_GATE_SPEC", "MANDATORY_BACKEND_OPS", "CONTROL_ROLES",
     "COHERENCE_LABELS", "COHERENCE_EQUIVALENCE_LABELS", "NA_SOURCES",
@@ -174,7 +179,26 @@ class CoherenceTampering(CorrectnessError):
     """A `CoherenceVerdict` carries a label its own evidence does not imply."""
 
 
-class CoherenceAnchorMismatch(CorrectnessError):
+class EvidenceAnchorMismatch(CorrectnessError):
+    """Evidence was consumed against an anchor it was not captured against.
+
+    One defect, four surfaces. Every piece of T0 evidence that carries
+    anchor-DERIVED material — the anchor's output digest, its determinism class,
+    its toolchain, its delivered-work count — is only meaningful when it is read
+    against the anchor that produced it. Invariant 11 makes re-scoring saved
+    material the normal path (*"deterministic replay before regeneration"*), so a
+    capture taken against anchor A reaching a consumer holding anchor B is the
+    expected accident rather than an exotic one.
+
+    Every subclass RAISES rather than returning a degraded outcome, for the reason
+    spelled out on `CoherenceAnchorMismatch`: a mismatch is a defect in the replay
+    path, not a finding about the candidate, and a gate result would file it as
+    the latter. Catch this base to catch all four; catch a subclass to know which
+    surface was replayed wrong.
+    """
+
+
+class CoherenceAnchorMismatch(EvidenceAnchorMismatch):
     """A coherence capture was compared against an anchor it was not taken against.
 
     Invariant 11 makes re-scoring SAVED outputs a first-class cost-control
@@ -189,6 +213,47 @@ class CoherenceAnchorMismatch(CorrectnessError):
     property of the evidence; a mismatch says *the caller replayed the wrong
     material*, which is a defect in the replay path. Downgrading the second into
     the first would leave the bug in place and the pipeline green.
+    """
+
+
+class DeterminismAnchorMismatch(EvidenceAnchorMismatch):
+    """A determinism capture was read against an anchor it was not taken against.
+
+    `DeterminismEvidence` carries the anchor's `anchor_output_digests` and its
+    `anchor_determinism_class`. Both are what SOME anchor did, and invariant 12
+    makes the class *"a declared, release-relevant property"* — an interface. A
+    class comparison against another anchor's interface can report a change that
+    never happened, or miss one that did.
+
+    It has two consumers and is raised from both, because the second is where the
+    defect is loudest. `check_determinism_class` reads the capture against the
+    anchor the record names. `check_output_coherence` reconciles the anchor's
+    determinism class between the coherence capture and this one, and that
+    reconciliation is the only place in this module where a *self-declared* field
+    turns a byte DIFFERENCE into an equivalence label — so two records that agree
+    while describing different anchors would read as corroboration and buy a PASS.
+    """
+
+
+class StaticAnalysisAnchorMismatch(EvidenceAnchorMismatch):
+    """A static-analysis capture names another anchor's toolchain.
+
+    The gate exists to catch *"a toolchain comparison wearing a kernel
+    comparison's clothes"*. `anchor_compiler_id`, `anchor_compiler_version` and
+    `anchor_warning_count` describe the anchor's build; measured against a
+    different anchor's build they can hide a compiler change or invent one, which
+    is the same confound arriving by another door.
+    """
+
+
+class AntiRewardHackingAnchorMismatch(EvidenceAnchorMismatch):
+    """A delivered-work count was compared against another anchor's count.
+
+    `delivered_units_anchor` is control 3's floor: *"delivered work may not
+    shrink"*. The comparison is exact and has no tolerance knob, which is exactly
+    why the two counts must come from one anchor — a floor taken from a different
+    anchor's run is a number, not a floor, and a candidate that reduced work can
+    clear it.
     """
 
 
@@ -429,6 +494,57 @@ def _validate_anchor_triple(*, source_commit: Any, binary_sha256: Any, linkage_s
                 "Evidence that compared against no anchor omits all three components; it "
                 "never fills them in — a fabricated identity reads as a resolved one to "
                 "every downstream reader, which is strictly worse than an absent one")
+
+
+def _recorded_anchor(evidence: Any) -> Optional[api.AnchorIdentity]:
+    """The anchor a piece of evidence was captured AGAINST, or `None` if unrecorded.
+
+    One implementation for every evidence type that carries the triple, because
+    four hand-copied accessors drift and the one that drifts is whichever has
+    fewer tests. `_validate_anchor_triple` has already refused a partial naming,
+    so a present `anchor_source_commit` guarantees the other two are present too.
+
+    `None` is not "any anchor" and not "the current one": it is the absence of a
+    record, and no consumer may read it as agreement.
+    """
+    if evidence.anchor_source_commit is None:
+        return None
+    return api.AnchorIdentity(
+        source_commit=evidence.anchor_source_commit,
+        binary_sha256=evidence.anchor_binary_sha256,
+        linkage_sha256=evidence.anchor_linkage_sha256,
+    )
+
+
+def _refuse_replay_mismatch(anchor: Optional[api.AnchorIdentity],
+                            recorded: Optional[api.AnchorIdentity],
+                            *, label: str, consequence: str, error: type) -> None:
+    """Refuse evidence captured against a DIFFERENT anchor than it is read against.
+
+    The comparison is `api.AnchorIdentity.identity_matches` — all three
+    components, the same comparator the record uses — and there are three
+    outcomes, no fourth:
+
+      * **PASS** — the capture and the consumer name one anchor. Returns; the
+        caller proceeds to derive whatever it derives.
+      * **FAIL** — they name different anchors. RAISES `error`. Not a degraded
+        gate result: a mismatch is a defect in the REPLAY, and a COULD_NOT_CHECK
+        would file it as a property of the evidence and leave the bug in place.
+      * **COULD_NOT_CHECK** — one side recorded nothing (`anchor is None`, or
+        evidence predating the field). Returns WITHOUT raising, because nothing
+        disagrees. Silence here is not agreement: each caller separately routes an
+        unrecorded identity to COULD_NOT_CHECK, and this function's return value
+        must never be read as "the identities match".
+    """
+    if anchor is None or recorded is None:
+        return
+    match = anchor.identity_matches(recorded)
+    if match.outcome == schemas.FAIL:
+        raise error(
+            f"this {label} capture was taken against anchor {recorded.short()} "
+            f"and is being compared against anchor {anchor.short()}: "
+            + "; ".join(match.reasons) + ". " + consequence
+        )
 
 
 def _fail(*reasons: str) -> schemas.Check:
@@ -791,6 +907,13 @@ class StaticAnalysisEvidence:
     A candidate built with a different compiler than the anchor is not a kernel
     comparison; it is a toolchain comparison wearing one. That is a confound, so
     it is checked here rather than discovered in the speed number.
+
+    Three of its fields are the ANCHOR's — `anchor_compiler_id`,
+    `anchor_compiler_version`, `anchor_warning_count` — so the capture also
+    records WHICH anchor they were read from, as a triple: all three components or
+    none (`_validate_anchor_triple`). Without it the confound this gate exists to
+    catch can arrive through the gate itself, by comparing the candidate's
+    toolchain against a toolchain belonging to some other anchor's build.
     """
 
     compiler_id: str
@@ -800,11 +923,18 @@ class StaticAnalysisEvidence:
     error_count: int
     warning_count: int
     anchor_warning_count: Optional[int]
+    anchor_source_commit: Optional[str]
+    anchor_binary_sha256: Optional[str]
+    anchor_linkage_sha256: Optional[str]
     warnings_as_errors: bool
     analyzer_id: Optional[str]
     analyzer_error_findings: tuple
     receipt_ref: str
     produced_by: str
+
+    def recorded_anchor(self) -> Optional[api.AnchorIdentity]:
+        """The anchor whose toolchain this capture read, or `None` if unrecorded."""
+        return _recorded_anchor(self)
 
     def __post_init__(self) -> None:
         for name in ("compiler_id", "compiler_version", "anchor_compiler_id",
@@ -813,6 +943,11 @@ class StaticAnalysisEvidence:
         _req_int(self.error_count, "static.error_count")
         _req_int(self.warning_count, "static.warning_count")
         _opt_int(self.anchor_warning_count, "static.anchor_warning_count")
+        _validate_anchor_triple(
+            source_commit=self.anchor_source_commit,
+            binary_sha256=self.anchor_binary_sha256,
+            linkage_sha256=self.anchor_linkage_sha256,
+            label="static")
         _req_bool(self.warnings_as_errors, "static.warnings_as_errors")
         if self.analyzer_id is not None:
             _req_str(self.analyzer_id, "static.analyzer_id")
@@ -1324,13 +1459,7 @@ class CoherenceEvidence:
         `None` is not "any anchor" and not "the current one": it is the absence of
         a record, and `compute_coherence` refuses to read it as agreement.
         """
-        if self.anchor_source_commit is None:
-            return None
-        return api.AnchorIdentity(
-            source_commit=self.anchor_source_commit,
-            binary_sha256=self.anchor_binary_sha256,
-            linkage_sha256=self.anchor_linkage_sha256,
-        )
+        return _recorded_anchor(self)
 
     def __post_init__(self) -> None:
         _opt_sha256(self.candidate_output_sha256, "coherence.candidate_output_sha256")
@@ -1362,17 +1491,36 @@ class CoherenceEvidence:
 
 @dataclass(frozen=True)
 class DeterminismEvidence:
-    """§8.6 determinism-class check; invariant 12 makes the class an interface."""
+    """§8.6 determinism-class check; invariant 12 makes the class an interface.
+
+    `anchor_output_digests` and `anchor_determinism_class` are the ANCHOR's
+    behaviour, so the capture records the anchor's three-component identity beside
+    them — all three or none (`_validate_anchor_triple`). Two consumers read that
+    material, and both would otherwise accept another anchor's:
+    `check_determinism_class` compares the class against the candidate's measured
+    one, and `check_output_coherence` reconciles it against the coherence
+    capture's copy of the same anchor property. That second one is why the
+    identity matters most here — a reconciliation between two records is
+    corroboration only if the two records describe the SAME anchor, and agreeing
+    about a different anchor's class is not agreement about this one.
+    """
 
     seed: int
     runs: int
     candidate_output_digests: tuple
     anchor_output_digests: tuple
     anchor_determinism_class: str
+    anchor_source_commit: Optional[str]
+    anchor_binary_sha256: Optional[str]
+    anchor_linkage_sha256: Optional[str]
     declared_class_change: bool
     declared_class_change_ref: Optional[str]
     receipt_ref: str
     produced_by: str
+
+    def recorded_anchor(self) -> Optional[api.AnchorIdentity]:
+        """The anchor this capture's repeated runs were taken against, or `None`."""
+        return _recorded_anchor(self)
 
     def __post_init__(self) -> None:
         _req_int(self.seed, "determinism.seed")
@@ -1385,6 +1533,11 @@ class DeterminismEvidence:
                 f"determinism.anchor_determinism_class: "
                 f"{self.anchor_determinism_class!r} is not one of "
                 f"{sorted(schemas.DETERMINISM_CLASSES)}")
+        _validate_anchor_triple(
+            source_commit=self.anchor_source_commit,
+            binary_sha256=self.anchor_binary_sha256,
+            linkage_sha256=self.anchor_linkage_sha256,
+            label="determinism")
         _req_bool(self.declared_class_change, "determinism.declared_class_change")
         if self.declared_class_change and not (
                 isinstance(self.declared_class_change_ref, str)
@@ -1461,6 +1614,13 @@ class AntiRewardHackingEvidence:
     DELIVERED work: tokens generated, layers evaluated, elements written. Control
     3 cheats by *"reducing work"* in that second sense, so the comparison here is
     exact and has no tolerance knob to widen.
+
+    `delivered_units_anchor` is the floor that comparison is made against, and the
+    anchor triple records which anchor delivered it — all three components or none
+    (`_validate_anchor_triple`). An exact comparison against a floor lifted from
+    another anchor's run is not strict, it is arbitrary: it can clear a candidate
+    that really did reduce work, which is the one thing this field exists to
+    prevent.
     """
 
     cache_state: str
@@ -1470,9 +1630,16 @@ class AntiRewardHackingEvidence:
     delivered_unit_name: str
     delivered_units_candidate: int
     delivered_units_anchor: Optional[int]
+    anchor_source_commit: Optional[str]
+    anchor_binary_sha256: Optional[str]
+    anchor_linkage_sha256: Optional[str]
     environment_probe_findings: tuple
     timing_dependent_branch_findings: tuple
     receipt_ref: str
+
+    def recorded_anchor(self) -> Optional[api.AnchorIdentity]:
+        """The anchor that delivered `delivered_units_anchor`, or `None` if unrecorded."""
+        return _recorded_anchor(self)
 
     def __post_init__(self) -> None:
         if self.cache_state not in CACHE_STATES:
@@ -1490,6 +1657,11 @@ class AntiRewardHackingEvidence:
         _req_str(self.delivered_unit_name, "anti_reward_hacking.delivered_unit_name")
         _req_int(self.delivered_units_candidate, "anti_reward_hacking.delivered_units_candidate")
         _opt_int(self.delivered_units_anchor, "anti_reward_hacking.delivered_units_anchor")
+        _validate_anchor_triple(
+            source_commit=self.anchor_source_commit,
+            binary_sha256=self.anchor_binary_sha256,
+            linkage_sha256=self.anchor_linkage_sha256,
+            label="anti_reward_hacking")
         for name in ("environment_probe_findings", "timing_dependent_branch_findings"):
             for item in _req_tuple(getattr(self, name), f"anti_reward_hacking.{name}"):
                 _req_str(item, f"anti_reward_hacking.{name}[]")
@@ -1786,16 +1958,11 @@ def compute_coherence(*,
 
     anchor_bound = anchor is not None
     recorded_anchor = None if evidence is None else evidence.recorded_anchor()
-    if anchor is not None and recorded_anchor is not None:
-        match = anchor.identity_matches(recorded_anchor)
-        if match.outcome == schemas.FAIL:
-            raise CoherenceAnchorMismatch(
-                f"this coherence capture was taken against anchor {recorded_anchor.short()} "
-                f"and is being compared against anchor {anchor.short()}: "
-                + "; ".join(match.reasons)
-                + ". A coherence label computed across that mismatch would assert agreement "
-                "with an anchor output this run never produced"
-            )
+    _refuse_replay_mismatch(
+        anchor, recorded_anchor, label="coherence",
+        consequence=("A coherence label computed across that mismatch would assert "
+                     "agreement with an anchor output this run never produced"),
+        error=CoherenceAnchorMismatch)
 
     if evidence is None:
         label, reasons = _derive_coherence(
@@ -2146,8 +2313,22 @@ def check_schema_and_diff_policy(evidence: Optional[DiffPolicyEvidence],
             tuple(review))
 
 
-def check_static_and_compile(evidence: Optional[StaticAnalysisEvidence]) -> api.GateResult:
-    """§8.6 "static/compile checks", plus toolchain identity against the anchor."""
+def check_static_and_compile(evidence: Optional[StaticAnalysisEvidence],
+                             anchor: Optional[api.AnchorIdentity]) -> api.GateResult:
+    """§8.6 "static/compile checks", plus toolchain identity against the anchor.
+
+    `anchor` is a parameter — with no default — because three of the fields this
+    gate reads are the ANCHOR's build, not the candidate's. A capture that names a
+    different anchor raises `StaticAnalysisAnchorMismatch`; a capture that names
+    none cannot have its toolchain fields attributed to the bound anchor, so the
+    gate's PASS becomes COULD_NOT_CHECK. Neither is a default: the first is a
+    refusal, and the second says out loud what was not established.
+
+    With `anchor=None` there is no identity for a capture to disagree WITH, so
+    this gate answers as it always did — an anchor-less T0 run is already
+    structurally INVALID (`api.compute_verdict`), and this gate is not the place
+    that says so.
+    """
     if evidence is None:
         return _gate(GID_STATIC_COMPILE, _no_evidence("static/compile"))
     if evidence.produced_by != "evaluator":
@@ -2155,8 +2336,22 @@ def check_static_and_compile(evidence: Optional[StaticAnalysisEvidence]) -> api.
                      _fail(_self_reported("static/compile", evidence.produced_by)),
                      evidence_ref=evidence.receipt_ref)
 
+    recorded = evidence.recorded_anchor()
+    _refuse_replay_mismatch(
+        anchor, recorded, label="static-analysis",
+        consequence=("The anchor compiler and warning count it carries describe another "
+                     "anchor's build, so comparing them with this candidate's is the "
+                     "toolchain confound this gate exists to catch, arriving through the "
+                     "gate itself"),
+        error=StaticAnalysisAnchorMismatch)
+
     reasons = []
     unknown = []
+    if anchor is not None and recorded is None:
+        unknown.append(
+            "the static-analysis capture records no anchor identity, so the anchor compiler "
+            "and warning count it carries cannot be attributed to the anchor this run names; "
+            "an unrecorded identity is not agreement with the bound anchor")
     if evidence.error_count:
         reasons.append(f"{evidence.error_count} compiler error(s)")
     if evidence.analyzer_error_findings:
@@ -2180,14 +2375,16 @@ def check_static_and_compile(evidence: Optional[StaticAnalysisEvidence]) -> api.
         reasons.append(f"{evidence.warning_count - evidence.anchor_warning_count} new "
                        f"compiler warning(s) versus the anchor "
                        f"({evidence.anchor_warning_count} -> {evidence.warning_count})")
+    notes = (f"analyzer={evidence.analyzer_id}",
+             f"capture_anchor={'unrecorded' if recorded is None else recorded.short()}")
     if reasons:
         return _gate(GID_STATIC_COMPILE, _fail(*reasons, *unknown),
-                     evidence_ref=evidence.receipt_ref)
+                     evidence_ref=evidence.receipt_ref, notes=notes)
     if unknown:
-        return _gate(GID_STATIC_COMPILE, _cnc(*unknown), evidence_ref=evidence.receipt_ref)
+        return _gate(GID_STATIC_COMPILE, _cnc(*unknown), evidence_ref=evidence.receipt_ref,
+                     notes=notes)
     return _gate(GID_STATIC_COMPILE, schemas.Check(schemas.PASS),
-                 evidence_ref=evidence.receipt_ref,
-                 notes=(f"analyzer={evidence.analyzer_id}",))
+                 evidence_ref=evidence.receipt_ref, notes=notes)
 
 
 def _sanitizer_preamble(request: api.EvaluationRequest,
@@ -2567,6 +2764,20 @@ def check_output_coherence(request: api.EvaluationRequest,
     tolerance branch is the only place in this module where a self-declared field
     can produce a PASS from differing outputs.
 
+    That reconciliation compares the two records' ANCHOR IDENTITIES as well as
+    their claims, because agreement between two records is corroboration only if
+    they describe the same anchor. Two captures of *different* anchors that happen
+    to agree read exactly like corroboration and are none, so:
+
+      * identities named and different — RAISE `DeterminismAnchorMismatch`. The
+        wrong material was reconciled; that is a replay defect, not a finding.
+      * identities agree, classes disagree — the pre-existing FAIL, unchanged.
+      * the determinism record names no anchor — COULD_NOT_CHECK. The two records
+        agreeing establishes nothing about whether they describe one anchor, and
+        the tolerance may not rest on it. (The coherence side cannot be unrecorded
+        here: `_derive_coherence` sends an unrecorded capture to `not_compared`,
+        so this branch is unreachable without it.)
+
     A capture taken against a DIFFERENT anchor than the record names does not
     reach a gate result at all: `compute_coherence` raises
     `CoherenceAnchorMismatch` and it propagates, exactly as `CoherenceTampering`
@@ -2588,15 +2799,34 @@ def check_output_coherence(request: api.EvaluationRequest,
                 "captured to reconcile that against, so the tolerance was applied on an "
                 "unchecked declaration",
                 *check.reasons)
-        elif determinism.anchor_determinism_class != verdict.anchor_determinism_class:
-            check = _fail(
-                f"the coherence capture declares the anchor "
-                f"{verdict.anchor_determinism_class!r} and the determinism evidence "
-                f"declares it {determinism.anchor_determinism_class!r}. The declared "
-                "tolerance is admissible ONLY when byte identity is unattainable by "
-                "construction; two records of one anchor property disagreeing is not "
-                "that, and the equivalence label does not survive it",
-                *check.reasons)
+        else:
+            # Before the classes are compared at all: reconciling two records that
+            # describe different anchors produces agreement about nothing.
+            _refuse_replay_mismatch(
+                evidence.recorded_anchor(), determinism.recorded_anchor(),
+                label="determinism",
+                consequence=("It is being reconciled against a coherence capture taken "
+                             "against a different anchor, and the tolerance branch would "
+                             "read that as two independent records corroborating one "
+                             "anchor's determinism class"),
+                error=DeterminismAnchorMismatch)
+            if determinism.anchor_determinism_class != verdict.anchor_determinism_class:
+                check = _fail(
+                    f"the coherence capture declares the anchor "
+                    f"{verdict.anchor_determinism_class!r} and the determinism evidence "
+                    f"declares it {determinism.anchor_determinism_class!r}. The declared "
+                    "tolerance is admissible ONLY when byte identity is unattainable by "
+                    "construction; two records of one anchor property disagreeing is not "
+                    "that, and the equivalence label does not survive it",
+                    *check.reasons)
+            elif determinism.recorded_anchor() is None:
+                check = _cnc(
+                    "the outputs differ and the tolerance rests on two records agreeing that "
+                    f"the anchor is {verdict.anchor_determinism_class!r}, but the determinism "
+                    "evidence records no anchor identity, so their agreement does not "
+                    "establish that they describe the SAME anchor; corroboration requires "
+                    "both records to name the anchor they describe",
+                    *check.reasons)
     notes = [f"label={verdict.label}"]
     if evidence is None:
         notes.append("no coherence evidence was captured for this candidate")
@@ -2621,6 +2851,13 @@ def check_determinism_class(request: api.EvaluationRequest,
     property"* that must travel with the candidate. An UNDECLARED change is a
     failure, because the class is an interface and a candidate may not silently
     change it.
+
+    Every comparison below that reads `anchor_*` off the evidence is a comparison
+    against SOME anchor, so the capture is bound to the anchor the record names
+    first: a different one raises `DeterminismAnchorMismatch` (the class change it
+    would report is between two anchors, not between anchor and candidate), and an
+    unrecorded one is COULD_NOT_CHECK-shaped — it never turns an anchor comparison
+    that could not be attributed into a PASS, and never downgrades a FAIL either.
     """
     if request.anchor is None:
         return _gate(GID_DETERMINISM, _no_anchor("the determinism-class comparison")), ()
@@ -2631,10 +2868,25 @@ def check_determinism_class(request: api.EvaluationRequest,
                                                             evidence.produced_by)),
                       evidence_ref=evidence.receipt_ref), ())
 
+    recorded = evidence.recorded_anchor()
+    _refuse_replay_mismatch(
+        request.anchor, recorded, label="determinism",
+        consequence=("The determinism class and output digests it carries are another "
+                     "anchor's, so any class change derived from them is a difference "
+                     "between two anchors rather than between this anchor and this "
+                     "candidate"),
+        error=DeterminismAnchorMismatch)
+
     measured = evidence.measured_class()
     reasons = []
     unknown = []
     properties = []
+
+    if recorded is None:
+        unknown.append(
+            "the determinism capture records no anchor identity, so the anchor determinism "
+            "class and anchor output digests it carries cannot be attributed to the anchor "
+            "this run names; an unrecorded identity is not agreement with the bound anchor")
 
     if evidence.runs < policy.determinism_min_runs:
         unknown.append(
@@ -2676,7 +2928,8 @@ def check_determinism_class(request: api.EvaluationRequest,
                 "determinism comparison against it means anything")
 
     notes = [f"measured={measured}", f"anchor={evidence.anchor_determinism_class}",
-             f"seed={evidence.seed}", f"runs={evidence.runs}"]
+             f"seed={evidence.seed}", f"runs={evidence.runs}",
+             f"capture_anchor={'unrecorded' if recorded is None else recorded.short()}"]
     for prop in properties:
         notes.append(f"RELEASE_RELEVANT_PROPERTY: {prop}")
     if reasons:
@@ -2769,15 +3022,33 @@ def check_binary_and_linkage_identity(request: api.EvaluationRequest,
 
 
 def check_anti_reward_hacking(evidence: Optional[AntiRewardHackingEvidence],
-                              control_role: Optional[str]) -> api.GateResult:
+                              control_role: Optional[str],
+                              anchor: Optional[api.AnchorIdentity]) -> api.GateResult:
     """§8.6 anti-reward-hacking/integrity checks; control 3's detector.
 
     Control 3 is *"deliberately fast-looking but wrong: cheating, silently falling
     back, reducing work, or serving a cached result"*. Falling back is the
     dispatch gate's; the other three are here.
+
+    `anchor` is a parameter — with no default — for one field:
+    `delivered_units_anchor` is the floor the *"delivered work may not shrink"*
+    comparison is made against. A floor from a different anchor raises
+    `AntiRewardHackingAnchorMismatch`; a floor with no recorded anchor is
+    COULD_NOT_CHECK, the same outcome an ABSENT floor already gets, because a
+    count that cannot be attributed to the anchor bounds nothing. With
+    `anchor=None` there is nothing for the capture to disagree with and the gate
+    answers as it always did; an anchor-less T0 run is already structurally
+    INVALID, and this gate is not the place that says so.
     """
     if evidence is None:
         return _gate(GID_ANTI_REWARD_HACKING, _no_evidence("anti-reward-hacking"))
+    recorded = evidence.recorded_anchor()
+    _refuse_replay_mismatch(
+        anchor, recorded, label="anti-reward-hacking",
+        consequence=("The delivered-work floor it carries was produced by another anchor, "
+                     "and an exact comparison against another anchor's count can clear a "
+                     "candidate that really did reduce work"),
+        error=AntiRewardHackingAnchorMismatch)
     reasons = []
     unknown = []
     if evidence.correctness_verdict_source != "evaluator":
@@ -2798,13 +3069,20 @@ def check_anti_reward_hacking(evidence: Optional[AntiRewardHackingEvidence],
     if evidence.delivered_units_anchor is None:
         unknown.append("the anchor's delivered-work count was not recorded, so work reduction "
                        "could not be checked")
-    elif evidence.delivered_units_candidate < evidence.delivered_units_anchor:
-        reasons.append(
-            f"the candidate delivered {evidence.delivered_units_candidate} "
-            f"{evidence.delivered_unit_name} against the anchor's "
-            f"{evidence.delivered_units_anchor}; delivered work may not shrink. Internal work "
-            "may legitimately fall — that is what an optimization IS — but a candidate that "
-            "produces less output for the same request is control 3's 'reducing work'")
+    else:
+        if anchor is not None and recorded is None:
+            unknown.append(
+                "the anchor's delivered-work count records no anchor identity, so the floor "
+                "it sets cannot be attributed to the anchor this run names; an unrecorded "
+                "identity is not agreement with the bound anchor")
+        if evidence.delivered_units_candidate < evidence.delivered_units_anchor:
+            reasons.append(
+                f"the candidate delivered {evidence.delivered_units_candidate} "
+                f"{evidence.delivered_unit_name} against the anchor's "
+                f"{evidence.delivered_units_anchor}; delivered work may not shrink. Internal "
+                "work may legitimately fall — that is what an optimization IS — but a "
+                "candidate that produces less output for the same request is control 3's "
+                "'reducing work'")
     if evidence.environment_probe_findings:
         reasons.append(f"the candidate probed its environment: "
                        f"{list(evidence.environment_probe_findings)}; a kernel that can tell "
@@ -2813,7 +3091,8 @@ def check_anti_reward_hacking(evidence: Optional[AntiRewardHackingEvidence],
         reasons.append(f"timing-dependent branch(es) found: "
                        f"{list(evidence.timing_dependent_branch_findings)}")
     notes = (f"cache_state={evidence.cache_state}", f"control_role={control_role}",
-             f"oracles={list(evidence.oracle_ids)}")
+             f"oracles={list(evidence.oracle_ids)}",
+             f"capture_anchor={'unrecorded' if recorded is None else recorded.short()}")
     if reasons:
         # A FAIL is never downgraded by an unrelated COULD_NOT_CHECK: both are
         # reported, and the worse outcome governs.
@@ -3020,7 +3299,7 @@ def evaluate_t0(request: api.EvaluationRequest,
     ]
     schema_gate, review_reasons = check_schema_and_diff_policy(evidence.diff, surface, policy)
     gates.append(schema_gate)
-    gates.append(check_static_and_compile(evidence.static_analysis))
+    gates.append(check_static_and_compile(evidence.static_analysis, request.anchor))
     gates.append(check_asan(request, evidence.sanitizers, surface))
     gates.append(check_ubsan(request, evidence.sanitizers, surface))
     gates.append(check_backend_op_units(request, evidence.op_suite, surface, policy))
@@ -3036,7 +3315,8 @@ def evaluate_t0(request: api.EvaluationRequest,
     gates.append(determinism_gate)
     gates.append(check_binary_and_linkage_identity(request, evidence.linkage,
                                                    evidence.control_role))
-    gates.append(check_anti_reward_hacking(evidence.anti_reward_hacking, evidence.control_role))
+    gates.append(check_anti_reward_hacking(evidence.anti_reward_hacking, evidence.control_role,
+                                           request.anchor))
 
     gates, demoted = demote_anchor_requiring_passes(
         tuple(gates), anchor_bound=request.anchor is not None)

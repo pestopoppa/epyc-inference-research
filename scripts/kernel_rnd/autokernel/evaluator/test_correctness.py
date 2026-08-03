@@ -201,7 +201,10 @@ def static_analysis(**overrides) -> C.StaticAnalysisEvidence:
     kwargs = dict(
         compiler_id="hipcc", compiler_version="6.2.0",
         anchor_compiler_id="hipcc", anchor_compiler_version="6.2.0",
-        error_count=0, warning_count=0, anchor_warning_count=0, warnings_as_errors=True,
+        error_count=0, warning_count=0, anchor_warning_count=0,
+        anchor_source_commit=V8_COMMIT, anchor_binary_sha256=sha("anchor-binary"),
+        anchor_linkage_sha256=sha("anchor-linkage"),
+        warnings_as_errors=True,
         analyzer_id="clang-tidy-18", analyzer_error_findings=(),
         receipt_ref="data/ak/akc-0001/static.json", produced_by="evaluator")
     kwargs.update(overrides)
@@ -306,6 +309,8 @@ def determinism(**overrides) -> C.DeterminismEvidence:
         candidate_output_digests=(sha("gen-out"),) * 3,
         anchor_output_digests=(sha("gen-out"),) * 3,
         anchor_determinism_class="bitwise_stable",
+        anchor_source_commit=V8_COMMIT, anchor_binary_sha256=sha("anchor-binary"),
+        anchor_linkage_sha256=sha("anchor-linkage"),
         declared_class_change=False, declared_class_change_ref=None,
         receipt_ref="data/ak/akc-0001/determinism.json", produced_by="evaluator")
     kwargs.update(overrides)
@@ -331,6 +336,8 @@ def anti_hack(**overrides) -> C.AntiRewardHackingEvidence:
         candidate_output_used_as_oracle=False, oracle_ids=("ik_llama.cpp@iqk-ref",),
         delivered_unit_name="generated_tokens",
         delivered_units_candidate=160, delivered_units_anchor=160,
+        anchor_source_commit=V8_COMMIT, anchor_binary_sha256=sha("anchor-binary"),
+        anchor_linkage_sha256=sha("anchor-linkage"),
         environment_probe_findings=(), timing_dependent_branch_findings=(),
         receipt_ref="data/ak/akc-0001/integrity.json")
     kwargs.update(overrides)
@@ -995,6 +1002,71 @@ class TestStaticAndCompile(unittest.TestCase):
         self.assertEqual(report.outcome(C.GID_STATIC_COMPILE), S.FAIL)
 
 
+class TestStaticAnalysisNamesTheAnchorItsToolchainCameFrom(unittest.TestCase):
+    """`anchor_compiler_id`, `anchor_compiler_version` and `anchor_warning_count`
+    are the ANCHOR's build, and the capture named no anchor — so the confound this
+    gate exists to catch could arrive through the gate itself, as a toolchain
+    comparison against a toolchain belonging to some other anchor."""
+
+    def test_two_of_three_components_is_rejected(self):
+        for omitted in ANCHOR_TRIPLE:
+            with self.subTest(omitted=omitted):
+                with self.assertRaises(ValueError) as ctx:
+                    static_analysis(**{omitted: None})
+                self.assertIn("A partially named anchor is the defect", str(ctx.exception))
+                self.assertIn(f"static.{omitted}", str(ctx.exception))
+
+    def test_a_placeholder_capture_anchor_is_refused(self):
+        with self.assertRaises(ValueError) as ctx:
+            static_analysis(anchor_binary_sha256="0" * 64)
+        self.assertIn("placeholder digest", str(ctx.exception))
+
+    def test_a_capture_from_another_anchor_is_refused_by_name(self):
+        with self.assertRaises(C.StaticAnalysisAnchorMismatch) as ctx:
+            run(ev=evidence(static_analysis=static_analysis(
+                anchor_binary_sha256=sha("some-other-anchor-binary"))))
+        self.assertIn("this static-analysis capture was taken against anchor",
+                      str(ctx.exception))
+
+    def test_a_commit_only_mismatch_is_refused(self):
+        """Both anchor digests still agree; only the commit moved."""
+        with self.assertRaises(C.StaticAnalysisAnchorMismatch):
+            run(ev=evidence(static_analysis=static_analysis(
+                anchor_source_commit=V7_COMMIT)))
+
+    def test_an_identical_toolchain_does_not_excuse_the_mismatch(self):
+        """The compilers agree, so every reason text this gate can emit is silent.
+        The refusal is about WHOSE build they were read from, not what they say."""
+        with self.assertRaises(C.StaticAnalysisAnchorMismatch):
+            run(ev=evidence(static_analysis=static_analysis(
+                compiler_id="hipcc", compiler_version="6.2.0",
+                anchor_compiler_id="hipcc", anchor_compiler_version="6.2.0",
+                anchor_linkage_sha256=sha("another-anchor-linkage"))))
+
+    def test_an_unrecorded_capture_anchor_is_could_not_check(self):
+        report = run(ev=evidence(static_analysis=static_analysis(**UNRECORDED)))
+        gate = report.gate(C.GID_STATIC_COMPILE)
+        self.assertEqual(gate.check.outcome, S.COULD_NOT_CHECK)
+        self.assertIn("records no anchor identity", " ".join(gate.check.reasons))
+        self.assertIn("capture_anchor=unrecorded", gate.notes)
+
+    def test_an_unrecorded_capture_anchor_raises_nothing(self):
+        """COULD_NOT_CHECK-shaped, not a refusal: nothing disagrees."""
+        run(ev=evidence(static_analysis=static_analysis(**UNRECORDED)))
+
+    def test_an_unrecorded_capture_anchor_does_not_downgrade_a_real_failure(self):
+        report = run(ev=evidence(static_analysis=static_analysis(
+            error_count=1, **UNRECORDED)))
+        self.assertEqual(report.outcome(C.GID_STATIC_COMPILE), S.FAIL)
+
+    def test_the_compliant_capture_still_passes(self):
+        """The counterpart: the new rule must not be satisfiable by always failing."""
+        report = run()
+        gate = report.gate(C.GID_STATIC_COMPILE)
+        self.assertEqual(gate.check.outcome, S.PASS)
+        self.assertIn(f"capture_anchor={anchor().short()}", gate.notes)
+
+
 # ---------------------------------------------------------------------------
 # ASAN / UBSAN — the invocation is built, never run
 # ---------------------------------------------------------------------------
@@ -1363,6 +1435,97 @@ class TestDeterminismClass(unittest.TestCase):
         self.assertEqual(ev.measured_class(), "not_measured")
 
 
+class TestDeterminismNamesTheAnchorItWasCapturedAgainst(unittest.TestCase):
+    """`anchor_output_digests` and `anchor_determinism_class` are what SOME anchor
+    did. Invariant 12 makes the class an interface, so a class comparison against
+    another anchor's interface can report a change that never happened or miss one
+    that did — and the capture recorded which anchor it ran against nowhere."""
+
+    def test_two_of_three_components_is_rejected(self):
+        for omitted in ANCHOR_TRIPLE:
+            with self.subTest(omitted=omitted):
+                with self.assertRaises(ValueError) as ctx:
+                    determinism(**{omitted: None})
+                self.assertIn("A partially named anchor is the defect", str(ctx.exception))
+                self.assertIn(f"determinism.{omitted}", str(ctx.exception))
+
+    def test_a_placeholder_capture_anchor_is_refused(self):
+        with self.assertRaises(ValueError) as ctx:
+            determinism(anchor_linkage_sha256="f" * 64)
+        self.assertIn("placeholder digest", str(ctx.exception))
+
+    def test_a_capture_from_another_anchor_is_refused_by_name(self):
+        with self.assertRaises(C.DeterminismAnchorMismatch) as ctx:
+            run(ev=evidence(determinism=determinism(
+                anchor_binary_sha256=sha("some-other-anchor-binary"))))
+        message = str(ctx.exception)
+        self.assertIn("this determinism capture was taken against anchor", message)
+        self.assertIn("anchor.binary_sha256 moved", message)
+
+    def test_a_commit_only_mismatch_is_refused(self):
+        """Both anchor digests still agree. This is the mismatch two-of-three
+        components could not see."""
+        with self.assertRaises(C.DeterminismAnchorMismatch):
+            run(ev=evidence(determinism=determinism(anchor_source_commit=V7_COMMIT)))
+
+    def test_an_agreeing_class_does_not_excuse_the_mismatch(self):
+        """The anchor class matches the candidate's measured one, so this gate has
+        nothing to report — and still refuses. Agreement with another anchor's
+        class is not agreement with this anchor's."""
+        with self.assertRaises(C.DeterminismAnchorMismatch):
+            run(ev=evidence(determinism=determinism(
+                anchor_determinism_class="bitwise_stable",
+                anchor_linkage_sha256=sha("another-anchor-linkage"))))
+
+    def test_a_mismatched_capture_is_never_silently_downgraded(self):
+        try:
+            report = run(ev=evidence(determinism=determinism(
+                anchor_binary_sha256=sha("some-other-anchor-binary"))))
+        except C.DeterminismAnchorMismatch:
+            return
+        self.fail(f"a mismatched determinism capture produced "
+                  f"{report.outcome(C.GID_DETERMINISM)!r} instead of refusing")
+
+    def test_an_unrecorded_capture_anchor_is_could_not_check(self):
+        report = run(ev=evidence(determinism=determinism(**UNRECORDED)))
+        gate = report.gate(C.GID_DETERMINISM)
+        self.assertEqual(gate.check.outcome, S.COULD_NOT_CHECK)
+        self.assertIn("records no anchor identity", " ".join(gate.check.reasons))
+        self.assertIn("capture_anchor=unrecorded", gate.notes)
+
+    def test_an_unrecorded_capture_anchor_raises_nothing(self):
+        run(ev=evidence(determinism=determinism(**UNRECORDED)))
+
+    def test_an_unrecorded_capture_anchor_does_not_downgrade_a_real_failure(self):
+        report = run(ev=evidence(determinism=determinism(
+            candidate_output_digests=(sha("gen-out"),) * 2, **UNRECORDED)))
+        self.assertEqual(report.outcome(C.GID_DETERMINISM), S.FAIL)
+
+    def test_an_unrecorded_capture_anchor_still_reports_an_undeclared_change(self):
+        """The invariant-12 FAIL survives an unattributable anchor: an unknown
+        never buys silence about a class change the evaluator measured."""
+        report = run(req=request(determinism=api.DeterminismReport(
+                         determinism_class="bitwise_unstable", same_seed_repeat_runs=3)),
+                     ev=evidence(determinism=determinism(
+                         candidate_output_digests=(sha("a"), sha("b"), sha("c")),
+                         **UNRECORDED)))
+        gate = report.gate(C.GID_DETERMINISM)
+        self.assertEqual(gate.check.outcome, S.FAIL)
+        self.assertIn("invariant 12", " ".join(gate.check.reasons))
+
+    def test_the_compliant_matched_capture_still_passes(self):
+        """The counterpart: the new rule must not be satisfiable by always failing."""
+        report = run()
+        gate = report.gate(C.GID_DETERMINISM)
+        self.assertEqual(gate.check.outcome, S.PASS)
+        self.assertIn(f"capture_anchor={anchor().short()}", gate.notes)
+
+    def test_measurement_event_ids_are_not_part_of_the_identity(self):
+        report = run(req=request(anchor=anchor(
+            measurement_event_ids=("ake-anchor-0002", "ake-anchor-0003"))))
+        self.assertEqual(report.outcome(C.GID_DETERMINISM), S.PASS)
+
+
 # ---------------------------------------------------------------------------
 # Binary / linkage identity
 # ---------------------------------------------------------------------------
@@ -1535,6 +1698,81 @@ class TestAntiRewardHacking(unittest.TestCase):
         report = run(ev=evidence(anti_reward_hacking=anti_hack(
             cache_state="unknown", candidate_output_used_as_oracle=True)))
         self.assertEqual(report.outcome(C.GID_ANTI_REWARD_HACKING), S.FAIL)
+
+
+class TestTheDeliveredWorkFloorNamesTheAnchorThatSetIt(unittest.TestCase):
+    """`delivered_units_anchor` is control 3's floor and the comparison against it
+    is exact, with no tolerance knob — which is exactly why both counts must come
+    from ONE anchor. A floor lifted from another anchor's run is a number, not a
+    floor, and it can clear a candidate that really did reduce work."""
+
+    def test_two_of_three_components_is_rejected(self):
+        for omitted in ANCHOR_TRIPLE:
+            with self.subTest(omitted=omitted):
+                with self.assertRaises(ValueError) as ctx:
+                    anti_hack(**{omitted: None})
+                self.assertIn("A partially named anchor is the defect", str(ctx.exception))
+                self.assertIn(f"anti_reward_hacking.{omitted}", str(ctx.exception))
+
+    def test_a_placeholder_capture_anchor_is_refused(self):
+        with self.assertRaises(ValueError) as ctx:
+            anti_hack(anchor_source_commit="0" * 40)
+        self.assertIn("placeholder digest", str(ctx.exception))
+
+    def test_a_floor_from_another_anchor_is_refused_by_name(self):
+        with self.assertRaises(C.AntiRewardHackingAnchorMismatch) as ctx:
+            run(ev=evidence(anti_reward_hacking=anti_hack(
+                anchor_binary_sha256=sha("some-other-anchor-binary"))))
+        self.assertIn("this anti-reward-hacking capture was taken against anchor",
+                      str(ctx.exception))
+
+    def test_a_commit_only_mismatch_is_refused(self):
+        with self.assertRaises(C.AntiRewardHackingAnchorMismatch):
+            run(ev=evidence(anti_reward_hacking=anti_hack(
+                anchor_source_commit=V7_COMMIT)))
+
+    def test_a_floor_the_candidate_clears_does_not_excuse_the_mismatch(self):
+        """The candidate delivers MORE than the floor, so the gate has nothing to
+        report — and the floor still belongs to another anchor."""
+        with self.assertRaises(C.AntiRewardHackingAnchorMismatch):
+            run(ev=evidence(anti_reward_hacking=anti_hack(
+                delivered_units_candidate=4096,
+                anchor_linkage_sha256=sha("another-anchor-linkage"))))
+
+    def test_an_unrecorded_capture_anchor_is_could_not_check(self):
+        report = run(ev=evidence(anti_reward_hacking=anti_hack(**UNRECORDED)))
+        gate = report.gate(C.GID_ANTI_REWARD_HACKING)
+        self.assertEqual(gate.check.outcome, S.COULD_NOT_CHECK)
+        self.assertIn("records no anchor identity", " ".join(gate.check.reasons))
+        self.assertIn("capture_anchor=unrecorded", gate.notes)
+
+    def test_an_unrecorded_capture_anchor_raises_nothing(self):
+        run(ev=evidence(anti_reward_hacking=anti_hack(**UNRECORDED)))
+
+    def test_an_unrecorded_capture_anchor_does_not_downgrade_a_real_failure(self):
+        report = run(ev=evidence(anti_reward_hacking=anti_hack(
+            delivered_units_candidate=96, **UNRECORDED)))
+        gate = report.gate(C.GID_ANTI_REWARD_HACKING)
+        self.assertEqual(gate.check.outcome, S.FAIL)
+        self.assertIn("reducing work", " ".join(gate.check.reasons))
+
+    def test_an_absent_floor_keeps_its_own_reason_and_gains_no_second_one(self):
+        """With no anchor count there is no anchor-derived material to attribute,
+        so the pre-existing COULD_NOT_CHECK says what it always said."""
+        report = run(ev=evidence(anti_reward_hacking=anti_hack(
+            delivered_units_anchor=None, **UNRECORDED)))
+        gate = report.gate(C.GID_ANTI_REWARD_HACKING)
+        self.assertEqual(gate.check.outcome, S.COULD_NOT_CHECK)
+        self.assertEqual(gate.check.reasons,
+                         ("the anchor's delivered-work count was not recorded, so work "
+                          "reduction could not be checked",))
+
+    def test_the_compliant_matched_floor_still_passes(self):
+        """The counterpart: the new rule must not be satisfiable by always failing."""
+        report = run()
+        gate = report.gate(C.GID_ANTI_REWARD_HACKING)
+        self.assertEqual(gate.check.outcome, S.PASS)
+        self.assertIn(f"capture_anchor={anchor().short()}", gate.notes)
 
 
 # ---------------------------------------------------------------------------
@@ -2070,6 +2308,166 @@ class TestToleranceRestsOnAReconciledAnchorClass(unittest.TestCase):
         report = run(ev=evidence(determinism=None))
         self.assertEqual(report.coherence.label, C.COHERENCE_BYTE_IDENTICAL)
         self.assertEqual(report.outcome(C.GID_COHERENCE), S.PASS)
+
+
+class TestReconciliationRequiresBothRecordsToNameOneAnchor(unittest.TestCase):
+    """The reconciliation above compared what two records SAY and never which
+    anchor each says it about. Two captures taken against different anchors that
+    happen to agree read exactly like corroboration, and bought the tolerance
+    branch's PASS — the one place a self-declared field turns a byte difference
+    into an equivalence label."""
+
+    DIVERGENT = dict(candidate_output_sha256=sha("different"), token_agreement_ratio=0.999)
+
+    def _unstable(self, **determinism_overrides):
+        kwargs = dict(anchor_determinism_class="bitwise_unstable",
+                      anchor_output_digests=(sha("a"), sha("b"), sha("c")))
+        kwargs.update(determinism_overrides)
+        return evidence(
+            coherence=coherence(anchor_determinism_class="bitwise_unstable",
+                                **self.DIVERGENT),
+            determinism=determinism(**kwargs))
+
+    def test_two_records_of_different_anchors_do_not_corroborate(self):
+        with self.assertRaises(C.DeterminismAnchorMismatch) as ctx:
+            run(ev=self._unstable(anchor_binary_sha256=sha("some-other-anchor-binary")))
+        message = str(ctx.exception)
+        self.assertIn("this determinism capture was taken against anchor", message)
+        self.assertIn("two independent records corroborating", message)
+
+    def test_a_commit_only_disagreement_between_the_two_records_is_refused(self):
+        """Both digests agree, both records declare `bitwise_unstable`, and the
+        agreement is between two different anchors."""
+        with self.assertRaises(C.DeterminismAnchorMismatch):
+            run(ev=self._unstable(anchor_source_commit=V7_COMMIT))
+
+    def test_the_refusal_precedes_the_class_comparison(self):
+        """A mismatch is refused even when the classes ALSO disagree: the FAIL
+        would report a disagreement between two anchors as a disagreement about
+        one, which is a different — and wrong — finding."""
+        with self.assertRaises(C.DeterminismAnchorMismatch):
+            run(ev=self._unstable(anchor_determinism_class="bitwise_stable",
+                                  anchor_output_digests=(sha("gen-out"),) * 3,
+                                  anchor_binary_sha256=sha("some-other-anchor-binary")))
+
+    def test_an_unrecorded_determinism_identity_is_not_corroboration(self):
+        report = run(ev=self._unstable(**UNRECORDED))
+        gate = report.gate(C.GID_COHERENCE)
+        self.assertEqual(report.coherence.label, C.COHERENCE_WITHIN_TOLERANCE)
+        self.assertEqual(gate.check.outcome, S.COULD_NOT_CHECK)
+        self.assertIn("does not establish that they describe the SAME anchor",
+                      " ".join(gate.check.reasons))
+
+    def test_an_unrecorded_determinism_identity_raises_nothing(self):
+        run(ev=self._unstable(**UNRECORDED))
+
+    def test_the_reconciliation_refuses_on_its_own(self):
+        """Called directly — `check_output_coherence` is public — the reconciliation
+        refuses without help from the determinism gate downstream of it. The two
+        bindings are independent: this one is record-to-record, and the gate's is
+        record-to-request."""
+        ev = self._unstable(anchor_binary_sha256=sha("some-other-anchor-binary"))
+        with self.assertRaises(C.DeterminismAnchorMismatch):
+            C.check_output_coherence(request(), ev.coherence, policy(), ev.determinism)
+
+    def test_the_reconciliation_withholds_corroboration_on_its_own(self):
+        """Same altitude for the absent case: COULD_NOT_CHECK from this function,
+        not from a later gate."""
+        ev = self._unstable(**UNRECORDED)
+        gate, verdict = C.check_output_coherence(request(), ev.coherence, policy(),
+                                                 ev.determinism)
+        self.assertEqual(verdict.label, C.COHERENCE_WITHIN_TOLERANCE)
+        self.assertEqual(gate.check.outcome, S.COULD_NOT_CHECK)
+        self.assertIn("does not establish that they describe the SAME anchor",
+                      " ".join(gate.check.reasons))
+
+    def test_a_class_disagreement_keeps_its_original_reason(self):
+        """Same anchor, disagreeing classes: the pre-existing FAIL, untouched."""
+        report = run(ev=self._unstable(anchor_determinism_class="bitwise_stable",
+                                       anchor_output_digests=(sha("gen-out"),) * 3))
+        gate = report.gate(C.GID_COHERENCE)
+        self.assertEqual(gate.check.outcome, S.FAIL)
+        self.assertIn("two records of one anchor property disagreeing",
+                      " ".join(gate.check.reasons))
+
+    def test_two_records_of_the_SAME_anchor_still_corroborate(self):
+        """The required counterpart: a reconciliation between two captures taken
+        against one anchor corroborates exactly as it did before."""
+        ev = self._unstable()
+        self.assertEqual(ev.coherence.recorded_anchor(), ev.determinism.recorded_anchor())
+        report = run(ev=ev)
+        self.assertEqual(report.coherence.label, C.COHERENCE_WITHIN_TOLERANCE)
+        self.assertEqual(report.outcome(C.GID_COHERENCE), S.PASS)
+
+    def test_the_absent_determinism_record_keeps_its_original_reason(self):
+        report = run(ev=evidence(
+            coherence=coherence(anchor_determinism_class="bitwise_unstable",
+                                **self.DIVERGENT),
+            determinism=None))
+        gate = report.gate(C.GID_COHERENCE)
+        self.assertEqual(gate.check.outcome, S.COULD_NOT_CHECK)
+        self.assertIn("no determinism evidence was captured to reconcile that against",
+                      " ".join(gate.check.reasons))
+
+
+class TestEveryAnchorDerivedSurfaceNamesItsAnchorTheSameWay(unittest.TestCase):
+    """One defect class, one rule. Five evidence types carry anchor-DERIVED
+    material; each names the anchor by the same triple, under the same validator,
+    and each refuses a replay against a different one by a named error."""
+
+    #: `(builder, label)` for every evidence type carrying the triple.
+    CARRIERS = (
+        (coherence, "coherence"), (linkage, "linkage"), (determinism, "determinism"),
+        (static_analysis, "static"), (anti_hack, "anti_reward_hacking"),
+    )
+
+    def test_every_carrier_names_the_anchor_by_all_three_components(self):
+        for builder, label in self.CARRIERS:
+            for omitted in ANCHOR_TRIPLE:
+                with self.subTest(evidence=label, omitted=omitted):
+                    with self.assertRaises(ValueError) as ctx:
+                        builder(**{omitted: None})
+                    # One validator, one sentence — not five hand-copied rules.
+                    self.assertIn("A partially named anchor is the defect", str(ctx.exception))
+                    self.assertIn(f"{label}.{omitted}", str(ctx.exception))
+
+    def test_every_carrier_refuses_a_placeholder_component(self):
+        for builder, label in self.CARRIERS:
+            with self.subTest(evidence=label):
+                with self.assertRaises(ValueError) as ctx:
+                    builder(anchor_binary_sha256="0" * 64)
+                self.assertIn("placeholder digest", str(ctx.exception))
+
+    def test_every_mismatch_error_is_one_catchable_family(self):
+        for error in (C.CoherenceAnchorMismatch, C.DeterminismAnchorMismatch,
+                      C.StaticAnalysisAnchorMismatch, C.AntiRewardHackingAnchorMismatch):
+            with self.subTest(error=error.__name__):
+                self.assertTrue(issubclass(error, C.EvidenceAnchorMismatch))
+                self.assertTrue(issubclass(error, C.CorrectnessError))
+                self.assertTrue(issubclass(error, api.EvaluatorError))
+                self.assertIn(error.__name__, C.__all__)
+
+    def test_a_report_where_nothing_recorded_its_anchor_raises_nothing_and_passes_nothing(self):
+        """Absence is COULD_NOT_CHECK-shaped on every surface at once. It must not
+        raise — nothing disagrees — and it must not pass either."""
+        report = run(ev=evidence(
+            coherence=coherence(**UNRECORDED), determinism=determinism(**UNRECORDED),
+            static_analysis=static_analysis(**UNRECORDED), linkage=linkage(**UNRECORDED),
+            anti_reward_hacking=anti_hack(**UNRECORDED)))
+        for gate_id in (C.GID_COHERENCE, C.GID_DETERMINISM, C.GID_STATIC_COMPILE,
+                        C.GID_LINKAGE, C.GID_ANTI_REWARD_HACKING):
+            with self.subTest(gate=gate_id):
+                self.assertEqual(report.outcome(gate_id), S.COULD_NOT_CHECK)
+
+    def test_the_fully_recorded_report_still_passes_every_one_of_them(self):
+        """The counterpart at report altitude: five new refusals, and the clean
+        candidate is still clean. A rule satisfiable by always refusing would show
+        up here."""
+        report = run()
+        for gate_id in (C.GID_COHERENCE, C.GID_DETERMINISM, C.GID_STATIC_COMPILE,
+                        C.GID_LINKAGE, C.GID_ANTI_REWARD_HACKING):
+            with self.subTest(gate=gate_id):
+                self.assertEqual(report.outcome(gate_id), S.PASS)
 
 
 class TestATotalDisagreementIsMeasurable(unittest.TestCase):
