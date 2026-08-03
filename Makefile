@@ -74,6 +74,17 @@ PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_packager.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/adapters/test_serving_runtime.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/adapters/test_whisper_stt.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/adapters/test_qwentts_tts.py
+# AK6 — the /kernel operator surface. It belongs in the gate for the same reason
+# the surface exists: the guarantees it holds (a dead loop cannot read as fresh, a
+# blocking panel cannot read clear while the sections beside it read blocked, the
+# one writer cannot reach a checkout or a production tree) are only guarantees
+# while something runs them.
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/surface/test_dashboard_contract.py
+# The SEAM: the only suite where the real producer writes a file the real hub
+# reads. Both halves were green while disagreeing about a field the producer
+# owns, so this one runs first among the surface suites in spirit and must never
+# be dropped — a seam nobody checks is two modules drifting in private.
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/surface/test_surface_seam.py
 
 help:
 	@printf '%s\n' 'Targets: setup lint test health docs docs-check analysis analysis-check security-check autopilot-gate'

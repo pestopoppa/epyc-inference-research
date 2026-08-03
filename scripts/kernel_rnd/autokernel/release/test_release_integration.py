@@ -1034,6 +1034,31 @@ _DENIED_ATTRS = frozenset({
     "TemporaryDirectory", "connect", "sendall", "urlopen",
 })
 
+#: The denied primitives that are NEVER exempt, whatever a module's exemption
+#: says. An exemption is granted for a capability ("this module writes one JSON
+#: file"), and until this existed it was applied to a BUCKET — `write_or_process`
+#: — so the exemption for the one writer in the plane also bought it
+#: `subprocess.run`, `os.kill`, `os.fork`, sockets and `exec`. An adversarial pass
+#: appended `subprocess.run(['systemctl', 'restart', 'dashboard'])` and
+#: `os.kill(pid, SIGKILL)` to the exempt module and the audit reported ZERO
+#: offenders: path-narrow, capability-wide. On a shared host where every dashboard
+#: and inference process belongs to somebody else, spawning and signalling is the
+#: capability that must not be reachable — so it is split out of the bucket and
+#: the exemption cannot reach it.
+_NEVER_EXEMPT_ATTRS = frozenset({
+    "system", "popen", "fork", "forkpty", "spawnl", "spawnv", "spawnvp",
+    "posix_spawn", "execv", "execve", "execvp", "execvpe", "execl", "execlp",
+    "run", "call", "check_call", "check_output", "Popen", "communicate",
+    "kill", "killpg", "terminate", "send_signal", "startfile",
+    "connect", "sendall", "urlopen",
+})
+_NEVER_EXEMPT_NAMES = frozenset({"exec", "eval", "execfile", "__import__", "reload"})
+_NEVER_EXEMPT_IMPORTS = frozenset({
+    "subprocess", "signal", "socket", "multiprocessing", "threading", "pty",
+    "asyncio", "http", "urllib", "requests", "ftplib", "smtplib", "webbrowser",
+    "ctypes", "runpy", "importlib",
+})
+
 #: Modules a non-test module in either plane may not import at all.
 _DENIED_IMPORTS = frozenset({
     "os", "subprocess", "shutil", "signal", "socket", "ctypes", "multiprocessing",
@@ -1042,14 +1067,94 @@ _DENIED_IMPORTS = frozenset({
     "runpy", "io", "glob", "atexit", "webbrowser", "ftplib", "smtplib",
 })
 
-#: RULE 1's scope — the two planes, and ONLY the two planes. Rule 1 is "this module
-#: cannot write or spawn AT ALL", which is true of `release/` and `adapters/` by
-#: design and FALSE of the rest of the package by design: `journal.py` appends to a
-#: journal, `storage.py` expires artifacts, `resource/device_claim.py` takes lock
+#: RULE 1's scope — the planes, and ONLY the planes. Rule 1 is "this module cannot
+#: write or spawn AT ALL", which is true of `release/`, `adapters/` and `surface/`
+#: by design and FALSE of the rest of the package by design: `journal.py` appends to
+#: a journal, `storage.py` expires artifacts, `resource/device_claim.py` takes lock
 #: files, `controller/state_machine.py` persists its own state. Those modules write
 #: because writing is their job, and widening rule 1 to them would be a guard that
 #: forbids the package's own legitimate idiom.
-_PLANE_DIRS = ("release", "adapters")
+_PLANE_DIRS = ("release", "adapters", "surface")
+
+#: The directories rule 1 deliberately does NOT reach, each because writing is the
+#: module's job. Listed rather than implied: `_PLANE_DIRS` is a hardcoded tuple, so
+#: before this existed a new top-level subpackage fell outside rule 1 SILENTLY while
+#: looking exactly like a module inside it. `test_every_package_directory_is_classified`
+#: makes a new directory a test failure until someone classifies it, which is the
+#: same defect class the audit itself exists to catch — a guarantee that quietly
+#: stops covering things.
+_RULE_ONE_UNSCOPED_DIRS = (
+    ".",            # journal.py, storage.py, schemas.py — journal/artifact writers
+    "controller",   # state_machine.py latches control state to disk
+    "evaluator",    # evaluator/surface.py and friends persist evaluator state
+    "resource",     # device_claim.py takes lock files
+)
+
+#: RULE 1's ONE exemption, keyed by EXACT package-relative module path.
+#:
+#: `surface/dashboard_contract.py` is the AK6 operator-surface producer, and it is
+#: the only module in a plane that writes. It has to: the `/kernel` panel it feeds
+#: was reading `KERNEL_DASHBOARD_JSON` — a gitignored scratch path that does not
+#: exist, credited to an exporter that is not part of AutoKernel — and rendering
+#: clean over the hole for as long as anyone had been looking. A contract nothing
+#: produces is the absence-tolerance scar itself, so "this plane writes nothing"
+#: cannot be the property that holds here.
+#:
+#: What DOES hold, unchanged and unweakened:
+#:   * RULE 2 binds over it exactly as over every other module — no call may name a
+#:     production branch, a `kernels/production` path, an era registry or an
+#:     AutoPilot baseline. The tests below prove rule 2 still bites on this module
+#:     specifically, not merely on the corpus containing it.
+#:   * the module refuses those targets at RUNTIME too, via
+#:     `assert_exportable_destination`, which checks the literal path, the absolute
+#:     path AND the symlink-resolved path against `packager.HUMAN_ONLY_TARGET_PATTERNS`
+#:     — the same SSOT this audit uses — plus the frozen production trees and the
+#:     scratch roots. A static exemption paired with a runtime guard is a different
+#:     thing from an exemption alone.
+#:
+#: The key is an exact path, never a prefix or a directory. A directory-shaped
+#: exemption would silently cover the next module someone adds beside it, and
+#: `test_the_exemption_does_not_reach_a_sibling_in_the_same_directory` is what stops
+#: that from being discovered later.
+_RULE_ONE_EXEMPT_MODULES = {
+    "surface/dashboard_contract.py":
+        "the AK6 /kernel contract producer — the operator surface's only writer, "
+        "emitting exactly one derived JSON export to a durable path. Rule 1 cannot "
+        "hold for a producer; rule 2 holds over it unchanged, its WRITES are "
+        "exempt but nothing in _NEVER_EXEMPT_* is, and its own "
+        "assert_exportable_destination refuses every human-only target, every "
+        "frozen production tree, every scratch root and every git working tree at "
+        "runtime.",
+}
+
+
+def package_relative(path: pathlib.Path, root: pathlib.Path) -> str:
+    """The audit's key for a module: its path relative to the package root."""
+    return path.relative_to(root).as_posix()
+
+
+def rule_one_offenders(findings_by_path, *, exempt=None) -> list:
+    """Rule-1 offenders, with the narrow per-module exemption applied.
+
+    Takes an already-computed `{package-relative path: findings}` mapping rather
+    than reading the filesystem, so a test can hand it a corpus containing a module
+    that does not exist — which is the only way to prove the exemption does NOT
+    widen to a sibling that has not been written yet.
+
+    The exemption is bounded on BOTH axes. By path: exact keys, no prefixes. By
+    CAPABILITY: it suppresses write findings only, and `process_or_exec` findings
+    are added back for an exempt module, so the one module allowed to write a file
+    still may not spawn, signal, open a socket or execute a string.
+    """
+    exempt = _RULE_ONE_EXEMPT_MODULES if exempt is None else exempt
+    offenders = []
+    for rel in sorted(findings_by_path):
+        findings = findings_by_path[rel]
+        if rel in exempt:
+            offenders.extend(findings.get("process_or_exec", []))
+            continue
+        offenders.extend(findings["write_or_process"])
+    return offenders
 
 
 def discover_plane_modules(root: pathlib.Path) -> list:
@@ -1123,6 +1228,29 @@ def _denied_call_name(node: ast.Call) -> str:
     return ""
 
 
+def _never_exempt_call_name(node: ast.Call) -> str:
+    """The never-exempt primitive this call invokes, or ''.
+
+    Mirrors `_denied_call_name`, including the `getattr` bypass, over the
+    spawn/signal/socket/dynamic-exec subset. Kept as its own function rather than
+    a filter over the finding STRINGS: parsing a message back into a primitive is
+    how a guard stops matching the day someone rewords the message.
+    """
+    func = node.func
+    if isinstance(func, ast.Name):
+        if func.id in _NEVER_EXEMPT_NAMES:
+            return func.id
+        if func.id == "getattr" and len(node.args) >= 2:
+            second = node.args[1]
+            if isinstance(second, ast.Constant) and isinstance(second.value, str) \
+                    and second.value in (_NEVER_EXEMPT_ATTRS | _NEVER_EXEMPT_NAMES):
+                return f"getattr(..., {second.value!r})"
+        return ""
+    if isinstance(func, ast.Attribute) and func.attr in _NEVER_EXEMPT_ATTRS:
+        return func.attr
+    return ""
+
+
 def _string_constants(node: ast.AST) -> list:
     return [n.value for n in ast.walk(node)
             if isinstance(n, ast.Constant) and isinstance(n.value, str)]
@@ -1149,7 +1277,8 @@ def audit_module_source(source: str, *, label: str, is_test: bool) -> dict:
     `packager.HUMAN_ONLY_TARGET_PATTERNS` is the SSOT for what a human-only target
     is; this does not restate it.
     """
-    findings = {"write_or_process": [], "human_only_targets": [], "unparsed": None}
+    findings = {"write_or_process": [], "process_or_exec": [],
+                "human_only_targets": [], "unparsed": None}
     try:
         tree = ast.parse(source)
     except SyntaxError as exc:
@@ -1161,6 +1290,9 @@ def audit_module_source(source: str, *, label: str, is_test: bool) -> dict:
             if not denied:
                 continue
             findings["write_or_process"].append(f"{label}:{node.lineno} calls {denied}")
+            if _never_exempt_call_name(node):
+                findings["process_or_exec"].append(
+                    f"{label}:{node.lineno} calls {denied}")
             for text in _string_constants(node):
                 for reason in _human_only_reasons(text):
                     findings["human_only_targets"].append(
@@ -1174,8 +1306,12 @@ def audit_module_source(source: str, *, label: str, is_test: bool) -> dict:
                 if root in _DENIED_IMPORTS:
                     findings["write_or_process"].append(
                         f"{label}:{node.lineno} imports {root!r}")
+                if root in _NEVER_EXEMPT_IMPORTS:
+                    findings["process_or_exec"].append(
+                        f"{label}:{node.lineno} imports {root!r}")
     if is_test:
         findings["write_or_process"] = []
+        findings["process_or_exec"] = []
     return findings
 
 
@@ -1330,13 +1466,216 @@ class TestNoProductionWritePathsAnywhere(unittest.TestCase):
 
     # -- rule 1: no write or process path in any non-test module -------------
 
+    def _rule_one_corpus(self) -> dict:
+        """`{package-relative path: findings}` for every non-test plane module."""
+        return {package_relative(path, self.root): self._audit(path)
+                for path in self.modules if not path.name.startswith("test_")}
+
     def test_no_non_test_module_writes_or_spawns_at_all(self):
-        offenders = []
-        for path in self.modules:
+        offenders = rule_one_offenders(self._rule_one_corpus())
+        self.assertEqual(offenders, [], "\n".join(offenders))
+
+    # -- rule 1's scope is TOTAL: a new directory cannot escape it silently ---
+
+    def test_every_package_directory_is_classified(self):
+        """Every directory holding a non-test module is in exactly one bucket.
+
+        `_PLANE_DIRS` is a hardcoded tuple, so a top-level subpackage added
+        tomorrow used to fall outside rule 1 while looking exactly like a module
+        inside it — the same shape as the `glob`/`rglob` defect one layer up. This
+        makes the omission a failure instead of a silence: a new directory is
+        either a plane (rule 1 applies) or explicitly listed as a writer.
+        """
+        classified = set(_PLANE_DIRS) | set(_RULE_ONE_UNSCOPED_DIRS)
+        found = set()
+        for path in discover_package_modules(self.root):
             if path.name.startswith("test_"):
                 continue
-            offenders.extend(self._audit(path)["write_or_process"])
-        self.assertEqual(offenders, [], "\n".join(offenders))
+            found.add(path.relative_to(self.root).parent.as_posix())
+        unclassified = sorted(found - classified)
+        self.assertEqual(
+            unclassified, [],
+            f"unclassified package directories {unclassified}: each must be added "
+            f"to _PLANE_DIRS (rule 1 applies: the modules write nothing) or to "
+            f"_RULE_ONE_UNSCOPED_DIRS (writing is their job). Leaving one out is "
+            f"not neutral — it removes rule 1 from those modules without saying so.")
+        # Anti-vacuity: both buckets must actually be populated by the real tree.
+        self.assertTrue(found & set(_PLANE_DIRS))
+        self.assertTrue(found & set(_RULE_ONE_UNSCOPED_DIRS))
+
+    def test_an_unclassified_directory_is_detected(self):
+        """The bite for the test above, on a tree it builds: an unlisted directory
+        holding a module must show up as unclassified.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            (root / "web").mkdir()
+            (root / "web" / "panel.py").write_text("x = 1\n", encoding="utf-8")
+            found = {p.relative_to(root).parent.as_posix()
+                     for p in discover_package_modules(root)
+                     if not p.name.startswith("test_")}
+            classified = set(_PLANE_DIRS) | set(_RULE_ONE_UNSCOPED_DIRS)
+            self.assertEqual(sorted(found - classified), ["web"])
+
+    # -- rule 1's single exemption, and the fence around it ------------------
+
+    def test_the_rule_one_exemption_names_exactly_one_module_by_exact_path(self):
+        """One entry, one exact path, and a justification long enough to be one."""
+        self.assertEqual(set(_RULE_ONE_EXEMPT_MODULES),
+                         {"surface/dashboard_contract.py"})
+        for rel, reason in _RULE_ONE_EXEMPT_MODULES.items():
+            self.assertFalse(rel.endswith("/"), rel)      # not a directory
+            self.assertNotIn("*", rel)                    # not a glob
+            self.assertTrue(rel.endswith(".py"), rel)     # a module, not a tree
+            self.assertGreater(len(reason), 120, rel)
+
+    def test_the_exempt_module_really_does_write(self):
+        """Anti-vacuity. An exemption for a module that writes nothing is dead
+        weight that will one day be inherited by something that does; if this
+        fails, DELETE the exemption rather than keeping it warm.
+        """
+        path = self.root / "surface" / "dashboard_contract.py"
+        findings = audit_module_source(path.read_text(encoding="utf-8"),
+                                       label="surface/dashboard_contract.py",
+                                       is_test=False)
+        self.assertTrue(findings["write_or_process"])
+
+    def test_the_exemption_does_not_reach_a_sibling_in_the_same_directory(self):
+        """THE fence: the exemption is keyed by exact path, so a second writer in
+        `surface/` is still an offender. A directory- or prefix-shaped exemption
+        would swallow it, and nobody would find out until the second writer had
+        been in the tree for a while.
+        """
+        writer = audit_module_source(
+            "import pathlib\n"
+            "def go():\n"
+            "    pathlib.Path('/mnt/raid0/llm/x.json').write_text('{}')\n",
+            label="surface/other_writer.py", is_test=False)
+        corpus = {"surface/dashboard_contract.py": writer,
+                  "surface/other_writer.py": writer}
+        offenders = rule_one_offenders(corpus)
+        self.assertTrue(offenders)
+        self.assertTrue(all("other_writer" in o for o in offenders), offenders)
+
+    def test_the_exemption_suppresses_rule_one_only_for_its_own_module(self):
+        """The compliant-path control: the exempted module's writes are allowed
+        through, so the exemption is not a no-op that the test above would pass
+        vacuously.
+        """
+        writer = audit_module_source(
+            "import os\n"
+            "def go(dst):\n"
+            "    os.replace('a', dst)\n",
+            label="surface/dashboard_contract.py", is_test=False)
+        self.assertTrue(writer["write_or_process"])
+        self.assertEqual(
+            rule_one_offenders({"surface/dashboard_contract.py": writer}), [])
+
+    def test_the_exemption_does_not_reach_spawning_or_signalling(self):
+        """THE OTHER fence, and the one the exemption did not have.
+
+        The exemption was keyed by exact path and reviewed on that axis alone,
+        while it suppressed a whole findings BUCKET — so the module allowed to
+        write one JSON file was equally allowed to `subprocess.run` and
+        `os.kill`. Proved on the REAL module's source with a hub restart and a
+        SIGKILL appended: on a host whose dashboards and inference servers belong
+        to other sessions, that is the capability that must not be reachable.
+        """
+        source = (self.root / "surface" / "dashboard_contract.py").read_text(
+            encoding="utf-8")
+        doctored = source + (
+            "\n\ndef restart_the_hub():\n"
+            "    import subprocess\n"
+            "    subprocess.run(['systemctl', 'restart', 'dashboard'])\n"
+            "    import signal\n"
+            "    os.kill(4242, signal.SIGKILL)\n")
+        findings = audit_module_source(doctored, label="surface/dashboard_contract.py",
+                                       is_test=False)
+        offenders = rule_one_offenders({"surface/dashboard_contract.py": findings})
+        self.assertTrue(offenders, "a spawn and a kill in the exempt module "
+                                   "produced no offender")
+        self.assertTrue(any("run" in o for o in offenders), offenders)
+        self.assertTrue(any("kill" in o for o in offenders), offenders)
+
+    def test_the_exempt_module_spawns_and_signals_nothing_as_it_ships(self):
+        """The compliant-path control for the fence above: the real module has an
+        empty never-exempt bucket, so the check is a fence and not a ban on the
+        module existing. Its `os.write`/`os.replace`/`os.makedirs` writes — the
+        thing it IS exempt for — still pass.
+        """
+        path = self.root / "surface" / "dashboard_contract.py"
+        findings = audit_module_source(path.read_text(encoding="utf-8"),
+                                       label="surface/dashboard_contract.py",
+                                       is_test=False)
+        self.assertEqual(findings["process_or_exec"], [])
+        self.assertTrue(findings["write_or_process"])
+        self.assertEqual(
+            rule_one_offenders({"surface/dashboard_contract.py": findings}), [])
+
+    def test_the_never_exempt_primitives_are_a_subset_of_the_denied_ones(self):
+        """Anti-drift. A never-exempt primitive that rule 1 does not deny at all
+        would be a rule nothing computes: the split is a PARTITION of the existing
+        denylist, not a second denylist beside it.
+        """
+        self.assertTrue(_NEVER_EXEMPT_ATTRS <= _DENIED_ATTRS)
+        self.assertTrue(_NEVER_EXEMPT_NAMES <= _DENIED_NAMES)
+        self.assertTrue(_NEVER_EXEMPT_IMPORTS <= _DENIED_IMPORTS)
+        # And the partition is non-trivial in both directions: writing is exemptible,
+        # spawning is not.
+        self.assertIn("write_text", _DENIED_ATTRS - _NEVER_EXEMPT_ATTRS)
+        self.assertIn("Popen", _NEVER_EXEMPT_ATTRS)
+
+    def test_the_getattr_bypass_is_covered_on_the_never_exempt_axis_too(self):
+        """`getattr(subprocess, 'Popen')()` routes around attribute matching, and
+        the never-exempt check is a second matcher — a bypass closed in one and
+        open in the other is a bypass.
+        """
+        findings = audit_module_source(
+            "def go(mod):\n    return getattr(mod, 'Popen')(['x'])\n",
+            label="surface/dashboard_contract.py", is_test=False)
+        self.assertTrue(findings["process_or_exec"])
+        self.assertTrue(rule_one_offenders({"surface/dashboard_contract.py": findings}))
+
+    def test_the_exemption_does_not_suppress_rule_two_on_the_exempt_module(self):
+        """Rule 2 is untouched by the exemption. Proved on the REAL module's source
+        with a production-symlink write appended — the exemption must not turn the
+        one writer in the plane into the one module nobody checks.
+        """
+        source = (self.root / "surface" / "dashboard_contract.py").read_text(
+            encoding="utf-8")
+        doctored = source + (
+            "\n\ndef cutover(document):\n"
+            "    import pathlib\n"
+            "    pathlib.Path('/mnt/raid0/llm/kernels/production/cpu')"
+            ".write_text('x')\n")
+        findings = audit_module_source(doctored, label="surface/dashboard_contract.py",
+                                       is_test=False)
+        self.assertTrue(findings["human_only_targets"])
+
+    def test_the_exempt_module_names_no_human_only_target(self):
+        """The compliant-path control for the check above: the real module, as it
+        ships, passes rule 2. It names `HUMAN_ONLY_TARGET_PATTERNS` in order to
+        REFUSE those destinations, which is exactly the correct-code case a grep
+        would have failed on.
+        """
+        path = self.root / "surface" / "dashboard_contract.py"
+        findings = audit_module_source(path.read_text(encoding="utf-8"),
+                                       label="surface/dashboard_contract.py",
+                                       is_test=False)
+        self.assertEqual(findings["human_only_targets"], [])
+
+    def test_rule_one_still_bites_on_a_non_exempt_plane_module(self):
+        """The exemption did not disarm rule 1 for the rest of the plane: the real
+        `release/plan.py` with a write appended is still an offender.
+        """
+        source = (self.root / "release" / "plan.py").read_text(encoding="utf-8")
+        doctored = source + (
+            "\n\ndef persist():\n"
+            "    import pathlib\n"
+            "    pathlib.Path('/mnt/raid0/llm/x.json').write_text('{}')\n")
+        corpus = {"release/plan.py": audit_module_source(
+            doctored, label="release/plan.py", is_test=False)}
+        self.assertTrue(rule_one_offenders(corpus))
 
     # -- rule 2: no call anywhere names a human-only target ------------------
 

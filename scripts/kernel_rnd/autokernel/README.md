@@ -51,6 +51,39 @@ benchmark, or runs inference.
 | `adapters/serving_runtime.py` | **AK8.** §13.5 — the backend that does **not** travel the kernel-freeze path. Owns the §11.6 three-gate stack-change package (registry guard → linkage/identity → live-vs-intended config), `task_rate` as the only admissible objective, and `refuse_kernel_freeze()`, which raises rather than degrading to a freeze-shaped package with empty kernel fields. |
 | `adapters/whisper_stt.py` | **AK9.** §13.3 — the STT backend: its frozen tree and binary inventory, the ggml-linkage verifier contract, the WER/RTF corpus and exclusion accounting, op-shape coverage, `assess_complexity` traced from the DIFF rather than a declared label, and `release_gate_readiness()`, which returns COULD_NOT_CHECK — never PASS — while `P-STT-*` remains a draft. |
 | `adapters/qwentts_tts.py` | **AK9.** §13.4 — the TTS backend: pipeline stages, stage attribution, numerical-safety and roundtrip-WER checks (measured THROUGH the frozen production STT binary, never through the champion), corpus identity, and the same draft-protocol release refusal. |
+| `surface/dashboard_contract.py` | **AK6.** The `/kernel` contract **v2 producer** — the only module here that writes a file outside the journal/storage/claim/controller planes, and it writes exactly one. Seven sections (campaign, champion, backend standing, headroom, blocking conditions, resource claims, release package), every figure DERIVED from the module that owns it and none recomputed; absence carried as `Unreported(reason=…)` rather than an omission; `produced_at` derived from the LOOP's journaled record timestamps via `schemas.dashboard_liveness_timestamp` (live host readings and the derived blocking section are excluded, so an exporter that is merely alive cannot date a dead controller); the blocking panel recomputed and refused if it omits a block the same document reports; and one atomic, size-verified write to a durable path that is refused if it is scratch, a production tree, a human-only target, or inside any git checkout. |
+
+### AK6 — the operator surface
+
+`surface/dashboard_contract.py` is the PRODUCER half. Its consumer is the handoff
+hub in **epyc-root** (`dashboard/panels.py`, `dashboard/server.py`,
+`dashboard/static/kernel.html`), which owns the panel→producer registry, the
+per-panel freshness envelope, the transport watchdog and the `/api/health` fold.
+The hub never imports this package — a consumer that needs its producer's code
+installed goes dark when the producer's repo moves — so the two halves are bound
+by three suites:
+
+| Suite | What only it can fail on |
+|---|---|
+| `surface/test_dashboard_contract.py` | the producer alone: a dead loop cannot be made to look alive, the one writer cannot reach a checkout or a production tree |
+| `epyc-root/tests/test_dashboard_panels*.py` | the consumer alone: absent ≠ empty on the wire, the registry is total, the fold is never green over a dead producer |
+| `surface/test_surface_seam.py` | **the two together** — the real producer writes the file the real hub reads, plus the restart chaos test |
+
+The seam suite exists because both halves were green while disagreeing: the hub
+overwrote `contract_version` (a producer-owned key, integer `2`) with the string
+`"v2"`, so what `/api/kernel` served no longer validated under
+`schemas.validate_kernel_dashboard_v2`; and `static/kernel.html` drew only a v1
+run log, so a **fully reported** v2 contract rendered as an empty page under the
+sentence *"the kernel-R&D loop has not exported any results"*. Both are fixed in
+epyc-root (hub-derived fields are now `_contract_version` / `_freshness` /
+`_render`, and the empty-state sentence is derived on the wire from the document
+that was read). `test_surface_seam.py` fails if either returns.
+
+`RestartChaosTest` reproduces the incident this surface exists for: a producer
+alive and reporting → the producer dies → time passes → the board goes from green
+to naming it, and stays naming it **across a hub restart**. Death is simulated by
+not exporting and by injecting the clock; **no process is started, signalled or
+killed**, and the suite audits its own source to keep it that way.
 
 ### AK3 — what the evaluator delivers
 
@@ -814,8 +847,39 @@ carried-forward list nobody ever *removes* from stops being read.
   rule would forbid the `isinstance` table this module legitimately uses.
 - **`_within_surface`'s denominator mixes refs with paths**, so a `target_paths`
   entry equal to a branch or tag name reads as "contained".
-- **The `/kernel` dashboard JSON contract and the freshness/health fold** (AK6
-  checklist) are not built: an HTTP surface plus a panel→producer registry.
+### Remaining in AK6 (the operator surface)
+
+Built: the v2 contract and its producer, the panel→producer registry, the
+per-panel freshness envelope, the transport watchdog, the `/api/health` fold, the
+restart chaos test. Still open — every item below was found by a red-team pass or
+by the seam integration and is reported rather than quietly carried:
+
+- **A caller can still date the contract from fabricated inputs.**
+  `ControllerObservation`, the champion record and `ReadinessReport.computed_at`
+  are caller-supplied value objects: a caller that fabricates a `Transition`, or
+  re-runs the reducer over month-old evaluations, stamps a fresh time on stale
+  evidence. Not closable at the producer boundary (it must accept the owners'
+  objects). Mitigated, not fixed: `observe_controller` reads
+  `machine.ledger`, and `producer.run.{campaign_id, controller_seq}` lets a
+  consumer see the loop did not advance whatever the timestamps say — which the
+  hub's watermark arm already does.
+- **`export_contract(path=…)` still accepts any durable, non-scratch,
+  non-production, non-checkout `.json` path.** The default is the only path
+  anything reads; a caller that passes another one writes a file nobody consumes.
+- **`refused` and `not_reported` render identically on the consumer side.** The
+  producer distinguishes them (a champion record that failed validation is
+  `refused`); the hub folds both into `unreported`, and its verdict sentence says
+  "has no producer" for a section whose producer explicitly refused.
+- **Nothing schedules the export.** There is no exporter loop, cron or controller
+  hook calling `export_contract`, so the durable path stays empty until AK7 wires
+  one — which the hub renders honestly (`NOBODY IS REPORTING`, fold `absent`) and
+  is the reason `/api/health` reads `absent` on this host today.
+- **The autopilot outcome contract has no exporter and its default path is
+  ephemeral.** `AUTOPILOT_OUTCOME_JSON` defaults to
+  `/mnt/raid0/llm/tmp/autopilot/outcome_contract.json` — the same sweep root the
+  kernel export was moved OFF in this phase. It belongs to epyc-orchestrator, so
+  it is flagged, not changed. The `outcome` panel is watched anyway: it is the
+  panel the trial-1302 outage happened on.
 - **§9.7's `llama_cpu` co-residency requirement is dischargeable by a co-resident
   PREFILL cell.** The pass narrowed it by role and admissibility, but not by phase —
   and `_CO_RESIDENT_WHY`'s entire stated mechanism is that *"CPU decode is

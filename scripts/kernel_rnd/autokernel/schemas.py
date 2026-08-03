@@ -116,6 +116,15 @@ SCHEMA_CHAMPION = "epyc.autokernel.champion.v1"
 SCHEMA_RELEASE_PACKAGE = "epyc.autokernel.release_package.v1"
 SCHEMA_OPERATOR_WAIVER = "epyc.autokernel.operator_waiver.v1"
 
+# The `/kernel` operator-surface contract, in two versions AT THE SAME TIME for
+# the same reason the evaluation event is: a consumer will meet both. v1 is the
+# LEGACY, unlabelled shape the hub reads today; v2 is what AK6 emits. The rules
+# and the reasoning live beside the validators further down.
+SCHEMA_KERNEL_DASHBOARD_V1 = "epyc.autokernel.kernel_dashboard.v1"
+SCHEMA_KERNEL_DASHBOARD_V2 = "epyc.autokernel.kernel_dashboard.v2"
+#: The CURRENT operator-surface contract. New exports are emitted under this one.
+SCHEMA_KERNEL_DASHBOARD = SCHEMA_KERNEL_DASHBOARD_V2
+
 
 # =============================================================================
 # Controlled vocabularies (§1.5, §7, §9.5, §10.4)
@@ -255,6 +264,11 @@ NON_RETRIEVABLE_FIELDS = {
     SCHEMA_CHAMPION: frozenset(),
     SCHEMA_RELEASE_PACKAGE: frozenset(),
     SCHEMA_OPERATOR_WAIVER: frozenset(),
+    # The operator surface renders no planner prose at all, so both versions have
+    # an empty set rather than no entry: an ABSENT entry makes `retrievable_view`
+    # raise on an otherwise valid record.
+    SCHEMA_KERNEL_DASHBOARD_V1: frozenset(),
+    SCHEMA_KERNEL_DASHBOARD_V2: frozenset(),
 }
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -1849,6 +1863,19 @@ def validate_evaluation_event(obj: Any) -> list:
 # epyc.autokernel.champion.v1 (§7.5)
 # =============================================================================
 
+#: The condition name an operator surface gives a champion `blocking_conditions`
+#: entry that is not written in the machine vocabulary the rest of the package
+#: uses (`EVALUATOR_COVERAGE_GAP`, `REANCHOR_PENDING_REMEASURE`,
+#: `T2_INTERACTION_FAILED`, …). The entry's own text is carried as the detail, so
+#: nothing is lost and nothing is invented.
+#:
+#: It lives HERE, beside the record it describes, and not in the surface: the
+#: champion record owns its blocking conditions, so the fallback name for one of
+#: them is the record schema's to define. A surface that minted its own name for
+#: it would be the private taxonomy `DASHBOARD_BLOCKING_ORIGINS` refuses to grow.
+CHAMPION_BLOCKED_UNNAMED = "CHAMPION_BLOCKED"
+
+
 def validate_champion(obj: Any) -> list:
     """Validate a champion record — one composed lineage per source tree."""
     out: list = []
@@ -2134,6 +2161,413 @@ def validate_operator_waiver(obj: Any, *, document_path: Any = _MISSING,
 
 
 # =============================================================================
+# epyc.autokernel.kernel_dashboard.v1 / .v2 — the /kernel operator surface (AK6)
+# =============================================================================
+#
+# WHY THIS CONTRACT IS SHAPED THE WAY IT IS
+# -----------------------------------------
+# The predecessor surface is the scar this schema exists to close. The hub's
+# `/kernel` page reads one JSON file and is ABSENCE-TOLERANT OVER A MISSING
+# DIRECTORY: when the producer is dead the page renders clean, which is exactly
+# the shape of AutoPilot dying at trial 1302 and staying dead ~23 hours with
+# every dashboard green. A panel that cannot distinguish "nothing is wrong" from
+# "nobody is reporting" is worse than no panel, because it is trusted.
+#
+# Absence tolerance is still REQUIRED — the page must not crash on a missing
+# producer — so the fix is not to make absence fatal, it is to make absence
+# UNREPRESENTABLE AS SILENCE. Three structural rules do that, and each of them is
+# a validation rule here rather than a convention in the producer:
+#
+#   1. **Every section is mandatory, and carries its own status.** A producer
+#      cannot drop a section whose owner is dead; it must emit the section with
+#      `status: "not_reported"`. A document missing a section key is INVALID, so
+#      "the field is absent" is never a renderable state.
+#   2. **`degraded` and `unreported_sections` are DERIVED from the sections, and
+#      the validator recomputes them.** A document that claims to be healthy while
+#      carrying an unreported section is refused — the same trick
+#      `ReleasePackage.state` uses against `_derive_package_state`, for the same
+#      reason: a summary that can be stamped independently of its evidence can be
+#      wrong in the direction nobody notices.
+#   3. **`produced_at` is derived from the LOOP's own record timestamps, never
+#      from the export.** `dashboard_liveness_timestamp()` is the single source of
+#      truth for it and the validator refuses any other value. Two consequences,
+#      both deliberate:
+#        * a no-op re-export cannot read as fresh — nothing the exporter does
+#          moves a journaled record's timestamp (the property `server.py`'s
+#          `_kernel_contract_freshness` already reaches for with "from semantic
+#          run timestamps, not file mtime"); and
+#        * live HOST observations — free disk, held device claims — are excluded
+#          from the computation (`DASHBOARD_LIVENESS_SECTIONS`). They are measured
+#          by the exporter itself, so counting them would let a surface process
+#          that is merely alive manufacture freshness for a controller that is
+#          dead. That is the 23-hour failure re-implemented one layer up.
+#
+# `exported_at` carries the wall clock and is NOT a freshness source. It is named
+# differently from `produced_at` on purpose: two fields that mean different things
+# must not be spellable the same way.
+
+DASHBOARD_SECTION_CAMPAIGN = "campaign"
+DASHBOARD_SECTION_CHAMPION = "champion"
+DASHBOARD_SECTION_BACKEND_STANDING = "backend_standing"
+DASHBOARD_SECTION_HEADROOM = "headroom"
+DASHBOARD_SECTION_BLOCKING = "blocking_conditions"
+DASHBOARD_SECTION_CLAIMS = "resource_claims"
+DASHBOARD_SECTION_RELEASE_PACKAGE = "release_package"
+
+#: Every section the v2 contract carries. EXACT, not minimum: an unknown section
+#: key is a violation, because a consumer that renders only what it recognises
+#: silently drops the one panel a future producer added.
+DASHBOARD_SECTIONS = (
+    DASHBOARD_SECTION_CAMPAIGN,
+    DASHBOARD_SECTION_CHAMPION,
+    DASHBOARD_SECTION_BACKEND_STANDING,
+    DASHBOARD_SECTION_HEADROOM,
+    DASHBOARD_SECTION_BLOCKING,
+    DASHBOARD_SECTION_CLAIMS,
+    DASHBOARD_SECTION_RELEASE_PACKAGE,
+)
+
+#: The sections whose `as_of` is a JOURNALED RECORD's timestamp — written by the
+#: loop, not by the exporter — and therefore the only ones that may establish
+#: liveness. Three exclusions, all for the same reason and each one load-bearing:
+#:
+#:   * `headroom` and `resource_claims` are live host readings taken BY the
+#:     exporter. They are fresh whenever the exporter runs, so admitting them
+#:     would mean a surface process could report a dead controller as fresh.
+#:   * `blocking_conditions` is a DERIVED section: every condition in it is
+#:     restated from the campaign, backend-standing, champion, headroom and
+#:     release-package sections, so it can only ever INHERIT freshness — it owns
+#:     no record of its own to establish it with. It was in this tuple until an
+#:     adversarial pass found the consequence: its `as_of` was the one timestamp
+#:     in the liveness set that no journaled record produced (the caller handed it
+#:     to `derive_blocking_conditions`), so an exporter that stamped its own clock
+#:     there made a month-dead controller render `produced_at: now`, `degraded:
+#:     false` — the 23-hour AutoPilot outage with a green dashboard over it,
+#:     rebuilt inside the fix for it. The producer now derives that `as_of` from
+#:     the conditions' own record timestamps as well; both guards stand, because
+#:     the class of defect is "one section's timestamp comes from the exporter"
+#:     and a single guard against it is a single point of failure.
+DASHBOARD_LIVENESS_SECTIONS = (
+    DASHBOARD_SECTION_CAMPAIGN,
+    DASHBOARD_SECTION_CHAMPION,
+    DASHBOARD_SECTION_BACKEND_STANDING,
+    DASHBOARD_SECTION_RELEASE_PACKAGE,
+)
+
+#: Three section statuses, never two. `not_reported` is the whole point: it is
+#: what a dead producer looks like, and it is a value, not an omission.
+SECTION_OBSERVED = "observed"
+SECTION_NOT_REPORTED = "not_reported"
+SECTION_REFUSED = "refused"
+DASHBOARD_SECTION_STATUSES = frozenset({
+    SECTION_OBSERVED, SECTION_NOT_REPORTED, SECTION_REFUSED,
+})
+
+#: Which owning module reported an open blocking condition. The CONDITION NAMES
+#: themselves (`EVALUATOR_COVERAGE_GAP`, `ANCHOR_MOVED`, the phase-trade statuses)
+#: are deliberately NOT enumerated here: they are owned by
+#: `controller.state_machine.STOP_STATES` and `release.readiness.BLOCKERS`, which
+#: import this module, so restating them would create the second source of truth
+#: this contract exists to avoid. The producer binds each `kind` to the owner's
+#: own constant and `test_dashboard_contract.py` proves the emitted kinds are a
+#: subset of the owners' vocabularies.
+DASHBOARD_BLOCKING_ORIGINS = frozenset({
+    "controller_stop", "readiness", "phase_trade", "evaluator_coverage",
+    "storage", "release_package", "champion",
+})
+
+_BLOCKING_KIND_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
+
+
+def _parse_ts(value: Any):
+    """An aware `datetime` for an ISO-8601 string, or None. Never raises."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else None
+
+
+def dashboard_liveness_timestamp(sections: Any) -> Optional[str]:
+    """The contract's semantic `produced_at`, derived from the loop's records.
+
+    THE single source of truth for the field: the producer calls it to fill
+    `produced_at` and `validate_kernel_dashboard_v2` calls it to refuse any other
+    value, so the two cannot drift and no caller can hand-stamp a fresh time onto
+    stale evidence.
+
+    Returns the newest `as_of` among the OBSERVED liveness sections, or `None`
+    when none of them reported. `None` is the correct, loud answer: every consumer
+    freshness classifier in this project reads a missing timestamp as `missing`
+    rather than as healthy, so a fully dead loop renders as absence.
+    """
+    newest_raw = None
+    newest_dt = None
+    if not isinstance(sections, Mapping):
+        return None
+    for name in DASHBOARD_LIVENESS_SECTIONS:
+        section = sections.get(name)
+        if not isinstance(section, Mapping):
+            continue
+        if section.get("status") != SECTION_OBSERVED:
+            continue
+        parsed = _parse_ts(section.get("as_of"))
+        if parsed is None:
+            continue
+        if newest_dt is None or parsed > newest_dt:
+            newest_dt, newest_raw = parsed, section.get("as_of")
+    return newest_raw
+
+
+def dashboard_unreported_sections(sections: Any) -> list:
+    """Sorted names of the sections whose owner did not report.
+
+    A section that is structurally ABSENT counts as unreported, so this function
+    gives the same answer for "the producer omitted the key" and "the producer
+    said `not_reported`" — a consumer must never have to know the difference, and
+    the validator refuses the omission separately.
+    """
+    out = []
+    if not isinstance(sections, Mapping):
+        return sorted(DASHBOARD_SECTIONS)
+    for name in DASHBOARD_SECTIONS:
+        section = sections.get(name)
+        if not isinstance(section, Mapping):
+            out.append(name)
+        elif section.get("status") != SECTION_OBSERVED:
+            out.append(name)
+    return sorted(out)
+
+
+def _check_dashboard_section(section: Any, name: str, out: list) -> None:
+    prefix = f"sections.{name}."
+    if not isinstance(section, Mapping):
+        out.append(f"sections.{name}: required section is missing or not a mapping "
+                   f"(a dead producer emits {SECTION_NOT_REPORTED!r}, never nothing — "
+                   f"an omitted section renders as silence)")
+        return
+    status = _need_str(section, "status", out, prefix,
+                       choices=DASHBOARD_SECTION_STATUSES)
+    as_of = _fetch(section, "as_of", out, prefix)
+    if as_of is not _MISSING and as_of is not None:
+        _need_timestamp(section, "as_of", out, prefix)
+    if status == SECTION_OBSERVED and name in DASHBOARD_LIVENESS_SECTIONS:
+        if as_of is _MISSING or as_of is None:
+            out.append(f"sections.{name}.as_of: an observed liveness section must "
+                       f"carry the record timestamp it observed; without it the "
+                       f"section contributes nothing to `produced_at` while still "
+                       f"reading as healthy")
+    if status in (SECTION_NOT_REPORTED, SECTION_REFUSED):
+        # Absence must be EXPLAINED, not merely flagged. "not_reported" with no
+        # reason is the same dead panel with a new label on it.
+        _need_str(section, "reason", out, prefix)
+        if as_of is not _MISSING and as_of is not None:
+            out.append(f"sections.{name}.as_of: must be null when status is "
+                       f"{status!r} — a section nobody reported has no observation "
+                       f"time, and a timestamp here would lift `produced_at`")
+
+
+def validate_kernel_dashboard_v2(obj: Any) -> list:
+    """Validate the v2 `/kernel` dashboard contract (AK6, §7 conventions)."""
+    out: list = []
+    if not _check_schema_header(obj, SCHEMA_KERNEL_DASHBOARD_V2, out):
+        return out
+    _reject_authority_keys(obj, out)
+
+    version = _need_int(obj, "contract_version", out, "", minimum=2, maximum=2)
+    del version
+    _need_id(obj, "campaign_id", out, "", "ak-")
+    _need_str(obj, "observation_notice", out, "")
+    # The wall clock. Required, and required to be USELESS for freshness: it is
+    # here so an operator can see when the file was last touched, next to a
+    # `produced_at` that a touch cannot move.
+    _need_timestamp(obj, "exported_at", out, "")
+
+    producer = _need_dict(obj, "producer", out, "")
+    if producer is not _MISSING:
+        _need_str(producer, "module_id", out, "producer.", pattern=_VERSIONED_ID_RE,
+                  pattern_hint="is not a versioned module id ('<name>/v<n>')")
+        run = _fetch(producer, "run", out, "producer.")
+        if run is not _MISSING and run is not None:
+            if not isinstance(run, Mapping):
+                out.append("producer.run: expected null (no producing run could be "
+                           f"identified) or a mapping, got {type(run).__name__}")
+            else:
+                # Run identity, so a consumer can tell two exports apart WITHOUT
+                # the filesystem: same campaign + same controller sequence means
+                # the loop did not advance between them.
+                _need_id(run, "campaign_id", out, "producer.run.", "ak-")
+                _need_int(run, "controller_seq", out, "producer.run.", minimum=0)
+                _need_str(run, "controller_state", out, "producer.run.")
+                _need_str(run, "ledger_receipt", out, "producer.run.")
+
+    sections = _need_dict(obj, "sections", out, "")
+    if sections is not _MISSING:
+        for name in DASHBOARD_SECTIONS:
+            _check_dashboard_section(sections.get(name), name, out)
+        for name in sections:
+            if name not in DASHBOARD_SECTIONS:
+                out.append(f"sections.{name!r}: not a known dashboard section; "
+                           f"known sections are {sorted(DASHBOARD_SECTIONS)}")
+
+    blocking = sections.get(DASHBOARD_SECTION_BLOCKING) \
+        if isinstance(sections, Mapping) else None
+    if isinstance(blocking, Mapping) and blocking.get("status") == SECTION_OBSERVED:
+        conditions = _need_list(blocking, "open", out,
+                                f"sections.{DASHBOARD_SECTION_BLOCKING}.")
+        if conditions is not _MISSING:
+            for i, entry in enumerate(conditions):
+                prefix = f"sections.{DASHBOARD_SECTION_BLOCKING}.open[{i}]."
+                if not isinstance(entry, Mapping):
+                    out.append(f"{prefix.rstrip('.')}: expected a mapping")
+                    continue
+                _need_str(entry, "kind", out, prefix, pattern=_BLOCKING_KIND_RE,
+                          pattern_hint="is not an UPPER_SNAKE condition name")
+                _need_str(entry, "origin", out, prefix,
+                          choices=DASHBOARD_BLOCKING_ORIGINS)
+                _need_str(entry, "detail", out, prefix)
+
+    # -- the two derived summaries, recomputed rather than trusted -------------
+    produced_at = _fetch(obj, "produced_at", out, "")
+    if produced_at is not _MISSING:
+        expected = dashboard_liveness_timestamp(
+            sections if sections is not _MISSING else None)
+        if produced_at is not None:
+            _need_timestamp(obj, "produced_at", out, "")
+        if produced_at != expected:
+            out.append(
+                f"produced_at: {produced_at!r} is not the value its own sections "
+                f"yield ({expected!r}). `produced_at` is DERIVED from the loop's "
+                "journaled record timestamps (dashboard_liveness_timestamp); a "
+                "hand-stamped one lets a live exporter report a dead controller "
+                "as fresh, which is the 23-hour AutoPilot outage with a green "
+                "dashboard over it.")
+
+    # v1 compatibility: the deployed hub reads `generated_at`. It must carry the
+    # SAME semantic value, so an old reader pointed at a v2 file gets the derived
+    # timestamp and not the export time.
+    generated_at = _fetch(obj, "generated_at", out, "")
+    if generated_at is not _MISSING and produced_at is not _MISSING:
+        if generated_at != produced_at:
+            out.append(
+                f"generated_at: {generated_at!r} must equal produced_at "
+                f"({produced_at!r}) — it is the v1 spelling of the same semantic "
+                "timestamp, and a v1 reader given the export time would classify a "
+                "dead loop as fresh")
+
+    degraded = _need_bool(obj, "degraded", out, "")
+    unreported = _fetch(obj, "unreported_sections", out, "")
+    expected_unreported = dashboard_unreported_sections(
+        sections if sections is not _MISSING else None)
+    if unreported is not _MISSING:
+        if not isinstance(unreported, list):
+            out.append("unreported_sections: expected a list, got "
+                       f"{type(unreported).__name__}")
+        elif sorted(unreported) != expected_unreported:
+            out.append(
+                f"unreported_sections: {sorted(unreported)!r} disagrees with the "
+                f"sections themselves ({expected_unreported!r}); the summary a "
+                "consumer reads first may not be stampable independently of the "
+                "evidence under it")
+    if degraded is not _MISSING and degraded is not bool(expected_unreported):
+        out.append(
+            f"degraded: {degraded!r} disagrees with the sections themselves "
+            f"(unreported: {expected_unreported!r}). A panel that renders clean "
+            "while its producer is dead is worse than no panel, because it is "
+            "trusted.")
+    return out
+
+
+def validate_kernel_dashboard_v1(obj: Any) -> list:
+    """Validate the LEGACY `/kernel` contract — read-only, and kept readable.
+
+    v1 is not ours to re-shape: files in this shape were written by an earlier
+    exporter and the hub still reads them, so the rules here are exactly the ones
+    a consumer depends on and nothing more. In particular v1 records carry NO
+    `schema` key (see `detect_kernel_dashboard_version`), so this validator must
+    not require one — demanding the label would make every real v1 file invalid
+    and push a reader toward "unknown, render empty", which is the absence-tolerant
+    failure again.
+
+    v1 is NOT emitted by anything in this package. It exists here so a consumer
+    that meets both versions has one validator per version rather than a guess.
+    """
+    out: list = []
+    if not isinstance(obj, Mapping):
+        return [f"record: expected a mapping, got {type(obj).__name__}"]
+    schema = obj.get("schema")
+    if schema is not None and schema != SCHEMA_KERNEL_DASHBOARD_V1:
+        out.append(f"schema: expected {SCHEMA_KERNEL_DASHBOARD_V1!r} or no schema "
+                   f"key at all (legacy exports are unlabelled), got {schema!r}")
+    generated_at = obj.get("generated_at", _MISSING)
+    if generated_at not in (_MISSING, None) and _parse_ts(generated_at) is None:
+        out.append(f"generated_at: {generated_at!r} is not a timezone-aware "
+                   "ISO-8601 timestamp")
+    runs = obj.get("runs", _MISSING)
+    if runs is not _MISSING:
+        if not isinstance(runs, list):
+            out.append(f"runs: expected a list, got {type(runs).__name__}")
+        else:
+            for i, run in enumerate(runs):
+                if not isinstance(run, Mapping):
+                    out.append(f"runs[{i}]: expected a mapping")
+                    continue
+                ts = run.get("ts", _MISSING)
+                if ts not in (_MISSING, None) and _parse_ts(ts) is None:
+                    out.append(f"runs[{i}].ts: {ts!r} is not a timezone-aware "
+                               "ISO-8601 timestamp")
+    for key in ("pareto", "best_per_model"):
+        value = obj.get(key, _MISSING)
+        if value is not _MISSING and not isinstance(value, list):
+            out.append(f"{key}: expected a list, got {type(value).__name__}")
+    totals = obj.get("totals", _MISSING)
+    if totals is not _MISSING and not isinstance(totals, Mapping):
+        out.append(f"totals: expected a mapping, got {type(totals).__name__}")
+    return out
+
+
+def detect_kernel_dashboard_version(obj: Any) -> Optional[str]:
+    """The dashboard schema string for `obj`, or None when it is not one.
+
+    A labelled document is taken at its label. An UNLABELLED one is classified by
+    the v1 shape markers, because that is the only thing a legacy file carries —
+    the whole reason the version is being made explicit now is that v1 never was.
+    Returning None is a real answer and must be reported as "unrecognised", never
+    coerced to v1: a malformed v2 file misread as a valid v1 file would render as
+    an empty-but-clean panel.
+    """
+    if not isinstance(obj, Mapping):
+        return None
+    schema = obj.get("schema")
+    if schema in (SCHEMA_KERNEL_DASHBOARD_V1, SCHEMA_KERNEL_DASHBOARD_V2):
+        return schema
+    if schema is not None:
+        return None
+    markers = ("db_present", "runs", "pareto", "best_per_model", "totals")
+    if sum(1 for key in markers if key in obj) >= 2:
+        return SCHEMA_KERNEL_DASHBOARD_V1
+    return None
+
+
+def validate_kernel_dashboard(obj: Any) -> list:
+    """Validate a dashboard document under whichever version it is."""
+    version = detect_kernel_dashboard_version(obj)
+    if version is None:
+        return ["schema: not a recognisable AutoKernel kernel-dashboard document "
+                f"(expected {SCHEMA_KERNEL_DASHBOARD_V2!r}, or the unlabelled v1 "
+                "shape)"]
+    return KERNEL_DASHBOARD_VALIDATORS[version](obj)
+
+
+KERNEL_DASHBOARD_VALIDATORS = {
+    SCHEMA_KERNEL_DASHBOARD_V1: validate_kernel_dashboard_v1,
+    SCHEMA_KERNEL_DASHBOARD_V2: validate_kernel_dashboard_v2,
+}
+
+
+# =============================================================================
 # Registry and dispatch
 # =============================================================================
 
@@ -2150,6 +2584,16 @@ SCHEMA_REGISTRY = {
     SCHEMA_RELEASE_PACKAGE: validate_release_package,
     SCHEMA_OPERATOR_WAIVER: validate_operator_waiver,
 }
+# The kernel-dashboard schemas are DELIBERATELY absent from this registry, and the
+# omission is a boundary rather than an oversight. `SCHEMA_REGISTRY` is the
+# JOURNAL-RECORD registry: `validate_record` dispatches journal lines through it,
+# so anything registered here is something a journal may contain. The dashboard
+# contract is a DERIVED EXPORT of those records, not one of them — appending one to
+# a journal would put a rendering where evidence belongs. It also could not be
+# dispatched here honestly: legacy v1 documents carry no `schema` key at all, which
+# `validate_record` requires, so version detection needs
+# `detect_kernel_dashboard_version` and dispatch needs
+# `KERNEL_DASHBOARD_VALIDATORS`. Both live beside the validators above.
 
 KNOWN_SCHEMAS = frozenset(SCHEMA_REGISTRY)
 
@@ -2203,8 +2647,20 @@ __all__ = [
     "validate_campaign", "validate_proposal", "validate_candidate",
     "validate_evaluation_event", "validate_evaluation_event_v2",
     "validate_evaluation_event_v3",
-    "validate_champion", "validate_release_package",
+    "validate_champion", "CHAMPION_BLOCKED_UNNAMED", "validate_release_package",
     "validate_operator_waiver", "validate_record", "is_valid",
+    "SCHEMA_KERNEL_DASHBOARD", "SCHEMA_KERNEL_DASHBOARD_V1",
+    "SCHEMA_KERNEL_DASHBOARD_V2", "KERNEL_DASHBOARD_VALIDATORS",
+    "DASHBOARD_SECTIONS", "DASHBOARD_LIVENESS_SECTIONS",
+    "DASHBOARD_SECTION_CAMPAIGN", "DASHBOARD_SECTION_CHAMPION",
+    "DASHBOARD_SECTION_BACKEND_STANDING", "DASHBOARD_SECTION_HEADROOM",
+    "DASHBOARD_SECTION_BLOCKING", "DASHBOARD_SECTION_CLAIMS",
+    "DASHBOARD_SECTION_RELEASE_PACKAGE", "DASHBOARD_SECTION_STATUSES",
+    "SECTION_OBSERVED", "SECTION_NOT_REPORTED", "SECTION_REFUSED",
+    "DASHBOARD_BLOCKING_ORIGINS", "dashboard_liveness_timestamp",
+    "dashboard_unreported_sections", "detect_kernel_dashboard_version",
+    "validate_kernel_dashboard", "validate_kernel_dashboard_v1",
+    "validate_kernel_dashboard_v2",
     "Check", "PASS", "FAIL", "COULD_NOT_CHECK",
     "check_scope_denominator_admits_gate", "check_anchor_binding",
     "check_metric_commensurability",
