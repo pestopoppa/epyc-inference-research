@@ -33,6 +33,18 @@ PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_integration.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/resource/test_device_claim.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/resource/test_preflight.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/resource/test_claim_witness.py
+# AK3 — the trusted tiered evaluator (P-AK-SEARCH-1). The two cross-module
+# suites come first: they are the ones that fail when two modules disagree.
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/evaluator/test_conformance.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/evaluator/test_integration.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/evaluator/test_api.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/evaluator/test_controls.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/evaluator/test_controls_redteam.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/evaluator/test_correctness.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/evaluator/test_integrity.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/evaluator/test_recipes.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/evaluator/test_statistics.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/evaluator/test_surface.py
 
 help:
 	@printf '%s\n' 'Targets: setup lint test health docs docs-check analysis analysis-check security-check autopilot-gate'

@@ -265,6 +265,7 @@ def _event(receipt_id: str, *, campaign_id: str = CAMPAIGN) -> dict:
             "linkage_sha256": _sha("candidate-linkage"),
         },
         "anchor": {
+            "source_commit": "67a433bf45a8a091d83b4ea0b32ff0735fd51800",
             "binary_sha256": _sha("anchor-binary"),
             "linkage_sha256": _sha("anchor-linkage"),
             "measurement_event_ids": ["ake-20260801-0009"],

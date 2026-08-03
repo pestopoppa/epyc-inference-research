@@ -16,9 +16,13 @@ paid for it three separate ways, each of which this module is shaped to prevent:
 
   * **A ratio outlived its denominator.** The existing `kernel_eval.sh` scaffold
     made the baseline optional, so a "coherent" run with no anchor passed (§12,
-    §2.2). Here `anchor` (binary_sha256, linkage_sha256, measurement_event_ids)
-    is REQUIRED; a no-anchor comparison is `invalid`, never correct. §8.9's
-    `ANCHOR_MOVED` rests entirely on that binding being recorded per event.
+    §2.2). Here `anchor` (source_commit, binary_sha256, linkage_sha256,
+    measurement_event_ids) is REQUIRED; a no-anchor comparison is `invalid`,
+    never correct. §8.9's `ANCHOR_MOVED` rests entirely on that binding being
+    recorded per event. The single exemption — a run VOIDED for a missing anchor,
+    which the protocol requires to be journaled as `INVALID` rather than
+    discarded — omits the block STRUCTURALLY and may never fabricate a digest to
+    fill it (`_check_anchor_block_v3`).
 
   * **The planner re-consumed its own prose as fact.** AutoPilot re-read planner
     free text out of its primary journal, regenerated a false story, and ran 81
@@ -75,7 +79,37 @@ from typing import Any, Callable, Mapping, Optional
 SCHEMA_CAMPAIGN = "epyc.autokernel.campaign.v2"
 SCHEMA_PROPOSAL = "epyc.autokernel.proposal.v2"
 SCHEMA_CANDIDATE = "epyc.autokernel.candidate.v1"
-SCHEMA_EVALUATION_EVENT = "epyc.autokernel.evaluation_event.v2"
+
+# The evaluation event exists in two versions AT THE SAME TIME, and both names
+# are explicit. v2 records already exist in journals and are read under
+# `validate_evaluation_event_v2` forever; nothing rewrites them, and no v2 record
+# is upgraded in place — the schema string is the record's identity (§7 and the
+# CONVENTIONS note above), so re-labelling one would be a forgery, not a migration.
+#
+# v3 exists because v2 could not express two things the ratified protocol
+# requires (`measurement/protocols/kernel-research.md`):
+#
+#   * **Precondition 4 names the anchor by THREE components** — *"names its anchor
+#     by source commit, binary SHA-256, and linkage SHA-256"*. `v2.anchor` carried
+#     only the two digests, so the source commit travelled as an unvalidated extra
+#     key inside a free-form block. In v3 `anchor.source_commit` is a REQUIRED,
+#     commit-shaped field, validated by the same `_need_commit` helper that
+#     `candidate.worktree.source_commit` uses.
+#   * **A voided run must be journalable** — *"A voided run is journaled as
+#     `INVALID` with its reason, and is never silently discarded."* v2 required
+#     `anchor.binary_sha256`/`anchor.linkage_sha256` unconditionally, so the
+#     ANCHOR-MISSING void — the one case where there is no digest to record — could
+#     not produce a valid record at all, and `journal.Journal.append` therefore
+#     refused the very record the protocol requires to exist. v3 permits `anchor`
+#     to be **structurally absent**, and only for that case (see
+#     `_check_anchor_block_v3`). It does NOT accept a placeholder digest in its
+#     place: a fabricated hash is indistinguishable from a measured one to every
+#     downstream reader, which is strictly worse than an absent block.
+SCHEMA_EVALUATION_EVENT_V2 = "epyc.autokernel.evaluation_event.v2"
+SCHEMA_EVALUATION_EVENT_V3 = "epyc.autokernel.evaluation_event.v3"
+#: The CURRENT evaluation-event contract. New records are emitted under this one.
+SCHEMA_EVALUATION_EVENT = SCHEMA_EVALUATION_EVENT_V3
+
 SCHEMA_CHAMPION = "epyc.autokernel.champion.v1"
 SCHEMA_RELEASE_PACKAGE = "epyc.autokernel.release_package.v1"
 SCHEMA_OPERATOR_WAIVER = "epyc.autokernel.operator_waiver.v1"
@@ -171,6 +205,25 @@ DETERMINISM_CLASSES = frozenset({
     "bitwise_stable", "bitwise_unstable", "not_measured",
 })
 
+# P-AK-SEARCH-1 "What voids a run", the two reasons whose SUBJECT is the anchor.
+# ONLY a record declaring one of these may omit its `anchor` block (v3), because
+# only these two say "there was no anchor identity to record" rather than "the
+# anchor was fine and something else went wrong".
+#
+# These strings are the vocabulary of `evaluator/api.VOID_REASONS`, restated here
+# rather than imported: `api` imports `schemas`, so importing back would be a
+# cycle, and a validator that needs the evaluator loaded to validate a record is
+# not a data contract. `evaluator/test_conformance.py` asserts the two lists agree,
+# so the duplication is checked rather than trusted.
+ANCHOR_VOID_REASONS = frozenset({
+    "ANCHOR_MISSING_OR_MUTATED",
+    "ANCHOR_GATE_FAILED",
+})
+
+#: Prefix `evaluator/api._derive()` uses when it projects a `VoidFinding` into the
+#: record's top-level `integrity_flags` vector: `VOID:<reason>:<outcome>`.
+VOID_FLAG_PREFIX = "VOID:"
+
 MACHINE_SUBSETS = frozenset({"full", "partial"})
 
 # §3.7: a verifier must be able to tell a defect from an expected absence.
@@ -195,7 +248,8 @@ NON_RETRIEVABLE_FIELDS = {
     SCHEMA_CAMPAIGN: frozenset(),
     SCHEMA_PROPOSAL: frozenset({"narrative"}),
     SCHEMA_CANDIDATE: frozenset({"narrative"}),
-    SCHEMA_EVALUATION_EVENT: frozenset({"narrative"}),
+    SCHEMA_EVALUATION_EVENT_V2: frozenset({"narrative"}),
+    SCHEMA_EVALUATION_EVENT_V3: frozenset({"narrative"}),
     SCHEMA_CHAMPION: frozenset(),
     SCHEMA_RELEASE_PACKAGE: frozenset(),
     SCHEMA_OPERATOR_WAIVER: frozenset(),
@@ -212,6 +266,34 @@ _CO_RESIDENCY_RE = re.compile(r"^(single|co_resident:[A-Za-z0-9._:-]+)$")
 # names one is a category error, not a naming preference: invariant 3 says no
 # actor builds in or modifies a production tree.
 _PRODUCTION_BRANCH_RE = re.compile(r"^production-(consolidated|speech)-v\d+$")
+
+#: SHA-256 of no bytes at all. It is well-formed hex and it is what a caller that
+#: hashed nothing gets, so it names an artifact that was never read.
+_EMPTY_INPUT_SHA256 = hashlib.sha256(b"").hexdigest()
+
+
+def is_placeholder_digest(value: Any) -> bool:
+    """True when `value` is a well-formed hex digest that no measurement produced.
+
+    A regex over `[0-9a-f]{40,64}` cannot tell a hash from a hand-typed filler,
+    and the filler is the dangerous one: `0` * 64 in an anchor is a *claim* that
+    an anchor was resolved, and every downstream reader — the champion view, the
+    readiness reducer, a human reading the journal — takes it for one. An ABSENT
+    anchor is loud; a fabricated anchor is silent and wrong.
+
+    Deliberately narrow, so it never falsely accuses a real digest:
+      * a string of ONE repeated hex character (`0`*64, `f`*64, `a`*40 …), which
+        no hash function has ever emitted for a real input; and
+      * the SHA-256 of the empty input.
+
+    It is NOT a general "does this look random" heuristic — a digest is either a
+    known filler or it is treated as measured.
+    """
+    if not isinstance(value, str):
+        return False
+    if not (_SHA256_RE.match(value) or _COMMIT_RE.match(value)):
+        return False
+    return len(set(value)) <= 1 or value == _EMPTY_INPUT_SHA256
 
 
 # =============================================================================
@@ -1176,13 +1258,130 @@ def candidate_natural_key(obj: Mapping[str, Any]) -> tuple:
 
 
 # =============================================================================
-# epyc.autokernel.evaluation_event.v2 (§7.4)
+# epyc.autokernel.evaluation_event — v2 and v3 (§7.4)
 # =============================================================================
 
-def validate_evaluation_event(obj: Any) -> list:
-    """Validate an evaluation event — the decision-grade unit of evidence."""
+def _check_anchor_measurement_ids(anchor, out, tier) -> None:
+    ids = _need_list(anchor, "measurement_event_ids", out, "anchor.",
+                     item_type=str, item_desc="an event id")
+    if ids is not _MISSING and not ids and tier != "T0":
+        out.append("anchor.measurement_event_ids: must name at least one anchor "
+                   f"measurement for tier {tier!r} (only T0 compares artifacts "
+                   "rather than rates)")
+
+
+def _check_anchor_block_v2(obj, out, tier) -> None:
+    """v2's anchor rule: the block is unconditionally required, two digests only.
+
+    Kept EXACTLY as it was. v2 records already exist; a validator that quietly
+    grew a third required field would turn every one of them into a defect
+    report on the next read.
+    """
+    anchor = _need_dict(obj, "anchor", out, "")
+    if anchor is _MISSING:
+        return
+    _need_sha256(anchor, "binary_sha256", out, "anchor.")
+    _need_sha256(anchor, "linkage_sha256", out, "anchor.")
+    _check_anchor_measurement_ids(anchor, out, tier)
+
+
+def declared_anchor_void_reasons(obj: Any) -> list:
+    """The ANCHOR-related void reasons a record declares, in `integrity_flags`.
+
+    `evaluator/api._derive()` is the only producer of `integrity_flags` and it
+    writes one `VOID:<reason>:<outcome>` entry per triggered void condition — the
+    same vector `evaluator/test_conformance` already asserts a voided record
+    carries. Reading the reason from that REQUIRED top-level list is what lets
+    the v3 anchor exemption be checked structurally; the free-form
+    `performance.search_discipline.void_findings` block carries the same findings
+    in full, but a conditional that hangs off a free-form block is exactly the
+    smuggling this version exists to end.
+    """
+    if not isinstance(obj, Mapping):
+        return []
+    flags = obj.get("integrity_flags")
+    if not isinstance(flags, list):
+        return []
+    found = []
+    for flag in flags:
+        if not isinstance(flag, str) or not flag.startswith(VOID_FLAG_PREFIX):
+            continue
+        parts = flag.split(":")
+        if len(parts) >= 2 and parts[1] in ANCHOR_VOID_REASONS and parts[1] not in found:
+            found.append(parts[1])
+    return found
+
+
+def _check_anchor_block_v3(obj, out, tier) -> None:
+    """v3's anchor rule — the exact conditional, stated once.
+
+    `anchor` is REQUIRED, and may be omitted **only** when BOTH hold:
+
+      1. `status == "invalid"`, and
+      2. `integrity_flags` names at least one anchor-related void reason
+         (`ANCHOR_VOID_REASONS`).
+
+    Anything else — a `pass`, `fail`, `inconclusive`, `timeout`, `crash` or
+    `rejected` record with no anchor, or an `invalid` record voided for some
+    OTHER reason (host health, storage, hand-typed argv) — is a violation. Those
+    runs had an anchor or should have had one; dropping the block would hide a
+    ratio with no denominator behind a status that says nothing about anchors.
+
+    There is no third option. `anchor: null` is refused so that absence has ONE
+    representation, and a placeholder digest is refused outright: an anchor block
+    that says `0`*64 is a claim that an anchor was resolved.
+    """
+    present = isinstance(obj, Mapping) and "anchor" in obj
+    if not present:
+        status = obj.get("status") if isinstance(obj, Mapping) else None
+        declared = declared_anchor_void_reasons(obj)
+        if status != "invalid" or not declared:
+            out.append(
+                "anchor: required field is missing — a record may omit its anchor ONLY "
+                "when status is 'invalid' AND integrity_flags names one of "
+                f"{sorted(ANCHOR_VOID_REASONS)}; this record declares status={status!r} "
+                f"and anchor void reasons {declared}. There is no placeholder digest to "
+                "supply instead: a fabricated anchor reads as a resolved one to every "
+                "downstream reader, which is worse than an absent block"
+            )
+        return
+
+    if obj.get("anchor") is None:
+        out.append(
+            "anchor: is null — an absent anchor is expressed by OMITTING the key, so "
+            "that absence has exactly one representation and no reader has to decide "
+            "whether null meant 'no anchor' or 'not filled in yet'"
+        )
+        return
+
+    anchor = _need_dict(obj, "anchor", out, "")
+    if anchor is _MISSING:
+        return
+    # Precondition 4: "names its anchor by source commit, binary SHA-256, and
+    # linkage SHA-256". All three, validated the same way the candidate record
+    # validates `worktree.source_commit`.
+    _need_commit(anchor, "source_commit", out, "anchor.")
+    _need_sha256(anchor, "binary_sha256", out, "anchor.")
+    _need_sha256(anchor, "linkage_sha256", out, "anchor.")
+    for name in ("source_commit", "binary_sha256", "linkage_sha256"):
+        value = anchor.get(name)
+        if is_placeholder_digest(value):
+            out.append(
+                f"anchor.{name}: {value!r} is a placeholder digest, not a measured "
+                "identity. A run with no anchor omits the block; it never fills it in"
+            )
+    _check_anchor_measurement_ids(anchor, out, tier)
+
+
+def _validate_evaluation_event(obj: Any, *, schema: str, check_anchor) -> list:
+    """The body shared by every evaluation-event version.
+
+    Only the schema string and the anchor rule differ between v2 and v3, so only
+    those are parameters. Everything else is one implementation: two hand-copied
+    validators drift, and the half that drifts is whichever one has fewer tests.
+    """
     out: list = []
-    if not _check_schema_header(obj, SCHEMA_EVALUATION_EVENT, out):
+    if not _check_schema_header(obj, schema, out):
         return out
     _reject_authority_keys(obj, out)
 
@@ -1218,16 +1417,7 @@ def validate_evaluation_event(obj: Any) -> list:
     # Every verdict is a ratio and a ratio needs its denominator bound (§7.4).
     # An optional baseline is what let "coherent" pass in the current scaffold
     # (§12); no-baseline is INVALID, never correct.
-    anchor = _need_dict(obj, "anchor", out, "")
-    if anchor is not _MISSING:
-        _need_sha256(anchor, "binary_sha256", out, "anchor.")
-        _need_sha256(anchor, "linkage_sha256", out, "anchor.")
-        ids = _need_list(anchor, "measurement_event_ids", out, "anchor.",
-                         item_type=str, item_desc="an event id")
-        if ids is not _MISSING and not ids and tier != "T0":
-            out.append("anchor.measurement_event_ids: must name at least one anchor "
-                       f"measurement for tier {tier!r} (only T0 compares artifacts "
-                       "rather than rates)")
+    check_anchor(obj, out, tier)
 
     _need_sha256(obj, "scope_manifest_sha256", out, "")
     _need_str(obj, "host_receipt", out, "")
@@ -1296,6 +1486,44 @@ def validate_evaluation_event(obj: Any) -> list:
     _check_narrative(obj, out, required=False)
     _need_timestamp(obj, "created_at", out, "")
     return out
+
+
+def validate_evaluation_event_v2(obj: Any) -> list:
+    """Validate a v2 evaluation event. Reader for records already in a journal."""
+    return _validate_evaluation_event(obj, schema=SCHEMA_EVALUATION_EVENT_V2,
+                                      check_anchor=_check_anchor_block_v2)
+
+
+def validate_evaluation_event_v3(obj: Any) -> list:
+    """Validate a v3 evaluation event — the decision-grade unit of evidence."""
+    return _validate_evaluation_event(obj, schema=SCHEMA_EVALUATION_EVENT_V3,
+                                      check_anchor=_check_anchor_block_v3)
+
+
+#: Every evaluation-event version that can still be read, by its schema string.
+EVALUATION_EVENT_VALIDATORS = {
+    SCHEMA_EVALUATION_EVENT_V2: validate_evaluation_event_v2,
+    SCHEMA_EVALUATION_EVENT_V3: validate_evaluation_event_v3,
+}
+
+
+def validate_evaluation_event(obj: Any) -> list:
+    """Validate an evaluation event under the version the record DECLARES.
+
+    Dispatch, not a fallback: the schema string is the record's identity, so a v2
+    record is checked by v2's rules and a v3 record by v3's, and a record naming
+    neither is a violation rather than a best-effort read. Callers that mean one
+    specific version (a migration, a test asserting v2 still reads) name it —
+    `validate_evaluation_event_v2` / `_v3`.
+    """
+    if not isinstance(obj, Mapping):
+        return [f"record: expected a mapping, got {type(obj).__name__}"]
+    schema = obj.get("schema")
+    validator = EVALUATION_EVENT_VALIDATORS.get(schema)
+    if validator is None:
+        return [f"schema: {schema!r} is not an AutoKernel evaluation_event schema; "
+                f"known versions are {sorted(EVALUATION_EVENT_VALIDATORS)}"]
+    return validator(obj)
 
 
 # =============================================================================
@@ -1563,7 +1791,11 @@ SCHEMA_REGISTRY = {
     SCHEMA_CAMPAIGN: validate_campaign,
     SCHEMA_PROPOSAL: validate_proposal,
     SCHEMA_CANDIDATE: validate_candidate,
-    SCHEMA_EVALUATION_EVENT: validate_evaluation_event,
+    # Both evaluation-event versions are registered. v2 is not retired and is not
+    # rewritten: a journal shard written last week still validates, under its own
+    # rules, forever.
+    SCHEMA_EVALUATION_EVENT_V2: validate_evaluation_event_v2,
+    SCHEMA_EVALUATION_EVENT_V3: validate_evaluation_event_v3,
     SCHEMA_CHAMPION: validate_champion,
     SCHEMA_RELEASE_PACKAGE: validate_release_package,
     SCHEMA_OPERATOR_WAIVER: validate_operator_waiver,
@@ -1599,7 +1831,9 @@ def is_valid(obj: Any) -> bool:
 
 __all__ = [
     "SCHEMA_CAMPAIGN", "SCHEMA_PROPOSAL", "SCHEMA_CANDIDATE",
-    "SCHEMA_EVALUATION_EVENT", "SCHEMA_CHAMPION", "SCHEMA_RELEASE_PACKAGE",
+    "SCHEMA_EVALUATION_EVENT", "SCHEMA_EVALUATION_EVENT_V2",
+    "SCHEMA_EVALUATION_EVENT_V3", "EVALUATION_EVENT_VALIDATORS",
+    "SCHEMA_CHAMPION", "SCHEMA_RELEASE_PACKAGE",
     "SCHEMA_OPERATOR_WAIVER", "SCHEMA_REGISTRY", "KNOWN_SCHEMAS",
     "BACKENDS", "SOURCE_TREES", "SOURCE_TREE_BY_BACKEND", "OBJECTIVE_RULES",
     "LLAMA_PHASES", "PHASES_BY_BACKEND", "RECIPE_CLASSES", "CHANGE_CLASSES",
@@ -1607,11 +1841,15 @@ __all__ = [
     "CRITIC_STATUSES", "TIERS", "CLAIM_CATEGORIES", "METRIC_DIRECTIONS",
     "EVENT_STATUSES", "DETERMINISM_CLASSES", "MACHINE_SUBSETS",
     "DURABILITY_CLASSES", "CANDIDATE_STATUSES", "CHAMPION_STATUSES",
-    "T3_VERDICTS", "NON_RETRIEVABLE_FIELDS",
+    "T3_VERDICTS", "NON_RETRIEVABLE_FIELDS", "ANCHOR_VOID_REASONS",
+    "VOID_FLAG_PREFIX",
     "canonical_json", "canonical_bytes", "content_hash", "retrievable_view",
     "candidate_natural_key", "find_authority_flavoured_keys",
+    "is_placeholder_digest", "declared_anchor_void_reasons",
     "validate_campaign", "validate_proposal", "validate_candidate",
-    "validate_evaluation_event", "validate_champion", "validate_release_package",
+    "validate_evaluation_event", "validate_evaluation_event_v2",
+    "validate_evaluation_event_v3",
+    "validate_champion", "validate_release_package",
     "validate_operator_waiver", "validate_record", "is_valid",
     "Check", "PASS", "FAIL", "COULD_NOT_CHECK",
     "check_scope_denominator_admits_gate", "check_anchor_binding",

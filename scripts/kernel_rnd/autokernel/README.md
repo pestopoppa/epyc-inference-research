@@ -1,7 +1,8 @@
 # `autokernel` — the AutoKernel research-loop substrate
 
-Owning design: [`epyc-root/handoffs/active/autokernel-research-loop.md`](/workspace/handoffs/active/autokernel-research-loop.md).
-Section references below (`§5.8`, `invariant 7`, …) are to that document.
+Owning design: [`/workspace/handoffs/active/autokernel-research-loop.md`](/workspace/handoffs/active/autokernel-research-loop.md)
+(the `epyc-root` handoff). Section references below (`§5.8`, `invariant 7`, …)
+are to that document.
 
 AutoKernel is the campaign/control plane that proposes, builds, and measures
 experimental kernel candidates against a frozen production anchor. **Its
@@ -16,16 +17,57 @@ benchmark, or runs inference.
 
 ---
 
-## What is implemented (AK1 + AK2, partial)
+## What is implemented (AK1 + AK2 + AK3, partial)
 
 | Module | What it owns |
 |---|---|
-| `schemas.py` | The seven versioned §7 record contracts, canonical JSON/content hashing, the `PASS`/`FAIL`/`COULD_NOT_CHECK` `Check` type, and the record-level checkers (`check_anchor_binding`, `check_scope_denominator_admits_gate`, `check_metric_commensurability`). **Single source of truth: every other module is written against these and must not invent a record shape.** |
+| `schemas.py` | The seven §7 record contracts (the evaluation event in **two live versions** — `v2` readable forever, `v3` current), canonical JSON/content hashing, the `PASS`/`FAIL`/`COULD_NOT_CHECK` `Check` type, and the record-level checkers (`check_anchor_binding`, `check_scope_denominator_admits_gate`, `check_metric_commensurability`). **Single source of truth: every other module is written against these and must not invent a record shape.** |
 | `journal.py` | The append-only, fsynced, **sharded** primary record. Shard ordering, torn-tail repair, cursors, archiving, supersession (record-scope and retrieval-scope), tombstones, preflight attestations, derived views, and `check_view_consistency`. |
 | `storage.py` | §3.7 durability classes, §5.8 retention classes and rule-bound tombstoned expiry, per-campaign quota and `DISK_PRESSURE`, the `data/<campaign>/` evidence root with `SHA256SUMS` + README, and `verify_durability`. |
 | `resource/device_claim.py` | The cross-process **exclusive GPU device claim** (§2.6) — `flock(LOCK_EX)` on a never-unlinked lock file, PID+start-time+boot-id liveness, journaled crash reclamation, quiesce-and-drain revocation, and the claim receipt id that lands in every evaluation event. |
 | `resource/preflight.py` | The **one** audited read-only inference preflight (§3.5): claim witness as the target instrument, an opt-in name-pattern enumerator as the labelled interim one, and an AST self-audit proving the module cannot deliver a signal. |
 | `resource/claim_witness.py` | The seam between the three above: a conforming `GpuClaimReader` over the device claim, and resolution of an evaluation event's opaque `resource_claim_receipt` back to the claim that produced it. |
+| `evaluator/api.py` | **AK3.** The typed evaluator interface and the only place a verdict is COMPUTED. Owns the protocol's eight preconditions, twelve void conditions, fourteen search-grade conjuncts, the record grammar, the tier state machine, and `E_PROCESS_CONSTRUCTION_IDS` — the bundle's construction registry-of-record. |
+| `evaluator/integrity.py` | **AK3.** §8.5.1 source integrity: an ELF `.dynsym`/`.symtab` reader, an Itanium-ABI demangler, symbol/arity/registration/dispatch-predicate diffs, clean-build-from-snapshot provenance, unified-diff parsing against the change-class envelope, the mechanically derived `core_header` risk tier, the §10.6 complexity ceiling, repair-from-clean-parent, and the gates that bind all of it to the request's anchor, artifact and derived surface. |
+| `evaluator/surface.py` | **AK3.** §6.4 affected-surface derivation from the build system's OWN dependency information (make/ninja depfiles, cmake link lines), the dispatch-trace stage, three-stage reconciliation (`derived ⊇ traced`), the actor's declaration as a SCORED prediction rather than a scope input, and §3.2 normalized-binary comparison. |
+| `evaluator/correctness.py` | **AK3.** The seventeen T0 gates: backend-op units, exact-reference comparison, unseen boundary shapes, surface reconciliation, the no-fallback proof, state/rollback/teardown, sanitizers (ASAN/UBSAN, no core dumps), output coherence vs the anchor, determinism class, binary+linkage identity, and anti-reward-hacking. `CoherenceVerdict` is computed and cannot be stamped. |
+| `evaluator/statistics.py` | **AK3.** The calibration block in its normative solve order — `φ`, `B_min`, the α budgets and their thresholds, the anchor-gate band — the anytime-valid e-process (two bundle-fixed constructions), the pre-committed stopping rule with bounded extension, the MDE, order control, the selection/confirmation split, and the reducer that produces a conforming `api.EffectEstimate`. |
+| `evaluator/controls.py` | **AK3.** The five controls as hashed data (definitions AND predicates), the A/A cadence scheduler, the historical-win-replay declared contract with its normative unavailable branch and operator escalation, and the projection into `api.WindowAttestations`. |
+| `evaluator/recipes.py` | **AK3.** The codified recipe constructors — every measurement argv is emitted by one, carrying its constructor id and content hash — for `test-backend-ops`, `test-quantize-perf` and `llama-bench`, CPU and GPU. |
+
+### AK3 — what the evaluator delivers
+
+It replaces `scripts/kernel_rnd/kernel_eval.sh`, which is fenced off and exits 2.
+That script's three defects are the three structural properties here:
+
+1. **It stamped a literal** (`"status":"OK"` in a `printf`). A `Verdict` is
+   constructible only by `compute_verdict()`, and `Verdict.__post_init__`
+   re-derives `status`, `effect_resolution`, `speed_rank_admissible`,
+   `integrity_flags` and `derivation` from the evidence on the same object,
+   raising `VerdictTampering` on any disagreement.
+2. **It reported coherence with no anchor** (`COH="coherent"` for any non-empty
+   generation). An absent, incomplete or mutated anchor is a `VoidFinding`, the
+   verdict is `INVALID`, and every gate declaring `requires_anchor=True` has its
+   PASS demoted to `COULD_NOT_CHECK` before the status is derived.
+3. **It let speed be reported beside a correctness problem.** `rank_key()` raises
+   `SpeedRankUnavailable` rather than returning a penalised rank, and
+   `rank_candidates()` returns `(ranked, unrankable)` so a withheld rank is a
+   journaled reason, never a shorter list.
+
+Governing instrument:
+[`/workspace/measurement/protocols/kernel-research.md`](/workspace/measurement/protocols/kernel-research.md)
+(Annex K, **P-AK-SEARCH-1**, RATIFIED 2026-08-03). It emits a **search record,
+not a claim**, and T3/T4 are refused by name — they are release instruments
+outside the protocol's scope, owned by AK5 through the `ReleaseTierEvaluator`
+seam.
+
+`evaluator/test_conformance.py` walks that protocol's own sections and asserts
+one test per obligation. Its coverage test fails if a registered obligation has
+no claiming test, if a test claims an unregistered obligation, or if a claiming
+test asserts nothing — so deleting a test is not a way to make it pass.
+Obligations whose subject is a real measurement are registered in `SEAM_ONLY`
+with the reason they cannot be asserted directly: a **declared** state, never a
+silent skip.
 
 ### Guarantees the package as a whole makes
 
@@ -50,11 +92,33 @@ benchmark, or runs inference.
 
 ---
 
-## Integration seams that were reconciled (2026-08-03)
+## Integration seams reconciled — AK3 evaluator (2026-08-03)
 
-The five modules were built in parallel against the same design. Each passed its
-own suite; the defects were all *between* them. `test_integration.py` is the
-regression barrier for these.
+The seven evaluator modules were written in parallel against one interface. Each
+passed its own suite and its own red-team pass; every defect below lived
+*between* two of them, where each module was individually correct and the two
+descriptions of the same object did not match.
+`evaluator/test_integration.py` is the regression barrier for these; each row
+was verified non-vacuous by reverting the fix in an isolated copy and confirming
+the suite fails.
+
+| Seam | Disagreement | Resolution |
+|---|---|---|
+| statistics → api → schemas | `PairedBlockReducer` set `EffectEstimate.raw_samples` to nested **tuples** (the estimate is a frozen, hashable dataclass); `schemas.canonical_json` **refuses tuples**. Every reduction the reducer actually produced raised `TypeError` out of `content_hash(event)` — the record could not be hashed, journaled, or emitted. Neither unit suite saw it: each fixture used the shape its own module wanted. | `api._canonicalizable()` converts tuple→list recursively for the event's `performance.raw_samples`, and RAISES (naming the path) on anything else `schemas` cannot represent rather than stringifying it. |
+| controls → api | `ControlPanelResult.definitions_check` — the control **definitions and predicate** tamper digest — had no field in `api.WindowAttestations`, so *"any post-hoc change to … the control definitions"* (What voids a run) could not reach `check_void_conditions` at all. A campaign could rebind a control predicate and every record in the window still read as clean. | New required `WindowAttestations.control_definitions_immutable`, folded into `VOID_POST_HOC_RULE_CHANGE` and into search-grade conjunct 8, plus `controls.window_control_attestations()` — the projection that fills it, mirroring `statistics.BlockReduction.window_checks`. |
+| api ↔ statistics | `CalibrationOutputs.e_process_construction_id` accepted any non-empty string while `statistics.CONSTRUCTIONS` is the bundle's registry. Three suites' fixtures named `paired_betting_supermartingale/v1`, which no reducer implements — a recorded selection nothing can reproduce. | `api.E_PROCESS_CONSTRUCTION_IDS` is the registry-of-record and `CalibrationOutputs` refuses an id outside it; `statistics.py` asserts at **import time** that its own registry has exactly those ids, so drift is an `ImportError` rather than an unreproducible record. |
+| surface → integrity | `SourceIntegrityInputs.declared_surface_scope` is a caller-supplied `"full_tree"`/`"partial"` string and the core-header tier FAILs on an under-declaration — while `surface.AffectedSurface.full_tree` is the **derived** answer to the same question, and nothing compared them. A caller who derived `full_tree=True` and typed `"partial"` got a PASS. | `integrity.surface_scope_for()` projects the derived manifest into the scope string, `check_declared_surface_scope()` compares them (COULD_NOT_CHECK when unbound), and `SourceIntegrityGateRunner(derived_surfaces=…)` emits `integrity.declared_surface_scope_binding`. The binding is a declared capability — `surface_binding` says whether the runner has it, and a registered-but-missing manifest raises rather than falling back. |
+| api ↔ any runner | A gate runner returning **zero** gates derived to `status: pass`: `_derive` walks the gate list and an empty list contributes nothing to worsen. `TierDispatcher` guarded the *unregistered*-tier case for exactly this reason and left the empty-return case open. | `TierDispatcher.dispatch` raises `EvaluatorNotWired` on an empty gate sequence: a tier that produced no findings because it ran nothing is not a tier that found nothing. |
+| api ↔ statistics (record) | `render_search_record_grammar` prints `request.metric` and `request.metric_direction` beside `effect.value`, and nothing compared them. An estimate of a *different* quantity rendered under this cell's metric name and was fully search-grade. | `check_record_grammar_complete` FAILs on a metric or direction mismatch, citing `MEASUREMENT.md:25-26` — the grammar's head is one triple. |
+| api ↔ calibration | `EffectEstimate.noise_floor` need not be the cell's calibrated `φ`, and `_resolve_effect` reads the floor **on the record**. Zeroing it turned a sub-floor estimate into a rankable `improvement`, defeating *"an estimate whose magnitude does not exceed φ MUST NOT be ranked"*. | `evaluate_search_grade` FAILs `calibration_block_accepted` when the record's floor is not the cell's calibrated `φ`. |
+| api ↔ schemas ↔ journal (**a voided run could not be journaled**) | *"A voided run is journaled as `INVALID` with its reason, and is **never silently discarded**."* `evaluation_event.v2` required `anchor.binary_sha256`/`linkage_sha256` unconditionally and `Journal.append` validates before it writes — so the ANCHOR-MISSING void, the one case where there is no digest to record, could produce **no valid record at all**. `build_evaluation_event` was right to raise rather than invent a digest, and the run survived only as `durable_payload`, which is not the primary record. | `evaluation_event.v3` permits `anchor` to be **structurally absent**, and only when `status == "invalid"` **and** `integrity_flags` names an anchor void reason (`schemas.ANCHOR_VOID_REASONS`, checked against `api.VOID_REASONS` in `test_conformance`). `schemas.is_placeholder_digest` refuses `0`*64 and friends in an anchor, so the exemption cannot be taken by faking one instead. `AnchorMissing` now fires only for an anchor **claimed** and unreadable/fabricated. |
+| schemas ↔ precondition 4 | Precondition 4 names the anchor by source commit **and** binary SHA-256 **and** linkage SHA-256. `evaluation_event.v2.anchor` carried two of the three, so `source_commit` rode along as an unvalidated extra key in a free-form block — present in practice, checked by nothing. | `v3.anchor.source_commit` is REQUIRED and validated by the same `_need_commit` helper as `candidate.worktree.source_commit`. |
+
+## Integration seams reconciled — AK1 + AK2 substrate (2026-08-03)
+
+The five substrate modules were built in parallel against the same design. Each
+passed its own suite; the defects were all *between* them.
+`autokernel/test_integration.py` is the regression barrier for these.
 
 | Seam | Disagreement | Resolution |
 |---|---|---|
@@ -138,11 +202,15 @@ python3 -W error::ResourceWarning -m unittest discover \
 python3 -m unittest scripts.kernel_rnd.autokernel.test_integration
 python3 -m unittest scripts.kernel_rnd.autokernel.resource.test_claim_witness
 
+# The two AK3 cross-module suites — the ones that fail when two modules disagree.
+python3 -m unittest scripts/kernel_rnd/autokernel/evaluator/test_conformance.py
+python3 -m unittest scripts/kernel_rnd/autokernel/evaluator/test_integration.py
+
 # As a plain script.
 python3 scripts/kernel_rnd/autokernel/test_integration.py
 ```
 
-Expected: **571 tests, OK (expected failures=1)** (`pytest` reports it as 570 passed + 1 xfailed). The one `expectedFailure` is
+Expected: **1846 tests, OK (expected failures=1)**. The one `expectedFailure` is
 `test_preflight.RealKernelLockEncodingTest.test_KNOWN_HOLE_unlinking_a_held_lock_
 file_hides_its_live_holder` — a real, documented hole (unlinking a held lock file
 hides its live holder from the `/proc/locks` witness), deliberately left visible
@@ -238,14 +306,89 @@ the flat idiom for historical reasons; new code should not.
   has not happened.
 - **Resource starvation / drain / resume tests and campaign checkpointing.**
 
+### Remaining in AK3
+
+The evaluator is the machinery, not the run. Everything below is a real gap and
+none of it is closed by the suites above.
+
+- **Nothing has been executed.** No candidate has been built, no op suite has
+  run, no microbench has been taken, no calibration block has been solved on real
+  A/A material. Every number in every test is synthetic. AK3's own acceptance
+  criterion — *"the first phase that consumes inference"* — is **not met**: the
+  machinery exists, the campaign does not.
+- **The runner seams are unimplemented on purpose.** `api.TierGateRunner` has
+  three fixture implementations (`correctness.T0CorrectnessRunner`,
+  `integrity.SourceIntegrityGateRunner`, `surface.SurfaceGateRunner`) and every
+  one of them consumes evidence somebody else must produce.
+  `correctness.T0EvidenceProvider` has exactly one implementation,
+  `StaticEvidenceProvider`, which serves a dict. **Nothing builds a candidate,
+  runs `test-backend-ops`, collects a dispatch trace, or takes a paired block.**
+  `controls.ControlRunner` likewise has no implementation.
+- **Two derivations of the §8.5.1 gates coexist.** `integrity.py` implements them
+  over ELF tables, parsed diffs and build provenance; `correctness.py` carries
+  three shallower `t0.source_integrity.*` gates over self-declared evidence
+  objects. Composing both runners emits both (the ids do not collide, and
+  `test_conformance` asserts that), and both are `integrity`-class so either
+  failing blocks ranking — but a caller wiring ONLY the correctness runner gets
+  the shallow three and nothing says the deep set never ran. Converging them is
+  an AK4 decision, not a local edit.
+- **`derived ⊇ traced` is unsatisfiable against a full-suite trace.** `surface.py`
+  compares the whole traced op set against the candidate's derived surface, so a
+  T0 trace that also dispatched unrelated ops reads as an escape. Either the
+  trace must be pre-filtered to the derived surface or the symbol axes must
+  compare only *changed* dispatch; nothing states or enforces either today.
+  `TracedSurface` also records no denominator of what the trace covered, which
+  the record grammar's `scope=` requires.
+- **Precondition 6 reaches one argv surface of about six.** Only
+  `correctness.SanitizerInvocation` carries an `api.RecipeReceipt`;
+  `OpSuiteEvidence`, `CoherenceEvidence`, `DeterminismEvidence`,
+  `BoundaryShapeEvidence`, `LinkageEvidence` and `StateSafetyEvidence` carry an
+  opaque `receipt_ref: str`. **A hand-typed `test-backend-ops` argv is
+  undetectable at T0.** `recipes.py` also exposes no `verify_receipt()`, so
+  `api.check_preconditions` passes precondition 6 on the mere *presence* of a
+  `RecipeReceipt` — a frozen dataclass of three well-shaped strings.
+- **Three §8.5.1 gates cannot detect a self-report.** `BuildProvenance` and
+  `DiffPolicyEvidence` have no `produced_by` field, so `build_dir_was_fresh`,
+  `incremental_objects_present` and `commit_was_pathspec_limited` are taken on
+  faith. Every other evidence type has the field.
+- **Precondition 4 is enforced on two of its three components in `correctness`.**
+  `LinkageEvidence` carries `anchor_binary_sha256` and `anchor_linkage_sha256`
+  and no `anchor_source_commit`; `CoherenceEvidence` names no anchor at all, so a
+  `byte_identical` PASS is against *some* anchor output.
+  `api.AnchorIdentity.identity_matches()` compares all three and is never called
+  from `correctness.py`. `integrity.check_evidence_binding` does bind the ELF
+  tables, and registration tables carry no provenance digest at all.
+- **The §8.5.1 (5) repair cap is enforced by nothing.** No gate consults a
+  `RepairLedger` or `RepairPolicy`; `check_repair_from_clean_parent` accepts
+  `attempt_index=99`, and `check_repair_from_clean_parent(None)` PASSes, which is
+  exactly how a repair evades the clean-parent rule.
+- **Control seed rotation is declared, hashed, and never enforced on the run
+  path.** `derive_control_seed`, `ControlBundle.seed_for` and
+  `SeedRotationSchedule.check_rotation` have no caller; `run_all` hands all five
+  controls the same seed.
+- **The calibration outputs are re-typable at the campaign boundary.**
+  `CampaignStatistics` takes an `api.CalibrationOutputs`, not the
+  `CalibrationSolve` that produced it, so a hand-built outputs object drives the
+  reducer. The MDE resists (it is recomputed from the retained A/A pool); `φ`,
+  `α_sel` and `α_conf` do not. `CalibrationAttempt.solve_order_recorded` is a
+  dataclass *default*, so *"a conforming implementation MUST record that it did"*
+  is satisfied by a literal.
+- **`ControlPanelResult` has no mint token.** `api.Verdict` re-derives its own
+  status and refuses a stamped one; a `ControlPanelResult` built by hand with an
+  all-PASS panel yields `may_rank=True` with no control ever run.
+- **Readiness, composition and the campaign lifecycle are AK4/AK6.** The
+  evaluator computes per-record verdicts; nothing computes the advisory readiness
+  signal, recomputes calibration at a campaign boundary, drives the A/A cadence,
+  or composes a champion lineage.
+- **T3/T4 are refused, not implemented.** `api.ReleaseTierEvaluator` is the seam
+  AK5 fills.
+
 ### Not started at all
 
-**AK3** (typed evaluator API, affected-surface derivation and trace, correctness
-surfaces, ASAN path, codified microbench recipe, e-process reducer, red-team,
-the four calibrated controls) — **the first phase that consumes inference**.
 **AK4** (state machine, context compiler, planner/critic adapters, selection,
 composition, guards). **AK5** (T2 scope and weights, readiness estimator,
 release-plan compiler, T3 runner, waiver verification, the v8 dry-run).
+**AK6** (readiness reporting and the operator decision surface).
 
 ### Known, documented holes in what *is* implemented
 

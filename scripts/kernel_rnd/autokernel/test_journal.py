@@ -192,6 +192,7 @@ def _event(suffix: str = "0001") -> dict:
             "linkage_sha256": _sha("linkage-0001"),
         },
         "anchor": {
+            "source_commit": V8_COMMIT,
             "binary_sha256": _sha("anchor-binary"),
             "linkage_sha256": _sha("anchor-linkage"),
             "measurement_event_ids": ["ake-20260801-0009"],
@@ -578,6 +579,88 @@ class TestAppendRefusals(_JournalTest):
         restarted = self._new_journal()
         entry = restarted.append(J.KIND_PROPOSAL_SKIPPED, _skip("c"))
         self.assertEqual(entry.seq, 3)
+
+
+class TestVoidedRunsAreJournalable(_JournalTest):
+    """P-AK-SEARCH-1 "What voids a run": *"A voided run is journaled as `INVALID`
+    with its reason, and is **never silently discarded**."*
+
+    The ANCHOR-MISSING void was the one case where that sentence was
+    unsatisfiable through the primary record: `evaluation_event.v2` required
+    `anchor.binary_sha256`, `append()` validates before it writes, and the whole
+    point of the void is that there is no digest to record. The evaluator was
+    correct to refuse to invent one, so the record simply could not be written.
+    These tests exercise the REAL `Journal.append`, not a validator call — the
+    write path is where the defect actually bit.
+    """
+
+    def _voided_anchorless_event(self, suffix: str = "0001") -> dict:
+        record = _event(suffix)
+        record["schema"] = S.SCHEMA_EVALUATION_EVENT_V3
+        del record["anchor"]
+        record["status"] = "invalid"
+        record["integrity_flags"] = ["VOID:ANCHOR_MISSING_OR_MUTATED:FAIL"]
+        record["performance"] = {"raw_samples": [], "paired_blocks": 0,
+                                 "estimate": None, "uncertainty": None}
+        return record
+
+    def test_a_voided_anchorless_run_round_trips_through_append(self):
+        record = self._voided_anchorless_event()
+        entry = self.j.append(J.KIND_EVALUATION_EVENT, record)
+        self.assertEqual(entry.record_id, record["event_id"])
+
+        report = self._new_journal().scan(validate_payloads=True)
+        self.assertEqual(report.defects, ())
+        [stored] = [e for e in report.entries if e.kind == J.KIND_EVALUATION_EVENT]
+        self.assertEqual(stored.payload["status"], "invalid")
+        self.assertNotIn("anchor", stored.payload)
+        self.assertIn("VOID:ANCHOR_MISSING_OR_MUTATED:FAIL",
+                      stored.payload["integrity_flags"])
+        self.assertEqual(S.validate_record(stored.payload), [])
+        # It survived byte-for-byte, so the reason is durable evidence.
+        self.assertEqual(S.content_hash(stored.payload), S.content_hash(record))
+
+    def test_a_pass_record_with_no_anchor_is_still_refused_by_append(self):
+        record = self._voided_anchorless_event()
+        record["status"] = "pass"
+        record["integrity_flags"] = []
+        with self.assertRaises(ValueError) as ctx:
+            self.j.append(J.KIND_EVALUATION_EVENT, record)
+        self.assertIn("anchor", str(ctx.exception))
+        self.assertEqual(self.j.read_all(), [])
+
+    def test_a_placeholder_anchor_is_refused_by_append(self):
+        record = self._voided_anchorless_event()
+        record["anchor"] = {"source_commit": "0" * 40, "binary_sha256": "0" * 64,
+                            "linkage_sha256": "0" * 64,
+                            "measurement_event_ids": ["ake-20260801-0009"]}
+        with self.assertRaises(ValueError) as ctx:
+            self.j.append(J.KIND_EVALUATION_EVENT, record)
+        self.assertIn("placeholder digest", str(ctx.exception))
+        self.assertEqual(self.j.read_all(), [])
+
+    def test_the_kind_accepts_both_live_evaluation_event_versions(self):
+        self.assertEqual(
+            J.ACCEPTED_SCHEMAS_BY_KIND[J.KIND_EVALUATION_EVENT],
+            frozenset({S.SCHEMA_EVALUATION_EVENT_V2, S.SCHEMA_EVALUATION_EVENT_V3}))
+        legacy = _event("0002")
+        legacy["schema"] = S.SCHEMA_EVALUATION_EVENT_V2
+        del legacy["anchor"]["source_commit"]
+        self.j.append(J.KIND_EVALUATION_EVENT, legacy)
+        self.j.append(J.KIND_EVALUATION_EVENT, _event("0003"))
+        report = self._new_journal().scan(validate_payloads=True)
+        self.assertEqual(report.defects, ())
+        self.assertEqual(
+            [e.payload["schema"] for e in report.entries
+             if e.kind == J.KIND_EVALUATION_EVENT],
+            [S.SCHEMA_EVALUATION_EVENT_V2, S.SCHEMA_EVALUATION_EVENT_V3])
+
+    def test_a_kind_still_refuses_a_schema_from_another_record_family(self):
+        record = _event("0004")
+        record["schema"] = S.SCHEMA_CHAMPION
+        with self.assertRaises(ValueError) as ctx:
+            self.j.append(J.KIND_EVALUATION_EVENT, record)
+        self.assertIn("declares schema", str(ctx.exception))
 
 
 class TestTombstones(_JournalTest):

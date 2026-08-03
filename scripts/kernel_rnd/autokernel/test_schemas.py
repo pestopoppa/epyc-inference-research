@@ -248,8 +248,14 @@ def _candidate() -> dict:
 
 
 def _event() -> dict:
+    """A v2 evaluation event — a record of the generation already in journals.
+
+    Kept as v2 ON PURPOSE. v2 is not retired and is not rewritten, so the corpus
+    has to contain one; if this fixture were quietly moved to v3 nothing would be
+    left proving that yesterday's shard still reads.
+    """
     return {
-        "schema": S.SCHEMA_EVALUATION_EVENT,
+        "schema": S.SCHEMA_EVALUATION_EVENT_V2,
         "event_id": "ake-20260803-0001",
         "campaign_id": "ak-llama_gpu-decode-20260803",
         "candidate_id": "akc-20260803-0001",
@@ -302,6 +308,47 @@ def _event() -> dict:
         "supersedes": [],
         "created_at": "2026-08-03T10:45:00+00:00",
     }
+
+
+def _event_v3(**overrides) -> dict:
+    """A v3 evaluation event with a fully named anchor (all THREE components)."""
+    record = _event()
+    record["schema"] = S.SCHEMA_EVALUATION_EVENT_V3
+    record["anchor"] = {
+        "source_commit": V8_COMMIT,
+        "binary_sha256": _sha("anchor-binary"),
+        "linkage_sha256": _sha("anchor-linkage"),
+        "measurement_event_ids": ["ake-20260801-0009"],
+    }
+    record.update(overrides)
+    return record
+
+
+def _event_v3_voided_without_an_anchor() -> dict:
+    """The record v3 exists for: a run VOIDED because no anchor was resolvable.
+
+    The protocol requires it to be journaled ("A voided run is journaled as
+    `INVALID` with its reason, and is **never silently discarded**") and v2 could
+    not express it — `anchor.binary_sha256` was unconditionally required, so the
+    only way to produce a valid record was to invent a digest. Here the block is
+    STRUCTURALLY ABSENT and the reason is in `integrity_flags`.
+
+    It is the FIXTURES entry for v3 deliberately: it is the shape the version was
+    introduced for, and it is also not a valid v2 record, which is what keeps
+    `test_dispatch_rejects_a_record_under_the_wrong_schema_string` honest.
+    """
+    record = _event()
+    record["schema"] = S.SCHEMA_EVALUATION_EVENT_V3
+    del record["anchor"]
+    record["status"] = "invalid"
+    record["integrity_flags"] = ["VOID:ANCHOR_MISSING_OR_MUTATED:FAIL"]
+    record["performance"] = {
+        "raw_samples": [],
+        "paired_blocks": 0,
+        "estimate": None,
+        "uncertainty": None,
+    }
+    return record
 
 
 def _champion() -> dict:
@@ -398,7 +445,8 @@ FIXTURES = {
     S.SCHEMA_CAMPAIGN: _campaign,
     S.SCHEMA_PROPOSAL: _proposal,
     S.SCHEMA_CANDIDATE: _candidate,
-    S.SCHEMA_EVALUATION_EVENT: _event,
+    S.SCHEMA_EVALUATION_EVENT_V2: _event,
+    S.SCHEMA_EVALUATION_EVENT_V3: _event_v3_voided_without_an_anchor,
     S.SCHEMA_CHAMPION: _champion,
     S.SCHEMA_RELEASE_PACKAGE: _release_package,
     S.SCHEMA_OPERATOR_WAIVER: _waiver,
@@ -781,6 +829,202 @@ class EvaluationEventRuleTest(unittest.TestCase):
 
 
 # =============================================================================
+# §7.4 — evaluation_event.v3: the anchor's third component, and the ONE case in
+# which a record may carry no anchor at all
+# =============================================================================
+
+class EvaluationEventV3AnchorTest(unittest.TestCase):
+    """The two defects v3 exists to close, each asserted from both sides.
+
+    Both were RECORDED against the AK3 evaluator rather than patched around, and
+    both are schema defects:
+
+      1. `evaluation_event.v2` required `anchor.binary_sha256` unconditionally,
+         so the ANCHOR-MISSING void — the one the protocol names explicitly and
+         requires to be *"journaled as INVALID with its reason"* — could not
+         produce a valid record, and `journal.Journal.append` refused it.
+      2. Precondition 4 names the anchor by source commit AND binary SHA-256 AND
+         linkage SHA-256; v2's `anchor` carried two of the three, so the commit
+         travelled as an unchecked extra key.
+    """
+
+    # ---- the anchor is named by all THREE components ----------------------
+
+    def test_source_commit_is_required_when_an_anchor_is_present(self):
+        record = _event_v3()
+        del record["anchor"]["source_commit"]
+        violations = S.validate_evaluation_event(record)
+        self.assertTrue(any("anchor.source_commit" in v for v in violations), violations)
+
+    def test_source_commit_must_be_a_full_40_hex_commit(self):
+        for bad in ("deadbeef", V8_COMMIT.upper(), V8_COMMIT + "0", 1234, None, ""):
+            with self.subTest(value=bad):
+                record = _event_v3()
+                record["anchor"]["source_commit"] = bad
+                self.assertTrue(any("anchor.source_commit" in v
+                                    for v in S.validate_evaluation_event(record)))
+
+    def test_a_fully_named_anchor_validates(self):
+        self.assertEqual(S.validate_evaluation_event(_event_v3()), [])
+
+    # ---- a fabricated anchor is refused, never accepted as "recorded" -----
+
+    def test_a_placeholder_digest_is_rejected_rather_than_read_as_an_anchor(self):
+        fillers = {
+            "source_commit": ("0" * 40, "f" * 40),
+            "binary_sha256": ("0" * 64, "f" * 64,
+                              hashlib.sha256(b"").hexdigest()),
+            "linkage_sha256": ("0" * 64, "a" * 64),
+        }
+        for field, values in fillers.items():
+            for value in values:
+                with self.subTest(field=field, value=value[:8]):
+                    record = _event_v3()
+                    record["anchor"][field] = value
+                    violations = S.validate_evaluation_event(record)
+                    self.assertTrue(any("placeholder digest" in v for v in violations),
+                                    violations)
+
+    def test_the_void_exemption_cannot_be_taken_by_supplying_a_placeholder(self):
+        """The two escape routes are closed together or neither is closed."""
+        record = _event_v3_voided_without_an_anchor()
+        record["anchor"] = {
+            "source_commit": "0" * 40,
+            "binary_sha256": "0" * 64,
+            "linkage_sha256": "0" * 64,
+            "measurement_event_ids": ["ake-20260801-0009"],
+        }
+        violations = S.validate_evaluation_event(record)
+        self.assertTrue(any("placeholder digest" in v for v in violations), violations)
+
+    def test_a_real_digest_is_not_falsely_accused(self):
+        self.assertFalse(S.is_placeholder_digest(_sha("anchor-binary")))
+        self.assertFalse(S.is_placeholder_digest(V8_COMMIT))
+        # Not hex, wrong length, or not a string at all: not this check's subject.
+        for other in ("", "zz", "0" * 63, "0" * 41, None, 0, ["0" * 64]):
+            with self.subTest(value=other):
+                self.assertFalse(S.is_placeholder_digest(other))
+        for filler in ("0" * 64, "f" * 64, "9" * 40, hashlib.sha256(b"").hexdigest()):
+            with self.subTest(value=filler[:8]):
+                self.assertTrue(S.is_placeholder_digest(filler))
+
+    # ---- the conditional: absent ONLY for an anchor-voided INVALID record --
+
+    def test_a_voided_anchorless_record_validates(self):
+        self.assertEqual(
+            S.validate_evaluation_event(_event_v3_voided_without_an_anchor()), [])
+
+    def test_a_pass_record_without_an_anchor_is_rejected(self):
+        """The loosest possible reading of the exemption, refused explicitly."""
+        record = _event_v3_voided_without_an_anchor()
+        record["status"] = "pass"
+        record["integrity_flags"] = []
+        violations = S.validate_evaluation_event(record)
+        self.assertTrue(any("anchor" in v for v in violations), violations)
+
+    def test_every_non_invalid_status_still_requires_an_anchor(self):
+        for status in sorted(S.EVENT_STATUSES - {"invalid"}):
+            with self.subTest(status=status):
+                record = _event_v3_voided_without_an_anchor()
+                record["status"] = status
+                violations = S.validate_evaluation_event(record)
+                self.assertTrue(any("anchor: required field is missing" in v
+                                    for v in violations), violations)
+
+    def test_invalid_for_some_other_reason_still_requires_an_anchor(self):
+        """A voided run that HAD an anchor does not get to drop it."""
+        record = _event_v3_voided_without_an_anchor()
+        record["integrity_flags"] = ["VOID:HOST_HEALTH_TIER_VIOLATION:FAIL",
+                                     "VOID:STORAGE_EXHAUSTED_MID_WINDOW:FAIL"]
+        violations = S.validate_evaluation_event(record)
+        self.assertTrue(any("anchor: required field is missing" in v
+                            for v in violations), violations)
+
+    def test_both_anchor_void_reasons_admit_the_omission(self):
+        for reason in sorted(S.ANCHOR_VOID_REASONS):
+            with self.subTest(reason=reason):
+                record = _event_v3_voided_without_an_anchor()
+                record["integrity_flags"] = [f"VOID:{reason}:{S.COULD_NOT_CHECK}"]
+                self.assertEqual(S.validate_evaluation_event(record), [])
+
+    def test_an_anchor_reason_outside_a_void_flag_does_not_admit_the_omission(self):
+        """The flag has to be a VOID flag, not merely a string mentioning one."""
+        for flag in ("ANCHOR_MISSING_OR_MUTATED",
+                     "INTEGRITY:ANCHOR_MISSING_OR_MUTATED:FAIL",
+                     "VOID:ANCHOR_MISSING_OR_MUTATED_LATER:FAIL"):
+            with self.subTest(flag=flag):
+                record = _event_v3_voided_without_an_anchor()
+                record["integrity_flags"] = [flag]
+                self.assertTrue(S.validate_evaluation_event(record))
+
+    def test_a_null_anchor_is_refused_so_absence_has_one_representation(self):
+        record = _event_v3_voided_without_an_anchor()
+        record["anchor"] = None
+        violations = S.validate_evaluation_event(record)
+        self.assertTrue(any("null" in v for v in violations), violations)
+
+    def test_an_anchor_present_but_malformed_still_fails_in_a_voided_record(self):
+        """Being INVALID is not permission to carry an unreadable anchor."""
+        record = _event_v3_voided_without_an_anchor()
+        record["anchor"] = {"source_commit": V8_COMMIT,
+                            "binary_sha256": "not-a-sha256",
+                            "linkage_sha256": _sha("anchor-linkage"),
+                            "measurement_event_ids": []}
+        violations = S.validate_evaluation_event(record)
+        self.assertTrue(any("anchor.binary_sha256" in v for v in violations), violations)
+
+    # ---- v2 keeps its own rules, and is never rewritten -------------------
+
+    def test_a_v2_record_still_validates_under_the_v2_validator(self):
+        record = _event()
+        self.assertEqual(record["schema"], S.SCHEMA_EVALUATION_EVENT_V2)
+        self.assertNotIn("source_commit", record["anchor"])
+        self.assertEqual(S.validate_evaluation_event_v2(record), [])
+        self.assertEqual(S.validate_record(record), [])
+        self.assertEqual(S.validate_evaluation_event(record), [])
+
+    def test_v2_still_requires_its_anchor_unconditionally(self):
+        """The v3 exemption is NOT back-ported: v2's rule is v2's rule."""
+        record = _event()
+        del record["anchor"]
+        record["status"] = "invalid"
+        record["integrity_flags"] = ["VOID:ANCHOR_MISSING_OR_MUTATED:FAIL"]
+        self.assertTrue(any("anchor" in v
+                            for v in S.validate_evaluation_event_v2(record)))
+
+    def test_a_v2_record_is_not_a_v3_record(self):
+        record = _event()
+        record["schema"] = S.SCHEMA_EVALUATION_EVENT_V3
+        self.assertTrue(any("anchor.source_commit" in v
+                            for v in S.validate_evaluation_event_v3(record)))
+
+    def test_a_v3_void_record_is_not_a_v2_record(self):
+        record = _event_v3_voided_without_an_anchor()
+        record["schema"] = S.SCHEMA_EVALUATION_EVENT_V2
+        self.assertTrue(S.validate_evaluation_event_v2(record))
+
+    def test_the_dispatcher_refuses_an_unknown_evaluation_event_version(self):
+        record = _event_v3()
+        record["schema"] = "epyc.autokernel.evaluation_event.v4"
+        violations = S.validate_evaluation_event(record)
+        self.assertTrue(any("not an AutoKernel evaluation_event schema" in v
+                            for v in violations), violations)
+        self.assertTrue(S.validate_evaluation_event(None))
+
+    def test_the_current_schema_string_is_v3(self):
+        self.assertEqual(S.SCHEMA_EVALUATION_EVENT, S.SCHEMA_EVALUATION_EVENT_V3)
+        self.assertIn(S.SCHEMA_EVALUATION_EVENT_V2, S.KNOWN_SCHEMAS)
+        self.assertIn(S.SCHEMA_EVALUATION_EVENT_V3, S.KNOWN_SCHEMAS)
+        for schema in (S.SCHEMA_EVALUATION_EVENT_V2, S.SCHEMA_EVALUATION_EVENT_V3):
+            self.assertEqual(S.NON_RETRIEVABLE_FIELDS[schema], frozenset({"narrative"}))
+
+    def test_the_narrative_is_stripped_from_a_v3_record_too(self):
+        record = _event_v3(narrative="the planner's story", narrative_retrievable=False)
+        self.assertEqual(S.validate_evaluation_event(record), [])
+        self.assertNotIn("narrative", S.retrievable_view(record))
+
+
+# =============================================================================
 # §7.1 / §7.2 — campaign and proposal specific rules
 # =============================================================================
 
@@ -1096,7 +1340,8 @@ class RegistryDispatchTest(unittest.TestCase):
             S.SCHEMA_CAMPAIGN: S.validate_campaign,
             S.SCHEMA_PROPOSAL: S.validate_proposal,
             S.SCHEMA_CANDIDATE: S.validate_candidate,
-            S.SCHEMA_EVALUATION_EVENT: S.validate_evaluation_event,
+            S.SCHEMA_EVALUATION_EVENT_V2: S.validate_evaluation_event_v2,
+            S.SCHEMA_EVALUATION_EVENT_V3: S.validate_evaluation_event_v3,
             S.SCHEMA_CHAMPION: S.validate_champion,
             S.SCHEMA_RELEASE_PACKAGE: S.validate_release_package,
             S.SCHEMA_OPERATOR_WAIVER: S.validate_operator_waiver,

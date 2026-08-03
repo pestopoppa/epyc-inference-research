@@ -175,6 +175,7 @@ KIND_CHAMPION_UPDATED = "CHAMPION_UPDATED"
 KIND_RELEASE_PACKAGE_PREPARED = "RELEASE_PACKAGE_PREPARED"
 KIND_OPERATOR_WAIVER_RECORDED = "OPERATOR_WAIVER_RECORDED"
 
+#: The CURRENT schema string each schema-bound kind emits.
 SCHEMA_BOUND_KINDS = {
     KIND_CAMPAIGN_OPENED: schemas.SCHEMA_CAMPAIGN,
     KIND_PROPOSAL_RECORDED: schemas.SCHEMA_PROPOSAL,
@@ -183,6 +184,20 @@ SCHEMA_BOUND_KINDS = {
     KIND_CHAMPION_UPDATED: schemas.SCHEMA_CHAMPION,
     KIND_RELEASE_PACKAGE_PREPARED: schemas.SCHEMA_RELEASE_PACKAGE,
     KIND_OPERATOR_WAIVER_RECORDED: schemas.SCHEMA_OPERATOR_WAIVER,
+}
+
+# Every schema version a kind ADMITS. A kind pinned to exactly one string could
+# not accept a record written before its contract was versioned, so a schema
+# revision would have made the previous generation of records unappendable —
+# including on a replay or an import of an existing shard. The set is closed and
+# explicit: `schemas.SCHEMA_REGISTRY` decides validity, this decides whether the
+# payload belongs under this kind at all.
+ACCEPTED_SCHEMAS_BY_KIND = {
+    **{kind: frozenset({schema}) for kind, schema in SCHEMA_BOUND_KINDS.items()},
+    KIND_EVALUATION_EVENT: frozenset({
+        schemas.SCHEMA_EVALUATION_EVENT_V2,
+        schemas.SCHEMA_EVALUATION_EVENT_V3,
+    }),
 }
 
 # Journal-native kinds: the record shape belongs to the journal itself, so it is
@@ -1255,10 +1270,11 @@ class Journal:
 
         schema_name = SCHEMA_BOUND_KINDS.get(kind)
         if schema_name is not None:
-            if payload.get("schema") != schema_name:
+            accepted = ACCEPTED_SCHEMAS_BY_KIND[kind]
+            if payload.get("schema") not in accepted:
                 raise ValueError(
                     f"{kind} payload declares schema {payload.get('schema')!r}; "
-                    f"expected {schema_name!r}"
+                    f"expected one of {sorted(accepted)}"
                 )
             violations = schemas.validate_record(payload)
             if violations:
@@ -2092,6 +2108,7 @@ def _atomic_write_json(path: str, obj: Mapping[str, Any]) -> None:
 __all__ = [
     "JOURNAL_ENTRY_SCHEMA", "BASE_SHARD_NAME", "ARCHIVE_DIRNAME", "CURSOR_DIRNAME",
     "DEFAULT_MAX_SHARD_BYTES", "KINDS", "NATIVE_KINDS", "SCHEMA_BOUND_KINDS",
+    "ACCEPTED_SCHEMAS_BY_KIND",
     "BOOTSTRAP_KNOWLEDGE_KINDS", "RECORD_ID_KEY_BY_KIND", "STORAGE_CLASSES",
     "TOMBSTONABLE_STORAGE_CLASSES", "NARRATIVE_KEYS",
     "KIND_CAMPAIGN_OPENED", "KIND_PROPOSAL_RECORDED", "KIND_CANDIDATE_RECORDED",

@@ -220,6 +220,7 @@ def _event(suffix: str, candidate_suffix: str, receipt_id: str, *,
             "linkage_sha256": _sha(f"linkage-{candidate_suffix}"),
         },
         "anchor": {
+            "source_commit": V8_COMMIT,
             "binary_sha256": _sha("anchor-binary"),
             "linkage_sha256": _sha("anchor-linkage"),
             "measurement_event_ids": ["ake-20260801-0009"],
