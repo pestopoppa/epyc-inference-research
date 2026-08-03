@@ -1,8 +1,13 @@
-version: 1
+version: 2
 domain: coder
 description: "Code generation and debugging benchmark - hardened for systems/research level"
 created: "2025-12-16"
-updated: "2025-12-18"
+updated: 2026-08-02
+revisions:
+  - version: 2
+    date: 2026-08-02
+    note: >-
+      t1_q1_algorithm: prompt claimed TWO bugs but the code had ONE (verified exhaustively: 57915 cases, 0 failures with only left=mid+1 applied). Second, genuine bug introduced (right=len(arr)-1 under the half-open loop test) so the stated premise is true.
 
 prompts:
   # ============== TIER 1: Medium (was T2) ==============
@@ -14,7 +19,7 @@ prompts:
       results on specific inputs. Find both bugs and fix them.
 
       def binary_search(arr, target):
-          left, right = 0, len(arr)
+          left, right = 0, len(arr) - 1
           while left < right:
               mid = (left + right) // 2
               if arr[mid] == target:
@@ -29,64 +34,64 @@ prompts:
       1. Provide a specific input that triggers the bug
       2. Explain what goes wrong
       3. Show the fix
-    expected: "Bug 1: left=mid causes infinite loop (fix: left=mid+1). Bug 2: right=mid may skip target (fix: right=mid is correct but need left<=right or right=len-1)"
+    expected: "Bug 1: left=mid never advances, infinite loop (fix: left=mid+1). Bug 2: right=len(arr)-1 combined with the exclusive test 'while left < right' makes the last element unreachable (fix: right=len(arr), keeping right=mid)."
     reference_answer: |
-      **Bug 1: `left = mid` causes infinite loop**
+      The two bugs are INDEPENDENT: fixing either one alone still leaves the
+      function wrong. Both must be found.
+
+      **Bug 1: `left = mid` never advances — infinite loop**
 
       *Triggering input:* `arr = [1, 3], target = 2`
 
-      *Trace:*
-      - left=0, right=2, mid=1, arr[1]=3 > 2, right=1
-      - left=0, right=1, mid=0, arr[0]=1 < 2, left=0 (unchanged!)
-      - Infinite loop: left stays 0, right stays 1, mid stays 0 forever
+      *Trace:* right = len(arr)-1 = 1.
+      - left=0, right=1, mid=0, arr[0]=1 < 2, left = mid = 0 (unchanged!)
+      - left and right never move: the loop spins forever.
 
-      *Problem:* When `arr[mid] < target`, we know mid isn't the target, so we should exclude it. Setting `left = mid` doesn't exclude mid, so when left and right differ by 1, left never advances.
+      *Problem:* When `arr[mid] < target` we have proved mid is not the answer,
+      so mid must be excluded from the next interval. `left = mid` keeps it, and
+      once right == left+1 the midpoint is always left, so left can never move.
 
       *Fix:* `left = mid + 1`
 
-      **Bug 2: Off-by-one with exclusive right bound**
+      **Bug 2: `right = len(arr) - 1` makes the last element unreachable**
 
-      *Issue:* The code uses `right = len(arr)` (exclusive upper bound) with `while left < right`, which is one valid pattern. However, there's a subtle inconsistency in how boundaries are handled.
+      *Issue:* Two conventions are mixed. `while left < right` with `right = mid`
+      is the HALF-OPEN convention, which requires the initial right to be the
+      EXCLUSIVE bound `len(arr)`. Initialising `right = len(arr) - 1` makes the
+      last index the exclusive bound, so `arr[len(arr)-1]` is never examined.
 
-      *Triggering input:* `arr = [1, 2, 3, 4], target = 4`
+      *Triggering input:* `arr = [1, 2, 3], target = 3` (with Bug 1 already fixed)
 
-      With the first bug fixed (`left = mid + 1`), let's trace:
-      - left=0, right=4, mid=2, arr[2]=3 < 4, left=3
-      - left=3, right=4, mid=3, arr[3]=4 == 4, return 3 ✓
+      *Trace:* right = 2.
+      - left=0, right=2, mid=1, arr[1]=2 < 3, left = 2
+      - loop test left < right is 2 < 2, false -> exit, return -1
 
-      Actually, the code works after fixing Bug 1 for most cases. The "second bug" is more of a pattern consistency issue:
+      The target sits at index 2 and is reported missing. Every array whose
+      target is the final element hits this.
 
-      *Alternative interpretation:* For very large arrays, `mid = (left + right) // 2` can overflow in some languages. Python handles big integers, but in C/Java: `mid = left + (right - left) // 2` is safer.
+      *Fix:* `right = len(arr)`, keeping `right = mid`. (Equivalently, switch
+      wholesale to the closed convention: `right = len(arr)-1`, `while left <= right`,
+      `right = mid - 1` — but do not mix halves of the two conventions.)
 
-      **Corrected Code:**
+      **Corrected Code (half-open, minimal edit):**
       ```python
       def binary_search(arr, target):
-          left, right = 0, len(arr) - 1  # inclusive bounds
-          while left <= right:
-              mid = left + (right - left) // 2  # overflow-safe
-              if arr[mid] == target:
-                  return mid
-              elif arr[mid] < target:
-                  left = mid + 1
-              else:
-                  right = mid - 1
-          return -1
-      ```
-
-      Or keeping exclusive right:
-      ```python
-      def binary_search(arr, target):
-          left, right = 0, len(arr)  # exclusive right
+          left, right = 0, len(arr)      # FIX 2: was len(arr) - 1
           while left < right:
               mid = (left + right) // 2
               if arr[mid] == target:
                   return mid
               elif arr[mid] < target:
-                  left = mid + 1  # FIX: was left = mid
+                  left = mid + 1         # FIX 1: was left = mid
               else:
                   right = mid
           return -1
       ```
+
+      *Note on `mid = (left + right) // 2`:* this is fine in Python, whose ints
+      are arbitrary-precision. In C/Java it can overflow and
+      `mid = left + (right - left) // 2` is preferred — but that is a portability
+      remark, NOT one of the two bugs asked for here.
     scoring:
       - criterion: "Identifies infinite loop bug"
         weight: 30

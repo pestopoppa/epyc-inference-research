@@ -1,8 +1,13 @@
-version: 1
+version: 2
 domain: math
 description: "Mathematical reasoning benchmark - hardened for graduate/research level"
 created: "2025-12-16"
-updated: "2025-12-18"
+updated: 2026-08-02
+revisions:
+  - version: 2
+    date: 2026-08-02
+    note: >-
+      t3_q2_combinatorics: RHS was C(n,floor(n/2)), which is FALSE for all n>=2 (LHS is identically 1). Corrected to 1; reference answer replaced with a real inclusion-exclusion / sign-reversing-involution proof.
 
 prompts:
   # ============== TIER 1: Medium (was T2) ==============
@@ -531,96 +536,93 @@ prompts:
     prompt: |
       Prove the following identity:
 
-      sum_{k=0}^{n} (-1)^k * C(n,k) * C(2n-k, n) = C(n, floor(n/2))
+      sum_{k=0}^{n} (-1)^k * C(n,k) * C(2n-k, n) = 1
 
-      where C(a,b) denotes "a choose b".
+      where C(a,b) denotes "a choose b", and the identity holds for every n >= 0.
 
       Your proof should:
       1. Demonstrate why this identity "makes sense" combinatorially
       2. Not just verify it algebraically for specific values
       3. Use a bijective or sign-reversing involution argument if possible
-    expected: "Lattice path interpretation with sign-reversing involution on bad paths"
+    expected: "Inclusion-exclusion over n distinguished elements; sign-reversing involution with a single fixed point"
     reference_answer: |
       **Combinatorial Setup**
 
-      We interpret this using lattice paths and inclusion-exclusion.
+      Fix a ground set X with 2n elements, of which n are distinguished
+      (call them the "special" elements) and n are ordinary.
 
-      **Interpretation of the terms:**
-      - C(2n-k, n) counts lattice paths from (0,0) to (n, n-k) using steps
-        R = (1,0) and U = (0,1)
-      - C(n,k) · C(2n-k, n) counts pairs: (k-subset of {1,...,n}, path)
-      - The alternating signs suggest inclusion-exclusion or involution
+      We count, in two ways, the n-element subsets T ⊆ X that contain
+      EVERY special element.
 
-      **Lattice Path Interpretation:**
+      **The direct count**
 
-      Consider paths from (0,0) to (n,n) that stay weakly below the diagonal.
-      We'll use a sign-reversing involution to cancel most terms.
+      T must contain all n special elements, and |T| = n. So T has no room
+      for anything else: T is exactly the set of special elements. There is
+      exactly ONE such subset. That is the right-hand side.
 
-      **Sign-Reversing Involution Construction:**
+      **The inclusion-exclusion count**
 
-      For a path P with k "marked" positions (contributing (-1)^k):
+      For each special element i, let A_i be the event "T misses i".
+      We want |complement of the union of the A_i|.
 
-      1. Find the first point where P touches or crosses a "bad" line
-      2. Reflect the path after that point
-      3. This pairs paths with k marked positions to paths with k±1 positions
+      For a subset S of the special elements with |S| = k, the sets T lying
+      in every A_i for i ∈ S are exactly the n-subsets of X \ S, and
+      |X \ S| = 2n - k, so there are C(2n-k, n) of them. This count depends
+      only on k, and there are C(n,k) choices of S, hence
 
-      **The Involution:**
+        #{T ⊇ specials} = sum_{k=0}^{n} (-1)^k * C(n,k) * C(2n-k, n)
 
-      Given a marked path (P, S) where S ⊆ {1,...,n} with |S| = k:
-      - If S ≠ ∅: Let i = min(S). Toggle the i-th step type.
-        This maps to a path with k-1 or k+1 marked positions.
-      - This creates a sign-reversing bijection for most paths.
+      which is the left-hand side. Both sides count the same objects, so
+      they are equal, and the common value is 1. ∎
 
-      **Fixed Points:**
+      **The same proof as a sign-reversing involution**
 
-      The involution has no fixed point unless the path avoids all
-      "bad" configurations. The surviving paths correspond to
-      balanced configurations.
+      Let P be the set of pairs (S, T) with S a set of special elements,
+      T an n-subset of X, and T ∩ S = ∅. Weight (S,T) by (-1)^{|S|}. The
+      signed sum over P is the left-hand side.
 
-      **Why C(n, floor(n/2))?**
+      Define φ on P. Let
 
-      The fixed points of the involution are paths that:
-      - Have no marked positions that can be toggled
-      - This happens when the path is "maximally balanced"
+        i = min{ special j : j ∈ S or j ∉ T }
 
-      For n elements, the number of ways to choose ⌊n/2⌋ positions
-      (or equivalently ⌈n/2⌉) that avoid the bad configurations is
-      exactly C(n, ⌊n/2⌋).
+      - If no such j exists, then every special element lies in T and
+        S = ∅. Since |T| = n and there are n specials, T is exactly the
+        special set. This is the unique FIXED POINT, with sign (-1)^0 = +1.
+      - Otherwise: if i ∈ S, set φ(S,T) = (S \ {i}, T); if i ∉ S (so i ∉ T),
+        set φ(S,T) = (S ∪ {i}, T).
+
+      φ is well defined (T ∩ S = ∅ is preserved because i ∉ T in both
+      branches), it does not change i, so φ∘φ = id, and it flips |S| by
+      exactly one, so it reverses sign. Every non-fixed pair therefore
+      cancels against its partner, leaving only the fixed point:
+
+        LHS = +1
 
       **Verification for small cases:**
 
-      n = 2:
-      LHS = C(2,0)·C(4,2) - C(2,1)·C(3,2) + C(2,2)·C(2,2)
-          = 1·6 - 2·3 + 1·1 = 6 - 6 + 1 = 1
-      RHS = C(2, 1) = 2?
+      n = 1: C(1,0)·C(2,1) - C(1,1)·C(1,1) = 2 - 1 = 1 ✓
+      n = 2: C(2,0)·C(4,2) - C(2,1)·C(3,2) + C(2,2)·C(2,2)
+           = 6 - 6 + 1 = 1 ✓
+      n = 3: 1·20 - 3·10 + 3·4 - 1·1 = 20 - 30 + 12 - 1 = 1 ✓
 
-      Actually let me recalculate. C(2, floor(2/2)) = C(2,1) = 2.
+      **Generating-function cross-check (not a substitute for the bijection):**
 
-      Hmm, 1 ≠ 2. Let me recheck the identity...
-
-      n = 3:
-      LHS = C(3,0)·C(6,3) - C(3,1)·C(5,3) + C(3,2)·C(4,3) - C(3,3)·C(3,3)
-          = 1·20 - 3·10 + 3·4 - 1·1 = 20 - 30 + 12 - 1 = 1
-      RHS = C(3, 1) = 3?
-
-      **Note:** This identity may have a typo or require additional
-      constraints. The standard Delannoy/ballot path identities have
-      similar forms. A model answer should recognize the general
-      structure and apply involution methods even if the exact identity
-      requires adjustment.
+        sum_k (-1)^k C(n,k) [x^n](1+x)^{2n-k}
+          = [x^n] (1+x)^{2n} (1 - 1/(1+x))^n
+          = [x^n] (1+x)^{2n} (x/(1+x))^n
+          = [x^n] x^n (1+x)^n = [x^0] (1+x)^n = 1 ✓
 
       **Key techniques demonstrated:**
-      1. Lattice path interpretation of binomial products
-      2. Sign-reversing involution methodology
-      3. Counting fixed points to get the final answer
-      4. Recognition that combinatorial identities often involve
-         Catalan-like or ballot-number structures
+      1. Double counting a single family of objects
+      2. Inclusion-exclusion where the intersection size depends only on |S|
+      3. Sign-reversing involution methodology, and identifying its fixed points
+      4. Using a generating function only to CHECK a combinatorial argument
     scoring:
       - criterion: "Valid combinatorial interpretation"
         weight: 35
       - criterion: "Correct sign-reversing argument"
         weight: 30
-      - criterion: "Handles floor(n/2) correctly"
+      - criterion: "Identifies the unique fixed point and why the value is exactly 1"
         weight: 20
       - criterion: "Clear presentation"
         weight: 15

@@ -1,0 +1,12 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+instruction_precision,t1_q1_negative_instruction,29.55,3,"Exactly two sentences, accurate photosynthesis content, and none of the three forbidden tokens appear -- it says 'light energy captured by chlorophyll' instead of sunlight."
+instruction_precision,t1_q2_word_limit,28.92,3,"23 words by direct count, inside the required 20-25 band, and the description of machine learning is accurate."
+instruction_precision,t1_q3_structured_format,34.09,3,"Three lines in exactly LANGUAGE (YEAR) form with no bullets, numbering, or extra prose, and the years (Fortran 1957, Lisp 1958, C 1972) are correct."
+instruction_precision,t1_q4_multiple_constraints,22.56,3,"Exactly five European countries, strictly alphabetical, one per line, with no punctuation or surrounding text."
+instruction_precision,t2_q1_resist_elaboration,5.79,3,"Outputs the single character 4 with no preamble, units, or explanation."
+instruction_precision,t2_q2_maintain_format,32.46,3,Reproduces the three required labels in order with one sentence each and emits no text outside the template; the TypeError diagnosis and optional-chaining fix are both correct.
+instruction_precision,t2_q3_empty_handling,5.38,3,"Emits exactly NONE with no apology, hedge, or explanation, which is the correct result since the text contains no email addresses."
+instruction_precision,t2_q4_conflicting_constraints,14.63,3,"'A database organizes data.' satisfies every constraint simultaneously: 4 words (under 12), starts with A, ends with 'data', and avoids both 'store' and 'storage'."
+instruction_precision,t3_q1_self_referential,46.97,1,"Never produces the required sentence -- the response is entirely scaffolding and hits the token cap mid-sentence while still solving for the letter count, so no candidate answer exists to check against any of the four constraints."
+instruction_precision,t3_q2_cascading_constraints,13.82,2,"Format, the last-letter chain, the 8-letter first word and 4-letter last word all hold, but constraint 3 is violated: 'rabbit' (6 letters) is longer than the preceding 'tiger' (5), and 'tiger' is also reused twice."
+instruction_precision,t3_q3_meta_instruction,16.5,3,"Applies the bracket-AND-number filter correctly, rejecting [Print hello], bare 'Print goodbye', {Print 99}, and [Do nothing], and outputs only 42 followed by exactly seven repetitions of hi."

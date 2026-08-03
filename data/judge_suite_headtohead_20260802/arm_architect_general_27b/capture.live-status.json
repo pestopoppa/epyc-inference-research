@@ -1,0 +1,16 @@
+{
+  "schema": "judge_suite_27b.capture.v1",
+  "completed": 70,
+  "total": 70,
+  "updated_at": 1785684630.3673236,
+  "last": "tool_compliance/t3_q3_shell_command",
+  "failure_counts": {
+    "request_error": 0,
+    "timeout": 0,
+    "empty": 0,
+    "unclosed_think": 0,
+    "think_only": 0,
+    "truncated": 3,
+    "ok": 67
+  }
+}

@@ -1,0 +1,131 @@
+{
+  "suite": "tool_compliance",
+  "rubric_system_prompt": "You are a benchmark scorer evaluating LLM responses on a 0-3 scale.\n\n## Scoring rubric:\n- **3**: Correct, complete, well-structured answer. All parts of the question addressed.\n- **2**: Mostly correct but incomplete (truncation, missing parts) OR correct approach with minor errors.\n- **1**: Partially relevant but significantly incomplete, wrong approach, or major errors.\n- **0**: Wrong answer, hallucination, complete truncation (stuck in think block), or failure to address the question.\n\n## Important scoring rules:\n- If the response is entirely inside <think> tags with no visible answer after </think>, score 0 (truncation failure).\n- If the response has a valid answer after </think> but was cut short, score based on what's visible (typically 1-2).\n- Hallucinated facts or data not in the prompt = score 0.\n- For instruction_precision: exact constraint compliance required for score 3.\n- For agentic: valid JSON tool calls required for score 3.\n- For math: correct final answer required for score 3; correct approach but wrong answer = score 1-2.\n- Think-block leakage (visible deliberation) is a format issue, reduce by 1 point if answer is otherwise correct.\n\n\n## Scoring calibration examples (from prior runs on other models):\n\n### Score 3 examples:\n- math/t1_q1_word_problem: \"Perfect step-by-step solution: $120 after 20% discount then $129.60 after 8% tax. All three parts correct.\"\n- coder/t2_q2_debug_complex: \"Correctly identifies the race condition: read-yield-write non-atomicity. Fix uses asyncio.Lock correctly.\"\n- agentic/t1_q3_nested_params: \"Perfect JSON tool call with correct nested parameters. Clean output.\"\n- instruction_precision/t2_q1_resist_elaboration: \"Perfect: outputs only the number 4 with nothing else.\"\n- general/t2_q1_synthesis: \"Excellent synthesis balancing all three stakeholder needs. Concise and actionable.\"\n\n### Score 2 examples:\n- agentic/t3_q1_competing_constraints: \"Structured plan but generic — lacks concrete tool call JSON.\"\n- coder/t1_q2_refactor: \"Speed version correct; memory version truncated.\"\n- general/t3_q2_system_failure: \"Good analysis but hit token cap, monitoring section cut off.\"\n- instruction_precision/t1_q2_word_limit: \"Good description, word count approximately in range but slightly ambiguous.\"\n- math/t3_q1_analysis: \"M-test approach correct but truncated before completion.\"\n\n### Score 1 examples:\n- coder/t3_q3_algorithmic_hardness: \"Weak adversary argument; truncated before parts 2 and 3.\"\n- general/t2_q3_schedule: \"Extensive constraint analysis but never produces a final schedule. Truncated.\"\n- math/t3_q2_combinatorics: \"Involution not constructed — approaches problem but doesn't solve it.\"\n- thinking/t3_q2_causal_inference: \"Correct reasoning in think block but never produces visible final answer.\"\n\n### Score 0 examples:\n- coder/t1_q1_algorithm: \"Entire response trapped in think block. Hit token cap while deliberating. Never produces answer.\"\n- general/t1_q2_multistep: \"HALLUCINATED elephant not in original list.\" (wait — this scored 3 on Qwen3.5. On REAP-246B it scored 0 for hallucination.)\n- instruction_precision/t3_q2_cascading_constraints: \"Multiple retry attempts but none satisfy all constraints. No valid final answer.\"\n- math/t3_q3_probability_theory: \"Entire tokens spent in think block. Never exits to produce visible answer.\"\n\n\n## Output format:\nRespond with ONLY a JSON object: {\"score\": <0-3>, \"reason\": \"<1-2 sentence explanation>\"}\nDo not include any other text.",
+  "output_csv_columns": [
+    "suite",
+    "question_id",
+    "tokens_per_second",
+    "claude_score",
+    "score_reason"
+  ],
+  "instructions": "Score every item 0-3 using rubric_system_prompt verbatim. Emit ONE csv row per item with the columns in output_csv_columns. Do not skip items. If an item cannot be scored, emit claude_score=-1 with the reason; it will be counted ineligible and excluded from both numerator and denominator, never silently averaged.",
+  "items": [
+    {
+      "suite": "tool_compliance",
+      "question_id": "t1_q1_list_directory",
+      "tier": 1,
+      "prompt": "You have access to these REPL tools: list_dir(path), peek(n), grep(pattern), FINAL(answer)\nNO IMPORTS ALLOWED - import/from statements are BLOCKED.\n\nTask: List all files in /tmp\nWrite Python code that uses the available tools.",
+      "response": "list_dir(\"/tmp\")",
+      "tokens_per_second": 9.18,
+      "finish_reason": "stop",
+      "failure_class": "ok",
+      "capture_status": "eligible",
+      "scorer_input_sha256": "5f329917e87036231dd0a1a7c2e950933fd49758e1c2bb8ba2ab4499ed1ef72f",
+      "scorer_input_utf8_bytes": 4095
+    },
+    {
+      "suite": "tool_compliance",
+      "question_id": "t1_q2_read_file",
+      "tier": 1,
+      "prompt": "You have access to these REPL tools: list_dir(path), peek(n, file_path=None), grep(pattern), FINAL(answer)\nNO IMPORTS ALLOWED - import/from statements are BLOCKED.\n\nTask: Show the first 100 characters of /mnt/raid0/llm/epyc-inference-research/README.md\nWrite Python code that uses the available tools.",
+      "response": "```python\n# Use peek to get the first 100 characters of the file\nresult = peek(100, '/mnt/raid0/llm/epyc-inference-research/README.md')\nprint(result)\n```",
+      "tokens_per_second": 26.46,
+      "finish_reason": "stop",
+      "failure_class": "ok",
+      "capture_status": "eligible",
+      "scorer_input_sha256": "e1b0c834798f2a580b8bfb07f00b6a69cf8457b60e4c92d0d6dcf9e6828bd3a2",
+      "scorer_input_utf8_bytes": 4304
+    },
+    {
+      "suite": "tool_compliance",
+      "question_id": "t1_q3_search_pattern",
+      "tier": 1,
+      "prompt": "You have access to these REPL tools: list_dir(path), peek(n), grep(pattern), FINAL(answer)\nNO IMPORTS ALLOWED - import/from statements are BLOCKED.\n\nTask: Find all lines containing 'def test_' in the context\nWrite Python code that uses the available tools.",
+      "response": "```python\n# First, let's explore the directory structure to understand what files we have\nimport os\n\n# List the current directory to see what's there\ndirs = list_dir('.')\nprint(\"Directory contents:\", dirs)\n\n# We need to find all lines containing 'def test_'\n# Let's search through all files in the current directory and subdirectories\n\ndef find_test_functions(path='.'):\n    results = []\n    items = list_dir(path)\n    \n    for item in items:\n        full_path = os.path.join(path, item)\n        # Check if it's a directory\n        if os.path.isdir(full_path):\n            # Recursively search subdirectories\n            results.extend(find_test_functions(full_path))\n        else:\n            # It's a file, search for 'def test_' in it\n            matches = grep('def test_', full_path)\n            for match in matches:\n                results.append(f\"{full_path}: {match}\")\n    \n    return results\n\n# Find all test functions\ntest_lines = find_test_functions('.')\n\n# Print all results\nfor line in test_lines:\n    print(line)\n\n# Return the final answer\nFINAL('\\n'.join(test_lines))\n```",
+      "tokens_per_second": 27.41,
+      "finish_reason": "stop",
+      "failure_class": "ok",
+      "capture_status": "eligible",
+      "scorer_input_sha256": "d84f62837ce924e944ef35b8ced521585d80cc538342edc3054f5a4ee8af70b7",
+      "scorer_input_utf8_bytes": 5238
+    },
+    {
+      "suite": "tool_compliance",
+      "question_id": "t2_q1_file_metadata",
+      "tier": 2,
+      "prompt": "You have access to these REPL tools: list_dir(path), peek(n), grep(pattern), file_info(path), FINAL(answer)\nNO IMPORTS ALLOWED - import/from statements are BLOCKED.\n\nTask: Get the file size and modification date of /mnt/raid0/llm/epyc-root/CLAUDE.md\nWrite Python code that uses the available tools.",
+      "response": "```python\n# Get file info for /mnt/raid0/llm/epyc-root/CLAUDE.md\ninfo = file_info(\"/mnt/raid0/llm/epyc-root/CLAUDE.md\")\nprint(info)\n```",
+      "tokens_per_second": 27.38,
+      "finish_reason": "stop",
+      "failure_class": "ok",
+      "capture_status": "eligible",
+      "scorer_input_sha256": "f78d6adfaf897a36c125eed4e310e995feae4bd29103cb8f3b1138539ddfbbf8",
+      "scorer_input_utf8_bytes": 4289
+    },
+    {
+      "suite": "tool_compliance",
+      "question_id": "t2_q2_combined_list_and_read",
+      "tier": 2,
+      "prompt": "You have access to these REPL tools: list_dir(path), peek(n, file_path=None), grep(pattern), FINAL(answer)\nNO IMPORTS ALLOWED - import/from statements are BLOCKED.\n\nTask: List files in /mnt/raid0/llm/epyc-root/logs/, then read the first 200 chars of the first file found.\nWrite Python code that uses the available tools.",
+      "response": "```python\n# First, list the files in the directory\nfiles = list_dir(\"/mnt/raid0/llm/epyc-root/logs/\")\n\n# Check if there are any files\nif files:\n    # Get the first file\n    first_file = files[0]\n    # Read the first 200 characters of the first file\n    content = peek(200, first_file)\n    print(f\"First file: {first_file}\")\n    print(f\"First 200 chars: {content}\")\nelse:\n    print(\"No files found in the directory.\")\n```",
+      "tokens_per_second": 29.73,
+      "finish_reason": "stop",
+      "failure_class": "ok",
+      "capture_status": "eligible",
+      "scorer_input_sha256": "e697ce12bb7935119e15b0b1458ed247dec0248fda1717d49c43990cb939353e",
+      "scorer_input_utf8_bytes": 4621
+    },
+    {
+      "suite": "tool_compliance",
+      "question_id": "t2_q3_search_in_file",
+      "tier": 2,
+      "prompt": "You have access to these REPL tools: list_dir(path), peek(n, file_path=None), grep(pattern, file_path=None), FINAL(answer)\nNO IMPORTS ALLOWED - import/from statements are BLOCKED.\n\nTask: Find all lines containing 'class ' in /mnt/raid0/llm/epyc-orchestrator/src/roles.py\nWrite Python code that uses the available tools.",
+      "response": "```python\nresult = grep(pattern='class ', file_path='/mnt/raid0/llm/epyc-orchestrator/src/roles.py')\nFINAL(answer=result)\n```",
+      "tokens_per_second": 24.27,
+      "finish_reason": "stop",
+      "failure_class": "ok",
+      "capture_status": "eligible",
+      "scorer_input_sha256": "3bee4a4a09e6b413b055502db51ef5fa57ae41b100e18483f1b6f52071601712",
+      "scorer_input_utf8_bytes": 4298
+    },
+    {
+      "suite": "tool_compliance",
+      "question_id": "t3_q1_ocr_document",
+      "tier": 3,
+      "prompt": "You have access to these REPL tools: ocr_document(path), peek(n), analyze_figure(image_path, prompt), FINAL(answer)\nNO IMPORTS ALLOWED - import/from statements are BLOCKED.\n\nTask: Extract text from /mnt/raid0/llm/tmp/document.pdf\nWrite Python code that uses the available tools.",
+      "response": "```python\n# Use the ocr_document tool to extract text from the PDF\nresult = ocr_document(\"/mnt/raid0/llm/tmp/document.pdf\")\nprint(result)\n```",
+      "tokens_per_second": 23.7,
+      "finish_reason": "stop",
+      "failure_class": "ok",
+      "capture_status": "eligible",
+      "scorer_input_sha256": "65f25e6cb4f7333c0a94a4ff04e0b53618e86b2c23db5782221dbf855f709346",
+      "scorer_input_utf8_bytes": 4274
+    },
+    {
+      "suite": "tool_compliance",
+      "question_id": "t3_q2_llm_delegation",
+      "tier": 3,
+      "prompt": "You have access to these REPL tools: peek(n), grep(pattern), llm_call(prompt, role='worker'), llm_batch(prompts, role='worker'), FINAL(answer)\nThe context contains a long document.\n\nTask: Split the context into 4 chunks and summarize each in parallel using llm_batch()\nWrite Python code that uses the available tools.",
+      "response": "```python\n# First, peek at the document to understand its structure and length\npeek_result = peek(100)\n\n# Use grep to get a sense of the document structure and total size\n# Let's try to find line counts or structure markers\ngrep_result = grep(\".*\")\n\n# Since we need to split the context into 4 chunks, we need to determine the total length\n# Let's use peek to get more context about the document size\npeek_2 = peek(1000)\n\n# Based on the context, we need to split it into 4 roughly equal chunks\n# Let's assume the document is accessible and we can determine its length\n# We'll use llm_batch to summarize each chunk in parallel\n\n# First, let's get the full context by peeking more\nfull_context = peek(10000)\n\n# Determine the length of the context\ncontext_length = len(full_context)\n\n# Calculate chunk sizes\nchunk_size = context_length // 4\nchunks = [\n    full_context[:chunk_size],\n    full_context[chunk_size:2*chunk_size],\n    full_context[2*chunk_size:3*chunk_size],\n    full_context[3*chunk_size:]\n]\n\n# Create prompts for summarizing each chunk\nprompts = [\n    f\"Summarize the following text chunk:\\n\\n{chunk}\"\n    for chunk in chunks\n]\n\n# Use llm_batch to summarize each chunk in parallel\nsummaries = llm_batch(prompts, role='worker')\n\n# Combine the summaries\nfinal_summary = \"\\n\\n\".join(summaries)\n\nFINAL(answer=final_summary)\n```",
+      "tokens_per_second": 28.23,
+      "finish_reason": "stop",
+      "failure_class": "ok",
+      "capture_status": "eligible",
+      "scorer_input_sha256": "ece079f5a8dc5cc48230921a41878d93cea35236cdfa352361ccde01096b012a",
+      "scorer_input_utf8_bytes": 5556
+    },
+    {
+      "suite": "tool_compliance",
+      "question_id": "t3_q3_shell_command",
+      "tier": 3,
+      "prompt": "You have access to these REPL tools: run_shell(cmd), list_dir(path), peek(n), FINAL(answer)\nNO IMPORTS ALLOWED - import/from statements are BLOCKED.\n\nTask: Get the git status of the current directory\nWrite Python code that uses the available tools.",
+      "response": "run_shell(cmd=\"git status\")",
+      "tokens_per_second": 12.21,
+      "finish_reason": "stop",
+      "failure_class": "ok",
+      "capture_status": "eligible",
+      "scorer_input_sha256": "d162906a87373d01a410ce8b66fca551de3f98a94225ce6b990d314be47b0a21",
+      "scorer_input_utf8_bytes": 4127
+    }
+  ]
+}

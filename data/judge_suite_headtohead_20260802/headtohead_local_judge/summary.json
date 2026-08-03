@@ -1,0 +1,81 @@
+{
+  "judge": "Qwen3.5-122B-A10B :8074",
+  "seed": 42,
+  "questions_scored": 70,
+  "arms": {
+    "architect_general_27b": {
+      "eligible": 69,
+      "ineligible": 1,
+      "score": 183,
+      "max": 207,
+      "pct": 88.4,
+      "by_suite": {
+        "agentic": [
+          28,
+          30
+        ],
+        "coder": [
+          25,
+          27
+        ],
+        "general": [
+          30,
+          30
+        ],
+        "instruction_precision": [
+          23,
+          33
+        ],
+        "math": [
+          27,
+          30
+        ],
+        "thinking": [
+          30,
+          30
+        ],
+        "tool_compliance": [
+          20,
+          27
+        ]
+      }
+    },
+    "frontdoor_35b": {
+      "eligible": 68,
+      "ineligible": 2,
+      "score": 179,
+      "max": 204,
+      "pct": 87.7,
+      "by_suite": {
+        "agentic": [
+          26,
+          30
+        ],
+        "coder": [
+          24,
+          27
+        ],
+        "general": [
+          30,
+          30
+        ],
+        "instruction_precision": [
+          25,
+          33
+        ],
+        "math": [
+          24,
+          27
+        ],
+        "thinking": [
+          29,
+          30
+        ],
+        "tool_compliance": [
+          21,
+          27
+        ]
+      }
+    }
+  }
+}
