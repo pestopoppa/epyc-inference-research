@@ -62,11 +62,14 @@ cell citing a different protocol than its phase declares is refused
   * broader dispatcher-boundary and non-target sentinels — a strict superset of
     T1's set (`SENTINEL_SET_NOT_BROADER`), and a regressing non-target sentinel
     blocks (`NON_TARGET_REGRESSION`);
-  * **at least one co-resident cell for `llama_cpu`** (`CO_RESIDENT_CELL_ABSENT`).
-    Production runs concurrent instances and CPU decode is bandwidth-bound, so a
-    change can be neutral alone and harmful co-resident. This one is not
-    negotiable by a caller: `CO_RESIDENT_REQUIRED_BACKENDS` is read by
-    `check_matrix_coverage()` and a spec cannot switch it off;
+  * **at least one co-resident PROTECTED cell for `llama_cpu`**
+    (`CO_RESIDENT_CELL_ABSENT`). Production runs concurrent instances and CPU
+    decode is bandwidth-bound **for a role the objective protects**, so a change
+    can be neutral alone and harmful co-resident. This one is not negotiable by a
+    caller and not closable by a sentinel: `CO_RESIDENT_REQUIRED_BACKENDS` is read
+    by `check_matrix_coverage()` and a spec cannot switch it off, and a
+    co-resident sentinel — a probe on a path nobody is protecting — does not
+    discharge it;
   * capacity deltas — VRAM / RAM / context (`CAPACITY_DELTA_ABSENT`,
     `CAPACITY_REGRESSION`), whose required kinds the backend adapter must
     DECLARE; an undeclared requirement is `COULD_NOT_CHECK`, never a satisfied
@@ -76,9 +79,19 @@ cell citing a different protocol than its phase declares is refused
     to keep measuring, not to land."*
 
 Evidence admissibility follows the protocol's own strata clause: **confirmation
-stratum only**, gathered **after** the candidate entered the lineage. A
-selection-stratum cell raises, because *"the evidence that promotes a candidate is
-structurally unfit to report how ready it is."*
+stratum only**, gathered **after** the candidate entered the lineage — cells,
+capacity deltas and mechanism confirmations alike, since all three are read here
+as statements about the composed champion. A selection-stratum cell raises,
+because *"the evidence that promotes a candidate is structurally unfit to report
+how ready it is."*
+
+Every §9.7 requirement above counts only cells whose own verdict admits them to a
+rank (`_rank_admissible`). A cell that failed a prior gate, was voided, never
+resolved, carries no rate comparison or binds no anchor covers no architecture,
+discharges no co-residency requirement and evidences no repetition strength:
+*"a candidate failing any of them receives no speed rank at all — not a penalised
+one"*, and each of those requirements asserts that the matrix learned something at
+that cell.
 
 THE THREE OUTCOMES, AND WHY `FAIL` AND `COULD_NOT_CHECK` DIFFER ONLY IN THE REASON
 ---------------------------------------------------------------------------------
@@ -155,6 +168,7 @@ __all__ = [
     "ReadinessError", "CrossBackendComposite", "ChampionMismatch", "StratumViolation",
     "ProtocolBoundaryCrossed", "CellInadmissible", "MatrixSpecInvalid",
     "TriggerAuthorityError", "CapabilityObjectiveInvalid", "StandingNotDerived",
+    "CampaignMismatch",
     # vocabularies
     "CELL_ROLES", "CELL_ROLE_PROTECTED", "CELL_ROLE_DISPATCHER_BOUNDARY",
     "CELL_ROLE_NON_TARGET", "STANDINGS", "STANDING_MET", "STANDING_NOT_MET",
@@ -230,6 +244,23 @@ class ChampionMismatch(ReadinessError):
     candidate's cell in a champion matrix is the exact defect that sentence
     exists to prevent, so it is unusable material and refused at construction
     rather than quietly averaged in.
+    """
+
+
+class CampaignMismatch(ReadinessError):
+    """A report labelled for one campaign carrying another campaign's signal.
+
+    `P-AK-SEARCH-1` denial 4 confines consumption *"to the AutoKernel controller
+    that produced the record, within the campaign that produced it"*, and a later
+    campaign may use a prior record *"for hypothesis formation only — never to
+    rank, bank, compose, or contribute to readiness"*, because a later campaign
+    re-derives its own calibration and a reused record would be scored against a
+    floor and a threshold it was never measured under.
+
+    `ReadinessReport` emits ONE `campaign_id` over whatever signals it was handed,
+    so an unchecked report is exactly the route by which a campaign-B signal
+    acquires a campaign-A label — the reuse the denial forbids, performed by the
+    reducer rather than by a person.
     """
 
 
@@ -561,6 +592,102 @@ def _combine(checks: Sequence[schemas.Check]) -> schemas.Check:
 def _short(value: str) -> str:
     """The grammar's own 12-hex abbreviation. Display only; never an identity."""
     return value[:12]
+
+
+#: The reason AK-D12 refuses, carried into every one-backend refusal so the three
+#: doors say the same thing for the same reason.
+_ONE_BACKEND_WHY = (
+    "Records are comparable only within one backend and one instrument version; a "
+    "cross-backend roll-up is a labelled analysis view and never gates (Annex K, "
+    "'Comparison scope'; AK-D12)")
+
+
+def _describe_cell(cell: "T2Cell") -> str:
+    return f"cell {cell.cell_id!r}"
+
+
+def _describe_capacity_delta(delta: "CapacityDelta") -> str:
+    return f"capacity delta {delta.kind!r} (event {delta.event_id})"
+
+
+def _require_one_backend(backend: str, records: Sequence, describe) -> None:
+    """AK-D12 at a door, over EVERY record that names a backend.
+
+    `compute_readiness()` held this and `check_matrix_coverage()` and
+    `phase_standing()` did not, so the module's central structural claim — *"no
+    function in this module ever sees two backends' measurements at once"* — was
+    true of one caller rather than of the module. Both of the other two are
+    exported, both fold the records they are handed into a single per-backend
+    statement, and `phase_standing()` will happily select a `llama_gpu` decode cell
+    as a `llama_cpu` phase's readiness figure, which is the reconstructed net
+    `gpu-cross-device.md:106-111` forbids outright.
+
+    A cell is not the only record here that names a backend. `CapacityDelta` does
+    too, and `_check_capacity` reads it through a `delta.backend == spec.backend`
+    FILTER: a `llama_gpu` VRAM regression handed to a `llama_cpu` matrix was
+    silently dropped, the axis it regressed on read PASS, and no blocker recorded
+    that a regression had been offered and discarded. A filter is not a refusal —
+    it is a refusal that reports success — and the same record was simultaneously
+    *gated on* by `_check_lineage_ordering`, which orders every delta it is given.
+    One record, read by one sibling and ignored by the other, is the composition
+    defect rather than the guard defect.
+
+    One function rather than four copies of the refusal: copies drift, and a door
+    whose refusal drifted is a door that stops refusing. `describe` names the
+    record in the refusal; it does not decide whether to refuse.
+    """
+    for record in records:
+        if record.backend != backend:
+            raise CrossBackendComposite(
+                f"{describe(record)} belongs to backend {record.backend!r}, not "
+                f"{backend!r}. " + _ONE_BACKEND_WHY)
+
+
+def _require_declared_protocol(objective: "ObjectiveSpec", cells: Sequence) -> None:
+    """§1.6's per-phase protocol at a door. ONE definition, both public entries.
+
+    `compute_readiness()` held this inline and `phase_standing()` did not, so the
+    protocol boundary was closed for one caller and open for the other — the same
+    shape as the backend hole, in the same two functions, half of it left behind.
+    `phase_standing()` stamps `objective.protocol_for(phase)` onto the
+    `PhaseStanding` and onto the `ReadinessFigure` it selects, WITHOUT asking the
+    cell what it was measured under: a `llama_cpu` decode cell citing
+    `P-BENCH-PREFILL-1` was judged as decode and its estimate came back labelled
+    `P-BENCH-1`. That is a cross-protocol comparison wearing a within-protocol
+    label, which `MEASUREMENT.md:83-84` makes analysis rather than a claim, and the
+    label is the part a reader cannot check for themselves.
+    """
+    for cell in cells:
+        declared = objective.protocol_by_phase.get(cell.phase)
+        if declared is None:
+            raise ProtocolBoundaryCrossed(
+                f"cell {cell.cell_id!r} is in phase {cell.phase!r}, which this objective "
+                f"does not declare {list(objective.phases)}")
+        if cell.protocol_id != declared:
+            raise ProtocolBoundaryCrossed(
+                f"cell {cell.cell_id!r} cites protocol {cell.protocol_id!r} but phase "
+                f"{cell.phase!r} is judged under {declared!r}; each phase is judged under "
+                "its own protocol so nothing crosses a protocol boundary (§1.6), and a "
+                "comparison across protocols is analysis rather than a claim "
+                "(MEASUREMENT.md:83-84)")
+
+
+def _require_composed_champion(champion: "ChampionLineage", cells: Sequence) -> None:
+    """§9.7's composed champion at a door. Same reasoning as `_require_one_backend`.
+
+    `check_matrix_coverage()` reads the champion for the mechanism, anchor and
+    ordering checks, and then measured coverage, co-residency, repetitions and the
+    sentinel set over whatever cells it was handed — including a member
+    candidate's. That is *"adding local percentages"* wearing the composition's
+    name at the one door that already knows both.
+    """
+    for cell in cells:
+        if cell.candidate_id != champion.combined_candidate_id:
+            raise ChampionMismatch(
+                f"cell {cell.cell_id!r} is evidence of candidate {cell.candidate_id!r}, "
+                f"not of the composed champion {champion.combined_candidate_id!r}. T2 "
+                "runs on the composed champion, never by adding local percentages (§9.7); "
+                "a member's own result is not the composition's result")
 
 
 # =============================================================================
@@ -1194,6 +1321,10 @@ class CapacityDelta:
     def regressed(self) -> bool:
         return self.delta < 0
 
+    @property
+    def measured_instant(self) -> datetime:
+        return _instant(self.measured_at, "capacity.measured_at")
+
     def to_dict(self) -> dict:
         return {"kind": self.kind, "backend": self.backend, "delta": self.delta,
                 "event_id": self.event_id, "measured_at": self.measured_at,
@@ -1213,12 +1344,23 @@ class MechanismConfirmation:
     `confirmed=False` is admissible ONLY with a recorded explanation, which is
     what the A1 clause's *"or a recorded explanation"* in §9.6 permits. An empty
     explanation with `confirmed=False` is refused rather than counted.
+
+    `measured_at` is REQUIRED and has no default, because "cumulative confirmation
+    on the composed champion" is an ordering statement before it is anything else:
+    a receipt taken before the composition existed cannot be a receipt about the
+    composition, however confidently it names it. Without a timestamp the class
+    contradicted its own docstring — the member's local receipt it says *"does not
+    carry forward"* was accepted as the cumulative one, and `_check_lineage_ordering`
+    had nothing to order it by. An optional field would have left the same hole
+    open to anyone who omitted it, so the ordering check can never be satisfied by
+    withholding the fact it orders.
     """
 
     member_candidate_id: str
     predicted_mechanism: str
     confirmed: bool
     event_id: str
+    measured_at: str
     explanation: str = ""
 
     def __post_init__(self) -> None:
@@ -1231,6 +1373,7 @@ class MechanismConfirmation:
         if not isinstance(self.confirmed, bool):
             raise CellInadmissible("mechanism.confirmed must be a bool")
         _text(self.event_id, "mechanism.event_id")
+        _instant(self.measured_at, "mechanism.measured_at")
         if not isinstance(self.explanation, str):
             raise CellInadmissible("mechanism.explanation must be a string")
         if not self.confirmed and not self.explanation.strip():
@@ -1239,10 +1382,15 @@ class MechanismConfirmation:
                 "no explanation; 'it got faster and I don't know why' is a reason to keep "
                 "measuring, not to land (P-AK-SEARCH-1-A1 clause 1)")
 
+    @property
+    def measured_instant(self) -> datetime:
+        return _instant(self.measured_at, "mechanism.measured_at")
+
     def to_dict(self) -> dict:
         return {"member_candidate_id": self.member_candidate_id,
                 "predicted_mechanism": self.predicted_mechanism,
                 "confirmed": self.confirmed, "event_id": self.event_id,
+                "measured_at": self.measured_at,
                 "explanation": self.explanation}
 
 
@@ -1402,6 +1550,38 @@ def _verdict_gate(evidence: PhaseEvidence, label: str) -> Optional[tuple]:
             f"{label}: no anchor is bound; absence of a comparison is not evidence of "
             "equivalence (P-AK-SEARCH-1 precondition 4)",)), BLOCK_ANCHOR_ABSENT)
     return None
+
+
+def _inadmissibility_reason(cell: T2Cell) -> Optional[str]:
+    """Why this cell's own verdict denies it a place in a matrix requirement.
+
+    `None` means the cell counts. Anything else is the reason it does not, in the
+    verdict's own words.
+
+    §9.7's matrix requirements — coverage, co-residency, repetitions — are
+    statements about what was MEASURED, and a cell whose correctness gate failed,
+    whose window was voided, which never resolved, which carries no rate
+    comparison, or which binds no anchor measured nothing that any of them can be
+    satisfied by. *"A candidate failing any of them receives no speed rank at all
+    — not a penalised one"*, and "this architecture is covered", "the co-resident
+    requirement is met" and "T2 repeated more than T1" are all ranks in that sense:
+    each one asserts the matrix learned something at that cell.
+
+    The predicate is `_verdict_gate`, reused rather than restated — the same
+    predicate `_phase_figure` selects under — because a second copy of *"what
+    disqualifies a cell"* is a second copy that drifts, and the half that drifts is
+    whichever one has fewer tests.
+    """
+    gated = _verdict_gate(cell.non_inferiority, f"cell {cell.cell_id!r}")
+    if gated is None:
+        return None
+    check, _blocker = gated
+    return "; ".join(check.reasons)
+
+
+def _rank_admissible(cell: T2Cell) -> bool:
+    """`True` when the cell's verdict permits it to count. See `_inadmissibility_reason`."""
+    return _inadmissibility_reason(cell) is None
 
 
 def _non_inferiority_check(cell: T2Cell) -> tuple:
@@ -1727,6 +1907,22 @@ def phase_standing(*, backend: str, phase: str, objective: ObjectiveSpec,
     a guard on the change's blast radius, not a cell the objective protects, and
     counting a sentinel's improvement toward §1.6 would let a lineage ship on a
     speed-up somewhere nobody runs.
+
+    A PUBLIC entry point, so it refuses a foreign-backend cell itself rather than
+    trusting `compute_readiness()` to have done it: `llama_cpu` and `llama_gpu`
+    share the phase names `prefill` and `decode`, so a GPU cell handed to a CPU
+    phase is not filtered out by anything else here — it is judged, and it can be
+    SELECTED as the phase's readiness figure.
+
+    It refuses a cell that cites a protocol this phase is not judged under, for
+    exactly the same reason and at exactly the same door. This function does not
+    read `cell.protocol_id` anywhere: it STAMPS `objective.protocol_for(phase)`
+    onto the `PhaseStanding` and onto the `ReadinessFigure`, so a decode cell
+    measured under `P-BENCH-PREFILL-1` came back labelled `P-BENCH-1` — a
+    cross-protocol comparison wearing a within-protocol label, which
+    `MEASUREMENT.md:83-84` makes analysis rather than a claim. Backend and protocol
+    are one hole with two halves, and closing one half is what leaves the other
+    findable only by someone who reads both doors.
     """
     if not isinstance(objective, ObjectiveSpec):
         raise CellInadmissible("phase_standing() takes an ObjectiveSpec")
@@ -1734,9 +1930,17 @@ def phase_standing(*, backend: str, phase: str, objective: ObjectiveSpec,
         raise CrossBackendComposite(
             f"phase_standing() was asked for backend {backend!r} with an objective for "
             f"{objective.backend!r}; a phase is judged inside one backend's objective")
+    cells = _tuple_of(cells, "cells", T2Cell)
+    _require_one_backend(backend, cells, _describe_cell)
     protocol_id = objective.protocol_for(phase)
-    protected = [cell for cell in cells
-                 if cell.phase == phase and cell.role == CELL_ROLE_PROTECTED]
+    # The cells of THIS phase, and only those: `compute_readiness()` hands the whole
+    # matrix to every phase in turn, so refusing a prefill cell here because the
+    # objective under judgement is decode's would forbid this function's own caller.
+    # The cells that are judged are the ones that must cite the protocol they are
+    # judged under.
+    of_phase = [cell for cell in cells if cell.phase == phase]
+    _require_declared_protocol(objective, of_phase)
+    protected = [cell for cell in of_phase if cell.role == CELL_ROLE_PROTECTED]
     blockers: list = []
 
     if not protected:
@@ -1801,8 +2005,7 @@ def _phase_figure(*, backend: str, phase: str, protocol_id: str,
     saying why, `_compare_reference` answers COULD_NOT_CHECK, and
     `render_readiness_line` prints "no protected-cell figure".
     """
-    admissible = [cell for cell in protected
-                  if _verdict_gate(cell.non_inferiority, "figure") is None]
+    admissible = [cell for cell in protected if _rank_admissible(cell)]
     measured = [cell for cell in admissible if cell.oriented_effect() is not None]
     if not measured:
         return None
@@ -1860,46 +2063,120 @@ class MatrixCoverage:
 
 
 def _check_coverage(spec: T2MatrixSpec, cells: Sequence[T2Cell]) -> schemas.Check:
-    covered = {(cell.architecture_class, cell.regime) for cell in cells
-               if cell.role == CELL_ROLE_PROTECTED}
-    missing = [pair for pair in spec.required_coverage if tuple(pair) not in covered]
-    if missing:
-        return schemas.Check(schemas.FAIL, tuple(
-            f"no protected cell covers architecture/regime {tuple(pair)!r}; §9.7 requires "
-            "one or a few roles per affected architecture/regime" for pair in missing))
+    """§9.7 coverage, over cells that MEASURED something.
+
+    A pair whose only protected cell failed a prior gate, was voided, never
+    resolved, or binds no anchor is not covered by it: coverage asks whether the
+    affected architecture/regime was exercised, and an inadmissible cell exercised
+    nothing the matrix can read. Counting it made "covered" satisfiable by a cell
+    the very next check refuses to give a speed reading.
+
+    The two ways to be uncovered are reported apart, because they tell the
+    operator different things: NOT MEASURED AT ALL is a FAIL (the matrix does not
+    reach that architecture), while MEASURED AND UNUSABLE is COULD_NOT_CHECK (it
+    reached it and the record cannot be read). Both block — `check_matrix_coverage`
+    raises `COVERAGE_GAP` on anything that is not a PASS — so nothing rides on the
+    distinction except what the operator is told.
+    """
+    protected = [cell for cell in cells if cell.role == CELL_ROLE_PROTECTED]
+    admissible = [cell for cell in protected if _rank_admissible(cell)]
+    covered = {(cell.architecture_class, cell.regime) for cell in admissible}
+    attempted: dict = {}
+    for cell in protected:
+        reason = _inadmissibility_reason(cell)
+        if reason is not None:
+            attempted.setdefault((cell.architecture_class, cell.regime), []).append(
+                f"cell {cell.cell_id!r}: {reason}")
+
+    absent: list = []
+    unusable: list = []
+    for pair in spec.required_coverage:
+        key = tuple(pair)
+        if key in covered:
+            continue
+        blocked = attempted.get(key)
+        if blocked:
+            unusable.append(
+                f"architecture/regime {key!r} carries protected cell(s) that measured "
+                "nothing readable, so §9.7's 'one or a few roles per affected "
+                "architecture/regime' is not evidenced by them — " + "; ".join(blocked))
+        else:
+            absent.append(
+                f"no protected cell covers architecture/regime {key!r}; §9.7 requires "
+                "one or a few roles per affected architecture/regime")
+    if absent:
+        return schemas.Check(schemas.FAIL, tuple(absent) + tuple(unusable))
+    if unusable:
+        return schemas.Check(schemas.COULD_NOT_CHECK, tuple(unusable))
     return schemas.Check(schemas.PASS, (
         f"every declared architecture/regime pair {[tuple(p) for p in spec.required_coverage]} "
-        "carries at least one protected cell",))
+        "carries at least one protected cell with a readable measurement",))
 
 
 def _check_repetitions(spec: T2MatrixSpec, cells: Sequence[T2Cell]) -> schemas.Check:
+    """§9.7's *"stronger paired repetitions than T1"*, over the WHOLE T2 matrix.
+
+    Two things this used to get wrong, in opposite directions:
+
+      * it examined protected cells only, so a sentinel re-run at fewer blocks than
+        T1 left the requirement green. T2's sentinel set is a strict superset of
+        T1's and it is part of the same matrix; a blast-radius check run weaker
+        than T1's is precisely the case where "broader" bought nothing, and §9.7
+        does not scope the repetition requirement to one role.
+      * it read the block count off cells whose verdict denies them a speed
+        reading, so an inadmissible cell's 16 blocks satisfied the requirement for
+        a phase whose readable cells ran fewer. A block count is evidence about
+        repetition strength only if the run it counts produced a reading.
+
+    An inadmissible cell is therefore reported as UNEVALUABLE rather than skipped:
+    skipping would let a matrix of entirely inadmissible cells report PASS, which
+    is the requirement satisfied by deleting what it inspects.
+    """
     reasons: list = []
     unknown: list = []
+    compared = 0
     for cell in cells:
-        if cell.role != CELL_ROLE_PROTECTED:
+        label = f"cell {cell.cell_id!r} ({cell.role})"
+        inadmissible = _inadmissibility_reason(cell)
+        if inadmissible is not None:
+            unknown.append(
+                f"{label} has no rank-admissible measurement, so its block count is not "
+                f"evidence that T2 repeated more strongly than T1 — {inadmissible}")
             continue
-        blocks = cell.paired_blocks
         t1_blocks = spec.t1_paired_blocks_by_phase.get(cell.phase)
         if t1_blocks is None:
             unknown.append(
-                f"cell {cell.cell_id!r} is in phase {cell.phase!r}, for which the spec "
-                "declares no T1 block count, so 'stronger than T1' is unevaluable")
+                f"{label} is in phase {cell.phase!r}, for which the spec declares no T1 "
+                "block count, so 'stronger than T1' is unevaluable")
             continue
+        blocks = cell.paired_blocks
         if blocks is None:
+            # Belt and braces: `_verdict_gate` already refuses a cell carrying no
+            # rate comparison, so this is unreachable while that holds. It is kept
+            # so a future change there degrades to UNEVALUABLE rather than to a
+            # comparison against None.
             unknown.append(
-                f"cell {cell.cell_id!r} carries no rate comparison, so its block count "
-                "cannot be compared with T1's")
+                f"{label} carries no rate comparison, so its block count cannot be "
+                "compared with T1's")
             continue
+        compared += 1
         if blocks <= t1_blocks:
             reasons.append(
-                f"cell {cell.cell_id!r} ran {blocks} paired blocks against T1's "
+                f"{label} ran {blocks} paired blocks against T1's "
                 f"{t1_blocks}; §9.7 requires STRONGER paired repetitions than T1, because "
                 "T2 is what the readiness signal is reported from")
     if reasons:
         return schemas.Check(schemas.FAIL, tuple(reasons) + tuple(unknown))
     if unknown:
         return schemas.Check(schemas.COULD_NOT_CHECK, tuple(unknown))
-    return schemas.Check(schemas.PASS)
+    if not compared:
+        return schemas.Check(schemas.COULD_NOT_CHECK, (
+            "no cell in this matrix carries a block count that could be compared with "
+            "T1's, so 'stronger paired repetitions than T1' is unevaluable rather than "
+            "satisfied; an empty matrix meets no requirement",))
+    return schemas.Check(schemas.PASS, (
+        f"{compared} rank-admissible cell(s) each ran more paired blocks than T1's count "
+        "for their phase",))
 
 
 def _check_sentinels(spec: T2MatrixSpec, cells: Sequence[T2Cell]) -> schemas.Check:
@@ -1924,20 +2201,56 @@ def _check_sentinels(spec: T2MatrixSpec, cells: Sequence[T2Cell]) -> schemas.Che
         f"T2 carries T1's {len(t1_sentinels)} sentinel(s) and adds {len(added)}",))
 
 
+#: The reason the co-residency requirement exists, carried into every refusal
+#: because it is also the reason a sentinel cannot close it.
+_CO_RESIDENT_WHY = (
+    "Production runs concurrent instances and CPU decode is bandwidth-bound, so a "
+    "change can be neutral alone and harmful co-resident; a single-instance matrix "
+    "cannot see that at all")
+
+
 def _check_co_resident(spec: T2MatrixSpec, cells: Sequence[T2Cell]) -> schemas.Check:
+    """§9.7's *"at least one co-resident cell"*, closable only by a PROTECTED one.
+
+    The requirement is not "the matrix contains the string `co_resident:`". It
+    exists because CPU decode is bandwidth-bound under concurrency **for a role the
+    objective protects**, so the cell that discharges it has to be a cell §1.6
+    quantifies over, carrying a reading. A dispatcher-boundary or non-target
+    sentinel run co-resident is a blast-radius probe on a path nobody is protecting
+    — it cannot show the harm the requirement was written to catch — and an
+    inadmissible protected cell shows nothing at all.
+
+    Sentinel-only is a FAIL: the matrix ran co-resident work and still did not
+    measure a protected role co-resident. Protected-but-unreadable is
+    COULD_NOT_CHECK: it measured the right thing and the record cannot be read.
+    Either way `CO_RESIDENT_CELL_ABSENT` blocks.
+    """
     if not spec.co_resident_required:
         return schemas.Check(schemas.PASS, (
             f"backend {spec.backend!r} declares no co-residency requirement",))
     co_resident = [cell for cell in cells if cell.is_co_resident]
-    if not co_resident:
+    protected = [cell for cell in co_resident if cell.role == CELL_ROLE_PROTECTED]
+    readable = [cell for cell in protected if _rank_admissible(cell)]
+    if readable:
+        return schemas.Check(schemas.PASS, tuple(
+            f"co-resident protected cell {cell.cell_id!r} at {cell.co_residency}"
+            for cell in readable))
+    if protected:
+        return schemas.Check(schemas.COULD_NOT_CHECK, tuple(
+            f"co-resident protected cell {cell.cell_id!r} measured nothing readable, so "
+            f"the co-residency requirement is unevaluable rather than met — "
+            f"{_inadmissibility_reason(cell)}" for cell in protected))
+    if co_resident:
         return schemas.Check(schemas.FAIL, (
-            f"backend {spec.backend!r} requires AT LEAST ONE co-resident cell and the "
-            "matrix has none. Production runs concurrent instances and CPU decode is "
-            "bandwidth-bound, so a change can be neutral alone and harmful co-resident; "
-            "a single-instance matrix cannot see that at all",))
-    return schemas.Check(schemas.PASS, tuple(
-        f"co-resident cell {cell.cell_id!r} at {cell.co_residency}"
-        for cell in co_resident))
+            f"the only co-resident cell(s) are sentinels "
+            f"({sorted(cell.cell_id for cell in co_resident)}); backend "
+            f"{spec.backend!r} requires at least one co-resident cell in a role the "
+            f"objective PROTECTS. {_CO_RESIDENT_WHY}, and a sentinel is a guard on the "
+            "change's blast radius rather than a role §1.6 quantifies over, so it cannot "
+            "carry the requirement it was never measured to answer",))
+    return schemas.Check(schemas.FAIL, (
+        f"backend {spec.backend!r} requires AT LEAST ONE co-resident cell and the "
+        f"matrix has none. {_CO_RESIDENT_WHY}",))
 
 
 def _check_capacity(spec: T2MatrixSpec,
@@ -1956,6 +2269,12 @@ def _check_capacity(spec: T2MatrixSpec,
     # it is not deterministic, and the direction it fails in is the one that hides
     # a regression. Capacity is a banked axis (§9.6): a regression on any record
     # of an axis is a regression on that axis.
+    #
+    # The backend comparison below is now belt-and-braces: `check_matrix_coverage`
+    # REFUSES a foreign-backend delta at the door, so this list comprehension can no
+    # longer be the thing that makes one disappear. It is kept so that a future
+    # caller reaching this function directly degrades to dropping rather than to
+    # folding two backends' capacity onto one axis.
     present = [delta for delta in deltas if delta.backend == spec.backend]
     measured_kinds = {delta.kind for delta in present}
     missing = [kind for kind in spec.required_capacity_kinds
@@ -2060,15 +2379,47 @@ def _check_non_target(cells: Sequence[T2Cell]) -> tuple:
 
 
 def _check_lineage_ordering(champion: ChampionLineage,
-                            cells: Sequence[T2Cell]) -> tuple:
+                            cells: Sequence[T2Cell],
+                            deltas: Sequence[CapacityDelta] = (),
+                            confirmations: Sequence[MechanismConfirmation] = ()
+                            ) -> tuple:
+    """*"Gathered AFTER the candidate entered the lineage"* — over EVERY record.
+
+    The clause is about evidence, not about throughput evidence. Capacity deltas
+    and mechanism confirmations are T2 matrix requirements in their own right
+    (§9.7), they are read here as statements about the composed champion, and both
+    were exempt: a RAM delta timestamped before the champion existed satisfied
+    `CAPACITY_DELTA_ABSENT`, and a mechanism receipt from before the composition
+    satisfied the CUMULATIVE confirmation that `MechanismConfirmation`'s own
+    docstring says a member's local receipt cannot carry forward.
+
+    One check rather than three, because "after the lineage was entered" is one
+    ordering over one instant, and three copies of it would eventually disagree
+    about which records it covers.
+    """
     entered = champion.entered_at
-    early = [cell for cell in cells if cell.measured_instant < entered]
+    early: list = []
+    for cell in cells:
+        if cell.measured_instant < entered:
+            early.append(
+                f"cell {cell.cell_id!r} was measured at {cell.measured_at}")
+    for delta in deltas:
+        if delta.measured_instant < entered:
+            early.append(
+                f"capacity delta {delta.kind!r} (event {delta.event_id}) was measured at "
+                f"{delta.measured_at}")
+    for conf in confirmations:
+        if conf.measured_instant < entered:
+            early.append(
+                f"mechanism confirmation for {conf.member_candidate_id!r} (event "
+                f"{conf.event_id}) was measured at {conf.measured_at}")
     if early:
         return schemas.Check(schemas.FAIL, tuple(
-            f"cell {cell.cell_id!r} was measured at {cell.measured_at}, before the "
-            f"candidate entered the lineage at {champion.entered_lineage_at}; the "
-            "readiness signal is computed only from confirmation-stratum evidence "
-            "gathered AFTER the candidate entered the lineage" for cell in early)), \
+            f"{item}, before the candidate entered the lineage at "
+            f"{champion.entered_lineage_at}; the readiness signal is computed only from "
+            "confirmation-stratum evidence gathered AFTER the candidate entered the "
+            "lineage, and a receipt that predates the composition is not a receipt about "
+            "it" for item in early)), \
             (BLOCK_CONFIRMATION_EVIDENCE_PREDATES_LINEAGE,)
     return schemas.Check(schemas.PASS), ()
 
@@ -2105,7 +2456,23 @@ def check_matrix_coverage(*, spec: T2MatrixSpec, champion: ChampionLineage,
                           capacity_deltas: Sequence[CapacityDelta] = (),
                           mechanisms: Sequence[MechanismConfirmation] = ()
                           ) -> MatrixCoverage:
-    """Check the T2 matrix §9.7 describes against the matrix that was run."""
+    """Check the T2 matrix §9.7 describes against the matrix that was run.
+
+    A PUBLIC entry point, so it holds the same two admissions AK-D12 and §9.7 need
+    holding — one backend, one composed champion — rather than relying on
+    `compute_readiness()` having held them upstream. A guarantee enforced one
+    function deep is a guarantee for one caller: this function was directly
+    callable with a `llama_gpu` cell in a `llama_cpu` matrix, and it counted it
+    toward coverage, co-residency and the sentinel set.
+
+    The one-backend admission covers CAPACITY DELTAS as well as cells, because a
+    delta names a backend too and `_check_capacity` reads it through a filter
+    rather than a refusal. A `llama_gpu` VRAM regression offered to a `llama_cpu`
+    matrix was dropped with no blocker and the axis reported PASS — a
+    success-shaped result over a record that says capacity was lost — while
+    `_check_lineage_ordering` gated on the very same record. Refuse it at the door
+    and both siblings agree about what they were handed.
+    """
     if not isinstance(spec, T2MatrixSpec):
         raise MatrixSpecInvalid("check_matrix_coverage() takes a T2MatrixSpec")
     if not isinstance(champion, ChampionLineage):
@@ -2113,6 +2480,9 @@ def check_matrix_coverage(*, spec: T2MatrixSpec, champion: ChampionLineage,
     cells = _tuple_of(cells, "cells", T2Cell)
     deltas = _tuple_of(capacity_deltas, "capacity_deltas", CapacityDelta)
     confirmations = _tuple_of(mechanisms, "mechanisms", MechanismConfirmation)
+    _require_one_backend(spec.backend, cells, _describe_cell)
+    _require_one_backend(spec.backend, deltas, _describe_capacity_delta)
+    _require_composed_champion(champion, cells)
 
     blockers: list = []
 
@@ -2131,7 +2501,8 @@ def check_matrix_coverage(*, spec: T2MatrixSpec, champion: ChampionLineage,
     capacity, capacity_blockers = _check_capacity(spec, deltas)
     mechanism, mechanism_blockers = _check_mechanism(champion, confirmations)
     non_target, non_target_blockers = _check_non_target(cells)
-    ordering, ordering_blockers = _check_lineage_ordering(champion, cells)
+    ordering, ordering_blockers = _check_lineage_ordering(champion, cells, deltas,
+                                                          confirmations)
     anchors, anchor_blockers = _check_anchor_agreement(champion, cells)
 
     for extra in (capacity_blockers, mechanism_blockers, non_target_blockers,
@@ -2603,31 +2974,9 @@ def compute_readiness(*, backend: str, campaign_id: str, champion: ChampionLinea
     _instant(computed_at, "computed_at")
 
     cells = _tuple_of(cells, "cells", T2Cell)
-    for cell in cells:
-        if cell.backend != backend:
-            raise CrossBackendComposite(
-                f"cell {cell.cell_id!r} belongs to backend {cell.backend!r}, not "
-                f"{backend!r}. Records are comparable only within one backend and one "
-                "instrument version; a cross-backend roll-up is a labelled analysis view "
-                "and never gates (Annex K, 'Comparison scope'; AK-D12)")
-        if cell.candidate_id != champion.combined_candidate_id:
-            raise ChampionMismatch(
-                f"cell {cell.cell_id!r} is evidence of candidate {cell.candidate_id!r}, "
-                f"not of the composed champion {champion.combined_candidate_id!r}. T2 "
-                "runs on the composed champion, never by adding local percentages (§9.7); "
-                "a member's own result is not the composition's result")
-        declared = objective.protocol_by_phase.get(cell.phase)
-        if declared is None:
-            raise ProtocolBoundaryCrossed(
-                f"cell {cell.cell_id!r} is in phase {cell.phase!r}, which this objective "
-                f"does not declare {list(objective.phases)}")
-        if cell.protocol_id != declared:
-            raise ProtocolBoundaryCrossed(
-                f"cell {cell.cell_id!r} cites protocol {cell.protocol_id!r} but phase "
-                f"{cell.phase!r} is judged under {declared!r}; each phase is judged under "
-                "its own protocol so nothing crosses a protocol boundary (§1.6), and a "
-                "comparison across protocols is analysis rather than a claim "
-                "(MEASUREMENT.md:83-84)")
+    _require_one_backend(backend, cells, _describe_cell)
+    _require_composed_champion(champion, cells)
+    _require_declared_protocol(objective, cells)
 
     # §1.6 is a conjunction over BOTH phases the backend declares — *"both prefill
     # and decode throughput must be non-inferior … and at least one must improve"*
@@ -2698,6 +3047,13 @@ class ReadinessReport:
     protocols analysis rather than a claim, and `gpu-cross-device.md:106-111`
     forbids a reconstructed net outright — so the report exposes the backends and
     stops.
+
+    It carries ONE `campaign_id` over its signals, so it is also the one place a
+    foreign campaign's signal can acquire this campaign's label. Every signal must
+    therefore name this campaign: `P-AK-SEARCH-1` denial 4 confines consumption to
+    the campaign that produced the record, and a later campaign re-derives its own
+    calibration — so a campaign-B signal collected here would be reported against a
+    floor and a threshold it was never measured under, by the reducer itself.
     """
 
     campaign_id: str
@@ -2706,10 +3062,25 @@ class ReadinessReport:
 
     def __post_init__(self) -> None:
         _text(self.campaign_id, "report.campaign_id")
+        if not self.campaign_id.startswith("ak-"):
+            raise CellInadmissible(
+                f"report.campaign_id: {self.campaign_id!r} must start with 'ak-'; the "
+                "report's own door holds the same shape `compute_readiness()` holds, "
+                "otherwise the label over the signals is looser than the label on them")
         _instant(self.computed_at, "report.computed_at")
         signals = _tuple_of(self.signals, "report.signals", ReadinessSignal)
         seen: list = []
         for signal in signals:
+            if signal.campaign_id != self.campaign_id:
+                raise CampaignMismatch(
+                    f"the report is labelled campaign {self.campaign_id!r} and carries a "
+                    f"signal computed for campaign {signal.campaign_id!r} (backend "
+                    f"{signal.backend!r}, champion {signal.champion_candidate_id!r}). "
+                    "Consumption is confined to the campaign that produced the record, "
+                    "and a later campaign may use a prior one for hypothesis formation "
+                    "only — never to contribute to readiness — because a reused record "
+                    "is scored against a floor and a threshold it was never measured "
+                    "under (P-AK-SEARCH-1 denial 4)")
             if signal.backend in seen:
                 raise CrossBackendComposite(
                     f"two readiness signals for backend {signal.backend!r}; a backend has "

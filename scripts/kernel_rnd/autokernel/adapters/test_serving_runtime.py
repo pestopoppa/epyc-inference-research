@@ -152,10 +152,17 @@ def _service(service_id="worker", index=0, start="2026-08-03T10:00:00+00:00",
     )
 
 
+#: The stable production kernel path a serving binary is executed THROUGH. It is
+#: the fixture's binary because it is the real one: §11.6's whole point is that
+#: serving runs the frozen kernel from the stable path.
+_PROD_LANE = "/mnt/raid0/llm/kernels/production/cpu"
+_PROD_BINARY = _PROD_LANE + "/llama-server"
+
+
 def _intended(service_id="worker", **overrides) -> SR.IntendedProcessConfig:
     kwargs = dict(
         service_id=service_id,
-        binary_path="/mnt/raid0/llm/kernels/production/cpu/llama-server",
+        binary_path=_PROD_BINARY,
         binary_sha256=_sha("kernel-binary-v8"),
         flags=("--parallel", "8", "--cont-batching"),
         cpu_affinity=(0, 1, 2, 3),
@@ -172,10 +179,9 @@ def _live(service_id="worker", **overrides) -> SR.LiveProcessFact:
         service_id=service_id,
         pid=4242,
         observation_source="proc_cmdline",
-        binary_path="/mnt/raid0/llm/kernels/production/cpu/llama-server",
+        binary_path=_PROD_BINARY,
         binary_sha256=_sha("kernel-binary-v8"),
-        argv=("/mnt/raid0/llm/kernels/production/cpu/llama-server", "--parallel", "8",
-              "--cont-batching"),
+        argv=(_PROD_BINARY, "--parallel", "8", "--cont-batching"),
         cpu_affinity=(0, 1, 2, 3),
         started_at="2026-08-03T10:00:00+00:00",
     )
@@ -183,12 +189,40 @@ def _live(service_id="worker", **overrides) -> SR.LiveProcessFact:
     return SR.LiveProcessFact(**kwargs)
 
 
-def _gate(gate, status=S.PASS, reasons=(), kind=None, ref="ref"):
+def _started(*facts, start="2026-08-03T09:59:00+00:00",
+             ready="2026-08-03T10:05:00+00:00"):
+    """Gate-2 observations that TIE to the given live facts.
+
+    Gate 3 is now decided about the processes gate 2 measured, so every gate-3
+    fixture states which gate-2 observation it belongs to. The default window
+    brackets `_live()`'s start instant, which is what a stack that came up and
+    then stayed up looks like.
+    """
+    return tuple(
+        _service(service_id=fact.service_id, index=i, pid=fact.pid,
+                 start=start, ready=ready)
+        for i, fact in enumerate(facts)
+    )
+
+
+#: The one process every hand-built gate fixture is about. Gate 2 declares it as
+#: its subject and gate 3 declares it as the gate-2 subject it was decided
+#: against, which is what a real pair of gate functions emits — the release
+#: verdict now requires that binding to exist and to agree.
+_FIXTURE_SUBJECT = ("worker#4242",)
+
+
+def _gate(gate, status=S.PASS, reasons=(), kind=None, ref="ref",
+          subjects=None, tied_to=None):
     kinds = {SR.GATE_1: "stack_change_guard_result",
              SR.GATE_2: "service_start_observation",
              SR.GATE_3: "live_process_observation"}
+    default_subjects = () if gate == SR.GATE_1 else _FIXTURE_SUBJECT
+    default_tied = _FIXTURE_SUBJECT if gate == SR.GATE_3 else ()
     return SR.GateOutcome(gate=gate, status=status, evidence_kind=kind or kinds[gate],
-                          evidence_ref=ref, reasons=reasons)
+                          evidence_ref=ref, reasons=reasons,
+                          subjects=default_subjects if subjects is None else subjects,
+                          tied_to=default_tied if tied_to is None else tied_to)
 
 
 def _all_gates_pass() -> SR.ThreeGateResult:
@@ -443,6 +477,174 @@ class TestKernelFreezeRefusal(unittest.TestCase):
         violations = S.validate_release_package(record_as_release)
         self.assertTrue(violations)
         self.assertTrue(any("source_tree" in v for v in violations))
+
+
+class TestStableKernelPathExecutesVsMutates(unittest.TestCase):
+    """AK8 carried-forward: the `kernels/production` substring match forbade the
+    adapter's own idiom.
+
+    `/mnt/raid0/llm/kernels/production/<lane>` is the symlink an operator repoints
+    at freeze AND the path every serving launcher executes its binary through. A
+    substring match cannot tell those apart, so it refused both, and a §11.6
+    package could not state the launch command it exists to hand over
+    (`feedback_guard_must_not_forbid_its_own_idiom`).
+
+    Both directions are proved here: the launch command is admitted, and every
+    shape of repoint, replace, delete and redirect is still refused.
+    """
+
+    # -- MUTATES: still refused, in every shape ----------------------------
+
+    def test_a_symlink_repoint_is_still_refused(self):
+        command = ("ln -sfn /mnt/raid0/llm/llama.cpp/build/bin " + _PROD_LANE)
+        check = SR.classify_stable_kernel_path_use(command)
+        self.assertEqual(check.outcome, S.FAIL, check.reasons)
+        self.assertTrue(any("ITSELF" in r for r in check.reasons), check.reasons)
+        self.assertEqual(
+            SR.scan_for_kernel_freeze_actions({"cmd": command}).outcome, S.FAIL)
+
+    def test_every_mutating_shape_is_refused(self):
+        cases = {
+            "repoint": "ln -sfn /mnt/raid0/llm/llama.cpp-v9 " + _PROD_LANE,
+            "remove the link": "rm -f " + _PROD_LANE,
+            "rename over the link": "mv /mnt/raid0/llm/staging " + _PROD_LANE,
+            "quoted link": 'mv /mnt/raid0/llm/staging "' + _PROD_LANE + '"',
+            "overwrite the binary": "cp /tmp/llama-server " + _PROD_BINARY,
+            "delete the binary": "rm " + _PROD_BINARY,
+            "chmod the binary": "chmod 0755 " + _PROD_BINARY,
+            "install into the tree": "install -m 0755 x " + _PROD_LANE + "/bin/y",
+            "redirect into the tree": "echo hi > " + _PROD_LANE + "/bin/marker",
+            "make with DESTDIR": "DESTDIR=" + _PROD_LANE + "/bin make install",
+            "second segment": _PROD_BINARY + " --port 8080 && ln -sfn a " + _PROD_LANE,
+            "piped into the tree": "cat x | tee " + _PROD_LANE + "/bin/marker",
+            "shell substitution": "rm $(readlink " + _PROD_LANE + ")",
+        }
+        for label, command in cases.items():
+            with self.subTest(label):
+                self.assertEqual(SR.classify_stable_kernel_path_use(command).outcome,
+                                 S.FAIL, command)
+                self.assertEqual(
+                    SR.scan_for_kernel_freeze_actions({"cmd": command}).outcome,
+                    S.FAIL, command)
+
+    def test_a_launcher_prefix_cannot_smuggle_a_mutating_verb_into_command_position(self):
+        """The passthrough walks to the program a launcher launches, not past it.
+
+        `taskset -c 0-95 rm <path>` must report `rm`, not the path: a launcher
+        prefix that stepped over any bare word would make every mutation legal by
+        prefixing it with `taskset`.
+        """
+        command = "taskset -c 0-95 rm " + _PROD_BINARY
+        check = SR.classify_stable_kernel_path_use(command)
+        self.assertEqual(check.outcome, S.FAIL, check.reasons)
+        self.assertTrue(any("'rm'" in r for r in check.reasons), check.reasons)
+
+    def test_a_non_loader_assignment_prefix_is_refused(self):
+        # Only the three dynamic-loader search paths may name the tree; every
+        # other NAME=value is a build/install destination.
+        for name in ("DESTDIR", "PREFIX", "OUT", "TARGET"):
+            command = name + "=" + _PROD_LANE + "/bin cmake --install ."
+            self.assertEqual(SR.classify_stable_kernel_path_use(command).outcome,
+                             S.FAIL, command)
+
+    def test_a_read_only_use_by_another_program_is_refused_conservatively(self):
+        # The classifier is conservative by design: a false positive costs a human
+        # one look, a false negative costs a production write. `ls` is refused
+        # because "the command word is what executes" is the whole rule.
+        self.assertEqual(
+            SR.classify_stable_kernel_path_use("ls -l " + _PROD_LANE + "/bin").outcome,
+            S.FAIL)
+
+    # -- EXECUTES: the adapter's own idiom, admitted -----------------------
+
+    def test_the_normal_launch_command_is_admitted(self):
+        command = (_PROD_BINARY + " -m /mnt/raid0/llm/models/qwen36-q8.gguf "
+                   "-t 96 -fa 1 --port 8080")
+        check = SR.classify_stable_kernel_path_use(command)
+        self.assertEqual(check.outcome, S.PASS, check.reasons)
+        self.assertEqual(
+            SR.scan_for_kernel_freeze_actions({"cmd": command}).outcome, S.PASS)
+
+    def test_every_real_launcher_shape_is_admitted(self):
+        cases = {
+            "bare": _PROD_BINARY + " --port 8080",
+            "taskset": "taskset -c 0-95 " + _PROD_BINARY + " -t 96 -fa 1",
+            "taskset SMT siblings": "taskset -c 184-191 " + _PROD_BINARY,
+            "numactl": "numactl --interleave=all " + _PROD_BINARY + " -t 96",
+            "numactl short": "numactl -i all " + _PROD_BINARY,
+            # CLAUDE.md's speech-kernel freeze: every launcher must set its own
+            # LD_LIBRARY_PATH. A guard that refused that refused the mandated form.
+            "own LD_LIBRARY_PATH": ("LD_LIBRARY_PATH=" + _PROD_LANE + "/lib "
+                                    + _PROD_BINARY + " --port 8080"),
+            "env + taskset + LD_LIBRARY_PATH": (
+                "env LD_LIBRARY_PATH=" + _PROD_LANE + "/lib:/usr/lib "
+                "taskset -c 184-191 " + _PROD_BINARY + " -fa 1"),
+            "nohup setsid": "nohup setsid " + _PROD_BINARY + " --port 8080",
+            "its own tree as an operand": (
+                _PROD_BINARY + " --lora " + _PROD_LANE + "/share/adapter.gguf"),
+        }
+        for label, command in cases.items():
+            with self.subTest(label):
+                self.assertEqual(SR.classify_stable_kernel_path_use(command).outcome,
+                                 S.PASS, command)
+                self.assertEqual(
+                    SR.scan_for_kernel_freeze_actions({"cmd": command}).outcome,
+                    S.PASS, command)
+
+    def test_a_package_can_report_its_own_serving_launch_command(self):
+        """The defect, end to end: a realistic §11.6 package assembles.
+
+        Before the distinction existed this raised `KernelFreezePathRefused` — the
+        package could not name the binary it exists to describe.
+        """
+        commands = (
+            {"command": "orchestrator_stack.py reload orchestrator",
+             "validated": True, "validation_receipt": "dryrun://reload/1"},
+            {"command": ("taskset -c 0-95 " + _PROD_BINARY
+                         + " -m /mnt/raid0/llm/models/qwen36-q8.gguf -t 96 -fa 1"),
+             "target_paths": [_PROD_BINARY],
+             "validated": True, "validation_receipt": "dryrun://launch/1"},
+        )
+        package = _package(operator_command_sequence=commands)
+        self.assertIn(_PROD_BINARY,
+                      package.to_record()["operator_command_sequence"][1]["command"])
+
+    def test_a_package_still_cannot_repoint_the_stable_path(self):
+        commands = (
+            {"command": "ln -sfn /mnt/raid0/llm/llama.cpp-v9 " + _PROD_LANE,
+             "validated": True, "validation_receipt": "dryrun://repoint"},
+        )
+        with self.assertRaises(SR.KernelFreezePathRefused):
+            _package(operator_command_sequence=commands)
+
+    def test_a_rollback_may_launch_the_incumbent_but_not_repoint_it(self):
+        allowed = _rollback(restore_command=_PROD_BINARY + " --port 8080")
+        self.assertIn(_PROD_BINARY, allowed.restore_command)
+        with self.assertRaises(SR.KernelFreezePathRefused):
+            _rollback(restore_command="ln -sfn /mnt/raid0/llm/llama.cpp-v9 "
+                                      + _PROD_LANE)
+
+    # -- the classifier cannot be passed by deleting what it inspects ------
+
+    def test_a_command_that_never_names_the_path_is_could_not_check_not_pass(self):
+        check = SR.classify_stable_kernel_path_use(
+            "orchestrator_stack.py reload orchestrator")
+        self.assertEqual(check.outcome, S.COULD_NOT_CHECK)
+        self.assertTrue(any("no use of the stable production kernel path"
+                            in r for r in check.reasons), check.reasons)
+
+    def test_a_non_string_is_could_not_check_not_pass(self):
+        for value in (None, 42, [_PROD_BINARY], {"cmd": _PROD_BINARY}):
+            self.assertEqual(SR.classify_stable_kernel_path_use(value).outcome,
+                             S.COULD_NOT_CHECK, value)
+
+    def test_diagnostic_prose_is_still_not_scanned_as_a_command(self):
+        # The whole-body scan runs with match_command_strings=False, so relaxing
+        # the classifier changed nothing about a gate reason quoting the path.
+        check = SR.scan_for_kernel_freeze_actions(
+            {"reason": "service 'worker' runs " + _PROD_BINARY},
+            match_command_strings=False)
+        self.assertEqual(check.outcome, S.PASS)
 
 
 class TestGateFramework(unittest.TestCase):
@@ -849,7 +1051,9 @@ class TestGate3LiveEqualsConfig(unittest.TestCase):
     """Gate 3: live state, never the config that was supposed to produce it."""
 
     def test_happy_path(self):
-        outcome = SR.gate_live_equals_config([_intended()], [_live()])
+        live = _live()
+        outcome = SR.gate_live_equals_config([_intended()], [live],
+                                             started=_started(live))
         self.assertEqual(outcome.status, S.PASS, outcome.reasons)
 
     def test_config_file_and_topology_hash_are_refused_as_live_sources(self):
@@ -858,68 +1062,223 @@ class TestGate3LiveEqualsConfig(unittest.TestCase):
                 _live(observation_source=source)
 
     def test_wrong_binary_fails(self):
-        outcome = SR.gate_live_equals_config(
-            [_intended()], [_live(binary_sha256=_sha("some-other-binary"))])
+        live = _live(binary_sha256=_sha("some-other-binary"))
+        outcome = SR.gate_live_equals_config([_intended()], [live],
+                                             started=_started(live))
         self.assertEqual(outcome.status, S.FAIL)
 
     def test_missing_and_differing_flags_fail(self):
-        missing = SR.gate_live_equals_config(
-            [_intended()],
-            [_live(argv=("/mnt/raid0/llm/kernels/production/cpu/llama-server",
-                         "--parallel", "8"))])
+        missing_live = _live(argv=(_PROD_BINARY, "--parallel", "8"))
+        missing = SR.gate_live_equals_config([_intended()], [missing_live],
+                                             started=_started(missing_live))
         self.assertEqual(missing.status, S.FAIL)
 
-        differing = SR.gate_live_equals_config(
-            [_intended()],
-            [_live(argv=("/mnt/raid0/llm/kernels/production/cpu/llama-server",
-                         "--parallel", "4", "--cont-batching"))])
+        differing_live = _live(
+            argv=(_PROD_BINARY, "--parallel", "4", "--cont-batching"))
+        differing = SR.gate_live_equals_config([_intended()], [differing_live],
+                                               started=_started(differing_live))
         self.assertEqual(differing.status, S.FAIL)
 
     def test_extra_live_flag_fails_only_when_config_claims_exhaustiveness(self):
-        argv = ("/mnt/raid0/llm/kernels/production/cpu/llama-server", "--parallel", "8",
-                "--cont-batching", "--mlock")
-        strict = SR.gate_live_equals_config([_intended()], [_live(argv=argv)])
+        argv = (_PROD_BINARY, "--parallel", "8", "--cont-batching", "--mlock")
+        live = _live(argv=argv)
+        strict = SR.gate_live_equals_config([_intended()], [live],
+                                            started=_started(live))
         self.assertEqual(strict.status, S.FAIL)
 
         loose = SR.gate_live_equals_config(
-            [_intended(flags_are_exhaustive=False)], [_live(argv=argv)])
+            [_intended(flags_are_exhaustive=False)], [live], started=_started(live))
         self.assertEqual(loose.status, S.PASS)
         self.assertTrue(any("live-only flags" in n for n in loose.notes))
 
     def test_affinity_is_compared_against_the_live_process(self):
-        outcome = SR.gate_live_equals_config(
-            [_intended()], [_live(cpu_affinity=(88, 89, 90, 91))])
+        live = _live(cpu_affinity=(88, 89, 90, 91))
+        outcome = SR.gate_live_equals_config([_intended()], [live],
+                                             started=_started(live))
         self.assertEqual(outcome.status, S.FAIL)
         self.assertTrue(any("affinity" in r for r in outcome.reasons))
 
     def test_a_process_older_than_its_config_is_stale(self):
+        live = _live(started_at="2026-08-01T00:00:00+00:00")
         outcome = SR.gate_live_equals_config(
-            [_intended()], [_live(started_at="2026-08-01T00:00:00+00:00")])
+            [_intended()], [live],
+            started=_started(live, start="2026-08-01T00:00:00+00:00",
+                             ready="2026-08-01T00:01:00+00:00"))
         self.assertEqual(outcome.status, S.FAIL)
         self.assertTrue(any("stale process" in r for r in outcome.reasons))
 
     def test_missing_and_extra_live_processes_fail(self):
         self.assertEqual(
-            SR.gate_live_equals_config([_intended()], []).status, S.FAIL)
+            SR.gate_live_equals_config([_intended()], [],
+                                       started=_started(_live())).status,
+            S.FAIL)
+        live, ghost = _live(), _live("ghost", pid=99)
         self.assertEqual(
-            SR.gate_live_equals_config([_intended()],
-                                       [_live(), _live("ghost", pid=99)]).status,
+            SR.gate_live_equals_config([_intended()], [live, ghost],
+                                       started=_started(live, ghost)).status,
             S.FAIL)
 
     def test_two_live_processes_for_one_service_fail(self):
-        outcome = SR.gate_live_equals_config([_intended()],
-                                             [_live(pid=1), _live(pid=2)])
+        first, second = _live(pid=1), _live(pid=2)
+        outcome = SR.gate_live_equals_config([_intended()], [first, second],
+                                             started=_started(second))
         self.assertEqual(outcome.status, S.FAIL)
         self.assertTrue(any("leftover" in r for r in outcome.reasons))
 
     def test_an_empty_intended_set_cannot_pass_vacuously(self):
         with self.assertRaises(ValueError):
-            SR.gate_live_equals_config([], [])
+            SR.gate_live_equals_config([], [], started=_started(_live()))
 
     def test_unparseable_timestamps_make_staleness_undecidable(self):
+        live = _live()
         outcome = SR.gate_live_equals_config(
-            [_intended(config_recorded_at="yesterday")], [_live()])
+            [_intended(config_recorded_at="yesterday")], [live],
+            started=_started(live))
         self.assertEqual(outcome.status, S.COULD_NOT_CHECK)
+
+
+class TestGate3IsTiedToGate2(unittest.TestCase):
+    """AK8 carried-forward: gate 3 could pass on a process gate 2 never measured.
+
+    Gate 2 proved that the pid it saw came up sequentially with the right ggml
+    linkage; gate 3 proved that the pid IT saw matched the intended config. Nothing
+    required the two pids to be the same number, let alone the same process — so
+    the two green gates could describe two different processes and the §11.6 stack
+    read as verified end to end.
+    """
+
+    def test_gate_2_observations_are_required_not_optional(self):
+        # A keyword nobody has to pass is a tie nobody has to make.
+        with self.assertRaises(TypeError):
+            SR.gate_live_equals_config([_intended()], [_live()])
+
+    def test_an_empty_gate_2_set_cannot_pass_vacuously(self):
+        with self.assertRaises(ValueError):
+            SR.gate_live_equals_config([_intended()], [_live()], started=())
+
+    def test_a_non_observation_in_the_gate_2_set_is_refused(self):
+        with self.assertRaises(TypeError):
+            SR.gate_live_equals_config([_intended()], [_live()],
+                                       started=({"service_id": "worker",
+                                                 "pid": 4242},))
+
+    def test_a_different_pid_between_the_gates_fails(self):
+        live = _live(pid=4242)
+        outcome = SR.gate_live_equals_config(
+            [_intended()], [live], started=_started(_live(pid=7777)))
+        self.assertEqual(outcome.status, S.FAIL)
+        self.assertTrue(any("gate 2 observed pid 7777" in r
+                            for r in outcome.reasons), outcome.reasons)
+
+    def test_a_service_with_no_gate_2_observation_fails(self):
+        live = _live()
+        outcome = SR.gate_live_equals_config(
+            [_intended()], [live], started=_started(_live("other", pid=51)))
+        self.assertEqual(outcome.status, S.FAIL)
+        self.assertTrue(any("no gate-2 start observation" in r
+                            for r in outcome.reasons), outcome.reasons)
+
+    def test_a_reused_pid_is_not_the_same_process(self):
+        """Same number, incompatible start instant — the strongest form of the bug.
+
+        Gate 2 watched pid 4242 come up between 09:59 and 10:05. The live process
+        wearing pid 4242 started at 11:30. Matching pids alone would call that the
+        same process; a pid is a reusable number.
+        """
+        live = _live(started_at="2026-08-03T11:30:00+00:00")
+        outcome = SR.gate_live_equals_config([_intended()], [live],
+                                             started=_started(_live()))
+        self.assertEqual(outcome.status, S.FAIL)
+        self.assertTrue(any("reusable number" in r for r in outcome.reasons),
+                        outcome.reasons)
+
+    def test_an_unparseable_gate_2_window_is_could_not_check_not_pass(self):
+        live = _live()
+        outcome = SR.gate_live_equals_config(
+            [_intended()], [live],
+            started=_started(live, start="whenever", ready="whenever"))
+        self.assertEqual(outcome.status, S.COULD_NOT_CHECK)
+        self.assertTrue(any("reused pid" in r for r in outcome.reasons),
+                        outcome.reasons)
+
+    def test_the_tie_is_recorded_in_the_evidence_reference(self):
+        live = _live()
+        outcome = SR.gate_live_equals_config([_intended()], [live],
+                                             started=_started(live))
+        self.assertIn("gate2:worker#4242", outcome.evidence_ref)
+
+    # -- compliant-path control -------------------------------------------
+
+    def test_the_tie_admits_the_process_gate_2_actually_observed(self):
+        """The guard must not forbid its own idiom: one stack, both gates.
+
+        Same pid, live start inside the window gate 2 watched — which is what the
+        normal case looks like — still PASSes, and gate 3's evidence kind is still
+        its own.
+        """
+        live = _live()
+        outcome = SR.gate_live_equals_config([_intended()], [live],
+                                             started=_started(live))
+        self.assertEqual(outcome.status, S.PASS, outcome.reasons)
+        self.assertEqual(outcome.evidence_kind, "live_process_observation")
+        self.assertIn(outcome.evidence_kind, SR.GATE_EVIDENCE_KINDS[SR.GATE_3])
+
+    def test_the_tie_admits_a_start_exactly_on_either_window_edge(self):
+        for instant in ("2026-08-03T09:59:00+00:00", "2026-08-03T10:05:00+00:00"):
+            live = _live(started_at=instant)
+            outcome = SR.gate_live_equals_config([_intended()], [live],
+                                                 started=_started(_live()))
+            self.assertEqual(outcome.status, S.PASS, (instant, outcome.reasons))
+
+
+class TestGate3ChecksArgv0(unittest.TestCase):
+    """AK8 carried-forward: gate 3 never compared argv[0] to the binary path.
+
+    `binary_path` comes from `proc_exe` and `argv` from `proc_cmdline` — two
+    different reads. A fact that pairs one process's `exe` with another's
+    `cmdline` described no process at all, and gate 3 graded it.
+    """
+
+    def test_argv0_naming_another_program_fails(self):
+        live = _live(argv=("/mnt/raid0/llm/candidate/sd-server", "--parallel", "8",
+                           "--cont-batching"))
+        outcome = SR.gate_live_equals_config([_intended()], [live],
+                                             started=_started(live))
+        self.assertEqual(outcome.status, S.FAIL)
+        self.assertTrue(any("argv[0]" in r and "different programs" in r
+                            for r in outcome.reasons), outcome.reasons)
+
+    def test_argv0_at_another_absolute_path_fails(self):
+        live = _live(argv=("/mnt/raid0/llm/candidate/llama-server", "--parallel", "8",
+                           "--cont-batching"))
+        outcome = SR.gate_live_equals_config([_intended()], [live],
+                                             started=_started(live))
+        self.assertEqual(outcome.status, S.FAIL)
+        self.assertTrue(any("same program name, different file" in r
+                            for r in outcome.reasons), outcome.reasons)
+
+    # -- compliant-path control -------------------------------------------
+
+    def test_argv0_equal_to_the_observed_binary_passes(self):
+        live = _live()
+        outcome = SR.gate_live_equals_config([_intended()], [live],
+                                             started=_started(live))
+        self.assertEqual(outcome.status, S.PASS, outcome.reasons)
+        self.assertFalse([n for n in outcome.notes if "argv[0]" in n])
+
+    def test_a_bare_argv0_is_compared_by_program_name_and_said_so(self):
+        """The compliant idiom a launcher produces: exec with a bare argv[0].
+
+        The program name is still compared; only the directory is unavailable, and
+        the outcome records which half could not be compared instead of pretending
+        it was.
+        """
+        live = _live(argv=("llama-server", "--parallel", "8", "--cont-batching"))
+        outcome = SR.gate_live_equals_config([_intended()], [live],
+                                             started=_started(live))
+        self.assertEqual(outcome.status, S.PASS, outcome.reasons)
+        self.assertTrue(any("by program name only" in n for n in outcome.notes),
+                        outcome.notes)
 
 
 class TestMetricAndWorkloadDiscipline(unittest.TestCase):
@@ -1535,6 +1894,283 @@ class TestNoProcessOrWritePaths(unittest.TestCase):
         for name in dir(SR):
             self.assertNotIn(name.split("_")[0], {"start", "stop", "kill", "restart",
                                                   "signal", "spawn", "launch"})
+
+
+class TestStableKernelPathDepthCannotBeWalkedOut(unittest.TestCase):
+    """Red-team of the executes-vs-mutates classifier: the DEPTH premise.
+
+    The classifier decides execution from two facts, and the first is depth —
+    `…/kernels/production/<lane>/<x>/…` is content reached THROUGH the link, so
+    it may stand in command-word position. Two path spellings defeated the
+    measurement, and both of them are ordinary shell, not exotica.
+    """
+
+    def test_a_parent_traversal_out_of_the_stable_path_is_refused(self):
+        """`..` counted as depth, so any host binary could wear the stable path.
+
+        `…/production/cpu/../../../../usr/bin/install` counts seven components —
+        "well below the link" — while naming `/usr/bin/install`. Admitted as the
+        command word it also flipped the segment to "a production binary is
+        running", which admitted the segment's below-link OPERANDS, and the
+        operand here is the production serving binary being overwritten.
+        """
+        escape = _PROD_LANE + "/../../../../usr/bin/install"
+        command = escape + " -m 0755 /tmp/evil " + _PROD_LANE + "/bin/llama-server"
+        check = SR.classify_stable_kernel_path_use(command)
+        self.assertEqual(check.outcome, S.FAIL, check.reasons)
+        self.assertTrue(any("'..'" in r for r in check.reasons), check.reasons)
+        self.assertEqual(
+            SR.scan_for_kernel_freeze_actions({"cmd": command}).outcome, S.FAIL)
+
+    def test_every_traversal_shape_is_refused(self):
+        cases = {
+            "escape to rm": _PROD_LANE + "/../../../../bin/rm -rf " + _PROD_LANE,
+            "escape mid-path": (_PROD_LANE + "/bin/../../../../bin/cp /tmp/x "
+                                + _PROD_BINARY),
+            "traversal as an operand": "rm -rf " + _PROD_LANE + "/bin/..",
+            "traversal in a loader path": ("LD_LIBRARY_PATH=" + _PROD_LANE
+                                          + "/../../../etc " + _PROD_BINARY),
+        }
+        for label, command in cases.items():
+            with self.subTest(label):
+                self.assertEqual(SR.classify_stable_kernel_path_use(command).outcome,
+                                 S.FAIL, command)
+                self.assertEqual(
+                    SR.scan_for_kernel_freeze_actions({"cmd": command}).outcome,
+                    S.FAIL, command)
+
+    def test_a_repeated_slash_does_not_hide_the_stable_path(self):
+        """`a//b` is `a/b` to every kernel on this host.
+
+        The segment search was a plain substring find, so one extra slash made a
+        straight `rm -rf` of the production tree produce no finding AT ALL — not a
+        weaker finding, not COULD_NOT_CHECK, nothing.
+        """
+        doubled = "/mnt/raid0/llm/kernels//production/cpu"
+        for command in ("rm -rf " + doubled + "/bin/llama-server",
+                        "ln -sfn /mnt/raid0/llm/llama.cpp-v9 " + doubled):
+            with self.subTest(command):
+                self.assertEqual(SR.classify_stable_kernel_path_use(command).outcome,
+                                 S.FAIL, command)
+                self.assertEqual(
+                    SR.scan_for_kernel_freeze_actions({"cmd": command}).outcome,
+                    S.FAIL, command)
+
+    def test_a_traversing_command_cannot_be_packaged(self):
+        commands = (
+            {"command": (_PROD_LANE + "/../../../../usr/bin/install -m 0755 /tmp/x "
+                         + _PROD_BINARY),
+             "validated": True, "validation_receipt": "dryrun://install"},
+        )
+        with self.assertRaises(SR.KernelFreezePathRefused):
+            _package(operator_command_sequence=commands)
+
+    # -- compliant-path controls ------------------------------------------
+
+    def test_the_launcher_idiom_is_still_admitted_unchanged(self):
+        """The depth guard must not forbid the idiom depth exists to permit."""
+        cases = {
+            "bare": _PROD_BINARY + " --port 8080",
+            "taskset": "taskset -c 184-191 " + _PROD_BINARY + " -t 96 -fa 1",
+            "own LD_LIBRARY_PATH": ("LD_LIBRARY_PATH=" + _PROD_LANE + "/lib "
+                                    + _PROD_BINARY + " --port 8080"),
+            "its own tree as an operand": (
+                _PROD_BINARY + " --lora " + _PROD_LANE + "/share/adapter.gguf"),
+        }
+        for label, command in cases.items():
+            with self.subTest(label):
+                self.assertEqual(SR.classify_stable_kernel_path_use(command).outcome,
+                                 S.PASS, command)
+
+    def test_a_traversal_that_is_nowhere_near_production_is_not_forbidden(self):
+        """`..` is banned BELOW the stable path, not banned from the command.
+
+        A guard that refused every `..` anywhere would refuse `-m ../models/x.gguf`
+        — a relative model path is ordinary — and would be the same defect this
+        class exists to close, pointing the other way.
+        """
+        command = ("taskset -c 0-95 " + _PROD_BINARY
+                   + " -m ../models/qwen36-q8.gguf --log ../logs/serve.log")
+        self.assertEqual(SR.classify_stable_kernel_path_use(command).outcome,
+                         S.PASS)
+        self.assertEqual(
+            SR.scan_for_kernel_freeze_actions({"cmd": command}).outcome, S.PASS)
+
+    def test_a_doubled_slash_elsewhere_is_not_read_as_the_stable_path(self):
+        command = _PROD_BINARY + " --model-url https://example.invalid/m.gguf"
+        self.assertEqual(SR.classify_stable_kernel_path_use(command).outcome,
+                         S.PASS, command)
+
+
+class TestGate3RefusesAnAmbiguousGate2Set(unittest.TestCase):
+    """Red-team of the gate-2/gate-3 tie: the gate-2 side was collapsed.
+
+    `started_by_id[obs.service_id] = obs` in a plain loop is last-wins. Gate 2
+    FAILs a service that "appears twice in one observation set" and the live side
+    of gate 3 FAILs two live processes for one service; the gate-2 side of the
+    tie silently kept whichever observation came last.
+    """
+
+    def test_two_gate2_observations_for_one_service_are_a_finding(self):
+        live = _live()
+        stale = _service(service_id="worker", pid=1000)
+        current = _service(service_id="worker", pid=4242,
+                           start="2026-08-03T09:59:00+00:00",
+                           ready="2026-08-03T10:05:00+00:00")
+        outcome = SR.gate_live_equals_config([_intended()], [live],
+                                             started=[stale, current])
+        self.assertEqual(outcome.status, S.FAIL, outcome.notes)
+        self.assertTrue(any("two gate-2 start observations" in r
+                            for r in outcome.reasons), outcome.reasons)
+
+    def test_the_verdict_does_not_depend_on_the_order_the_evidence_was_listed(self):
+        """The bite: the SAME evidence in two orders gave PASS and FAIL."""
+        live = _live()
+        stale = _service(service_id="worker", pid=1000)
+        current = _service(service_id="worker", pid=4242,
+                           start="2026-08-03T09:59:00+00:00",
+                           ready="2026-08-03T10:05:00+00:00")
+        forward = SR.gate_live_equals_config([_intended()], [live],
+                                             started=[stale, current])
+        reverse = SR.gate_live_equals_config([_intended()], [live],
+                                             started=[current, stale])
+        self.assertEqual(forward.status, S.FAIL)
+        self.assertEqual(reverse.status, S.FAIL)
+
+    def test_every_observed_pid_is_named_in_the_evidence_reference(self):
+        live = _live()
+        outcome = SR.gate_live_equals_config(
+            [_intended()], [live],
+            started=[_service(service_id="worker", pid=1000),
+                     _service(service_id="worker", pid=4242)])
+        self.assertIn("worker#1000+4242", outcome.evidence_ref)
+
+    # -- compliant-path control -------------------------------------------
+
+    def test_one_observation_per_service_is_still_admitted(self):
+        """Several services, one gate-2 observation each: the normal stack."""
+        facts = [_live(service_id="worker"), _live(service_id="router", pid=4343)]
+        intended = [_intended(service_id="worker"), _intended(service_id="router")]
+        outcome = SR.gate_live_equals_config(intended, facts,
+                                             started=_started(*facts))
+        self.assertEqual(outcome.status, S.PASS, outcome.reasons)
+
+
+class TestReleaseVerdictRequiresTheGate2Binding(unittest.TestCase):
+    """Red-team of the tie's COMPOSITION: it lived only inside the function.
+
+    A caller assembling a verdict holds `GateOutcome`s — from a journal, from a
+    prior run, from wherever. `evaluate_three_gates()` derived `released == True`
+    from a gate-3 outcome that declared no tie at all, and from one citing
+    processes the gate-2 outcome beside it had never observed. A guarantee
+    obtainable by not calling the function that provides it is not a guarantee.
+    """
+
+    def test_an_untied_gate3_cannot_produce_a_release_verdict(self):
+        with self.assertRaises(SR.GateSubjectUnbound):
+            SR.evaluate_three_gates(
+                pipeline_green=_gate(SR.GATE_1),
+                stack_starts=_gate(SR.GATE_2),
+                live_equals_config=_gate(SR.GATE_3, tied_to=()),
+            )
+
+    def test_a_gate3_tied_to_processes_gate2_never_observed_is_refused(self):
+        with self.assertRaises(SR.GateSubjectUnbound) as ctx:
+            SR.evaluate_three_gates(
+                pipeline_green=_gate(SR.GATE_1),
+                stack_starts=_gate(SR.GATE_2, subjects=("worker#4242",)),
+                live_equals_config=_gate(SR.GATE_3, tied_to=("router#77",)),
+            )
+        self.assertIn("different processes", str(ctx.exception))
+
+    def test_a_pid_reused_between_the_gates_is_refused(self):
+        # Same service, different process: the tie is on `service#pid`, so the
+        # replacement is visible at the verdict, not only inside gate 3.
+        with self.assertRaises(SR.GateSubjectUnbound):
+            SR.evaluate_three_gates(
+                pipeline_green=_gate(SR.GATE_1),
+                stack_starts=_gate(SR.GATE_2, subjects=("worker#1000",)),
+                live_equals_config=_gate(SR.GATE_3, tied_to=("worker#4242",)),
+            )
+
+    def test_the_binding_is_not_satisfiable_by_supplying_neither_side(self):
+        """Two empty tuples compare equal; a tie that only tested equality was
+        passed by DELETING both sides of it."""
+        with self.assertRaises(SR.GateSubjectUnbound):
+            SR.evaluate_three_gates(
+                pipeline_green=_gate(SR.GATE_1),
+                stack_starts=_gate(SR.GATE_2, subjects=()),
+                live_equals_config=_gate(SR.GATE_3, tied_to=()),
+            )
+
+    def test_the_binding_cannot_be_skipped_by_building_the_result_directly(self):
+        # `ThreeGateResult` is constructible; the verdict-tampering check already
+        # lives in its `__post_init__` for exactly that reason, and so does this.
+        with self.assertRaises(SR.GateSubjectUnbound):
+            SR.ThreeGateResult(
+                pipeline_green=_gate(SR.GATE_1),
+                stack_starts=_gate(SR.GATE_2),
+                live_equals_config=_gate(SR.GATE_3, tied_to=()),
+                status=S.PASS, blocked_at=None,
+            )
+
+    def test_a_package_cannot_be_assembled_on_an_unbound_verdict(self):
+        with self.assertRaises(SR.GateSubjectUnbound):
+            _package(gates=SR.evaluate_three_gates(
+                pipeline_green=_gate(SR.GATE_1),
+                stack_starts=_gate(SR.GATE_2),
+                live_equals_config=_gate(SR.GATE_3, tied_to=()),
+            ))
+
+    def test_gate1_cannot_declare_a_binding_to_something_that_precedes_it(self):
+        with self.assertRaises(ValueError):
+            SR.GateOutcome(gate=SR.GATE_1, status=S.PASS,
+                           evidence_kind="stack_change_guard_result",
+                           evidence_ref="guard", tied_to=("worker#4242",))
+
+    # -- compliant-path control -------------------------------------------
+
+    def test_the_real_gate_functions_compose_into_a_released_verdict(self):
+        """The idiom the binding exists to permit: gates 2 and 3 as actually run.
+
+        Both gate functions are called on ONE observation set, and the verdict
+        assembles and is release-eligible. A binding that the module's own gate
+        pair could not satisfy would be the `feedback_guard_must_not_forbid_its_
+        own_idiom` defect over again.
+        """
+        # Sequential starts, because gate 2 requires them: worker comes up, then
+        # router (`feedback_sequential_model_loading`).
+        facts = [_live(service_id="worker"),
+                 _live(service_id="router", pid=4343,
+                       started_at="2026-08-03T10:01:30+00:00")]
+        observations = (
+            _service(service_id="worker", index=0, pid=4242,
+                     start="2026-08-03T09:59:00+00:00",
+                     ready="2026-08-03T10:00:30+00:00"),
+            _service(service_id="router", index=1, pid=4343,
+                     start="2026-08-03T10:01:00+00:00",
+                     ready="2026-08-03T10:02:00+00:00"),
+        )
+        gate2 = SR.gate_stack_starts(
+            observations, affected_services=("worker", "router"))
+        self.assertEqual(gate2.status, S.PASS, gate2.reasons)
+        gate3 = SR.gate_live_equals_config(
+            [_intended(service_id="worker"), _intended(service_id="router")],
+            facts, started=observations)
+        self.assertEqual(gate3.status, S.PASS, gate3.reasons)
+        result = SR.evaluate_three_gates(pipeline_green=_gate(SR.GATE_1),
+                                         stack_starts=gate2,
+                                         live_equals_config=gate3)
+        self.assertTrue(result.released)
+        result.require_release_eligible()
+
+    def test_the_binding_is_still_derived_from_observations_not_intentions(self):
+        """Gate 2's subjects come from what it OBSERVED, never from the manifest's
+        `affected_services` — a binding to a declared name would tie gate 3 to an
+        intention, which is the thing gate 3 exists to be independent of."""
+        observations = _started(_live())
+        gate2 = SR.gate_stack_starts(observations, affected_services=("worker",))
+        self.assertEqual(gate2.subjects, ("worker#4242",))
 
 
 if __name__ == "__main__":

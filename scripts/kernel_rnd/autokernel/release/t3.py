@@ -91,6 +91,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional, Sequence
 
 from .. import schemas, storage
+from ..adapters import qwentts_tts, whisper_stt
 from ..controller import guards
 from ..evaluator import api, integrity, surface
 
@@ -108,11 +109,15 @@ __all__ = [
     "OBJECTIVE_SATISFYING_STANDINGS", "QUALITY_MODES", "BUNDLE_COMPONENTS",
     "SUPPLIED_COMPONENTS", "COMPUTED_COMPONENTS", "KNOWN_WAIVER_SCHEMAS",
     "LINKAGE_VERIFIER_RELPATH", "RERUN_CODES", "ARCHIVE_GENERATIONS",
+    "EPYC_ROOT", "TRUST_BOUNDARY_MANIFEST", "FINGERPRINT_FACETS",
+    "RELEASE_READINESS_BY_BACKEND",
     # errors
     "T3Error", "T3InputError", "StackChangePathRequired",
     "ReleaseProtocolNotRatified", "ProductionWriteRefused", "RerunRefused",
     # inputs
-    "ProtocolBinding", "SealedCandidate", "ReleasePlanView", "UnchangedView",
+    "ProtocolBinding", "PhaseProtocolBinding", "phase_protocol_binding",
+    "declared_ratified_protocol_ids",
+    "SealedCandidate", "ReleasePlanView", "UnchangedView",
     "TransferReceipt", "LinkageReceipt", "BackendInventory", "DeterminismDeclaration",
     "Cell", "CellResult", "PhaseStanding", "PhaseTradeException", "CapacityFloor",
     "QualityEvidence", "StabilityEvidence", "ArchivedBuild", "IncumbentArchive",
@@ -123,12 +128,13 @@ __all__ = [
     # functions
     "release_plan_view", "release_plan_view_from_compiled", "unchanged_view",
     "unchanged_results_from_plan", "transfer_receipts_from_plan",
-    "verify_waiver", "sealed_fingerprint", "check_rerun",
+    "human_only_boundary", "verify_waiver", "sealed_fingerprint", "check_rerun",
     "phase_identity_preflight", "phase_build_linkage", "phase_backend_correctness",
     "phase_performance_matrix", "phase_quality", "phase_stability",
     "phase_capacity_utility", "phase_transaction_dry_run", "phase_seal",
     "compute_verdict", "run_t3", "T3Runner",
     "audit_no_write_or_process_paths", "audit_phase_coverage_totality",
+    "audit_backend_readiness_is_consulted",
     # calibration (§10.4 "expect the v8 dry-run to FAIL without its waiver")
     "PreservedFreeze", "preserved_freeze_from_v8_artifacts",
     "preserved_freeze_from_speech_artifact", "calibration_request",
@@ -296,6 +302,23 @@ LINKAGE_VERIFIER_RELPATH = "scripts/utils/verify_ggml_linkage.sh"
 ARCHIVE_GENERATION_N1 = "N-1"
 ARCHIVE_GENERATION_N2 = "N-2"
 ARCHIVE_GENERATIONS = (ARCHIVE_GENERATION_N1, ARCHIVE_GENERATION_N2)
+
+#: backend -> the ADAPTER's own answer to *"is this backend's release path legally
+#: runnable yet?"*. Both speech adapters have exposed `release_gate_readiness()`
+#: since AK9 and nothing in the release plane called it, so the gate graded cells
+#: under protocol families the adapters already knew were drafts. This mapping is
+#: the missing adapter->gate edge, and `audit_backend_readiness_is_consulted()`
+#: proves from this module's AST that phase 1 still consults it — a registry that
+#: nothing reads is the defect it was added to close, wearing a table.
+#:
+#: A backend ABSENT from this mapping is not "ready": it is a backend whose adapter
+#: states no release-readiness predicate, which is the llama pair's honest position
+#: (their protocols are Annex B/G protocols the per-phase `ProtocolBinding` already
+#: carries). Absence therefore delegates to the per-phase bindings and nothing else.
+RELEASE_READINESS_BY_BACKEND = {
+    whisper_stt.BACKEND: whisper_stt.release_gate_readiness,
+    qwentts_tts.BACKEND: qwentts_tts.release_gate_readiness,
+}
 
 RERUN_ADMITTED_FIRST_ATTEMPT = "ADMITTED_FIRST_ATTEMPT"
 RERUN_ADMITTED_NEW_FINGERPRINT = "ADMITTED_NEW_FINGERPRINT"
@@ -485,6 +508,51 @@ def _hashed_pairs(value: Any, label: str, *, non_empty: bool = True) -> tuple:
     return tuple(out)
 
 
+def _attributed_hashed_triples(value: Any, label: str, *,
+                               non_empty: bool = True) -> tuple:
+    """A tuple of `(backends, path, sha256)`, where `backends` is NON-EMPTY.
+
+    The attribution is required rather than optional because the fact it records is
+    the one this host has already been bitten by: three ggml generations live here,
+    and *which build a preserved `libggml-base.so.0` belongs to* is not recoverable
+    from its path or its digest once the tree it came from is gone. An empty
+    attribution is refused for the same reason `RollbackPlan.incumbent_binaries`
+    refuses to be empty — an unattributed rollback library is a library that will be
+    resolved against whatever is on the path at rollback time.
+    """
+    if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple)):
+        raise T3InputError(
+            f"{label}: required, a list/tuple of (backends, path, sha256) triples")
+    out: list = []
+    for i, item in enumerate(value):
+        if not isinstance(item, (list, tuple)) or len(item) != 3:
+            raise T3InputError(
+                f"{label}[{i}]: expected a (backends, path, sha256) triple. A bare "
+                "(path, sha256) pair is the UNATTRIBUTED shape this field exists to "
+                "replace: on a three-ggml-generation host, an archived library with no "
+                "backend attribution is the 2026-07-31 linkage incident with a longer "
+                "fuse.")
+        backends = item[0]
+        if isinstance(backends, str):
+            raise T3InputError(
+                f"{label}[{i}].backends: a single string is not a backend SET; a shared "
+                "library legitimately serves more than one backend, and collapsing that "
+                "to one name attributes it to the wrong build half the time")
+        backends = _str_tuple(backends, f"{label}[{i}].backends")
+        for backend in backends:
+            if backend not in schemas.BACKENDS:
+                raise T3InputError(
+                    f"{label}[{i}].backends: {backend!r} is not a known backend")
+        if len(set(backends)) != len(backends):
+            raise T3InputError(f"{label}[{i}].backends: duplicate backend names")
+        path = _text(item[1], f"{label}[{i}].path")
+        digest = _sha256(item[2], f"{label}[{i}].sha256")
+        out.append((tuple(sorted(set(backends))), path, digest))
+    if non_empty and not out:
+        raise T3InputError(f"{label}: must not be empty")
+    return tuple(out)
+
+
 def _check_dict(check: schemas.Check) -> dict:
     return {"outcome": check.outcome, "reasons": list(check.reasons)}
 
@@ -548,6 +616,139 @@ class ProtocolBinding:
         return {"protocol_id": self.protocol_id, "document_sha256": self.document_sha256,
                 "ratified": self.ratified, "ratified_at": self.ratified_at,
                 "annex": self.annex}
+
+
+@dataclass(frozen=True)
+class PhaseProtocolBinding:
+    """The protocol ONE (backend, workload phase) is GRADED UNDER, and its standing.
+
+    `ProtocolBinding` proves the FREEZE protocol is ratified — the authority to run
+    the gate at all. It says nothing about the protocols the matrix cells are
+    *graded* under, which used to arrive in `T3Request.phase_protocols` as bare
+    strings: `{"llama_cpu": {"decode": "P-BENCH-1"}}`. A bare id is a name, and a
+    name is not a ratification. `P-STT-*` and `P-TTS-*` are drafts today
+    (`kernel-research.md:54-56` — an unowned number cannot become a claim), and the
+    old shape could not tell them apart from `P-BENCH-1`.
+
+    So the value carries the binding. `binding is None` is the UNBOUND state and it
+    is `COULD_NOT_CHECK`, never PASS: the run does not know what it was graded
+    under, which is exactly what an unbound id means and exactly what deleting the
+    binding would otherwise buy.
+    """
+
+    backend: str
+    workload_phase: str
+    protocol_id: str
+    binding: Optional[ProtocolBinding] = None
+
+    def __post_init__(self) -> None:
+        _text(self.backend, "PhaseProtocolBinding.backend")
+        if self.backend not in schemas.BACKENDS:
+            raise T3InputError(
+                f"PhaseProtocolBinding.backend: {self.backend!r} is not a known backend")
+        _text(self.workload_phase, "PhaseProtocolBinding.workload_phase")
+        _text(self.protocol_id, "PhaseProtocolBinding.protocol_id")
+        if self.binding is None:
+            return
+        if not isinstance(self.binding, ProtocolBinding):
+            raise T3InputError(
+                "PhaseProtocolBinding.binding: must be a ProtocolBinding or None")
+        if self.binding.protocol_id != self.protocol_id:
+            raise T3InputError(
+                f"PhaseProtocolBinding({self.backend}/{self.workload_phase}): the phase "
+                f"is declared under {self.protocol_id!r} but the binding attests "
+                f"{self.binding.protocol_id!r}. A ratification receipt for a DIFFERENT "
+                "protocol is the cheapest possible way to make a draft look ratified."
+            )
+
+    @property
+    def ratified(self) -> Optional[bool]:
+        """True / False / None, where None means *nobody said* — never False."""
+        return None if self.binding is None else self.binding.ratified
+
+    def check(self) -> schemas.Check:
+        if self.binding is None:
+            return _cnc(
+                f"{self.backend}/{self.workload_phase}: protocol {self.protocol_id!r} "
+                "arrives as a BARE ID with no ratification binding, so the gate cannot "
+                "tell a ratified instrument from a draft. An unknown standing is not a "
+                "ratified one (kernel-research.md:54-56)."
+            )
+        if not self.binding.ratified:
+            return _cnc(
+                f"{self.backend}/{self.workload_phase}: protocol {self.protocol_id!r} is "
+                "declared NOT ratified, so the cells graded under it have no owning "
+                "protocol and their numbers cannot become claims "
+                "(kernel-research.md:54-56). Search under P-AK-SEARCH-1 stays legal; "
+                "release eligibility for this phase is blocked until the operator "
+                "ratifies or declines the family."
+            )
+        return schemas.Check(schemas.PASS)
+
+    def to_dict(self) -> dict:
+        return {"backend": self.backend, "workload_phase": self.workload_phase,
+                "protocol_id": self.protocol_id, "ratified": self.ratified,
+                "binding": None if self.binding is None else self.binding.to_dict(),
+                "check": _check_dict(self.check())}
+
+
+def phase_protocol_binding(value: Any, *, backend: str,
+                           workload_phase: str) -> PhaseProtocolBinding:
+    """Normalise one `phase_protocols[backend][phase]` entry.
+
+    Accepts a `PhaseProtocolBinding`, a `ProtocolBinding`, or the legacy bare id.
+    The bare id is accepted rather than refused ON PURPOSE: refusing it would turn
+    every caller that has not yet been rewired into an exception, and an exception
+    is not a verdict about the candidate. It is instead carried as the UNBOUND state
+    and reported as `COULD_NOT_CHECK` by `check()`, so the gap is journaled in the
+    bundle rather than either crashing the run or passing silently.
+    """
+    if isinstance(value, PhaseProtocolBinding):
+        if value.backend != backend or value.workload_phase != workload_phase:
+            raise T3InputError(
+                f"phase_protocols[{backend!r}][{workload_phase!r}]: the binding names "
+                f"({value.backend}, {value.workload_phase}); a binding filed under a "
+                "different phase is a mislabelled instrument, not a relabelled one")
+        return value
+    if isinstance(value, ProtocolBinding):
+        return PhaseProtocolBinding(
+            backend=backend, workload_phase=workload_phase,
+            protocol_id=value.protocol_id, binding=value)
+    if isinstance(value, str):
+        return PhaseProtocolBinding(
+            backend=backend, workload_phase=workload_phase,
+            protocol_id=_text(value, f"phase_protocols[{backend!r}][{workload_phase!r}]"))
+    raise T3InputError(
+        f"phase_protocols[{backend!r}][{workload_phase!r}]: expected a protocol id, a "
+        f"ProtocolBinding, or a PhaseProtocolBinding, got {type(value).__name__}")
+
+
+def declared_ratified_protocol_ids(request: "T3Request") -> tuple:
+    """The ratified set the adapters are asked about — DERIVED, never a constant.
+
+    `whisper_stt.release_gate_readiness()` documents why it takes the set as an
+    argument: *"the source of truth is the protocol registry in `MEASUREMENT.md` §2,
+    and a constant here would go stale silently"*. The same argument forbids a
+    constant HERE, so the set is read off this request's own bindings and nothing
+    else. A protocol is in the set only if some `ProtocolBinding` in the request
+    carries a document hash and `ratified=True` — which means the only way to
+    satisfy a speech adapter is to declare each of its release protocols, hashed,
+    as ratified. There is no shorter route, and in particular no flag.
+    """
+    if not isinstance(request, T3Request):
+        raise T3InputError(
+            "declared_ratified_protocol_ids: request must be a T3Request")
+    ids: set = set()
+    if request.protocol.ratified:
+        ids.add(request.protocol.protocol_id)
+    for by_phase in request.phase_protocols.values():
+        for binding in by_phase.values():
+            if binding.ratified:
+                ids.add(binding.protocol_id)
+    for binding in request.protocol_registry:
+        if binding.ratified:
+            ids.add(binding.protocol_id)
+    return tuple(sorted(ids))
 
 
 @dataclass(frozen=True)
@@ -1640,10 +1841,34 @@ class PhaseTradeException:
                     "exact band, and §1.6 requires the exact regression band")
         if band[0] > band[1]:
             raise T3InputError("PhaseTradeException.regression_band: lo exceeds hi")
+        if band[1] > 0:
+            # The other half of the refusal `readiness.PhaseTradeException` makes at
+            # declaration, and it was the half left behind. The band is oriented, so
+            # a regression band's bounds are at or below zero; a band whose upper
+            # bound is positive describes a GAIN, and a trade that names a gain as
+            # the thing it is buying permission for is admitting a regression the
+            # gate can no longer recognise as one.
+            raise T3InputError(
+                f"PhaseTradeException.regression_band: {list(band)} has a positive "
+                "upper bound, so it does not describe a regression. §1.6 names the "
+                "exact REGRESSION band, in the phase's own oriented scale.")
         object.__setattr__(self, "regression_band", band)
         if not isinstance(self.expected_gain, (int, float)) or \
                 isinstance(self.expected_gain, bool):
             raise T3InputError("PhaseTradeException.expected_gain: required, a number")
+        if self.expected_gain != self.expected_gain or \
+                self.expected_gain in (float("inf"), float("-inf")):
+            raise T3InputError(
+                "PhaseTradeException.expected_gain: must be finite; §1.6 requires the "
+                "EXACT expected gain, and an unbounded one names no quantity")
+        if self.expected_gain <= 0:
+            # Same refusal `readiness.PhaseTradeException` already makes at
+            # declaration. A trade buys a regression with a gain; one that expects no
+            # gain is an unpriced regression, and the gate would then be comparing a
+            # realised effect against nothing.
+            raise T3InputError(
+                "PhaseTradeException.expected_gain: must be strictly positive; a trade "
+                "with no expected gain is a regression, not a trade")
         object.__setattr__(self, "roles_affected", _str_tuple(
             self.roles_affected, "PhaseTradeException.roles_affected"))
         _timestamp(self.declared_at, "PhaseTradeException.declared_at")
@@ -1665,6 +1890,22 @@ class PhaseTradeException:
             reasons.append(
                 f"the {self.backend} phase-trade exception is not operator-approved; "
                 "§1.6 makes it an operator decision at freeze time, not a controller one")
+        # `operator_approved` is a BOOLEAN the caller sets, and `approved_by` was the
+        # only place the approver is named — unguarded, while the identically-shaped
+        # `authorized_by` on a §10.4 waiver is refused a machine name. A phase trade
+        # admits a REGRESSION into a release; that is the same authority a waiver
+        # carries, so it meets the same vocabulary. A FINDING rather than a
+        # constructor refusal, because "the controller approved it" must stay
+        # expressible for the gate to be able to say no to it.
+        approver_tokens = schemas.machine_actor_tokens(self.approved_by)
+        if approver_tokens:
+            reasons.append(
+                f"the {self.backend} phase-trade exception is approved by "
+                f"{self.approved_by!r}, a machine actor "
+                f"({', '.join(approver_tokens)}). §1.6 makes the trade an operator "
+                "decision at freeze time, not a controller one; a loop that approves "
+                "its own regression has not been granted an exception, it has taken "
+                "one (MEASUREMENT.md:140-142).")
         return _fail(*reasons) if reasons else schemas.Check(schemas.PASS)
 
     def to_dict(self) -> dict:
@@ -1851,10 +2092,16 @@ class StabilityEvidence:
 class ArchivedBuild:
     """One preserved incumbent build — binaries AND linked libraries (§10.5).
 
-    Libraries are not optional. The three ggml generations on this host are
-    precisely why: a preserved binary whose libraries were not preserved with it
-    resolves against whatever is on the path at rollback time, which is the
-    2026-07-31 incident with a longer fuse.
+    Libraries are not optional, and neither is their BACKEND ATTRIBUTION. The three
+    ggml generations on this host are precisely why: a preserved binary whose
+    libraries were not preserved with it resolves against whatever is on the path at
+    rollback time, which is the 2026-07-31 incident with a longer fuse — and a
+    preserved library nobody attributed cannot be shown to be the one the backend
+    being rolled back actually linked. `libraries` is therefore
+    `((backends, path, sha256), …)`, and the attribution is recorded HERE, at the
+    source, where the archiving actor knows it. `packager.RollbackPlan` carries it
+    forward unchanged; it must never mint one, because a rollback plan that invented
+    an attribution would put a fact in the operator's package that nothing measured.
     """
 
     generation: str
@@ -1862,6 +2109,9 @@ class ArchivedBuild:
     commit: str
     archive_root: str
     binaries: tuple
+    #: ((backends, path, sha256), …) — `backends` is a non-empty tuple of backend
+    #: names, plural because one `libggml-base.so.0` legitimately serves both llama
+    #: backends of one tree.
     libraries: tuple
     rebuilt: bool = False
 
@@ -1875,9 +2125,18 @@ class ArchivedBuild:
         _text(self.archive_root, "ArchivedBuild.archive_root")
         object.__setattr__(self, "binaries", _hashed_pairs(
             self.binaries, "ArchivedBuild.binaries"))
-        object.__setattr__(self, "libraries", _hashed_pairs(
+        object.__setattr__(self, "libraries", _attributed_hashed_triples(
             self.libraries, "ArchivedBuild.libraries"))
         _bool(self.rebuilt, "ArchivedBuild.rebuilt")
+
+    def libraries_for(self, backend: str) -> tuple:
+        """The archived libraries this entry attributes to `backend`."""
+        return tuple((path, digest) for backends, path, digest in self.libraries
+                     if backend in backends)
+
+    @property
+    def attributed_backends(self) -> tuple:
+        return tuple(sorted({b for backends, _p, _d in self.libraries for b in backends}))
 
     def check(self) -> schemas.Check:
         reasons: list = []
@@ -1904,7 +2163,9 @@ class ArchivedBuild:
         return {"generation": self.generation, "branch": self.branch,
                 "commit": self.commit, "archive_root": self.archive_root,
                 "binaries": [list(p) for p in self.binaries],
-                "libraries": [list(p) for p in self.libraries],
+                "libraries": [{"backends": list(backends), "path": path,
+                               "sha256": digest}
+                              for backends, path, digest in self.libraries],
                 "rebuilt": self.rebuilt}
 
 
@@ -2060,6 +2321,37 @@ class TransactionPlan:
 # Inputs — operator waivers (§10.4), the human-authored first-class input
 # =============================================================================
 
+#: epyc-root's working path (CLAUDE.md "Repository Map"). The trust-boundary
+#: manifest lives in epyc-root, this module lives in epyc-inference-research, and
+#: there is exactly one edge between them: a READ of one file.
+EPYC_ROOT = Path("/workspace")
+
+#: The manifest itself. `schemas.HUMAN_ONLY_PATHS_MANIFEST` owns the relative path
+#: so the two planes cannot disagree about which file is the boundary.
+TRUST_BOUNDARY_MANIFEST = EPYC_ROOT / schemas.HUMAN_ONLY_PATHS_MANIFEST
+
+
+def human_only_boundary(manifest: Optional[Any] = None) -> schemas.TrustBoundary:
+    """Read `human_only_paths.yaml` — the trust boundary, as data (§1.3 item 4).
+
+    The ONLY filesystem edge in the waiver path, and it is a read. `schemas.py`
+    performs no I/O and therefore cannot load its own boundary; it parses, this
+    reads. An absent, unreadable, empty or foreign manifest yields an UNREADABLE
+    boundary, and `schemas.operator_owned_path_check` answers COULD_NOT_CHECK
+    rather than PASS on one — so a caller cannot widen what counts as
+    operator-owned by deleting the file this check inspects.
+
+    Not cached: the manifest is human-amendment-only and tiny, and a cache would
+    make the gate's answer depend on which run warmed it.
+    """
+    target = Path(manifest) if manifest is not None else TRUST_BOUNDARY_MANIFEST
+    try:
+        text = target.read_text(encoding="utf-8")
+    except OSError:
+        return schemas.TrustBoundary(source=str(target))
+    return schemas.parse_trust_boundary(text, source=str(target))
+
+
 @dataclass(frozen=True)
 class WaiverBinding:
     """A waiver as T3 receives it: pinned hash, observed hash, document, coverage.
@@ -2198,16 +2490,39 @@ def _waiver_scope(document: Mapping) -> tuple:
 def verify_waiver(binding: WaiverBinding, *, candidate_commit: str,
                   production_base_commit: str, campaign_id: str,
                   known_cell_ids: Iterable[str], failing_cell_ids: Iterable[str],
-                  now: str) -> WaiverVerification:
+                  now: str,
+                  boundary: Optional[schemas.TrustBoundary] = None
+                  ) -> WaiverVerification:
     """Verify a waiver's HASH and PREDICATE. Never its merits (§10.4).
 
     The predicate is exactly what `freeze_v8_production_20260725.sh:248` gated on,
     generalised: the waiver names this candidate head and this production head, its
     protocol did not move underneath it, it has not expired, it names the claims it
     forfeits, and every cell it covers exists in this run's matrix.
+
+    Two of the predicates are about AUTHORSHIP, and both were holes until
+    2026-08-03:
+
+      * The attestation may not name a machine actor. Accepting any non-empty
+        `authorized_by` meant a document attributed to `autokernel` verified as
+        human-attested, suppressed a failing gating cell, and produced a
+        PASS_WITH_WAIVER verdict; the refusal existed only in the packager, one
+        layer up, so every caller reaching T3 directly bypassed it.
+      * The document must LIVE somewhere an operator owns. A hash proves the bytes
+        did not change after somebody quoted them; it says nothing about who could
+        have written them in the first place.
+
+    `boundary` is the parsed trust-boundary manifest. It defaults to reading the
+    live one; pass an explicit `schemas.TrustBoundary` to verify against a stated
+    boundary instead. An unreadable boundary yields COULD_NOT_CHECK on any path
+    outside the operator-attestation root, which suppresses nothing.
     """
     if not isinstance(binding, WaiverBinding):
         raise T3InputError("verify_waiver: binding must be a WaiverBinding")
+    if boundary is None:
+        boundary = human_only_boundary()
+    elif not isinstance(boundary, schemas.TrustBoundary):
+        raise T3InputError("verify_waiver: boundary must be a schemas.TrustBoundary")
     known = set(known_cell_ids)
     failing = set(failing_cell_ids)
     document = binding.document
@@ -2239,19 +2554,81 @@ def verify_waiver(binding: WaiverBinding, *, candidate_commit: str,
     else:
         results["structure"] = schemas.PASS
 
+    # --- provenance: where the document LIVES --------------------------------
+    # §10.4 stores a waiver "under the trust-boundary path set". Without this the
+    # hash pins bytes and nothing pins their origin: a document the loop wrote to
+    # its own scratch directory verifies exactly as well as a ratified attestation.
+    # Evaluated BEFORE authorship because authorship depends on it: see below.
+    located = schemas.operator_owned_path_check(binding.document_path,
+                                                boundary=boundary)
+    results["document_path"] = located.outcome
+    if located.outcome == schemas.FAIL:
+        reasons.extend(f"waiver {binding.waiver_id}: {r}" for r in located.reasons)
+    elif located.outcome == schemas.COULD_NOT_CHECK:
+        unknown.extend(f"waiver {binding.waiver_id}: {r}" for r in located.reasons)
+
     # --- human authorship ----------------------------------------------------
     # §10.4: waivers are human-only. A machine-authored record in this repository
     # carries no authority-flavoured key (schemas `_reject_authority_keys`), so the
     # ONLY thing that distinguishes a waiver is a named human attestation.
+    #
+    # THREE ways a document can be attributed, and the third is why the second is
+    # not enough on its own. A scan of the five attribution fields is satisfiable
+    # by DELETING them: the preserved v8 waiver
+    # (`artifacts/operator/waive_q8_cpu_prefill_v8_20260725.json`) carries none of
+    # them — its whole attestation is a `ratified_at` timestamp — so under the
+    # older `epyc.cpu_prefill_v8.operator_waiver.v1` schema, which does not require
+    # one either, any document that simply named no author read as human-attested
+    # and the machine-actor refusal never fired. That schema cannot be tightened
+    # without invalidating the genuine ratified record, so the missing fact is
+    # supplied by the one thing the v8 record HAS and a forged one does not: it
+    # lives under an operator-owned path. Authorship is therefore
+    #   (a named non-machine actor) OR (no attribution at all AND provenance PASS),
+    # and never a machine name in either case. COULD_NOT_CHECK provenance does not
+    # substitute for an author — an unknown origin establishes nothing.
     attested_by = document.get("authorized_by") or document.get("ratified_at")
+    attributed_to_machine = schemas.machine_attributions(document)
+    named_actors = [
+        field_name for field_name in schemas.ACTOR_ATTRIBUTION_FIELDS
+        if isinstance(document.get(field_name), str) and document[field_name].strip()]
     if not attested_by:
         reasons.append(
             f"waiver {binding.waiver_id}: carries neither `authorized_by` nor "
             "`ratified_at`. A waiver is human-authored by definition; an unattributed "
             "one is a machine granting itself an exception.")
         results["human_attested"] = schemas.FAIL
-    else:
+    elif attributed_to_machine:
+        # An attribution is not a formality that a non-empty string satisfies. §10.4
+        # makes the waiver human-authored BY DEFINITION, so a machine-attributed
+        # document is not a waiver with a bad author — it is the loop excusing its
+        # own failing cell, which is the single thing this gate exists to refuse.
+        for field_name, identity, tokens in attributed_to_machine:
+            reasons.append(
+                f"waiver {binding.waiver_id}: names {identity!r} in {field_name!r}, a "
+                f"machine actor ({', '.join(tokens)}). §10.4 waivers are human-only "
+                "(MEASUREMENT.md:140-142); a waiver the loop attributed to itself is "
+                f"the loop excusing {list(binding.covers_cell_ids)}.")
+        results["human_attested"] = schemas.FAIL
+    elif named_actors:
         results["human_attested"] = schemas.PASS
+        results["attribution_source"] = "named_actor"
+    elif located.outcome == schemas.PASS:
+        # The preserved v8 shape: no author field anywhere, and the record's
+        # standing rests on where it lives. Recorded as a DIFFERENT source of the
+        # same verdict so the bundle says which one carried it.
+        results["human_attested"] = schemas.PASS
+        results["attribution_source"] = "operator_owned_path"
+    else:
+        reasons.append(
+            f"waiver {binding.waiver_id}: names no actor in any of "
+            f"{list(schemas.ACTOR_ATTRIBUTION_FIELDS)} — a timestamp is not an author — "
+            f"and its path {binding.document_path!r} is not established as "
+            f"operator-owned ({located.outcome}). The machine-actor refusal scans "
+            "those fields, so a document that simply omits them would otherwise pass "
+            "it by deleting what it inspects; the only other thing that distinguishes "
+            "the preserved v8 attestation from a forgery is where it lives.")
+        results["human_attested"] = schemas.FAIL
+        results["attribution_source"] = "none"
 
     # --- predicate: heads ----------------------------------------------------
     doc_candidate = document.get("candidate_head")
@@ -2462,18 +2839,28 @@ class RerunDisposition:
 #: you what it now covers. Active waiver hashes ARE evidence-affecting — adding a
 #: waiver is precisely how a FAILed v8-shaped run becomes PASS_WITH_WAIVER, and a
 #: fingerprint that ignored them could never admit that rerun.
+#:
+#: `active_waiver_coverage` is separate from `active_waiver_sha256` because the
+#: digest is a fact about the DOCUMENT and the coverage is a fact about the RUN.
+#: The same hash-verified attestation can be bound to different cells — that is
+#: exactly the misdirection the scope predicate refuses — and hashing only the
+#: digest gave two runs that suppress different cells one fingerprint, so §9.1's
+#: idempotence would have refused the second as "already sealed".
 FINGERPRINT_FACETS = (
     "candidate_id", "source_tree", "candidate_branch", "production_base_commit",
     "candidate_commit", "seal_sha256", "binary_sha256", "linkage_sha256",
     "evaluator_bundle_sha256", "scope_manifest_sha256", "evidence_tree_sha256",
     "plan_sha256", "protocol_document_sha256", "supplied_components",
-    "active_waiver_sha256",
+    "active_waiver_sha256", "active_waiver_coverage", "phase_protocol_standing",
+    "protocol_registry_standing",
 )
 
 
 def sealed_fingerprint(*, sealed: SealedCandidate, plan: ReleasePlanView,
                        protocol: ProtocolBinding, waivers: Sequence[WaiverBinding] = (),
-                       supplied_components: Optional[Mapping] = None) -> str:
+                       supplied_components: Optional[Mapping] = None,
+                       phase_protocols: Optional[Mapping] = None,
+                       protocol_registry: Sequence[ProtocolBinding] = ()) -> str:
     """The identity §9.1's *"once per sealed fingerprint"* is keyed on.
 
     Deliberately excludes the run id, the timestamps, the operator, and every
@@ -2504,6 +2891,41 @@ def sealed_fingerprint(*, sealed: SealedCandidate, plan: ReleasePlanView,
         "protocol_document_sha256": protocol.document_sha256,
         "supplied_components": {k: supplied[k] for k in sorted(supplied)},
         "active_waiver_sha256": sorted(w.pinned_sha256 for w in waivers),
+        "active_waiver_coverage": sorted(
+            [w.waiver_id, w.pinned_sha256, sorted(w.covers_cell_ids)]
+            for w in waivers),
+        # Evidence-affecting for the same reason the waiver hashes are: ratifying
+        # `P-STT-1` turns a run this gate BLOCKED into one it can adjudicate,
+        # without touching the candidate, the plan, or a single measurement. A
+        # fingerprint blind to it would send that rerun into
+        # REFUSED_UNCHANGED_FINGERPRINT — fail-closed, and still wrong, because
+        # §9.1's idempotence is over the evidence graded and the standing of the
+        # instrument is part of it.
+        "phase_protocol_standing": sorted(
+            [backend, workload_phase, bound.protocol_id,
+             "unbound" if bound.ratified is None
+             else ("ratified" if bound.ratified else "draft"),
+             "" if bound.binding is None else bound.binding.document_sha256]
+            for backend, by_phase in dict(phase_protocols or {}).items()
+            for workload_phase, bound in by_phase.items()),
+        # The OTHER half of the same fact, and the half that actually moves the
+        # speech backends. `declared_ratified_protocol_ids()` reads THREE sources —
+        # `protocol`, `phase_protocols` and `protocol_registry` — and the adapter
+        # seam is satisfied through the registry, because `P-AK-SEARCH-1` and
+        # `P-STT-REL-1` are not per-phase grading instruments and have no phase to
+        # be filed under. Covering only the per-phase half left the exact
+        # post-ratification rerun this facet exists for — declare the five whisper
+        # protocols as ratified `ProtocolBinding`s and run again — landing on an
+        # UNCHANGED fingerprint and `REFUSED_UNCHANGED_FINGERPRINT`. A fingerprint
+        # must cover every input the gate's own verdict is a function of, and
+        # `phase_identity_preflight` blocks on this one.
+        "protocol_registry_standing": sorted(
+            [binding.protocol_id,
+             "ratified" if binding.ratified else "draft",
+             binding.document_sha256]
+            for binding in _typed_tuple(
+                protocol_registry, "sealed_fingerprint: protocol_registry",
+                ProtocolBinding)),
     }
     if set(facets) != set(FINGERPRINT_FACETS):
         raise T3Error(
@@ -2648,8 +3070,17 @@ class T3Request:
     #: protocol id -> the release rep count that protocol requires. No default:
     #: §10.2 phase 4 says "release reps", and a made-up rep count is a made-up gate.
     release_reps_by_protocol: Mapping = field(default_factory=dict)
-    #: backend -> workload phase -> the protocol that owns it (§1.6).
+    #: backend -> workload phase -> the protocol that owns it (§1.6), as a
+    #: `PhaseProtocolBinding`. A bare id or a `ProtocolBinding` is normalised into
+    #: one on construction; a bare id normalises to the UNBOUND state, which reads
+    #: COULD_NOT_CHECK and blocks — an id is a name, not a ratification.
     phase_protocols: Mapping = field(default_factory=dict)
+    #: `ProtocolBinding`s for protocols this run depends on that are not per-phase
+    #: and are not the freeze protocol — a speech family's `P-STT-REL-1`, or
+    #: `P-AK-SEARCH-1` itself. Together with the per-phase bindings this is the ONLY
+    #: source `declared_ratified_protocol_ids()` reads, so an adapter can never be
+    #: told a family is ratified without a hashed binding saying so.
+    protocol_registry: tuple = ()
     transfer_receipts: Mapping = field(default_factory=dict)
     linkage_receipts: tuple = ()
     backend_inventories: tuple = ()
@@ -2726,6 +3157,7 @@ class T3Request:
                             ("quality_evidence", QualityEvidence),
                             ("stability_evidence", StabilityEvidence),
                             ("waivers", WaiverBinding),
+                            ("protocol_registry", ProtocolBinding),
                             ("attempt_ledger", T3Attempt)):
             object.__setattr__(self, name, _typed_tuple(
                 getattr(self, name), f"T3Request.{name}", klass))
@@ -2734,6 +3166,21 @@ class T3Request:
         for name in ("release_reps_by_protocol", "phase_protocols", "complexity"):
             if not isinstance(getattr(self, name), Mapping):
                 raise T3InputError(f"T3Request.{name}: must be a mapping")
+        # The per-phase protocol map is NORMALISED here rather than read as-typed
+        # downstream, so there is exactly one shape in the gate and no reader has to
+        # remember that a value might be a string. `phase_protocol_binding` accepts
+        # the legacy bare id and records it as UNBOUND; it never invents a standing.
+        bound_protocols: dict = {}
+        for backend, by_phase in self.phase_protocols.items():
+            if not isinstance(by_phase, Mapping):
+                raise T3InputError(
+                    f"T3Request.phase_protocols[{backend!r}]: must be a mapping of "
+                    "workload phase -> protocol binding")
+            bound_protocols[backend] = {
+                phase: phase_protocol_binding(value, backend=backend,
+                                              workload_phase=phase)
+                for phase, value in by_phase.items()}
+        object.__setattr__(self, "phase_protocols", bound_protocols)
         for backend, assessment in self.complexity.items():
             if not isinstance(assessment, integrity.ComplexityAssessment):
                 raise T3InputError(
@@ -2787,7 +3234,9 @@ class T3Request:
     def fingerprint(self) -> str:
         return sealed_fingerprint(
             sealed=self.sealed, plan=self.plan, protocol=self.protocol,
-            waivers=self.waivers, supplied_components=self.supplied_components)
+            waivers=self.waivers, supplied_components=self.supplied_components,
+            phase_protocols=self.phase_protocols,
+            protocol_registry=self.protocol_registry)
 
 
 # =============================================================================
@@ -2918,6 +3367,46 @@ def phase_identity_preflight(request: T3Request) -> tuple:
             "a release authorisation. §10.4's calibration note asks for exactly this "
             "against the preserved v8 and speech freeze artifacts."
         )
+
+    # --- the protocols the CELLS are graded under (§1.6) ---------------------
+    # `request.protocol` above is the authority to run the gate. This is the other
+    # half: the per-phase instruments the matrix is adjudicated with. They used to
+    # arrive as bare ids, so a cell graded under a DRAFT family was indistinguishable
+    # from one graded under a ratified Annex B protocol, and the gate licensed claims
+    # for both. A non-PASS here blocks: `kernel-research.md:54-56` — a number with no
+    # owning protocol cannot become a claim, and this bundle's whole output is a list
+    # of claims it licenses.
+    phase_protocol_detail: dict = {}
+    for backend in sorted(request.phase_protocols):
+        for workload_phase in sorted(request.phase_protocols[backend]):
+            bound = request.phase_protocols[backend][workload_phase]
+            phase_protocol_detail[f"{backend}.{workload_phase}"] = bound.to_dict()
+            bound_check = bound.check()
+            if bound_check.outcome != schemas.PASS:
+                blocking.extend(bound_check.reasons)
+    detail["phase_protocols"] = phase_protocol_detail
+
+    # --- the adapters' own release-readiness verdict --------------------------
+    # The edge AK5 shipped without. Both speech adapters have always known their
+    # families are drafts and returned COULD_NOT_CHECK for it; nothing asked them.
+    # The ratified set is DERIVED from this request's own hashed bindings, so this
+    # cannot be satisfied by a constant, a flag, or an adapter edit.
+    ratified_ids = declared_ratified_protocol_ids(request)
+    detail["declared_ratified_protocol_ids"] = list(ratified_ids)
+    readiness_detail: dict = {}
+    for backend in request.plan.backends:
+        readiness_of = RELEASE_READINESS_BY_BACKEND.get(backend)
+        if readiness_of is None:
+            continue
+        readiness = readiness_of(ratified_ids)
+        readiness_detail[backend] = _check_dict(readiness)
+        if readiness.outcome != schemas.PASS:
+            blocking.append(
+                f"{backend}: the adapter's own release_gate_readiness() returns "
+                f"{readiness.outcome} against the ratified set {list(ratified_ids)} — "
+                + "; ".join(readiness.reasons)
+            )
+    detail["backend_release_readiness"] = readiness_detail
 
     # --- sealed candidate identity ------------------------------------------
     sealed = request.sealed
@@ -3054,12 +3543,16 @@ def phase_identity_preflight(request: T3Request) -> tuple:
     failing_cell_ids = [r.cell.cell_id for r in request.cell_results
                         if r.cell.gating and r.check.outcome != schemas.PASS]
     verifications: list = []
+    # Read the trust boundary ONCE per run, not once per waiver: two waivers in the
+    # same run must be judged against the same boundary, or a manifest edited
+    # mid-run would give one document an answer the other never faced.
+    boundary = human_only_boundary() if request.waivers else None
     for binding in request.waivers:
         verification = verify_waiver(
             binding, candidate_commit=sealed.candidate_commit,
             production_base_commit=sealed.production_base_commit,
             campaign_id=request.campaign_id, known_cell_ids=known_cell_ids,
-            failing_cell_ids=failing_cell_ids, now=request.now)
+            failing_cell_ids=failing_cell_ids, now=request.now, boundary=boundary)
         verifications.append(verification)
         if verification.check.outcome == schemas.FAIL:
             blocking.append(
@@ -3291,7 +3784,8 @@ def phase_performance_matrix(request: T3Request,
         owning = None
         by_backend = request.phase_protocols.get(cell.backend)
         if isinstance(by_backend, Mapping) and cell.workload_phase is not None:
-            owning = by_backend.get(cell.workload_phase)
+            bound = by_backend.get(cell.workload_phase)
+            owning = None if bound is None else bound.protocol_id
         if owning is None:
             blocking.append(
                 f"{cell.cell_id}: no protocol is declared for "
@@ -3554,6 +4048,61 @@ def _standing_binding_reasons(request: T3Request, standings: Sequence[PhaseStand
     return reasons
 
 
+def _phase_trade_realisation(trade: PhaseTradeException,
+                             standing_by_phase: Mapping) -> tuple:
+    """`(reasons, detail)` for whether the trade's gain ACTUALLY happened.
+
+    §1.6 makes a phase trade *"a pre-declared campaign exception"* naming the exact
+    regression band, the exact expected gain, and the roles affected. The gate
+    validated all three for STRUCTURE and then compared none of them to anything:
+    `expected_gain` was a number that had to be present and never had to be true.
+    So an operator-approved trade admitted its regression on the strength of a gain
+    nobody checked for, and a run where the gaining phase ALSO regressed passed
+    silently — the trade paying for itself with a loss.
+
+    T3 does not re-derive standings (`evaluator.statistics` owns the e-process), so
+    the comparison is over the standing VOCABULARY, which is the strongest
+    statement available here: the phase the trade was granted for must carry an
+    IMPROVED standing. `not worse` is not `+expected_gain`, and `we could not tell`
+    is not either — both are reported as a finding rather than admitted, because a
+    trade is the one place §1.6's conjunction is deliberately relaxed and a relaxed
+    conjunct nobody checks is a deleted one.
+
+    This never RE-GRADES the trade. It compares the pre-declaration to the
+    standings this run produced and says whether they agree.
+    """
+    label = f"{trade.backend}/{trade.regressing_phase}"
+    gaining = standing_by_phase.get((trade.backend, trade.gaining_phase))
+    detail = {"expected_gain": trade.expected_gain,
+              "gaining_phase": trade.gaining_phase,
+              "gaining_standing": None if gaining is None else gaining.standing,
+              "realised": False}
+    if gaining is None:
+        return ([
+            f"{label}: the phase-trade exception is priced at a gain of "
+            f"{trade.expected_gain} on {trade.backend}/{trade.gaining_phase}, and this "
+            "run produced no standing for that phase. §1.6 admits a regression in "
+            "exchange for a NAMED gain; a gain nobody measured is a regression with a "
+            "story attached."
+        ], detail)
+    if gaining.standing == STANDING_IMPROVED:
+        detail["realised"] = True
+        return ([], detail)
+    if gaining.standing == STANDING_REGRESSED:
+        return ([
+            f"{label}: the exception is priced at a gain of {trade.expected_gain} on "
+            f"{trade.gaining_phase}, and {trade.gaining_phase} REGRESSED. The realised "
+            "effect contradicts the pre-declared expected gain: the trade paid for a "
+            "regression with a second one."
+        ], detail)
+    return ([
+        f"{label}: the exception is priced at a gain of {trade.expected_gain} on "
+        f"{trade.gaining_phase}, whose standing is {gaining.standing!r}. The gain the "
+        "trade was granted for was not established, and §1.6 relaxes its conjunction "
+        "for a trade whose gain HAPPENED, not for one that was declared."
+    ], detail)
+
+
 def phase_capacity_utility(request: T3Request,
                            products: PreflightProducts) -> PhaseResult:
     """§10.2 phase 7 — VRAM/RAM/context-capacity non-inferiority; every protected
@@ -3605,9 +4154,37 @@ def phase_capacity_utility(request: T3Request,
     standings = [s for s in request.standings
                  if s.backend not in products.dropped_backends]
     by_backend: dict = {}
+    standing_by_phase: dict = {}
     for standing in standings:
         by_backend.setdefault(standing.backend, []).append(standing)
+        key = (standing.backend, standing.workload_phase)
+        prior = standing_by_phase.get(key)
+        if prior is not None:
+            # Every consumer of a per-phase standing in this gate is a dict keyed on
+            # (backend, phase) — here, `owned` below, and the trade-realisation
+            # comparison — so a second standing for one phase silently WINS, and the
+            # caller supplying it is the party being gated. Two standings that
+            # disagree are a contradiction the run must state, not a preference the
+            # gate resolves by insertion order.
+            blocking.append(
+                f"{standing.backend}/{standing.workload_phase}: this run supplies more "
+                f"than one standing for the phase ({prior.standing!r} from "
+                f"{prior.evidence_ref!r}, then {standing.standing!r} from "
+                f"{standing.evidence_ref!r}). §1.6 adjudicates ONE standing per phase; "
+                "a duplicate is resolved last-wins by every dict in this gate, which "
+                "makes the adjudicated verdict a function of the order the caller "
+                "listed them in.")
+        standing_by_phase[key] = standing
     detail["standings"] = [s.to_dict() for s in standings]
+
+    # A trade's expected_gain is a PRE-DECLARATION, and until now it was only ever
+    # validated for structure. Compare it to what this run actually measured.
+    for key, trade in sorted(trades.items()):
+        if trade.backend in products.dropped_backends:
+            continue
+        trade_reasons, trade_detail = _phase_trade_realisation(trade, standing_by_phase)
+        detail[f"phase_trade.{key[0]}.{key[1]}.realisation"] = trade_detail
+        blocking.extend(trade_reasons)
 
     # A standing is a SUMMARY of measured cells, not a declaration that stands in for
     # them. Nothing else in this gate joins the two: phase 4 measures cells and this
@@ -3642,7 +4219,8 @@ def phase_capacity_utility(request: T3Request,
                 )
         owned = {s.workload_phase: s for s in by_backend.get(backend, [])}
         improved = 0
-        for phase_name, protocol_id in declared_phases.items():
+        for phase_name, bound in declared_phases.items():
+            protocol_id = bound.protocol_id
             standing = owned.get(phase_name)
             if standing is None:
                 blocking.append(
@@ -3670,12 +4248,14 @@ def phase_capacity_utility(request: T3Request,
                         "approved phase-trade exception covers it (§1.6)."
                     )
                 else:
+                    gaining = standing_by_phase.get((backend, trade.gaining_phase))
                     notes.append(
                         f"{backend}/{phase_name}: regression admitted by the pre-declared "
                         f"phase-trade exception approved by {trade.approved_by} "
                         f"(band {list(trade.regression_band)}, expected gain "
-                        f"{trade.expected_gain} on {trade.gaining_phase}, roles "
-                        f"{list(trade.roles_affected)})."
+                        f"{trade.expected_gain} on {trade.gaining_phase}, realised "
+                        f"standing {None if gaining is None else gaining.standing!r}, "
+                        f"roles {list(trade.roles_affected)})."
                     )
             else:
                 blocking.append(
@@ -4416,10 +4996,26 @@ def calibration_request(freeze: PreservedFreeze, *, now: str,
     standings: list = []
 
     for name in freeze.backends:
-        protocols[name] = {"prefill": "P-BENCH-PREFILL-1", "decode": "P-BENCH-1"}
+        # A backend with a DECLARED phase vocabulary (`schemas.PHASES_BY_BACKEND`,
+        # i.e. the llama pair) was graded under Annex B protocols that are ratified,
+        # so the calibration replays it with a synthetic-but-bound ratification
+        # receipt — labelled as synthetic in the document digest's preimage, exactly
+        # like the host and storage receipts above. A backend with NO declared phase
+        # vocabulary is a speech backend whose family is a draft (§13.3, §13.4); its
+        # per-phase protocols are left UNBOUND, because the honest answer for those
+        # cells is "we do not know what they were graded under" and synthesising a
+        # ratification there would forge the very fact §10.4 is calibrating.
+        phases_declared = bool(schemas.PHASES_BY_BACKEND.get(name))
+        protocols[name] = {}
         for workload_phase, protocol_id, standing in (
                 ("prefill", "P-BENCH-PREFILL-1", STANDING_IMPROVED),
                 ("decode", "P-BENCH-1", STANDING_NON_INFERIOR)):
+            protocols[name][workload_phase] = (
+                ProtocolBinding(
+                    protocol_id=protocol_id,
+                    document_sha256=_calibration_digest(f"protocol:{protocol_id}"),
+                    ratified=True, ratified_at=now, annex="B")
+                if phases_declared else protocol_id)
             cell = Cell(
                 cell_id=f"{name}.{workload_phase}.production_optimal",
                 backend=name, release_phase=PHASE_PERFORMANCE_MATRIX,
@@ -4782,3 +5378,143 @@ def audit_phase_coverage_totality() -> schemas.Check:
     if unknown_cell_phases:
         reasons.append(f"CELL_PHASES names non-phases: {unknown_cell_phases}")
     return _fail(*reasons) if reasons else schemas.Check(schemas.PASS)
+
+
+#: Names the audited source MUST bind for the result to be ABOUT this module. Same
+#: device the adapters use: without an identity binding an AST audit is a property
+#: of whatever string it was handed, and the empty string satisfies "contains no
+#: defect" perfectly. Missing any of these is COULD_NOT_CHECK, never PASS.
+_READINESS_AUDIT_IDENTITY = (
+    "RELEASE_READINESS_BY_BACKEND", "declared_ratified_protocol_ids",
+    "phase_identity_preflight",
+)
+
+
+def audit_backend_readiness_is_consulted(source: Optional[str] = None) -> schemas.Check:
+    """Prove from this module's AST that phase 1 still ASKS the adapters.
+
+    `RELEASE_READINESS_BY_BACKEND` closes a gap whose whole shape was *"the adapters
+    knew and nothing called them"*. A registry is only worth as much as its call
+    site, and a deleted call site is invisible: every existing test would still pass,
+    because a release that consults nothing looks exactly like a release everything
+    approved of. So the call is a checked property, not a convention.
+
+    FAIL when `phase_identity_preflight` does not call a value taken out of the
+    registry. COULD_NOT_CHECK — never PASS — when the source cannot be read or
+    parsed, or when it does not bind the names above: an audit of a module that does
+    not contain the mechanism is not a passing audit of the mechanism.
+    """
+    if source is None:
+        try:
+            source = Path(__file__).read_text(encoding="utf-8")
+        except OSError as exc:
+            return _cnc(f"could not read {__file__}: {exc}")
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as exc:
+        return _cnc(f"could not parse module: {exc}")
+
+    bound: set = set()
+    preflight = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef):
+            bound.add(node.name)
+            if node.name == "phase_identity_preflight":
+                preflight = node
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    bound.add(target.id)
+    absent = [name for name in _READINESS_AUDIT_IDENTITY if name not in bound]
+    if absent:
+        return _cnc(
+            f"the audited source does not bind {absent}, so it is not this module and "
+            "the result would be a property of whatever was handed in. An audit that "
+            "an empty string can pass is not an audit.")
+    if preflight is None:  # pragma: no cover - unreachable while the identity holds
+        return _cnc("the audited source binds no `phase_identity_preflight` function")
+
+    # Names inside phase 1 that were taken OUT of the registry, and then the proof
+    # that one of them is actually called. Both halves matter: reading the registry
+    # into a variable and never calling it is precisely the pre-AK5 state.
+    taken: set = set()
+    for node in ast.walk(preflight):
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+            func = node.value.func
+            if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name) \
+                    and func.value.id == "RELEASE_READINESS_BY_BACKEND":
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        taken.add(target.id)
+    if not taken:
+        return _fail(
+            "phase_identity_preflight does not read RELEASE_READINESS_BY_BACKEND. The "
+            "adapters expose release_gate_readiness() and the release plane is back to "
+            "never calling it, which is the AK5 defect this registry closed.")
+    called = {node.func.id for node in ast.walk(preflight)
+              if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)}
+    if not (taken & called):
+        return _fail(
+            f"phase_identity_preflight reads RELEASE_READINESS_BY_BACKEND into {sorted(taken)} "
+            "and never calls it. A readiness predicate that is looked up and not invoked "
+            "is the same silence as not looking it up at all.")
+
+    # ...and the third half, which the first two do not imply. Reading the registry
+    # and calling what it returns still permits `readiness = readiness_of(ids)` with
+    # the verdict then dropped on the floor — which is INDISTINGUISHABLE, in every
+    # artifact this gate emits, from a release the adapters approved of. That is the
+    # same shape as the pre-AK5 state, one step further in. So the verdict must be
+    # shown to reach `blocking`.
+    verdicts = {target.id
+                for node in ast.walk(preflight)
+                if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call)
+                and isinstance(node.value.func, ast.Name) and node.value.func.id in taken
+                for target in node.targets if isinstance(target, ast.Name)}
+    if not verdicts:
+        return _fail(
+            "phase_identity_preflight calls the readiness predicate without binding its "
+            "result, so the verdict cannot be adjudicated. A check whose answer is "
+            "discarded is a check that was not made.")
+    reached = _names_reaching_blocking(preflight)
+    if not (verdicts & reached):
+        return _fail(
+            f"phase_identity_preflight computes the readiness verdict into "
+            f"{sorted(verdicts)} and nothing it computes reaches `blocking`. A "
+            "COULD_NOT_CHECK from an adapter that is never appended is a release the "
+            "gate consulted and then ignored, which reads in every emitted artifact "
+            "exactly like a release the adapters approved of.")
+    return schemas.Check(schemas.PASS)
+
+
+#: The two ways this gate turns a finding into a refusal. Both are accepted, because
+#: an audit that recognised only the `if`-then-append shape would FAIL the moment
+#: somebody factored the reasons out into a helper — a guard that forbids a
+#: legitimate rewrite of the thing it is guarding.
+_BLOCKING_SINKS = ("append", "extend")
+
+
+def _blocking_calls(node: ast.AST) -> list:
+    """Every `blocking.append(...)` / `blocking.extend(...)` under `node`."""
+    return [n for n in ast.walk(node)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+            and n.func.attr in _BLOCKING_SINKS
+            and isinstance(n.func.value, ast.Name) and n.func.value.id == "blocking"]
+
+
+def _names_reaching_blocking(func: ast.AST) -> set:
+    """Names whose value demonstrably reaches `blocking` inside `func`.
+
+    Two routes, and no attempt at a third: a name **read inside the arguments of** a
+    `blocking.append/extend` call, and a name **tested by an `if` whose body**
+    appends to `blocking`. Anything subtler than that is dataflow analysis, and an
+    audit that guesses is worse than one that says what it recognises.
+    """
+    reaching: set = set()
+    for call in _blocking_calls(func):
+        for arg in list(call.args) + [kw.value for kw in call.keywords]:
+            reaching.update(n.id for n in ast.walk(arg) if isinstance(n, ast.Name))
+    for node in ast.walk(func):
+        if isinstance(node, ast.If) and any(
+                _blocking_calls(stmt) for stmt in node.body):
+            reaching.update(n.id for n in ast.walk(node.test) if isinstance(n, ast.Name))
+    return reaching

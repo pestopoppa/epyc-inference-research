@@ -67,9 +67,11 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import posixpath
 import re
 from dataclasses import dataclass
 from datetime import datetime
+from fnmatch import fnmatchcase
 from typing import Any, Callable, Mapping, Optional
 
 # =============================================================================
@@ -601,6 +603,323 @@ def find_authority_flavoured_keys(obj: Any, path: str = "$") -> list:
         for i, value in enumerate(obj):
             found.extend(find_authority_flavoured_keys(value, f"{path}[{i}]"))
     return found
+
+
+# =============================================================================
+# Machine actors and the trust boundary (§1.3, §10.4)
+#
+# Both halves of this section are SHARED VOCABULARY, and they live here for one
+# reason: they were owned by `release/packager.py`, one layer above the gate that
+# needs them, and a rule enforced only at the outer layer is not enforced. A
+# waiver attributed to `autokernel` verified as human-attested inside
+# `t3.verify_waiver` — turning FAIL into PASS_WITH_WAIVER — and was refused only
+# when the packager later assembled a package, so any caller reaching T3 directly
+# bypassed the refusal entirely. `schemas.py` is the module every plane already
+# imports, so it is the only place the two planes can share one answer.
+#
+# Everything here is PURE. This module performs no I/O (see the header), so the
+# trust-boundary manifest is PARSED here and READ by the caller that owns the
+# filesystem — `t3.human_only_boundary()`.
+# =============================================================================
+
+#: Tokens that betray a MACHINE actor in an identity field. Matched on word
+#: boundaries against the lowercased identity, so a human called "Daniele" is
+#: unaffected and `autokernel-daemon` is not. §10.4 makes a waiver human-authored
+#: by definition and `MEASUREMENT.md:140-142` makes freeze/cutover a human-only
+#: write; an automated identity in an attestation field is the loop authorising
+#: itself.
+MACHINE_ACTOR_TOKENS = frozenset({
+    "autokernel", "autopilot", "controller", "planner", "critic", "packager",
+    "evaluator", "daemon", "agent", "subagent", "bot", "cron", "timer", "scheduler",
+    "loop", "runner", "worker", "automation", "robot", "script",
+})
+
+#: Every key an attestation may use to name WHO authorised it. Enumerated once:
+#: a guard that scans `authorized_by` and not `approved_by` is a guard with a
+#: rename-shaped hole.
+ACTOR_ATTRIBUTION_FIELDS = (
+    "authorized_by", "ratified_by", "approved_by", "attested_by", "granted_by",
+)
+
+_IDENTITY_TOKEN_RE = re.compile(r"[a-z0-9]+")
+_DIGITS = "0123456789"
+
+#: How many adjacent alphanumeric runs may be re-joined when looking for a token.
+#: Bounded so a pathological identity cannot cost O(n^2) — four is past every
+#: separator spelling of every token in the set.
+_MAX_JOINED_RUNS = 4
+#: And a ceiling on how many runs are considered at all, for the same reason.
+_MAX_IDENTITY_RUNS = 64
+
+
+def identity_candidates(identity: Any) -> frozenset:
+    """Every string an identity could be SPELLING, for machine-token matching.
+
+    Splitting on non-alphanumerics alone was a rename-shaped hole: `autokernel` was
+    refused and `auto-kernel`, `auto_kernel`, `auto.kernel`, `auto pilot` and
+    `autokernel2` all sailed through, so the guard was walk-aroundable by typing a
+    separator. So the candidates are the runs, the concatenations of ADJACENT runs
+    (bounded), and each of those with leading/trailing digits removed.
+
+    It is deliberately NOT substring matching, because substring matching is the
+    thing that would break the compliant path: `"scriptor"` contains `script` and
+    is a perfectly good human handle. A candidate must be a whole re-joining, so
+    `"scriptor"` yields only `{"scriptor"}` and matches nothing.
+    """
+    if not isinstance(identity, str):
+        return frozenset()
+    runs = _IDENTITY_TOKEN_RE.findall(identity.lower())[:_MAX_IDENTITY_RUNS]
+    out: set = set()
+    for start in range(len(runs)):
+        joined = ""
+        for offset in range(min(_MAX_JOINED_RUNS, len(runs) - start)):
+            joined += runs[start + offset]
+            out.add(joined)
+            out.add(joined.strip(_DIGITS))
+    out.discard("")
+    return frozenset(out)
+
+
+def machine_actor_tokens(identity: Any) -> tuple:
+    """The machine-actor tokens `identity` contains, sorted; `()` for a human name.
+
+    A non-string identity yields `()` rather than raising: callers that require a
+    string check that separately, and a scanner that raised would be one a caller
+    could disable by passing the wrong type.
+    """
+    return tuple(sorted(identity_candidates(identity) & MACHINE_ACTOR_TOKENS))
+
+
+def machine_attributions(document: Any) -> tuple:
+    """`(field, identity, tokens)` for every attribution field naming a machine."""
+    if not isinstance(document, Mapping):
+        return ()
+    found: list = []
+    for field_name in ACTOR_ATTRIBUTION_FIELDS:
+        identity = document.get(field_name)
+        tokens = machine_actor_tokens(identity)
+        if tokens:
+            found.append((field_name, identity, tokens))
+    return tuple(found)
+
+
+#: Where the trust boundary is DECLARED, repo-relative inside epyc-root. This
+#: module never restates its contents: the manifest is the single source of truth,
+#: it is human-amendment-only (its own preamble, plus a PreToolUse hook and a
+#: `.sha256` pin), and a copy here would be a second boundary that drifts.
+HUMAN_ONLY_PATHS_MANIFEST = "coordination/session-bus/human_only_paths.yaml"
+
+#: The one operator-owned root this module can name without the manifest: the
+#: root every preserved operator attestation the release plane reads already
+#: lives under — `artifacts/operator/ratify_v8_final_freeze_20260725.json`,
+#: `artifacts/operator/ratify_speech_kernel_freeze_20260731.json`, the
+#: measurement-v2 ratification ledger (`MEASUREMENT.md:2`), the §11.6 freeze
+#: receipt paths, and both draft speech protocol families. It is a ROOT, not a
+#: path list, and it is deliberately additive to the manifest rather than a
+#: substitute for it: the manifest's `paths:` block does not yet name a waiver
+#: home (§3.6's open "add … to human_only_paths.yaml" item, which is a human-only
+#: amendment), and when it does, this check picks it up with no code change.
+OPERATOR_ATTESTATION_ROOT = "artifacts/operator"
+
+#: Host roots the repos are checked out under (CLAUDE.md "Repository Map"). Used
+#: ONLY to reduce an absolute citation to the repo-relative form the manifest is
+#: written in. It never widens the boundary: a path under none of these roots
+#: yields no repo-relative form at all and therefore matches nothing.
+REPO_CHECKOUT_ROOTS = ("/workspace/repos", "/workspace", "/mnt/raid0/llm")
+
+#: The directory names that ARE a repository checkout when they appear directly
+#: under a checkout root — CLAUDE.md's "Repository Map", with the kernel trees
+#: DERIVED from `SOURCE_TREE_BY_BACKEND` so a backend cannot gain a tree this set
+#: does not know about.
+#:
+#: This set is what makes the repo-name strip in `repo_relative_forms` safe. The
+#: strip exists so an absolute citation can be matched against a manifest glob
+#: written repo-relative (`orchestration/instrument_eras.yaml` under
+#: `/workspace/repos/epyc-orchestrator/`). Applied to ANY leading segment it
+#: instead MANUFACTURES a repo-relative form out of a directory that is not a
+#: repository: `/mnt/raid0/llm/tmp/artifacts/operator/w.json` reduced to
+#: `artifacts/operator/w.json` and read as the operator attestation root, and
+#: `/mnt/raid0/llm/tmp/orchestration/instrument_eras.yaml` matched the era-registry
+#: glob. `/mnt/raid0/llm/tmp/` is the loop's OWN scratch root (it is where
+#: `resource/device_claim.py` puts its lock files), so that was an operator-owned
+#: verdict obtainable with `mkdir -p`.
+REPO_CHECKOUT_NAMES = frozenset(SOURCE_TREES) | frozenset({
+    "epyc-root", "epyc-orchestrator", "epyc-inference-research", "epyc-llama",
+    "epyc-whisper", "epyc-qwentts",
+})
+
+
+@dataclass(frozen=True)
+class TrustBoundary:
+    """The human-only path set, as parsed from the manifest.
+
+    `readable` is False for an absent, empty, or foreign document. That state is
+    load-bearing: `operator_owned_path_check` reports COULD_NOT_CHECK rather than
+    PASS when the boundary is unreadable, so deleting or emptying the manifest can
+    never widen what counts as operator-owned.
+    """
+
+    globs: tuple = ()
+    branches: tuple = ()
+    source: str = ""
+
+    @property
+    def readable(self) -> bool:
+        return bool(self.globs)
+
+    def to_dict(self) -> dict:
+        return {"globs": list(self.globs), "branches": list(self.branches),
+                "source": self.source, "readable": self.readable}
+
+
+def parse_trust_boundary(text: Any, *, source: str = "") -> TrustBoundary:
+    """Parse `human_only_paths.yaml` text into the glob set it declares.
+
+    Pure: text in, data out. Returns an UNREADABLE boundary (`globs=()`) for text
+    that is absent, unparsable, or not this schema — never a boundary that happens
+    to be empty, because an empty boundary that read as usable would admit
+    everything the manifest exists to refuse.
+    """
+    if not isinstance(text, str) or not text.strip():
+        return TrustBoundary(source=source)
+    try:
+        import yaml  # declared in pyproject as `pyyaml>=6.0`
+    except ImportError:  # pragma: no cover - dependency is declared
+        return TrustBoundary(source=source)
+    try:
+        loaded = yaml.safe_load(text)
+    except Exception:  # noqa: BLE001 - any parse failure is "not readable"
+        return TrustBoundary(source=source)
+    if not isinstance(loaded, Mapping):
+        return TrustBoundary(source=source)
+    if not str(loaded.get("schema_version", "")).startswith(
+            "session_bus.human_only_paths."):
+        # A foreign document is not this boundary. Reading its `paths:` block
+        # anyway is how an audit gets satisfied by a file somebody swapped.
+        return TrustBoundary(source=source)
+
+    def _globs(key: str) -> tuple:
+        entries = loaded.get(key)
+        if not isinstance(entries, list):
+            return ()
+        out = []
+        for entry in entries:
+            if not isinstance(entry, Mapping):
+                continue
+            glob = entry.get("glob")
+            if isinstance(glob, str) and glob.strip():
+                out.append(glob.strip())
+        return tuple(dict.fromkeys(out))
+
+    return TrustBoundary(globs=_globs("paths"), branches=_globs("branches"),
+                         source=source)
+
+
+def _normalised_path(path: str) -> str:
+    cleaned = path.strip()
+    if not cleaned:
+        return ""
+    normalised = posixpath.normpath(cleaned)
+    return normalised.rstrip("/") or "/"
+
+
+def repo_relative_forms(document_path: Any) -> tuple:
+    """The repo-relative form(s) of a citation, for matching against the manifest.
+
+    A relative path is already in the manifest's vocabulary. An absolute path is
+    reduced at a known checkout root, and the repo-name segment is offered as a
+    second form so `/workspace/repos/epyc-orchestrator/orchestration/x.yaml`
+    matches the manifest's `orchestration/x.yaml`. A path under no checkout root
+    (`/tmp/artifacts/operator/w.json`) reduces to NOTHING and therefore matches
+    nothing — the containment test is on the resolved root, never on a substring.
+
+    The repo-name strip is taken ONLY when the segment it removes is in
+    `REPO_CHECKOUT_NAMES`. Stripping any leading segment does not reduce a
+    citation, it INVENTS one: `/mnt/raid0/llm/tmp/artifacts/operator/w.json` became
+    `artifacts/operator/w.json` and read as operator-owned, and
+    `/mnt/raid0/llm/tmp/orchestration/instrument_eras.yaml` matched the human-only
+    era-registry glob. Both are inside the loop's own scratch root, so both were a
+    trust-boundary PASS obtainable with `mkdir -p`.
+    """
+    if not isinstance(document_path, str):
+        return ()
+    normalised = _normalised_path(document_path)
+    if not normalised or normalised == "/":
+        return ()
+    if not normalised.startswith("/"):
+        # `..` escapes the root it was resolved against, so it names no repo-
+        # relative location at all.
+        return () if normalised.split("/")[0] == ".." else (normalised,)
+    for root in REPO_CHECKOUT_ROOTS:
+        if not normalised.startswith(root + "/"):
+            continue
+        rest = normalised[len(root) + 1:]
+        if not rest:
+            return ()
+        forms = [rest]
+        head, _, tail = rest.partition("/")
+        if tail and head in REPO_CHECKOUT_NAMES:
+            forms.append(tail)
+        return tuple(dict.fromkeys(forms))
+    return ()
+
+
+def _under(path: str, root: str) -> bool:
+    return path == root or path.startswith(root + "/")
+
+
+def operator_owned_path_check(document_path: Any, *,
+                              boundary: Optional[TrustBoundary] = None) -> Check:
+    """Is `document_path` somewhere an OPERATOR owns, and a machine does not?
+
+    §10.4 requires an operator waiver to be *"stored under the trust-boundary path
+    set"*. Without this, `WaiverBinding.document_path` is free text: a document the
+    loop wrote to its own scratch directory hash-verifies exactly as well as a
+    ratified attestation, because a hash proves only that the bytes did not change
+    after somebody quoted them.
+
+    Three outcomes, and the third is why this is safe to consult:
+
+      * PASS — under `OPERATOR_ATTESTATION_ROOT`, or matching a glob the manifest
+        declares.
+      * COULD_NOT_CHECK — not under the attestation root AND the boundary is
+        unreadable. The manifest might have named this path; nobody can say.
+      * FAIL — the boundary is readable and names nothing that covers this path,
+        or the path resolves to no repo-relative location at all.
+
+    Deleting, emptying, or swapping the manifest therefore turns FAIL into
+    COULD_NOT_CHECK, never into PASS — and callers that treat COULD_NOT_CHECK as
+    "not verified" (`t3.verify_waiver` does) stay fail-closed either way.
+    """
+    if not isinstance(document_path, str) or not document_path.strip():
+        return Check(FAIL, ("document_path: a waiver that names no location cannot be "
+                            "shown to live anywhere an operator owns",))
+    forms = repo_relative_forms(document_path)
+    if not forms:
+        return Check(FAIL, (
+            f"document_path: {document_path!r} resolves to no repo-relative location "
+            f"(checkout roots {list(REPO_CHECKOUT_ROOTS)}), so it is outside every "
+            "path the trust boundary can speak about",))
+    for form in forms:
+        if _under(form, OPERATOR_ATTESTATION_ROOT):
+            return Check(PASS)
+    if boundary is not None and boundary.readable:
+        for form in forms:
+            for glob in boundary.globs:
+                if fnmatchcase(form, glob):
+                    return Check(PASS)
+        return Check(FAIL, (
+            f"document_path: {document_path!r} is neither under "
+            f"{OPERATOR_ATTESTATION_ROOT!r} nor matched by any human-only path in "
+            f"{boundary.source or HUMAN_ONLY_PATHS_MANIFEST}. §10.4 stores a waiver "
+            "under the trust-boundary path set; a document at a path the loop can "
+            "write is a document the loop can author.",))
+    return Check(COULD_NOT_CHECK, (
+        f"document_path: {document_path!r} is not under "
+        f"{OPERATOR_ATTESTATION_ROOT!r}, and the trust-boundary manifest "
+        f"({boundary.source if boundary is not None else HUMAN_ONLY_PATHS_MANIFEST}) "
+        "could not be read, so whether it is operator-owned is unknown. An unreadable "
+        "boundary is not an empty one.",))
 
 
 # =============================================================================
@@ -1724,7 +2043,8 @@ def validate_release_package(obj: Any) -> list:
 # epyc.autokernel.operator_waiver.v1 (§10.4)
 # =============================================================================
 
-def validate_operator_waiver(obj: Any) -> list:
+def validate_operator_waiver(obj: Any, *, document_path: Any = _MISSING,
+                             boundary: Optional[TrustBoundary] = None) -> list:
     """Validate an operator waiver — human-authored, first-class T3 input.
 
     A binary PASS/FAIL gate would have blocked v8: its ratification recorded
@@ -1738,10 +2058,34 @@ def validate_operator_waiver(obj: Any) -> list:
     and an operator attestation is exactly the thing the machine records may not
     contain. The evaluator verifies its hash and predicate; it never judges its
     merits (§10.4).
+
+    TWO checks here are about WHO wrote it, not what it says, and neither is a
+    merits judgement:
+
+      * `authorized_by` may not name a machine actor. §10.4 makes the waiver
+        human-authored by definition, so a document the loop attributed to itself
+        is not a waiver with a bad author, it is not a waiver.
+      * `document_path`, WHEN THE CALLER KNOWS IT, must resolve under an
+        operator-owned path (`operator_owned_path_check`). The path is not carried
+        by the record — it is a fact about where the record was read from — so it
+        arrives as a keyword. A caller that omits it (journal replay, registry
+        dispatch, a record quoted inside another document) validates the document
+        and makes no claim about its provenance; the gate that acts on a waiver
+        (`t3.verify_waiver`) always knows the path and always checks it.
+
+    A COULD_NOT_CHECK from the path check is reported as a violation here on
+    purpose: this function has two states, and a provenance it cannot establish is
+    not one it may assume. Callers that need the third state call
+    `operator_owned_path_check` directly.
     """
     out: list = []
     if not _check_schema_header(obj, SCHEMA_OPERATOR_WAIVER, out):
         return out
+
+    if document_path is not _MISSING:
+        located = operator_owned_path_check(document_path, boundary=boundary)
+        if located.outcome != PASS:
+            out.extend(located.reasons)
 
     _need_str(obj, "waiver_id", out, "")
     _need_id(obj, "campaign_id", out, "", "ak-")
@@ -1767,6 +2111,12 @@ def validate_operator_waiver(obj: Any) -> list:
     _need_list(obj, "consequences", out, "", non_empty=True, item_type=str,
                item_desc="a forfeited claim")
     _need_str(obj, "authorized_by", out, "")
+    for field_name, identity, tokens in machine_attributions(obj):
+        out.append(
+            f"{field_name}: {identity!r} names a machine actor "
+            f"({', '.join(tokens)}). §10.4 waivers are human-authored "
+            "(MEASUREMENT.md:140-142); a waiver the loop attributed to itself is "
+            "the loop excusing its own failing cell.")
 
     expiry = _need_dict(obj, "expiry", out, "")
     if expiry is not _MISSING:
@@ -1843,6 +2193,10 @@ __all__ = [
     "DURABILITY_CLASSES", "CANDIDATE_STATUSES", "CHAMPION_STATUSES",
     "T3_VERDICTS", "NON_RETRIEVABLE_FIELDS", "ANCHOR_VOID_REASONS",
     "VOID_FLAG_PREFIX",
+    "MACHINE_ACTOR_TOKENS", "ACTOR_ATTRIBUTION_FIELDS",
+    "HUMAN_ONLY_PATHS_MANIFEST", "OPERATOR_ATTESTATION_ROOT", "REPO_CHECKOUT_ROOTS",
+    "TrustBoundary", "parse_trust_boundary", "repo_relative_forms",
+    "machine_actor_tokens", "machine_attributions", "operator_owned_path_check",
     "canonical_json", "canonical_bytes", "content_hash", "retrievable_view",
     "candidate_natural_key", "find_authority_flavoured_keys",
     "is_placeholder_digest", "declared_anchor_void_reasons",

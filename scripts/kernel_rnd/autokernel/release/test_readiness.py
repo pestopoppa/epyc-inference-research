@@ -210,10 +210,12 @@ def mechanisms() -> tuple:
     return (
         R.MechanismConfirmation(member_candidate_id=MEMBER_A,
                                 predicted_mechanism="fewer L3 misses per token",
-                                confirmed=True, event_id="ake-mech-a"),
+                                confirmed=True, event_id="ake-mech-a",
+                                measured_at=NOW),
         R.MechanismConfirmation(member_candidate_id=MEMBER_B,
                                 predicted_mechanism="one fewer kernel launch",
-                                confirmed=True, event_id="ake-mech-b"),
+                                confirmed=True, event_id="ake-mech-b",
+                                measured_at=NOW),
     )
 
 
@@ -879,10 +881,19 @@ class CapacityTest(unittest.TestCase):
         self.assertEqual(signal.standing, R.STANDING_NOT_MET)
 
     def test_another_backends_capacity_delta_does_not_satisfy_this_one(self):
+        """Refused at the door now — strictly stronger than 'does not satisfy'.
+
+        It used to be silently DROPPED by `_check_capacity`'s backend filter, so
+        the axis reported COULD_NOT_CHECK for *"nothing was measured"* rather than
+        for *"you handed me another backend's record"*, and the same filter made a
+        foreign REGRESSION vanish into a PASS. See
+        `TheOneBackendDoorCoversCapacityDeltasTest`.
+        """
         foreign = (R.CapacityDelta(kind=R.CAPACITY_RAM, backend="llama_gpu",
                                    delta=0.0, event_id="ake-cap", measured_at=NOW),)
-        signal = green_signal(capacity_deltas=foreign)
-        self.assertEqual(signal.matrix.capacity.outcome, S.COULD_NOT_CHECK)
+        with self.assertRaises(R.CrossBackendComposite) as caught:
+            green_signal(capacity_deltas=foreign)
+        self.assertIn("one backend", str(caught.exception))
 
 
 class MechanismTest(unittest.TestCase):
@@ -891,7 +902,7 @@ class MechanismTest(unittest.TestCase):
         unconfirmed = (
             R.MechanismConfirmation(
                 member_candidate_id=MEMBER_A, predicted_mechanism="fewer L3 misses",
-                confirmed=False, event_id="ake-mech-a",
+                confirmed=False, event_id="ake-mech-a", measured_at=NOW,
                 explanation="the counter moved the other way and nobody knows why"),
             mechanisms()[1],
         )
@@ -908,14 +919,14 @@ class MechanismTest(unittest.TestCase):
         with self.assertRaises(R.CellInadmissible) as caught:
             R.MechanismConfirmation(member_candidate_id=MEMBER_A,
                                     predicted_mechanism="magic", confirmed=False,
-                                    event_id="ake-mech")
+                                    event_id="ake-mech", measured_at=NOW)
         self.assertIn("keep measuring, not to land", str(caught.exception))
 
     def test_a_confirmation_for_a_non_member_is_flagged(self):
         stray = mechanisms() + (
             R.MechanismConfirmation(member_candidate_id="akc-stranger",
                                     predicted_mechanism="x", confirmed=True,
-                                    event_id="ake-mech-x"),)
+                                    event_id="ake-mech-x", measured_at=NOW),)
         signal = green_signal(mechanisms=stray)
         self.assertEqual(signal.matrix.mechanism.outcome, S.COULD_NOT_CHECK)
 
@@ -1517,11 +1528,11 @@ class MechanismConfirmationsAreNotDeduplicatedTest(unittest.TestCase):
     def _contradictory(self):
         unconfirmed = R.MechanismConfirmation(
             member_candidate_id=MEMBER_A, predicted_mechanism="fewer L3 misses",
-            confirmed=False, event_id="ake-mech-a-negative",
+            confirmed=False, event_id="ake-mech-a-negative", measured_at=NOW,
             explanation="the predicted counter did not move on the composition")
         confirmed = R.MechanismConfirmation(
             member_candidate_id=MEMBER_A, predicted_mechanism="fewer L3 misses",
-            confirmed=True, event_id="ake-mech-a-positive")
+            confirmed=True, event_id="ake-mech-a-positive", measured_at=LATER)
         return unconfirmed, confirmed, mechanisms()[1]
 
     def test_an_unconfirmed_member_is_not_overwritten_by_a_later_confirmation(self):
@@ -1693,6 +1704,502 @@ class StandingIsDerivedNotStampedTest(unittest.TestCase):
         self.assertEqual(strict.standing, R.STANDING_UNDETERMINED)
         self.assertEqual(dataclasses.replace(strict).standing,
                          R.STANDING_UNDETERMINED)
+
+
+# ===========================================================================
+# 14. The carried-forward red-team items, closed
+#
+# Every test in this section fails against the module as it stood at 4e96fdc0.
+# Each class states the hole, and each class carries a COMPLIANT-PATH control —
+# a test proving the new refusal does not forbid the idiom it exists to protect.
+# A guard that bans its own legitimate usage is the recurring defect in this
+# package, so the control is part of the fix rather than an extra.
+# ===========================================================================
+
+class EveryPublicDoorHoldsTheBackendAndChampionTest(unittest.TestCase):
+    """AK-D12 was one function deep.
+
+    *"No function in this module ever sees two backends' measurements at once"* was
+    true of `compute_readiness()` and false of the module: `check_matrix_coverage()`
+    and `phase_standing()` are both exported, both fold the cells they are handed
+    into one per-backend statement, and neither looked at `cell.backend`.
+    `llama_cpu` and `llama_gpu` share the phase names `prefill` and `decode`, so
+    nothing else filtered a GPU cell out of a CPU phase — it was judged, counted
+    toward coverage and co-residency, and could be SELECTED as the CPU phase's
+    readiness figure. That is the reconstructed net `gpu-cross-device.md:106-111`
+    forbids outright.
+    """
+
+    def _gpu_cell(self, cell_id: str = "cell-gpu-decode") -> R.T2Cell:
+        return cell(cell_id, backend="llama_gpu", protocol_id=GPU_PROTOCOL,
+                    event_id=f"ake-{cell_id}")
+
+    def test_check_matrix_coverage_refuses_a_foreign_backend_cell(self):
+        with self.assertRaises(R.CrossBackendComposite) as caught:
+            R.check_matrix_coverage(spec=matrix_spec(), champion=champion(),
+                                    cells=green_cells() + (self._gpu_cell(),),
+                                    capacity_deltas=capacity(),
+                                    mechanisms=mechanisms())
+        self.assertIn("one backend", str(caught.exception))
+
+    def test_check_matrix_coverage_refuses_a_member_candidates_cell(self):
+        member_cell = cell("cell-decode-member", candidate_id=MEMBER_A,
+                           event_id="ake-member")
+        with self.assertRaises(R.ChampionMismatch) as caught:
+            R.check_matrix_coverage(spec=matrix_spec(), champion=champion(),
+                                    cells=green_cells() + (member_cell,),
+                                    capacity_deltas=capacity(),
+                                    mechanisms=mechanisms())
+        self.assertIn("never by adding local percentages", str(caught.exception))
+
+    def test_phase_standing_refuses_a_foreign_backend_cell(self):
+        """The leak with teeth: the GPU cell was eligible to BE the CPU figure."""
+        strong_gpu = cell("cell-gpu-fast", backend="llama_gpu",
+                          protocol_id=GPU_PROTOCOL, event_id="ake-gpu-fast",
+                          non_inferiority=non_inferior_evidence(
+                              value=0.99, effect_per_block=0.99))
+        with self.assertRaises(R.CrossBackendComposite) as caught:
+            R.phase_standing(backend="llama_cpu", phase="decode",
+                             objective=objective(),
+                             cells=(cell("cell-decode-a"), strong_gpu))
+        self.assertIn("one backend", str(caught.exception))
+
+    # -- compliant-path controls ------------------------------------------
+
+    def test_check_matrix_coverage_still_accepts_its_own_backends_matrix(self):
+        coverage = R.check_matrix_coverage(
+            spec=matrix_spec(), champion=champion(), cells=green_cells(),
+            capacity_deltas=capacity(), mechanisms=mechanisms())
+        self.assertEqual(coverage.overall.outcome, S.PASS, coverage.blockers)
+        self.assertEqual(coverage.blockers, ())
+
+    def test_phase_standing_still_judges_its_own_backends_cells(self):
+        standing = R.phase_standing(
+            backend="llama_cpu", phase="decode", objective=objective(),
+            cells=tuple(c for c in green_cells() if c.phase == "decode"))
+        self.assertEqual(standing.non_inferior.outcome, S.PASS)
+        self.assertIsNotNone(standing.figure)
+
+
+class ConfirmationEvidenceMustPostdateTheLineageTest(unittest.TestCase):
+    """Capacity and mechanism evidence was exempt from the ordering it is under.
+
+    The protocol admits confirmation evidence *"gathered after the candidate
+    entered the lineage"*, and `_check_lineage_ordering` read cells only. So a RAM
+    delta timestamped before the champion existed closed `CAPACITY_DELTA_ABSENT`,
+    and — worse — `MechanismConfirmation` carried no timestamp at all, so the
+    CUMULATIVE confirmation on the composed champion could be the member's own
+    local receipt from before the composition existed, which is exactly what its
+    own docstring says does not carry forward.
+    """
+
+    def test_a_capacity_delta_measured_before_lineage_entry_blocks(self):
+        early = (R.CapacityDelta(kind=R.CAPACITY_RAM, backend="llama_cpu", delta=0.0,
+                                 event_id="ake-cap-early", measured_at=BEFORE),)
+        signal = green_signal(capacity_deltas=early)
+        self.assertEqual(signal.matrix.lineage_ordering.outcome, S.FAIL)
+        self.assertIn(R.BLOCK_CONFIRMATION_EVIDENCE_PREDATES_LINEAGE, signal.blockers)
+        self.assertIn("ake-cap-early",
+                      " ".join(signal.matrix.lineage_ordering.reasons))
+
+    def test_a_mechanism_confirmation_measured_before_lineage_entry_blocks(self):
+        early = (
+            R.MechanismConfirmation(member_candidate_id=MEMBER_A,
+                                    predicted_mechanism="fewer L3 misses per token",
+                                    confirmed=True, event_id="ake-mech-early",
+                                    measured_at=BEFORE),
+            mechanisms()[1],
+        )
+        signal = green_signal(mechanisms=early)
+        self.assertEqual(signal.matrix.lineage_ordering.outcome, S.FAIL)
+        self.assertIn(R.BLOCK_CONFIRMATION_EVIDENCE_PREDATES_LINEAGE, signal.blockers)
+        self.assertIn("is not a receipt about it",
+                      " ".join(signal.matrix.lineage_ordering.reasons))
+        self.assertNotEqual(signal.standing, R.STANDING_MET)
+
+    def test_a_mechanism_confirmation_cannot_be_built_without_its_timestamp(self):
+        """The field is required, so the ordering cannot be escaped by omission."""
+        with self.assertRaises(TypeError):
+            R.MechanismConfirmation(member_candidate_id=MEMBER_A,
+                                    predicted_mechanism="fewer L3 misses",
+                                    confirmed=True, event_id="ake-mech")
+
+    def test_a_mechanism_timestamp_that_cannot_be_ordered_is_refused(self):
+        with self.assertRaises(R.CellInadmissible) as caught:
+            R.MechanismConfirmation(member_candidate_id=MEMBER_A,
+                                    predicted_mechanism="fewer L3 misses",
+                                    confirmed=True, event_id="ake-mech",
+                                    measured_at="2026-08-03T12:00:00")
+        self.assertIn("cannot be ordered", str(caught.exception))
+
+    # -- compliant-path control -------------------------------------------
+
+    def test_evidence_gathered_after_entry_is_still_accepted(self):
+        late = (
+            R.MechanismConfirmation(member_candidate_id=MEMBER_A,
+                                    predicted_mechanism="fewer L3 misses per token",
+                                    confirmed=True, event_id="ake-mech-a",
+                                    measured_at=LATER),
+            R.MechanismConfirmation(member_candidate_id=MEMBER_B,
+                                    predicted_mechanism="one fewer kernel launch",
+                                    confirmed=True, event_id="ake-mech-b",
+                                    measured_at=LATER),
+        )
+        signal = green_signal(
+            mechanisms=late,
+            capacity_deltas=(R.CapacityDelta(kind=R.CAPACITY_RAM, backend="llama_cpu",
+                                             delta=0.0, event_id="ake-cap-late",
+                                             measured_at=LATER),))
+        self.assertEqual(signal.matrix.lineage_ordering.outcome, S.PASS)
+        self.assertEqual(signal.standing, R.STANDING_MET, signal.blockers)
+
+
+class MatrixRequirementsCountOnlyReadableCellsTest(unittest.TestCase):
+    """A requirement closed by a cell that measured nothing is not closed.
+
+    Coverage, co-residency and repetitions all read cells without consulting the
+    verdict, so an architecture/regime was "covered" by a cell whose correctness
+    gate FAILED, and that cell's block count evidenced "stronger paired repetitions
+    than T1". *"A candidate failing any of them receives no speed rank at all — not
+    a penalised one"*, and each of these requirements asserts the matrix learned
+    something at that cell.
+    """
+
+    def _dense_cell(self, **over) -> R.T2Cell:
+        kwargs = dict(architecture_class="dense", regime="long_context",
+                      event_id="ake-dense")
+        kwargs.update(over)
+        return cell("cell-dense", **kwargs)
+
+    def _two_pair_spec(self) -> R.T2MatrixSpec:
+        return matrix_spec(required_coverage=(("moe", "batch1"),
+                                              ("dense", "long_context")))
+
+    def test_a_correctness_failed_cell_does_not_cover_its_architecture(self):
+        broken_dense = self._dense_cell(non_inferiority=non_inferior_evidence(
+            gates=gates_correctness_failed()))
+        signal = green_signal(cells=green_cells() + (broken_dense,),
+                              spec=self._two_pair_spec())
+        self.assertNotEqual(signal.matrix.coverage.outcome, S.PASS)
+        self.assertIn(R.BLOCK_COVERAGE_GAP, signal.blockers)
+        self.assertIn("measured nothing readable",
+                      " ".join(signal.matrix.coverage.reasons))
+        self.assertNotEqual(signal.standing, R.STANDING_MET)
+
+    def test_a_voided_cell_does_not_cover_its_architecture_either(self):
+        void = api.VoidFinding(reason=api.VOID_AA_CONTROL_FAILED,
+                               protocol_phrase="a failing A/A VOIDS the window",
+                               outcome=S.FAIL)
+        voided_dense = self._dense_cell(
+            non_inferiority=non_inferior_evidence(voids=(void,)))
+        signal = green_signal(cells=green_cells() + (voided_dense,),
+                              spec=self._two_pair_spec())
+        self.assertNotEqual(signal.matrix.coverage.outcome, S.PASS)
+        self.assertIn(R.BLOCK_COVERAGE_GAP, signal.blockers)
+
+    def test_an_inadmissible_cells_block_count_is_not_repetition_strength(self):
+        broken = cell("cell-decode-a", non_inferiority=non_inferior_evidence(
+            blocks=16, gates=gates_correctness_failed()))
+        signal = green_signal(cells=(broken,) + green_cells()[1:])
+        self.assertEqual(signal.matrix.repetitions.outcome, S.COULD_NOT_CHECK)
+        self.assertIn(R.BLOCK_REPETITIONS_NOT_STRONGER_THAN_T1, signal.blockers)
+        self.assertIn("not evidence that T2 repeated more strongly",
+                      " ".join(signal.matrix.repetitions.reasons))
+
+    def test_an_empty_matrix_cannot_report_stronger_repetitions_than_t1(self):
+        """PASS on nothing is a requirement satisfiable by deleting its subject."""
+        coverage = R.check_matrix_coverage(spec=matrix_spec(), champion=champion(),
+                                           cells=(), capacity_deltas=capacity(),
+                                           mechanisms=mechanisms())
+        self.assertEqual(coverage.repetitions.outcome, S.COULD_NOT_CHECK)
+        self.assertIn(R.BLOCK_REPETITIONS_NOT_STRONGER_THAN_T1, coverage.blockers)
+
+    # -- compliant-path control -------------------------------------------
+
+    def test_readable_cells_still_cover_and_still_repeat_more_than_t1(self):
+        signal = green_signal()
+        self.assertEqual(signal.matrix.coverage.outcome, S.PASS)
+        self.assertEqual(signal.matrix.repetitions.outcome, S.PASS)
+        self.assertEqual(signal.standing, R.STANDING_MET, signal.blockers)
+
+    def test_a_second_readable_architecture_closes_the_second_pair(self):
+        signal = green_signal(cells=green_cells() + (self._dense_cell(),),
+                              spec=self._two_pair_spec())
+        self.assertEqual(signal.matrix.coverage.outcome, S.PASS)
+        self.assertNotIn(R.BLOCK_COVERAGE_GAP, signal.blockers)
+
+
+class CoResidencyNeedsAProtectedRoleTest(unittest.TestCase):
+    """§9.7's non-negotiable requirement was closable by a sentinel.
+
+    `is_co_resident` filters no role and no admissibility, so any cell carrying
+    `co_resident:<lineup>` discharged it. The requirement exists because CPU decode
+    is bandwidth-bound under concurrency FOR A PROTECTED ROLE; a dispatcher-boundary
+    or non-target sentinel is a probe on a path nobody is protecting and cannot show
+    the harm the requirement was written to catch.
+    """
+
+    def _cells_with_sentinel_co_residency(self) -> tuple:
+        kept = tuple(c for c in green_cells() if c.cell_id != "cell-decode-co")
+        sentinel_co = cell("sent-co", role=R.CELL_ROLE_NON_TARGET,
+                           production_share=0.0, event_id="ake-sent-co",
+                           co_residency="co_resident:big-quarters")
+        return kept + (sentinel_co,)
+
+    def test_a_co_resident_sentinel_does_not_close_the_requirement(self):
+        signal = green_signal(cells=self._cells_with_sentinel_co_residency())
+        self.assertEqual(signal.matrix.co_resident.outcome, S.FAIL)
+        self.assertIn(R.BLOCK_CO_RESIDENT_CELL_ABSENT, signal.blockers)
+        self.assertIn("a role the objective PROTECTS",
+                      " ".join(signal.matrix.co_resident.reasons))
+        self.assertNotEqual(signal.standing, R.STANDING_MET)
+
+    def test_an_unreadable_co_resident_protected_cell_is_could_not_check(self):
+        broken_co = cell("cell-decode-co", co_residency="co_resident:big-quarters",
+                         event_id="ake-cell-decode-co",
+                         non_inferiority=non_inferior_evidence(
+                             gates=gates_correctness_failed()))
+        cells = tuple(c for c in green_cells() if c.cell_id != "cell-decode-co")
+        signal = green_signal(cells=cells + (broken_co,))
+        self.assertEqual(signal.matrix.co_resident.outcome, S.COULD_NOT_CHECK)
+        self.assertIn(R.BLOCK_CO_RESIDENT_CELL_ABSENT, signal.blockers)
+
+    def test_a_sentinel_weaker_than_t1_fails_the_repetition_requirement(self):
+        """`_check_repetitions` examined protected cells only.
+
+        T2's sentinel set is a strict superset of T1's and part of the same matrix,
+        so a blast-radius probe re-run at FEWER blocks than T1 left *"stronger
+        paired repetitions than T1"* green over the very cells that got weaker.
+        """
+        weak_sentinel = cell("sent-t1", role=R.CELL_ROLE_NON_TARGET,
+                             production_share=0.0,
+                             non_inferiority=non_inferior_evidence(blocks=8))
+        cells = tuple(c for c in green_cells() if c.cell_id != "sent-t1")
+        signal = green_signal(cells=cells + (weak_sentinel,))
+        self.assertEqual(signal.matrix.repetitions.outcome, S.FAIL)
+        self.assertIn(R.BLOCK_REPETITIONS_NOT_STRONGER_THAN_T1, signal.blockers)
+        self.assertIn("sent-t1", " ".join(signal.matrix.repetitions.reasons))
+
+    # -- compliant-path controls ------------------------------------------
+
+    def test_a_readable_protected_co_resident_cell_still_closes_it(self):
+        signal = green_signal()
+        self.assertEqual(signal.matrix.co_resident.outcome, S.PASS)
+        self.assertIn("cell-decode-co", " ".join(signal.matrix.co_resident.reasons))
+
+    def test_a_sentinel_stronger_than_t1_disturbs_nothing(self):
+        """Sentinels are IN the repetition check; being green there costs nothing."""
+        strong_sentinel = cell("sent-t1", role=R.CELL_ROLE_NON_TARGET,
+                               production_share=0.0,
+                               non_inferiority=non_inferior_evidence(blocks=20))
+        cells = tuple(c for c in green_cells() if c.cell_id != "sent-t1")
+        signal = green_signal(cells=cells + (strong_sentinel,))
+        self.assertEqual(signal.matrix.repetitions.outcome, S.PASS)
+        self.assertEqual(signal.standing, R.STANDING_MET, signal.blockers)
+
+
+class AReportCannotRelabelAnotherCampaignsSignalTest(unittest.TestCase):
+    """One campaign id was emitted over signals nobody checked.
+
+    `compute_readiness_report()` never compared its `campaign_id` with its signals',
+    so a report labelled campaign A carried a campaign-B signal and rendered A's
+    label over it. `P-AK-SEARCH-1` denial 4 confines consumption to the campaign
+    that produced the record — a later campaign re-derives its own calibration, so
+    a reused record is scored against a floor and a threshold it was never measured
+    under.
+    """
+
+    def _foreign_signal(self) -> R.ReadinessSignal:
+        return green_signal(campaign_id="ak-llama_cpu-20260701")
+
+    def test_a_signal_from_another_campaign_is_refused(self):
+        with self.assertRaises(R.CampaignMismatch) as caught:
+            R.compute_readiness_report(campaign_id=CAMPAIGN, computed_at=LATER,
+                                       signals=(self._foreign_signal(),))
+        text = str(caught.exception)
+        self.assertIn("ak-llama_cpu-20260701", text)
+        self.assertIn("denial 4", text)
+
+    def test_the_constructor_door_holds_it_too(self):
+        with self.assertRaises(R.CampaignMismatch):
+            R.ReadinessReport(campaign_id=CAMPAIGN, computed_at=LATER,
+                              signals=(self._foreign_signal(),))
+
+    def test_the_reports_campaign_id_has_the_campaign_shape(self):
+        with self.assertRaises(R.CellInadmissible) as caught:
+            R.compute_readiness_report(campaign_id="whatever", computed_at=LATER,
+                                       signals=())
+        self.assertIn("must start with 'ak-'", str(caught.exception))
+
+    # -- compliant-path control -------------------------------------------
+
+    def test_a_report_over_its_own_campaigns_signals_is_built(self):
+        report = R.compute_readiness_report(campaign_id=CAMPAIGN, computed_at=LATER,
+                                            signals=(green_signal(),))
+        self.assertEqual(report.backends, ("llama_cpu",))
+        self.assertEqual(report.to_dict()["campaign_id"], CAMPAIGN)
+        self.assertIsNotNone(report.signal_for("llama_cpu"))
+
+
+# ===========================================================================
+# 15. The red-team OF the red-team — what the public-door pass left behind
+#
+# Every test in this section fails against the module as it stood after the
+# carried-forward items were closed. Both defects are the same shape as the ones
+# that pass closed: a guarantee held one function deep, and a record read by one
+# sibling and ignored by the other. Each class carries a compliant-path control.
+# ===========================================================================
+
+class EveryPublicDoorHoldsTheProtocolBoundaryTest(unittest.TestCase):
+    """Half of one hole was closed, in the same two functions.
+
+    `compute_readiness()` refuses a cell whose `protocol_id` is not the one its
+    phase is judged under; `phase_standing()` — the other public door, the one the
+    backend refusal was just added to — never reads `cell.protocol_id` at all. It
+    STAMPS `objective.protocol_for(phase)` onto the `PhaseStanding` and onto the
+    `ReadinessFigure` it selects. So a `llama_cpu` decode cell measured under
+    `P-BENCH-PREFILL-1` was judged as decode and its estimate came back labelled
+    `P-BENCH-1`: a cross-protocol comparison wearing a within-protocol label, which
+    `MEASUREMENT.md:83-84` makes analysis rather than a claim, and the label is the
+    part a reader cannot check for themselves.
+    """
+
+    def _mislabelled(self) -> R.T2Cell:
+        return cell("cell-decode-misprotocol", protocol_id=PREFILL_PROTOCOL)
+
+    def test_phase_standing_refuses_a_cell_citing_another_phases_protocol(self):
+        with self.assertRaises(R.ProtocolBoundaryCrossed) as caught:
+            R.phase_standing(backend="llama_cpu", phase="decode",
+                             objective=objective(), cells=(self._mislabelled(),))
+        self.assertIn("nothing crosses a protocol boundary", str(caught.exception))
+
+    def test_the_mislabelled_cell_could_have_become_the_phases_figure(self):
+        """The leak with teeth, named: the figure carried the wrong protocol id."""
+        with self.assertRaises(R.ProtocolBoundaryCrossed):
+            R.phase_standing(backend="llama_cpu", phase="decode",
+                             objective=objective(),
+                             cells=(cell("cell-decode-a"), self._mislabelled()))
+
+    def test_phase_standing_refuses_a_cell_in_an_undeclared_phase(self):
+        decode_only = objective(phases=("decode",),
+                                protocol_by_phase={"decode": DECODE_PROTOCOL})
+        stray = cell("cell-decode-stray", protocol_id=PREFILL_PROTOCOL)
+        with self.assertRaises(R.ProtocolBoundaryCrossed):
+            R.phase_standing(backend="llama_cpu", phase="decode",
+                             objective=decode_only, cells=(stray,))
+
+    def test_compute_readiness_still_refuses_it_through_the_shared_predicate(self):
+        with self.assertRaises(R.ProtocolBoundaryCrossed):
+            green_signal(cells=green_cells() + (self._mislabelled(),))
+
+    # -- compliant-path controls ------------------------------------------
+
+    def test_the_whole_matrix_may_still_be_handed_to_one_phase(self):
+        """`compute_readiness()`'s own idiom: every phase gets ALL the cells.
+
+        A refusal scoped to the whole tuple rather than to the judged phase would
+        reject a prefill cell citing `P-BENCH-PREFILL-1` while judging decode —
+        that is, it would forbid the only caller this function has.
+        """
+        standing = R.phase_standing(backend="llama_cpu", phase="decode",
+                                    objective=objective(), cells=green_cells())
+        self.assertEqual(standing.non_inferior.outcome, S.PASS)
+        self.assertEqual(standing.protocol_id, DECODE_PROTOCOL)
+        self.assertIsNotNone(standing.figure)
+        self.assertEqual(standing.figure.protocol_id, DECODE_PROTOCOL)
+
+    def test_two_phases_sharing_one_protocol_id_are_still_accepted(self):
+        """P-GPU-1 governs both GPU phases, so the check is 'the phase's declared
+        protocol', never 'a protocol no other phase uses'."""
+        gpu_objective = R.ObjectiveSpec(
+            backend="llama_gpu", phases=("prefill", "decode"),
+            protocol_by_phase={"prefill": GPU_PROTOCOL, "decode": GPU_PROTOCOL},
+            improvement_quantifier=R.QUANTIFIER_BACKEND_WIDE)
+        gpu_cells = (cell("cell-gpu-decode", backend="llama_gpu",
+                          protocol_id=GPU_PROTOCOL, event_id="ake-gpu-decode"),
+                     cell("cell-gpu-prefill", backend="llama_gpu", phase="prefill",
+                          protocol_id=GPU_PROTOCOL, event_id="ake-gpu-prefill"))
+        standing = R.phase_standing(backend="llama_gpu", phase="decode",
+                                    objective=gpu_objective, cells=gpu_cells)
+        self.assertEqual(standing.non_inferior.outcome, S.PASS)
+        self.assertEqual(standing.protocol_id, GPU_PROTOCOL)
+
+
+class TheOneBackendDoorCoversCapacityDeltasTest(unittest.TestCase):
+    """A record read by one sibling and ignored by the other.
+
+    `check_matrix_coverage()` admits `capacity_deltas` at the same door it now
+    refuses foreign-backend CELLS at, and never looks at `delta.backend`.
+    `_check_capacity` reads them through a `delta.backend == spec.backend` FILTER,
+    so a `llama_gpu` VRAM regression offered to a `llama_cpu` matrix was dropped:
+    the axis reported PASS, `overall` reported PASS, and no blocker recorded that a
+    record saying capacity was LOST had been handed in and discarded. A filter is a
+    refusal that reports success.
+
+    The same record was simultaneously GATED ON: `_check_lineage_ordering` orders
+    every delta it is given, so the identical foreign delta timestamped before the
+    lineage blocked the computation. One record, two siblings, opposite treatment —
+    which is the composition defect rather than the guard defect.
+    """
+
+    def _foreign_regression(self, measured_at: str = NOW) -> R.CapacityDelta:
+        return R.CapacityDelta(kind=R.CAPACITY_VRAM, backend="llama_gpu",
+                               delta=-2048.0, event_id="ake-cap-gpu",
+                               measured_at=measured_at)
+
+    def test_a_foreign_backend_capacity_delta_is_refused_at_the_door(self):
+        with self.assertRaises(R.CrossBackendComposite) as caught:
+            R.check_matrix_coverage(spec=matrix_spec(), champion=champion(),
+                                    cells=green_cells(),
+                                    capacity_deltas=capacity()
+                                    + (self._foreign_regression(),),
+                                    mechanisms=mechanisms())
+        text = str(caught.exception)
+        self.assertIn("one backend", text)
+        self.assertIn("ake-cap-gpu", text)
+
+    def test_compute_readiness_holds_it_through_the_same_door(self):
+        with self.assertRaises(R.CrossBackendComposite):
+            green_signal(capacity_deltas=capacity() + (self._foreign_regression(),))
+
+    def test_the_dropped_regression_used_to_leave_a_clean_matrix(self):
+        """Names the success-shaped result: PASS over a discarded regression."""
+        with self.assertRaises(R.CrossBackendComposite):
+            R.check_matrix_coverage(spec=matrix_spec(), champion=champion(),
+                                    cells=green_cells(),
+                                    capacity_deltas=(self._foreign_regression(),)
+                                    + capacity(),
+                                    mechanisms=mechanisms())
+
+    def test_the_ordering_check_no_longer_gates_on_a_record_capacity_ignores(self):
+        """Both siblings now see the same set: refused, rather than one each way."""
+        with self.assertRaises(R.CrossBackendComposite):
+            R.check_matrix_coverage(spec=matrix_spec(), champion=champion(),
+                                    cells=green_cells(),
+                                    capacity_deltas=capacity()
+                                    + (self._foreign_regression(BEFORE),),
+                                    mechanisms=mechanisms())
+
+    # -- compliant-path controls ------------------------------------------
+
+    def test_this_backends_own_capacity_deltas_are_still_read(self):
+        coverage = R.check_matrix_coverage(
+            spec=matrix_spec(), champion=champion(), cells=green_cells(),
+            capacity_deltas=capacity(), mechanisms=mechanisms())
+        self.assertEqual(coverage.capacity.outcome, S.PASS)
+        self.assertEqual(coverage.blockers, ())
+
+    def test_several_deltas_on_this_backend_are_still_all_read(self):
+        """The non-deduplication guarantee must survive the new refusal."""
+        spec = matrix_spec(required_capacity_kinds=(R.CAPACITY_RAM,))
+        deltas = capacity() + (
+            R.CapacityDelta(kind=R.CAPACITY_RAM, backend="llama_cpu", delta=-64.0,
+                            event_id="ake-cap-ram-2", measured_at=LATER),)
+        coverage = R.check_matrix_coverage(
+            spec=spec, champion=champion(), cells=green_cells(),
+            capacity_deltas=deltas, mechanisms=mechanisms())
+        self.assertEqual(coverage.capacity.outcome, S.FAIL)
+        self.assertIn(R.BLOCK_CAPACITY_REGRESSION, coverage.blockers)
 
 
 if __name__ == "__main__":  # pragma: no cover

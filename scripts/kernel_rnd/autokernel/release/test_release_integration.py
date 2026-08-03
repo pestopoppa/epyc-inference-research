@@ -33,12 +33,26 @@ and one confirmed unchanged and dropped under receipt, a T3 run through the wire
 sealed bundle, and an assembled package carrying its drafted era rows and AutoPilot
 rebaseline note.
 
-THE CARDINAL RULE, AS A TEST. `TestNoProductionWritePathsAnywhere` parses the AST of
-every module under `release/` and `adapters/` — from the filesystem, so a module
-added tomorrow is covered by default — and proves that none of them can write a
-production branch, move a stable kernel symlink, write an era-registry row or apply
-an AutoPilot baseline. It is deliberately NOT a grep: the words appear in almost
-every docstring in both directories, which is the point of parsing calls instead.
+THE CARDINAL RULE, AS A TEST. `TestNoProductionWritePathsAnywhere` parses the AST —
+from the filesystem, RECURSIVELY, so a module added tomorrow is covered by default —
+and proves that nothing can write a production branch, move a stable kernel symlink,
+write an era-registry row or apply an AutoPilot baseline. It is deliberately NOT a
+grep: the words appear in almost every docstring, which is the point of parsing
+calls instead.
+
+The two rules have DIFFERENT SCOPES, and conflating them is what left the audit
+covering 18 of 42 modules:
+
+  * RULE 1 — "writes or spawns nothing at all" — is true of `release/` and
+    `adapters/` and FALSE of the rest of the package by design. `journal.py`
+    appends, `storage.py` expires artifacts, `resource/device_claim.py` takes lock
+    files, `controller/state_machine.py` persists state. Widening rule 1 to them
+    would be a guard forbidding the package's own legitimate idiom.
+  * RULE 2 — "no call names a human-only target" — is not a property of a plane, and
+    it binds HARDEST on exactly the modules rule 1 cannot reach, because those are
+    the ones holding `rmtree`, `mkdir`, `replace` and `subprocess`. It runs over the
+    whole package. The auditor always could find such a call; it was simply never
+    handed the source.
 
 NO INFERENCE, NO BENCHMARK, NO BUILD, NO PROCESS, NO PRODUCTION WRITE. The only
 bytes this suite writes go into `tempfile.TemporaryDirectory` instances it creates
@@ -53,6 +67,8 @@ Run:
 from __future__ import annotations
 
 import ast
+import dataclasses
+import hashlib
 import json
 import os
 import pathlib
@@ -685,6 +701,168 @@ class TestServingRuntimeRefusesTheKernelFreezePath(unittest.TestCase):
 
 
 # =============================================================================
+# 6b — the 2026-08-03 hardening pass, driven through the CHAIN
+#
+# Each guarantee below was closed inside one module and red-teamed there. What no
+# module's own suite can show is that the guarantee survives composition: the
+# waiver vocabulary is enforced in `schemas`, consumed by `t3.verify_waiver` AND by
+# `packager`, and a verdict is what a caller actually sees. These drive the real
+# chain and assert on the VERDICT, not on the helper.
+# =============================================================================
+
+class TestWaiverAuthorityHoldsThroughTheChain(unittest.TestCase):
+    """One vocabulary, two planes. Before the pass a waiver attributed to
+    `autokernel` verified as human-attested in AK5 and was refused only in AK6, so
+    T3's own verdict read PASS_WITH_WAIVER and only the packager said no.
+    """
+
+    def setUp(self):
+        self.chain = Chain()
+        self.cell_id = self.chain.performance_cells("prefill")[0].cell_id
+
+    def _verdict(self, *, author=None, path=None) -> t3.T3Result:
+        overrides = {} if author is None else {"authorized_by": author}
+        document = waiver_document(self.cell_id, **overrides)
+        binding = waiver_binding(self.cell_id, document)
+        if path is not None:
+            binding = t3.WaiverBinding(
+                waiver_id=binding.waiver_id, pinned_sha256=binding.pinned_sha256,
+                observed_sha256=binding.observed_sha256, document=binding.document,
+                document_path=path, covers_cell_ids=binding.covers_cell_ids)
+        return self.chain.run(_failing_cell_id=self.cell_id, waivers=(binding,))
+
+    def test_a_human_attributed_waiver_still_suppresses_its_cell(self):
+        """COMPLIANT-PATH CONTROL. The guard must not forbid the thing §10.4
+        exists to permit: a real operator waiving a real cell.
+        """
+        result = self._verdict()
+        self.assertEqual(result.verdict, "PASS_WITH_WAIVER",
+                         " | ".join(result.verdict_computation.blocking_reasons))
+
+    def test_no_spelling_of_the_loop_can_waive_its_own_cell(self):
+        """The separator walk-around, end to end. `[a-z0-9]+` tokenisation refused
+        `autokernel` and admitted `auto-kernel`, and a waiver is the loop's only
+        route to licensing a claim it did not earn.
+        """
+        for author in ("autokernel", "auto-kernel", "auto_kernel", "auto.kernel",
+                       "AutoKernel", "autokernel-controller", "ak-controller"):
+            with self.subTest(author=author):
+                result = self._verdict(author=author)
+                self.assertNotEqual(result.verdict, "PASS_WITH_WAIVER")
+
+    def test_a_human_name_that_merely_contains_a_token_is_still_a_human(self):
+        """COMPLIANT-PATH CONTROL for the vocabulary. Substring matching would
+        refuse these, and refusing a real operator is the same defect pointed the
+        other way.
+        """
+        for author in ("Daniele Pinna", "d.pinna", "ops-daniele", "Jean-Luc Picard"):
+            with self.subTest(author=author):
+                self.assertEqual(self._verdict(author=author).verdict,
+                                 "PASS_WITH_WAIVER")
+
+    def test_the_operator_attestation_root_cannot_be_manufactured(self):
+        """`repo_relative_forms` stripped ANY leading segment, so the loop's own
+        scratch root spelled the operator's attestation root. `/mnt/raid0/llm/tmp/`
+        is where `resource/device_claim.py` puts its lock files — a path the loop
+        can write.
+        """
+        result = self._verdict(path="/mnt/raid0/llm/tmp/artifacts/operator/w.json")
+        self.assertNotEqual(result.verdict, "PASS_WITH_WAIVER")
+
+    def test_a_real_operator_checkout_path_still_resolves(self):
+        """COMPLIANT-PATH CONTROL for containment: the reduction exists so that a
+        genuine absolute citation under a real checkout root still matches.
+        """
+        for path in ("artifacts/operator/waive-cpu-prefill-v9.json",
+                     "/workspace/artifacts/operator/waive-cpu-prefill-v9.json"):
+            with self.subTest(path=path):
+                self.assertEqual(self._verdict(path=path).verdict,
+                                 "PASS_WITH_WAIVER")
+
+
+class TestOnePerPhaseStandingThroughTheChain(unittest.TestCase):
+    """§1.6 is adjudicated over caller-supplied standings, and the caller is the
+    party being gated. Every dict in the gate resolved a duplicate last-wins, so a
+    regressed standing plus a later `non_inferior` one over the same cell PASSed.
+    """
+
+    def setUp(self):
+        self.chain = Chain()
+
+    def test_one_standing_per_phase_still_passes(self):
+        """COMPLIANT-PATH CONTROL: the ordinary shape is unaffected."""
+        self.assertEqual(self.chain.run().verdict, "PASS")
+
+    def test_a_duplicated_phase_standing_is_a_blocking_contradiction(self):
+        standings = self.chain.standings()
+        result = self.chain.run(standings=standings + (standings[0],))
+        self.assertEqual(result.verdict, "FAIL")
+        self.assertIn("more than one standing for the phase",
+                      " | ".join(result.verdict_computation.blocking_reasons))
+
+    def test_a_regression_cannot_be_overwritten_by_a_later_standing(self):
+        """The exploit direction, exactly: the regressed record must survive."""
+        standings = self.chain.standings()
+        regressed = dataclasses.replace(
+            standings[0], standing=t3.STANDING_REGRESSED,
+            evidence_ref=standings[0].evidence_ref + "-earlier")
+        result = self.chain.run(standings=(regressed,) + standings)
+        self.assertEqual(result.verdict, "FAIL")
+        reasons = " | ".join(result.verdict_computation.blocking_reasons)
+        self.assertIn("more than one standing for the phase", reasons)
+        self.assertIn("regressed", reasons)
+
+
+class TestStableKernelPathTraversalThroughTheChain(unittest.TestCase):
+    """The stable kernel symlink is the trust boundary, and `..` is a plain path
+    character. Depth alone said "well below the link" about a command naming
+    `/usr/bin/install` with the production binary as its operand.
+    """
+
+    LINK = "/mnt/raid0/llm/kernels/production/cpu"
+
+    def test_a_traversal_out_of_the_stable_path_is_a_positive_finding(self):
+        """`assertEqual(FAIL)`, deliberately, NOT `assertNotEqual(PASS)`: a
+        "not PASS" assertion is satisfied by COULD_NOT_CHECK, which is how the
+        doubled-slash defect below hid in the first place. These two commands are
+        refused by the traversal rule AND by the below-link operand rule, so this is
+        a defence-in-depth assertion rather than an isolating one.
+        """
+        for command in (
+                f"{self.LINK}/../../../../usr/bin/install -m755 evil {self.LINK}/bin",
+                f"{self.LINK}/../../../../bin/rm -rf {self.LINK}/bin",
+                f"{self.LINK}/../../../../usr/bin/install -m755 evil /var/tmp/x",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(
+                    serving_runtime.classify_stable_kernel_path_use(command).outcome,
+                    schemas.FAIL)
+
+    def test_a_repeated_slash_does_not_hide_the_stable_path(self):
+        """`a//b` is `a/b` to every kernel on this host. Without slash collapsing
+        this returned COULD_NOT_CHECK — no finding at all — and packaged.
+        """
+        doubled = "rm -rf /mnt/raid0/llm/kernels//production/cpu/bin/llama-server"
+        self.assertEqual(
+            serving_runtime.classify_stable_kernel_path_use(doubled).outcome,
+            schemas.FAIL)
+
+    def test_an_ordinary_launcher_command_is_still_admitted(self):
+        """COMPLIANT-PATH CONTROL. A guard that refused every `..`, or every
+        doubled slash, would forbid the adapter's own launcher idiom.
+        """
+        for command in (
+                f"{self.LINK}/bin/llama-server -m ../models/qwen.gguf",
+                "taskset -c 0-95 /mnt/raid0/llm/llama.cpp/build/bin/llama-server",
+                "curl https://localhost:8000/health",
+        ):
+            with self.subTest(command=command):
+                self.assertNotEqual(
+                    serving_runtime.classify_stable_kernel_path_use(command).outcome,
+                    schemas.FAIL)
+
+
+# =============================================================================
 # 5 — the seam regressions this integration pass found
 # =============================================================================
 
@@ -864,7 +1042,49 @@ _DENIED_IMPORTS = frozenset({
     "runpy", "io", "glob", "atexit", "webbrowser", "ftplib", "smtplib",
 })
 
+#: RULE 1's scope — the two planes, and ONLY the two planes. Rule 1 is "this module
+#: cannot write or spawn AT ALL", which is true of `release/` and `adapters/` by
+#: design and FALSE of the rest of the package by design: `journal.py` appends to a
+#: journal, `storage.py` expires artifacts, `resource/device_claim.py` takes lock
+#: files, `controller/state_machine.py` persists its own state. Those modules write
+#: because writing is their job, and widening rule 1 to them would be a guard that
+#: forbids the package's own legitimate idiom.
 _PLANE_DIRS = ("release", "adapters")
+
+
+def discover_plane_modules(root: pathlib.Path) -> list:
+    """Every `.py` under the two planes — RECURSIVELY.
+
+    `rglob`, not `glob`. The non-recursive form audited only files sitting directly
+    in `release/` and `adapters/`, so a module added at `release/anything/x.py` was
+    outside the corpus while looking exactly like a module inside it — and the
+    completeness test would still have passed, because it asserts named modules and a
+    floor, neither of which a new subpackage changes.
+    """
+    found = []
+    for name in _PLANE_DIRS:
+        for path in sorted((root / name).rglob("*.py")):
+            if "__pycache__" in path.parts:
+                continue
+            found.append(path)
+    return found
+
+
+def discover_package_modules(root: pathlib.Path) -> list:
+    """Every `.py` in the WHOLE autokernel package — rule 2's scope.
+
+    Rule 2 is *"no call anywhere names a human-only target"*, and unlike rule 1 that
+    obligation is not a property of a plane. It binds hardest exactly where this
+    corpus used to stop: `storage.py` imports `shutil` and `subprocess` and calls
+    `rmtree`/`makedirs`, `journal.py` and `resource/device_claim.py` call `mkdir` and
+    `replace`, `controller/state_machine.py` calls `write`. Those are the modules
+    that HAVE the capability to repoint a stable kernel symlink or delete a
+    production tree, and they were the twenty-four this audit never looked at — the
+    audit finds such a call the instant it is handed the source, so the defect was
+    never the detector, only the corpus it was pointed at.
+    """
+    return [path for path in sorted(root.rglob("*.py"))
+            if "__pycache__" not in path.parts]
 
 
 #: The ONE qualified name exempted from `_DENIED_ATTRS`, and only in this exact
@@ -973,16 +1193,13 @@ class TestNoProductionWritePathsAnywhere(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.root = pathlib.Path(__file__).resolve().parent.parent
-        cls.modules = []
-        for name in _PLANE_DIRS:
-            directory = cls.root / name
-            for path in sorted(directory.glob("*.py")):
-                cls.modules.append(path)
+        cls.modules = discover_plane_modules(cls.root)
+        cls.package_modules = discover_package_modules(cls.root)
 
     def _audit(self, path: pathlib.Path) -> dict:
         return audit_module_source(
             path.read_text(encoding="utf-8"),
-            label=f"{path.parent.name}/{path.name}",
+            label=str(path.relative_to(self.root)),
             is_test=path.name.startswith("test_"))
 
     # -- the audit is over the real corpus, computed from disk ---------------
@@ -999,6 +1216,117 @@ class TestNoProductionWritePathsAnywhere(unittest.TestCase):
     def test_every_module_parses(self):
         for path in self.modules:
             self.assertIsNone(self._audit(path)["unparsed"], path)
+
+    # -- the corpus cannot be escaped by nesting ------------------------------
+
+    def test_a_module_nested_under_a_plane_is_still_discovered(self):
+        """The recursion, proved on a tree this test builds rather than on the
+        package's current shape — `release/` and `adapters/` are flat TODAY, so a
+        non-recursive glob and a recursive one agree on the real corpus and the
+        defect would be invisible if this asserted against the package.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            for name in _PLANE_DIRS:
+                (root / name / "nested").mkdir(parents=True)
+                (root / name / "flat.py").write_text("x = 1\n", encoding="utf-8")
+                (root / name / "nested" / "deep.py").write_text("y = 2\n",
+                                                                encoding="utf-8")
+            found = {p.name for p in discover_plane_modules(root)}
+            self.assertIn("flat.py", found)
+            self.assertIn("deep.py", found)   # the bite: `glob` never returns this
+
+    def test_the_discovery_never_returns_compiled_bytecode_caches(self):
+        """The compliant-path control for the recursion: `rglob` now reaches into
+        `__pycache__`, whose `.pyc` files are not source and would be an unparsable
+        finding in every module. Excluding them is not a hole — a `.pyc` has no
+        author and cannot be reviewed.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            for name in _PLANE_DIRS:
+                (root / name / "__pycache__").mkdir(parents=True)
+                (root / name / "real.py").write_text("x = 1\n", encoding="utf-8")
+                (root / name / "__pycache__" / "real.py").write_text(
+                    "import os\n", encoding="utf-8")
+            found = discover_plane_modules(root)
+            self.assertEqual({p.name for p in found}, {"real.py"})
+            self.assertTrue(all("__pycache__" not in p.parts for p in found))
+
+    # -- rule 2 binds over the WHOLE package, not just the two planes ---------
+
+    def test_rule_two_covers_every_module_in_the_package(self):
+        """§ the cardinal rule. Rule 1's scope is the two planes because only they
+        can honestly claim "no writes at all". Rule 2 has no such excuse, and the
+        modules it was NOT applied to are precisely the ones holding the primitives:
+        `storage.py` (`shutil`, `subprocess`, `rmtree`), `journal.py` (`mkdir`,
+        `replace`), `resource/device_claim.py`, `controller/state_machine.py`.
+        """
+        offenders = []
+        for path in self.package_modules:
+            offenders.extend(self._audit(path)["human_only_targets"])
+        self.assertEqual(offenders, [], "\n".join(offenders))
+
+    def test_the_package_corpus_contains_the_write_capable_modules(self):
+        """Anti-vacuity, and the whole point of widening the corpus. If this list
+        ever shrinks to nothing the test above passes by inspecting nothing.
+        """
+        names = {str(p.relative_to(self.root)) for p in self.package_modules}
+        for expected in ("storage.py", "journal.py", "schemas.py",
+                         "resource/device_claim.py", "controller/state_machine.py",
+                         "evaluator/surface.py"):
+            self.assertIn(expected, names)
+        self.assertGreater(len(self.package_modules), len(self.modules))
+
+    def test_the_write_capable_modules_really_do_hold_the_primitives(self):
+        """The corpus above is worth auditing only if those modules CAN do the
+        forbidden thing. Asserted, not assumed: each names a write/process primitive
+        rule 1 would refuse — which is exactly why rule 1 does not reach them and
+        rule 2 must.
+        """
+        for name in ("storage.py", "journal.py", "resource/device_claim.py",
+                     "controller/state_machine.py"):
+            path = self.root / name
+            findings = audit_module_source(
+                path.read_text(encoding="utf-8"), label=name, is_test=False)
+            self.assertTrue(findings["write_or_process"],
+                            f"{name} holds no write primitive, so rule 2 over it "
+                            "proves nothing")
+
+    def test_rule_two_bites_on_a_write_capable_module_outside_the_planes(self):
+        """The bite, on the real defect: a production-tree delete appended to the
+        real `storage.py`. Before the corpus was widened this returned a finding the
+        suite never asked for, so the module could have shipped it.
+        """
+        source = (self.root / "storage.py").read_text(encoding="utf-8")
+        doctored = source + (
+            "\n\ndef cutover_production():\n"
+            "    import shutil\n"
+            "    shutil.rmtree('/mnt/raid0/llm/kernels/production/cpu')\n")
+        findings = audit_module_source(doctored, label="storage.py", is_test=False)
+        self.assertTrue(findings["human_only_targets"])
+
+    def test_rule_two_does_not_forbid_the_write_capable_modules_own_idiom(self):
+        """The compliant-path control for widening rule 2: `storage.py` and friends
+        keep writing where they legitimately write. Rule 2 forbids naming a
+        human-only TARGET, never writing as such — a guard that banned `mkdir` here
+        would have banned the package's own storage plane.
+        """
+        for name in ("storage.py", "journal.py", "resource/device_claim.py"):
+            path = self.root / name
+            findings = audit_module_source(
+                path.read_text(encoding="utf-8"), label=name, is_test=False)
+            self.assertEqual(findings["human_only_targets"], [], name)
+
+    def test_an_empty_package_corpus_is_not_a_pass(self):
+        """A guarantee obtainable by deleting what it inspects is not one: an empty
+        root yields no offenders, so emptiness must be refused by the corpus test
+        rather than read as compliance.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(discover_package_modules(pathlib.Path(tmp)), [])
+        # ...and the real corpus is what stops that from being the state we are in.
+        self.assertGreaterEqual(len(self.package_modules), 20)
 
     # -- rule 1: no write or process path in any non-test module -------------
 
@@ -1137,12 +1465,59 @@ class TestPreservedV8Calibration(unittest.TestCase):
 
     RATIFICATION = pathlib.Path(
         "/workspace/artifacts/operator/ratify_v8_final_freeze_20260725.json")
+    #: The waiver is read off disk TOO. It used to come from `test_t3.V8_WAIVER`, so
+    #: the class docstring's claim — "against the record rather than against a
+    #: fixture of it" — was true of the ratification and false of the waiver, which
+    #: is the half that decides PASS_WITH_WAIVER. A calibration whose authority
+    #: document is a fixture is calibrating the fixture.
+    WAIVER = pathlib.Path(
+        "/workspace/artifacts/operator/waive_q8_cpu_prefill_v8_20260725.json")
+
+    @classmethod
+    def setUpClass(cls):
+        # NOT `skipTest`. §10.4's calibration is the one check that says the compiler
+        # is right, and a check that evaporates when its subject is removed is a
+        # guarantee obtainable by deleting what it inspects. Absence is a FAILURE.
+        missing = [str(p) for p in (cls.RATIFICATION, cls.WAIVER) if not p.exists()]
+        if missing:
+            raise AssertionError(
+                "the §10.4 calibration cannot run: " + ", ".join(missing) + " is not "
+                "present. This is a FAILURE and never a skip — the preserved v8 "
+                "attestation is the only real operator record this suite grades "
+                "itself against.")
+        cls.ratification = json.loads(cls.RATIFICATION.read_text(encoding="utf-8"))
+        cls.waiver = json.loads(cls.WAIVER.read_text(encoding="utf-8"))
 
     def setUp(self):
-        if not self.RATIFICATION.exists():  # pragma: no cover - artifact is in-repo
-            self.skipTest(f"{self.RATIFICATION} is not present")
-        document = json.loads(self.RATIFICATION.read_text(encoding="utf-8"))
-        self.freeze = t3.preserved_freeze_from_v8_artifacts(document, V8_WAIVER)
+        self.freeze = t3.preserved_freeze_from_v8_artifacts(
+            self.ratification, self.waiver)
+
+    def test_the_calibration_reads_the_real_documents_not_a_fixture_of_them(self):
+        """The inlined fixtures are REDUCTIONS of the real artifacts (`test_t3.py`
+        keeps only the fields the gate reads), so the honest seam assertion is not a
+        hash of the documents — it is that the READER produces the same freeze from
+        either source. If the fixture ever drifts from the record in any field T3
+        consumes, the two freezes stop being equal and this fails.
+        """
+        from_fixture = t3.preserved_freeze_from_v8_artifacts(
+            FT3.V8_RATIFICATION, V8_WAIVER)
+        self.assertEqual(self.freeze.to_dict(), from_fixture.to_dict())
+        self.assertEqual(self.freeze.excluded_pairs,
+                         ("qwen36_q8-tg128-iqk1", "qwen36_q8-pp2048-iqk1"))
+        self.assertEqual(self.freeze.production_head, FT3.V8_HEAD)
+        self.assertEqual(self.freeze.rollback_head, FT3.V7_HEAD)
+
+    def test_the_waiver_on_disk_is_the_document_the_ratification_pins(self):
+        """The one authenticity check available here, and it is a real one: the
+        attestation carries `evidence_sha256.waive_q8`, so the waiver is not merely
+        "a file at the operator path" — it is the document the ratified record
+        names. This is the §10.4 binding the red team reported as UNCLOSED for
+        caller-supplied waivers generally (U1); for the preserved v8 pair it can be
+        closed, and is, because both artifacts exist and one hashes the other.
+        """
+        digest = hashlib.sha256(self.WAIVER.read_bytes()).hexdigest()
+        self.assertEqual(digest, self.ratification["evidence_sha256"]["waive_q8"])
+        self.assertEqual(digest, FT3.V8_WAIVER_SHA)
 
     def test_the_dry_run_fails_without_the_waiver_as_10_4_predicts(self):
         result = t3.run_t3(t3.calibration_request(
@@ -1165,6 +1540,56 @@ class TestPreservedV8Calibration(unittest.TestCase):
         self.assertEqual(result.verdict_computation.failed_cells, ())
         self.assertIn("no rollback target",
                       " | ".join(result.verdict_computation.blocking_reasons))
+
+    # -- the third outcome, which only `test_t3.py`'s INLINED copy covered ----
+
+    def _with_archive_and_quality(self) -> t3.T3Result:
+        """Waiver + a reconstructed N-1 archive + the archived quality baseline."""
+        preserved_v7 = t3.IncumbentArchive(entries=(t3.ArchivedBuild(
+            generation=t3.ARCHIVE_GENERATION_N1,
+            branch="production-consolidated-v7", commit=FT3.V7_HEAD,
+            archive_root="/mnt/raid0/llm/llama.cpp-v7-build-backup-6ad45fa3ff",
+            binaries=((FT3.V7_BASELINE_BINARY, FT3.digest("v7-llama-server")),),
+            libraries=((FT3.LLAMA_BACKENDS,
+                        "/mnt/raid0/llm/llama.cpp-v7-build-backup-6ad45fa3ff/"
+                        "cpu-bin/libggml-base.so.0",
+                        FT3.digest("v7-libggml-base")),)),))
+        base = t3.calibration_request(self.freeze, now=NOW, include_waiver=True,
+                                      archive=preserved_v7)
+        quality = tuple(
+            t3.QualityEvidence(
+                backend=b, mode=t3.QUALITY_MEASURED_PARITY,
+                baseline_binary_path=FT3.V7_BASELINE_BINARY,
+                baseline_binary_sha256=FT3.digest("v7-llama-server"),
+                baseline_kernel="production-consolidated-v7",
+                baseline_is_rebuild=False,
+                evidence_refs=("data/kernel-v8-candidate/quality-gate/",),
+                suites=("mmlu_pro", "gpqa"), shared_question_identity=True)
+            for b in self.freeze.backends)
+        return t3.run_t3(t3.T3Request(**{
+            **{f.name: getattr(base, f.name)
+               for f in base.__dataclass_fields__.values()},
+            "quality_evidence": quality}))
+
+    def test_the_waiver_plus_an_n_minus_one_archive_is_pass_with_waiver(self):
+        result = self._with_archive_and_quality()
+        self.assertEqual(result.verdict, "PASS_WITH_WAIVER",
+                         " | ".join(result.verdict_computation.blocking_reasons))
+        self.assertEqual(result.verdict_computation.blocking_reasons, ())
+        self.assertEqual(result.mode, t3.MODE_DRY_RUN)
+
+    def test_exactly_the_two_q8_claims_are_suppressed_by_name(self):
+        """"Exactly" is the assertion: an equality on the set, not a membership
+        test. A waiver that suppressed a third claim would pass a containment check.
+        """
+        result = self._with_archive_and_quality()
+        self.assertEqual(
+            {s["claim"] for s in result.receipt.suppressed_claims},
+            {"qwen36_q8-tg128-iqk1 non-regression",
+             "qwen36_q8-pp2048-iqk1 non-regression"})
+        self.assertEqual(len(result.receipt.suppressed_claims), 2)
+        self.assertIn("No v8 Q8 non-regression claim may be made from this campaign.",
+                      result.receipt.forfeited_claims)
 
 
 if __name__ == "__main__":  # pragma: no cover

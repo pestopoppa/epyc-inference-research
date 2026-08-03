@@ -111,8 +111,10 @@ __all__ = [
     # kernel-freeze refusal
     "FORBIDDEN_PRODUCTION_ACTIONS", "refuse_kernel_freeze", "release_path_for",
     "scan_for_kernel_freeze_actions", "check_no_kernel_artifact_change",
+    "STABLE_KERNEL_PATH_SEGMENT", "classify_stable_kernel_path_use",
     # gate framework
     "GATE_1", "GATE_2", "GATE_3", "GATE_ORDER", "GATE_EVIDENCE_KINDS",
+    "GateSubjectUnbound",
     "REFUSED_EVIDENCE_KINDS", "LIVE_OBSERVATION_SOURCES", "GateOutcome",
     "ThreeGateResult", "evaluate_three_gates",
     # gate 1
@@ -312,6 +314,21 @@ class GateVerdictTampering(ServingAdapterError):
     """A `ThreeGateResult` carries a status that does not follow from its gates."""
 
 
+class GateSubjectUnbound(ServingAdapterError):
+    """Gate 3's outcome is not bound to the processes gate 2's outcome is about.
+
+    `gate_live_equals_config()` ties each live fact to the gate-2 observation of
+    the same process. That tie lived entirely INSIDE the function, so it was
+    obtainable by not calling it: a hand-built gate-3 `GateOutcome` — which is
+    what a caller assembling a verdict from journalled outcomes holds — carried
+    no tie at all, and `evaluate_three_gates()` derived `released == True` from
+    it. A guarantee a verdict can be assembled without is not a guarantee
+    (`feedback_verify_integrity_not_presence_of_own_edit`), so the release verdict
+    itself now requires the binding, and requires it to name the same processes
+    the gate-2 outcome beside it names.
+    """
+
+
 class AdditiveCompositionRefused(ServingAdapterError):
     """A composed estimate was requested by adding local percentages (§9.7)."""
 
@@ -428,8 +445,6 @@ FORBIDDEN_PRODUCTION_ACTIONS = frozenset({
 _FORBIDDEN_COMMAND_PATTERNS = (
     (re.compile(r"production-(consolidated|speech)-v\d+"),
      "names a frozen production kernel branch (§1.3 item 4; human_only_paths.yaml:42-49)"),
-    (re.compile(r"kernels/production"),
-     "touches a stable production kernel path (invariant 3)"),
     (re.compile(r"instrument_eras\.ya?ml"),
      "writes the era registry (MEASUREMENT.md:140-142, human-only)"),
     (re.compile(r"autopilot_baseline\.ya?ml"),
@@ -443,6 +458,341 @@ _FORBIDDEN_COMMAND_PATTERNS = (
     (re.compile(r"\breboot\b"),
      "reboots the host (MEASUREMENT.md:140-142, operator authority)"),
 )
+
+#: The stable production kernel path, as its own vocabulary rather than as one
+#: more substring in `_FORBIDDEN_COMMAND_PATTERNS`.
+#:
+#: `/mnt/raid0/llm/kernels/production/<lane>` is a SYMLINK an operator repoints at
+#: freeze (invariant 3). It is also the path every serving launcher legitimately
+#: EXECUTES A BINARY THROUGH — that is the whole point of a stable path. A
+#: substring match cannot tell the two apart, so it refused both, and a §11.6
+#: package could not state its own launch command: the guard forbade its own
+#: idiom (`feedback_guard_must_not_forbid_its_own_idiom`).
+#:
+#: The distinction this classifier draws is the shell's own, and it is drawn from
+#: two facts about each occurrence, never from a verb blocklist (a blocklist of
+#: mutating verbs fails OPEN on the verb nobody listed):
+#:
+#:   1. **Depth.** `…/kernels/production` and `…/kernels/production/<lane>` ADDRESS
+#:      the trust boundary itself — the directory and the symlink. Everything at
+#:      those depths is refused in every position, because repointing, removing
+#:      and replacing the link all name it and nothing legitimate does.
+#:      `…/kernels/production/<lane>/<something>/…` addresses content THROUGH the
+#:      link, which is what execution does.
+#:   2. **Position.** In shell grammar the command word is the program that runs;
+#:      everything after it is an operand that the program acts ON. A below-link
+#:      path in command-word position is an execution. The same path as an operand
+#:      of some other program (`cp … <path>`, `rm <path>`, `install … <path>`) is
+#:      that program acting on production, and is refused without asking which
+#:      program it was.
+#:
+#: Three narrow, named allowances complete "executes a binary under the path":
+#: a transparent launcher prefix (`taskset`/`numactl`/`env`/…) is stepped over to
+#: the program it launches; a loader-search-path assignment in the segment's
+#: assignment PREFIX (`LD_LIBRARY_PATH=…`, which CLAUDE.md's speech-kernel freeze
+#: requires every launcher to set) is a read; and once the command word IS a
+#: production binary, its own below-link operands are that binary's own tree.
+#: Assignment prefixes are distinguished from `cmd NAME=value` operands by
+#: position, exactly as the shell does — `make install DESTDIR=…` is an operand
+#: and is refused.
+#:
+#: The residual this leaves, stated rather than implied: a segment whose command
+#: word is a production binary may pass below-link operands, so a production
+#: binary that itself writes into its own tree is not caught here. Nothing
+#: text-level can catch that, and the link itself is still refused in that segment
+#: — what is NOT relied on is any claim that the residual is empty.
+STABLE_KERNEL_PATH_SEGMENT = "kernels/production"
+
+#: Characters a plain path token may contain. Anything else — a substitution, a
+#: glob, a quote, a metacharacter — makes the token undecidable, and an
+#: undecidable token holding a production path is refused rather than parsed.
+_PLAIN_PATH_RE = re.compile(r"^[\w./+@%~-]+$")
+
+#: Shell control operators that end one command segment and begin the next.
+_SEGMENT_SPLIT_RE = re.compile(r"\|\||&&|[;|&\n]")
+
+#: A redirection operator, optionally file-descriptor-qualified. A redirect TARGET
+#: is a write by definition, so a production path in one is refused in every case
+#: — including inside a segment whose command word is a production binary.
+_REDIRECT_RE = re.compile(r"^[0-9]*(?:>>|>&|&>|>|<<|<&|<)")
+
+#: `NAME=value`. The name grammar is the shell's, so `--prefix=…`, `core.x=…` and
+#: `-o key=value` are operands rather than assignments.
+_ASSIGNMENT_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)=(.*)$")
+
+#: The only assignment names whose value may name the production tree. All three
+#: are dynamic-loader search paths: they are READ by `ld.so`, and no write can
+#: hide in one. Every other name — `DESTDIR`, `PREFIX`, `OUT` — is refused, which
+#: is what keeps `DESTDIR=…/kernels/production/cpu/bin make install` out.
+_READ_ONLY_PATH_ASSIGNMENTS = frozenset({
+    "LD_LIBRARY_PATH", "LD_RUN_PATH", "PATH",
+})
+
+#: Programs that launch another program rather than acting on their operands.
+#: Stepping over one reaches the program it launches; it never grants anything.
+_TRANSPARENT_LAUNCHERS = frozenset({
+    "env", "exec", "taskset", "numactl", "nohup", "setsid", "stdbuf", "nice",
+    "ionice", "chrt", "time",
+})
+
+#: The ONLY non-option token shape stepped over while walking a launcher's own
+#: arguments: a CPU/node list or `all`. Any other bare word ends the walk and
+#: becomes the command word, so `taskset -c 0-95 rm …/kernels/production/cpu/bin/x`
+#: reports `rm` — a launcher prefix may not be used to smuggle a mutating verb
+#: into command position.
+_LAUNCHER_SCALAR_RE = re.compile(r"^(?:[0-9][0-9,+-]*|all)$")
+
+
+def _unquote(token: str) -> str:
+    """Strip ONE matching pair of surrounding shell quotes. Nothing else.
+
+    A quoted launch command is still a launch command. Stripping grants nothing:
+    the unquoted token is depth- and position-analysed exactly as a bare one, so
+    `ln -sfn X "…/kernels/production/cpu"` is still an operand at link depth.
+    """
+    if len(token) >= 2 and token[0] == token[-1] and token[0] in ("'", '"'):
+        return token[1:-1]
+    return token
+
+
+def _plain_path_parts(token: str) -> tuple:
+    """`(parts, decidable)` — the path-like pieces of one shell token.
+
+    A `NAME=a:b` assignment and a bare `a:b` search path are both colon-separated
+    lists of paths, so they are split before depth is measured. `decidable` is
+    False when any piece is not a plain path, which is refused rather than read.
+    """
+    body = _unquote(token)
+    match = _ASSIGNMENT_RE.match(body)
+    if match is not None:
+        body = match.group(2)
+    parts = [part for part in body.split(":") if part]
+    decidable = all(_PLAIN_PATH_RE.match(part) for part in parts)
+    return tuple(parts), decidable
+
+
+#: A run of two or more `/`. `a//b` and `a/b` are THE SAME PATH to every kernel
+#: on this host, so a segment search that does not collapse them is passed by
+#: typing one extra slash: `rm -rf /mnt/raid0/llm/kernels//production/cpu/bin/x`
+#: names no `kernels/production` substring and produced no finding at all.
+_SLASH_RUN_RE = re.compile(r"/{2,}")
+
+
+def _collapse_slashes(text: str) -> str:
+    """`a//b` -> `a/b`. Used for SEARCHING only; messages quote the raw token."""
+    return _SLASH_RUN_RE.sub("/", text)
+
+
+def _names_stable_path(text: str) -> bool:
+    """True when `text` names the stable path under any slash spelling."""
+    return STABLE_KERNEL_PATH_SEGMENT in _collapse_slashes(text)
+
+
+def _stable_path_components(path: str):
+    """Components addressed BELOW `kernels/production`, or None for no occurrence.
+
+    `…/kernels/production` -> `()`; `…/kernels/production/cpu` -> `('cpu',)` — the
+    lane symlink itself; `…/kernels/production/cpu/bin/llama-server` -> three, which
+    is content reached THROUGH the link. Slash runs are collapsed first, because
+    `kernels//production` is the same directory and a depth this function cannot
+    see is a depth it reports as zero occurrences.
+    """
+    collapsed = _collapse_slashes(path)
+    index = collapsed.find(STABLE_KERNEL_PATH_SEGMENT)
+    if index < 0:
+        return None
+    tail = collapsed[index + len(STABLE_KERNEL_PATH_SEGMENT):]
+    return tuple(part for part in tail.split("/") if part)
+
+
+def _traverses_out_of_stable_path(path: str) -> bool:
+    """True when a `..` component appears below `kernels/production`.
+
+    Depth is the whole of the execute-vs-mutate distinction, and `..` makes the
+    counted depth mean nothing: `…/kernels/production/cpu/../../../../usr/bin/
+    install` counts SEVEN components — "well below the link" — while naming
+    `/usr/bin/install`, a program that is not under the stable path at all. In
+    command-word position that admitted an arbitrary host binary as "an execution
+    through the link", and admitting it also flipped `launches_production`, which
+    then admitted the segment's below-link OPERANDS. The pair
+    `…/production/cpu/../../../../usr/bin/install -m755 evil
+    …/production/cpu/bin/llama-server` classified PASS: a straight overwrite of
+    the production serving binary.
+
+    A path this function cannot measure is refused, not resolved: resolving it
+    would mean following the very symlink whose target is the trust boundary.
+    """
+    components = _stable_path_components(path)
+    return components is not None and ".." in components
+
+
+def _is_below_stable_link(path: str) -> bool:
+    components = _stable_path_components(path)
+    if components is None or ".." in components:
+        return False
+    return len(components) >= 2
+
+
+def _executes_under_stable_path(token: str) -> bool:
+    """True when `token` is a plain path naming a file BELOW the lane symlink."""
+    body = _unquote(token)
+    if not _PLAIN_PATH_RE.match(body):
+        return False
+    return _is_below_stable_link(body)
+
+
+def _segment_positions(tokens: Sequence) -> tuple:
+    """`(command_word_index, assignment_prefix_indices, redirect_target_indices)`.
+
+    The walk is fail-closed at every step: an unrecognised token ENDS it and
+    becomes the command word, so nothing is stepped over by accident.
+    """
+    assignments: set = set()
+    redirects: set = set()
+    i = 0
+    total = len(tokens)
+    while i < total:
+        token = tokens[i]
+        if _REDIRECT_RE.match(token):
+            redirects.add(i)
+            # A bare operator takes the next token as its target; an attached one
+            # (`>file`) carries its own.
+            if _REDIRECT_RE.fullmatch(token) and i + 1 < total:
+                redirects.add(i + 1)
+                i += 1
+            i += 1
+            continue
+        break
+    command_index = None
+    while i < total:
+        token = tokens[i]
+        if _ASSIGNMENT_RE.match(token):
+            assignments.add(i)
+            i += 1
+            continue
+        if token in _TRANSPARENT_LAUNCHERS:
+            i += 1
+            while i < total and (tokens[i].startswith("-")
+                                 or _LAUNCHER_SCALAR_RE.match(tokens[i])):
+                i += 1
+            continue
+        command_index = i
+        break
+    # Redirections may appear anywhere after the command word too.
+    j = 0
+    while j < total:
+        token = tokens[j]
+        if _REDIRECT_RE.match(token):
+            redirects.add(j)
+            if _REDIRECT_RE.fullmatch(token) and j + 1 < total:
+                redirects.add(j + 1)
+                j += 1
+        j += 1
+    return command_index, assignments, redirects
+
+
+def _stable_kernel_path_findings(text: str) -> list:
+    """Every use of the stable production kernel path in `text` that MUTATES it.
+
+    Executions are not findings; everything else that names the path is, including
+    every token the parser could not decide.
+    """
+    findings: list = []
+    for segment in _SEGMENT_SPLIT_RE.split(text):
+        tokens = segment.split()
+        if not tokens:
+            continue
+        command_index, assignments, redirects = _segment_positions(tokens)
+        command_word = "" if command_index is None else tokens[command_index]
+        launches_production = _executes_under_stable_path(command_word)
+        for i, token in enumerate(tokens):
+            parts, decidable = _plain_path_parts(token)
+            occurrences = [part for part in parts
+                           if _stable_path_components(part) is not None]
+            if not occurrences and not _names_stable_path(token):
+                continue
+            if not decidable or (not occurrences and _names_stable_path(token)):
+                findings.append(
+                    f"token {token!r} names {STABLE_KERNEL_PATH_SEGMENT!r} but is not "
+                    f"a plain path token, so whether it executes a binary under the "
+                    f"stable production kernel path or mutates it cannot be decided "
+                    f"— an undecidable use of a trust boundary is refused "
+                    f"(invariant 3)"
+                )
+                continue
+            for part in occurrences:
+                if _traverses_out_of_stable_path(part):
+                    findings.append(
+                        f"token {token!r} walks back out of the stable production "
+                        f"kernel path with a '..' component ({part!r}); depth is what "
+                        f"separates executing a binary THROUGH the link from acting "
+                        f"ON it, and a path that traverses upward has no depth this "
+                        f"scan can measure without resolving the very symlink that "
+                        f"is the trust boundary (invariant 3)"
+                    )
+                    continue
+                if not _is_below_stable_link(part):
+                    findings.append(
+                        f"token {token!r} addresses the stable production kernel path "
+                        f"{part!r} ITSELF — that path is the symlink an operator "
+                        f"repoints at freeze, never a binary anything executes "
+                        f"(invariant 3, §1.3 item 4)"
+                    )
+                    continue
+                if i in redirects:
+                    findings.append(
+                        f"token {token!r} is a redirection target under the stable "
+                        f"production kernel path; a redirect writes it (invariant 3)"
+                    )
+                    continue
+                if i == command_index:
+                    continue
+                match = _ASSIGNMENT_RE.match(_unquote(token))
+                if (i in assignments and match is not None
+                        and match.group(1) in _READ_ONLY_PATH_ASSIGNMENTS):
+                    continue
+                if launches_production:
+                    continue
+                acting = command_word or "<no command word>"
+                findings.append(
+                    f"token {token!r} passes a path under the stable production "
+                    f"kernel path to {acting!r} as an operand; the command word is "
+                    f"what executes, and an operand is what a command ACTS ON "
+                    f"(invariant 3)"
+                )
+    return findings
+
+
+def classify_stable_kernel_path_use(command: Any) -> schemas.Check:
+    """PASS / FAIL / COULD_NOT_CHECK for one command's use of the stable path.
+
+      * FAIL — at least one occurrence MUTATES the path (or could not be decided).
+      * PASS — the command names the stable production kernel path and every
+        occurrence EXECUTES a binary through it.
+      * COULD_NOT_CHECK — the command does not name the path at all, so this
+        classifier decided nothing about it. PASS is deliberately unreachable
+        there: a classifier that certifies a string for not containing the thing
+        it classifies is passed by deleting the thing it inspects, and the
+        §11.6 package would then carry a green receipt for a command that never
+        mentioned production.
+    """
+    if not isinstance(command, str):
+        return schemas.Check(
+            schemas.COULD_NOT_CHECK,
+            (f"expected a command string, got {type(command).__name__}; a "
+             f"non-string was not classified",),
+        )
+    if not _names_stable_path(command):
+        return schemas.Check(
+            schemas.COULD_NOT_CHECK,
+            (f"the command does not name {STABLE_KERNEL_PATH_SEGMENT!r}, so there "
+             f"was no use of the stable production kernel path to classify",),
+        )
+    findings = _stable_kernel_path_findings(command)
+    if findings:
+        return schemas.Check(schemas.FAIL, tuple(findings))
+    return schemas.Check(schemas.PASS)
+
 
 _ACTION_KEYS = frozenset({"action", "actions", "kind", "op", "operation", "verb"})
 
@@ -554,6 +904,12 @@ def _scan_node(node: Any, path: str, findings: list, match_strings: bool) -> Non
         for pattern, reason in _FORBIDDEN_COMMAND_PATTERNS:
             if pattern.search(node):
                 findings.append(f"{path}: {reason} — matched {pattern.pattern!r}")
+        # The stable kernel path is classified, not matched: see
+        # `STABLE_KERNEL_PATH_SEGMENT`. It runs only where the substring patterns
+        # run, so diagnostic prose (scanned with match_command_strings=False) is
+        # untouched by it in either direction.
+        for finding in _stable_kernel_path_findings(node):
+            findings.append(f"{path}: {finding}")
 
 
 def check_no_kernel_artifact_change(
@@ -663,6 +1019,16 @@ class GateOutcome:
     reasons: tuple = ()
     notes: tuple = ()
     defect: bool = False
+    #: The processes this outcome is ABOUT, as `service_id#pid` tokens. Gates 2
+    #: and 3 fill it from their own observations; gate 1's subject is a guard run,
+    #: not a process, so it stays empty there.
+    subjects: tuple = ()
+    #: The EARLIER gate's subjects this outcome was decided against. Gate 3 fills
+    #: it with the gate-2 observations it tied each live fact to. It is a subject
+    #: binding, never an answer: `GATE_EVIDENCE_KINDS` still requires gate 3 to be
+    #: answered with `live_process_observation`, and nothing here is read as
+    #: evidence for *"is live what was configured"*.
+    tied_to: tuple = ()
 
     def __post_init__(self) -> None:
         if self.gate not in GATE_ORDER:
@@ -672,6 +1038,13 @@ class GateOutcome:
         _require_str(self.evidence_ref, "evidence_ref")
         object.__setattr__(self, "reasons", _require_tuple(self.reasons, "reasons"))
         object.__setattr__(self, "notes", _require_tuple(self.notes, "notes"))
+        object.__setattr__(self, "subjects", _require_tuple(self.subjects, "subjects"))
+        object.__setattr__(self, "tied_to", _require_tuple(self.tied_to, "tied_to"))
+        if self.gate == GATE_1 and self.tied_to:
+            raise ValueError(
+                f"gate {GATE_1!r} carries tied_to {self.tied_to}: nothing precedes "
+                f"gate 1, so there is no earlier subject to be bound to"
+            )
 
         allowed = GATE_EVIDENCE_KINDS[self.gate]
         if self.evidence_kind not in allowed:
@@ -737,6 +1110,7 @@ class ThreeGateResult:
             raise GateVerdictTampering(
                 "ThreeGateResult carries reasons that do not follow from its gates"
             )
+        _require_gate_subject_binding(self.stack_starts, self.live_equals_config)
 
     @property
     def gates(self) -> tuple:
@@ -753,6 +1127,48 @@ class ThreeGateResult:
                 f"stack change is not release-eligible: status={self.status!r}, "
                 f"blocked at {self.blocked_at!r} — {'; '.join(self.reasons)}"
             )
+
+
+def _require_gate_subject_binding(
+    stack_starts: Optional[GateOutcome], live_equals_config: Optional[GateOutcome],
+) -> None:
+    """Refuse a three-gate result whose gate 3 is about processes gate 2 is not.
+
+    Checked HERE rather than only inside `gate_live_equals_config()` because this
+    is the one place a release verdict can come into existence. Every conjunct is
+    required to be non-empty on purpose: two empty tuples compare equal, so a tie
+    that only tested `tied_to == subjects` would have been satisfiable by
+    supplying neither — the same shape as an audit passed by handing it nothing to
+    audit.
+    """
+    if live_equals_config is None:
+        return
+    if stack_starts is None:
+        raise GateSubjectUnbound(
+            "a gate-3 outcome was assembled with no gate-2 outcome; gate 3 is "
+            "decided about the processes gate 2 observed, and there are none"
+        )
+    if not stack_starts.subjects:
+        raise GateSubjectUnbound(
+            f"the gate-2 outcome {stack_starts.evidence_ref!r} names no subjects, so "
+            f"there is nothing for gate 3 to be bound to. A binding to an empty set "
+            f"is not a binding"
+        )
+    if not live_equals_config.tied_to:
+        raise GateSubjectUnbound(
+            f"the gate-3 outcome {live_equals_config.evidence_ref!r} declares no "
+            f"gate-2 subjects it was decided against. Gate 2 could have proved that "
+            f"one set of processes came up correctly linked while gate 3 proved a "
+            f"different set matches its configuration, and the pair would read as "
+            f"'the stack that started is the stack that is running' with nothing "
+            f"having compared the two (§11.6)"
+        )
+    if set(live_equals_config.tied_to) != set(stack_starts.subjects):
+        raise GateSubjectUnbound(
+            f"gate 3 was decided against {sorted(live_equals_config.tied_to)} but "
+            f"gate 2 is about {sorted(stack_starts.subjects)}; the two gates are "
+            f"about different processes, so neither says anything about the other's"
+        )
 
 
 def _derive_three_gate_status(gates: Sequence) -> tuple:
@@ -1254,6 +1670,11 @@ def gate_stack_starts(
                 f"{type(obs).__name__}"
             )
     ref = "services:" + ",".join(sorted(o.service_id for o in observed))
+    #: The processes this gate is about, for gate 3 to be bound to. Derived from
+    #: the observations, never from `affected_services` — the declared set is the
+    #: manifest's claim about what should have started, and binding gate 3 to it
+    #: would tie gate 3 to an intention rather than to an observed process.
+    subjects = tuple(sorted(f"{o.service_id}#{o.pid}" for o in observed))
 
     reasons: list = []
     notes: list = []
@@ -1422,15 +1843,15 @@ def gate_stack_starts(
         return GateOutcome(gate=GATE_2, status=schemas.FAIL,
                            evidence_kind="service_start_observation",
                            evidence_ref=ref, reasons=tuple(reasons),
-                           notes=tuple(notes))
+                           notes=tuple(notes), subjects=subjects)
     if undecidable:
         return GateOutcome(gate=GATE_2, status=schemas.COULD_NOT_CHECK,
                            evidence_kind="service_start_observation",
-                           evidence_ref=ref,
+                           evidence_ref=ref, subjects=subjects,
                            reasons=tuple(notes) or ("gate 2 could not be decided",))
     return GateOutcome(gate=GATE_2, status=schemas.PASS,
                        evidence_kind="service_start_observation",
-                       evidence_ref=ref, notes=tuple(notes))
+                       evidence_ref=ref, notes=tuple(notes), subjects=subjects)
 
 
 # =============================================================================
@@ -1556,20 +1977,61 @@ def _flag_map(tokens: Sequence) -> dict:
     return out
 
 
+def _program_name(path: str) -> str:
+    """The last path component. `''` for the empty string, never an exception."""
+    return path.rsplit("/", 1)[-1]
+
+
 def gate_live_equals_config(
-    intended: Sequence, live: Sequence,
+    intended: Sequence, live: Sequence, *, started: Sequence,
 ) -> GateOutcome:
     """Gate 3: the running processes match the intended configuration.
 
-    Right binary, right flags, right affinity — and not stale. The staleness
-    check is separate from the three comparisons on purpose: a process started
-    before its configuration was written can match every field and still be
-    running the previous configuration's behaviour, because the file it would
-    have read did not exist yet (CLAUDE.md, *"check the running process isn't
-    stale"*).
+    Right binary, right argv, right flags, right affinity — not stale, and **the
+    same processes gate 2 measured**. The staleness check is separate from the
+    comparisons on purpose: a process started before its configuration was written
+    can match every field and still be running the previous configuration's
+    behaviour, because the file it would have read did not exist yet (CLAUDE.md,
+    *"check the running process isn't stale"*).
+
+    `started` is gate 2's own observations and is REQUIRED, not optional. Without
+    it gate 3 graded whatever `LiveProcessFact` set it was handed: gate 2 could
+    have proved that pid 1000 came up correctly linked while gate 3 proved that
+    pid 4242 matched its config, and the pair read as "the stack that started is
+    the stack that is running" when nothing had checked that they were the same
+    process. Two ties close it, because a pid alone does not identify a process:
+
+      * `LiveProcessFact.pid` must equal the pid gate 2 observed for that service;
+      * that pid's start instant must fall inside the start→ready window gate 2
+        watched it come up in. A pid is a reusable number, so matching pids with
+        incompatible start times are two different processes wearing one number.
+
+    Consuming gate 2's observation is not gate 2's evidence answering gate 3:
+    `GATE_EVIDENCE_KINDS` still binds this outcome to `live_process_observation`,
+    and no gate-2 fact is read as an answer to *"is live what was configured"*.
+    It is read only to establish that the SUBJECT of both gates is one process.
+
+    `argv[0]` is compared to the observed `binary_path` for the same reason. The
+    two come from different `/proc` reads (`proc_cmdline` and `proc_exe`), so a
+    disagreement means the observation stitched two processes together — or that
+    the binary was exec'd under another program's name.
     """
     intended_list = list(intended)
     live_list = list(live)
+    started_list = list(started)
+    for i, obs in enumerate(started_list):
+        if not isinstance(obs, ServiceStartObservation):
+            raise TypeError(
+                f"started[{i}]: expected a ServiceStartObservation, got "
+                f"{type(obs).__name__}"
+            )
+    if not started_list:
+        raise ValueError(
+            "started: gate 3 is decided about the processes gate 2 observed. With no "
+            "gate-2 observation there is nothing to tie the live facts to, and a PASS "
+            "would certify that the stack which started is the stack which is running "
+            "without anything having compared the two"
+        )
     for i, item in enumerate(intended_list):
         if not isinstance(item, IntendedProcessConfig):
             raise TypeError(
@@ -1588,9 +2050,35 @@ def gate_live_equals_config(
             "would certify an empty comparison"
         )
 
-    ref = "live:" + ",".join(sorted(f.service_id for f in live_list))
+    # Gate 2 FAILs a service that "appears twice in one observation set", and the
+    # live side of this very function FAILs two live processes for one service.
+    # The gate-2 side was collapsed last-wins, so the SAME evidence in a different
+    # list order decided the tie differently: `[pid 1000, pid 4242]` tied to 4242
+    # and PASSed, `[pid 4242, pid 1000]` tied to 1000 and FAILed. A verdict that
+    # depends on the order its evidence was listed in is not a verdict.
+    started_by_id = {}
+    started_pids: dict = {}
+    tie_reasons: list = []
+    for obs in started_list:
+        if obs.service_id in started_by_id:
+            tie_reasons.append(
+                f"service {obs.service_id!r} carries two gate-2 start observations "
+                f"(pids {started_by_id[obs.service_id].pid} and {obs.pid}); which of "
+                f"them gate 3 is tied to is not determined here, and one of the two "
+                f"processes is a leftover"
+            )
+        started_by_id[obs.service_id] = obs
+        started_pids.setdefault(obs.service_id, []).append(obs.pid)
+
+    # The tie is part of the evidence reference, so the durable record shows WHICH
+    # gate-2 processes this outcome was decided against rather than only that some
+    # tie happened. Every observed pid is named, not the surviving one.
+    ref = ("live:" + ",".join(sorted(f.service_id for f in live_list))
+           + "|gate2:" + ",".join(
+               f"{sid}#" + "+".join(str(pid) for pid in started_pids[sid])
+               for sid in sorted(started_pids)))
     live_by_id = {}
-    reasons: list = []
+    reasons: list = list(tie_reasons)
     notes: list = []
     undecidable = False
 
@@ -1629,6 +2117,68 @@ def gate_live_equals_config(
                 f"service {cfg.service_id!r} runs {fact.binary_path!r}, configured "
                 f"{cfg.binary_path!r}"
             )
+
+        # argv[0] against the observed binary path. `LiveProcessFact.argv` is
+        # non-empty by construction, so there is no missing-argv branch.
+        argv0 = fact.argv[0]
+        if _program_name(argv0) != _program_name(fact.binary_path):
+            reasons.append(
+                f"service {cfg.service_id!r}: argv[0] {argv0!r} names program "
+                f"{_program_name(argv0)!r} while the observed binary is "
+                f"{fact.binary_path!r}; the two live reads describe different "
+                f"programs, so this fact is not about one process"
+            )
+        elif argv0.startswith("/"):
+            if argv0 != fact.binary_path:
+                reasons.append(
+                    f"service {cfg.service_id!r}: argv[0] {argv0!r} is an absolute "
+                    f"path that is not the observed binary {fact.binary_path!r}; "
+                    f"same program name, different file"
+                )
+        else:
+            # The compliant idiom: a launcher may exec with a bare or relative
+            # argv[0]. The program NAME is still compared — only the directory is
+            # unavailable — and saying which part could not be compared is the
+            # honest record.
+            notes.append(
+                f"service {cfg.service_id!r}: argv[0] {argv0!r} is not an absolute "
+                f"path, so it was compared to {fact.binary_path!r} by program name "
+                f"only"
+            )
+
+        start_obs = started_by_id.get(cfg.service_id)
+        if start_obs is None:
+            reasons.append(
+                f"service {cfg.service_id!r} has no gate-2 start observation, so the "
+                f"live process cannot be tied to one that was observed starting; "
+                f"gate 3 would otherwise grade a process gate 2 never measured"
+            )
+        elif start_obs.pid != fact.pid:
+            reasons.append(
+                f"service {cfg.service_id!r}: gate 3 observed pid {fact.pid} but "
+                f"gate 2 observed pid {start_obs.pid}. The process was replaced "
+                f"between the gates, so gate 2's start, linkage and sequencing "
+                f"evidence is about a process that is no longer the one serving"
+            )
+        else:
+            live_start = _parse_instant(fact.started_at, "started_at")
+            window_open = _parse_instant(start_obs.started_at, "started_at")
+            window_close = _parse_instant(start_obs.ready_at, "ready_at")
+            if live_start is None or window_open is None or window_close is None:
+                undecidable = True
+                notes.append(
+                    f"service {cfg.service_id!r}: pid {fact.pid} matches gate 2, but a "
+                    f"timestamp is absent, naive, or unparseable, so it could not be "
+                    f"shown to be the SAME process rather than a reused pid"
+                )
+            elif not window_open <= live_start <= window_close:
+                reasons.append(
+                    f"service {cfg.service_id!r}: pid {fact.pid} started at "
+                    f"{fact.started_at}, outside the window gate 2 watched it come up "
+                    f"in ({start_obs.started_at} .. {start_obs.ready_at}). A pid is a "
+                    f"reusable number; matching pids with incompatible start times "
+                    f"are two processes, not one"
+                )
 
         live_flags = _flag_map(fact.argv)
         want_flags = _flag_map(cfg.flags)
@@ -1680,19 +2230,22 @@ def gate_live_equals_config(
                 f"configuration"
             )
 
+    subjects = tuple(sorted(f"{f.service_id}#{f.pid}" for f in live_list))
+    tied_to = tuple(sorted(f"{o.service_id}#{o.pid}" for o in started_list))
     if reasons:
         return GateOutcome(gate=GATE_3, status=schemas.FAIL,
                            evidence_kind="live_process_observation",
                            evidence_ref=ref, reasons=tuple(reasons),
-                           notes=tuple(notes))
+                           notes=tuple(notes), subjects=subjects, tied_to=tied_to)
     if undecidable:
         return GateOutcome(gate=GATE_3, status=schemas.COULD_NOT_CHECK,
                            evidence_kind="live_process_observation",
-                           evidence_ref=ref,
+                           evidence_ref=ref, subjects=subjects, tied_to=tied_to,
                            reasons=tuple(notes) or ("gate 3 could not be decided",))
     return GateOutcome(gate=GATE_3, status=schemas.PASS,
                        evidence_kind="live_process_observation",
-                       evidence_ref=ref, notes=tuple(notes))
+                       evidence_ref=ref, notes=tuple(notes),
+                       subjects=subjects, tied_to=tied_to)
 
 
 # =============================================================================

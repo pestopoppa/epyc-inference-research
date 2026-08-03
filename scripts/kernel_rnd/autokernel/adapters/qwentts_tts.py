@@ -83,7 +83,7 @@ from pathlib import PurePosixPath
 from typing import Any, Collection, Iterable, Mapping, Optional, Sequence
 
 from .. import schemas
-from ..evaluator import api, integrity
+from ..evaluator import api, devices, integrity
 
 # =============================================================================
 # Errors — every one is a refusal, never a degraded answer
@@ -403,25 +403,116 @@ def expect_production_anchor(path: str, *, label: str = "anchor_path") -> str:
 # =============================================================================
 
 
+#: The ggml core EVERY member of this inventory resolves from its OWN tree. This is
+#: the freeze premise restated as a set: qwentts.cpp runs ggml 0.17.0 while
+#: whisper.cpp runs 0.18.0 and llama.cpp 0.16.0, so a member that resolves any of
+#: these three from another tree runs silently wrong
+#: (INC-20260731-ggml-linkage-silent-cpu-fallback).
+CORE_SHARED_LIBRARIES = frozenset({
+    "libggml-base.so",
+    "libggml-cpu.so",
+    "libggml.so",
+})
+
+#: Tree-local libraries never REQUIRED of any member. `libggml-hip.so` is here
+#: because the HIP backend is `dlopen`ed at runtime and `ldd` cannot see it, so its
+#: absence from a report is silence rather than evidence; its presence FROM ANOTHER
+#: TREE is still a `BAD` line and still FAILs.
+OPTIONAL_SHARED_LIBRARIES = frozenset({
+    "libggml-hip.so",
+})
+
+#: WHERE a member's declared library set comes from. It says "declared, not
+#: attested" on purpose: attesting a member's linkage means running `ldd` against
+#: the FROZEN tree, and this module executes nothing (invariant 3). The declaration
+#: is made in the direction that cannot manufacture a PASS — a required library
+#: absent from a report is COULD_NOT_CHECK, and an optional one resolving from
+#: another tree is still a FAIL.
+_GGML_ONLY_MEMBER_PROVENANCE = (
+    "role-derived: this backend has no engine shared object at all — qwentts.cpp's own "
+    "code links as the static archive libqwen-core.a, which never appears in ldd output — "
+    "so every member's required set is the ggml core it must resolve from its own tree. "
+    "Declared here, not attested against a live ldd on the frozen tree."
+)
+
+
 @dataclass(frozen=True)
 class BinarySpec:
+    """One binary this backend measures, what it is for, and what IT links.
+
+    `required_libraries` is **per member**, with no inventory-wide default. One set
+    for the whole inventory makes the §10.2 phase-2 gate unrunnable for any member
+    that links a subset: every report for that member is missing a library it never
+    linked, so the verdict is COULD_NOT_CHECK forever and the phase can never pass.
+    A default here would reintroduce that silently, so there is none.
+    """
+
     name: str
     rel_path: str
     role: str
+    required_libraries: frozenset
+    optional_libraries: frozenset
+    linkage_provenance: str
+
+    def __post_init__(self) -> None:
+        for field in ("required_libraries", "optional_libraries"):
+            value = getattr(self, field)
+            if not isinstance(value, frozenset) or not all(
+                    isinstance(v, str) and v.endswith(".so") for v in value):
+                raise QwenTtsAdapterError(
+                    f"{self.name}.{field} must be a frozenset of `.so` stems, got "
+                    f"{value!r}")
+        if not self.required_libraries:
+            raise QwenTtsAdapterError(
+                f"{self.name} declares no required library; an empty requirement is a "
+                f"gate that passes on any report at all")
+        if not CORE_SHARED_LIBRARIES <= self.required_libraries:
+            raise QwenTtsAdapterError(
+                f"{self.name} does not require the ggml core {sorted(CORE_SHARED_LIBRARIES)}; "
+                f"resolving this tree's own ggml is the property the freeze exists for")
+        overlap = self.required_libraries & self.optional_libraries
+        if overlap:
+            raise QwenTtsAdapterError(
+                f"{self.name} lists {sorted(overlap)} as both required and optional; a "
+                f"library cannot be both, and the overlap decides silently which rule wins")
+        if not isinstance(self.linkage_provenance, str) or not self.linkage_provenance.strip():
+            raise QwenTtsAdapterError(
+                f"{self.name} carries no linkage provenance; a per-member library set "
+                f"whose origin is unrecorded is a guess nobody can audit")
 
     def to_dict(self) -> dict:
-        return {"name": self.name, "rel_path": self.rel_path, "role": self.role}
+        return {"name": self.name, "rel_path": self.rel_path, "role": self.role,
+                "required_libraries": sorted(self.required_libraries),
+                "optional_libraries": sorted(self.optional_libraries),
+                "linkage_provenance": self.linkage_provenance}
 
 
 #: Verified against the frozen tree's own `build/` on 2026-08-03. Note every
 #: `rel_path` lacks a `bin/` segment — asymmetry 1, carried in the data rather than
-#: reconstructed by a caller.
+#: reconstructed by a caller. The library sets are DECLARED per member: uniform
+#: today because this tree ships no engine shared object, per-member BY
+#: CONSTRUCTION so a member that links a subset stays gradeable.
 BINARY_INVENTORY = (
-    BinarySpec("qwen-tts", "build/qwen-tts", "synthesis_cell"),
-    BinarySpec("tts-server", "build/tts-server", "service_smoke"),
-    BinarySpec("qwen-codec", "build/qwen-codec", "codec_cell"),
-    BinarySpec("quantize", "build/quantize", "quantization_tool"),
-    BinarySpec("test-backend-ops", "build/test-backend-ops", "op_and_unit_test"),
+    BinarySpec("qwen-tts", "build/qwen-tts", "synthesis_cell",
+               required_libraries=CORE_SHARED_LIBRARIES,
+               optional_libraries=OPTIONAL_SHARED_LIBRARIES,
+               linkage_provenance=_GGML_ONLY_MEMBER_PROVENANCE),
+    BinarySpec("tts-server", "build/tts-server", "service_smoke",
+               required_libraries=CORE_SHARED_LIBRARIES,
+               optional_libraries=OPTIONAL_SHARED_LIBRARIES,
+               linkage_provenance=_GGML_ONLY_MEMBER_PROVENANCE),
+    BinarySpec("qwen-codec", "build/qwen-codec", "codec_cell",
+               required_libraries=CORE_SHARED_LIBRARIES,
+               optional_libraries=OPTIONAL_SHARED_LIBRARIES,
+               linkage_provenance=_GGML_ONLY_MEMBER_PROVENANCE),
+    BinarySpec("quantize", "build/quantize", "quantization_tool",
+               required_libraries=CORE_SHARED_LIBRARIES,
+               optional_libraries=OPTIONAL_SHARED_LIBRARIES,
+               linkage_provenance=_GGML_ONLY_MEMBER_PROVENANCE),
+    BinarySpec("test-backend-ops", "build/test-backend-ops", "op_and_unit_test",
+               required_libraries=CORE_SHARED_LIBRARIES,
+               optional_libraries=OPTIONAL_SHARED_LIBRARIES,
+               linkage_provenance=_GGML_ONLY_MEMBER_PROVENANCE),
 )
 
 _BINARIES_BY_NAME = {b.name: b for b in BINARY_INVENTORY}
@@ -460,23 +551,41 @@ def library_dir(tree_root: str, *, allow_production: bool = False) -> str:
     return path
 
 
-#: Shared objects a correctly linked qwentts.cpp binary resolves from its OWN tree.
-#: `libqwen-core` is deliberately ABSENT: it is a static archive (`libqwen-core.a`)
-#: and never appears in `ldd` output at all, so listing it would make every report
-#: look incomplete.
-EXPECTED_SHARED_LIBRARIES = frozenset({
-    "libggml-base.so",
-    "libggml-cpu.so",
-    "libggml.so",
-})
+def expected_shared_libraries(binary: str) -> frozenset:
+    """The libraries THIS member must resolve from its own tree.
 
-OPTIONAL_SHARED_LIBRARIES = frozenset({
-    "libggml-hip.so",
-})
+    `binary` has no default. The inventory-wide union is not a gate input and is not
+    reachable as one — `all_declared_shared_libraries()` exists to DESCRIBE the tree,
+    and grading a member against it is the defect this signature closes.
+
+    `libqwen-core` appears in no member's set, required or optional: it is a static
+    archive (`libqwen-core.a`) and never appears in `ldd` output at all, so listing
+    it would make every report look incomplete.
+    """
+    return _require_member(binary).required_libraries
 
 
-def expected_shared_libraries() -> frozenset:
-    return EXPECTED_SHARED_LIBRARIES
+def optional_shared_libraries(binary: str) -> frozenset:
+    """Libraries THIS member may resolve. Absence is not a finding; wrong tree is."""
+    return _require_member(binary).optional_libraries
+
+
+def all_declared_shared_libraries() -> frozenset:
+    """The union over the inventory. A DESCRIPTION of the tree, never a gate input."""
+    union: frozenset = frozenset()
+    for spec in BINARY_INVENTORY:
+        union = union | spec.required_libraries | spec.optional_libraries
+    return union
+
+
+def _require_member(binary: str) -> BinarySpec:
+    _require_str(binary, "binary")
+    try:
+        return _BINARIES_BY_NAME[binary]
+    except KeyError as exc:
+        raise UnknownBinary(
+            f"{binary!r} is not in the {BACKEND} binary inventory; declared binaries "
+            f"are {sorted(_BINARIES_BY_NAME)}") from exc
 
 
 # =============================================================================
@@ -543,18 +652,36 @@ class LinkageVerdict:
     bad_libraries: tuple
     missing_expected: tuple
     resolved_count: int
+    binary: str
+    required_libraries: tuple
 
     def to_dict(self) -> dict:
         return {"outcome": self.check.outcome, "reasons": list(self.check.reasons),
                 "ok_libraries": list(self.ok_libraries),
                 "bad_libraries": list(self.bad_libraries),
                 "missing_expected": list(self.missing_expected),
-                "resolved_count": self.resolved_count}
+                "resolved_count": self.resolved_count,
+                "binary": self.binary,
+                "required_libraries": list(self.required_libraries)}
 
 
 _OK_LINE_RE = re.compile(r"^\s{2}OK\s+(\S+)\s+->\s+(\S+)\s*$")
 _BAD_LINE_RE = re.compile(r"^\s{2}BAD\s+(\S+)\s+->\s+(\S+)\s*$")
 _NO_LIBS_MARKER = "no ggml/whisper/llama libs in ldd output"
+
+#: The verifier's own first line: `echo "binary : $BIN"`, printed before any ldd
+#: output. It is the ONLY thing in the report that says which binary was inspected.
+_REPORT_BINARY_RE = re.compile(r"^binary\s*:\s*(?P<path>\S.*?)\s*$", re.MULTILINE)
+
+
+def report_binary_name(stdout: str) -> Optional[str]:
+    """The basename the report itself says it inspected, or None if it says nothing."""
+    if not isinstance(stdout, str):
+        raise QwenTtsAdapterError(f"stdout must be a string, got {type(stdout).__name__}")
+    match = _REPORT_BINARY_RE.search(stdout)
+    if match is None:
+        return None
+    return PurePosixPath(match.group("path")).name
 
 
 def _soname_stem(name: str) -> str:
@@ -562,17 +689,32 @@ def _soname_stem(name: str) -> str:
     return head + sep if sep else name
 
 
-def interpret_linkage_report(stdout: str, exit_code: int) -> LinkageVerdict:
-    """Turn a captured verifier report into a three-outcome verdict.
+def interpret_linkage_report(stdout: str, exit_code: int, *,
+                             binary: str) -> LinkageVerdict:
+    """Turn a captured verifier report into a three-outcome verdict, FOR ONE MEMBER.
 
     Identical rules to the STT sibling, and deliberately not shared with it: the two
     adapters declare different expected library sets, and a shared helper would make
     one backend's coverage gap invisible in the other's report.
+
+    `binary` is a required keyword: the report is graded against **that member's**
+    declared library set, never against the inventory union. A union grades every
+    member by the strictest one, so a member linking a subset is permanently
+    COULD_NOT_CHECK and §10.2 phase 2 can never pass for it.
+
+    And `binary` is CHECKED against the report's own `binary :` header, not trusted.
+    A name the caller supplies is a claim by the party being gated; the header is
+    the evidence's own statement of what it is. A disagreement, or a report naming
+    no binary at all, is COULD_NOT_CHECK — never PASS. Uniform required sets today
+    make the STT sibling the one that can currently be exploited by relabelling, but
+    the binding belongs to the signature, not to the current contents of the table.
     """
     if not isinstance(stdout, str):
         raise QwenTtsAdapterError(f"stdout must be a string, got {type(stdout).__name__}")
     if isinstance(exit_code, bool) or not isinstance(exit_code, int):
         raise QwenTtsAdapterError("exit_code must be an int")
+    spec = _require_member(binary)
+    required = frozenset(spec.required_libraries)
 
     ok: list = []
     bad: list = []
@@ -587,7 +729,8 @@ def interpret_linkage_report(stdout: str, exit_code: int) -> LinkageVerdict:
 
     resolved = len(ok) + len(bad)
     seen = {_soname_stem(name) for name, _ in ok}
-    missing = tuple(sorted(EXPECTED_SHARED_LIBRARIES - seen))
+    missing = tuple(sorted(required - seen))
+    member = tuple(sorted(required))
 
     if bad:
         offenders = ", ".join(f"{n} -> {p}" for n, p in bad)
@@ -598,7 +741,8 @@ def interpret_linkage_report(stdout: str, exit_code: int) -> LinkageVerdict:
                 f"runs 0.18.0 and llama.cpp 0.16.0 — a binary inheriting another tree's "
                 f"ggml runs silently wrong",)),
             ok_libraries=tuple(sorted(ok)), bad_libraries=tuple(sorted(bad)),
-            missing_expected=missing, resolved_count=resolved)
+            missing_expected=missing, resolved_count=resolved,
+            binary=spec.name, required_libraries=member)
 
     if exit_code != 0:
         return LinkageVerdict(
@@ -606,7 +750,30 @@ def interpret_linkage_report(stdout: str, exit_code: int) -> LinkageVerdict:
                 f"verifier exited {exit_code} with no BAD line parsed; the report is "
                 f"inconsistent with its own exit status and is not trusted",)),
             ok_libraries=tuple(sorted(ok)), bad_libraries=(),
-            missing_expected=missing, resolved_count=resolved)
+            missing_expected=missing, resolved_count=resolved,
+            binary=spec.name, required_libraries=member)
+
+    named = report_binary_name(stdout)
+    if named != spec.name:
+        return LinkageVerdict(
+            check=schemas.Check(schemas.COULD_NOT_CHECK, (
+                (f"this report was captured against {named!r} and is being graded as "
+                 f"{spec.name!r}. `binary=` is the CALLER's claim about the evidence; "
+                 f"the report's own `binary :` header is the evidence's statement of "
+                 f"what it is, and only the second is supplied by something other than "
+                 f"the party being gated. Per-member sets make the member's identity "
+                 f"load-bearing, so a report graded under the wrong member is graded "
+                 f"against a set it was never captured for"
+                 if named is not None else
+                 f"the report carries no `binary : <path>` header, so nothing in it "
+                 f"says which binary was inspected and it cannot be bound to "
+                 f"{spec.name!r}. The verifier prints that header unconditionally "
+                 f"before any ldd output; a report without one is not its output, or "
+                 f"is a fragment of it, and grading it against a member's set would be "
+                 f"grading the caller's claim instead of the evidence"),)),
+            ok_libraries=tuple(sorted(ok)), bad_libraries=(),
+            missing_expected=(), resolved_count=resolved,
+            binary=spec.name, required_libraries=member)
 
     if resolved == 0 or _NO_LIBS_MARKER in stdout:
         return LinkageVerdict(
@@ -615,24 +782,43 @@ def interpret_linkage_report(stdout: str, exit_code: int) -> LinkageVerdict:
                 "`ldd` failed. It exits 0 in this state, so an exit-status consumer would "
                 "record a PASS for a check that did not run",)),
             ok_libraries=(), bad_libraries=(), missing_expected=missing,
-            resolved_count=0)
+            resolved_count=0, binary=spec.name, required_libraries=member)
 
     if missing:
         return LinkageVerdict(
             check=schemas.Check(schemas.COULD_NOT_CHECK, (
-                f"expected libraries absent from the report: {list(missing)}. The "
-                f"verifier's name filter is {list(VERIFIER_NAME_FILTER)}, so a library "
-                f"outside it is never examined and its absence is silence, not evidence",)),
+                f"libraries {spec.name!r} is declared to require are absent from the "
+                f"report: {list(missing)} (its declared set is {list(member)}; "
+                f"provenance: {spec.linkage_provenance}). The verifier's name filter is "
+                f"{list(VERIFIER_NAME_FILTER)}, so a library outside it is never examined "
+                f"and its absence is silence, not evidence",)),
             ok_libraries=tuple(sorted(ok)), bad_libraries=(),
-            missing_expected=missing, resolved_count=resolved)
+            missing_expected=missing, resolved_count=resolved,
+            binary=spec.name, required_libraries=member)
 
     return LinkageVerdict(check=schemas.Check(schemas.PASS),
                           ok_libraries=tuple(sorted(ok)), bad_libraries=(),
-                          missing_expected=(), resolved_count=resolved)
+                          missing_expected=(), resolved_count=resolved,
+                          binary=spec.name, required_libraries=member)
 
 
+#: This engine's LOG GRAMMAR — the line shape a qwentts.cpp build prints when a
+#: device was enumerated, and the flag it prints when one was merely requested. The
+#: grammar is this adapter's; what a device NAME denotes is not, and lives in
+#: `evaluator/devices.py` so the two speech adapters cannot diverge on it.
 _DEVICE_LINE_RE = re.compile(r"Device\s+\d+\s*:\s*(?P<name>[^\n,]+)", re.IGNORECASE)
 _REQUEST_FLAG_RE = re.compile(r"use\s+gpu\s*=\s*1", re.IGNORECASE)
+
+
+def device_names_in_log(startup_log: str) -> tuple:
+    """Every `Device N: <name>` the log enumerates, in order.
+
+    `finditer`, not `search`: a ROCm build enumerates more than one device, and
+    grading the FIRST line alone lets one entry decide a cell the others contradict.
+    """
+    if not isinstance(startup_log, str):
+        raise QwenTtsAdapterError("startup_log must be a string")
+    return tuple(m.group("name").strip() for m in _DEVICE_LINE_RE.finditer(startup_log))
 
 
 def check_device_evidence(startup_log: str, *, expected_lane: str) -> schemas.Check:
@@ -641,6 +827,11 @@ def check_device_evidence(startup_log: str, *, expected_lane: str) -> schemas.Ch
     The verifier says it in its own PASS message: ggml backends are `dlopen`ed at
     runtime and are not covered by `ldd`, so a `use gpu = 1` flag reports what was
     REQUESTED, never what was LOADED.
+
+    The presence of a device LINE is necessary and not sufficient, which is the
+    carried-forward defect this now closes: `Device 0: CPU` is a device line, and it
+    is exactly what a silently-fallen-back ggml prints. The NAME is graded against
+    `evaluator/devices.py`'s vocabulary — one table for both speech adapters.
     """
     if not isinstance(startup_log, str):
         raise QwenTtsAdapterError("startup_log must be a string")
@@ -650,21 +841,19 @@ def check_device_evidence(startup_log: str, *, expected_lane: str) -> schemas.Ch
     if not startup_log.strip():
         return schemas.Check(schemas.COULD_NOT_CHECK,
                              ("startup log is empty; no device evidence was captured",))
-    device = _DEVICE_LINE_RE.search(startup_log)
+    names = device_names_in_log(startup_log)
     requested = bool(_REQUEST_FLAG_RE.search(startup_log))
     if expected_lane == "gpu":
-        if device is None:
+        if not names:
             reasons = ["no `Device N: <name>` line in the startup log, so nothing "
                        "establishes which backend actually loaded"]
             if requested:
                 reasons.append("the log carries `use gpu = 1`, which reports what was "
                                "REQUESTED, never what was LOADED")
             return schemas.Check(schemas.FAIL, tuple(reasons))
-        return schemas.Check(schemas.PASS)
-    if device is not None:
-        return schemas.Check(schemas.FAIL, (
-            f"a CPU cell's log names a device ({device.group('name').strip()!r}); the "
-            f"measured footprint is not the declared one",))
+        return devices.check_device_names(names, expected_lane="gpu")
+    if names:
+        return devices.check_device_names(names, expected_lane="cpu")
     if requested:
         return schemas.Check(schemas.FAIL, (
             "a CPU cell's log carries `use gpu = 1`; the request contradicts the "
@@ -1441,14 +1630,69 @@ def saturation_label(anchor_roundtrip_wer_pct: float, aa_dispersion_pp: float) -
 # =============================================================================
 
 
+#: A stage-attribution tolerance may not exceed this fraction of the total it is a
+#: tolerance ON. The bound is what makes the check a check: at `tolerance >= total`,
+#: "the parts sum to the whole" is satisfied by parts of ZERO, so an attribution
+#: that accounts for none of the wall time passes. 1 % is the ceiling because the
+#: 2026-07-31 CPU->GPU move left the SMALLEST declared stage at 10.4 % of wall
+#: (codec_decode, down from 64 %), so a 1 % slack keeps every real stage an order of
+#: magnitude above the noise it must be distinguished from.
+MAX_TOLERANCE_FRACTION_OF_TOTAL = 0.01
+
+
+@dataclass(frozen=True)
+class StageTimingTolerance:
+    """The harness's timer resolution, times the number of stages it timed.
+
+    A tolerance is a property of the instrument, so it is CONSTRUCTED from the
+    instrument's resolution rather than typed as a number — `derive_stage_tolerance`
+    is the only sanctioned constructor and it takes the stage count from
+    `STAGE_PHASES`, not from the caller, so the slack cannot be widened by claiming
+    more stages than the protocol declares.
+    """
+
+    timer_resolution_ms: float
+    stage_count: int
+
+    def __post_init__(self) -> None:
+        _require_non_negative(self.timer_resolution_ms, "timer_resolution_ms")
+        if self.stage_count != len(STAGE_PHASES):
+            raise QwenTtsAdapterError(
+                f"stage_count is {self.stage_count!r} but this backend declares "
+                f"{len(STAGE_PHASES)} stages {list(STAGE_PHASES)}; a tolerance scaled by "
+                f"a stage count the protocol does not have is slack invented by the caller")
+
+    @property
+    def value_ms(self) -> float:
+        return float(self.timer_resolution_ms) * self.stage_count
+
+    def to_dict(self) -> dict:
+        return {"timer_resolution_ms": self.timer_resolution_ms,
+                "stage_count": self.stage_count, "value_ms": self.value_ms}
+
+
+def derive_stage_tolerance(*, timer_resolution_ms: float) -> StageTimingTolerance:
+    """`tolerance = timer resolution x declared stage count`. Derived, never typed."""
+    return StageTimingTolerance(
+        timer_resolution_ms=_require_non_negative(timer_resolution_ms,
+                                                  "timer_resolution_ms"),
+        stage_count=len(STAGE_PHASES))
+
+
 def check_stage_attribution(stage_ms: Mapping[str, float], *, total_ms: float,
-                            tolerance_ms: float) -> schemas.Check:
+                            tolerance: StageTimingTolerance) -> schemas.Check:
     """Every declared stage present, and the parts summing to the whole.
 
-    `tolerance_ms` is the measurement's own timer resolution times the stage count; it
-    is supplied by the caller because it is a property of the harness, not of this
-    adapter. An unaccounted remainder is a finding: it means wall time is being spent
-    somewhere no stage names.
+    `tolerance` is a `StageTimingTolerance` — the harness's own timer resolution
+    times the declared stage count — and it is BOUNDED against the measurement it is
+    a tolerance on. An unbounded tolerance is not a loose check, it is no check: a
+    tolerance at or above `total_ms` passes an attribution whose stages sum to zero,
+    and one at half the total passes an attribution that loses half the wall clock.
+    Over `MAX_TOLERANCE_FRACTION_OF_TOTAL` of `total_ms` the result is
+    COULD_NOT_CHECK — the instrument is too coarse for this measurement — never PASS.
+
+    An unaccounted remainder inside the bound is still a finding: it means wall time
+    is being spent somewhere no stage names.
     """
     if not isinstance(stage_ms, Mapping):
         return schemas.Check(schemas.COULD_NOT_CHECK, ("stage_ms is not a mapping",))
@@ -1464,7 +1708,27 @@ def check_stage_attribution(stage_ms: Mapping[str, float], *, total_ms: float,
             f"stage attribution names stages outside the declared vocabulary: {unknown}; "
             f"declared stages are {list(STAGE_PHASES)}",))
     total = _require_non_negative(total_ms, "total_ms")
-    tol = _require_non_negative(tolerance_ms, "tolerance_ms")
+    if not isinstance(tolerance, StageTimingTolerance):
+        raise QwenTtsAdapterError(
+            f"tolerance must be a StageTimingTolerance, got "
+            f"{type(tolerance).__name__} ({tolerance!r}). A bare number is unbounded: a "
+            f"tolerance at or above the total passes an attribution whose stages sum to "
+            f"zero. Use derive_stage_tolerance(timer_resolution_ms=...)")
+    tol = tolerance.value_ms
+    if total <= 0.0:
+        return schemas.Check(schemas.COULD_NOT_CHECK, (
+            f"total_ms is {total}; a tolerance has nothing to be bounded against and the "
+            f"parts-versus-whole comparison has no whole",))
+    ceiling = total * MAX_TOLERANCE_FRACTION_OF_TOTAL
+    if tol > ceiling:
+        return schemas.Check(schemas.COULD_NOT_CHECK, (
+            f"the tolerance is {tol} ms ({tolerance.timer_resolution_ms} ms timer "
+            f"resolution x {tolerance.stage_count} stages) against a total of {total} ms — "
+            f"above the ceiling of {ceiling} ms "
+            f"({MAX_TOLERANCE_FRACTION_OF_TOTAL:.0%} of the measurement). A tolerance that "
+            f"large cannot discriminate: the smallest stage this protocol has ever "
+            f"observed was 10.4 % of wall, and slack of this size would absorb it. The "
+            f"instrument is too coarse for this measurement, which is not a PASS",))
     summed = 0.0
     for name in STAGE_PHASES:
         summed += _require_non_negative(stage_ms[name], f"stage_ms[{name!r}]")
@@ -1654,3 +1918,18 @@ def audit_no_write_or_process_paths(source: Optional[str] = None) -> schemas.Che
             f"not this adapter's. A clean audit of text nobody bound to the module — the "
             f"empty string passes every rule — is not evidence about the module",))
     return result
+
+
+def audit_device_vocabulary_delegation(source: Optional[str] = None) -> schemas.Check:
+    """Prove from THIS module's AST that it holds no device vocabulary of its own.
+
+    Same shape and same reason as the audit above, delegating to
+    `evaluator/devices.py` so the rule is stated once for both speech adapters. It
+    returns COULD_NOT_CHECK on empty, unparsable or foreign source, and FAILs both on
+    a local device-name table and on a `check_device_evidence` that decides what a
+    device name denotes without asking the shared vocabulary.
+    """
+    return devices.audit_delegates_device_vocabulary(
+        source, expected_backend=BACKEND,
+        checker_name="check_device_evidence",
+        identity_functions=_AUDIT_IDENTITY_FUNCTIONS)

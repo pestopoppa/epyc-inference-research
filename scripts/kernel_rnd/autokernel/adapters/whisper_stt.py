@@ -71,7 +71,7 @@ from pathlib import PurePosixPath
 from typing import Any, Collection, Iterable, Mapping, Optional, Sequence
 
 from .. import schemas
-from ..evaluator import api, integrity
+from ..evaluator import api, devices, integrity
 
 # =============================================================================
 # Errors — every one is a refusal, never a degraded answer
@@ -384,27 +384,130 @@ def expect_production_anchor(path: str, *, label: str = "anchor_path") -> str:
 # =============================================================================
 
 
+#: The ggml core EVERY member of this inventory resolves from its OWN tree. This is
+#: the freeze premise restated as a set: whisper.cpp runs ggml 0.18.0 while
+#: qwentts.cpp runs 0.17.0 and llama.cpp 0.16.0, so a member that resolves any of
+#: these three from another tree runs silently wrong
+#: (INC-20260731-ggml-linkage-silent-cpu-fallback).
+CORE_SHARED_LIBRARIES = frozenset({
+    "libggml-base.so",
+    "libggml-cpu.so",
+    "libggml.so",
+})
+
+#: whisper.cpp's public API. Required of the members that drive it, OPTIONAL for the
+#: members whose linkage is not attested — see `_TOOL_MEMBER_PROVENANCE`.
+ENGINE_SHARED_LIBRARY = "libwhisper.so"
+
+#: Libraries present in this tree that are never REQUIRED of any member. Their
+#: absence from a report is not a finding; their presence FROM THE WRONG TREE is,
+#: and stays a `BAD` line. `libparakeet` is listed deliberately: the verifier
+#: script's name filter is `libggml*|libwhisper*|libllama*|libmtmd*`, so a
+#: `libparakeet` resolving from somewhere else would not appear as a BAD line at all.
+OPTIONAL_SHARED_LIBRARIES = frozenset({
+    "libggml-hip.so",
+    "libparakeet.so",
+})
+
+#: WHERE a member's declared library set comes from. Both strings say "declared,
+#: not attested" on purpose: attesting a member's linkage means running `ldd`
+#: against the FROZEN tree, and this module executes nothing (invariant 3, and
+#: `audit_no_write_or_process_paths` proves it from the AST). The declaration is
+#: therefore made in the direction that cannot manufacture a PASS — a library this
+#: adapter requires and the report does not carry is COULD_NOT_CHECK, and a library
+#: it leaves optional is still a FAIL when it resolves from another tree.
+_ENGINE_MEMBER_PROVENANCE = (
+    "role-derived: this member drives whisper.cpp's public API, which lives in "
+    "libwhisper.so. Declared here, not attested against a live ldd on the frozen tree."
+)
+_TOOL_MEMBER_PROVENANCE = (
+    "role-derived: a tool or test member may link the engine library or only ggml, and "
+    "which it does is NOT attested here. libwhisper.so is therefore optional for it — "
+    "so the §10.2 phase-2 gate is RUNNABLE for a member that links a subset, instead of "
+    "reporting COULD_NOT_CHECK forever against another member's set."
+)
+
+
 @dataclass(frozen=True)
 class BinarySpec:
-    """One binary this backend measures, and what it is for."""
+    """One binary this backend measures, what it is for, and what IT links.
+
+    `required_libraries` is **per member**, with no inventory-wide default. One set
+    for the whole inventory makes the §10.2 phase-2 gate unrunnable for any member
+    that links a subset: every report for that member is missing a library it never
+    linked, so the verdict is COULD_NOT_CHECK forever and the phase can never pass.
+    A default here would reintroduce that silently, so there is none — every member
+    states its own set and where the statement came from.
+    """
 
     name: str
     rel_path: str
     role: str
+    required_libraries: frozenset
+    optional_libraries: frozenset
+    linkage_provenance: str
+
+    def __post_init__(self) -> None:
+        for field in ("required_libraries", "optional_libraries"):
+            value = getattr(self, field)
+            if not isinstance(value, frozenset) or not all(
+                    isinstance(v, str) and v.endswith(".so") for v in value):
+                raise WhisperAdapterError(
+                    f"{self.name}.{field} must be a frozenset of `.so` stems, got "
+                    f"{value!r}")
+        if not self.required_libraries:
+            raise WhisperAdapterError(
+                f"{self.name} declares no required library; an empty requirement is a "
+                f"gate that passes on any report at all")
+        if not CORE_SHARED_LIBRARIES <= self.required_libraries:
+            raise WhisperAdapterError(
+                f"{self.name} does not require the ggml core {sorted(CORE_SHARED_LIBRARIES)}; "
+                f"resolving this tree's own ggml is the property the freeze exists for")
+        overlap = self.required_libraries & self.optional_libraries
+        if overlap:
+            raise WhisperAdapterError(
+                f"{self.name} lists {sorted(overlap)} as both required and optional; a "
+                f"library cannot be both, and the overlap decides silently which rule wins")
+        if not isinstance(self.linkage_provenance, str) or not self.linkage_provenance.strip():
+            raise WhisperAdapterError(
+                f"{self.name} carries no linkage provenance; a per-member library set "
+                f"whose origin is unrecorded is a guess nobody can audit")
 
     def to_dict(self) -> dict:
-        return {"name": self.name, "rel_path": self.rel_path, "role": self.role}
+        return {"name": self.name, "rel_path": self.rel_path, "role": self.role,
+                "required_libraries": sorted(self.required_libraries),
+                "optional_libraries": sorted(self.optional_libraries),
+                "linkage_provenance": self.linkage_provenance}
 
 
 #: Verified against the frozen tree's own `build/bin` on 2026-08-03. `role` is what
-#: the loop uses it for, not what upstream calls it.
+#: the loop uses it for, not what upstream calls it. The library sets are DECLARED
+#: per member (see the provenance constants above), never shared.
 BINARY_INVENTORY = (
-    BinarySpec("whisper-cli", "build/bin/whisper-cli", "transcription_cell"),
-    BinarySpec("whisper-server", "build/bin/whisper-server", "service_smoke"),
-    BinarySpec("whisper-bench", "build/bin/whisper-bench", "operator_microbench"),
-    BinarySpec("whisper-quantize", "build/bin/whisper-quantize", "quantization_tool"),
-    BinarySpec("test-vad", "build/bin/test-vad", "op_and_unit_test"),
-    BinarySpec("test-vad-full", "build/bin/test-vad-full", "op_and_unit_test"),
+    BinarySpec("whisper-cli", "build/bin/whisper-cli", "transcription_cell",
+               required_libraries=CORE_SHARED_LIBRARIES | {ENGINE_SHARED_LIBRARY},
+               optional_libraries=OPTIONAL_SHARED_LIBRARIES,
+               linkage_provenance=_ENGINE_MEMBER_PROVENANCE),
+    BinarySpec("whisper-server", "build/bin/whisper-server", "service_smoke",
+               required_libraries=CORE_SHARED_LIBRARIES | {ENGINE_SHARED_LIBRARY},
+               optional_libraries=OPTIONAL_SHARED_LIBRARIES,
+               linkage_provenance=_ENGINE_MEMBER_PROVENANCE),
+    BinarySpec("whisper-bench", "build/bin/whisper-bench", "operator_microbench",
+               required_libraries=CORE_SHARED_LIBRARIES | {ENGINE_SHARED_LIBRARY},
+               optional_libraries=OPTIONAL_SHARED_LIBRARIES,
+               linkage_provenance=_ENGINE_MEMBER_PROVENANCE),
+    BinarySpec("whisper-quantize", "build/bin/whisper-quantize", "quantization_tool",
+               required_libraries=CORE_SHARED_LIBRARIES,
+               optional_libraries=OPTIONAL_SHARED_LIBRARIES | {ENGINE_SHARED_LIBRARY},
+               linkage_provenance=_TOOL_MEMBER_PROVENANCE),
+    BinarySpec("test-vad", "build/bin/test-vad", "op_and_unit_test",
+               required_libraries=CORE_SHARED_LIBRARIES,
+               optional_libraries=OPTIONAL_SHARED_LIBRARIES | {ENGINE_SHARED_LIBRARY},
+               linkage_provenance=_TOOL_MEMBER_PROVENANCE),
+    BinarySpec("test-vad-full", "build/bin/test-vad-full", "op_and_unit_test",
+               required_libraries=CORE_SHARED_LIBRARIES,
+               optional_libraries=OPTIONAL_SHARED_LIBRARIES | {ENGINE_SHARED_LIBRARY},
+               linkage_provenance=_TOOL_MEMBER_PROVENANCE),
 )
 
 _BINARIES_BY_NAME = {b.name: b for b in BINARY_INVENTORY}
@@ -445,29 +548,42 @@ def library_dir(tree_root: str, *, allow_production: bool = False) -> str:
     return path
 
 
-#: Shared objects a correctly linked whisper.cpp binary resolves from its OWN tree.
-#: `libparakeet` is included deliberately: the verifier script's name filter is
-#: `libggml*|libwhisper*|libllama*|libmtmd*`, so a `libparakeet` resolving from
-#: somewhere else would not appear as a BAD line at all. `interpret_linkage_report`
-#: treats an expected library missing from the report as COULD_NOT_CHECK rather than
-#: as a pass, which is the whole point of declaring the set here.
-EXPECTED_SHARED_LIBRARIES = frozenset({
-    "libggml-base.so",
-    "libggml-cpu.so",
-    "libggml.so",
-    "libwhisper.so",
-})
+def expected_shared_libraries(binary: str) -> frozenset:
+    """The libraries THIS member must resolve from its own tree.
 
-#: Libraries present in this tree but only linked by some binaries. Their absence
-#: from a report is not a finding; their presence from the WRONG tree is.
-OPTIONAL_SHARED_LIBRARIES = frozenset({
-    "libggml-hip.so",
-    "libparakeet.so",
-})
+    `binary` has no default. The inventory-wide union is not a gate input and is not
+    reachable as one — `all_declared_shared_libraries()` exists to DESCRIBE the tree,
+    and grading a member against it is the defect this signature closes.
+    """
+    return _require_member(binary).required_libraries
 
 
-def expected_shared_libraries() -> frozenset:
-    return EXPECTED_SHARED_LIBRARIES
+def optional_shared_libraries(binary: str) -> frozenset:
+    """Libraries THIS member may resolve. Absence is not a finding; wrong tree is."""
+    return _require_member(binary).optional_libraries
+
+
+def all_declared_shared_libraries() -> frozenset:
+    """The union over the inventory. A DESCRIPTION of the tree, never a gate input.
+
+    `interpret_linkage_report` takes a member and reads that member's own set; there
+    is no code path from this union to a verdict, which is what keeps a member that
+    links a subset gradeable.
+    """
+    union: frozenset = frozenset()
+    for spec in BINARY_INVENTORY:
+        union = union | spec.required_libraries | spec.optional_libraries
+    return union
+
+
+def _require_member(binary: str) -> BinarySpec:
+    _require_str(binary, "binary")
+    try:
+        return _BINARIES_BY_NAME[binary]
+    except KeyError as exc:
+        raise UnknownBinary(
+            f"{binary!r} is not in the {BACKEND} binary inventory; declared binaries "
+            f"are {sorted(_BINARIES_BY_NAME)}") from exc
 
 
 # =============================================================================
@@ -548,18 +664,36 @@ class LinkageVerdict:
     bad_libraries: tuple
     missing_expected: tuple
     resolved_count: int
+    binary: str
+    required_libraries: tuple
 
     def to_dict(self) -> dict:
         return {"outcome": self.check.outcome, "reasons": list(self.check.reasons),
                 "ok_libraries": list(self.ok_libraries),
                 "bad_libraries": list(self.bad_libraries),
                 "missing_expected": list(self.missing_expected),
-                "resolved_count": self.resolved_count}
+                "resolved_count": self.resolved_count,
+                "binary": self.binary,
+                "required_libraries": list(self.required_libraries)}
 
 
 _OK_LINE_RE = re.compile(r"^\s{2}OK\s+(\S+)\s+->\s+(\S+)\s*$")
 _BAD_LINE_RE = re.compile(r"^\s{2}BAD\s+(\S+)\s+->\s+(\S+)\s*$")
 _NO_LIBS_MARKER = "no ggml/whisper/llama libs in ldd output"
+
+#: The verifier's own first line: `echo "binary : $BIN"`, printed before any ldd
+#: output. It is the ONLY thing in the report that says which binary was inspected.
+_REPORT_BINARY_RE = re.compile(r"^binary\s*:\s*(?P<path>\S.*?)\s*$", re.MULTILINE)
+
+
+def report_binary_name(stdout: str) -> Optional[str]:
+    """The basename the report itself says it inspected, or None if it says nothing."""
+    if not isinstance(stdout, str):
+        raise WhisperAdapterError(f"stdout must be a string, got {type(stdout).__name__}")
+    match = _REPORT_BINARY_RE.search(stdout)
+    if match is None:
+        return None
+    return PurePosixPath(match.group("path")).name
 
 
 def _soname_stem(name: str) -> str:
@@ -568,8 +702,21 @@ def _soname_stem(name: str) -> str:
     return head + sep if sep else name
 
 
-def interpret_linkage_report(stdout: str, exit_code: int) -> LinkageVerdict:
-    """Turn a captured verifier report into a three-outcome verdict.
+def interpret_linkage_report(stdout: str, exit_code: int, *,
+                             binary: str) -> LinkageVerdict:
+    """Turn a captured verifier report into a three-outcome verdict, FOR ONE MEMBER.
+
+    `binary` is a required keyword: the report is graded against **that member's**
+    declared library set, never against the inventory union. A union grades every
+    member by the strictest one, so a member linking a subset is permanently
+    COULD_NOT_CHECK and §10.2 phase 2 can never pass for it.
+
+    And `binary` is CHECKED against the report's own `binary :` header, not trusted.
+    Per-member sets make the member's identity load-bearing, and a name the caller
+    supplies is a claim by the party being gated: an engine member's report that
+    never resolved `libwhisper.so` is COULD_NOT_CHECK as that member and PASS the
+    moment it is relabelled as a tool member, on identical bytes. A disagreement, or
+    a report that names no binary at all, is COULD_NOT_CHECK — never PASS.
 
     Four rules, and the last two are the ones the raw script cannot express:
 
@@ -588,6 +735,8 @@ def interpret_linkage_report(stdout: str, exit_code: int) -> LinkageVerdict:
         raise WhisperAdapterError(f"stdout must be a string, got {type(stdout).__name__}")
     if isinstance(exit_code, bool) or not isinstance(exit_code, int):
         raise WhisperAdapterError("exit_code must be an int")
+    spec = _require_member(binary)
+    required = frozenset(spec.required_libraries)
 
     ok: list = []
     bad: list = []
@@ -602,7 +751,8 @@ def interpret_linkage_report(stdout: str, exit_code: int) -> LinkageVerdict:
 
     resolved = len(ok) + len(bad)
     seen_stems = {_soname_stem(name) for name, _ in ok}
-    missing = tuple(sorted(EXPECTED_SHARED_LIBRARIES - seen_stems))
+    missing = tuple(sorted(required - seen_stems))
+    member = tuple(sorted(required))
 
     if bad:
         offenders = ", ".join(f"{n} -> {p}" for n, p in bad)
@@ -612,7 +762,8 @@ def interpret_linkage_report(stdout: str, exit_code: int) -> LinkageVerdict:
                 f"{offenders}. Any performance number produced now is attributable to the "
                 f"WRONG BUILD (INC-20260731-ggml-linkage-silent-cpu-fallback)",)),
             ok_libraries=tuple(sorted(ok)), bad_libraries=tuple(sorted(bad)),
-            missing_expected=missing, resolved_count=resolved)
+            missing_expected=missing, resolved_count=resolved,
+            binary=spec.name, required_libraries=member)
 
     if exit_code != 0:
         return LinkageVerdict(
@@ -620,7 +771,31 @@ def interpret_linkage_report(stdout: str, exit_code: int) -> LinkageVerdict:
                 f"verifier exited {exit_code} with no BAD line parsed; the report is "
                 f"inconsistent with its own exit status and is not trusted",)),
             ok_libraries=tuple(sorted(ok)), bad_libraries=(),
-            missing_expected=missing, resolved_count=resolved)
+            missing_expected=missing, resolved_count=resolved,
+            binary=spec.name, required_libraries=member)
+
+    named = report_binary_name(stdout)
+    if named != spec.name:
+        return LinkageVerdict(
+            check=schemas.Check(schemas.COULD_NOT_CHECK, (
+                (f"this report was captured against {named!r} and is being graded as "
+                 f"{spec.name!r}. `binary=` is the CALLER's claim about the evidence; "
+                 f"the report's own `binary :` header is the evidence's statement of "
+                 f"what it is, and the two must agree because the members do not share "
+                 f"a required set. Grading an engine member's report — one that never "
+                 f"resolved {ENGINE_SHARED_LIBRARY} — as a tool member whose set omits "
+                 f"it turns COULD_NOT_CHECK into PASS without a byte of the report "
+                 f"changing"
+                 if named is not None else
+                 f"the report carries no `binary : <path>` header, so nothing in it "
+                 f"says which binary was inspected and it cannot be bound to "
+                 f"{spec.name!r}. The verifier prints that header unconditionally "
+                 f"before any ldd output; a report without one is not its output, or "
+                 f"is a fragment of it, and grading it against a member's set would be "
+                 f"grading the caller's claim instead of the evidence"),)),
+            ok_libraries=tuple(sorted(ok)), bad_libraries=(),
+            missing_expected=(), resolved_count=resolved,
+            binary=spec.name, required_libraries=member)
 
     if resolved == 0 or _NO_LIBS_MARKER in stdout:
         return LinkageVerdict(
@@ -629,27 +804,44 @@ def interpret_linkage_report(stdout: str, exit_code: int) -> LinkageVerdict:
                 "linked, or `ldd` failed. It exits 0 in this state, so an exit-status "
                 "consumer would record a PASS for a check that did not run",)),
             ok_libraries=(), bad_libraries=(), missing_expected=missing,
-            resolved_count=0)
+            resolved_count=0, binary=spec.name, required_libraries=member)
 
     if missing:
         return LinkageVerdict(
             check=schemas.Check(schemas.COULD_NOT_CHECK, (
-                f"expected libraries absent from the report: {list(missing)}. The "
-                f"verifier's name filter is libggml*/libwhisper*/libllama*/libmtmd*, so a "
-                f"library outside it is never examined and its absence is silence, not "
-                f"evidence",)),
+                f"libraries {spec.name!r} is declared to require are absent from the "
+                f"report: {list(missing)} (its declared set is {list(member)}; "
+                f"provenance: {spec.linkage_provenance}). The verifier's name filter is "
+                f"libggml*/libwhisper*/libllama*/libmtmd*, so a library outside it is "
+                f"never examined and its absence is silence, not evidence",)),
             ok_libraries=tuple(sorted(ok)), bad_libraries=(),
-            missing_expected=missing, resolved_count=resolved)
+            missing_expected=missing, resolved_count=resolved,
+            binary=spec.name, required_libraries=member)
 
     return LinkageVerdict(check=schemas.Check(schemas.PASS),
                           ok_libraries=tuple(sorted(ok)), bad_libraries=(),
-                          missing_expected=(), resolved_count=resolved)
+                          missing_expected=(), resolved_count=resolved,
+                          binary=spec.name, required_libraries=member)
 
 
-#: What a whisper.cpp binary prints when a real device was LOADED. A device line
-#: names the device; a request flag names an intention.
+#: This engine's LOG GRAMMAR — the line shape a whisper.cpp build prints when a
+#: device was enumerated, and the flag it prints when one was merely requested. The
+#: grammar is this adapter's (the sibling TTS engine prints a different prefix);
+#: what a device NAME denotes is not, and lives in `evaluator/devices.py`.
 _DEVICE_LINE_RE = re.compile(r"Device\s+\d+\s*:\s*(?P<name>[^\n,]+)", re.IGNORECASE)
 _REQUEST_FLAG_RE = re.compile(r"use\s+gpu\s*=\s*1", re.IGNORECASE)
+
+
+def device_names_in_log(startup_log: str) -> tuple:
+    """Every `Device N: <name>` the log enumerates, in order.
+
+    `findall`, not `search`: a ROCm build enumerates more than one device, and
+    grading the FIRST line alone lets a `Device 0: CPU` header decide a cell whose
+    accelerator was listed second — or the reverse.
+    """
+    if not isinstance(startup_log, str):
+        raise WhisperAdapterError("startup_log must be a string")
+    return tuple(m.group("name").strip() for m in _DEVICE_LINE_RE.finditer(startup_log))
 
 
 def check_device_evidence(startup_log: str, *, expected_lane: str) -> schemas.Check:
@@ -660,20 +852,26 @@ def check_device_evidence(startup_log: str, *, expected_lane: str) -> schemas.Ch
     `use gpu = 1` flag alone — that flag reports what was REQUESTED, not what was
     LOADED."* On 2026-07-31 that exact flag was printed by a binary running
     full-CPU.
+
+    The presence of a device LINE is necessary and not sufficient, which is the
+    carried-forward defect this now closes: `Device 0: CPU` is a device line, and it
+    is exactly what a silently-fallen-back ggml prints. The NAME is graded against
+    `evaluator/devices.py`'s vocabulary — one table for both speech adapters,
+    because two copies diverge and the divergent one grades a lane by a stale table.
     """
     if not isinstance(startup_log, str):
         raise WhisperAdapterError("startup_log must be a string")
     if expected_lane not in ("cpu", "gpu"):
         raise WhisperAdapterError(f"expected_lane must be 'cpu' or 'gpu', got "
                                   f"{expected_lane!r}")
-    device = _DEVICE_LINE_RE.search(startup_log)
+    names = device_names_in_log(startup_log)
     requested = bool(_REQUEST_FLAG_RE.search(startup_log))
 
     if not startup_log.strip():
         return schemas.Check(schemas.COULD_NOT_CHECK,
                              ("startup log is empty; no device evidence was captured",))
     if expected_lane == "gpu":
-        if device is None:
+        if not names:
             reasons = ["no `Device N: <name>` line in the startup log, so nothing "
                        "establishes which backend actually loaded"]
             if requested:
@@ -681,12 +879,10 @@ def check_device_evidence(startup_log: str, *, expected_lane: str) -> schemas.Ch
                                "REQUESTED, never what was LOADED — this is the exact "
                                "signature of the 2026-07-31 silent CPU fallback")
             return schemas.Check(schemas.FAIL, tuple(reasons))
-        return schemas.Check(schemas.PASS)
+        return devices.check_device_names(names, expected_lane="gpu")
     # cpu lane
-    if device is not None:
-        return schemas.Check(schemas.FAIL, (
-            f"a CPU cell's log names a device ({device.group('name').strip()!r}); the "
-            f"measured footprint is not the declared one",))
+    if names:
+        return devices.check_device_names(names, expected_lane="cpu")
     if requested:
         return schemas.Check(schemas.FAIL, (
             "a CPU cell's log carries `use gpu = 1`; the request contradicts the "
@@ -1313,14 +1509,95 @@ def check_failure_taxonomy(counts: Mapping[str, int], *, n_utterances: int
     return schemas.Check(schemas.PASS)
 
 
+#: The units an A/A dispersion of a RATE is quoted in on this project. Both appear
+#: in live artifacts: `stt_wer_results.json` quotes WER in percent, the exclusion
+#: rate here is a count over a count, and the TTS sibling's
+#: `derive_intelligibility_floor` takes percentage POINTS. `0.02` is a legal value
+#: in both units and means two different things.
+DISPERSION_SOURCE_UNITS = ("fraction_of_1", "percentage_points")
+
+
+class UnitAmbiguity(WhisperAdapterError):
+    """A dispersion arrived as a bare number, so its unit is unknowable."""
+
+
+@dataclass(frozen=True)
+class ExclusionRateDispersion:
+    """An A/A dispersion carried in the SAME unit as the rate it bounds.
+
+    The unit is in the field NAME (`fraction_of_1`) and in the TYPE, not in a
+    docstring, because the hazard is not that a reader misunderstands the unit — it
+    is that a caller passes `0.02` meaning "2 percentage points" into a cap added to
+    a rate of 0.02, silently widening the cap 50-fold in the permissive direction.
+    `source_unit` records what the caller actually had, so a conversion that happened
+    is visible in the record rather than inferred.
+    """
+
+    fraction_of_1: float
+    source_unit: str
+
+    def __post_init__(self) -> None:
+        if self.source_unit not in DISPERSION_SOURCE_UNITS:
+            raise UnitAmbiguity(
+                f"source_unit must be one of {list(DISPERSION_SOURCE_UNITS)}, got "
+                f"{self.source_unit!r}")
+        value = self.fraction_of_1
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise WhisperAdapterError(
+                f"fraction_of_1 must be a number, got {type(value).__name__}")
+        if not (0.0 <= float(value) <= 1.0):
+            raise WhisperAdapterError(
+                f"fraction_of_1 is {value!r}, which is not a fraction of 1. A value above "
+                f"1 is the percentage-point reading of a fraction field — use "
+                f"ExclusionRateDispersion.from_percentage_points()")
+
+    @classmethod
+    def from_fraction(cls, value: Any) -> "ExclusionRateDispersion":
+        """The A/A dispersion already expressed as a fraction of 1 (0.02 = 2 %)."""
+        return cls(fraction_of_1=float(_require_dispersion_number(value)),
+                   source_unit="fraction_of_1")
+
+    @classmethod
+    def from_percentage_points(cls, value: Any) -> "ExclusionRateDispersion":
+        """The A/A dispersion expressed in percentage points (2.0 = 2 %)."""
+        return cls(fraction_of_1=float(_require_dispersion_number(value)) / 100.0,
+                   source_unit="percentage_points")
+
+    def to_dict(self) -> dict:
+        return {"fraction_of_1": self.fraction_of_1, "source_unit": self.source_unit}
+
+
+def _require_dispersion_number(value: Any) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise WhisperAdapterError(f"dispersion must be a number, got "
+                                  f"{type(value).__name__}")
+    if float(value) < 0.0:
+        raise WhisperAdapterError(f"dispersion must be non-negative, got {value!r}")
+    return float(value)
+
+
 def check_exclusion_rate(*, candidate_excluded: int, anchor_excluded: int,
-                         n_utterances: int, aa_dispersion: float) -> schemas.Check:
+                         n_utterances: int,
+                         aa_dispersion_fraction: Optional[ExclusionRateDispersion]
+                         ) -> schemas.Check:
     """The numeral/marker exclusion cap, DERIVED from the anchor plus A/A dispersion.
 
     `P-STT-1` §1.3 step 6: the cap is the anchor's own exclusion rate on the same
     corpus plus the A/A dispersion of that rate. A candidate above it is emitting
     forms the anchor does not, and a scorer that quietly drops them would be hiding
     the very change under study.
+
+    `aa_dispersion_fraction` is an `ExclusionRateDispersion`, never a bare number: an
+    exclusion rate is a fraction of 1 and an A/A dispersion is routinely quoted in
+    percentage points, so `0.02` is a legal value in both units and the two readings
+    differ by 50x — in the direction that widens the cap and passes a candidate the
+    protocol would refuse. A bare number RAISES rather than being interpreted.
+
+    The unit is necessary and not sufficient. The DERIVED CAP is also bounded against
+    what it caps: an exclusion rate cannot exceed 1, so `anchor_rate + dispersion >=
+    1` admits every candidate there is and the check has stopped discriminating. That
+    is COULD_NOT_CHECK — the same argument the TTS sibling's stage-attribution
+    tolerance makes against a tolerance at or above the total it bounds.
     """
     for name, value in (("candidate_excluded", candidate_excluded),
                         ("anchor_excluded", anchor_excluded)):
@@ -1330,21 +1607,39 @@ def check_exclusion_rate(*, candidate_excluded: int, anchor_excluded: int,
     if isinstance(n_utterances, bool) or not isinstance(n_utterances, int) or n_utterances <= 0:
         return schemas.Check(schemas.COULD_NOT_CHECK,
                              (f"n_utterances must be a positive int, got {n_utterances!r}",))
-    if isinstance(aa_dispersion, bool) or not isinstance(aa_dispersion, (int, float)):
-        return schemas.Check(schemas.COULD_NOT_CHECK,
-                             ("aa_dispersion must be a number derived from the A/A control",))
-    if float(aa_dispersion) < 0.0:
-        return schemas.Check(schemas.COULD_NOT_CHECK,
-                             ("aa_dispersion must be non-negative",))
+    if aa_dispersion_fraction is None:
+        return schemas.Check(schemas.COULD_NOT_CHECK, (
+            "no A/A dispersion was supplied, so the cap cannot be derived; a literal cap "
+            "is exactly what the protocol forbids",))
+    if not isinstance(aa_dispersion_fraction, ExclusionRateDispersion):
+        raise UnitAmbiguity(
+            f"aa_dispersion_fraction must be an ExclusionRateDispersion, got "
+            f"{type(aa_dispersion_fraction).__name__} ({aa_dispersion_fraction!r}). A bare "
+            f"number carries no unit: 0.02 is 2 % read as a fraction of 1 and 0.02 % read "
+            f"as percentage points, and the wrong reading widens the cap in the permissive "
+            f"direction. Use ExclusionRateDispersion.from_fraction() or "
+            f".from_percentage_points()")
+    dispersion = aa_dispersion_fraction.fraction_of_1
     cand_rate = candidate_excluded / n_utterances
     anchor_rate = anchor_excluded / n_utterances
-    cap = anchor_rate + float(aa_dispersion)
+    cap = anchor_rate + dispersion
+    if cap >= 1.0:
+        return schemas.Check(schemas.COULD_NOT_CHECK, (
+            f"the derived cap is {cap:.4f} (anchor {anchor_rate:.4f} + A/A dispersion "
+            f"{dispersion:.4f}, supplied as {aa_dispersion_fraction.source_unit}). An "
+            f"exclusion rate is a count over a count and cannot exceed 1, so a cap at "
+            f"or above 1 admits EVERY possible candidate, including one that excluded "
+            f"every utterance in the corpus. Naming the unit stopped 0.02 from meaning "
+            f"two things; it does not stop a legally-typed dispersion from being wide "
+            f"enough to make the comparison vacuous, and a comparison no candidate can "
+            f"fail is not a PASS — the A/A control it came from is too dispersed to "
+            f"bound this rate",))
     if cand_rate > cap:
         return schemas.Check(schemas.FAIL, (
             f"candidate exclusion rate {cand_rate:.4f} exceeds the derived cap {cap:.4f} "
-            f"(anchor {anchor_rate:.4f} + A/A dispersion {float(aa_dispersion):.4f}); the "
-            f"candidate is emitting forms the anchor does not and the scorer would be "
-            f"dropping the change under study",))
+            f"(anchor {anchor_rate:.4f} + A/A dispersion {dispersion:.4f}, supplied as "
+            f"{aa_dispersion_fraction.source_unit}); the candidate is emitting forms the "
+            f"anchor does not and the scorer would be dropping the change under study",))
     return schemas.Check(schemas.PASS)
 
 
@@ -1493,3 +1788,19 @@ def audit_no_write_or_process_paths(source: Optional[str] = None) -> schemas.Che
             f"not this adapter's. A clean audit of text nobody bound to the module — the "
             f"empty string passes every rule — is not evidence about the module",))
     return result
+
+
+def audit_device_vocabulary_delegation(source: Optional[str] = None) -> schemas.Check:
+    """Prove from THIS module's AST that it holds no device vocabulary of its own.
+
+    Same shape and same reason as the audit above, delegating to
+    `evaluator/devices.py` so the rule is stated once for both speech adapters. It
+    returns COULD_NOT_CHECK on empty, unparsable or foreign source — a guarantee
+    obtainable by handing the auditor a different string is not one — and FAILs both
+    on a local device-name table and on a `check_device_evidence` that grades a
+    device name without asking the shared vocabulary what it denotes.
+    """
+    return devices.audit_delegates_device_vocabulary(
+        source, expected_backend=BACKEND,
+        checker_name="check_device_evidence",
+        identity_functions=_AUDIT_IDENTITY_FUNCTIONS)

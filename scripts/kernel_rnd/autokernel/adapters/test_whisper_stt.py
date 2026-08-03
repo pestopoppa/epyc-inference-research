@@ -57,10 +57,15 @@ def _sha(tag: str) -> str:
     return hashlib.sha256(tag.encode("utf-8")).hexdigest()
 
 
-def _report(lines, *, expect=EXP_LIB, trailer="PASS: all linked ggml libraries "
-                                                "resolve inside "):
-    """Rebuild the verifier's own output shape from `(state, name, path)` rows."""
-    out = [f"binary : {EXP_BIN}", f"expect : libraries under {expect}", ""]
+def _report(lines, *, expect=EXP_LIB, member="whisper-cli",
+            trailer="PASS: all linked ggml libraries resolve inside "):
+    """Rebuild the verifier's own output shape from `(state, name, path)` rows.
+
+    `member` names the binary the report was CAPTURED AGAINST, and it goes into the
+    `binary :` header exactly as `verify_ggml_linkage.sh` prints it. A fixture that
+    always said `whisper-cli` was how one member's report got graded as another's.
+    """
+    out = [f"binary : {expect}/{member}", f"expect : libraries under {expect}", ""]
     for state, name, path in lines:
         out.append("  %s %-28s -> %s" % ("OK  " if state == "OK" else "BAD ", name, path))
     out += ["", "LD_LIBRARY_PATH order as the loader sees it:", f"     1  {expect}", ""]
@@ -238,7 +243,7 @@ class LinkageCommandTest(unittest.TestCase):
 
 class LinkageInterpretationTest(unittest.TestCase):
     def test_a_clean_report_is_pass(self):
-        verdict = W.interpret_linkage_report(_report(_GOOD_ROWS), 0)
+        verdict = W.interpret_linkage_report(_report(_GOOD_ROWS), 0, binary="whisper-cli")
         self.assertEqual(verdict.check.outcome, S.PASS)
         self.assertEqual(verdict.bad_libraries, ())
         self.assertEqual(verdict.resolved_count, 4)
@@ -248,7 +253,8 @@ class LinkageInterpretationTest(unittest.TestCase):
         rows[2] = ("BAD", "libggml.so.0.18.0",
                    "/mnt/raid0/llm/llama.cpp/build/bin/libggml.so.0")
         verdict = W.interpret_linkage_report(
-            _report(rows, trailer="FAIL: 1 library/libraries resolve OUTSIDE "), 1)
+            _report(rows, trailer="FAIL: 1 library/libraries resolve OUTSIDE "), 1,
+            binary="whisper-cli")
         self.assertEqual(verdict.check.outcome, S.FAIL)
         self.assertEqual(len(verdict.bad_libraries), 1)
         self.assertIn("llama.cpp", " ".join(verdict.check.reasons))
@@ -261,7 +267,7 @@ class LinkageInterpretationTest(unittest.TestCase):
                 "  (no ggml/whisper/llama libs in ldd output — statically linked, "
                 "or ldd failed)\n\nPASS: all linked ggml libraries resolve inside "
                 f"{EXP_LIB}\n")
-        verdict = W.interpret_linkage_report(text, 0)
+        verdict = W.interpret_linkage_report(text, 0, binary="whisper-cli")
         self.assertEqual(verdict.check.outcome, S.COULD_NOT_CHECK)
         self.assertNotEqual(verdict.check.outcome, S.PASS)
         self.assertFalse(verdict.check.passed)
@@ -271,22 +277,115 @@ class LinkageInterpretationTest(unittest.TestCase):
         # The script's name filter is libggml*/libwhisper*/libllama*/libmtmd*; a
         # library outside it is never examined, and its absence is silence.
         rows = [r for r in _GOOD_ROWS if not r[1].startswith("libwhisper")]
-        verdict = W.interpret_linkage_report(_report(rows), 0)
+        verdict = W.interpret_linkage_report(_report(rows), 0, binary="whisper-cli")
         self.assertEqual(verdict.check.outcome, S.COULD_NOT_CHECK)
         self.assertIn("libwhisper.so", verdict.missing_expected)
         self.assertIn("name filter", " ".join(verdict.check.reasons))
 
     def test_a_nonzero_exit_with_no_bad_line_is_a_fail_not_a_pass(self):
-        verdict = W.interpret_linkage_report(_report(_GOOD_ROWS), 3)
+        verdict = W.interpret_linkage_report(_report(_GOOD_ROWS), 3, binary="whisper-cli")
         self.assertEqual(verdict.check.outcome, S.FAIL)
 
     def test_versioned_sonames_are_matched_by_stem(self):
-        verdict = W.interpret_linkage_report(_report(_GOOD_ROWS), 0)
+        verdict = W.interpret_linkage_report(_report(_GOOD_ROWS), 0, binary="whisper-cli")
         self.assertEqual(verdict.missing_expected, ())
 
     def test_a_non_string_report_is_refused_rather_than_coerced(self):
         with self.assertRaises(W.WhisperAdapterError):
-            W.interpret_linkage_report(None, 0)
+            W.interpret_linkage_report(None, 0, binary="whisper-cli")
+
+
+class PerMemberLibrarySetTest(unittest.TestCase):
+    """§10.2 phase 2 was UNRUNNABLE for any member that links a subset.
+
+    One `EXPECTED_SHARED_LIBRARIES` for the whole inventory grades every member by
+    the strictest one: a report for a member that never linked `libwhisper.so` is
+    missing a library, so the verdict is COULD_NOT_CHECK on every run and the phase
+    can never pass for it. On a three-ggml-generation host that is not cosmetic —
+    the gate is the one that catches a binary inheriting another tree's ggml.
+    """
+
+    def test_a_subset_member_is_gradeable_on_a_report_with_no_engine_library(self):
+        # ggml core only — exactly what a tool member that does not link the engine
+        # library resolves. Before the fix this was COULD_NOT_CHECK forever.
+        rows = [r for r in _GOOD_ROWS if not r[1].startswith("libwhisper")]
+        verdict = W.interpret_linkage_report(_report(rows, member="whisper-quantize"), 0,
+                                             binary="whisper-quantize")
+        self.assertEqual(verdict.check.outcome, S.PASS)
+        self.assertEqual(verdict.missing_expected, ())
+        self.assertEqual(verdict.binary, "whisper-quantize")
+        self.assertNotIn("libwhisper.so", verdict.required_libraries)
+
+    def test_the_same_report_is_still_could_not_check_for_a_member_that_needs_more(self):
+        # The relaxation is PER MEMBER, not a global loosening.
+        rows = [r for r in _GOOD_ROWS if not r[1].startswith("libwhisper")]
+        verdict = W.interpret_linkage_report(_report(rows), 0, binary="whisper-cli")
+        self.assertEqual(verdict.check.outcome, S.COULD_NOT_CHECK)
+        self.assertIn("libwhisper.so", verdict.missing_expected)
+
+    def test_a_report_cannot_be_graded_without_naming_the_member(self):
+        # No default: the union is not reachable as a gate input.
+        with self.assertRaises(TypeError):
+            W.interpret_linkage_report(_report(_GOOD_ROWS), 0)
+        with self.assertRaises(W.UnknownBinary):
+            W.interpret_linkage_report(_report(_GOOD_ROWS), 0, binary="qwen-tts")
+
+    def test_every_member_declares_its_own_set_with_provenance(self):
+        for spec in W.binary_inventory():
+            self.assertTrue(W.CORE_SHARED_LIBRARIES <= spec.required_libraries, spec.name)
+            self.assertFalse(spec.required_libraries & spec.optional_libraries, spec.name)
+            self.assertTrue(spec.linkage_provenance.strip(), spec.name)
+            self.assertEqual(W.expected_shared_libraries(spec.name),
+                             spec.required_libraries)
+
+    def test_the_inventory_union_is_a_description_and_never_a_gate_input(self):
+        union = W.all_declared_shared_libraries()
+        self.assertIn("libwhisper.so", union)
+        self.assertIn("libparakeet.so", union)
+        # No member is graded against the union: the strictest member's set is a
+        # proper subset of it, so grading by the union would import optional
+        # libraries into every member's requirement.
+        for spec in W.binary_inventory():
+            self.assertTrue(spec.required_libraries < union, spec.name)
+
+    def test_a_member_that_requires_nothing_or_drops_the_ggml_core_is_refused(self):
+        with self.assertRaises(W.WhisperAdapterError):
+            W.BinarySpec("x", "build/bin/x", "op_and_unit_test",
+                         required_libraries=frozenset(),
+                         optional_libraries=frozenset(), linkage_provenance="test")
+        with self.assertRaises(W.WhisperAdapterError):
+            W.BinarySpec("x", "build/bin/x", "op_and_unit_test",
+                         required_libraries=frozenset({"libwhisper.so"}),
+                         optional_libraries=frozenset(), linkage_provenance="test")
+
+    def test_a_library_cannot_be_both_required_and_optional(self):
+        with self.assertRaises(W.WhisperAdapterError):
+            W.BinarySpec("x", "build/bin/x", "op_and_unit_test",
+                         required_libraries=W.CORE_SHARED_LIBRARIES,
+                         optional_libraries=frozenset({"libggml.so"}),
+                         linkage_provenance="test")
+
+    def test_a_member_set_without_provenance_is_refused(self):
+        with self.assertRaises(W.WhisperAdapterError):
+            W.BinarySpec("x", "build/bin/x", "op_and_unit_test",
+                         required_libraries=W.CORE_SHARED_LIBRARIES,
+                         optional_libraries=frozenset(), linkage_provenance="   ")
+
+    # --- COMPLIANT-PATH CONTROL ---------------------------------------------
+
+    def test_the_per_member_rule_does_not_break_the_full_linkage_report(self):
+        """The engine members still grade a complete report exactly as before.
+
+        Per-member sets must not turn into "every member requires less": the member
+        that DOES link the engine library is still held to it, on the same report
+        shape the verifier actually emits.
+        """
+        for name in ("whisper-cli", "whisper-server", "whisper-bench"):
+            verdict = W.interpret_linkage_report(_report(_GOOD_ROWS, member=name), 0,
+                                                 binary=name)
+            self.assertEqual(verdict.check.outcome, S.PASS, name)
+            self.assertIn("libwhisper.so", verdict.required_libraries, name)
+            self.assertIn("libwhisper.so", W.expected_shared_libraries(name))
 
 
 class DeviceEvidenceTest(unittest.TestCase):
@@ -318,6 +417,120 @@ class DeviceEvidenceTest(unittest.TestCase):
     def test_an_undeclared_lane_is_refused(self):
         with self.assertRaises(W.WhisperAdapterError):
             W.check_device_evidence("x", expected_lane="hip")
+
+
+class DeviceNameVocabularyTest(unittest.TestCase):
+    """A device LINE is necessary and not sufficient — the NAME has to denote a GPU.
+
+    The carried-forward defect: `check_device_evidence(expected_lane="gpu")` required
+    a `Device N: <name>` line and never asked what `<name>` was, so `Device 0: CPU`
+    — precisely what a silently-fallen-back ggml prints — satisfied a GPU cell. That
+    is the 2026-07-31 incident surviving the check written to catch it.
+    """
+
+    def test_device_zero_cpu_no_longer_satisfies_a_gpu_cell(self):
+        check = W.check_device_evidence("whisper_init: Device 0: CPU\n",
+                                        expected_lane="gpu")
+        self.assertEqual(check.outcome, S.FAIL)
+        self.assertNotEqual(check.outcome, S.PASS)
+        self.assertIn("host devices", " ".join(check.reasons))
+
+    def test_a_cpu_device_line_beside_a_request_flag_is_the_incident_signature(self):
+        log = "whisper_init: use gpu = 1\nwhisper_init: Device 0: CPU\n"
+        self.assertEqual(W.check_device_evidence(log, expected_lane="gpu").outcome,
+                         S.FAIL)
+
+    def test_a_blas_device_is_a_host_device_not_an_accelerator(self):
+        self.assertEqual(
+            W.check_device_evidence("Device 0: BLAS\n", expected_lane="gpu").outcome,
+            S.FAIL)
+
+    def test_an_unrecognised_device_name_is_could_not_check_never_pass(self):
+        # A device the vocabulary cannot name is a device it cannot vouch for.
+        check = W.check_device_evidence("Device 0: Some Future Accelerator\n",
+                                        expected_lane="gpu")
+        self.assertEqual(check.outcome, S.COULD_NOT_CHECK)
+        self.assertNotEqual(check.outcome, S.PASS)
+
+    def test_every_device_line_is_read_not_only_the_first(self):
+        # ggml enumerates more than one device; grading `search()` alone lets the
+        # first line decide a cell the second contradicts, in both directions.
+        log = ("ggml_cuda_init: found 1 ROCm devices:\n"
+               "  Device 0: CPU\n"
+               "  Device 1: AMD Instinct MI210, gfx90a:sramecc+:xnack-\n")
+        self.assertEqual(W.check_device_evidence(log, expected_lane="gpu").outcome,
+                         S.PASS)
+        self.assertEqual(W.check_device_evidence(log, expected_lane="cpu").outcome,
+                         S.FAIL)
+        self.assertEqual(W.device_names_in_log(log),
+                         ("CPU", "AMD Instinct MI210"))
+
+    def test_a_cpu_cell_whose_log_names_the_cpu_device_is_correct_evidence(self):
+        self.assertEqual(
+            W.check_device_evidence("Device 0: CPU\n", expected_lane="cpu").outcome,
+            S.PASS)
+
+    def test_the_vocabulary_is_not_local_to_this_adapter(self):
+        # Two copies diverge; the audit proves this one has none of its own.
+        source = Path(W.__file__).read_text(encoding="utf-8")
+        self.assertEqual(W.audit_device_vocabulary_delegation(source).outcome, S.PASS)
+
+    def test_the_delegation_audit_is_could_not_check_on_empty_and_foreign_source(self):
+        self.assertEqual(W.audit_device_vocabulary_delegation("").outcome,
+                         S.COULD_NOT_CHECK)
+        self.assertEqual(W.audit_device_vocabulary_delegation(None).outcome,
+                         S.COULD_NOT_CHECK)
+        foreign = Path(Q_MODULE_PATH).read_text(encoding="utf-8")
+        self.assertEqual(W.audit_device_vocabulary_delegation(foreign).outcome,
+                         S.COULD_NOT_CHECK)
+
+    def test_the_delegation_audit_bites_on_a_local_vocabulary(self):
+        doctored = (
+            'BACKEND = "whisper_stt"\n'
+            'GPU_DEVICE_NAMES = {"AMD Instinct MI210", "gfx90a"}\n'
+            "def check_not_production_path(p):\n    return p\n"
+            "def interpret_linkage_report(s, e):\n    return s\n"
+            "def release_gate_readiness(r):\n    return r\n"
+            "def check_device_evidence(log, *, expected_lane):\n"
+            "    return devices.check_device_names([log], expected_lane=expected_lane)\n"
+        )
+        check = W.audit_device_vocabulary_delegation(doctored)
+        self.assertEqual(check.outcome, S.FAIL)
+        self.assertIn("MI210", " ".join(check.reasons))
+
+    def test_the_delegation_audit_bites_on_a_checker_that_grades_names_itself(self):
+        doctored = (
+            'BACKEND = "whisper_stt"\n'
+            "def check_not_production_path(p):\n    return p\n"
+            "def interpret_linkage_report(s, e):\n    return s\n"
+            "def release_gate_readiness(r):\n    return r\n"
+            "def check_device_evidence(log, *, expected_lane):\n"
+            "    return schemas.Check(schemas.PASS) if 'Device' in log else None\n"
+        )
+        check = W.audit_device_vocabulary_delegation(doctored)
+        self.assertEqual(check.outcome, S.FAIL)
+        self.assertIn("check_device_names", " ".join(check.reasons))
+
+    # --- COMPLIANT-PATH CONTROL ---------------------------------------------
+
+    def test_the_audit_does_not_forbid_this_adapters_own_legitimate_literals(self):
+        """Library names and lane keys are not a device vocabulary.
+
+        `libggml-cpu.so` carries the token `cpu` on a word boundary and this adapter
+        must keep naming it; the TTS sibling keys `SIBLING_STABLE_TARGETS` by lane
+        (`cpu`/`gpu`/`stt`). A guard that banned either would be banning the idiom it
+        exists to protect, so both real adapter sources must pass it.
+        """
+        source = Path(W.__file__).read_text(encoding="utf-8")
+        self.assertEqual(W.audit_device_vocabulary_delegation(source).outcome, S.PASS)
+        self.assertIn("libggml-cpu.so", W.all_declared_shared_libraries())
+        self.assertIn("libggml-cpu.so", W.expected_shared_libraries("whisper-cli"))
+        # And a real, complete GPU startup log still passes on the GPU lane.
+        log = ("whisper_init: use gpu = 1\n"
+               "ggml_cuda_init: found 1 ROCm devices:\n"
+               "  Device 0: AMD Instinct MI210, gfx90a:sramecc+:xnack-, VMM: no\n")
+        self.assertEqual(W.check_device_evidence(log, expected_lane="gpu").outcome,
+                         S.PASS)
 
 
 class MetricAndPhaseTest(unittest.TestCase):
@@ -715,19 +928,115 @@ class FailureTaxonomyTest(unittest.TestCase):
                          S.PASS)
 
     def test_the_exclusion_cap_is_derived_from_the_anchor_plus_aa_dispersion(self):
+        two_percent = W.ExclusionRateDispersion.from_fraction(0.02)
         ok = W.check_exclusion_rate(candidate_excluded=3, anchor_excluded=2,
-                                    n_utterances=100, aa_dispersion=0.02)
+                                    n_utterances=100,
+                                    aa_dispersion_fraction=two_percent)
         self.assertEqual(ok.outcome, S.PASS)
         bad = W.check_exclusion_rate(candidate_excluded=9, anchor_excluded=2,
-                                     n_utterances=100, aa_dispersion=0.02)
+                                     n_utterances=100,
+                                     aa_dispersion_fraction=two_percent)
         self.assertEqual(bad.outcome, S.FAIL)
         self.assertIn("derived cap", " ".join(bad.reasons))
 
     def test_a_missing_aa_dispersion_is_could_not_check(self):
         self.assertEqual(
             W.check_exclusion_rate(candidate_excluded=1, anchor_excluded=0,
-                                   n_utterances=100, aa_dispersion=None).outcome,
+                                   n_utterances=100,
+                                   aa_dispersion_fraction=None).outcome,
             S.COULD_NOT_CHECK)
+
+
+class ExclusionDispersionUnitTest(unittest.TestCase):
+    """The unit hazard: `aa_dispersion=0.02` meant two things and said neither.
+
+    An exclusion rate is a fraction of 1 (a count over a count). An A/A dispersion of
+    a rate is routinely quoted in percentage POINTS on this project — the TTS
+    sibling's `derive_intelligibility_floor` takes `aa_dispersion_pp`, and
+    `stt_wer_results.json` quotes WER in percent. `0.02` is legal in both units and
+    the two readings of it differ 50-fold, in the direction that WIDENS the cap.
+    """
+
+    def test_a_bare_number_is_refused_because_its_unit_is_unknowable(self):
+        # Before the fix this was accepted and silently read as a fraction.
+        with self.assertRaises(W.UnitAmbiguity) as ctx:
+            W.check_exclusion_rate(candidate_excluded=3, anchor_excluded=2,
+                                   n_utterances=100, aa_dispersion_fraction=0.02)
+        message = str(ctx.exception)
+        self.assertIn("percentage points", message)
+        self.assertIn("from_fraction", message)
+
+    def test_the_two_units_are_different_caps_and_both_are_expressible(self):
+        # 2 percentage points IS 0.02 as a fraction; 0.02 percentage points is not.
+        self.assertAlmostEqual(
+            W.ExclusionRateDispersion.from_percentage_points(2.0).fraction_of_1, 0.02)
+        self.assertAlmostEqual(
+            W.ExclusionRateDispersion.from_percentage_points(0.02).fraction_of_1, 0.0002)
+        # The same candidate passes under one reading and fails under the other, which
+        # is exactly why the bare number could not be interpreted.
+        wide = W.check_exclusion_rate(candidate_excluded=4, anchor_excluded=2,
+                                      n_utterances=100,
+                                      aa_dispersion_fraction=
+                                      W.ExclusionRateDispersion.from_percentage_points(2.0))
+        narrow = W.check_exclusion_rate(candidate_excluded=4, anchor_excluded=2,
+                                        n_utterances=100,
+                                        aa_dispersion_fraction=
+                                        W.ExclusionRateDispersion.from_percentage_points(0.02))
+        self.assertEqual(wide.outcome, S.PASS)
+        self.assertEqual(narrow.outcome, S.FAIL)
+
+    def test_the_unit_travels_with_the_value_into_the_reason(self):
+        check = W.check_exclusion_rate(
+            candidate_excluded=9, anchor_excluded=2, n_utterances=100,
+            aa_dispersion_fraction=W.ExclusionRateDispersion.from_percentage_points(2.0))
+        self.assertEqual(check.outcome, S.FAIL)
+        self.assertIn("percentage_points", " ".join(check.reasons))
+
+    def test_a_percentage_point_value_typed_into_the_fraction_field_is_refused(self):
+        # The honest mistake, caught by the field's own range: 2.0 is not a fraction.
+        with self.assertRaises(W.WhisperAdapterError):
+            W.ExclusionRateDispersion.from_fraction(2.0)
+        with self.assertRaises(W.WhisperAdapterError):
+            W.ExclusionRateDispersion(fraction_of_1=2.0, source_unit="fraction_of_1")
+
+    def test_an_undeclared_source_unit_is_refused(self):
+        with self.assertRaises(W.UnitAmbiguity):
+            W.ExclusionRateDispersion(fraction_of_1=0.02, source_unit="percent")
+
+    def test_a_negative_or_non_numeric_dispersion_is_refused(self):
+        with self.assertRaises(W.WhisperAdapterError):
+            W.ExclusionRateDispersion.from_fraction(-0.01)
+        with self.assertRaises(W.WhisperAdapterError):
+            W.ExclusionRateDispersion.from_fraction("0.02")
+        with self.assertRaises(W.WhisperAdapterError):
+            W.ExclusionRateDispersion.from_fraction(True)
+
+    # --- COMPLIANT-PATH CONTROL ---------------------------------------------
+
+    def test_the_guard_does_not_forbid_a_dispersion_that_really_is_a_fraction(self):
+        """A typed fraction — the idiom the guard exists to require — still works.
+
+        A refusal that also refused the compliant call would be worked around rather
+        than obeyed. Both constructors reach a verdict, and a zero dispersion (a
+        bitwise-stable instrument) is a legal cap, not a refusal.
+
+        `from_fraction(1.0)` was in this list and has been removed: a dispersion of
+        100 % puts the cap at or above 1, which no exclusion rate can exceed, so the
+        "compliant path" it asserted was a comparison no candidate could ever fail.
+        Its verdict is now COULD_NOT_CHECK and it has its own test below.
+        """
+        for dispersion in (W.ExclusionRateDispersion.from_fraction(0.0),
+                           W.ExclusionRateDispersion.from_fraction(0.02),
+                           W.ExclusionRateDispersion.from_percentage_points(0.0),
+                           W.ExclusionRateDispersion.from_percentage_points(2.0),
+                           W.ExclusionRateDispersion.from_fraction(0.5)):
+            check = W.check_exclusion_rate(candidate_excluded=2, anchor_excluded=2,
+                                           n_utterances=100,
+                                           aa_dispersion_fraction=dispersion)
+            self.assertEqual(check.outcome, S.PASS, dispersion)
+        self.assertEqual(
+            W.ExclusionRateDispersion.from_fraction(0.02).to_dict(),
+            {"fraction_of_1": 0.02, "source_unit": "fraction_of_1"})
 
 
 class ReleaseReadinessTest(unittest.TestCase):
@@ -796,6 +1105,160 @@ class SelfAuditTest(unittest.TestCase):
         # binding must not convert a positive detection into COULD_NOT_CHECK.
         self.assertEqual(
             W.audit_no_write_or_process_paths("p.write_text('x')\n").outcome, S.FAIL)
+
+
+class LinkageReportBindingTest(unittest.TestCase):
+    """RED TEAM: per-member sets made the member's identity load-bearing, and the
+    member was named by the CALLER with nothing tying it to the report.
+
+    `verify_ggml_linkage.sh` prints `binary : $BIN` as its first line, so the report
+    states what it is. Grading was done against `binary=`, the claim of the party
+    being gated. On identical bytes:
+
+        whisper-cli's own report, missing libwhisper.so
+          graded as whisper-cli      -> COULD_NOT_CHECK   (the engine member is held
+                                                           to its engine library)
+          graded as whisper-quantize -> PASS              (a tool member is not)
+
+    A wrongly-linked or half-captured engine report was therefore one keyword away
+    from a clean §10.2 phase-2 verdict.
+    """
+
+    def _core_only(self):
+        return [r for r in _GOOD_ROWS if not r[1].startswith("libwhisper")]
+
+    def test_a_report_cannot_be_graded_as_a_member_it_was_not_captured_against(self):
+        report = _report(self._core_only(), member="whisper-cli")
+        self.assertEqual(
+            W.interpret_linkage_report(report, 0, binary="whisper-cli").check.outcome,
+            S.COULD_NOT_CHECK)
+        verdict = W.interpret_linkage_report(report, 0, binary="whisper-quantize")
+        self.assertEqual(verdict.check.outcome, S.COULD_NOT_CHECK)
+        self.assertNotEqual(verdict.check.outcome, S.PASS)
+        self.assertFalse(verdict.check.passed)
+        reasons = " ".join(verdict.check.reasons)
+        self.assertIn("whisper-cli", reasons)
+        self.assertIn("whisper-quantize", reasons)
+
+    def test_the_relabelling_cannot_manufacture_a_pass_for_any_other_member(self):
+        report = _report(_GOOD_ROWS, member="whisper-cli")
+        for name in ("whisper-server", "whisper-bench", "whisper-quantize",
+                     "test-vad", "test-vad-full"):
+            verdict = W.interpret_linkage_report(report, 0, binary=name)
+            self.assertEqual(verdict.check.outcome, S.COULD_NOT_CHECK, name)
+
+    def test_a_report_that_names_no_binary_cannot_be_bound_to_a_member(self):
+        # Deleting the header is the other way to make grading float free of the
+        # evidence, so absence is COULD_NOT_CHECK too — never PASS.
+        stripped = "\n".join(line for line in _report(_GOOD_ROWS).splitlines()
+                             if not line.startswith("binary :")) + "\n"
+        self.assertIsNone(W.report_binary_name(stripped))
+        verdict = W.interpret_linkage_report(stripped, 0, binary="whisper-cli")
+        self.assertEqual(verdict.check.outcome, S.COULD_NOT_CHECK)
+        self.assertIn("no `binary : <path>` header", " ".join(verdict.check.reasons))
+
+    def test_a_wrong_tree_resolution_is_still_a_fail_whoever_the_report_belongs_to(self):
+        # A BAD line is a finding about the text, and stays FAIL rather than being
+        # softened into "not my member" — the fail-closed direction.
+        rows = list(_GOOD_ROWS)
+        rows[2] = ("BAD", "libggml.so.0.18.0",
+                   "/mnt/raid0/llm/llama.cpp/build/bin/libggml.so.0")
+        verdict = W.interpret_linkage_report(
+            _report(rows, member="whisper-cli",
+                    trailer="FAIL: 1 library/libraries resolve OUTSIDE "), 1,
+            binary="whisper-quantize")
+        self.assertEqual(verdict.check.outcome, S.FAIL)
+
+    # --- COMPLIANT-PATH CONTROL ---------------------------------------------
+
+    def test_every_member_still_grades_its_own_report_exactly_as_before(self):
+        """The binding must not make any member ungradeable.
+
+        Each member, graded on a report captured against ITSELF — the only thing a
+        runner can actually produce — reaches the same verdict it did before the
+        binding existed: engine members PASS the full report, tool members PASS the
+        ggml-core-only report, and the engine members are still held to
+        `libwhisper.so`.
+        """
+        for name in ("whisper-cli", "whisper-server", "whisper-bench"):
+            verdict = W.interpret_linkage_report(_report(_GOOD_ROWS, member=name), 0,
+                                                 binary=name)
+            self.assertEqual(verdict.check.outcome, S.PASS, name)
+        for name in ("whisper-quantize", "test-vad", "test-vad-full"):
+            verdict = W.interpret_linkage_report(
+                _report(self._core_only(), member=name), 0, binary=name)
+            self.assertEqual(verdict.check.outcome, S.PASS, name)
+        held = W.interpret_linkage_report(
+            _report(self._core_only(), member="whisper-cli"), 0, binary="whisper-cli")
+        self.assertEqual(held.check.outcome, S.COULD_NOT_CHECK)
+        self.assertIn("libwhisper.so", held.missing_expected)
+
+    def test_the_header_is_read_the_way_the_script_prints_it(self):
+        # `echo "binary : $BIN"` — an absolute path, and the member is its basename.
+        self.assertEqual(
+            W.report_binary_name(f"binary : {EXP_LIB}/whisper-cli\nexpect : x\n"),
+            "whisper-cli")
+        self.assertEqual(W.report_binary_name("binary : whisper-cli\n"), "whisper-cli")
+        self.assertEqual(W.report_binary_name("binary :   /a/b/test-vad-full  \n"),
+                         "test-vad-full")
+
+
+class ExclusionCapVacuityTest(unittest.TestCase):
+    """RED TEAM: naming the unit fixed which number was meant, not how wide it is.
+
+    `check_exclusion_rate` derives `cap = anchor_rate + dispersion` and FAILs a
+    candidate above it. An exclusion rate is a count over a count, so it cannot
+    exceed 1 — and a legally-typed `ExclusionRateDispersion.from_fraction(1.0)` puts
+    the cap at 1.0, where a candidate that dropped EVERY utterance in the corpus
+    passes. That is the same defect the TTS sibling's stage tolerance was bounded
+    against in this very package: a slack at or above the quantity it bounds is not a
+    loose check, it is no check.
+    """
+
+    def test_a_cap_no_candidate_could_exceed_is_not_a_pass(self):
+        for dispersion in (W.ExclusionRateDispersion.from_fraction(1.0),
+                           W.ExclusionRateDispersion.from_percentage_points(100.0),
+                           W.ExclusionRateDispersion.from_fraction(0.99)):
+            check = W.check_exclusion_rate(candidate_excluded=100, anchor_excluded=1,
+                                           n_utterances=100,
+                                           aa_dispersion_fraction=dispersion)
+            self.assertEqual(check.outcome, S.COULD_NOT_CHECK, dispersion)
+            self.assertNotEqual(check.outcome, S.PASS, dispersion)
+            self.assertFalse(check.passed, dispersion)
+            self.assertIn("vacuous", " ".join(check.reasons))
+
+    def test_the_anchors_own_rate_counts_toward_the_vacuity_bound(self):
+        # cap = 0.90 + 0.10 = 1.00. The dispersion alone looks modest; the cap does
+        # not, and the cap is what grades.
+        check = W.check_exclusion_rate(
+            candidate_excluded=100, anchor_excluded=90, n_utterances=100,
+            aa_dispersion_fraction=W.ExclusionRateDispersion.from_fraction(0.10))
+        self.assertEqual(check.outcome, S.COULD_NOT_CHECK)
+
+    # --- COMPLIANT-PATH CONTROL ---------------------------------------------
+
+    def test_a_real_dispersion_still_reaches_both_verdicts(self):
+        """The bound must not turn a working check into a permanent refusal.
+
+        A realistic A/A dispersion still PASSes a candidate inside the cap and FAILs
+        one outside it — the check keeps discriminating, which is the property the
+        bound exists to protect.
+        """
+        dispersion = W.ExclusionRateDispersion.from_fraction(0.02)
+        self.assertEqual(
+            W.check_exclusion_rate(candidate_excluded=3, anchor_excluded=2,
+                                   n_utterances=100,
+                                   aa_dispersion_fraction=dispersion).outcome, S.PASS)
+        self.assertEqual(
+            W.check_exclusion_rate(candidate_excluded=9, anchor_excluded=2,
+                                   n_utterances=100,
+                                   aa_dispersion_fraction=dispersion).outcome, S.FAIL)
+        # …and a cap just under 1 on a corpus where it can still be exceeded.
+        self.assertEqual(
+            W.check_exclusion_rate(
+                candidate_excluded=1000, anchor_excluded=0, n_utterances=1000,
+                aa_dispersion_fraction=W.ExclusionRateDispersion.from_fraction(0.999)
+            ).outcome, S.FAIL)
 
 
 if __name__ == "__main__":

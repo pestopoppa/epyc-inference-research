@@ -71,6 +71,15 @@ def digest(label: str) -> str:
     return schemas.content_hash({"test_fixture": label})
 
 
+def ratified_protocol(protocol_id: str, **overrides) -> t3.ProtocolBinding:
+    """A per-phase binding for a protocol that IS ratified (Annex B)."""
+    fields = {"protocol_id": protocol_id,
+              "document_sha256": digest(f"protocol:{protocol_id}"),
+              "ratified": True, "ratified_at": "2026-05-01T00:00:00Z", "annex": "B"}
+    fields.update(overrides)
+    return t3.ProtocolBinding(**fields)
+
+
 V8_CPU_BINARY = digest("v8-cpu-binary")
 V8_GPU_BINARY = digest("v8-gpu-binary")
 INCUMBENT_BINARIES = {"llama_cpu": V8_CPU_BINARY, "llama_gpu": V8_GPU_BINARY}
@@ -162,7 +171,9 @@ def incumbent_archive(**overrides) -> t3.IncumbentArchive:
         "archive_root": ARCHIVE_ROOT,
         "binaries": ((f"{ARCHIVE_ROOT}/cpu/llama-server", V8_CPU_BINARY),
                      (f"{ARCHIVE_ROOT}/gpu/llama-server", V8_GPU_BINARY)),
-        "libraries": ((f"{ARCHIVE_ROOT}/cpu/libggml-base.so.0",
+        # One ggml runtime, both llama backends of the tree — the attribution is a
+        # SET, and it is recorded here at the archive, never minted in the packager.
+        "libraries": ((LLAMA_BACKENDS, f"{ARCHIVE_ROOT}/cpu/libggml-base.so.0",
                        digest("v8-libggml-base")),),
         "rebuilt": False,
     }
@@ -243,7 +254,11 @@ def t3_request(**overrides) -> t3.T3Request:
         "cooldown_seconds": 86400,
         "release_reps_by_protocol": {"P-BENCH-1": 10, "P-BENCH-PREFILL-1": 5,
                                      "P-KERNEL-FREEZE-1": 1},
-        "phase_protocols": {b: {"prefill": "P-BENCH-PREFILL-1", "decode": "P-BENCH-1"}
+        # Per-phase `ProtocolBinding`s, not bare ids: `P-BENCH-1` and
+        # `P-BENCH-PREFILL-1` are ratified Annex B protocols and the gate now
+        # requires that to be a DECLARED, hashed fact rather than a guess from a name.
+        "phase_protocols": {b: {"prefill": ratified_protocol("P-BENCH-PREFILL-1"),
+                                "decode": ratified_protocol("P-BENCH-1")}
                             for b in LLAMA_BACKENDS},
         "linkage_receipts": tuple(linkage_receipt(b) for b in LLAMA_BACKENDS),
         "backend_inventories": tuple(
@@ -345,6 +360,10 @@ def rollback_plan(**overrides) -> packager.RollbackPlan:
         "stable_path_restore": ((CPU_LINK, "/mnt/raid0/llm/llama.cpp/build/bin"),
                                 (GPU_LINK, "/mnt/raid0/llm/llama.cpp/build-hip/bin")),
         "verified_at": NOW,
+        # STATED, because the field is tristate and `None` means "nobody said". It
+        # used to default to True, which answered §11.5's live-anchor requirement for
+        # every caller who never considered it.
+        "anchor_live": True,
     }
     fields.update(overrides)
     return packager.build_rollback_plan(**fields)
@@ -1034,6 +1053,58 @@ class TestRollback(unittest.TestCase):
         self.assertIn("ROLLBACK_BACKEND_UNCOVERED", codes_of(package))
 
 
+class TestRollbackLibraryAttribution(unittest.TestCase):
+    """`incumbent_libraries` used to carry `(path, sha256)` and a comment saying the
+    attribution could not be invented here. Correct — so it was added at the SOURCE
+    (`t3.ArchivedBuild`) and this field transports it. On a three-ggml-generation
+    host it is the field a rollback would most want attributed."""
+
+    def test_the_attribution_flows_from_the_archive_into_the_plan(self):
+        """The bite: before the source carried it, there was nothing to flow."""
+        plan = rollback_plan()
+        self.assertEqual(
+            plan.incumbent_libraries,
+            ((("llama_cpu", "llama_gpu"), f"{ARCHIVE_ROOT}/cpu/libggml-base.so.0",
+              digest("v8-libggml-base")),))
+        self.assertEqual(plan.to_dict()["incumbent_libraries"][0]["backends"],
+                         ["llama_cpu", "llama_gpu"])
+
+    def test_the_plan_will_not_carry_an_unattributed_library(self):
+        with self.assertRaises(packager.PackagerInputError) as caught:
+            dataclasses.replace(
+                rollback_plan(),
+                incumbent_libraries=((f"{ARCHIVE_ROOT}/cpu/libggml-base.so.0",
+                                      digest("v8-libggml-base")),))
+        self.assertIn("(backends, path, sha256)", str(caught.exception))
+
+    def test_an_unknown_backend_is_refused_in_the_plan_too(self):
+        with self.assertRaises(packager.PackagerInputError):
+            dataclasses.replace(
+                rollback_plan(),
+                incumbent_libraries=((("not_a_backend",),
+                                      f"{ARCHIVE_ROOT}/cpu/lib.so", digest("lib")),))
+
+    def test_a_backend_with_no_attributed_library_fails_the_archive_check(self):
+        """What the attribution is FOR: an archive with one library and two backends
+        was previously indistinguishable from one library PER backend."""
+        cpu_only = incumbent_archive(libraries=(
+            (("llama_cpu",), f"{ARCHIVE_ROOT}/cpu/libggml-base.so.0",
+             digest("v8-libggml-base")),))
+        check = packager.verify_archive_target(
+            cpu_only, backends=LLAMA_BACKENDS,
+            incumbent_branch="production-consolidated-v8", incumbent_commit=V8_HEAD,
+            expected_binary_sha256=INCUMBENT_BINARIES)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("attributes no preserved library to this backend",
+                      " ".join(check.reasons))
+        self.assertIn("llama_gpu", " ".join(check.reasons))
+
+    def test_a_shared_library_covers_both_backends(self):
+        """Control: the check must not demand one library per backend when one
+        `libggml-base.so.0` genuinely serves both."""
+        self.assertEqual(rollback_plan().archive_check.outcome, schemas.PASS)
+
+
 # =============================================================================
 # The transaction plan
 # =============================================================================
@@ -1279,6 +1350,104 @@ class TestOperatorCommands(unittest.TestCase):
     def test_an_empty_sequence_is_refused_outright(self):
         with self.assertRaises(packager.PackagerInputError):
             self.review(())
+
+
+class TestCoverageRequiresAVerb(unittest.TestCase):
+    """Coverage used to be `value in "\\n".join(every validated command's text)`, so
+    a transaction element was "commanded" by any command that MENTIONED it —
+    including in a shell comment, and including a mention in one step with the verb
+    in a different step. `ELEMENT_VERBS` is what turns naming into acting."""
+
+    def review(self, commands, **overrides):
+        fields = {"transaction": transaction_plan(), "rollback": rollback_plan(),
+                  "era_row": era_draft(),
+                  "autopilot_baseline_path": AUTOPILOT_BASELINE}
+        fields.update(overrides)
+        return packager.validate_command_sequence(commands, **fields)
+
+    def _with_step(self, index, **changes):
+        commands = list(operator_commands())
+        commands[index] = dataclasses.replace(commands[index], **changes)
+        return tuple(commands)
+
+    def test_every_element_kind_the_denominator_emits_has_a_vocabulary(self):
+        """A kind with no vocabulary is not auto-covered — it is uncoverable. Both
+        halves are wrong, so the two lists must not be allowed to drift."""
+        elements = packager._transaction_elements(
+            transaction_plan(), rollback_plan(), era_draft())
+        kinds = {kind for kind, _value in elements} | {"autopilot_baseline"}
+        self.assertEqual(sorted(kinds - set(packager.ELEMENT_VERBS)), [])
+
+    def test_a_comment_mentioning_the_era_registry_does_not_cover_it(self):
+        """The bite, in the README's own words: *"a comment mentioning
+        instrument_eras.yaml covers the era-registry element."*"""
+        commands = self._with_step(
+            5, command=f"git status  # remember to hand-write {ERA_REGISTRY} after this",
+            target_paths=())
+        review = self.review(commands)
+        self.assertEqual(review.check.outcome, schemas.FAIL)
+        self.assertIn(f"era_registry:{ERA_REGISTRY}", review.uncovered_elements)
+        self.assertIn("naming a thing is not acting on it", " ".join(review.findings))
+
+    def test_a_declared_target_with_no_verb_does_not_cover_it(self):
+        """`target_paths` says what a command touches; it does not say it did."""
+        commands = self._with_step(
+            5, command=f"echo 'the operator will edit {ERA_REGISTRY} later'")
+        review = self.review(commands)
+        self.assertIn(f"era_registry:{ERA_REGISTRY}", review.uncovered_elements)
+
+    def test_a_name_in_one_step_and_a_verb_in_another_is_not_coverage(self):
+        """Coverage is per COMMAND. Pooling the sequence's text let step 2 name the
+        element and step 9 supply the verb, which is not a step that does the job."""
+        commands = list(operator_commands())
+        commands[5] = dataclasses.replace(
+            commands[5], command=f"true {ERA_REGISTRY}", target_paths=(ERA_REGISTRY,))
+        review = self.review(tuple(commands))
+        self.assertIn(f"era_registry:{ERA_REGISTRY}", review.uncovered_elements)
+
+    def test_an_unaddressed_autopilot_baseline_is_held_to_the_same_bar(self):
+        commands = self._with_step(
+            6, command=f"git status  # {AUTOPILOT_BASELINE} still needs opening",
+            target_paths=())
+        review = self.review(commands)
+        self.assertIn(f"autopilot_baseline:{AUTOPILOT_BASELINE}",
+                      review.uncovered_elements)
+
+    # -- compliant-path controls ---------------------------------------------
+
+    def test_the_reference_sequence_still_covers_everything(self):
+        review = self.review(operator_commands())
+        self.assertEqual(review.check.outcome, schemas.PASS, list(review.findings))
+        self.assertEqual(review.uncovered_elements, ())
+
+    def test_the_editor_idiom_is_a_verb_for_a_human_only_registry_write(self):
+        """Control: the sanctioned way to write `instrument_eras.yaml` is to open it
+        in an editor. A vocabulary that refused `$EDITOR` would forbid the only
+        compliant way to perform the write it is checking for."""
+        commands = self._with_step(
+            5, command=f"$EDITOR {ERA_REGISTRY}")
+        review = self.review(commands)
+        self.assertIn(f"era_registry:{ERA_REGISTRY}", review.covered_elements)
+
+    def test_a_trailing_comment_on_a_real_command_is_still_coverage(self):
+        """Control: comments are stripped, not banned. The reference sequence's own
+        era step carries one, and it must go on covering."""
+        commands = self._with_step(
+            5, command=f"$EDITOR {ERA_REGISTRY}  # write the three drafted E9 rows")
+        review = self.review(commands)
+        self.assertIn(f"era_registry:{ERA_REGISTRY}", review.covered_elements)
+
+    def test_a_verifying_command_covers_without_mutating(self):
+        """Control: the finding says "performs OR VERIFIES it". `sha256sum -c` over
+        the archive is the correct command for the rollback anchor and touches
+        nothing; a mutation-only vocabulary would have demanded a write."""
+        review = self.review(operator_commands())
+        self.assertIn(f"archive:{ARCHIVE_ROOT}", review.covered_elements)
+
+    def test_a_kind_with_no_vocabulary_is_not_silently_covered(self):
+        command = operator_commands()[0]
+        self.assertFalse(packager._acts_on(command, "kind_nobody_declared",
+                                           "production-consolidated-v9"))
 
 
 # =============================================================================
@@ -1875,6 +2044,313 @@ class TestEndToEnd(unittest.TestCase):
         page = packager.render_first_page(self.build())
         self.assertIn("production-consolidated-v8 → production-consolidated-v9", page)
         self.assertIn("## 4. Default", page)
+
+
+# =============================================================================
+# Independent red team, 2026-08-03 — an author's self-mutation harness tests the
+# guarantees the author thought of. Every case below PASSED before its fix: the
+# module's own audits certified source that could write, alias a clock, mint a
+# freeze request or replace a refusal door, and the assembly certified packages
+# whose evidence did not support them. Each test is paired with a COMPLIANT-PATH
+# control, because the recurring defect in this package is a guard that closes a
+# hole by forbidding its own legitimate idiom.
+# =============================================================================
+
+class TestAuditsCannotBeWalkedAround(unittest.TestCase):
+    """The four self-audits are the guarantee. They are what gets attacked first."""
+
+    def bound(self, body: str) -> str:
+        """Doctored source that BINDS to this module, so a clean result is a PASS."""
+        return f'MODULE_ID = "{packager.MODULE_ID}"\n{body}'
+
+    # -- the write audit ------------------------------------------------------
+
+    def test_the_write_audit_bites_on_a_write_verb_bound_to_a_name(self):
+        """`sink = Path(p).write_text` then `sink(x)` puts nothing in call position."""
+        for snippet in ("sink = Path(p).write_text\nsink('x')\n",
+                        "w = open\nw('/etc/passwd', 'w')\n",
+                        "mover = Path(new).replace\nmover(link)\n"):
+            with self.subTest(snippet=snippet):
+                check = packager.audit_no_write_or_process_paths(self.bound(snippet))
+                self.assertEqual(check.outcome, schemas.FAIL, list(check.reasons))
+
+    def test_the_write_audit_bites_on_dispatch_it_cannot_read(self):
+        """`builtins.__dict__['open'](p, 'w')` is `open(p, 'w')` with punctuation."""
+        check = packager.audit_no_write_or_process_paths(
+            self.bound("import builtins\nbuiltins.__dict__['open']('/x', 'w')\n"))
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("Subscript expression", " ".join(check.reasons))
+
+    def test_the_write_audit_bites_on_a_getattr_name_it_cannot_resolve(self):
+        check = packager.audit_no_write_or_process_paths(
+            self.bound("verb = 'sys' + 'tem'\ngetattr(module, verb)('rm -rf /')\n"))
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("cannot resolve to constants", " ".join(check.reasons))
+
+    def test_the_write_audit_reads_a_denied_verb_out_of_a_literal_loop(self):
+        check = packager.audit_no_write_or_process_paths(
+            self.bound('for name in ("unlink", "tree_clean"):\n    getattr(c, name)()\n'))
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("'unlink'", " ".join(check.reasons))
+
+    def test_the_compliant_literal_field_loop_is_not_forbidden(self):
+        """CONTROL. This module reads its own fields exactly this way, twice."""
+        check = packager.audit_no_write_or_process_paths(self.bound(
+            'for name in ("overlay_present", "tree_clean", "ancestry_clean"):\n'
+            '    value = getattr(candidate, name)\n'))
+        self.assertEqual(check.outcome, schemas.PASS, list(check.reasons))
+
+    # -- the clock / self-trigger audit ---------------------------------------
+
+    def test_the_clock_audit_bites_on_a_clock_bound_to_a_name(self):
+        check = packager.audit_no_clock_or_self_trigger(
+            self.bound("clock = datetime.now\nmoment = clock()\n"))
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("clock-bearing receiver", " ".join(check.reasons))
+
+    def test_a_field_called_now_is_not_a_clock(self):
+        """CONTROL. `WatchWindowProgress.now` is data; `progress.now` must stay legal."""
+        check = packager.audit_no_clock_or_self_trigger(self.bound(
+            "moment = _timestamp(progress.now, 'progress.now')\nlabel = self.now\n"))
+        self.assertEqual(check.outcome, schemas.PASS, list(check.reasons))
+
+    def test_the_self_trigger_audit_bites_on_an_aliased_mint(self):
+        check = packager.audit_no_clock_or_self_trigger(
+            self.bound("mint = OperatorFreezeRequest\nrequest = mint(request_id='akfr-x')\n"))
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("binds OperatorFreezeRequest", " ".join(check.reasons))
+
+    def test_naming_the_request_class_in_a_type_check_is_not_a_mint(self):
+        """CONTROL. `assemble_release_package` names the class in its isinstance table."""
+        check = packager.audit_no_clock_or_self_trigger(self.bound(
+            'for label, value, klass in (("freeze_request", request, '
+            'OperatorFreezeRequest),):\n    isinstance(value, klass)\n'))
+        self.assertEqual(check.outcome, schemas.PASS, list(check.reasons))
+
+    # -- the delegation audit -------------------------------------------------
+
+    def test_the_delegation_audit_bites_on_an_aliased_gate(self):
+        check = packager.audit_verdict_is_delegated(
+            self.bound("grade = t3.run_t3\nresult = grade(request)\n"))
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("binds run_t3", " ".join(check.reasons))
+
+    def test_going_through_the_seam_is_still_allowed(self):
+        """CONTROL. The whole point is that `evaluate_release` remains reachable."""
+        check = packager.audit_verdict_is_delegated(self.bound(
+            'evaluate = getattr(evaluator, "evaluate_release", None)\n'
+            "result = evaluate(request)\n"))
+        self.assertEqual(check.outcome, schemas.PASS, list(check.reasons))
+
+    # -- the refusal doors ----------------------------------------------------
+
+    def doors(self) -> str:
+        return "\n".join(f"def {name}(*a, **k):\n    raise RuntimeError('no')\n"
+                         for name in packager.REFUSED_CAPABILITIES.values())
+
+    def test_the_door_audit_bites_on_a_door_rebound_after_it_was_defined(self):
+        """The AST is full of compliant raises and the module exports a no-op."""
+        check = packager.audit_refusal_doors_raise_unconditionally(
+            self.bound(self.doors() + "\nexecute_freeze = lambda *a, **k: None\n"))
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("rebinds execute_freeze()", " ".join(check.reasons))
+
+    def test_the_door_audit_bites_on_a_door_imported_over(self):
+        check = packager.audit_refusal_doors_raise_unconditionally(
+            self.bound(self.doors() + "\nfrom somewhere import helper as schedule_cutover\n"))
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("rebinds schedule_cutover()", " ".join(check.reasons))
+
+    def test_a_door_that_binds_no_module_attribute_does_not_count(self):
+        """A nested `def` satisfies a walk and leaves `packager.execute_freeze` absent."""
+        nested = "def _holder():\n" + "\n".join(
+            f"    def {name}(*a, **k):\n        raise RuntimeError('no')\n"
+            for name in packager.REFUSED_CAPABILITIES.values())
+        check = packager.audit_refusal_doors_raise_unconditionally(self.bound(nested))
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("no function named", " ".join(check.reasons))
+
+    def test_the_twelve_real_doors_still_pass(self):
+        """CONTROL, and the reason the three tests above are not just strictness."""
+        check = packager.audit_refusal_doors_raise_unconditionally(
+            self.bound(self.doors()))
+        self.assertEqual(check.outcome, schemas.PASS, list(check.reasons))
+        for name in packager.REFUSED_CAPABILITIES.values():
+            self.assertTrue(callable(getattr(packager, name)), name)
+
+
+class TestPackageEvidenceCannotBeDeclaredAway(unittest.TestCase):
+    """Each of these reached a package state its own evidence did not support."""
+
+    def test_a_verdict_for_a_different_seal_blocks_the_package(self):
+        foreign = sealed_release(candidate=sealed_candidate(
+            candidate_id="akc-something-else", seal_sha256=digest("another-seal")))
+        package = release_package(sealed=foreign)
+        self.assertEqual(package.state, packager.STATE_BLOCKED)
+        self.assertIn("SEALED_CANDIDATE_NOT_THE_GRADED_ONE", codes_of(package))
+
+    def test_the_seal_the_evaluator_graded_is_still_accepted(self):
+        """CONTROL. The cross-check must not refuse the matching pair."""
+        self.assertEqual(release_package().state, packager.STATE_READY)
+
+    def test_era_kinds_are_traced_from_the_rows_not_read_off_a_summary_key(self):
+        declared_only = {"draft": True, "written_by": packager.OPERATOR_AUTHORITY,
+                         "registry_path": ERA_REGISTRY,
+                         "kinds_present": list(packager.ERA_ROW_KINDS), "rows": []}
+        package = release_package(era_row_draft=declared_only)
+        self.assertEqual(package.state, packager.STATE_BLOCKED)
+        self.assertIn("ERA_ROW_KINDS_DECLARED_NOT_DRAFTED", codes_of(package))
+        self.assertIn("ERA_ROW_KIND_MISSING", codes_of(package))
+
+    def test_a_real_three_row_draft_is_still_complete(self):
+        """CONTROL. `draft_era_registry_row()` output must remain sufficient."""
+        self.assertNotIn("ERA_ROW_KINDS_DECLARED_NOT_DRAFTED",
+                         codes_of(release_package()))
+
+    def test_a_duplicate_binding_cannot_hide_a_self_granted_waiver(self):
+        machine = dict(unverified_waiver_binding().document)
+        machine["authorized_by"] = "autokernel-controller"
+        shadowed = unverified_waiver_binding(document=machine,
+                                             pinned_sha256=digest("self-granted"))
+        clean = unverified_waiver_binding()
+        for order in ((shadowed, clean), (clean, shadowed)):
+            with self.subTest(order=[b.pinned_sha256[:8] for b in order]):
+                package = release_package(waivers=order)
+                self.assertEqual(package.state, packager.STATE_BLOCKED)
+                self.assertIn("WAIVER_SELF_GRANTED", codes_of(package))
+                self.assertIn("WAIVER_BINDING_DUPLICATE", codes_of(package))
+
+    def test_two_different_waivers_are_not_a_duplicate(self):
+        """CONTROL. Pinning two distinct waivers is the normal §10.4 case."""
+        second = unverified_waiver_binding(
+            waiver_id="WAIVE-STT-v9", pinned_sha256=digest("waive-stt-v9"),
+            covers_cell_ids=("llama_gpu.decode",))
+        package = release_package(waivers=(unverified_waiver_binding(), second))
+        self.assertNotIn("WAIVER_BINDING_DUPLICATE", codes_of(package))
+
+    def test_an_unstated_rollback_anchor_liveness_is_not_a_yes(self):
+        package = release_package(rollback=rollback_plan(anchor_live=None))
+        self.assertEqual(package.state, packager.STATE_INCOMPLETE)
+        self.assertIn("ROLLBACK_ANCHOR_LIVENESS_UNSTATED", codes_of(package))
+
+    def test_a_stated_live_anchor_still_clears_and_a_dead_one_still_blocks(self):
+        """CONTROL, both directions: the tristate keeps the two states it had."""
+        self.assertEqual(release_package().state, packager.STATE_READY)
+        dead = release_package(rollback=rollback_plan(anchor_live=False))
+        self.assertEqual(dead.state, packager.STATE_BLOCKED)
+        self.assertIn("ROLLBACK_ANCHOR_NOT_LIVE", codes_of(dead))
+
+    def test_an_unstated_shared_core_answer_is_not_a_no(self):
+        package = release_package(diff_complexity={"diff_size": 4000,
+                                                   "files_touched": 61})
+        self.assertEqual(package.state, packager.STATE_INCOMPLETE)
+        self.assertIn("DIFF_COMPLEXITY_SHARED_CORE_UNSTATED", codes_of(package))
+        self.assertTrue(package.requires_human_code_review)
+
+    def test_a_stated_shared_core_answer_still_clears(self):
+        """CONTROL. `touches_shared_core: False` is an answer and must read as one."""
+        package = release_package()
+        self.assertEqual(package.state, packager.STATE_READY)
+        self.assertFalse(package.requires_human_code_review)
+
+
+class TestWatchWindowFoldsEveryObservation(unittest.TestCase):
+
+    def progress_with(self, extra, *, first: bool = False):
+        base = watch_progress()
+        observations = (extra,) + base.observations if first \
+            else base.observations + (extra,)
+        return packager.WatchWindowProgress(
+            now=base.now, volume_by_role=dict(base.volume_by_role),
+            bands_sha256=base.bands_sha256, observations=observations)
+
+    def excursion(self) -> packager.WatchObservation:
+        return packager.WatchObservation(
+            signal_id=packager.SIGNAL_THROUGHPUT, value=12.0,
+            observed_at="2026-08-11T13:00:00Z", era_label="E9",
+            samples_ref="data/ak-v9/watch/throughput-second-sample.jsonl")
+
+    def test_a_second_observation_outside_the_band_still_alarms(self):
+        """First-wins dedup dropped it and the window closed with `no regression`."""
+        for first in (False, True):
+            with self.subTest(position="first" if first else "last"):
+                recommendation = packager.evaluate_watch_window(
+                    watch_window(), self.progress_with(self.excursion(), first=first))
+                self.assertEqual(recommendation.recommendation,
+                                 packager.WATCH_RAISE_DECISION_PACKAGE)
+                self.assertIn(packager.SIGNAL_THROUGHPUT, recommendation.alarms)
+
+    def test_no_regression_cannot_be_recorded_over_an_alarming_signal(self):
+        """'We looked and it alarmed' was accepted while 'we did not look' was not."""
+        with self.assertRaises(packager.PackagerInputError) as caught:
+            packager.close_watch_window(
+                watch_window(), self.progress_with(self.excursion()),
+                verdict="no_regression_observed", closed_by="daniele",
+                closed_at="2026-08-11T14:00:00Z")
+        self.assertIn("outside their bands", str(caught.exception))
+
+    def test_the_same_window_closes_on_the_verdict_the_evidence_supports(self):
+        """CONTROL. `regression_observed` over an alarm is the compliant closure."""
+        closure = packager.close_watch_window(
+            watch_window(), self.progress_with(self.excursion()),
+            verdict="regression_observed", closed_by="daniele",
+            closed_at="2026-08-11T14:00:00Z")
+        self.assertEqual(closure.verdict, "regression_observed")
+        self.assertIn(packager.SIGNAL_THROUGHPUT, closure.recommendation.alarms)
+
+    def test_a_clean_window_still_closes_with_no_regression(self):
+        """CONTROL. The refusal must not swallow the ordinary close."""
+        closure = packager.close_watch_window(
+            watch_window(), watch_progress(), verdict="no_regression_observed",
+            closed_by="daniele", closed_at="2026-08-11T14:00:00Z")
+        self.assertEqual(closure.verdict, "no_regression_observed")
+
+    def test_one_observation_per_signal_still_closes_the_window(self):
+        """CONTROL. Folding must not turn the ordinary window into an open one."""
+        recommendation = packager.evaluate_watch_window(watch_window(), watch_progress())
+        self.assertEqual(recommendation.recommendation,
+                         packager.WATCH_CLOSE_NO_REGRESSION)
+
+    def test_two_observations_inside_the_band_are_both_a_pass(self):
+        """CONTROL. Repeated sampling is the normal case, not a finding."""
+        second = packager.WatchObservation(
+            signal_id=packager.SIGNAL_THROUGHPUT, value=49.9,
+            observed_at="2026-08-11T13:00:00Z", era_label="E9",
+            samples_ref="data/ak-v9/watch/throughput-second-sample.jsonl")
+        recommendation = packager.evaluate_watch_window(
+            watch_window(), self.progress_with(second))
+        self.assertEqual(recommendation.recommendation,
+                         packager.WATCH_CLOSE_NO_REGRESSION)
+
+    def test_a_window_shorter_than_the_section_11_5_floor_is_refused(self):
+        with self.assertRaises(packager.PackagerInputError) as caught:
+            watch_window(min_duration_days=1)
+        self.assertIn("floor", str(caught.exception))
+
+    def test_the_declared_default_window_is_still_accepted(self):
+        """CONTROL. Seven days is the rule, not the exception."""
+        self.assertEqual(watch_window().min_duration_days,
+                         packager.DEFAULT_WATCH_WINDOW_DAYS)
+
+
+class TestVersionStalenessCountsTags(unittest.TestCase):
+
+    def test_a_tag_that_moved_the_series_is_a_stale_incumbent(self):
+        with self.assertRaises(packager.VersionCollision) as caught:
+            packager.compute_next_version(
+                incumbent_branch="production-consolidated-v8",
+                existing_branches=("production-consolidated-v8",),
+                existing_tags=("production-consolidated-v10",))
+        self.assertIn("production-consolidated-v10", str(caught.exception))
+
+    def test_an_older_tag_and_another_family_do_not_collide(self):
+        """CONTROL. Only a HIGHER version of the SAME family is a moved series."""
+        version = packager.compute_next_version(
+            incumbent_branch="production-consolidated-v8",
+            existing_branches=("production-consolidated-v7",
+                               "production-consolidated-v8"),
+            existing_tags=("production-consolidated-v7", "production-speech-v3"))
+        self.assertEqual(version.next_branch, "production-consolidated-v9")
 
 
 if __name__ == "__main__":

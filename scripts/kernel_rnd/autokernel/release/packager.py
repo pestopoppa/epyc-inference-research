@@ -167,6 +167,7 @@ __all__ = [
     "EraRowDraft", "draft_era_registry_row", "draft_autopilot_rebaseline_note",
     # operator commands
     "OperatorCommand", "CommandSequenceReview", "validate_command_sequence",
+    "ELEMENT_VERBS", "era_row_registry_path",
     # cutover request
     "CutoverRequest", "build_cutover_request",
     # watch window
@@ -627,20 +628,19 @@ OPERATOR_AUTHORITY = "operator"
 
 #: Tokens that betray a machine actor in an identity field. A freeze request whose
 #: requester is the loop is the loop triggering itself, which is the one thing AK7
-#: must be unable to express. Matched on word boundaries against the lowercased
-#: identity, so a human called "Daniele" is unaffected and `autokernel-daemon` is not.
-MACHINE_ACTOR_TOKENS = frozenset({
-    "autokernel", "autopilot", "controller", "planner", "critic", "packager",
-    "evaluator", "daemon", "agent", "subagent", "bot", "cron", "timer", "scheduler",
-    "loop", "runner", "worker", "automation", "robot", "script",
-})
-
-_IDENTITY_TOKEN_RE = re.compile(r"[a-z0-9]+")
+#: must be unable to express.
+#:
+#: OWNED BY `schemas.py`, not by this module, and re-exported here so existing
+#: importers keep working. It lived here first, one layer ABOVE the gate that
+#: needed it: `t3.verify_waiver` accepted any non-empty `authorized_by`, so a
+#: waiver attributed to `autokernel` verified as human-attested and T3's own
+#: verdict read PASS_WITH_WAIVER — this module's refusal only stopped it from
+#: reaching a package. Both planes now read one vocabulary.
+MACHINE_ACTOR_TOKENS = schemas.MACHINE_ACTOR_TOKENS
 
 
 def _machine_actor_tokens(identity: str) -> tuple:
-    return tuple(sorted(
-        set(_IDENTITY_TOKEN_RE.findall(identity.lower())) & MACHINE_ACTOR_TOKENS))
+    return schemas.machine_actor_tokens(identity)
 
 
 def _require_human_actor(identity: str, label: str, *, error: type = SelfTriggerRefused):
@@ -1111,13 +1111,19 @@ def compute_next_version(*, incumbent_branch: str,
             "computable successor")
     family, current = match.group(1), int(match.group(2))
 
+    # TAGS COUNT for staleness, not only for the name collision below. A
+    # `production-consolidated-v10` tag with no branch of that name still says the
+    # series moved past v8 — the version number is the era number, and an era row
+    # written for E9 after E10 exists misorders the evidence timeline whichever kind
+    # of ref recorded the newer version.
     higher = sorted(
-        b for b in branches
+        b for b in (branches | tags)
         if (m := _PRODUCTION_BRANCH_RE.fullmatch(b)) is not None
         and m.group(1) == family and int(m.group(2)) > current)
     if higher:
         raise VersionCollision(
-            f"{incumbent_branch!r} is not the tip of its series: {higher} already exist. "
+            f"{incumbent_branch!r} is not the tip of its series: {higher} already exist "
+            "as a branch or a tag. "
             "The successor computed from a stale incumbent is behind production, and the "
             "version number is the era number, so the era row would misorder the "
             "evidence timeline (MEASUREMENT.md:233).")
@@ -1158,15 +1164,23 @@ class RollbackPlan:
     incumbent_archive_path: str
     #: ((backend, path, sha256), …) — every backend the tree serves.
     incumbent_binaries: tuple
-    #: ((path, sha256), …). Deliberately NOT attributed to a backend: the archive
-    #: record does not attribute libraries either, and inventing an attribution here
-    #: would put a fact in the package that nothing measured.
+    #: ((backends, path, sha256), …), attributed. The attribution is NOT minted
+    #: here — `t3.ArchivedBuild.libraries` carries it and this field transports it
+    #: unchanged. That direction is the whole point: a rollback plan that invented an
+    #: attribution would put a fact in the operator's package that nothing measured,
+    #: and on a three-ggml-generation host that fact is exactly the one a rollback
+    #: most needs to be true.
     incumbent_libraries: tuple
     #: ((link_path, restore_target), …) — putting the stable paths back.
     stable_path_restore: tuple
     archive_check: schemas.Check
     verified_at: str
-    anchor_live: bool = True
+    #: TRISTATE, and `None` is the default. §11.5 requires the rollback anchor to
+    #: stay live and verified for the whole watch window; a `bool` defaulting to
+    #: `True` answered that requirement for every caller who never thought about it,
+    #: which is "we did not check" wearing "we checked". `None` is the third state and
+    #: `assemble_release_package` reports it as COULD_NOT_CHECK.
+    anchor_live: Optional[bool] = None
 
     def __post_init__(self) -> None:
         _text(self.rollback_branch, "RollbackPlan.rollback_branch")
@@ -1189,17 +1203,55 @@ class RollbackPlan:
         object.__setattr__(self, "incumbent_binaries", tuple(triples))
         libraries: list = []
         for i, entry in enumerate(self.incumbent_libraries or ()):
-            if not isinstance(entry, (list, tuple)) or len(entry) != 2:
+            if not isinstance(entry, (list, tuple)) or len(entry) != 3:
                 raise PackagerInputError(
-                    f"RollbackPlan.incumbent_libraries[{i}]: expected (path, sha256)")
+                    f"RollbackPlan.incumbent_libraries[{i}]: expected "
+                    "(backends, path, sha256). The unattributed (path, sha256) shape is "
+                    "what this field used to carry, and it is the shape that cannot say "
+                    "which of three ggml generations a preserved library belongs to.")
+            backends = entry[0]
+            if isinstance(backends, str):
+                raise PackagerInputError(
+                    f"RollbackPlan.incumbent_libraries[{i}].backends: a single string is "
+                    "not a backend set")
+            backends = _str_tuple(
+                backends, f"RollbackPlan.incumbent_libraries[{i}].backends")
+            for backend in backends:
+                if backend not in schemas.BACKENDS:
+                    raise PackagerInputError(
+                        f"RollbackPlan.incumbent_libraries[{i}].backends: {backend!r} is "
+                        "not a known backend")
             libraries.append((
-                _text(entry[0], f"RollbackPlan.incumbent_libraries[{i}].path"),
-                _sha256(entry[1], f"RollbackPlan.incumbent_libraries[{i}].sha256")))
+                tuple(sorted(set(backends))),
+                _text(entry[1], f"RollbackPlan.incumbent_libraries[{i}].path"),
+                _sha256(entry[2], f"RollbackPlan.incumbent_libraries[{i}].sha256")))
         object.__setattr__(self, "incumbent_libraries", tuple(libraries))
         if not self.incumbent_binaries:
             raise RollbackIncomplete(
                 "RollbackPlan.incumbent_binaries is empty: there is no archived binary to "
                 "fall back to (§10.5). A commit id is not a rollback target.")
+        # The attribution has to hold HERE, not only where the plan is compiled.
+        # `verify_archive_target()` FAILs a backend with no attributed library, but
+        # that is one door: `assemble_release_package()` takes a `RollbackPlan`
+        # object, and `archive_check` is a FIELD on it. A hand-built plan carrying
+        # `incumbent_libraries=()` and `archive_check=Check(PASS)` reaches the
+        # operator's package with the attribution requirement never asked — the
+        # `unchanged_view()` lesson (README seam 1) in a second place. Deleting the
+        # binary instead of supplying the library is not an escape: that drops the
+        # backend out of `RollbackPlan.backends`, which `assemble_release_package`
+        # already reports as ROLLBACK_MISSING_BACKEND against the sealed set.
+        attributed = {b for backends, _p, _d in self.incumbent_libraries
+                      for b in backends}
+        unattributed = sorted(
+            {b for b, _p, _d in self.incumbent_binaries} - attributed)
+        if unattributed:
+            raise RollbackIncomplete(
+                f"RollbackPlan: {unattributed} would be rolled back to an archived "
+                f"binary with no attributed library (the plan attributes libraries to "
+                f"{sorted(attributed)}). §10.5 archives built binaries AND linked "
+                "libraries; on a three-ggml-generation host an unattributed rollback "
+                "resolves the binary against whatever is on the path at rollback time, "
+                "which is the 2026-07-31 linkage incident with a longer fuse.")
         pairs: list = []
         for i, entry in enumerate(self.stable_path_restore or ()):
             if not isinstance(entry, (list, tuple)) or len(entry) != 2:
@@ -1217,7 +1269,8 @@ class RollbackPlan:
         if not isinstance(self.archive_check, schemas.Check):
             raise PackagerInputError("RollbackPlan.archive_check: must be a schemas.Check")
         _timestamp(self.verified_at, "RollbackPlan.verified_at")
-        _bool(self.anchor_live, "RollbackPlan.anchor_live")
+        if self.anchor_live is not None:
+            _bool(self.anchor_live, "RollbackPlan.anchor_live")
 
     @property
     def backends(self) -> tuple:
@@ -1238,7 +1291,8 @@ class RollbackPlan:
                 {"backend": b, "path": p, "sha256": d}
                 for b, p, d in self.incumbent_binaries],
             "incumbent_libraries": [
-                {"path": p, "sha256": d} for p, d in self.incumbent_libraries],
+                {"backends": list(b), "path": p, "sha256": d}
+                for b, p, d in self.incumbent_libraries],
             "stable_path_restore": [list(pair) for pair in self.stable_path_restore],
             "archive_check": _check_dict(self.archive_check),
             "verified_at": self.verified_at,
@@ -1314,6 +1368,22 @@ def verify_archive_target(archive: t3.IncumbentArchive, *, backends: Sequence[st
                 f"{backend}: the incumbent binary {expected[:12]} is not among the "
                 f"archived binaries {sorted(d[:12] for d in archived)}")
 
+    # What the backend attribution on `ArchivedBuild.libraries` is FOR. §10.5
+    # archives "built binaries AND linked libraries" because a preserved binary
+    # whose libraries were not preserved with it resolves against whatever is on the
+    # path at rollback time. Until the attribution existed this was uncheckable: an
+    # archive with one library and four backends looked identical to an archive with
+    # one library per backend. Now the hole has a name.
+    for backend in wanted:
+        if not entry.libraries_for(backend):
+            reasons.append(
+                f"{backend}: the archive attributes no preserved library to this "
+                f"backend (it attributes to {list(entry.attributed_backends)}). §10.5 "
+                "archives binaries AND linked libraries; a preserved binary whose "
+                "libraries were not preserved with it resolves against whatever is on "
+                "the path at rollback time, which is the 2026-07-31 ggml-linkage "
+                "incident with a longer fuse.")
+
     entry_checks = [c for c in archive.check() if isinstance(c, schemas.Check)]
     parts = [_fail(*reasons)] if reasons else []
     if unknown:
@@ -1326,7 +1396,8 @@ def build_rollback_plan(*, archive: t3.IncumbentArchive, backends: Sequence[str]
                         incumbent_branch: str, incumbent_commit: str,
                         expected_binary_sha256: Mapping[str, str],
                         stable_path_restore: Sequence[Sequence[str]],
-                        verified_at: str, anchor_live: bool = True) -> RollbackPlan:
+                        verified_at: str,
+                        anchor_live: Optional[bool] = None) -> RollbackPlan:
     """Assemble the rollback plan from the archive, or refuse as incomplete.
 
     The refusal is structural and separate from the verdict: a plan that cannot name
@@ -1362,7 +1433,11 @@ def build_rollback_plan(*, archive: t3.IncumbentArchive, backends: Sequence[str]
             "the branch but not the binaries leaves production on a kernel nobody "
             "archived (§10.5).")
 
-    libraries = tuple((path, digest) for path, digest in entry.libraries)
+    # Copied through verbatim. `t3.ArchivedBuild` is the source of the attribution
+    # and this is a transport, not a producer: anything computed here would be a
+    # fact about the packager rather than about the archive.
+    libraries = tuple((backends, path, digest)
+                      for backends, path, digest in entry.libraries)
     return RollbackPlan(
         rollback_branch=entry.branch, rollback_head=entry.commit,
         incumbent_archive_path=entry.archive_root,
@@ -1706,6 +1781,19 @@ class CommandSequenceReview:
                 "uncovered_elements": list(self.uncovered_elements)}
 
 
+def era_row_registry_path(era_row: Mapping) -> str:
+    """The era registry this row writes, or `""` when the row does not name one.
+
+    Split out and made public because ONE reader of this key decides whether the
+    era registry is in the coverage denominator at all, and the caller has to be
+    able to ask the same question the enumerator asked. `draft_era_registry_row()`
+    always sets it; `validate_command_sequence()` and `assemble_release_package()`
+    accept a hand-built mapping, and there the key is simply absent-able.
+    """
+    value = era_row.get("registry_path")
+    return value if isinstance(value, str) and value else ""
+
+
 def _transaction_elements(transaction: t3.TransactionPlan, rollback: RollbackPlan,
                           era_row: Mapping) -> tuple:
     """Every thing the transaction says will happen, as a coverage denominator.
@@ -1723,11 +1811,116 @@ def _transaction_elements(transaction: t3.TransactionPlan, rollback: RollbackPla
         ("archive", rollback.incumbent_archive_path),
     ]
     elements.extend(("stable_path", link) for link, _c, _n in transaction.symlink_diff)
-    registry_path = era_row.get("registry_path")
-    if isinstance(registry_path, str) and registry_path:
+    # A missing `registry_path` SHRINKS this denominator rather than failing it, which
+    # is why `validate_command_sequence` refuses the era row that omits it before it
+    # ever gets here. Keep the guard there, not a raise here: this function's whole
+    # job is to enumerate, and an enumerator that raises cannot report.
+    registry_path = era_row_registry_path(era_row)
+    if registry_path:
         elements.append(("era_registry", registry_path))
     elements.extend(("receipt_path", path) for path in transaction.receipt_paths)
     return tuple(elements)
+
+
+#: What a command must be seen DOING to an element of each kind. Coverage used to
+#: ask only that some validated command's text CONTAIN the element's value, pooled
+#: across the whole sequence — which a COMMENT satisfies, and which `$EDITOR
+#: something_else  # remember to update instrument_eras.yaml` satisfied for the
+#: era-registry element. Naming a thing is not acting on it.
+#:
+#: Both classes of verb are legitimate, because the coverage finding says
+#: "performs OR VERIFIES it": `ln` repoints a stable path and `readlink` proves
+#: where it points, and a sequence that verifies the archive without touching it is
+#: the correct sequence, not an uncovered one.
+#:
+#: `$EDITOR` is a verb here, and deliberately. A human-only registry write is
+#: performed by opening the file in an editor — that is the sanctioned idiom for
+#: `instrument_eras.yaml` and `autopilot_baseline.yaml` (`MEASUREMENT.md:140-142`),
+#: and a vocabulary that refused it would forbid the only compliant way to do the
+#: thing it is checking for.
+ELEMENT_VERBS = {
+    "branch": ("git", "branch", "checkout", "switch", "tag", "rev-parse", "show-ref",
+               "merge-base", "log", "for-each-ref"),
+    "tag": ("git", "tag", "describe", "rev-parse", "show-ref", "for-each-ref"),
+    "install_path": ("install", "cp", "rsync", "mkdir", "ln", "readlink", "ls", "stat",
+                     "test", "find", "sha256sum", "du"),
+    "archive": ("cp", "rsync", "tar", "mkdir", "sha256sum", "ls", "stat", "test",
+                "find", "du"),
+    "stable_path": ("ln", "readlink", "mv", "ls", "stat", "test", "find"),
+    "era_registry": ("$EDITOR", "${EDITOR}", "EDITOR", "vim", "vi", "nano", "yq",
+                     "python3", "diff", "grep", "sha256sum", "cat", "test", "ls"),
+    "autopilot_baseline": ("$EDITOR", "${EDITOR}", "EDITOR", "vim", "vi", "nano", "yq",
+                           "python3", "diff", "grep", "sha256sum", "cat", "test", "ls"),
+    "receipt_path": ("cp", "rsync", "mkdir", "tee", "sha256sum", "ls", "stat", "test",
+                     "find", "cat", "python3", "git"),
+}
+
+#: A `#` that starts a token runs to end of line. Erring toward OVER-stripping is
+#: the fail-CLOSED direction: text wrongly treated as a comment can only make an
+#: element look uncovered, never covered.
+_SHELL_COMMENT_RE = re.compile(r"(?m)(?:^|\s)#.*$")
+_WORD_RE = re.compile(r"[A-Za-z0-9_$.{}-]+")
+
+#: A quoted span is DATA, not a verb. `#` is not the only way to write prose on a
+#: command line: `echo "reminder: $EDITOR instrument_eras.yaml"` names the era
+#: registry and puts `$EDITOR` in the token set while running `echo`, which is the
+#: comment hole with a different quoting character. Unterminated quotes are left
+#: alone deliberately — the pattern requires a closing quote, so a stray `"` cannot
+#: swallow the rest of a real command and turn a genuine verb into prose.
+_QUOTED_SPAN_RE = re.compile(r"'[^']*'|\"[^\"]*\"")
+
+
+def _executable_text(command: str) -> str:
+    """The part of a command line that actually runs."""
+    return _SHELL_COMMENT_RE.sub(" ", command)
+
+
+def _verb_text(command: str) -> str:
+    """The part of a command line a VERB may be read out of: unquoted, uncommented.
+
+    Deliberately narrower than `_executable_text()`, and used for exactly one of the
+    two halves of `_acts_on`. A quoted span may still NAME the element — `python3 -c
+    "…open('orchestration/instrument_eras.yaml')…"` is a real way to edit the
+    registry and its verb (`python3`) is in command position outside the quotes — so
+    only the verb lookup is narrowed. Narrowing both would forbid that idiom, which
+    is the failure mode this vocabulary has already had once.
+    """
+    return _QUOTED_SPAN_RE.sub(" ", _executable_text(command))
+
+
+def _acts_on(command: "OperatorCommand", kind: str, value: str) -> bool:
+    """Does THIS ONE command both name the element and carry a verb for its kind?
+
+    Three tightenings over the old `value in "\\n".join(every command)`:
+
+      1. **one command**, not the pooled text of all of them — element named in step
+         2 and verb present in step 9 is not a step that does the thing;
+      2. **comments removed** from the command before it is scanned;
+      3. **a verb from the element's own kind**, so a command that mentions the era
+         registry while doing something else does not cover it; and
+      4. **the verb read only out of the UNQUOTED text**, because stripping `#` and
+         nothing else left the same hole under a different quoting character:
+         `echo "reminder: $EDITOR orchestration/instrument_eras.yaml"` named the
+         element and put `$EDITOR` in the token set while running `echo`, and the
+         whole sequence reviewed as covered.
+
+    The element's value may be named in the executable text — quoted spans included,
+    because a path inside `python3 -c "…"` really is the path that command edits — or
+    in `target_paths`. `target_paths` is where a command declares what it touches, and
+    a declared target with no verb is the same silence the old check could not see.
+    """
+    verbs = ELEMENT_VERBS.get(kind)
+    if not verbs:
+        # An element kind with no declared vocabulary is NOT auto-covered. A kind
+        # added to `_transaction_elements` without a vocabulary here would otherwise
+        # be a free pass, which is the failure mode this table exists to remove.
+        return False
+    executable = _executable_text(command.command)
+    named = value in executable or any(value in path for path in command.target_paths)
+    if not named:
+        return False
+    words = set(_WORD_RE.findall(_verb_text(command.command)))
+    return any(verb in words for verb in verbs)
 
 
 def _within_surface(path: str, surface: str) -> bool:
@@ -1766,15 +1959,17 @@ def validate_command_sequence(commands: Sequence[OperatorCommand], *,
       3. **every human-only step carries a rollback command** — a trust-boundary
          write with no stated way back is how a cutover becomes irreversible in
          practice while looking reversible on paper;
-      4. **coverage** — every element of the transaction is named by some command.
-         A transaction step with no command is a step the operator has to invent at
-         3am;
+      4. **coverage** — every element of the transaction is ACTED ON by some
+         command. A transaction step with no command is a step the operator has to
+         invent at 3am. "Acted on" is `ELEMENT_VERBS`, not a substring: this check
+         used to pool every command's text and ask whether the element's value
+         appeared anywhere in it, which a comment in an unrelated step satisfied;
       5. **containment** — every command's target paths lie inside the transaction's
          declared surface. A command reaching outside it is scope this package did
          not derive (invariant 18, §12); and
       6. **the AutoPilot baseline is addressed** — §11.4/E8 make the rebaseline part
-         of the transaction's consequences, so a sequence that never mentions it has
-         left a human-only write undischarged.
+         of the transaction's consequences, so it is an element of the coverage
+         denominator and is held to property 4 exactly like the rest.
     """
     cmds = _typed_tuple(commands, "validate_command_sequence: commands", OperatorCommand,
                         non_empty=True)
@@ -1807,24 +2002,48 @@ def validate_command_sequence(commands: Sequence[OperatorCommand], *,
                 f"HUMAN_ONLY_COMMAND_WITHOUT_ROLLBACK: step {command.step} "
                 f"({'; '.join(command.human_only_reasons)}) states no way back")
 
+    # The era-registry element is the ONE element of the denominator that is
+    # conditional on the input, and a conditional conjunct is a conjunct that can be
+    # satisfied by deleting it. `_transaction_elements` appends `era_registry` only
+    # when the era row names a `registry_path`, so an era row with the key absent or
+    # blank removed the era registry from the coverage requirement entirely and the
+    # sequence passed with no step writing the row at all — the human-only write at
+    # `MEASUREMENT.md:140-142` silently dropped out of the package. The absence is
+    # therefore the finding, and the strengthened verb vocabulary is not reachable
+    # around it. §11.2/E8 makes the era row part of every freeze transaction; a
+    # freeze that genuinely writes no era row is not a case this drops quietly, it is
+    # a case whose row must say which registry it is a row IN.
+    if not era_row_registry_path(era_row):
+        findings.append(
+            "ERA_ROW_NAMES_NO_REGISTRY_PATH: the drafted era row does not name a "
+            "`registry_path`, so there is no era-registry element for any command to "
+            "be held against and the coverage check silently stops asking about the "
+            "human-only registry write (MEASUREMENT.md:140-142). A conjunct that "
+            "disappears when its subject is omitted is not a conjunct.")
     elements = _transaction_elements(transaction, rollback, era_row)
-    haystack = "\n".join(c.scanned_text for c in validated)
+    # §11.4/E8 makes the rebaseline a consequence of the cutover, so it is an
+    # element of the transaction and is held to the same "acts on it" bar as every
+    # other one. It was previously checked by substring alone, which is the hole
+    # this whole vocabulary closes — leaving one element on the old rule would have
+    # left the hole under a different name.
+    covered_elements = elements + (("autopilot_baseline", autopilot_baseline_path),)
     covered: list = []
     uncovered: list = []
-    for kind, value in elements:
-        if value and value in haystack:
+    for kind, value in covered_elements:
+        acting = [c.step for c in validated if value and _acts_on(c, kind, value)]
+        if acting:
             covered.append(f"{kind}:{value}")
         else:
             uncovered.append(f"{kind}:{value}")
+            naming = [c.step for c in validated
+                      if value and (value in c.scanned_text)]
+            named_but_inert = (
+                f" Step(s) {naming} NAME it without any {kind} verb "
+                f"{sorted(ELEMENT_VERBS.get(kind, ()))} in the part of the line that "
+                "runs; naming a thing is not acting on it." if naming else "")
             findings.append(
                 f"TRANSACTION_STEP_UNCOMMANDED: the transaction names {kind} {value!r} and "
-                "no pre-validated command performs or verifies it")
-    if autopilot_baseline_path not in haystack:
-        uncovered.append(f"autopilot_baseline:{autopilot_baseline_path}")
-        findings.append(
-            f"TRANSACTION_STEP_UNCOMMANDED: autopilot_baseline "
-            f"{autopilot_baseline_path!r} is a consequence of this cutover (§11.4, the E8 "
-            "fail-closed rebaseline hold) and no command addresses it")
+                "no pre-validated command performs or verifies it." + named_but_inert)
 
     declared_surface = tuple(value for _kind, value in elements) + (
         autopilot_baseline_path, transaction.install_path)
@@ -2244,6 +2463,18 @@ class WatchWindow:
         object.__setattr__(self, "affected_roles", _str_tuple(
             self.affected_roles, "WatchWindow.affected_roles"))
         _positive_int(self.min_duration_days, "WatchWindow.min_duration_days")
+        if self.min_duration_days < DEFAULT_WATCH_WINDOW_DAYS:
+            # §11.5's duration is `later_of(7 days, per-role volume)`. `later_of` has
+            # no branch in which the answer is shorter than seven days, so a declared
+            # duration below the floor is not a stricter reading of the rule — it is
+            # the one number in the window that could be set to make the window close
+            # sooner, and it is the number nothing else checks.
+            raise PackagerInputError(
+                f"WatchWindow.min_duration_days: {self.min_duration_days} is below "
+                f"§11.5's {DEFAULT_WATCH_WINDOW_DAYS}-day floor. The rule is later_of("
+                f"{DEFAULT_WATCH_WINDOW_DAYS} days, declared per-role volume); a shorter "
+                "window is a window that closes before the last automatic safety net in "
+                "the path has seen a weekday cycle.")
         _mapping(self.min_volume_by_role, "WatchWindow.min_volume_by_role", non_empty=True)
         missing = sorted(set(self.affected_roles) - set(self.min_volume_by_role))
         if missing:
@@ -2488,11 +2719,19 @@ def evaluate_watch_window(window: WatchWindow,
             "chosen after seeing the data, and it is indistinguishable from a valid one "
             "in the output.")
 
+    # EVERY observation of a signal, not the first one seen. `setdefault` kept the
+    # first and discarded the rest, so a second sample four times outside the band
+    # was silently dropped and the window recommended
+    # `close_with_no_regression_observed` over an observed regression — the
+    # last-wins/first-wins collapse this package has already had three times, in the
+    # one place where the discarded record is an ALARM. Worst standing governs:
+    # §11.5 says a signal outside its band raises a decision package, and one
+    # excursion is an excursion however many samples were inside.
     by_signal: dict = {}
     for observation in progress.observations:
         if observation.era_label != window.candidate_era:
             continue
-        by_signal.setdefault(observation.signal_id, observation)
+        by_signal.setdefault(observation.signal_id, []).append(observation)
 
     standings: list = []
     alarms: list = []
@@ -2500,13 +2739,20 @@ def evaluate_watch_window(window: WatchWindow,
     reasons: list = []
     for signal_id in REQUIRED_WATCH_SIGNALS:
         band = window.band_for(signal_id)
-        observation = by_signal.get(signal_id)
-        value = observation.value if observation is not None else None
-        check = band.standing_for(value)
-        if observation is None:
-            check = _cnc(
-                f"{signal_id}: no observation labelled era {window.candidate_era!r} was "
-                "recorded; an unobserved signal is not a quiet one")
+        observed = by_signal.get(signal_id) or ()
+        checks = [band.standing_for(o.value) for o in observed]
+        check = _worst(checks) if checks else _cnc(
+            f"{signal_id}: no observation labelled era {window.candidate_era!r} was "
+            "recorded; an unobserved signal is not a quiet one")
+        value = None
+        for observation, standing in zip(observed, checks):
+            if standing.outcome == check.outcome:
+                value = observation.value
+                break
+        if len(observed) > 1:
+            check = schemas.Check(check.outcome, check.reasons + (
+                f"{signal_id}: {len(observed)} observations were folded and the worst "
+                "standing governs; a later sample cannot be answered by an earlier one",))
         standings.append(WatchSignalStanding(
             signal_id=signal_id, check=check, observed=value, band=band.to_dict()))
         if check.outcome == schemas.FAIL:
@@ -2581,6 +2827,18 @@ def close_watch_window(window: WatchWindow, progress: WatchWindowProgress, *,
             f"close_watch_window: {verdict!r} cannot be recorded while "
             f"{list(recommendation.unevaluable)} were never evaluated. "
             "'We did not look' is not 'we looked and saw nothing'.")
+    if verdict == "no_regression_observed" and recommendation.alarms:
+        # The symmetric half, and the one that was missing. "We did not look" was
+        # refused while "we looked and it alarmed" was accepted: a window whose
+        # throughput signal sat outside its band could be closed
+        # `no_regression_observed`, and the closure is the record of record — the
+        # recommendation it contradicts is a field inside it that nobody re-reads.
+        raise PackagerInputError(
+            f"close_watch_window: {verdict!r} cannot be recorded while "
+            f"{list(recommendation.alarms)} stand outside their bands. §11.5: a signal "
+            "outside its band raises a decision package. The verdict for that window is "
+            "`regression_observed` or `inconclusive`; a closure that contradicts its own "
+            "recommendation is how the observation stops existing.")
     return WatchWindowClosure(window_id=window.window_id, verdict=verdict,
                               closed_by=closed_by, closed_at=closed_at,
                               recommendation=recommendation)
@@ -3135,10 +3393,17 @@ class ReleasePackage:
         Three independent sources, OR-ed: T3's own per-backend ceiling assessment,
         a `core_header` change class (a KIND of change, not a size band, AK-D30),
         and a diff that touches shared ggml core.
+
+        The third source is UNSTATED-is-yes. `.get(…) is True` read a missing key as
+        "no", so a diff nobody classified cleared the §10.6 marker by omission — and
+        "we did not measure the blast radius" is not "the blast radius was small"
+        (`t3._requires_human_code_review` says the same for a missing per-backend
+        assessment).
         """
         return bool(
             self.evaluation.result.requires_human_code_review
             or "core_header" in self.change_classes
+            or not isinstance(self.diff_complexity.get("touches_shared_core"), bool)
             or self.diff_complexity.get("touches_shared_core") is True)
 
     @property
@@ -3150,7 +3415,11 @@ class ReleasePackage:
         if "core_header" in self.change_classes:
             reasons.append("a member change class is `core_header`, which reaches every "
                            "op in both the CPU and GPU builds (AK-D30, §8.5.1)")
-        if self.diff_complexity.get("touches_shared_core") is True:
+        if not isinstance(self.diff_complexity.get("touches_shared_core"), bool):
+            reasons.append("`diff_complexity.touches_shared_core` was never stated, so "
+                           "no assessment says this diff stays out of shared ggml core "
+                           "(§10.6)")
+        elif self.diff_complexity.get("touches_shared_core") is True:
             reasons.append("the diff touches shared ggml core (§10.6)")
         return f"{integrity.REQUIRES_HUMAN_CODE_REVIEW} — " + "; ".join(reasons)
 
@@ -3296,6 +3565,24 @@ def assemble_release_package(*, package_id: str, created_at: str,
              f"the request names {freeze_request.source_tree!r} and the seal names "
              f"{sealed.candidate.source_tree!r}; freezes are per source tree (§1.5)")
     if evaluation.result.bundle is not None:
+        # "A T3 verdict for a different seal" is named in this function's own
+        # docstring as one of the things it exists to catch, and it was the one
+        # cross-check nobody wrote: `sealed` and `evaluation` arrive as separate
+        # arguments, each internally consistent, and the package carried candidate A's
+        # identity beside candidate B's PASS. The bundle is the only place the graded
+        # seal is recorded, so it is what the package's own seal is compared against.
+        graded_seal = evaluation.result.bundle.payload.get("sealed_candidate")
+        graded_seal = graded_seal if isinstance(graded_seal, Mapping) else {}
+        for field_name, ours in (("candidate_id", sealed.candidate.candidate_id),
+                                 ("seal_sha256", sealed.candidate.seal_sha256)):
+            theirs = graded_seal.get(field_name)
+            if theirs != ours:
+                note("SEALED_CANDIDATE_NOT_THE_GRADED_ONE",
+                     f"the package seals {field_name} {ours!r} and the sealed bundle was "
+                     f"graded over {theirs!r}. The verdict in this package belongs to a "
+                     "different candidate, and nothing inside either object could say so "
+                     "(invariant 2: release evidence is produced by the same full "
+                     "candidate that is frozen)")
         graded_campaign = evaluation.result.bundle.payload.get("campaign_id")
         if graded_campaign != freeze_request.campaign_id:
             note("CAMPAIGN_MISMATCH",
@@ -3335,7 +3622,14 @@ def assemble_release_package(*, package_id: str, created_at: str,
         note("ROLLBACK_ARCHIVE_UNVERIFIED", "; ".join(rollback.archive_check.reasons)
              or "the incumbent archive did not verify",
              outcome=rollback.archive_check.outcome)
-    if not rollback.anchor_live:
+    if rollback.anchor_live is None:
+        note("ROLLBACK_ANCHOR_LIVENESS_UNSTATED",
+             "the rollback plan does not say whether the anchor is live. §11.5 requires it "
+             "to stay live and verified for the whole watch window, and the field used to "
+             "default to True — so a plan nobody checked answered the requirement by "
+             "construction. Unstated is COULD_NOT_CHECK, not yes",
+             outcome=schemas.COULD_NOT_CHECK)
+    elif not rollback.anchor_live:
         note("ROLLBACK_ANCHOR_NOT_LIVE",
              "§11.5 requires the rollback anchor to stay live and verified for the whole "
              "watch window; it is recorded as not live")
@@ -3345,7 +3639,23 @@ def assemble_release_package(*, package_id: str, created_at: str,
              f"no archived incumbent binary for {missing_backends}, which the seal builds")
 
     # -- era rows and the rebaseline note (§1.3 items 2 and 3) ----------------
-    kinds_present = set(era_row_draft.get("kinds_present") or ())
+    # TRACED from the rows, never read off `kinds_present`. The declared key is a
+    # summary the caller writes, and this function accepts a hand-built mapping: an
+    # era block carrying `kinds_present: [kernel, autopilot_speed, umbrella]` and
+    # `rows: []` reached RELEASE_PACKAGE_READY with no era row in it at all. That is
+    # the same declared-vs-traced hole `OperatorCommand.human_only` closes one layer
+    # down, in the place where the missing thing is a human-only write.
+    rows = era_row_draft.get("rows")
+    rows = tuple(rows) if isinstance(rows, (list, tuple)) else ()
+    kinds_present = {row.get("kind") for row in rows if isinstance(row, Mapping)}
+    declared_kinds = set(era_row_draft.get("kinds_present") or ())
+    overdeclared = sorted(declared_kinds - kinds_present)
+    if overdeclared:
+        note("ERA_ROW_KINDS_DECLARED_NOT_DRAFTED",
+             f"the era block declares {overdeclared} in `kinds_present` and carries no "
+             "row of that kind. The operator writes the ROWS; a summary key is not a "
+             "draft, and a freeze whose era row is unwritten produces evidence nobody "
+             "can interpret (§1.3 item 2, MEASUREMENT.md:233)")
     missing_kinds = [kind for kind in ERA_ROW_KINDS if kind not in kinds_present]
     if missing_kinds:
         note("ERA_ROW_KIND_MISSING",
@@ -3356,6 +3666,12 @@ def assemble_release_package(*, package_id: str, created_at: str,
             era_row_draft.get("written_by") != EXECUTED_BY:
         note("ERA_ROW_NOT_A_DRAFT",
              "the era block does not declare itself a draft written by the operator")
+    if not isinstance(diff_complexity.get("touches_shared_core"), bool):
+        note("DIFF_COMPLEXITY_SHARED_CORE_UNSTATED",
+             "`diff_complexity` does not state `touches_shared_core` as a bool, so the "
+             "§10.6 shared-core question was answered by a missing key. An unassessed "
+             "diff has not cleared a blast-radius ceiling; the package is INCOMPLETE "
+             "rather than clear", outcome=schemas.COULD_NOT_CHECK)
     if autopilot_baseline_path not in rebaseline_note:
         note("REBASELINE_NOTE_NAMES_NO_BASELINE",
              f"the rebaseline note never names {autopilot_baseline_path!r}, so it does not "
@@ -3382,6 +3698,22 @@ def assemble_release_package(*, package_id: str, created_at: str,
     verified_ids = {v.waiver_id for v in evaluation.result.products.waiver_verifications
                     if v.verified}
     used_ids = {w.get("waiver_id") for w in evaluation.result.verdict_computation.waived_cells}
+    # A binding map is LAST-WINS, and the losing binding vanishes from every check
+    # below it: two `WaiverBinding`s with one id, the machine-attributed one first,
+    # and `WAIVER_SELF_GRANTED` was never raised because the scan only ever saw the
+    # survivor. The package's waiver findings were order-dependent. Duplicates are
+    # therefore a finding in their own right — two documents claiming to be one
+    # waiver is a contradiction about which bytes T3 pinned — and every scan below
+    # that can be defeated by dedup now walks `bindings`, not the map.
+    duplicate_ids = sorted({b.waiver_id for b in bindings
+                            if [x.waiver_id for x in bindings].count(b.waiver_id) > 1})
+    if duplicate_ids:
+        note("WAIVER_BINDING_DUPLICATE",
+             f"waiver id(s) {duplicate_ids} are pinned more than once with different "
+             "documents or coverage. A map keyed on the id keeps one and silently drops "
+             "the other, so the package would report the surviving document's hash, "
+             "coverage and attribution for a waiver T3 may have verified from the other "
+             "(§10.4)")
     bound = {b.waiver_id: b for b in bindings}
     active = tuple(
         {"waiver_id": waiver_id, "sha256": bound[waiver_id].pinned_sha256,
@@ -3397,31 +3729,22 @@ def assemble_release_package(*, package_id: str, created_at: str,
              f"waiver {waiver_id!r} is pinned into the package and T3 did not verify it; "
              "an unverified waiver suppresses nothing and must not read as active",
              outcome=schemas.COULD_NOT_CHECK)
-    # §10.4 waivers are HUMAN-only, and this module already owns the vocabulary that
-    # decides whether an identity is a machine — `ComputeWindow.owner`,
-    # `OperatorFreezeRequest.requested_by` and both watch-window owners are guarded
-    # by it. `t3.verify_waiver` guards none: it accepts any non-empty
-    # `authorized_by`/`ratified_at` as human attestation, so a document attributed to
-    # `autokernel` verifies, suppresses a failing gating cell, and turns FAIL into
-    # PASS_WITH_WAIVER. The import direction is packager -> t3, so the check lands
-    # here rather than forking the token set downward; the package is what a human
-    # executes, and a self-granted exception must not reach one.
-    for waiver_id in sorted(bound):
-        document = bound[waiver_id].document
-        for field_name in ("authorized_by", "ratified_by", "approved_by",
-                           "attested_by", "granted_by"):
-            attributed = document.get(field_name)
-            if not isinstance(attributed, str) or not attributed:
-                continue
-            found = _machine_actor_tokens(attributed)
-            if found:
-                note("WAIVER_SELF_GRANTED",
-                     f"waiver {waiver_id!r} names {attributed!r} in {field_name!r}, a "
-                     f"machine actor ({', '.join(found)}). §10.4 waivers are "
-                     "human-only (MEASUREMENT.md:140-142); a waiver the loop "
-                     "attributed to itself is the loop excusing its own failing cell, "
-                     f"and this one suppresses "
-                     f"{list(bound[waiver_id].covers_cell_ids)}.")
+    # §10.4 waivers are HUMAN-only. The vocabulary that decides whether an identity
+    # is a machine now lives in `schemas.py`, so `t3.verify_waiver` refuses a
+    # self-granted waiver at the gate and this stays as the OUTER layer: the package
+    # is what a human executes, and a self-granted exception must not reach one even
+    # if a caller reached the packager with a verdict T3 never produced.
+    for binding in sorted(bindings, key=lambda b: (b.waiver_id, b.pinned_sha256)):
+        for field_name, attributed, found in schemas.machine_attributions(
+                binding.document):
+            note("WAIVER_SELF_GRANTED",
+                 f"waiver {binding.waiver_id!r} ({binding.pinned_sha256[:12]}) names "
+                 f"{attributed!r} in {field_name!r}, a "
+                 f"machine actor ({', '.join(found)}). §10.4 waivers are "
+                 "human-only (MEASUREMENT.md:140-142); a waiver the loop "
+                 "attributed to itself is the loop excusing its own failing cell, "
+                 f"and this one suppresses "
+                 f"{list(binding.covers_cell_ids)}.")
     if evaluation.result.verdict == "PASS_WITH_WAIVER" and not active:
         note("PASS_WITH_WAIVER_PINS_NOTHING",
              "the verdict is PASS_WITH_WAIVER and the package pins no waiver")
@@ -3518,6 +3841,103 @@ _FORBIDDEN_CLOCK_ATTRS = frozenset({
     "fromtimestamp", "utcfromtimestamp", "process_time",
 })
 
+#: Receivers that can actually HAND OUT a clock. `.now` is the field name on
+#: `WatchWindowProgress`, so `progress.now` and `self.now` are ordinary data reads
+#: and flagging them would forbid this module's own compliant idiom — the defect
+#: `_timestamp` already exists to avoid on the write side. A clock ALIAS is
+#: `datetime.now` bound without calling it, and what distinguishes it is the
+#: receiver, not the attribute name.
+_CLOCK_BEARING_RECEIVERS = frozenset({"datetime", "date", "time", "clock"})
+
+
+def _call_func_ids(tree: ast.AST) -> frozenset:
+    """Identities of the nodes standing in CALL position anywhere in `tree`."""
+    return frozenset(id(node.func) for node in ast.walk(tree)
+                     if isinstance(node, ast.Call))
+
+
+def _unauditable_dispatch(tree: ast.AST) -> list:
+    """Calls whose callee is neither a name nor an attribute.
+
+    `builtins.__dict__["open"](p, "w")` IS `open(p, "w")` written as a subscript,
+    and `getattr(m, verb)(...)` is the same move through a call. A name-based
+    denylist cannot read either, so the construct itself is the finding: an audit
+    that silently returns PASS over dispatch it cannot follow is asserting a
+    property it never checked.
+    """
+    findings: list = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and not isinstance(node.func,
+                                                         (ast.Name, ast.Attribute)):
+            findings.append(
+                f"line {node.lineno}: calls a {type(node.func).__name__} expression. "
+                "A callee this audit cannot name is a callee it cannot deny — "
+                "`builtins.__dict__['open'](p, 'w')` is `open(p, 'w')` with different "
+                "punctuation.")
+    return findings
+
+
+def _receiver_roots(node: ast.AST) -> set:
+    """Every name in an attribute chain's receiver, e.g. `a.b.c` ⇒ {'a', 'b'}."""
+    roots: set = set()
+    while isinstance(node, ast.Attribute):
+        roots.add(node.attr)
+        node = node.value
+    if isinstance(node, ast.Name):
+        roots.add(node.id)
+    return roots
+
+
+def _literal_loop_bindings(tree: ast.AST) -> dict:
+    """`{name: {constant, …} | {None}}` for names bound by iterating a literal.
+
+    `getattr(x, name)` inside `for name in ("overlay_present", "tree_clean", …)` is
+    a spelled-out attribute read: every value the name can take is in the source, so
+    the denylist can read it. `getattr(m, "sys" + "tem")` is not. Resolving the loop
+    is what lets the audit refuse the second WITHOUT forbidding the first — this
+    module uses the first idiom twice, and a guard that bans its own compliant
+    spelling is a guard that gets exempted rather than obeyed.
+
+    A name whose binding cannot be resolved to constants maps to `{None}`, which is
+    the unauditable answer and never the safe one.
+    """
+    out: dict = {}
+    for node in ast.walk(tree):
+        pairs: list = []
+        if isinstance(node, ast.For):
+            pairs = [(node.target, node.iter)]
+        elif isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp,
+                               ast.DictComp)):
+            pairs = [(gen.target, gen.iter) for gen in node.generators]
+        for target, iterable in pairs:
+            if not isinstance(target, ast.Name):
+                continue
+            values: set = {None}
+            if isinstance(iterable, (ast.Tuple, ast.List, ast.Set)) and iterable.elts:
+                literals = {element.value for element in iterable.elts
+                            if isinstance(element, ast.Constant)
+                            and isinstance(element.value, str)}
+                if len(literals) == len(iterable.elts):
+                    values = literals
+            out.setdefault(target.id, set()).update(values)
+    return out
+
+
+def _assigned_values(tree: ast.AST) -> list:
+    """Every expression bound to a name by an assignment, with its line.
+
+    Aliasing is how a denylist keyed on the CALL site is walked around: the call
+    `sink(x)` says nothing, and `sink = Path(p).write_text` two lines above is where
+    the capability was actually acquired. This yields the right-hand sides so the
+    audits can look at what was bound rather than only at what was called.
+    """
+    out: list = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Assign, ast.AugAssign)) or \
+                (isinstance(node, ast.AnnAssign) and node.value is not None):
+            out.append(node.value)
+    return out
+
 
 def _module_source(source: Optional[str]) -> tuple:
     """`(source, check_or_None)` — an unreadable module is not an audited one."""
@@ -3571,7 +3991,9 @@ def audit_no_write_or_process_paths(source: Optional[str] = None) -> schemas.Che
     if refusal is not None:
         return refusal
 
-    findings: list = []
+    findings: list = _unauditable_dispatch(tree)
+    called = _call_func_ids(tree)
+    loop_bindings = _literal_loop_bindings(tree)
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
@@ -3587,15 +4009,47 @@ def audit_no_write_or_process_paths(source: Optional[str] = None) -> schemas.Che
                 findings.append(f"line {node.lineno}: calls {func.id}()")
             elif isinstance(func, ast.Attribute) and func.attr in _FORBIDDEN_CALL_ATTRS:
                 findings.append(f"line {node.lineno}: calls .{func.attr}()")
-            elif isinstance(func, ast.Name) and func.id in ("getattr", "setattr") \
-                    and len(node.args) >= 2:
-                named = node.args[1]
-                if isinstance(named, ast.Constant) and isinstance(named.value, str) \
-                        and (named.value in _FORBIDDEN_CALL_ATTRS
-                             or named.value in _FORBIDDEN_CALL_NAMES):
+            elif isinstance(func, ast.Name) and func.id in ("getattr", "setattr"):
+                # A DYNAMIC attribute name is the same route with the evidence
+                # removed: `getattr(m, "sys" + "tem")` reads no differently to this
+                # audit than `getattr(m, "to_dict")`, so the unreadable form is the
+                # finding rather than a silent pass.
+                named = node.args[1] if len(node.args) >= 2 else None
+                reachable: set = set()
+                if named is None:
+                    reachable = set()
+                elif isinstance(named, ast.Constant) and isinstance(named.value, str):
+                    reachable = {named.value}
+                elif isinstance(named, ast.Name):
+                    reachable = set(loop_bindings.get(named.id) or {None})
+                else:
+                    reachable = {None}
+                if None in reachable:
                     findings.append(
-                        f"line {node.lineno}: reaches {named.value!r} through {func.id}(), "
-                        "which routes around the attribute denylist")
+                        f"line {node.lineno}: {func.id}() is given a computed attribute "
+                        "name this audit cannot resolve to constants, so it cannot say "
+                        "which attribute is reached. Name it, or iterate a literal.")
+                for candidate_attr in sorted(a for a in reachable if a is not None):
+                    if candidate_attr in _FORBIDDEN_CALL_ATTRS or \
+                            candidate_attr in _FORBIDDEN_CALL_NAMES:
+                        findings.append(
+                            f"line {node.lineno}: reaches {candidate_attr!r} through "
+                            f"{func.id}(), which routes around the attribute denylist")
+        elif isinstance(node, ast.Name) and id(node) not in called and \
+                isinstance(node.ctx, ast.Load) and node.id in _FORBIDDEN_CALL_NAMES:
+            # BINDING a write primitive is acquiring it. `w = open` followed by
+            # `w(path, "w")` puts nothing forbidden in call position, and the audit
+            # returned PASS over exactly that until the reference itself counted.
+            findings.append(
+                f"line {node.lineno}: binds {node.id} without calling it; a write verb "
+                "bound to a name is a write verb, and the call site that uses it is "
+                "unreadable to a call-position denylist")
+        elif isinstance(node, ast.Attribute) and id(node) not in called and \
+                node.attr in _FORBIDDEN_CALL_ATTRS:
+            findings.append(
+                f"line {node.lineno}: references .{node.attr} without calling it; a "
+                "mutating method bound to a name is the same capability one indirection "
+                "away")
     if findings:
         return _fail(*findings)
     if not _defines_this_module(tree):
@@ -3623,24 +4077,44 @@ def audit_no_clock_or_self_trigger(source: Optional[str] = None) -> schemas.Chec
     if refusal is not None:
         return refusal
 
-    findings: list = []
+    findings: list = _unauditable_dispatch(tree)
+    called = _call_func_ids(tree)
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        func = node.func
-        if isinstance(func, ast.Attribute) and func.attr in _FORBIDDEN_CLOCK_ATTRS:
+        if isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Attribute) and func.attr in _FORBIDDEN_CLOCK_ATTRS:
+                findings.append(
+                    f"line {node.lineno}: reads a clock via .{func.attr}(); every "
+                    "timestamp here must be an input, or the module can decide it is "
+                    "time to freeze")
+            if isinstance(func, ast.Name) and func.id == "OperatorFreezeRequest":
+                findings.append(
+                    f"line {node.lineno}: constructs OperatorFreezeRequest. The freeze "
+                    "request is the operator's artifact; a module that can mint one can "
+                    "trigger itself (AK7).")
+            if isinstance(func, ast.Attribute) and func.attr == "OperatorFreezeRequest":
+                findings.append(
+                    f"line {node.lineno}: constructs OperatorFreezeRequest through an "
+                    "attribute, which is the same mint by another route")
+        elif isinstance(node, ast.Attribute) and id(node) not in called and \
+                node.attr in _FORBIDDEN_CLOCK_ATTRS and \
+                (_receiver_roots(node.value) & _CLOCK_BEARING_RECEIVERS):
+            # `clock = datetime.now` then `clock()`: nothing forbidden is ever in
+            # call position and the audit passed. Receiver-qualified, so this
+            # module's own `progress.now` / `self.now` field reads — which are data,
+            # not clocks — are untouched.
             findings.append(
-                f"line {node.lineno}: reads a clock via .{func.attr}(); every timestamp "
-                "here must be an input, or the module can decide it is time to freeze")
-        if isinstance(func, ast.Name) and func.id == "OperatorFreezeRequest":
+                f"line {node.lineno}: binds .{node.attr} off a clock-bearing receiver "
+                "without calling it. A clock held under another name is still a clock, "
+                "and the call that uses it reads as an ordinary local.")
+    for value in _assigned_values(tree):
+        name = value.attr if isinstance(value, ast.Attribute) else \
+            (value.id if isinstance(value, ast.Name) else None)
+        if name == "OperatorFreezeRequest":
             findings.append(
-                f"line {node.lineno}: constructs OperatorFreezeRequest. The freeze "
-                "request is the operator's artifact; a module that can mint one can "
-                "trigger itself (AK7).")
-        if isinstance(func, ast.Attribute) and func.attr == "OperatorFreezeRequest":
-            findings.append(
-                f"line {node.lineno}: constructs OperatorFreezeRequest through an "
-                "attribute, which is the same mint by another route")
+                f"line {value.lineno}: binds OperatorFreezeRequest to another name. The "
+                "mint refusal is about the CAPABILITY, not the spelling: an alias "
+                "called later is the same self-trigger (AK7).")
     if findings:
         return _fail(*findings)
     if not _defines_this_module(tree):
@@ -3666,8 +4140,19 @@ def audit_verdict_is_delegated(source: Optional[str] = None) -> schemas.Check:
               "phase_build_linkage", "phase_backend_correctness",
               "phase_performance_matrix", "phase_quality", "phase_stability",
               "phase_capacity_utility", "phase_transaction_dry_run"}
-    findings: list = []
+    findings: list = _unauditable_dispatch(tree)
+    called = _call_func_ids(tree)
     for node in ast.walk(tree):
+        if isinstance(node, (ast.Name, ast.Attribute)) and id(node) not in called:
+            # Same aliasing route as the other two audits: `grade = t3.run_t3`
+            # followed by `grade(request)` puts nothing denied in call position.
+            referenced = node.attr if isinstance(node, ast.Attribute) else node.id
+            if referenced in denied:
+                findings.append(
+                    f"line {node.lineno}: binds {referenced} without calling it; the "
+                    "gate reached through an alias is the gate, and invariant 4 is "
+                    "about the authority domain rather than the spelling")
+            continue
         if not isinstance(node, ast.Call):
             continue
         func = node.func
@@ -3711,9 +4196,41 @@ def audit_refusal_doors_raise_unconditionally(source: Optional[str] = None) -> s
             f"the audited source does not define MODULE_ID == {MODULE_ID!r}, so its "
             "missing doors say nothing about this module's refusals")
 
-    functions = {node.name: node for node in ast.walk(tree)
+    # MODULE LEVEL only (`tree.body`, not `ast.walk`). A door defined inside another
+    # function satisfies a walk and binds no module attribute at all: `packager.
+    # execute_freeze` would not exist, and the audit would report the door as present
+    # while the name a caller reaches for is missing.
+    functions = {node.name: node for node in tree.body
                  if isinstance(node, ast.FunctionDef)}
+    doors = set(REFUSED_CAPABILITIES.values())
     findings: list = []
+    # A door is the NAME, not the `def`. `execute_freeze = lambda *a, **k: None`
+    # after a compliant definition leaves the AST full of correct-looking raises and
+    # the module exporting a function that returns None. Any rebinding of a door name
+    # — assignment, `import … as`, loop variable, `with … as` — is the finding.
+    for node in ast.walk(tree):
+        rebound: list = []
+        if isinstance(node, ast.Assign):
+            rebound = [t for t in node.targets if isinstance(t, ast.Name)]
+        elif isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+            rebound = [node.target] if isinstance(node.target, ast.Name) else []
+        elif isinstance(node, ast.For):
+            rebound = [node.target] if isinstance(node.target, ast.Name) else []
+        elif isinstance(node, ast.withitem):
+            rebound = [node.optional_vars] if isinstance(node.optional_vars, ast.Name) \
+                else []
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            rebound = [ast.Name(id=(alias.asname or alias.name.split(".")[0]),
+                                 lineno=node.lineno)
+                       for alias in node.names]
+        for target in rebound:
+            if target.id in doors:
+                findings.append(
+                    f"line {getattr(target, 'lineno', node.lineno)}: rebinds "
+                    f"{target.id}(), the door refusing "
+                    f"{sorted(c for c, n in REFUSED_CAPABILITIES.items() if n == target.id)}. "
+                    "A refusal that a later statement can replace is a refusal for as "
+                    "long as nobody replaces it.")
     for capability, name in sorted(REFUSED_CAPABILITIES.items()):
         node = functions.get(name)
         if node is None:

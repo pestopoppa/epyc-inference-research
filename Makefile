@@ -45,6 +45,7 @@ PYTEST_SMOKE += scripts/kernel_rnd/autokernel/evaluator/test_integrity.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/evaluator/test_recipes.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/evaluator/test_statistics.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/evaluator/test_surface.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/evaluator/test_devices.py
 # AK4 — the planner/critic/controller plane. Same ordering rule as AK3: the two
 # cross-module suites come first, because they are the ones that fail when two
 # modules that are each green disagree at the seam between them.
@@ -68,6 +69,7 @@ PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_release_integration.p
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_plan.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_readiness.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_t3.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_t3_protocol_binding_redteam.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_packager.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/adapters/test_serving_runtime.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/adapters/test_whisper_stt.py

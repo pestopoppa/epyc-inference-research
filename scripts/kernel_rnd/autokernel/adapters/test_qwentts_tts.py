@@ -58,9 +58,12 @@ def _sha(tag: str) -> str:
     return hashlib.sha256(tag.encode("utf-8")).hexdigest()
 
 
-def _report(rows, *, expect=EXP_LIB,
+def _report(rows, *, expect=EXP_LIB, member="qwen-tts",
             trailer="PASS: all linked ggml libraries resolve inside "):
-    out = [f"binary : {EXP_BIN}", f"expect : libraries under {expect}", ""]
+    """`member` is the binary the report was CAPTURED AGAINST, as the verifier's own
+    `binary :` header states it. A fixture that always named one member is how a
+    report for one binary got graded against another binary's declared set."""
+    out = [f"binary : {expect}/{member}", f"expect : libraries under {expect}", ""]
     for state, name, path in rows:
         out.append("  %s %-28s -> %s" % ("OK  " if state == "OK" else "BAD ", name, path))
     out += ["", "LD_LIBRARY_PATH order as the loader sees it:", f"     1  {expect}", ""]
@@ -206,15 +209,17 @@ class LinkageTest(unittest.TestCase):
                                                     EXP_LIB])
 
     def test_a_clean_report_is_pass(self):
-        self.assertEqual(Q.interpret_linkage_report(_report(_GOOD_ROWS), 0).check.outcome,
-                         S.PASS)
+        self.assertEqual(
+            Q.interpret_linkage_report(_report(_GOOD_ROWS), 0,
+                                       binary="qwen-tts").check.outcome, S.PASS)
 
     def test_another_trees_ggml_fails_and_names_the_generation_spread(self):
         rows = list(_GOOD_ROWS)
         rows[0] = ("BAD", "libggml-base.so.0",
                    "/mnt/raid0/llm/whisper.cpp/build/bin/libggml-base.so.0")
         verdict = Q.interpret_linkage_report(
-            _report(rows, trailer="FAIL: 1 library/libraries resolve OUTSIDE "), 1)
+            _report(rows, trailer="FAIL: 1 library/libraries resolve OUTSIDE "), 1,
+            binary="qwen-tts")
         self.assertEqual(verdict.check.outcome, S.FAIL)
         self.assertIn("0.17.0", " ".join(verdict.check.reasons))
 
@@ -222,20 +227,24 @@ class LinkageTest(unittest.TestCase):
         text = (f"binary : {EXP_BIN}\n\n  (no ggml/whisper/llama libs in ldd output "
                 f"— statically linked, or ldd failed)\n\nPASS: all linked ggml "
                 f"libraries resolve inside {EXP_LIB}\n")
-        verdict = Q.interpret_linkage_report(text, 0)
+        verdict = Q.interpret_linkage_report(text, 0, binary="qwen-tts")
         self.assertEqual(verdict.check.outcome, S.COULD_NOT_CHECK)
         self.assertFalse(verdict.check.passed)
 
     def test_the_static_qwen_core_archive_is_not_an_expected_shared_library(self):
         # `libqwen-core.a` never appears in ldd output, so listing it would make
         # every report look incomplete.
-        self.assertNotIn("libqwen-core.so", Q.EXPECTED_SHARED_LIBRARIES)
-        self.assertEqual(Q.interpret_linkage_report(_report(_GOOD_ROWS), 0).missing_expected,
-                         ())
+        self.assertNotIn("libqwen-core.so", Q.all_declared_shared_libraries())
+        for spec in Q.binary_inventory():
+            self.assertNotIn("libqwen-core.so", spec.required_libraries)
+            self.assertNotIn("libqwen-core.so", spec.optional_libraries)
+        self.assertEqual(
+            Q.interpret_linkage_report(_report(_GOOD_ROWS), 0,
+                                       binary="qwen-tts").missing_expected, ())
 
     def test_a_library_outside_the_scripts_name_filter_is_could_not_check(self):
         rows = [r for r in _GOOD_ROWS if not r[1].startswith("libggml-cpu")]
-        verdict = Q.interpret_linkage_report(_report(rows), 0)
+        verdict = Q.interpret_linkage_report(_report(rows), 0, binary="qwen-tts")
         self.assertEqual(verdict.check.outcome, S.COULD_NOT_CHECK)
         self.assertIn("libggml*", " ".join(verdict.check.reasons))
 
@@ -247,6 +256,192 @@ class LinkageTest(unittest.TestCase):
     def test_a_real_device_line_passes(self):
         self.assertEqual(
             Q.check_device_evidence("ggml_cuda_init: Device 0: AMD Instinct MI210\n",
+                                    expected_lane="gpu").outcome, S.PASS)
+
+
+class PerMemberLibrarySetTest(unittest.TestCase):
+    """One set for the whole inventory made §10.2 phase 2 unrunnable for a subset.
+
+    Uniform content today — this tree ships no engine shared object, so every member
+    is held to the ggml core it must resolve from its OWN tree — but per member BY
+    CONSTRUCTION: there is no inventory-wide set left for a future member linking a
+    subset to be graded against, and no way to grade a report without naming which
+    member it belongs to.
+    """
+
+    def test_a_report_cannot_be_graded_without_naming_the_member(self):
+        with self.assertRaises(TypeError):
+            Q.interpret_linkage_report(_report(_GOOD_ROWS), 0)
+        with self.assertRaises(Q.UnknownBinary):
+            Q.interpret_linkage_report(_report(_GOOD_ROWS), 0, binary="whisper-cli")
+
+    def test_the_verdict_names_the_member_and_the_set_it_was_graded_against(self):
+        verdict = Q.interpret_linkage_report(_report(_GOOD_ROWS), 0,
+                                             binary="test-backend-ops")
+        self.assertEqual(verdict.binary, "test-backend-ops")
+        self.assertEqual(set(verdict.required_libraries), set(Q.CORE_SHARED_LIBRARIES))
+
+    def test_a_members_missing_library_reason_names_the_member_and_its_provenance(self):
+        rows = [r for r in _GOOD_ROWS if not r[1].startswith("libggml-cpu")]
+        verdict = Q.interpret_linkage_report(_report(rows, member="quantize"), 0,
+                                             binary="quantize")
+        reasons = " ".join(verdict.check.reasons)
+        self.assertEqual(verdict.check.outcome, S.COULD_NOT_CHECK)
+        self.assertIn("quantize", reasons)
+        self.assertIn("role-derived", reasons)
+
+    def test_every_member_declares_its_own_set_with_provenance(self):
+        for spec in Q.binary_inventory():
+            self.assertTrue(Q.CORE_SHARED_LIBRARIES <= spec.required_libraries, spec.name)
+            self.assertFalse(spec.required_libraries & spec.optional_libraries, spec.name)
+            self.assertTrue(spec.linkage_provenance.strip(), spec.name)
+            self.assertEqual(Q.expected_shared_libraries(spec.name),
+                             spec.required_libraries)
+            self.assertEqual(Q.optional_shared_libraries(spec.name),
+                             spec.optional_libraries)
+
+    def test_a_member_that_drops_the_ggml_core_is_refused(self):
+        # The ggml core is the freeze premise: three generations coexist on this
+        # host and a binary inheriting another tree's ggml runs silently wrong.
+        with self.assertRaises(Q.QwenTtsAdapterError):
+            Q.BinarySpec("x", "build/x", "codec_cell",
+                         required_libraries=frozenset({"libggml.so"}),
+                         optional_libraries=frozenset(), linkage_provenance="test")
+        with self.assertRaises(Q.QwenTtsAdapterError):
+            Q.BinarySpec("x", "build/x", "codec_cell",
+                         required_libraries=frozenset(),
+                         optional_libraries=frozenset(), linkage_provenance="test")
+
+    def test_a_library_cannot_be_both_required_and_optional(self):
+        with self.assertRaises(Q.QwenTtsAdapterError):
+            Q.BinarySpec("x", "build/x", "codec_cell",
+                         required_libraries=Q.CORE_SHARED_LIBRARIES,
+                         optional_libraries=frozenset({"libggml.so"}),
+                         linkage_provenance="test")
+
+    def test_a_member_set_without_provenance_is_refused(self):
+        with self.assertRaises(Q.QwenTtsAdapterError):
+            Q.BinarySpec("x", "build/x", "codec_cell",
+                         required_libraries=Q.CORE_SHARED_LIBRARIES,
+                         optional_libraries=frozenset(), linkage_provenance="")
+
+    def test_a_hypothetical_subset_member_is_gradeable(self):
+        # The property the per-member rule buys, demonstrated on a constructed
+        # member: a report carrying only what IT links is a PASS, not a permanent
+        # COULD_NOT_CHECK against somebody else's set.
+        spec = Q.BinarySpec("x", "build/x", "codec_cell",
+                            required_libraries=Q.CORE_SHARED_LIBRARIES,
+                            optional_libraries=frozenset({"libggml-hip.so"}),
+                            linkage_provenance="fixture")
+        self.assertTrue(spec.required_libraries < Q.all_declared_shared_libraries())
+        self.assertEqual(spec.to_dict()["required_libraries"],
+                         sorted(Q.CORE_SHARED_LIBRARIES))
+
+    # --- COMPLIANT-PATH CONTROL ---------------------------------------------
+
+    def test_every_real_member_still_passes_the_real_report_shape(self):
+        """Per-member sets must not make any member ungradeable.
+
+        The failure this closes is a member that can never pass; a "fix" that made a
+        DIFFERENT member unable to pass would be the same defect moved. Every
+        declared member grades the verifier's own output shape as PASS.
+        """
+        for spec in Q.binary_inventory():
+            verdict = Q.interpret_linkage_report(_report(_GOOD_ROWS, member=spec.name),
+                                                 0, binary=spec.name)
+            self.assertEqual(verdict.check.outcome, S.PASS, spec.name)
+            self.assertEqual(verdict.missing_expected, (), spec.name)
+
+
+class DeviceNameVocabularyTest(unittest.TestCase):
+    """`Device 0: CPU` satisfied a GPU cell here too. It no longer does."""
+
+    def test_device_zero_cpu_no_longer_satisfies_a_gpu_cell(self):
+        check = Q.check_device_evidence("qwen_tts: Device 0: CPU\n", expected_lane="gpu")
+        self.assertEqual(check.outcome, S.FAIL)
+        self.assertNotEqual(check.outcome, S.PASS)
+        self.assertIn("silent CPU fallback", " ".join(check.reasons))
+
+    def test_an_unrecognised_device_name_is_could_not_check_never_pass(self):
+        check = Q.check_device_evidence("Device 0: Mystery Device\n",
+                                        expected_lane="gpu")
+        self.assertEqual(check.outcome, S.COULD_NOT_CHECK)
+        self.assertNotEqual(check.outcome, S.PASS)
+
+    def test_every_device_line_is_read_not_only_the_first(self):
+        log = ("Device 0: CPU\n"
+               "Device 1: AMD Instinct MI210, gfx90a:sramecc+:xnack-\n")
+        self.assertEqual(Q.check_device_evidence(log, expected_lane="gpu").outcome,
+                         S.PASS)
+        self.assertEqual(Q.check_device_evidence(log, expected_lane="cpu").outcome,
+                         S.FAIL)
+        self.assertEqual(Q.device_names_in_log(log), ("CPU", "AMD Instinct MI210"))
+
+    def test_the_two_adapters_read_ONE_vocabulary(self):
+        # The point of putting the table in the evaluator bundle: the sibling and
+        # this adapter cannot disagree about what a device name denotes.
+        for log in ("Device 0: CPU\n", "Device 0: AMD Instinct MI210\n",
+                    "Device 0: BLAS\n", "Device 0: Mystery Device\n"):
+            self.assertEqual(Q.check_device_evidence(log, expected_lane="gpu").outcome,
+                             W.check_device_evidence(log, expected_lane="gpu").outcome,
+                             log)
+
+    def test_the_vocabulary_is_not_local_to_this_adapter(self):
+        source = Path(Q.__file__).read_text(encoding="utf-8")
+        self.assertEqual(Q.audit_device_vocabulary_delegation(source).outcome, S.PASS)
+
+    def test_the_delegation_audit_is_could_not_check_on_empty_and_foreign_source(self):
+        self.assertEqual(Q.audit_device_vocabulary_delegation("").outcome,
+                         S.COULD_NOT_CHECK)
+        self.assertEqual(Q.audit_device_vocabulary_delegation(None).outcome,
+                         S.COULD_NOT_CHECK)
+        foreign = Path(W_MODULE_PATH).read_text(encoding="utf-8")
+        self.assertEqual(Q.audit_device_vocabulary_delegation(foreign).outcome,
+                         S.COULD_NOT_CHECK)
+
+    def test_the_delegation_audit_bites_on_a_local_vocabulary(self):
+        doctored = (
+            'BACKEND = "qwentts_tts"\n'
+            'DEVICE_NAMES = ("AMD Instinct MI210",)\n'
+            "def check_not_production_path(p):\n    return p\n"
+            "def interpret_linkage_report(s, e):\n    return s\n"
+            "def release_gate_readiness(r):\n    return r\n"
+            "def check_device_evidence(log, *, expected_lane):\n"
+            "    return devices.check_device_names([log], expected_lane=expected_lane)\n"
+        )
+        check = Q.audit_device_vocabulary_delegation(doctored)
+        self.assertEqual(check.outcome, S.FAIL)
+        self.assertIn("MI210", " ".join(check.reasons))
+
+    # --- COMPLIANT-PATH CONTROL ---------------------------------------------
+
+    def test_the_audit_does_not_forbid_lane_keys_or_library_names(self):
+        """This adapter keys `SIBLING_STABLE_TARGETS` by lane and names ggml sonames.
+
+        `libggml-cpu.so` and the lane key `cpu` both carry the vocabulary's `cpu`
+        token. A guard that flagged either would forbid the adapter's own necessary
+        idiom, so both must survive it — while the printed device name `CPU` in a
+        collection literal is still caught.
+        """
+        source = Path(Q.__file__).read_text(encoding="utf-8")
+        self.assertIn('"cpu": "/mnt/raid0/llm/llama.cpp/build/bin"', source)
+        self.assertIn("libggml-cpu.so", Q.all_declared_shared_libraries())
+        self.assertEqual(Q.audit_device_vocabulary_delegation(source).outcome, S.PASS)
+        doctored = (
+            'BACKEND = "qwentts_tts"\n'
+            'HOST_DEVICES = {"CPU": "the ggml CPU backend"}\n'
+            "def check_not_production_path(p):\n    return p\n"
+            "def interpret_linkage_report(s, e):\n    return s\n"
+            "def release_gate_readiness(r):\n    return r\n"
+            "def check_device_evidence(log, *, expected_lane):\n"
+            "    return devices.check_device_names([log], expected_lane=expected_lane)\n"
+        )
+        self.assertEqual(Q.audit_device_vocabulary_delegation(doctored).outcome, S.FAIL)
+        # And a real GPU startup log still passes on the GPU lane.
+        self.assertEqual(
+            Q.check_device_evidence("qwen_tts: use gpu = 1\n"
+                                    "ggml_cuda_init: found 1 ROCm devices:\n"
+                                    "  Device 0: AMD Instinct MI210, gfx90a, VMM: no\n",
                                     expected_lane="gpu").outcome, S.PASS)
 
 
@@ -637,7 +832,9 @@ class IntelligibilityTest(unittest.TestCase):
 class StageAndOpCoverageTest(unittest.TestCase):
     def test_all_three_stages_are_required(self):
         check = Q.check_stage_attribution({"talker": 1313.7, "code_predictor": 1091.8},
-                                          total_ms=6820.7, tolerance_ms=1.0)
+                                          total_ms=6820.7,
+                                          tolerance=Q.derive_stage_tolerance(
+                                              timer_resolution_ms=0.3))
         self.assertEqual(check.outcome, S.FAIL)
         self.assertIn("codec_decode", " ".join(check.reasons))
 
@@ -645,20 +842,132 @@ class StageAndOpCoverageTest(unittest.TestCase):
         stages = {"talker": 1313.7, "code_predictor": 1091.8, "codec_decode": 4362.9}
         total = sum(stages.values())
         self.assertEqual(
-            Q.check_stage_attribution(stages, total_ms=total, tolerance_ms=0.5).outcome,
+            Q.check_stage_attribution(stages, total_ms=total,
+                                      tolerance=Q.derive_stage_tolerance(
+                                          timer_resolution_ms=0.16)).outcome,
             S.PASS)
 
     def test_an_unaccounted_remainder_is_a_finding(self):
         stages = {"talker": 1313.7, "code_predictor": 1091.8, "codec_decode": 4362.9}
-        check = Q.check_stage_attribution(stages, total_ms=6820.7, tolerance_ms=0.5)
+        check = Q.check_stage_attribution(stages, total_ms=6820.7,
+                                          tolerance=Q.derive_stage_tolerance(
+                                              timer_resolution_ms=0.16))
         self.assertEqual(check.outcome, S.FAIL)
         self.assertIn("unaccounted", " ".join(check.reasons))
 
     def test_parts_exceeding_the_whole_fail(self):
         stages = {"talker": 10.0, "code_predictor": 10.0, "codec_decode": 10.0}
-        check = Q.check_stage_attribution(stages, total_ms=20.0, tolerance_ms=0.1)
+        check = Q.check_stage_attribution(stages, total_ms=20.0,
+                                          tolerance=Q.derive_stage_tolerance(
+                                              timer_resolution_ms=0.033))
         self.assertEqual(check.outcome, S.FAIL)
         self.assertIn("exceed the whole", " ".join(check.reasons))
+
+
+class StageToleranceBoundTest(unittest.TestCase):
+    """`tolerance_ms` was UNBOUNDED: a tolerance larger than the measurement passes.
+
+    A tolerance is slack on a comparison, so it is only a check while it is small
+    against the quantity compared. At `tolerance >= total_ms`, "the parts sum to the
+    whole" is satisfied by parts of ZERO — the attribution can account for none of
+    the wall clock and still PASS. That is the exact class of defect §P-TTS-3 exists
+    to prevent: on 2026-07-31 the bottleneck moved from codec_decode (64 % -> 10.4 %)
+    to code_predictor (-> 65.5 %), and only stage attribution shows it.
+    """
+
+    _STAGES = {"talker": 1313.7, "code_predictor": 1091.8, "codec_decode": 4362.9}
+
+    def test_a_tolerance_larger_than_the_measurement_no_longer_passes(self):
+        # Before the fix: stages summing to nothing, absorbed by the slack, PASS.
+        empty = {"talker": 0.0, "code_predictor": 0.0, "codec_decode": 0.0}
+        check = Q.check_stage_attribution(
+            empty, total_ms=6768.4,
+            tolerance=Q.derive_stage_tolerance(timer_resolution_ms=5000.0))
+        self.assertEqual(check.outcome, S.COULD_NOT_CHECK)
+        self.assertNotEqual(check.outcome, S.PASS)
+        self.assertIn("cannot discriminate", " ".join(check.reasons))
+
+    def test_the_ceiling_is_a_fraction_of_the_total_it_is_a_tolerance_on(self):
+        total = sum(self._STAGES.values())
+        ceiling = total * Q.MAX_TOLERANCE_FRACTION_OF_TOTAL
+        just_under = Q.derive_stage_tolerance(
+            timer_resolution_ms=(ceiling / len(Q.STAGE_PHASES)) * 0.99)
+        just_over = Q.derive_stage_tolerance(
+            timer_resolution_ms=(ceiling / len(Q.STAGE_PHASES)) * 1.01)
+        self.assertEqual(
+            Q.check_stage_attribution(self._STAGES, total_ms=total,
+                                      tolerance=just_under).outcome, S.PASS)
+        self.assertEqual(
+            Q.check_stage_attribution(self._STAGES, total_ms=total,
+                                      tolerance=just_over).outcome, S.COULD_NOT_CHECK)
+
+    def test_the_bound_is_relative_so_a_short_measurement_gets_a_tight_tolerance(self):
+        # The same 3 ms tolerance is fine against 6.8 s of wall and far too coarse
+        # against 20 ms — which is why the bound is against the measurement and not
+        # an absolute millisecond constant.
+        tolerance = Q.derive_stage_tolerance(timer_resolution_ms=1.0)
+        self.assertEqual(
+            Q.check_stage_attribution(self._STAGES, total_ms=sum(self._STAGES.values()),
+                                      tolerance=tolerance).outcome, S.PASS)
+        small = {"talker": 6.0, "code_predictor": 7.0, "codec_decode": 7.0}
+        self.assertEqual(
+            Q.check_stage_attribution(small, total_ms=20.0,
+                                      tolerance=tolerance).outcome, S.COULD_NOT_CHECK)
+
+    def test_a_bare_number_is_refused_because_it_carries_no_derivation(self):
+        with self.assertRaises(Q.QwenTtsAdapterError) as ctx:
+            Q.check_stage_attribution(self._STAGES, total_ms=6768.4, tolerance=0.5)
+        self.assertIn("derive_stage_tolerance", str(ctx.exception))
+
+    def test_the_stage_count_comes_from_the_protocol_not_the_caller(self):
+        # Inflating the stage count is how a caller widens the slack without ever
+        # naming a larger tolerance.
+        with self.assertRaises(Q.QwenTtsAdapterError):
+            Q.StageTimingTolerance(timer_resolution_ms=1.0, stage_count=300)
+        self.assertEqual(
+            Q.derive_stage_tolerance(timer_resolution_ms=1.0).stage_count,
+            len(Q.STAGE_PHASES))
+
+    def test_a_zero_total_has_nothing_to_bound_a_tolerance_against(self):
+        zeroed = {"talker": 0.0, "code_predictor": 0.0, "codec_decode": 0.0}
+        check = Q.check_stage_attribution(
+            zeroed, total_ms=0.0,
+            tolerance=Q.derive_stage_tolerance(timer_resolution_ms=0.0))
+        self.assertEqual(check.outcome, S.COULD_NOT_CHECK)
+
+    def test_a_negative_or_non_numeric_resolution_is_refused(self):
+        with self.assertRaises(Q.QwenTtsAdapterError):
+            Q.derive_stage_tolerance(timer_resolution_ms=-1.0)
+        with self.assertRaises(Q.QwenTtsAdapterError):
+            Q.derive_stage_tolerance(timer_resolution_ms="1.0")
+
+    # --- COMPLIANT-PATH CONTROL ---------------------------------------------
+
+    def test_a_real_harness_tolerance_still_reaches_a_verdict(self):
+        """The bound must not forbid the tolerance a real harness actually has.
+
+        A 1 ms timer over three stages is 3 ms of slack against a 6.8 s measurement —
+        0.044 % — and it must still PASS a reconciling attribution, still FAIL an
+        unaccounted remainder, and still FAIL parts exceeding the whole. A guard that
+        refused the legitimate case would be routed around rather than obeyed.
+        """
+        tolerance = Q.derive_stage_tolerance(timer_resolution_ms=1.0)
+        total = sum(self._STAGES.values())
+        self.assertAlmostEqual(tolerance.value_ms, 3.0)
+        self.assertEqual(
+            Q.check_stage_attribution(self._STAGES, total_ms=total,
+                                      tolerance=tolerance).outcome, S.PASS)
+        # Within the tolerance, not exactly equal: the point of having one at all.
+        self.assertEqual(
+            Q.check_stage_attribution(self._STAGES, total_ms=total + 2.0,
+                                      tolerance=tolerance).outcome, S.PASS)
+        self.assertEqual(
+            Q.check_stage_attribution(self._STAGES, total_ms=total + 50.0,
+                                      tolerance=tolerance).outcome, S.FAIL)
+        self.assertEqual(
+            Q.check_stage_attribution(self._STAGES, total_ms=total - 50.0,
+                                      tolerance=tolerance).outcome, S.FAIL)
+        self.assertEqual(tolerance.to_dict()["stage_count"], len(Q.STAGE_PHASES))
 
     def test_a_shrinking_op_enumeration_fails_at_one_hundred_percent_pass(self):
         # The gfx90a ARGSORT precedent: 46/46 and 74/74 are both "100 % pass".
@@ -778,6 +1087,100 @@ class SelfAuditTest(unittest.TestCase):
     def test_a_forbidden_import_still_fails_even_unbound(self):
         self.assertEqual(
             Q.audit_no_write_or_process_paths("import subprocess\n").outcome, S.FAIL)
+
+
+class LinkageReportBindingTest(unittest.TestCase):
+    """RED TEAM: the member was named by the CALLER, with nothing tying that name to
+    the report being graded.
+
+    Per-member library sets make the member's identity load-bearing. `binary=` is a
+    claim by the party being gated; `verify_ggml_linkage.sh` prints `binary : $BIN`
+    as its first line, which is the evidence's own statement of what it is. This
+    backend's required sets happen to be uniform today, so the relabelling does not
+    manufacture a PASS *here* — the STT sibling shows that it does — but the binding
+    belongs to the signature, not to the current contents of the table, or the first
+    member to declare a different set reopens it silently.
+    """
+
+    def test_a_report_cannot_be_graded_as_a_member_it_was_not_captured_against(self):
+        report = _report(_GOOD_ROWS, member="qwen-tts")
+        verdict = Q.interpret_linkage_report(report, 0, binary="quantize")
+        self.assertEqual(verdict.check.outcome, S.COULD_NOT_CHECK)
+        self.assertNotEqual(verdict.check.outcome, S.PASS)
+        self.assertFalse(verdict.check.passed)
+        reasons = " ".join(verdict.check.reasons)
+        self.assertIn("qwen-tts", reasons)
+        self.assertIn("quantize", reasons)
+
+    def test_a_report_that_names_no_binary_cannot_be_bound_to_a_member(self):
+        stripped = "\n".join(line for line in _report(_GOOD_ROWS).splitlines()
+                             if not line.startswith("binary :")) + "\n"
+        self.assertIsNone(Q.report_binary_name(stripped))
+        verdict = Q.interpret_linkage_report(stripped, 0, binary="qwen-tts")
+        self.assertEqual(verdict.check.outcome, S.COULD_NOT_CHECK)
+        self.assertIn("no `binary : <path>` header", " ".join(verdict.check.reasons))
+
+    def test_a_wrong_tree_resolution_is_still_a_fail_whoever_the_report_belongs_to(self):
+        rows = list(_GOOD_ROWS)
+        rows[0] = ("BAD", "libggml-base.so.0",
+                   "/mnt/raid0/llm/whisper.cpp/build/bin/libggml-base.so.0")
+        verdict = Q.interpret_linkage_report(
+            _report(rows, member="qwen-tts",
+                    trailer="FAIL: 1 library/libraries resolve OUTSIDE "), 1,
+            binary="quantize")
+        self.assertEqual(verdict.check.outcome, S.FAIL)
+
+    # --- COMPLIANT-PATH CONTROL ---------------------------------------------
+
+    def test_every_member_still_grades_its_own_report_exactly_as_before(self):
+        """The binding must not make any member ungradeable.
+
+        Each member graded on the report a runner would actually capture for it —
+        the verifier run against that binary — is PASS, unchanged.
+        """
+        for spec in Q.binary_inventory():
+            verdict = Q.interpret_linkage_report(_report(_GOOD_ROWS, member=spec.name),
+                                                 0, binary=spec.name)
+            self.assertEqual(verdict.check.outcome, S.PASS, spec.name)
+            self.assertEqual(verdict.binary, spec.name, spec.name)
+
+    def test_the_header_is_read_the_way_the_script_prints_it(self):
+        self.assertEqual(Q.report_binary_name(f"binary : {EXP_LIB}/qwen-tts\n"),
+                         "qwen-tts")
+        self.assertEqual(Q.report_binary_name("binary : test-backend-ops\n"),
+                         "test-backend-ops")
+        self.assertIsNone(Q.report_binary_name("expect : libraries under /a\n"))
+
+
+class HiddenDeviceVocabularyTest(unittest.TestCase):
+    """RED TEAM: the delegation audit read MODULE-LEVEL literals only.
+
+    A device table moved inside `check_device_evidence`, with the shared grader
+    called on the fall-through, satisfied both of the audit's rules.
+    """
+
+    def test_a_vocabulary_hidden_inside_the_checker_fails(self):
+        doctored = (
+            'BACKEND = "qwentts_tts"\n'
+            "def check_not_production_path(p):\n    return p\n"
+            "def interpret_linkage_report(s, e):\n    return s\n"
+            "def release_gate_readiness(r):\n    return r\n"
+            "def check_device_evidence(log, *, expected_lane):\n"
+            '    local = ("AMD Instinct MI210", "CPU")\n'
+            "    if any(n in log for n in local):\n"
+            "        return 'PASS'\n"
+            "    return devices.check_device_names([log], expected_lane=expected_lane)\n")
+        check = Q.audit_device_vocabulary_delegation(doctored)
+        self.assertEqual(check.outcome, S.FAIL)
+        self.assertNotEqual(check.outcome, S.PASS)
+
+    # --- COMPLIANT-PATH CONTROL ---------------------------------------------
+
+    def test_this_adapters_real_source_still_passes(self):
+        source = Path(Q.__file__).read_text(encoding="utf-8")
+        self.assertEqual(Q.audit_device_vocabulary_delegation(source).outcome, S.PASS)
+        # …including its own FAIL reason, which names a device in prose.
+        self.assertIn("a CPU cell's log carries", source)
 
 
 if __name__ == "__main__":

@@ -177,11 +177,30 @@ stack-change path and is refused **by name at all four release-plane doors** —
 `plan.ReleaseTarget`, `t3.ReleasePlanView`, `packager.OperatorFreezeRequest` and
 `readiness.ObjectiveSpec`.
 
-§10.4's calibration is wired and passing: the T3 dry run against the REAL
-`artifacts/operator/ratify_v8_final_freeze_20260725.json` predicts **FAIL without
-the waiver**, naming both Q8 pairs; with the waiver and a reconstructed N-1
-archive it is `PASS_WITH_WAIVER` with exactly those two claims suppressed by name
-and the forfeit recorded. The waiver alone never clears the integrity spine.
+§10.4's calibration is wired and passing, and was **re-run against the real
+artifacts after the 2026-08-03 hardening pass** to prove the hardening did not
+break the compiler. All three outcomes still hold:
+
+| input | verdict |
+|---|---|
+| no waiver | **FAIL**, naming `qwen36_q8-tg128-iqk1` and `qwen36_q8-pp2048-iqk1` |
+| waiver, no N-1 archive | **FAIL** — no archived incumbent, so no rollback target |
+| waiver + reconstructed N-1 archive | **PASS_WITH_WAIVER**, exactly those two claims suppressed by name, forfeit recorded |
+
+Two things about the calibration changed in the truth-up, both because the old
+form could pass without inspecting anything:
+
+- **Both documents are now read off disk.** The ratification always was; the
+  *waiver* came from `test_t3.V8_WAIVER`, so the claim "against the record rather
+  than a fixture of it" was true of the ratification and false of the half that
+  decides PASS_WITH_WAIVER. `waive_q8_cpu_prefill_v8_20260725.json` is now read
+  too, and its sha256 is checked against `evidence_sha256.waive_q8` **on the
+  ratification** — the attestation hashes its own waiver, so for this preserved
+  pair the authenticity gap below is genuinely closed.
+- **Absence is a FAILURE, never a skip.** `TestPreservedV8Calibration` used to call
+  `self.skipTest()` when the artifact was missing. Removing the file turned the one
+  check that says the compiler is right into a silent `ran=0, failures=0` — a
+  guarantee obtainable by deleting what it inspects.
 
 ## Integration seams reconciled — AK5/AK6/AK8/AK9 release plane (2026-08-03)
 
@@ -435,7 +454,8 @@ python3 -m unittest scripts.kernel_rnd.autokernel.release.test_release_integrati
 python3 scripts/kernel_rnd/autokernel/test_integration.py
 ```
 
-Expected: **4066 tests, OK (expected failures=1)**. The one `expectedFailure` is
+Expected: **4456 tests, OK (expected failures=1)** as of the 2026-08-03 hardening
+pass (4066 before it). The one `expectedFailure` is
 `test_preflight.RealKernelLockEncodingTest.test_KNOWN_HOLE_unlinking_a_held_lock_
 file_hides_its_live_holder` — a real, documented hole (unlinking a held lock file
 hides its live holder from the `/proc/locks` witness), deliberately left visible
@@ -680,6 +700,59 @@ none of it is closed by the suites above.
   `ContextManifest` — asserted in `test_loop_integration` — but a caller that
   hand-builds a `ContextManifest` from compiler sections has no total mapping.
 
+### Closed by the 2026-08-03 hardening pass (was carried-forward, now done)
+
+Each of these was on the list above until this pass. They are recorded because a
+carried-forward list nobody ever *removes* from stops being read.
+
+- **Per-phase protocol ratification** — `t3.PhaseProtocolBinding` carries a hashed,
+  ratified binding per `(backend, phase)`. A bare id is still accepted, but as the
+  UNBOUND state reported COULD_NOT_CHECK, so the gap is journaled rather than
+  passing silently. `declared_ratified_protocol_ids()` derives the adapters' set
+  from the request's own bindings — no constant, no flag.
+- **`t3.verify_waiver` accepting any non-empty `authorized_by`** — the vocabulary
+  moved to `schemas.MACHINE_ACTOR_TOKENS` and both planes read it. Separator
+  spellings (`auto-kernel`, `auto_kernel`, `auto.kernel`) are refused too, and
+  `machine_attributions` scans five attribution fields. Authorship is now
+  *(named non-machine actor)* OR *(no attribution at all AND provenance PASS)*,
+  because the ratified v8 waiver names no author and its legacy schema cannot be
+  tightened without invalidating a genuine record.
+- **The operator-attestation root was manufacturable with `mkdir -p`** — the
+  repo-name strip is now taken only for names in `schemas.REPO_CHECKOUT_NAMES`, so
+  `/mnt/raid0/llm/tmp/artifacts/operator/…` (the loop's own scratch root) no longer
+  reduces to an operator citation.
+- **Per-phase standings were deduplicated last-wins** — a duplicate
+  `(backend, phase)` is a blocking contradiction naming both standings and both
+  evidence refs. It made the verdict a function of the caller's list order, and the
+  caller is the party being gated.
+- **`expected_gain` never compared to a standing**; **`sealed_fingerprint` blind to
+  waiver coverage** (`FINGERPRINT_FACETS` is now 18, including
+  `active_waiver_coverage`); **`MechanismConfirmation` carried no timestamp**
+  (`measured_at` is required); **`check_matrix_coverage` accepted foreign-backend
+  cells *and* foreign-backend capacity deltas** (one `_require_one_backend` door
+  over both); **`ArchivedBuild.libraries` carried no backend attribution** (now
+  `((backends, path, sha256), …)`).
+- **`serving_runtime`'s `kernels/production` substring pattern** is gone, so a §11.6
+  package can name its own serving binary; `..` traversal out of the stable path and
+  `a//b` slash runs are both refused; gate 2 and gate 3 are tied through typed
+  `subjects`/`tied_to` validated in `ThreeGateResult.__post_init__`, so a caller
+  assembling a verdict from journalled outcomes cannot skip the tie.
+- **The packager's four self-audits** are now alias-, dispatch- and rebinding-aware,
+  and package assembly checks that the sealed candidate **is** the graded one and
+  that era-row kinds are **traced from `rows[]`** rather than declared.
+- **The cardinal-rule audit corpus was 18 of 42 modules** — found by this pass, not
+  reported by any red team. `TestNoProductionWritePathsAnywhere` globbed `release/`
+  and `adapters/` non-recursively. Rule 1 ("writes nothing at all") is correctly
+  scoped to those two planes, because `journal.py`, `storage.py`,
+  `resource/device_claim.py` and `controller/state_machine.py` write by design. But
+  **rule 2** ("no call names a human-only target") is not a property of a plane, and
+  it was never applied to the twenty-four modules that actually hold the
+  primitives: a `shutil.rmtree('/mnt/raid0/llm/kernels/production/cpu')` appended to
+  the real `storage.py` produces a finding the moment the auditor is handed the
+  source, and the suite never handed it over. Rule 2 now runs over the whole
+  package, discovery is recursive, and the corpus is asserted to contain the
+  write-capable modules so it cannot pass by inspecting nothing.
+
 ### Remaining in AK5/AK6 (the release plane)
 
 - **No runner, and no live release has been rehearsed.** Everything below the
@@ -691,59 +764,100 @@ none of it is closed by the suites above.
   `ReleaseProtocolNotRatified` for `mode="release"` under an unratified protocol,
   so **every** run this package can currently perform is a dry run. Ratification
   is human-only and is the gate on AK5 being usable at all.
-- **The per-phase measurement protocols carry no ratification status.**
-  `ProtocolBinding` proves the FREEZE protocol is ratified; the protocols the
-  matrix cells are graded under (`P-BENCH-1`, `P-GPU-1`, `P-STT-*`, `P-TTS-*`)
-  arrive as bare ids in `phase_protocols`. The adapters know — `whisper_stt` and
-  `qwentts_tts` each expose `release_gate_readiness()`, which returns
-  COULD_NOT_CHECK while their families are drafts — and nothing in the release
-  plane calls it. Wiring it needs an adapter→gate edge `t3.py` deliberately does
-  not have; the honest fix is a per-phase `ProtocolBinding` in `T3Request`, which
-  is a request-shape change AK6 also depends on.
-- **`t3.verify_waiver` still accepts any non-empty `authorized_by`.** The
-  machine-actor refusal is enforced in the packager (seam 7), so a self-granted
-  waiver cannot reach a package — but T3's own verdict still reads
-  PASS_WITH_WAIVER. The correct home for `MACHINE_ACTOR_TOKENS` is `schemas.py`,
-  where both planes can read it; that file is the shared SSOT and was out of scope
-  for the integration pass.
-- **Waivers are structurally validated, not authenticated.** No signature, no
-  trust-boundary path check on `document_path`, and `WaiverBinding.pinned_sha256`
-  pins the document a caller supplied rather than one read from an operator-owned
-  path.
+- **Waivers are structurally validated, not authenticated — `WaiverBinding` is
+  three independent caller assertions.** `document`, `document_path` and
+  `observed_sha256` are all supplied by the party being gated; **nothing reads the
+  file**. `document_path="artifacts/operator/w.json"` verifies with no manifest and
+  no filesystem at all, so `pinned_sha256` pins bytes the caller handed over rather
+  than bytes read from an operator-owned path. What the hardening pass *did* close
+  is the trust-boundary shape: the path must now resolve under a real checkout root
+  (`schemas.operator_owned_path_check`), the loop's own scratch root
+  `/mnt/raid0/llm/tmp/` can no longer spell the attestation root, and no spelling of
+  the loop can be the author. Closing the rest needs a mandatory
+  `waiver_binding_from_path()` reader as T3's only constructor — every caller and
+  fixture changes. **Recommended as its own item.** (The preserved v8 pair is the
+  one exception: the ratification hashes its own waiver, so that binding is real.)
+- **§1.6's `regression_band` is compared to nothing measured.** The pass made
+  `expected_gain` realisable against the measured standing; the *band* stays
+  structurally uncheckable at T3 because `PhaseStanding` carries a vocabulary
+  (`improved`/`non_inferior`/`regressed`), not an effect magnitude — `readiness`
+  has the magnitude. Seam: a numeric oriented effect on `PhaseStanding`.
+- **`fnmatchcase` `*` crosses `/` in the operator manifest matcher**, so a glob
+  written as `measurement/protocols/*` + `.md` also matches documents nested
+  several directories deeper, which then read as operator-owned. Broader is *more*
+  permissive for this consumer. **Deliberately not fixed:** it changes how a
+  human-authored manifest is interpreted, and making `autokernel` disagree with
+  `session_bus.py validate`'s matcher would be worse than the widening. Operator
+  call.
+- **`WaiverVerification.covered_cell_ids` is populated even when the check FAILs.**
+  Inert today (`compute_verdict` guards on `.verified`) and no consumer exists
+  outside `t3.py`, but it lands in the durable bundle as a waived-looking coverage
+  list on a refused waiver.
+- **Identity re-joining can false-positive on a two-part human name** whose parts
+  concatenate to a machine token (`"Bo T"` → `bot`). Fail-closed, and documented in
+  `schemas.identity_candidates`; introduced by the hardening pass itself.
+- **`OperatorCommand.validation_receipt` is any non-empty string.** "Pre-validated
+  end to end" is a caller declaration, and `validated=True` also decides which
+  commands count for transaction coverage. A structural fix needs a receipt
+  vocabulary/digest contract belonging in `schemas.py` and the evidence plane, not
+  in the packager.
 - **`_transaction_elements` coverage is satisfied by a command that NAMES an
   element**, not by proving it acts on it — a comment mentioning
   `instrument_eras.yaml` covers the era-registry element. Tightening it needs a
   verb vocabulary per element kind.
-- **`RollbackPlan.incumbent_libraries` carries no backend attribution**, because
-  `t3.ArchivedBuild.libraries` carries none either. On a three-ggml-generation
-  host that is the field a rollback would most want attributed.
+- **Era-row *content* (era_id prefix, duplicates) is validated only inside
+  `draft_era_registry_row`**, not at package assembly, which accepts a hand-built
+  mapping. The READY-reaching part of that hole (declared-vs-traced `kinds`) is
+  fixed; the content part is not.
+- **The mint-alias residual**: a refused class passed through a data structure and
+  called later is still unauditable. The assignment-alias route is closed; a general
+  rule would forbid the `isinstance` table this module legitimately uses.
+- **`_within_surface`'s denominator mixes refs with paths**, so a `target_paths`
+  entry equal to a branch or tag name reads as "contained".
 - **The `/kernel` dashboard JSON contract and the freshness/health fold** (AK6
   checklist) are not built: an HTTP surface plus a panel→producer registry.
-- **`readiness.py` open items from its red-team** remain as reported:
-  `check_matrix_coverage()` accepts foreign-backend cells at its public entry
-  point; capacity/mechanism evidence is exempt from the lineage-ordering check and
-  `MechanismConfirmation` carries no timestamp at all; coverage/co-residency/
-  repetition checks count inadmissible cells and the `llama_cpu` co-residency
-  requirement can be closed by a sentinel; sub-floor estimates can still be
-  selected as weakest or best (an operator call — excluding them makes a phase
-  measured entirely at parity report "no figure").
-- **`t3.py` open items**: a phase trade's `expected_gain` is validated for
-  structure and never compared to any standing; `sealed_fingerprint` hashes the
-  active waiver's digest but not its coverage, so two runs whose waivers cover
-  different cells share a fingerprint (fail-closed today).
+- **§9.7's `llama_cpu` co-residency requirement is dischargeable by a co-resident
+  PREFILL cell.** The pass narrowed it by role and admissibility, but not by phase —
+  and `_CO_RESIDENT_WHY`'s entire stated mechanism is that *"CPU decode is
+  bandwidth-bound"*, which a compute-bound prefill measurement cannot show.
+  **Deliberately not fixed:** §9.7's ratified text says only *"at least one
+  co-resident cell for `llama_cpu`"* and names no phase, so narrowing it is an
+  operator amendment, not a red-team call. Either narrow it (a one-line predicate
+  plus its control) or amend `_CO_RESIDENT_WHY` to stop asserting a mechanism the
+  check does not enforce.
+- **Coverage/repetition checks still count inadmissible cells**, and sub-floor
+  estimates can still be selected as weakest or best — an operator call, because
+  excluding them makes a phase measured entirely at parity report "no figure".
 
 ### Remaining in AK8/AK9 (the adapters)
 
 - **Both speech release-protocol families are drafts**, so `whisper_stt` and
   `qwentts_tts` are search-legal and release-blocked by design. Their phase
   vocabularies are absent from `schemas.PHASES_BY_BACKEND` for the same reason.
-- **`serving_runtime`'s `kernels/production` pattern refuses the package from
-  reporting the normal launch command** — the stable symlink is also the path a
-  service legitimately executes, so a realistic §11.6 package cannot name its own
-  serving binary. Fixing it needs a pattern that distinguishes *executes a binary
-  under the path* from *mutates the path*.
-- **Gate 3 never checks `argv[0]` against `binary_path`** and never ties a
-  `LiveProcessFact.pid` to gate 2's observed pid.
+- **The gate-2/gate-3 tie forbids gate 3 from verifying any service gate 2 did not
+  observe.** Two intended services with one restarted now yields
+  `FAIL: service 'router' has no gate-2 start observation`, so a stack change that
+  restarts 1 of 4 services cannot have gate 3 verify the other 3 against config —
+  and the way to make it pass is to verify *less*. **Not fixed:** it is a genuine
+  semantic choice about §11.6's gate 3 (whole stack vs. restarted subset), not a bug
+  with one right answer. Recommendation: keep the tie mandatory for restarted
+  services and admit an unrestarted one as fully compared but tied-COULD_NOT_CHECK,
+  forcing COULD_NOT_CHECK rather than PASS.
+- **`subjects`/`tied_to` are forgeable by a caller who hand-builds both outcomes.**
+  The binding proves the two outcomes are *about* one process set; it cannot prove
+  the tokens were ever observed. Unavoidable in any design that takes observations
+  as data — the same limit applied to the string `evidence_ref` it replaced.
+- **`classify_stable_kernel_path_use` has zero production consumers.** The real
+  guard path is `_stable_kernel_path_findings` inside `_scan_node`; the exported
+  classifier is exercised only by tests, so its COULD_NOT_CHECK cannot be misread
+  today — but nothing stops a future consumer from treating it as a green receipt.
+- **A `..` below the stable path is refused as undecidable, never resolved.**
+  Resolving it would mean following the very symlink that is the trust boundary.
+  The consequence is that a legitimate command using `..` *below* the link is
+  refused rather than admitted — fail-closed, and deliberate.
+- **`gate_live_equals_config`'s local `started = _parse_instant(...)` shadows the
+  `started` parameter** inside the per-service loop. Harmless today
+  (`started_by_id` is built before the loop); a trap for the next editor.
 - **`check_device_evidence(expected_lane="gpu")` accepts `Device 0: CPU`** in both
   speech adapters: it requires a `Device N: <name>` line and never checks the name
   denotes a GPU. A correct fix needs a device-name vocabulary that belongs in the

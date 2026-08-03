@@ -35,9 +35,10 @@ import unittest
 from pathlib import Path
 
 from .. import schemas, storage
+from ..adapters import whisper_stt
 from ..controller import guards
 from ..evaluator import api, integrity
-from . import t3
+from . import packager, t3
 
 # The preserved operator artifacts §10.4 names. Read when present; the embedded
 # fixtures below are cross-checked against them so a fixture cannot drift silently.
@@ -144,6 +145,26 @@ CANDIDATE_COMMIT = "b" * 40
 BASE_COMMIT = "a" * 40
 BUILD_ROOT = "/mnt/raid0/llm/llama.cpp-experimental/build"
 
+#: §1.6's phase vocabulary for the llama pair, and the Annex B protocol that owns
+#: each phase. Both are RATIFIED, so the default fixture binds them as such — a
+#: fixture that left them as bare ids would be exercising the UNBOUND path in every
+#: test at once and hiding the one it is supposed to exercise.
+LLAMA_PHASE_PROTOCOLS = {"prefill": "P-BENCH-PREFILL-1", "decode": "P-BENCH-1"}
+
+
+def ratified_protocol(protocol_id: str, **overrides) -> t3.ProtocolBinding:
+    fields = {"protocol_id": protocol_id,
+              "document_sha256": digest(f"protocol:{protocol_id}"),
+              "ratified": True, "ratified_at": "2026-05-01T00:00:00Z", "annex": "B"}
+    fields.update(overrides)
+    return t3.ProtocolBinding(**fields)
+
+
+def draft_protocol(protocol_id: str) -> t3.ProtocolBinding:
+    return t3.ProtocolBinding(
+        protocol_id=protocol_id, document_sha256=digest(f"draft:{protocol_id}"),
+        ratified=False)
+
 
 def linkage_receipt(backend: str, **overrides) -> t3.LinkageReceipt:
     fields = {
@@ -210,7 +231,10 @@ def archive(**overrides) -> t3.IncumbentArchive:
                       V8_CPU_BINARY),
                      ("/mnt/raid0/llm/kernels/archive/v8/gpu/llama-server",
                       V8_HIP_BINARY)),
-        "libraries": (("/mnt/raid0/llm/kernels/archive/v8/cpu/libggml-base.so.0",
+        # One `libggml-base.so.0` genuinely serves both llama backends of one tree,
+        # which is why the attribution is a SET rather than a name.
+        "libraries": ((LLAMA_BACKENDS,
+                       "/mnt/raid0/llm/kernels/archive/v8/cpu/libggml-base.so.0",
                        digest("v8-libggml-base")),),
         "rebuilt": False,
     }
@@ -302,7 +326,8 @@ def request(**overrides) -> t3.T3Request:
         "cooldown_seconds": 86400,
         "release_reps_by_protocol": {"P-BENCH-1": 10, "P-BENCH-PREFILL-1": 5,
                                      "P-KERNEL-FREEZE-1": 1},
-        "phase_protocols": {b: {"prefill": "P-BENCH-PREFILL-1", "decode": "P-BENCH-1"}
+        "phase_protocols": {b: {phase: ratified_protocol(protocol)
+                                for phase, protocol in LLAMA_PHASE_PROTOCOLS.items()}
                             for b in LLAMA_BACKENDS},
         "linkage_receipts": tuple(linkage_receipt(b) for b in LLAMA_BACKENDS),
         "backend_inventories": tuple(
@@ -753,6 +778,446 @@ class TestWaivers(unittest.TestCase):
 
 
 # =============================================================================
+# §10.4 — WHO wrote the waiver, and where it lives
+#
+# The two authorship holes, closed 2026-08-03. Both were invisible from inside
+# this file before: `verify_waiver` accepted any non-empty `authorized_by`, and
+# `document_path` was free text nothing ever read. The machine-actor refusal
+# existed only in `packager.py`, one layer up, so T3's own verdict read
+# PASS_WITH_WAIVER and any caller reaching T3 directly bypassed the refusal.
+#
+# Every guard below is paired with a COMPLIANT-PATH control asserting it does not
+# forbid its own legitimate idiom — a self-refusing guard is the recurring defect
+# in this plane (`serving_runtime`'s `kernels/production` pattern).
+# =============================================================================
+
+#: A boundary in the manifest's own shape, for tests that must not depend on the
+#: live file. Every glob here is read from the DOCUMENT, never from a list in the
+#: gate — that is the property under test.
+BOUNDARY_YAML = """
+schema_version: session_bus.human_only_paths.v1
+paths:
+  - repo: epyc-root
+    glob: "MEASUREMENT.md"
+    why: "instrument constitution"
+  - repo: epyc-root
+    glob: "measurement/protocols/*.md"
+    why: "protocol annexes"
+branches:
+  - repo: epyc-llama
+    glob: "production-consolidated-*"
+    why: "frozen production kernels"
+"""
+
+UNREADABLE_BOUNDARY = schemas.TrustBoundary(source="<absent>")
+
+
+def verify(binding, *, boundary=None, cells=None, failing=("llama_cpu.prefill",)):
+    """`verify_waiver` on one binding, with everything else compliant."""
+    known = [c.cell_id for c in (cells if cells is not None else matrix_cells())]
+    return t3.verify_waiver(
+        binding, candidate_commit=CANDIDATE_COMMIT,
+        production_base_commit=BASE_COMMIT, campaign_id="ak-v9",
+        known_cell_ids=known, failing_cell_ids=list(failing), now=NOW,
+        boundary=boundary)
+
+
+class TestWaiverAuthorship(unittest.TestCase):
+    """§10.4: a waiver is human-authored BY DEFINITION."""
+
+    def test_a_waiver_attributed_to_the_loop_does_not_verify_at_t3(self):
+        binding = waiver_binding(autokernel_waiver(authorized_by="autokernel"))
+        verification = verify(binding, boundary=UNREADABLE_BOUNDARY)
+        self.assertFalse(verification.verified)
+        self.assertEqual(verification.predicate_results["human_attested"], schemas.FAIL)
+        self.assertIn("machine actor", " ".join(verification.check.reasons))
+
+    def test_the_verdict_itself_is_fail_not_pass_with_waiver(self):
+        # The hole this closes: the packager refused the package, but T3's OWN
+        # verdict still read PASS_WITH_WAIVER, so any caller reaching T3 directly
+        # got a waived pass.
+        cells, results = failing_matrix()
+        binding = waiver_binding(autokernel_waiver(authorized_by="autokernel"))
+        result = t3.run_t3(request(_cells=cells, _results=results, waivers=(binding,)))
+        self.assertEqual(result.verdict, "FAIL")
+        self.assertIn("llama_cpu.prefill", result.verdict_computation.failed_cells)
+        self.assertIn("machine actor", reasons_of(result))
+
+    def test_every_attribution_field_is_scanned_not_just_authorized_by(self):
+        # A guard that reads `authorized_by` and not `approved_by` has a
+        # rename-shaped hole, and a waiver is a document a human hand-writes.
+        for field_name in schemas.ACTOR_ATTRIBUTION_FIELDS:
+            with self.subTest(field=field_name):
+                # `authorized_by` stays a human name except where it IS the field
+                # under test, so each subtest proves that one field alone refuses.
+                doc = autokernel_waiver(**{field_name: "autokernel-daemon"})
+                verification = verify(waiver_binding(doc),
+                                      boundary=UNREADABLE_BOUNDARY)
+                self.assertFalse(verification.verified, field_name)
+                self.assertIn("machine actor", " ".join(verification.check.reasons))
+
+    def test_the_token_vocabulary_is_the_one_the_packager_reads(self):
+        # One vocabulary, in `schemas.py`. Two copies drift, and the copy that
+        # drifts is the one that stops catching things.
+        self.assertIs(packager.MACHINE_ACTOR_TOKENS, schemas.MACHINE_ACTOR_TOKENS)
+        for token in ("autokernel", "daemon", "bot", "cron", "runner"):
+            with self.subTest(token=token):
+                self.assertTrue(schemas.machine_actor_tokens(f"the-{token}-1"))
+
+    def test_a_human_named_after_no_machine_still_verifies(self):
+        # COMPLIANT-PATH CONTROL. The guard matches whole tokens, so a human name
+        # is unaffected — including one that merely CONTAINS a token's letters.
+        for name in ("daniele", "operator", "Daniele Pinna", "scriptor"):
+            with self.subTest(name=name):
+                binding = waiver_binding(autokernel_waiver(authorized_by=name))
+                verification = verify(binding, boundary=UNREADABLE_BOUNDARY)
+                self.assertTrue(verification.verified, verification.check.reasons)
+                self.assertEqual(verification.predicate_results["human_attested"],
+                                 schemas.PASS)
+
+    def test_a_human_attributed_waiver_still_turns_fail_into_pass_with_waiver(self):
+        # COMPLIANT-PATH CONTROL, end to end: the refusal must not have closed the
+        # door §10.4 exists to open. v8 shipped through this door.
+        cells, results = failing_matrix()
+        result = t3.run_t3(request(_cells=cells, _results=results,
+                                   waivers=(waiver_binding(),)))
+        self.assertEqual(result.verdict, "PASS_WITH_WAIVER", reasons_of(result))
+
+    def test_schemas_refuses_a_machine_attributed_waiver_document(self):
+        violations = schemas.validate_operator_waiver(
+            autokernel_waiver(authorized_by="autokernel"))
+        self.assertTrue(any("machine actor" in v for v in violations))
+        self.assertEqual(schemas.validate_operator_waiver(autokernel_waiver()), [])
+
+
+class TestWaiverProvenance(unittest.TestCase):
+    """§10.4: a waiver is *"stored under the trust-boundary path set"*.
+
+    A hash proves the bytes did not change after somebody quoted them. It says
+    nothing about who could have written them, which is the whole question.
+    """
+
+    def test_a_waiver_in_the_loops_own_scratch_does_not_verify(self):
+        binding = waiver_binding(document_path="/mnt/raid0/llm/tmp/waive-q8.json")
+        verification = verify(binding,
+                              boundary=schemas.parse_trust_boundary(BOUNDARY_YAML))
+        self.assertFalse(verification.verified)
+        self.assertEqual(verification.predicate_results["document_path"], schemas.FAIL)
+
+    def test_a_scratch_waiver_blocks_the_whole_run(self):
+        cells, results = failing_matrix()
+        binding = waiver_binding(
+            document_path="scripts/kernel_rnd/autokernel/waive-q8.json")
+        result = t3.run_t3(request(_cells=cells, _results=results, waivers=(binding,)))
+        self.assertEqual(result.verdict, "FAIL")
+        self.assertIn("llama_cpu.prefill", result.verdict_computation.failed_cells)
+
+    def test_a_path_outside_every_checkout_root_resolves_to_nothing(self):
+        # Containment is tested on the RESOLVED root, never on a substring, so a
+        # directory that merely spells the operator root does not inherit it.
+        check = schemas.operator_owned_path_check(
+            "/tmp/artifacts/operator/waive-q8.json",
+            boundary=schemas.parse_trust_boundary(BOUNDARY_YAML))
+        self.assertEqual(check.outcome, schemas.FAIL)
+
+    def test_traversal_out_of_the_operator_root_is_not_operator_owned(self):
+        check = schemas.operator_owned_path_check(
+            "artifacts/operator/../../tmp/waive-q8.json",
+            boundary=schemas.parse_trust_boundary(BOUNDARY_YAML))
+        self.assertEqual(check.outcome, schemas.FAIL)
+
+    def test_an_unreadable_boundary_is_could_not_check_never_pass(self):
+        # THE PROPERTY: a guarantee obtainable by deleting what it inspects is not
+        # one. Emptying the manifest must not widen what counts as operator-owned.
+        for boundary in (UNREADABLE_BOUNDARY,
+                         schemas.parse_trust_boundary(""),
+                         schemas.parse_trust_boundary("schema_version: something.else\n"
+                                                      "paths:\n  - glob: \"**\"\n")):
+            with self.subTest(source=boundary.source):
+                self.assertFalse(boundary.readable)
+                check = schemas.operator_owned_path_check("/mnt/raid0/llm/tmp/w.json",
+                                                          boundary=boundary)
+                self.assertEqual(check.outcome, schemas.COULD_NOT_CHECK)
+
+    def test_could_not_check_suppresses_nothing(self):
+        binding = waiver_binding(document_path="/mnt/raid0/llm/tmp/waive-q8.json")
+        verification = verify(binding, boundary=UNREADABLE_BOUNDARY)
+        self.assertEqual(verification.check.outcome, schemas.COULD_NOT_CHECK)
+        self.assertFalse(verification.verified)
+
+    def test_a_foreign_manifest_cannot_widen_the_boundary(self):
+        # A document that is not this schema is not this boundary, however
+        # generous its globs are.
+        foreign = schemas.parse_trust_boundary(
+            "schema_version: some.other.v1\npaths:\n  - glob: \"**\"\n",
+            source="<foreign>")
+        self.assertFalse(foreign.readable)
+        self.assertEqual(foreign.globs, ())
+
+    def test_the_manifest_widens_the_boundary_rather_than_a_list_in_the_gate(self):
+        # Reuse, not restatement: a path nothing in this module names is
+        # operator-owned because the MANIFEST says so.
+        boundary = schemas.parse_trust_boundary(BOUNDARY_YAML, source="<fixture>")
+        self.assertEqual(
+            schemas.operator_owned_path_check("measurement/protocols/kernel-research.md",
+                                              boundary=boundary).outcome, schemas.PASS)
+        self.assertEqual(
+            schemas.operator_owned_path_check("/workspace/MEASUREMENT.md",
+                                              boundary=boundary).outcome, schemas.PASS)
+
+    def test_the_live_manifest_is_readable_and_is_the_one_schemas_names(self):
+        boundary = t3.human_only_boundary()
+        self.assertTrue(str(t3.TRUST_BOUNDARY_MANIFEST).endswith(
+            schemas.HUMAN_ONLY_PATHS_MANIFEST))
+        if not Path(t3.TRUST_BOUNDARY_MANIFEST).exists():
+            self.skipTest("epyc-root is not checked out beside this repo")
+        self.assertTrue(boundary.readable, boundary.to_dict())
+        self.assertIn("MEASUREMENT.md", boundary.globs)
+
+    def test_an_absent_manifest_reads_as_unreadable_not_as_empty(self):
+        boundary = t3.human_only_boundary(
+            Path(t3.TRUST_BOUNDARY_MANIFEST).parent / "no-such-manifest.yaml")
+        self.assertFalse(boundary.readable)
+        self.assertEqual(boundary.globs, ())
+
+    def test_the_operator_attestation_root_needs_no_manifest(self):
+        # COMPLIANT-PATH CONTROL. The idiom this plane already writes —
+        # `artifacts/operator/<label>/waiver.json`, the path `calibration_request`
+        # itself emits — must pass, and must pass even with no manifest at all, or
+        # the guard forbids its own output.
+        for path in ("artifacts/operator/waive-q8-v9.json",
+                     "artifacts/operator/v9-freeze/waiver.json",
+                     "/workspace/artifacts/operator/waive_q8_cpu_prefill_v8_20260725.json"):
+            for boundary in (UNREADABLE_BOUNDARY,
+                             schemas.parse_trust_boundary(BOUNDARY_YAML)):
+                with self.subTest(path=path, readable=boundary.readable):
+                    self.assertEqual(
+                        schemas.operator_owned_path_check(path,
+                                                          boundary=boundary).outcome,
+                        schemas.PASS)
+
+    def test_the_default_boundary_admits_the_normal_waiver_path(self):
+        # COMPLIANT-PATH CONTROL against the LIVE boundary, through `run_t3`'s own
+        # default: no explicit boundary, the fixture's ordinary operator path.
+        cells, results = failing_matrix()
+        result = t3.run_t3(request(_cells=cells, _results=results,
+                                   waivers=(waiver_binding(),)))
+        self.assertEqual(result.verdict, "PASS_WITH_WAIVER", reasons_of(result))
+
+    def test_schemas_checks_the_path_only_when_the_caller_states_one(self):
+        document = autokernel_waiver()
+        self.assertEqual(schemas.validate_operator_waiver(document), [])
+        self.assertEqual(
+            schemas.validate_operator_waiver(
+                document, document_path="artifacts/operator/w.json"), [])
+        self.assertTrue(schemas.validate_operator_waiver(
+            document, document_path="/mnt/raid0/llm/tmp/w.json",
+            boundary=schemas.parse_trust_boundary(BOUNDARY_YAML)))
+
+
+# =============================================================================
+# Waiver authority — the RED-TEAM pass over the 2026-08-03 closure.
+#
+# Three of the four defects below are the same shape the closure was written to
+# answer, one layer further in: a guarantee obtainable by DELETING what it
+# inspects, and a guard walked around by spelling.
+# =============================================================================
+
+#: A boundary that declares the era registry, so the glob path can be attacked as
+#: well as the attestation root.
+ERA_BOUNDARY = schemas.parse_trust_boundary("""
+schema_version: session_bus.human_only_paths.v1
+paths:
+  - repo: epyc-orchestrator
+    glob: "orchestration/instrument_eras.yaml"
+    why: "era registry rows"
+""", source="<era-fixture>")
+
+
+def v8_shaped_waiver(**overrides) -> dict:
+    """The PRESERVED v8 waiver's shape: no attribution field anywhere.
+
+    `artifacts/operator/waive_q8_cpu_prefill_v8_20260725.json` carries
+    `ratified_at` and nothing else — no `authorized_by`, `ratified_by`,
+    `approved_by`, `attested_by` or `granted_by`. That is a fact about the genuine
+    ratified record, so it is a fixture here rather than something to be fixed
+    there.
+    """
+    doc = {
+        "schema": t3.WAIVER_SCHEMA_V8_CPU_PREFILL,
+        "decision": "WAIVE",
+        "protocol": "P-BENCH-PREFILL-1",
+        "protocol_changed": False,
+        "candidate_head": CANDIDATE_COMMIT,
+        "production_head": BASE_COMMIT,
+        "scope": {"excluded_pairs": ["llama_cpu.prefill"]},
+        "reason": "the Q8 workload cannot satisfy the ratified core-equivalent floor",
+        "consequences": ["No v9 Q8 prefill non-regression claim may be made."],
+        "ratified_at": "2026-08-02T00:00:00Z",
+    }
+    doc.update(overrides)
+    return doc
+
+
+class TestOperatorRootCannotBeManufactured(unittest.TestCase):
+    """The repo-name strip must REDUCE a citation, never invent one.
+
+    `repo_relative_forms` dropped the first path segment of any absolute citation
+    under a checkout root, so `/mnt/raid0/llm/tmp/artifacts/operator/w.json`
+    reduced to `artifacts/operator/w.json`. `/mnt/raid0/llm/tmp/` is the loop's own
+    scratch root — `resource/device_claim.py` puts its lock files there — so the
+    trust-boundary PASS the provenance check exists to withhold was obtainable with
+    `mkdir -p`.
+    """
+
+    def test_the_loops_scratch_root_cannot_spell_the_operator_root(self):
+        for path in ("/mnt/raid0/llm/tmp/artifacts/operator/waive-q8.json",
+                     "/workspace/tmp/artifacts/operator/waive-q8.json",
+                     "/mnt/raid0/llm/scratch/ak/artifacts/operator/w.json"):
+            with self.subTest(path=path):
+                check = schemas.operator_owned_path_check(
+                    path, boundary=schemas.parse_trust_boundary(BOUNDARY_YAML))
+                self.assertEqual(check.outcome, schemas.FAIL, check.reasons)
+
+    def test_a_scratch_waiver_that_spells_the_operator_root_blocks_the_run(self):
+        cells, results = failing_matrix()
+        binding = waiver_binding(
+            document_path="/mnt/raid0/llm/tmp/artifacts/operator/waive-q8.json")
+        result = t3.run_t3(request(_cells=cells, _results=results, waivers=(binding,)))
+        self.assertEqual(result.verdict, "FAIL", reasons_of(result))
+        self.assertIn("llama_cpu.prefill", result.verdict_computation.failed_cells)
+
+    def test_a_scratch_dir_cannot_wear_a_human_only_glob_either(self):
+        # The same strip made `/mnt/raid0/llm/tmp/orchestration/instrument_eras.yaml`
+        # match the era-registry glob, i.e. any manifest entry, not just the root.
+        self.assertEqual(
+            schemas.operator_owned_path_check(
+                "/mnt/raid0/llm/tmp/orchestration/instrument_eras.yaml",
+                boundary=ERA_BOUNDARY).outcome,
+            schemas.FAIL)
+
+    def test_a_real_checkout_still_reduces_to_its_repo_relative_form(self):
+        # COMPLIANT-PATH CONTROL. The strip exists so an absolute citation inside a
+        # checkout matches a manifest glob written repo-relative. That must keep
+        # working, or the fix has forbidden the idiom it was protecting.
+        self.assertEqual(
+            schemas.operator_owned_path_check(
+                "/workspace/repos/epyc-orchestrator/orchestration/instrument_eras.yaml",
+                boundary=ERA_BOUNDARY).outcome,
+            schemas.PASS)
+        for path in ("/workspace/artifacts/operator/waive-q8.json",
+                     "/mnt/raid0/llm/epyc-inference-research/artifacts/operator/w.json",
+                     "/workspace/repos/epyc-orchestrator/artifacts/operator/w.json",
+                     "artifacts/operator/waive-q8-v9.json"):
+            with self.subTest(path=path):
+                self.assertEqual(
+                    schemas.operator_owned_path_check(
+                        path,
+                        boundary=schemas.parse_trust_boundary(BOUNDARY_YAML)).outcome,
+                    schemas.PASS)
+
+    def test_the_checkout_names_are_derived_from_the_backend_source_trees(self):
+        # Not a hand-list: a backend whose tree this set does not know about would
+        # silently stop reducing, so the kernel trees come from the SSOT.
+        self.assertTrue(schemas.SOURCE_TREES <= schemas.REPO_CHECKOUT_NAMES)
+        self.assertNotIn("tmp", schemas.REPO_CHECKOUT_NAMES)
+
+
+class TestAuthorshipIsNotSatisfiedByOmission(unittest.TestCase):
+    """A five-field scan is satisfiable by naming none of the five fields."""
+
+    def test_a_legacy_waiver_with_no_author_and_no_provenance_is_refused(self):
+        binding = waiver_binding(
+            v8_shaped_waiver(),
+            document_path="/mnt/raid0/llm/tmp/ak/waive-q8.json")
+        verification = verify(binding,
+                              boundary=schemas.parse_trust_boundary(BOUNDARY_YAML))
+        self.assertFalse(verification.verified)
+        self.assertEqual(verification.predicate_results["human_attested"], schemas.FAIL)
+        self.assertIn("a timestamp is not an author",
+                      " ".join(verification.check.reasons))
+
+    def test_an_unauthored_waiver_at_an_unknown_path_does_not_suppress_a_cell(self):
+        cells, results = failing_matrix()
+        binding = waiver_binding(
+            v8_shaped_waiver(),
+            document_path="/mnt/raid0/llm/tmp/ak/waive-q8.json")
+        result = t3.run_t3(request(_cells=cells, _results=results, waivers=(binding,)))
+        self.assertEqual(result.verdict, "FAIL", reasons_of(result))
+        self.assertIn("llama_cpu.prefill", result.verdict_computation.failed_cells)
+
+    def test_an_unknown_provenance_does_not_stand_in_for_an_author(self):
+        # COULD_NOT_CHECK is not PASS here either: an origin nobody can establish
+        # establishes no authorship.
+        binding = waiver_binding(v8_shaped_waiver(),
+                                 document_path="/mnt/raid0/llm/tmp/ak/waive-q8.json")
+        verification = verify(binding, boundary=UNREADABLE_BOUNDARY)
+        self.assertEqual(verification.predicate_results["human_attested"], schemas.FAIL)
+
+    def test_the_preserved_v8_shape_still_verifies_from_its_own_home(self):
+        # COMPLIANT-PATH CONTROL. The genuine v8 waiver names no author at all, so
+        # the refusal must not close the door v8 itself walked through: at an
+        # operator-owned path it verifies, and the bundle records WHICH fact carried
+        # the attribution.
+        for path in ("artifacts/operator/v8-final-freeze-20260725/waiver.json",
+                     "/workspace/artifacts/operator/waive_q8_cpu_prefill_v8_20260725"
+                     ".json"):
+            with self.subTest(path=path):
+                binding = waiver_binding(v8_shaped_waiver(), document_path=path)
+                verification = verify(binding, boundary=UNREADABLE_BOUNDARY)
+                self.assertTrue(verification.verified, verification.check.reasons)
+                self.assertEqual(
+                    verification.predicate_results["attribution_source"],
+                    "operator_owned_path")
+
+    def test_a_named_human_is_still_attributed_by_name(self):
+        # COMPLIANT-PATH CONTROL for the other branch: the ordinary schema names an
+        # author, and that is what carries it — not the path.
+        verification = verify(waiver_binding(), boundary=UNREADABLE_BOUNDARY)
+        self.assertTrue(verification.verified, verification.check.reasons)
+        self.assertEqual(verification.predicate_results["attribution_source"],
+                         "named_actor")
+
+    def test_a_machine_name_is_refused_even_from_the_operator_root(self):
+        # Provenance never launders a machine attribution: the two conditions are
+        # AND-ed on the refusal side, not OR-ed.
+        binding = waiver_binding(autokernel_waiver(authorized_by="autokernel"),
+                                 document_path="artifacts/operator/waive-q8-v9.json")
+        verification = verify(binding,
+                              boundary=schemas.parse_trust_boundary(BOUNDARY_YAML))
+        self.assertFalse(verification.verified)
+        self.assertEqual(verification.predicate_results["human_attested"], schemas.FAIL)
+
+
+class TestSeparatorsDoNotLaunderAMachineName(unittest.TestCase):
+    """The scan split on every non-alphanumeric, so a hyphen walked around it."""
+
+    def test_a_separator_spelling_is_still_a_machine_name(self):
+        for identity in ("auto-kernel", "auto_kernel", "auto.kernel", "auto pilot",
+                         "Auto Kernel", "autokernel2", "sub agent", "auto-pilot"):
+            with self.subTest(identity=identity):
+                self.assertTrue(schemas.machine_actor_tokens(identity), identity)
+                verification = verify(
+                    waiver_binding(autokernel_waiver(authorized_by=identity)),
+                    boundary=UNREADABLE_BOUNDARY)
+                self.assertFalse(verification.verified, identity)
+                self.assertIn("machine actor", " ".join(verification.check.reasons))
+
+    def test_a_human_name_is_still_a_human_name(self):
+        # COMPLIANT-PATH CONTROL. Re-joining adjacent runs must not become substring
+        # matching: "scriptor" contains "script" and is a fine handle, and a
+        # two-part human name must not become a token by concatenation.
+        for identity in ("scriptor", "Daniele Pinna", "operator", "daniele",
+                         "Anna-Maria", "d.pinna", "Jean-Luc Picard", "ops-daniele"):
+            with self.subTest(identity=identity):
+                self.assertEqual(schemas.machine_actor_tokens(identity), (), identity)
+                verification = verify(
+                    waiver_binding(autokernel_waiver(authorized_by=identity)),
+                    boundary=UNREADABLE_BOUNDARY)
+                self.assertTrue(verification.verified, verification.check.reasons)
+
+
+# =============================================================================
 # Phase 2 — linkage (INC-20260731-ggml-linkage-silent-cpu-fallback)
 # =============================================================================
 
@@ -1169,6 +1634,136 @@ class TestObjective(unittest.TestCase):
         self.assertEqual(result.verdict, "FAIL")
         self.assertIn("an unmeasured phase is not a non-inferior one", reasons_of(result))
 
+    def _trade(self, **overrides):
+        fields = {"backend": "llama_cpu", "regressing_phase": "decode",
+                  "regression_band": (-0.03, -0.01), "gaining_phase": "prefill",
+                  "expected_gain": 0.18, "roles_affected": ("worker_general",),
+                  "declared_at": CAMPAIGN_START, "campaign_start_at": CAMPAIGN_START,
+                  "operator_approved": True, "approved_by": "operator"}
+        fields.update(overrides)
+        return t3.PhaseTradeException(**fields)
+
+    def _traded_run(self, gaining_standing, **trade_overrides):
+        """A run where `decode` regressed under an approved trade, and `prefill`
+        — the phase the trade was priced on — carries `gaining_standing`."""
+        table = {("llama_cpu", "decode"): t3.STANDING_REGRESSED}
+        if gaining_standing is not None:
+            table[("llama_cpu", "prefill")] = gaining_standing
+        keep = standings(table)
+        if gaining_standing is None:
+            keep = tuple(s for s in keep
+                         if (s.backend, s.workload_phase) != ("llama_cpu", "prefill"))
+        return t3.run_t3(request(standings=keep,
+                                 phase_trades=(self._trade(**trade_overrides),)))
+
+    def test_a_trade_whose_gaining_phase_also_regressed_is_a_finding(self):
+        # `expected_gain` was validated for structure and compared to nothing, so
+        # a trade could pay for a regression with a second one and pass silently.
+        result = self._traded_run(t3.STANDING_REGRESSED)
+        self.assertEqual(result.verdict, "FAIL")
+        self.assertIn("contradicts the pre-declared expected gain", reasons_of(result))
+
+    def test_a_trade_whose_gain_was_never_established_is_a_finding(self):
+        for standing in (t3.STANDING_NON_INFERIOR, t3.STANDING_INDETERMINATE,
+                         t3.STANDING_NOT_MEASURED):
+            with self.subTest(standing=standing):
+                result = self._traded_run(standing)
+                self.assertEqual(result.verdict, "FAIL")
+                self.assertIn("was not established", reasons_of(result))
+
+    def test_a_trade_priced_on_a_phase_nobody_measured_is_a_finding(self):
+        result = self._traded_run(None)
+        self.assertEqual(result.verdict, "FAIL")
+        self.assertIn("a regression with a story attached", reasons_of(result))
+
+    def test_a_trade_priced_on_a_phase_that_is_not_the_backends_is_a_finding(self):
+        result = self._traded_run(t3.STANDING_IMPROVED, gaining_phase="throughput")
+        self.assertEqual(result.verdict, "FAIL")
+        self.assertIn("no standing for that phase", reasons_of(result))
+
+    def test_a_trade_with_no_expected_gain_is_refused_at_declaration(self):
+        for gain in (0.0, -0.2, float("nan"), float("inf")):
+            with self.subTest(gain=gain):
+                with self.assertRaises(t3.T3InputError):
+                    self._trade(expected_gain=gain)
+
+    def test_a_realised_trade_is_admitted_and_the_note_names_the_standing(self):
+        # COMPLIANT-PATH CONTROL: the comparison must not forbid the thing §1.6
+        # allows. The gain happened, so the trade stands — and the receipt now
+        # records the REALISED standing beside the pre-declared gain.
+        result = self._traded_run(t3.STANDING_IMPROVED)
+        self.assertEqual(result.verdict, "PASS", reasons_of(result))
+        notes = " ".join(n for r in result.phase_results for n in r.notes)
+        self.assertIn("realised standing 'improved'", notes)
+
+    def test_the_realisation_is_recorded_in_the_phase_detail(self):
+        result = self._traded_run(t3.STANDING_IMPROVED)
+        detail = [r.detail for r in result.phase_results
+                  if r.phase_id == t3.PHASE_CAPACITY_UTILITY][0]
+        realisation = detail["phase_trade.llama_cpu.decode.realisation"]
+        self.assertTrue(realisation["realised"])
+        self.assertEqual(realisation["expected_gain"], 0.18)
+        self.assertEqual(realisation["gaining_standing"], t3.STANDING_IMPROVED)
+
+    def test_a_trade_the_loop_approved_is_not_an_operator_decision(self):
+        # §1.6 makes the trade an operator decision. `approved_by` was the only
+        # place the approver is NAMED and it was unguarded, while the
+        # identically-shaped `authorized_by` on a §10.4 waiver is refused a machine
+        # name — so the loop could approve its own regression by setting a boolean
+        # and typing its own name.
+        for approver in ("autokernel", "the controller", "ak-runner", "auto-pilot"):
+            with self.subTest(approver=approver):
+                result = self._traded_run(t3.STANDING_IMPROVED, approved_by=approver)
+                self.assertEqual(result.verdict, "FAIL", reasons_of(result))
+                self.assertIn("machine actor", reasons_of(result))
+
+    def test_an_operator_approved_trade_is_still_admitted(self):
+        # COMPLIANT-PATH CONTROL: the approver vocabulary must not refuse the people
+        # who actually approve these.
+        for approver in ("operator", "Daniele Pinna", "daniele"):
+            with self.subTest(approver=approver):
+                result = self._traded_run(t3.STANDING_IMPROVED, approved_by=approver)
+                self.assertEqual(result.verdict, "PASS", reasons_of(result))
+
+    def test_a_regression_band_that_describes_a_gain_is_refused(self):
+        # `readiness.PhaseTradeException` refuses `high > 0` at declaration; T3
+        # mirrored the `expected_gain` half of that refusal and not this one, so a
+        # "regression band" of (0.01, 0.05) was an admissible exception here and
+        # inadmissible one module away.
+        for band in ((0.01, 0.05), (-0.03, 0.02)):
+            with self.subTest(band=band):
+                with self.assertRaises(t3.T3InputError):
+                    self._trade(regression_band=band)
+
+    def test_an_oriented_regression_band_is_still_accepted(self):
+        # COMPLIANT-PATH CONTROL.
+        for band in ((-0.03, -0.01), (-0.03, 0.0)):
+            with self.subTest(band=band):
+                self.assertEqual(self._trade(regression_band=band).check().outcome,
+                                 schemas.PASS)
+
+    def test_two_standings_for_one_phase_are_a_contradiction_not_a_preference(self):
+        # Every per-phase consumer in this gate is a dict keyed on
+        # (backend, workload_phase) — `owned`, and the trade-realisation lookup — so
+        # a second standing for one phase WINS silently, and the party supplying it
+        # is the party being gated. Here the regression is real and a second,
+        # later standing overwrites it with `non_inferior`.
+        regressed = standings({("llama_cpu", "decode"): t3.STANDING_REGRESSED})
+        overwrite = t3.PhaseStanding(
+            backend="llama_cpu", workload_phase="decode", protocol_id="P-BENCH-1",
+            standing=t3.STANDING_NON_INFERIOR, cell_ids=("llama_cpu.decode",),
+            evidence_ref="standing:llama_cpu.decode.second")
+        result = t3.run_t3(request(standings=regressed + (overwrite,)))
+        self.assertEqual(result.verdict, "FAIL", reasons_of(result))
+        self.assertIn("more than one standing for the phase", reasons_of(result))
+
+    def test_one_standing_per_phase_is_not_a_duplicate(self):
+        # COMPLIANT-PATH CONTROL: four standings over four distinct (backend, phase)
+        # keys is the normal shape and must stay silent.
+        result = t3.run_t3(request(standings=standings()))
+        self.assertEqual(result.verdict, "PASS", reasons_of(result))
+        self.assertNotIn("more than one standing", reasons_of(result))
+
     def test_capacity_floor_breach_fails(self):
         floor = t3.CapacityFloor(cell_id="llama_gpu.capacity_utility",
                                  quantity="context_tokens", floor=32768.0,
@@ -1409,8 +2004,35 @@ class TestComplexityCeiling(unittest.TestCase):
 class TestFingerprintAndRerun(unittest.TestCase):
 
     def test_fingerprint_facets_are_enumerated_not_implied(self):
-        self.assertEqual(len(t3.FINGERPRINT_FACETS), 15)
+        self.assertEqual(len(t3.FINGERPRINT_FACETS), 18)
         self.assertIn("active_waiver_sha256", t3.FINGERPRINT_FACETS)
+        self.assertIn("active_waiver_coverage", t3.FINGERPRINT_FACETS)
+        self.assertIn("phase_protocol_standing", t3.FINGERPRINT_FACETS)
+        self.assertIn("protocol_registry_standing", t3.FINGERPRINT_FACETS)
+
+    def test_two_runs_whose_waivers_cover_different_cells_are_different_runs(self):
+        # The digest is a fact about the DOCUMENT; the coverage is a fact about the
+        # RUN. Hashing only the digest gave both runs one fingerprint, so §9.1
+        # would have refused the second as "already sealed" — a rerun that
+        # suppresses a different cell is not the run that was already graded.
+        cells, results = failing_matrix()
+        prefill = request(_cells=cells, _results=results,
+                          waivers=(waiver_binding(),)).fingerprint()
+        decode = request(_cells=cells, _results=results,
+                         waivers=(waiver_binding(
+                             covers_cell_ids=("llama_cpu.decode",)),)).fingerprint()
+        self.assertNotEqual(prefill, decode)
+
+    def test_the_same_waiver_over_the_same_cells_is_the_same_run(self):
+        # COMPLIANT-PATH CONTROL: the coverage facet must not make an unchanged
+        # rerun look new, or §9.1's idempotence is unreachable.
+        cells, results = failing_matrix()
+        first = request(_cells=cells, _results=results,
+                        waivers=(waiver_binding(),)).fingerprint()
+        second = request(_cells=cells, _results=results, run_id="akt3-v9-002",
+                         now="2026-08-03T18:00:00Z",
+                         waivers=(waiver_binding(),)).fingerprint()
+        self.assertEqual(first, second)
 
     def test_run_id_and_timestamp_do_not_perturb_the_fingerprint(self):
         first = request().fingerprint()
@@ -1692,7 +2314,8 @@ class TestCalibrationV8(unittest.TestCase):
             branch="production-consolidated-v7", commit=V7_HEAD,
             archive_root="/mnt/raid0/llm/llama.cpp-v7-build-backup-6ad45fa3ff",
             binaries=((V7_BASELINE_BINARY, digest("v7-llama-server")),),
-            libraries=(("/mnt/raid0/llm/llama.cpp-v7-build-backup-6ad45fa3ff/cpu-bin/"
+            libraries=((LLAMA_BACKENDS,
+                        "/mnt/raid0/llm/llama.cpp-v7-build-backup-6ad45fa3ff/cpu-bin/"
                         "libggml-base.so.0", digest("v7-libggml-base")),)),))
         request_with_archive = t3.calibration_request(
             self.freeze, now=NOW, include_waiver=True, archive=preserved_v7)
@@ -1723,7 +2346,8 @@ class TestCalibrationV8(unittest.TestCase):
             branch="production-consolidated-v7", commit=V7_HEAD,
             archive_root="/mnt/raid0/llm/llama.cpp-v7-build-backup-6ad45fa3ff",
             binaries=((V7_BASELINE_BINARY, digest("v7-llama-server")),),
-            libraries=(("/mnt/raid0/llm/llama.cpp-v7-build-backup-6ad45fa3ff/cpu-bin/"
+            libraries=((LLAMA_BACKENDS,
+                        "/mnt/raid0/llm/llama.cpp-v7-build-backup-6ad45fa3ff/cpu-bin/"
                         "libggml-base.so.0", digest("v7-libggml-base")),)),))
         base = t3.calibration_request(self.freeze, now=NOW, include_waiver=True,
                                       archive=preserved_v7)
@@ -2139,6 +2763,296 @@ class TestNoUndeclaredReleaseThreshold(unittest.TestCase):
                                    stability_min_cycles=5))
         self.assertEqual(result.verdict, "FAIL")
         self.assertIn("below the declared release minimum of 5", reasons_of(result))
+
+
+# =============================================================================
+# Per-phase protocol ratification (AK5 carried-forward item)
+#
+# `ProtocolBinding` proved the FREEZE protocol was ratified. The protocols the
+# matrix cells were GRADED UNDER arrived as bare ids, so a cell measured under a
+# DRAFT `P-STT-*` was indistinguishable from one measured under Annex B's
+# `P-BENCH-1`, and the gate licensed claims for both.
+# =============================================================================
+
+class TestPerPhaseProtocolRatification(unittest.TestCase):
+
+    def test_a_bare_id_is_could_not_check_never_pass(self):
+        bound = t3.phase_protocol_binding(
+            "P-BENCH-1", backend="llama_cpu", workload_phase="decode")
+        self.assertIsNone(bound.ratified)
+        self.assertEqual(bound.check().outcome, schemas.COULD_NOT_CHECK)
+        self.assertIn("BARE ID", " ".join(bound.check().reasons))
+
+    def test_a_bare_id_blocks_the_run(self):
+        """The bite: this run PASSed before the per-phase binding existed."""
+        result = t3.run_t3(request(phase_protocols={
+            b: dict(LLAMA_PHASE_PROTOCOLS) for b in LLAMA_BACKENDS}))
+        self.assertEqual(result.verdict, "FAIL")
+        self.assertIn("arrives as a BARE ID", reasons_of(result))
+
+    def test_a_draft_protocol_blocks_the_run(self):
+        result = t3.run_t3(request(phase_protocols={
+            b: {"prefill": draft_protocol("P-BENCH-PREFILL-1"),
+                "decode": ratified_protocol("P-BENCH-1")}
+            for b in LLAMA_BACKENDS}))
+        self.assertEqual(result.verdict, "FAIL")
+        self.assertIn("declared NOT ratified", reasons_of(result))
+
+    def test_ratified_bindings_are_the_compliant_path_and_pass(self):
+        """The control: the guard must not forbid its own legitimate idiom."""
+        result = t3.run_t3(request())
+        self.assertEqual(result.verdict, "PASS", reasons_of(result))
+        self.assertNotIn("BARE ID", reasons_of(result))
+        self.assertNotIn("declared NOT ratified", reasons_of(result))
+
+    def test_a_ratification_receipt_for_another_protocol_is_refused(self):
+        with self.assertRaises(t3.T3InputError) as caught:
+            t3.PhaseProtocolBinding(
+                backend="llama_cpu", workload_phase="decode",
+                protocol_id="P-BENCH-1", binding=ratified_protocol("P-GPU-1"))
+        self.assertIn("A ratification receipt for a DIFFERENT protocol",
+                      str(caught.exception))
+
+    def test_a_binding_filed_under_another_phase_is_refused(self):
+        decode = t3.phase_protocol_binding(
+            ratified_protocol("P-BENCH-1"), backend="llama_cpu",
+            workload_phase="decode")
+        with self.assertRaises(t3.T3InputError):
+            t3.phase_protocol_binding(
+                decode, backend="llama_cpu", workload_phase="prefill")
+
+    def test_the_map_still_reads_as_a_protocol_owner_in_phase_four(self):
+        """Normalising the map must not delete the §1.6 ownership check it feeds."""
+        crossed = {b: {"prefill": ratified_protocol("P-BENCH-PREFILL-1"),
+                       "decode": ratified_protocol("P-GPU-1")}
+                   for b in LLAMA_BACKENDS}
+        result = t3.run_t3(request(phase_protocols=crossed))
+        self.assertEqual(result.verdict, "FAIL")
+        self.assertIn("is owned by 'P-GPU-1'", reasons_of(result))
+
+    def test_an_unknown_backend_key_is_refused_rather_than_ignored(self):
+        with self.assertRaises(t3.T3InputError):
+            request(phase_protocols={"not_a_backend": {"decode": "P-BENCH-1"}})
+
+    def test_ratifying_a_phase_protocol_moves_the_fingerprint(self):
+        """§9.1's idempotence is over the evidence GRADED, and the standing of the
+        instrument is part of it. A fingerprint blind to ratification would send the
+        post-ratification rerun into REFUSED_UNCHANGED_FINGERPRINT."""
+        self.assertIn("phase_protocol_standing", t3.FINGERPRINT_FACETS)
+        draft = request(phase_protocols={
+            b: {"prefill": draft_protocol("P-BENCH-PREFILL-1"),
+                "decode": ratified_protocol("P-BENCH-1")}
+            for b in LLAMA_BACKENDS})
+        self.assertNotEqual(draft.fingerprint(), request().fingerprint())
+        bare = request(phase_protocols={b: dict(LLAMA_PHASE_PROTOCOLS)
+                                        for b in LLAMA_BACKENDS})
+        self.assertNotEqual(bare.fingerprint(), draft.fingerprint())
+
+    def test_an_unchanged_binding_keeps_the_fingerprint_stable(self):
+        """Control: the facet must not make the key perturbable for free."""
+        self.assertEqual(request().fingerprint(), request().fingerprint())
+
+
+class TestDeclaredRatifiedProtocolIds(unittest.TestCase):
+    """The set handed to the adapters is DERIVED from hashed bindings. A constant,
+    a flag, or an adapter edit must not be able to produce a member of it."""
+
+    def test_only_ratified_bindings_are_in_the_set(self):
+        req = request(protocol_registry=(ratified_protocol("P-AK-SEARCH-1", annex="K"),
+                                         draft_protocol("P-STT-1")))
+        ids = t3.declared_ratified_protocol_ids(req)
+        self.assertIn("P-AK-SEARCH-1", ids)
+        self.assertIn("P-BENCH-1", ids)
+        self.assertNotIn("P-STT-1", ids)
+        # The freeze protocol is a draft in the default fixture and must not appear.
+        self.assertNotIn(t3.RELEASE_PROTOCOL_ID, ids)
+
+    def test_bare_ids_contribute_nothing(self):
+        req = request(phase_protocols={b: dict(LLAMA_PHASE_PROTOCOLS)
+                                       for b in LLAMA_BACKENDS})
+        self.assertEqual(t3.declared_ratified_protocol_ids(req), ())
+
+
+class TestSpeechAdapterReadinessIsConsulted(unittest.TestCase):
+    """AK5/AK9: *"the adapters know … and nothing in the release plane calls it."*
+
+    Driven through the PRESERVED 2026-07-31 speech freeze rather than a synthetic
+    plan, so the seam is exercised on the artifact it exists for.
+    """
+
+    def setUp(self):
+        self.freezes = t3.preserved_freeze_from_speech_artifact(SPEECH_RATIFICATION)
+        self.freeze = self.freezes["whisper.cpp"]
+
+    def _reasons(self, **overrides):
+        base = t3.calibration_request(self.freeze, now=NOW)
+        fields = {f.name: getattr(base, f.name)
+                  for f in dataclasses.fields(t3.T3Request)}
+        fields.update(overrides)
+        return reasons_of(t3.run_t3(t3.T3Request(**fields)))
+
+    def test_the_registry_names_both_speech_backends(self):
+        self.assertEqual(sorted(t3.RELEASE_READINESS_BY_BACKEND),
+                         ["qwentts_tts", "whisper_stt"])
+
+    def test_a_draft_family_blocks_through_the_adapters_own_verdict(self):
+        """The bite: nothing called `release_gate_readiness()` before this."""
+        text = self._reasons()
+        self.assertIn("release_gate_readiness() returns COULD_NOT_CHECK", text)
+
+    def test_search_authority_alone_still_blocks_release(self):
+        text = self._reasons(
+            protocol_registry=(ratified_protocol("P-AK-SEARCH-1", annex="K"),))
+        self.assertIn("release_gate_readiness() returns COULD_NOT_CHECK", text)
+        self.assertIn("are not ratified", text)
+
+    def test_a_fully_ratified_family_clears_the_readiness_seam(self):
+        """The control: the seam must not forbid the operator's compliant path.
+
+        Ratifying `P-AK-SEARCH-1` and every `whisper_stt` release protocol — each as
+        a hashed `ProtocolBinding`, which is the only route there is — must make the
+        adapter answer PASS and remove the readiness blocker. (The run still FAILs on
+        the artifact's own holes: an unclean tree and no archived incumbent. Those
+        are facts about the 2026-07-31 freeze, not about this seam.)
+        """
+        registry = tuple(
+            ratified_protocol(pid, annex="K")
+            for pid in (whisper_stt.SEARCH_PROTOCOL_ID,)
+            + tuple(whisper_stt.RELEASE_PROTOCOL_IDS))
+        text = self._reasons(protocol_registry=registry)
+        self.assertNotIn("release_gate_readiness()", text)
+        # …and the adapter itself agrees, asked with the same derived set.
+        base = t3.calibration_request(self.freeze, now=NOW)
+        fields = {f.name: getattr(base, f.name)
+                  for f in dataclasses.fields(t3.T3Request)}
+        fields["protocol_registry"] = registry
+        ids = t3.declared_ratified_protocol_ids(t3.T3Request(**fields))
+        self.assertEqual(whisper_stt.release_gate_readiness(ids).outcome, schemas.PASS)
+
+    def test_a_llama_only_release_is_not_blocked_by_a_seam_it_has_no_adapter_for(self):
+        """Control: a backend absent from the registry is not swept up by it."""
+        result = t3.run_t3(request())
+        self.assertEqual(result.verdict, "PASS", reasons_of(result))
+        self.assertNotIn("release_gate_readiness()", reasons_of(result))
+
+
+class TestTheReadinessAuditActuallyAudits(unittest.TestCase):
+    """A registry nothing calls is the defect it was added to close. The call is a
+    checked property of this module's AST, not a convention."""
+
+    def test_the_live_module_consults_the_registry(self):
+        check = t3.audit_backend_readiness_is_consulted()
+        self.assertEqual(check.outcome, schemas.PASS, check.reasons)
+
+    def test_a_module_that_looks_up_and_never_calls_fails(self):
+        source = (
+            "RELEASE_READINESS_BY_BACKEND = {}\n"
+            "def declared_ratified_protocol_ids(request):\n    return ()\n"
+            "def phase_identity_preflight(request):\n"
+            "    for backend in request.plan.backends:\n"
+            "        readiness_of = RELEASE_READINESS_BY_BACKEND.get(backend)\n"
+            "    return None\n"
+        )
+        check = t3.audit_backend_readiness_is_consulted(source)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("never calls it", " ".join(check.reasons))
+
+    def test_a_module_that_never_reads_the_registry_fails(self):
+        source = (
+            "RELEASE_READINESS_BY_BACKEND = {}\n"
+            "def declared_ratified_protocol_ids(request):\n    return ()\n"
+            "def phase_identity_preflight(request):\n    return None\n"
+        )
+        check = t3.audit_backend_readiness_is_consulted(source)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("does not read RELEASE_READINESS_BY_BACKEND",
+                      " ".join(check.reasons))
+
+    def test_empty_source_is_could_not_check_never_pass(self):
+        check = t3.audit_backend_readiness_is_consulted("")
+        self.assertEqual(check.outcome, schemas.COULD_NOT_CHECK)
+
+    def test_foreign_source_is_could_not_check_never_pass(self):
+        check = t3.audit_backend_readiness_is_consulted("def unrelated():\n    pass\n")
+        self.assertEqual(check.outcome, schemas.COULD_NOT_CHECK)
+
+    def test_unparseable_source_is_could_not_check(self):
+        self.assertEqual(
+            t3.audit_backend_readiness_is_consulted("def (").outcome,
+            schemas.COULD_NOT_CHECK)
+
+    def test_the_compliant_shape_passes(self):
+        """Control: the audit must accept the idiom it is written to require.
+
+        The shape below is the LIVE module's: look the predicate up, call it, bind
+        the verdict, and block on a non-PASS. This control previously ran on a
+        preflight that called the predicate and threw the answer away, returning
+        `None` and never touching `blocking` — which is not the compliant shape, it
+        is the fail-open one, and asserting PASS on it made the control certify the
+        defect. See `test_t3_protocol_binding_redteam.py` for the FAILing cases.
+        """
+        source = (
+            "RELEASE_READINESS_BY_BACKEND = {}\n"
+            "def declared_ratified_protocol_ids(request):\n    return ()\n"
+            "def phase_identity_preflight(request):\n"
+            "    blocking = []\n"
+            "    ratified_ids = declared_ratified_protocol_ids(request)\n"
+            "    for backend in request.plan.backends:\n"
+            "        readiness_of = RELEASE_READINESS_BY_BACKEND.get(backend)\n"
+            "        if readiness_of is None:\n            continue\n"
+            "        readiness = readiness_of(ratified_ids)\n"
+            "        if readiness.outcome != schemas.PASS:\n"
+            "            blocking.append(f'{backend}: {readiness.reasons}')\n"
+            "    return blocking\n"
+        )
+        self.assertEqual(
+            t3.audit_backend_readiness_is_consulted(source).outcome, schemas.PASS)
+
+
+# =============================================================================
+# §10.5 — the archived library's BACKEND ATTRIBUTION, recorded at the source
+# =============================================================================
+
+class TestArchivedLibraryAttribution(unittest.TestCase):
+
+    def test_an_unattributed_pair_is_refused(self):
+        """The bite: `(path, sha256)` was the whole shape before this."""
+        with self.assertRaises(t3.T3InputError) as caught:
+            archive(libraries=(("/mnt/raid0/llm/kernels/archive/v8/cpu/libggml-base.so.0",
+                                digest("v8-libggml-base")),))
+        self.assertIn("UNATTRIBUTED shape", str(caught.exception))
+
+    def test_an_empty_backend_set_is_refused(self):
+        with self.assertRaises(t3.T3InputError):
+            archive(libraries=(((), "/mnt/raid0/llm/kernels/archive/v8/cpu/lib.so",
+                                digest("lib")),))
+
+    def test_a_bare_string_is_not_a_backend_set(self):
+        with self.assertRaises(t3.T3InputError) as caught:
+            archive(libraries=(("llama_cpu",
+                                "/mnt/raid0/llm/kernels/archive/v8/cpu/lib.so",
+                                digest("lib")),))
+        self.assertIn("not a backend SET", str(caught.exception))
+
+    def test_an_unknown_backend_is_refused(self):
+        with self.assertRaises(t3.T3InputError):
+            archive(libraries=((("not_a_backend",),
+                                "/mnt/raid0/llm/kernels/archive/v8/cpu/lib.so",
+                                digest("lib")),))
+
+    def test_a_shared_library_may_name_both_backends(self):
+        """Control: one ggml runtime serving two backends is the normal case, and
+        the guard must not force a false single attribution onto it."""
+        entry = archive().entry(t3.ARCHIVE_GENERATION_N1)
+        self.assertEqual(entry.attributed_backends, ("llama_cpu", "llama_gpu"))
+        for backend in LLAMA_BACKENDS:
+            self.assertEqual(len(entry.libraries_for(backend)), 1)
+        self.assertEqual(t3.run_t3(request()).verdict, "PASS")
+
+    def test_the_attribution_reaches_the_serialised_record(self):
+        entry = archive().to_dict()["entries"][0]
+        self.assertEqual(entry["libraries"][0]["backends"],
+                         ["llama_cpu", "llama_gpu"])
 
 
 if __name__ == "__main__":
