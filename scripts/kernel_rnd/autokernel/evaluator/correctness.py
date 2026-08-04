@@ -816,11 +816,24 @@ class SymbolTableDiff:
     tool_id: str
     receipt_ref: str
     produced_by: str
+    #: Registrations present on BOTH sides whose declared arity changed —
+    #: `GGML_CPU_OP(MUL_MAT, 2)` becoming `GGML_CPU_OP(MUL_MAT, 5)`. Added
+    #: 2026-08-04: `integrity.RegistrationDiff` has produced this since it was
+    #: written and this record had no field for it, so `chain.symbol_evidence`
+    #: could only report it in a `checks` tuple that no gate reads. §8.5.1 makes
+    #: an arity change hard for a SYMBOL and there is no reading under which a
+    #: registration's arity is softer: an op registered with the wrong operand
+    #: count dispatches wrong for every shape, and it compiles.
+    #:
+    #: Defaulted to `()` so records written before the field existed stay
+    #: constructible — and `()` is honest for them only because the projection
+    #: that fills it is the same one that produced them.
+    arity_changed_op_registrations: tuple = ()
 
     def __post_init__(self) -> None:
         for name in ("removed_symbols", "arity_changed_symbols", "added_symbols",
                      "removed_op_registrations", "removed_dispatch_predicates",
-                     "declared_removals"):
+                     "declared_removals", "arity_changed_op_registrations"):
             for item in _req_tuple(getattr(self, name), f"symbols.{name}"):
                 _req_str(item, f"symbols.{name}[]")
         _req_int(self.anchor_symbol_count, "symbols.anchor_symbol_count", minimum=1)
@@ -2180,6 +2193,14 @@ def check_symbol_and_registration_preservation(
     if undeclared_arity:
         reasons.append(f"{len(undeclared_arity)} symbol(s) changed arity undeclared: "
                        f"{list(undeclared_arity)}")
+    undeclared_reg_arity = tuple(
+        sorted(set(evidence.arity_changed_op_registrations) - declared))
+    if undeclared_reg_arity:
+        reasons.append(
+            f"{len(undeclared_reg_arity)} op registration(s) changed arity undeclared: "
+            f"{list(undeclared_reg_arity)}. A registration is data, not a symbol: the ELF "
+            "diff sees nothing, the build is clean, and the op dispatches with the wrong "
+            "operand count for every shape")
 
     shrinkage = 1.0 - (evidence.candidate_symbol_count / evidence.anchor_symbol_count)
     if shrinkage > policy.symbol_shrinkage_reject_ratio:

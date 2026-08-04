@@ -78,6 +78,93 @@ THE FIVE THINGS THIS MODULE REFUSES TO GET WRONG
    failure that is not durable is indistinguishable from a run that never
    happened.
 
+THE EXTENSION ROUND IS *EXTENDED*, NOT RE-DERIVED — AND WHY
+-----------------------------------------------------------
+For the CPU decode cell the calibration solves `B_min = 5` and `threshold = 10`,
+and the sign-martingale e-value over 5 same-sign blocks tops out at **5.5687**
+— the statistic is the SIGN of each block's effect, so the magnitude never
+enters and a candidate at a true factor of 3.0 returns the same 5.5687 as one at
+1.08. No candidate can cross on the base segment, whatever its real effect.
+Every win therefore comes from the declared extension round (10 same-sign blocks
+reach 42.29), which makes the question below load-bearing rather than academic:
+
+    when a run extends, is the order schedule RE-DERIVED for the extension
+    round, or EXTENDED from the base segment across two runner invocations?
+
+**It is EXTENDED.** One `OrderSchedule`, whose `base_blocks` is `B_min`, indexed
+straight through the base segment and every extension round. The argument is in
+the code, not in a preference:
+
+1. `OrderSchedule.order_for` has an explicit `index >= base_blocks` limb that
+   FLIPS the base order — *"extension = fresh REVERSED-order pairs"*. Under
+   re-derivation that limb is unreachable: a schedule re-derived for a 5-block
+   round is only ever asked for indices 0..4, so the extension would repeat the
+   base orders exactly. `statistics.BoundedExtension` refuses any `order` but
+   `"reversed"`, so re-derivation contradicts the only extension the protocol
+   can represent.
+2. `plan_blocks` already offsets extension blocks by `schedule.base_blocks`: it
+   takes the BASE schedule and continues its index line. It never re-derives.
+3. `statistics.SequentialEvaluation` — the rule's own driver, the thing that
+   TELLS a caller what the next block must be — refuses an `order_schedule`
+   whose `base_blocks != b_min`, and issues `order_for(len(blocks))` straight
+   through the extension. A re-derived, longer schedule is not constructible
+   there at all; `CampaignStatistics.order_schedule()` does not even accept a
+   block count.
+4. `statistics._check_block_identity` requires the pooled submission to be
+   `block_index == position` over 0..n-1. Base and extension are one index line
+   by the time the reducer sees them, so they must be one index line when they
+   are produced.
+5. Prefix-stability is argued in `OrderSchedule`'s own docstring as *"adding
+   extension blocks cannot retroactively change the schedule of the base
+   blocks"*. That sentence is about ONE schedule being extended; under
+   re-derivation there is nothing for it to be retroactive about.
+
+The statistical reason underneath: the order assignment must be a pre-committed
+function of (campaign seed, candidate, block index) fixed before any data is
+seen. Extending evaluates that function at further indices. Re-deriving would
+introduce a SECOND schedule whose `base_blocks` parameter depends on how many
+blocks were actually run — which depends on the data — so the randomization
+scheme itself would become data-dependent, and it would silently drop the
+reversal. `MicrobenchPlan.extend()` therefore carries the base plan's
+`campaign_seed`, `candidate_id`, `attempt` and `base_blocks` across unchanged,
+`ExtensionAuthorization` refuses a `base_blocks` that disagrees with the rule's,
+and `assemble_run_blocks()` refuses to pool two runs that are not the same
+schedule (`ScheduleMismatch`). A mismatch is a hard error, never a relabel.
+
+AND THE EXTENSION IS DECLARED, NOT GRANTED AFTER THE FACT
+--------------------------------------------------------
+Anytime-validity is the whole justification for the e-process, and it survives
+looking but not rule-changing. So an extension round here is not something a
+caller can hand itself: `ExtensionAuthorization` takes the CAMPAIGN — one
+`statistics.CampaignStatistics` — and reads `max_rounds`, `blocks_per_round`,
+the ceiling and the base length off it. Round `max_rounds + 1` cannot be
+constructed, a round that would carry the run past `max_blocks_per_candidate`
+cannot be constructed, and a plan with `segment="extension"` and no
+authorization is refused at construction (`ExtensionNotDeclared`). There is no
+unbounded extension because there is no way to say one.
+
+It takes the campaign and NOT a `(StoppingRule, StoppingRuleCommitment)` pair,
+which is what it used to take. `commitment.verify(rule)` compares the two
+arguments to EACH OTHER, so a caller that wanted a rule the campaign never
+committed did not have to mutate anything: it built the rule it wanted and
+called `StoppingRuleCommitment.commit()` on it, and the verification passed by
+construction. Red-teamed on 2026-08-04 — a licence for round 3 of a
+`max_rounds=3` rule with a ceiling of 100, campaign id `"not-even-this-
+campaign"` and `committed_at` in 2099, constructed cleanly, and rounds 1..3
+were SPAWNED (real benchmark minutes, on a held claim) before anything refused
+them. `CampaignStatistics` is the object the REDUCER already reads, it verifies
+its own commitment at construction, and it additionally requires an accepted
+calibration solved for this cell — so binding the licence to it is what makes
+"the rule that licensed this round is the rule this evidence is reduced under"
+a checkable fact instead of a pair of caller-supplied objects agreeing with
+themselves.
+
+Binding it at construction is necessary and not sufficient, because a caller can
+build a second campaign. `assemble_run_blocks()` therefore takes the campaign
+too, and refuses a round whose licence names a different one — that is the seam
+where the pooled evidence is built, and a round licensed by another campaign
+must not reach the reducer wearing this campaign's record.
+
 WHY STDOUT GOES TO A FILE AND NOT A PIPE
 ----------------------------------------
 *"Never pipe llama binaries through another process; it changes their
@@ -118,6 +205,7 @@ __all__ = [
     # errors
     "MicrobenchError", "ClaimNotHeld", "PairingViolation", "BenchOutputError",
     "RecipeOutputMismatch", "RunRefused", "SpawnFailure", "HostStateUnreadable",
+    "ExtensionNotDeclared", "ScheduleMismatch",
     # claim seam
     "HeldClaim", "ClaimAttestation", "CpuRegionClaimAdapter",
     # host state
@@ -137,7 +225,8 @@ __all__ = [
     "ARM_ANCHOR", "ARM_CANDIDATE", "BlockPlan", "plan_blocks", "assemble_block",
     "Invocation", "BlockRecord",
     # the run
-    "MicrobenchPlan", "MicrobenchRun", "MicrobenchRunner",
+    "ExtensionAuthorization", "MicrobenchPlan", "MicrobenchRun", "MicrobenchRunner",
+    "assemble_run_blocks",
     # self-audit
     "audit_no_name_pattern_process_paths",
 ]
@@ -203,6 +292,33 @@ class SpawnFailure(MicrobenchError):
 
 class HostStateUnreadable(MicrobenchError):
     """Host frequency or load could not be read at all."""
+
+
+class ExtensionNotDeclared(MicrobenchError):
+    """An extension round the pre-committed stopping rule does not license.
+
+    *"Extension follows the declared rule only … Any post-hoc change to the
+    stopping rule voids every affected record."* Raised rather than returned,
+    and raised at CONSTRUCTION of the authorization, so a plan for an undeclared
+    round never comes into existence and therefore never reaches a spawn. The
+    three ways to earn it: a round beyond the declared `max_rounds`, a round
+    whose blocks would carry the run past `max_blocks_per_candidate`, and a
+    `StoppingRule` that no longer hashes to the commitment made at campaign
+    start — which is what "the caller granted itself an extension after seeing
+    the result" actually looks like in a diff.
+    """
+
+
+class ScheduleMismatch(MicrobenchError):
+    """Base and extension were produced under two different order schedules.
+
+    The extension round EXTENDS the base segment's schedule; it does not
+    re-derive one (see the module docstring). Two runs that do not agree on
+    `(campaign_seed, candidate_id, attempt, base_blocks)` — or on the recipe,
+    params, anchor and bindings that make them one instrument — are not one
+    candidate's blocks, and pooling them to a pre-declared threshold would pool
+    two experiments. A hard error, never a relabel.
+    """
 
 
 # =============================================================================
@@ -1568,6 +1684,23 @@ class BlockPlan:
         if isinstance(self.block_index, bool) or not isinstance(self.block_index, int) \
                 or self.block_index < 0:
             raise ValueError("block_index must be a non-negative int")
+        # Mirrors `statistics.PairedBlock.__post_init__`. Checked HERE as well as
+        # there because `assemble_block` copies these two fields onto the
+        # PairedBlock: without this, a malformed plan is discovered only after
+        # the block has been measured, as a `MaterialError` out of the middle of
+        # a run rather than a refusal before a single process is spawned.
+        if self.segment not in statistics.SEGMENTS:
+            raise ValueError(f"segment {self.segment!r} is not one of "
+                             f"{list(statistics.SEGMENTS)}")
+        if self.segment == statistics.SEGMENT_EXTENSION:
+            if isinstance(self.extension_round, bool) \
+                    or not isinstance(self.extension_round, int) or self.extension_round < 1:
+                raise ValueError(
+                    "extension_round must be a positive int on an extension block; an "
+                    "extension that cannot say which declared round it belongs to is "
+                    "unstructured continuation")
+        elif self.extension_round is not None:
+            raise ValueError("extension_round must be None on a base block")
         first = ARM_ANCHOR if self.order == statistics.ORDER_ANCHOR_FIRST else ARM_CANDIDATE
         second = ARM_CANDIDATE if first == ARM_ANCHOR else ARM_ANCHOR
         derived = tuple((first, second)[i % 2] for i in range(self.pairs * 2))
@@ -1601,6 +1734,15 @@ def plan_blocks(schedule: statistics.OrderSchedule, *, count: int, pairs: int,
     is prefix-stable, so appending extension blocks cannot retroactively change
     the schedule of the base blocks and turn a conforming run into a
     non-conforming one.
+
+    Extension rounds CONTINUE the base schedule's index line rather than
+    re-deriving one (module docstring, "the extension round is extended, not
+    re-derived"): round *r* of `count` blocks starts at
+    `base_blocks + (r - 1) * count`, so its orders are `order_for()`'s reversed
+    limb and no two rounds can claim the same index. The unit is taken at the
+    ABSOLUTE index for the same reason — restarting the unit cycle at every
+    round would over-weight the first units of the cycle across a run that the
+    reducer then treats as one block sequence.
     """
     if not isinstance(schedule, statistics.OrderSchedule):
         raise TypeError("plan_blocks takes a statistics.OrderSchedule")
@@ -1608,11 +1750,22 @@ def plan_blocks(schedule: statistics.OrderSchedule, *, count: int, pairs: int,
         raise ValueError("count must be a positive int")
     if not unit_ids:
         raise ValueError("unit_ids must name at least one measurement-material unit")
+    if segment not in statistics.SEGMENTS:
+        raise ValueError(f"segment {segment!r} is not one of {list(statistics.SEGMENTS)}")
+    if segment == statistics.SEGMENT_EXTENSION:
+        if isinstance(extension_round, bool) or not isinstance(extension_round, int) \
+                or extension_round < 1:
+            raise ValueError("plan_blocks needs the declared round number to place an "
+                             "extension round on the schedule's index line")
+        offset = schedule.base_blocks + (extension_round - 1) * count
+    else:
+        if extension_round is not None:
+            raise ValueError("extension_round must be None on the base segment")
+        offset = 0
     units = list(unit_ids)
-    offset = 0 if segment == statistics.SEGMENT_BASE else schedule.base_blocks
     return tuple(
         BlockPlan(block_index=offset + i, order=schedule.order_for(offset + i), pairs=pairs,
-                  unit_id=units[i % len(units)], stratum=stratum, segment=segment,
+                  unit_id=units[(offset + i) % len(units)], stratum=stratum, segment=segment,
                   extension_round=extension_round)
         for i in range(count)
     )
@@ -1745,6 +1898,158 @@ class BlockRecord:
 # =============================================================================
 
 @dataclass(frozen=True)
+class ExtensionAuthorization:
+    """The pre-committed licence for ONE declared extension round.
+
+    It holds the CAMPAIGN, and READS every bound off it: `max_rounds`,
+    `blocks_per_round`, `max_blocks_per_candidate` and the base segment's length
+    are not arguments, so there is no spelling of this object in which a caller
+    states its own budget. The only thing the caller supplies is which declared
+    round this is.
+
+    It does NOT take a `(StoppingRule, StoppingRuleCommitment)` pair, which is
+    what it took until the 2026-08-04 red team. `commitment.verify(rule)`
+    compares its two arguments to each other, and a caller that wanted a budget
+    the campaign never declared never had to mutate anything — it built the rule
+    it wanted and committed THAT. Verification passed by construction, a licence
+    for round 3 of a `max_rounds=3` rule carrying campaign id
+    `"not-even-this-campaign"` and `committed_at` in 2099 was accepted, and its
+    three rounds were spawned before anything refused them. The campaign is the
+    object the reducer already reads, it verifies its own commitment at
+    construction, and it carries an accepted calibration for this cell — so a
+    licence derived from it is a licence the evidence's own denominator issued.
+
+    `base_blocks` is `campaign.b_min`, and it is the OTHER half of the schedule
+    identity: the extension continues the base segment's index line, so a plan
+    whose `base_blocks` disagrees is a re-derived schedule wearing an
+    extension's name, and `MicrobenchPlan` refuses it.
+
+    Construction is the first enforcement point but not the last: a caller can
+    build a second campaign, so `assemble_run_blocks()` re-checks the licence
+    against the campaign the evidence is being pooled for (`licence_for`).
+    """
+
+    campaign: statistics.CampaignStatistics
+    round_index: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.campaign, statistics.CampaignStatistics):
+            raise ExtensionNotDeclared(
+                "an extension round is authorized by the CAMPAIGN — the same "
+                "statistics.CampaignStatistics the reduction is computed under — not by a "
+                "stopping rule and a commitment the caller minted together, which verify "
+                "against each other and against nothing else")
+        if isinstance(self.round_index, bool) or not isinstance(self.round_index, int) \
+                or self.round_index < 1:
+            raise ExtensionNotDeclared("extension round_index must be a positive int")
+        verified = self.commitment.verify(self.rule)
+        if verified.outcome != schemas.PASS:
+            raise ExtensionNotDeclared(
+                f"the stopping rule does not match the one committed at campaign start "
+                f"({self.commitment.committed_at}): {verified.outcome} — "
+                f"{'; '.join(verified.reasons)}. An extension the caller granted itself "
+                f"after seeing the base segment is exactly what anytime-validity does not "
+                f"license.")
+        extension = self.rule.extension
+        if extension.max_rounds < 1:
+            raise ExtensionNotDeclared(
+                f"rule {self.rule.rule_id!r} declares max_rounds={extension.max_rounds}: it "
+                f"licenses NO extension round at all, so there is nothing to authorize")
+        if self.round_index > extension.max_rounds:
+            raise ExtensionNotDeclared(
+                f"round {self.round_index} exceeds the declared maximum "
+                f"{extension.max_rounds} of rule {self.rule.rule_id!r}. Extension follows "
+                f"the declared rule only; there is no round the rule did not name.")
+        last_block = self.base_blocks + self.round_index * extension.blocks_per_round
+        if last_block > self.rule.max_blocks_per_candidate:
+            raise ExtensionNotDeclared(
+                f"round {self.round_index} would take the run to {last_block} blocks, past "
+                f"the declared ceiling max_blocks_per_candidate="
+                f"{self.rule.max_blocks_per_candidate} of rule {self.rule.rule_id!r}")
+
+    @property
+    def rule(self) -> statistics.StoppingRule:
+        """The campaign's committed rule. Read, never supplied."""
+        return self.campaign.stopping_rule
+
+    @property
+    def commitment(self) -> statistics.StoppingRuleCommitment:
+        """The commitment the campaign was constructed against."""
+        return self.campaign.stopping_rule_commitment
+
+    @property
+    def base_blocks(self) -> int:
+        """The calibrated `B_min`. The base segment is exactly that long."""
+        return self.campaign.b_min
+
+    @property
+    def blocks_per_round(self) -> int:
+        return self.rule.extension.blocks_per_round
+
+    @property
+    def max_rounds(self) -> int:
+        return self.rule.extension.max_rounds
+
+    @property
+    def first_block_index(self) -> int:
+        """Where this round starts on the base segment's index line."""
+        return self.base_blocks + (self.round_index - 1) * self.blocks_per_round
+
+    def licence_for(self, campaign: statistics.CampaignStatistics) -> schemas.Check:
+        """PASS only when this licence was issued by `campaign` itself.
+
+        Construction binds the licence to A campaign; this binds it to THIS one.
+        Nothing stops a caller from building a second `CampaignStatistics` with a
+        permissive rule, licensing a round off it, and then pooling the round
+        into the real campaign's evidence — and the resulting record would carry
+        the other campaign's `rule_id`, `rule_content_hash` and `committed_at`
+        while its number was reduced under this campaign's threshold. That is a
+        record that overstates its own licence, and the reducer cannot see it:
+        `PairedBlock` carries a segment and a round number, never an
+        authorization.
+
+        The identity compared is the `StoppingRuleCommitment` — campaign id,
+        rule id, content hash and `committed_at`, all four at once — plus the
+        campaign seed the schedule is derived from and the calibrated `B_min`
+        the round's first index is measured off.
+        """
+        if not isinstance(campaign, statistics.CampaignStatistics):
+            return schemas.Check(schemas.COULD_NOT_CHECK, (
+                "no CampaignStatistics was supplied to check this licence against",))
+        reasons = []
+        if self.commitment != campaign.stopping_rule_commitment:
+            reasons.append(
+                f"the round is licensed by rule {self.commitment.rule_id!r} committed at "
+                f"{self.commitment.committed_at} for campaign "
+                f"{self.commitment.campaign_id!r}, but this evidence is reduced under rule "
+                f"{campaign.stopping_rule_commitment.rule_id!r} committed at "
+                f"{campaign.stopping_rule_commitment.committed_at} for campaign "
+                f"{campaign.campaign_id!r}; a licence issued by another campaign licenses "
+                "nothing here")
+        if self.campaign.campaign_seed != campaign.campaign_seed:
+            reasons.append(
+                "the licence was issued under a different committed campaign seed, so the "
+                "order schedule it authorizes is not the one this reduction checks against")
+        if self.base_blocks != campaign.b_min:
+            reasons.append(
+                f"the licence places round {self.round_index} off a base segment of "
+                f"{self.base_blocks} blocks but this campaign's calibrated B_min is "
+                f"{campaign.b_min}")
+        return schemas.Check(schemas.FAIL, tuple(reasons)) if reasons \
+            else schemas.Check(schemas.PASS)
+
+    def to_dict(self) -> dict:
+        return {"round_index": self.round_index, "base_blocks": self.base_blocks,
+                "first_block_index": self.first_block_index,
+                "rule_id": self.rule.rule_id,
+                "rule_content_hash": self.commitment.rule_content_hash,
+                "committed_at": self.commitment.committed_at,
+                "campaign_id": self.commitment.campaign_id,
+                "extension": self.rule.extension.to_dict(),
+                "max_blocks_per_candidate": self.rule.max_blocks_per_candidate}
+
+
+@dataclass(frozen=True)
 class MicrobenchPlan:
     """Everything a campaign needs to run one candidate against one anchor.
 
@@ -1756,6 +2061,16 @@ class MicrobenchPlan:
     anchor binary IS and the second says what it must BE. `anchor.source_commit`
     is checked against the `build_commit` that `llama-bench` itself reports, so a
     rebuilt-in-place anchor is caught in the output rather than assumed away.
+
+    `segment` and `extension` are the extension-round producer. `base_blocks`
+    keeps its meaning in BOTH segments — it is the length of the base segment
+    and therefore the `base_blocks` of the one `OrderSchedule` the whole run
+    uses — and it is `blocks_to_run` (not `base_blocks`) that says how many
+    blocks THIS invocation produces. That split is the "extended, not
+    re-derived" decision made structural: there is no way to build an extension
+    plan whose schedule is derived for a different base length, because
+    `schedule()` reads `base_blocks` and `ExtensionAuthorization` refuses a
+    `base_blocks` that disagrees with it.
     """
 
     recipe_id: str
@@ -1771,6 +2086,8 @@ class MicrobenchPlan:
     stratum: str = api.STRATUM_SELECTION
     timeout_s: float = 1800.0
     attempt: int = 0
+    segment: str = statistics.SEGMENT_BASE
+    extension: Optional[ExtensionAuthorization] = None
 
     def __post_init__(self) -> None:
         for name in ("recipe_id", "candidate_id", "campaign_seed"):
@@ -1793,12 +2110,81 @@ class MicrobenchPlan:
             raise ValueError("plan.unit_ids must name at least one measurement-material unit")
         if self.timeout_s <= 0:
             raise ValueError("plan.timeout_s must be positive")
+        if self.segment not in statistics.SEGMENTS:
+            raise ValueError(f"plan.segment {self.segment!r} is not one of "
+                             f"{list(statistics.SEGMENTS)}")
+        if self.segment == statistics.SEGMENT_EXTENSION:
+            if not isinstance(self.extension, ExtensionAuthorization):
+                raise ExtensionNotDeclared(
+                    "plan.segment is 'extension' but the plan carries no "
+                    "ExtensionAuthorization. An extension round is a DECLARED "
+                    "continuation of the pre-committed stopping rule; a run that can "
+                    "extend itself by setting a string is peeking with extra steps.")
+            if self.extension.base_blocks != self.base_blocks:
+                raise ScheduleMismatch(
+                    f"the authorization is for a base segment of "
+                    f"{self.extension.base_blocks} blocks but the plan declares "
+                    f"base_blocks={self.base_blocks}. The extension EXTENDS the base "
+                    f"segment's order schedule — one schedule, indexed straight through — "
+                    f"so a plan whose base length disagrees with the authorized one is a "
+                    f"RE-DERIVED schedule, and its blocks would carry orders the "
+                    f"pre-committed schedule never assigned.")
+        elif self.extension is not None:
+            raise ExtensionNotDeclared(
+                "plan.extension is set on a BASE-segment plan. The base segment is not "
+                "authorized by the extension rule and carrying its authorization here "
+                "would make `segment` the only thing standing between a base run and an "
+                "extension's index line; build the extension plan with `extend()`.")
+
+    @property
+    def extension_round(self) -> Optional[int]:
+        """The declared round this plan produces, or None on the base segment."""
+        return None if self.extension is None else self.extension.round_index
+
+    @property
+    def blocks_to_run(self) -> int:
+        """How many blocks THIS invocation produces — not how long the base was."""
+        return (self.base_blocks if self.segment == statistics.SEGMENT_BASE
+                else self.extension.blocks_per_round)
+
+    @property
+    def block_index_offset(self) -> int:
+        """Where this invocation's blocks start on the run's single index line."""
+        return 0 if self.extension is None else self.extension.first_block_index
 
     def schedule(self) -> statistics.OrderSchedule:
-        """The order schedule this plan implies. Derived, never declared."""
+        """The order schedule this plan implies. Derived, never declared.
+
+        Identical for the base plan and every extension plan derived from it:
+        `base_blocks` is the BASE segment's length in both, so `order_for()`
+        reaches its reversed limb for extension indices. This method is the
+        single place the "extended, not re-derived" decision lives.
+        """
         return statistics.OrderSchedule.derive(
             campaign_seed=self.campaign_seed, candidate_id=self.candidate_id,
             base_blocks=self.base_blocks, attempt=self.attempt)
+
+    def extend(self, authorization: ExtensionAuthorization) -> "MicrobenchPlan":
+        """The plan for one DECLARED extension round of this base plan.
+
+        Every schedule-identity field — `campaign_seed`, `candidate_id`,
+        `attempt`, `base_blocks` — rides across unchanged, which is what makes
+        `assemble_run_blocks()`'s equality check something the honest path
+        satisfies by construction rather than by care.
+
+        Callable only on a base plan. Round 2 comes from the same base plan with
+        `round_index=2`, not from round 1's plan: chaining would put the round
+        arithmetic in two places, and the second place is where it goes wrong.
+        """
+        if self.segment != statistics.SEGMENT_BASE:
+            raise ExtensionNotDeclared(
+                "extend() takes the BASE plan. Every extension round is a continuation of "
+                "the base segment's index line, so round N comes from the base plan with "
+                "round_index=N — never from round N-1's plan.")
+        if not isinstance(authorization, ExtensionAuthorization):
+            raise ExtensionNotDeclared("extend() takes an ExtensionAuthorization")
+        return replace(self, segment=statistics.SEGMENT_EXTENSION,
+                       extension=authorization)
 
     def to_dict(self) -> dict:
         return {"recipe_id": self.recipe_id, "candidate_id": self.candidate_id,
@@ -1807,7 +2193,12 @@ class MicrobenchPlan:
                 "anchor": self.anchor.short(), "params": dict(self.params),
                 "base_blocks": self.base_blocks, "pairs_per_block": self.pairs_per_block,
                 "unit_ids": list(self.unit_ids), "stratum": self.stratum,
-                "timeout_s": self.timeout_s, "attempt": self.attempt}
+                "timeout_s": self.timeout_s, "attempt": self.attempt,
+                "segment": self.segment, "extension_round": self.extension_round,
+                "blocks_to_run": self.blocks_to_run,
+                "block_index_offset": self.block_index_offset,
+                "extension": (None if self.extension is None
+                              else self.extension.to_dict())}
 
 
 @dataclass(frozen=True)
@@ -1845,13 +2236,14 @@ class MicrobenchRun:
         — fail instead of silently relabelling the run's order provenance.
         """
         emitted = [b.paired_block for b in self.blocks if b.paired_block is not None]
-        return self.plan.schedule().check_observed(emitted)
+        return self.plan.schedule().check_observed(
+            emitted, first_index=self.plan.block_index_offset)
 
     @property
     def complete(self) -> bool:
         """True only when every requested block completed AND nothing was refused."""
         return (not self.refusals
-                and len(self.blocks) == self.plan.base_blocks
+                and len(self.blocks) == self.plan.blocks_to_run
                 and all(b.complete for b in self.blocks)
                 and self.order_control.outcome == schemas.PASS)
 
@@ -1860,7 +2252,7 @@ class MicrobenchRun:
         if not self.complete:
             raise RunRefused(
                 f"this run produced no admissible number and will not pretend otherwise. "
-                f"{len(self.blocks)}/{self.plan.base_blocks} blocks completed; refusals: "
+                f"{len(self.blocks)}/{self.plan.blocks_to_run} blocks completed; refusals: "
                 f"{list(self.refusals) or ['(none, but a block is incomplete)']}. The raw "
                 f"vector is still available via raw_vector() — a failure that is not "
                 f"durable is indistinguishable from a run that never happened.")
@@ -1894,9 +2286,21 @@ class MicrobenchRun:
             # against each block's own recorded order without needing the seed,
             # and binds the pair to the committed campaign record through the
             # digest above.
-            "order_schedule": dict(self.plan.schedule().to_dict(),
-                                   orders=list(self.plan.schedule().orders(
-                                       self.plan.base_blocks))),
+            # The orders spelled out are THIS invocation's window on the one
+            # schedule — `first_block_index .. +blocks_to_run`. On the base
+            # segment that is 0..base_blocks-1, unchanged; on an extension round
+            # it is the reversed limb the round actually ran, so the reader is
+            # comparing against the positions the blocks claim rather than
+            # against the base segment's slots.
+            "order_schedule": dict(
+                self.plan.schedule().to_dict(),
+                first_block_index=self.plan.block_index_offset,
+                orders=[self.plan.schedule().order_for(self.plan.block_index_offset + i)
+                        for i in range(self.plan.blocks_to_run)]),
+            "segment": self.plan.segment,
+            "extension_round": self.plan.extension_round,
+            "extension_authorization": (None if self.plan.extension is None
+                                        else self.plan.extension.to_dict()),
             "anchor": self.plan.anchor.short(),
             "anchor_identity": self.plan.anchor.to_dict(),
             "scope_denominator": self.scope_denominator.to_dict(),
@@ -2031,7 +2435,56 @@ class MicrobenchRunner:
                 f"`verify_ggml_linkage.sh`, wired in execution/t0_provider.py. Recorded "
                 f"rather than omitted — three trees run three ggml generations and a "
                 f"binary that inherits another tree's ggml runs silently wrong.",))))
+        checks.append(("anchor_identity.tool", MicrobenchRunner._check_anchor_tool(plan)))
         return checks
+
+    @staticmethod
+    def _check_anchor_tool(plan: MicrobenchPlan) -> schemas.Check:
+        """Is the tool the plan's anchor NAMES the tool this run MEASURES with?
+
+        `api.AnchorIdentity.tool` (2026-08-04) carries a RULE, not a label:
+        *`binary_sha256` is the digest of the tool the record's `metric` was
+        measured with*. This is the only place in the package where both halves
+        of that rule are present at once — the plan's anchor and the recipe that
+        is about to be spawned — so it is the only place the rule can be
+        enforced rather than trusted.
+
+        Without it the digest check alone does not close the hole. A driver that
+        captures the anchor `llama-bench` correctly and then binds it
+        `chain.bind_anchor(capture, tool="llama-cli")` — a copy-paste from the T0
+        leg, which is the leg that legitimately names `llama-cli` — produces a
+        plan whose digest matches the binary that runs, whose every existing
+        check PASSes, and whose record renders `vs anchor llama-cli:<digest>/…`
+        for a ratio `llama-bench` measured. `for_tool` refuses a RE-label, but the
+        FIRST label is a free string and `bind_anchor` accepts any of them.
+
+        COULD_NOT_CHECK when the anchor names no tool: a record predating the
+        field is readable and must stay so, and an unnamed anchor is not evidence
+        that the tool agrees. Recorded rather than omitted, for the reason the
+        linkage conjunct above is — an unverified conjunct that appears nowhere
+        is indistinguishable from one that passed.
+        """
+        measured_with = recipes.get_recipe(plan.recipe_id).tool
+        if plan.anchor.tool is None:
+            return schemas.Check(schemas.COULD_NOT_CHECK, (
+                f"the plan's anchor names no tool, so whether its "
+                f"{plan.anchor.binary_sha256[:12]} is the digest of the {measured_with!r} "
+                f"this run measures with is UNOBSERVED. Bind it with "
+                f"`chain.bind_anchor(capture, tool=…)`; not naming a tool is not evidence "
+                f"that it is the right one",))
+        if plan.anchor.tool != measured_with:
+            return schemas.Check(schemas.FAIL, (
+                f"the plan's anchor is named {plan.anchor.tool!r} but recipe "
+                f"{plan.recipe_id!r} measures with {measured_with!r}. `binary_sha256` is "
+                f"the digest of the tool the record's metric was measured with, so this "
+                f"record would render `vs anchor {plan.anchor.tool}:"
+                f"{plan.anchor.binary_sha256[:12]}…` as the denominator of a ratio "
+                f"{measured_with} produced — a denominator naming a binary that never "
+                f"ran. The digest check cannot see this: one anchor BUILD ships both "
+                f"tools, so the label can be wrong while the bytes are right",))
+        return schemas.Check(schemas.PASS, (
+            f"the plan's anchor names {measured_with!r}, the tool recipe "
+            f"{plan.recipe_id!r} measures with",))
 
     def _attest_binary(self, *, arm: str, command: recipes.ConstructedCommand,
                        receipt: ExecutionReceipt, when: str) -> None:
@@ -2138,8 +2591,13 @@ class MicrobenchRunner:
         schedule = statistics.OrderSchedule.derive(
             campaign_seed=plan.campaign_seed, candidate_id=plan.candidate_id,
             base_blocks=plan.base_blocks, attempt=plan.attempt)
-        plans = plan_blocks(schedule, count=plan.base_blocks, pairs=plan.pairs_per_block,
-                            unit_ids=plan.unit_ids, stratum=plan.stratum)
+        # `count` is `blocks_to_run`, not `base_blocks`: on an extension round
+        # the schedule still has the BASE segment's length (that is what makes
+        # `order_for` reverse past it) while the number of blocks to produce is
+        # the rule's declared `blocks_per_round`.
+        plans = plan_blocks(schedule, count=plan.blocks_to_run, pairs=plan.pairs_per_block,
+                            unit_ids=plan.unit_ids, stratum=plan.stratum,
+                            segment=plan.segment, extension_round=plan.extension_round)
 
         for block_plan in plans:
             record = self._run_block(plan, block_plan, commands, envs, receipts,
@@ -2277,9 +2735,9 @@ class MicrobenchRunner:
     def _finish(self, plan: MicrobenchPlan, started_at: str, blocks: list, refusals: list,
                 checks: list, scope: api.ScopeDenominator, attestations: list,
                 receipts: Mapping) -> MicrobenchRun:
-        if len(blocks) < plan.base_blocks and not refusals:
+        if len(blocks) < plan.blocks_to_run and not refusals:
             refusals.append(
-                f"only {len(blocks)}/{plan.base_blocks} paired blocks completed; a run "
+                f"only {len(blocks)}/{plan.blocks_to_run} paired blocks completed; a run "
                 f"short of its declared block count does not emit a number")
         run = MicrobenchRun(
             plan=plan, runner_id=RUNNER_ID, started_at=started_at, ended_at=self._now(),
@@ -2296,13 +2754,125 @@ class MicrobenchRunner:
         # the tautological verdict is worth nothing and the recomputed one is
         # what stops a completed run being relabelled with another plan.
         if run.order_control.outcome != schemas.PASS and not refusals \
-                and len(blocks) == plan.base_blocks:
+                and len(blocks) == plan.blocks_to_run:
             refusals.append(
                 f"the emitted blocks do not satisfy the order schedule derived from "
                 f"the committed campaign seed: {run.order_control.outcome} — "
                 f"{'; '.join(run.order_control.reasons)}")
             return replace(run, refusals=tuple(refusals))
         return run
+
+
+# =============================================================================
+# Pooling the base segment and its extension rounds
+# =============================================================================
+
+def assemble_run_blocks(base_run: MicrobenchRun,
+                        extension_runs: Sequence[MicrobenchRun] = (), *,
+                        campaign: statistics.CampaignStatistics) -> tuple:
+    """The one block sequence the reducer reads: base segment, then whole rounds.
+
+    Something has to concatenate a base run with the extension rounds that
+    followed it, and doing it at the call site with `base + ext` is exactly
+    where two different schedules get pooled into one candidate's evidence.
+    `statistics._check_extension_structure` would catch some of that at
+    reduction time — interleaving, a short round, more rounds than declared —
+    but it cannot see what it is not told: it never sees the campaign seed, the
+    attempt, the recipe or the bindings, so two runs of DIFFERENT candidates or
+    under two different seeds reduce cleanly if their segments line up. This
+    function refuses first, and raises, because a pooled block set is not
+    something to journal as INVALID — it is a set that should never have been
+    built.
+
+    The runs must be the same plan in everything except `segment` and
+    `extension` (a total comparison rather than a field list: a field list is a
+    thing to forget to update, and every field of a plan is either a
+    measurement condition or a refusal bound, both of which must hold across a
+    pooled run). Rounds must be consecutive from 1, each exactly once, and the
+    resulting indices must be contiguous from 0 — the shape
+    `statistics._check_block_identity` requires downstream.
+
+    Every run must be `complete`; an incomplete one raises `RunRefused` through
+    `paired_blocks()`, which is the same refusal a caller would have got from
+    the run on its own.
+
+    `campaign` is REQUIRED and has no default. This is the only place the runs
+    and the campaign whose threshold they will be judged against are in the same
+    frame, so it is the only place "was this round licensed by THIS campaign?"
+    can be asked — `ExtensionAuthorization.licence_for`. A default of `None`
+    here would be the fail-open version of the whole guard: the honest caller
+    passes it, the pooled-in round from somewhere else does not, and the check
+    would be skipped exactly when it matters.
+    """
+    if not isinstance(base_run, MicrobenchRun):
+        raise TypeError("assemble_run_blocks takes a MicrobenchRun as the base run")
+    if not isinstance(campaign, statistics.CampaignStatistics):
+        raise TypeError(
+            "assemble_run_blocks needs the statistics.CampaignStatistics this evidence "
+            "will be reduced under; the pooled set is where a round licensed by another "
+            "campaign would otherwise enter this campaign's record")
+    runs = tuple(extension_runs)
+    for run in runs:
+        if not isinstance(run, MicrobenchRun):
+            raise TypeError("every extension run must be a MicrobenchRun")
+    if base_run.plan.segment != statistics.SEGMENT_BASE:
+        raise ScheduleMismatch(
+            f"the base run's plan is segment {base_run.plan.segment!r}; the base segment "
+            f"is what an extension extends and it cannot itself be an extension round")
+    if base_run.plan.campaign_seed != campaign.campaign_seed:
+        raise ScheduleMismatch(
+            "the base run was planned under a different committed campaign seed than the "
+            "campaign it is being pooled for; the order schedule this run obeyed is not "
+            "the one the reduction will check it against")
+    if base_run.plan.base_blocks != campaign.b_min:
+        raise ScheduleMismatch(
+            f"the base segment is {base_run.plan.base_blocks} blocks but this campaign's "
+            f"calibrated B_min is {campaign.b_min}; the base segment is exactly B_min "
+            f"blocks and everything beyond it is a declared extension round")
+
+    identity = replace(base_run.plan, segment=statistics.SEGMENT_BASE, extension=None)
+    rounds: dict = {}
+    for run in runs:
+        plan = run.plan
+        if plan.segment != statistics.SEGMENT_EXTENSION or plan.extension is None:
+            raise ScheduleMismatch(
+                f"a run passed as an extension round carries segment {plan.segment!r} with "
+                f"no authorization; only a declared extension round may follow the base "
+                f"segment")
+        licence = plan.extension.licence_for(campaign)
+        if licence.outcome != schemas.PASS:
+            raise ExtensionNotDeclared(
+                f"extension round {plan.extension.round_index} is not licensed by this "
+                f"campaign: {licence.outcome} — {'; '.join(licence.reasons)}")
+        if replace(plan, segment=statistics.SEGMENT_BASE, extension=None) != identity:
+            raise ScheduleMismatch(
+                f"extension round {plan.extension.round_index} was produced under a "
+                f"different plan than the base segment (seed/candidate/attempt/base_blocks "
+                f"identify the ONE order schedule; recipe, params, anchor and bindings "
+                f"identify the ONE instrument). Pooling them to the pre-declared threshold "
+                f"would pool two experiments.")
+        if plan.extension.round_index in rounds:
+            raise ScheduleMismatch(
+                f"extension round {plan.extension.round_index} was submitted twice; a "
+                f"round is a fixed number of fresh pairs, not a resubmittable one")
+        rounds[plan.extension.round_index] = run
+
+    expected = list(range(1, len(rounds) + 1))
+    if sorted(rounds) != expected:
+        raise ScheduleMismatch(
+            f"extension rounds {sorted(rounds)} are not consecutive from 1; a run cannot "
+            f"skip a declared round and keep the ones after it")
+
+    blocks: list = list(base_run.paired_blocks())
+    for round_index in expected:
+        blocks.extend(rounds[round_index].paired_blocks())
+    for position, block in enumerate(blocks):
+        if block.block_index != position:
+            raise ScheduleMismatch(
+                f"the pooled blocks are not one contiguous index line: position "
+                f"{position} carries block_index {block.block_index}. Base and extension "
+                f"are ONE schedule, indexed straight through.")
+    return tuple(blocks)
 
 
 # =============================================================================

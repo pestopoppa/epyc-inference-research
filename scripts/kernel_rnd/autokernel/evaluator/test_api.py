@@ -1227,5 +1227,131 @@ class InputContractTest(unittest.TestCase):
             self.assertIn(status, S.EVENT_STATUSES)
 
 
+# ===========================================================================
+# 12. The anchor triple names ONE tool
+#
+# `binary_sha256` is single-valued and one anchor build ships several binaries:
+# T0 hashes the anchor `llama-cli`, `microbench` compares the plan's digest
+# against the anchor `llama-bench` it is about to spawn. The rule this section
+# holds down is "`binary_sha256` is the digest of the tool the record's `metric`
+# was measured with, and `tool` names it" — ENFORCED, which means the case that
+# used to be invisible (two tools, one capture, digests therefore equal) is a
+# FAIL and not a PASS.
+# ===========================================================================
+
+def tool_anchor(tool=None, **overrides) -> api.AnchorIdentity:
+    """One fixed triple, optionally naming a tool. The DIGESTS never vary here.
+
+    Deliberate: every test below that varies the tool holds the three digests
+    constant, because a differing digest would make the comparison fail for the
+    old reason and prove nothing about the new field.
+    """
+    fields = dict(source_commit=V8_COMMIT, binary_sha256=sha("anchor-binary"),
+                  linkage_sha256=sha("anchor-linkage"), tool=tool)
+    fields.update(overrides)
+    return api.AnchorIdentity(**fields)
+
+
+class AnchorNamesOneToolTest(unittest.TestCase):
+
+    def test_one_capture_two_tools_is_a_FAIL_not_a_silent_match(self):
+        """The defect. Same bytes cannot be two different binaries."""
+        check = tool_anchor("llama-cli").identity_matches(tool_anchor("llama-bench"))
+        self.assertEqual(check.outcome, S.FAIL, check.reasons)
+        joined = " ".join(check.reasons)
+        self.assertIn("anchor.tool differs", joined)
+        self.assertIn("llama-cli", joined)
+        self.assertIn("llama-bench", joined)
+
+    def test_the_same_tool_still_matches(self):
+        """Compliant-path control: the rule must not forbid its own idiom."""
+        self.assertEqual(
+            tool_anchor("llama-bench").identity_matches(tool_anchor("llama-bench")).outcome,
+            S.PASS)
+
+    def test_two_unnamed_anchors_compare_exactly_as_before(self):
+        """Backward compatibility is a control too: records predating the field."""
+        self.assertEqual(tool_anchor().identity_matches(tool_anchor()).outcome, S.PASS)
+
+    def test_named_against_unnamed_is_could_not_check_never_pass(self):
+        """Not naming a tool is not evidence that it is the same tool."""
+        for mine, theirs in (("llama-bench", None), (None, "llama-bench")):
+            with self.subTest(mine=mine, theirs=theirs):
+                check = tool_anchor(mine).identity_matches(tool_anchor(theirs))
+                self.assertEqual(check.outcome, S.COULD_NOT_CHECK, check.reasons)
+                self.assertIn("one side names its tool", " ".join(check.reasons))
+
+    def test_a_digest_difference_outranks_an_unobserved_tool(self):
+        """`state_machine.check_anchor_identity`'s rule: a fact beats an absence."""
+        check = tool_anchor("llama-bench").identity_matches(
+            tool_anchor(None, binary_sha256=sha("some other binary")))
+        self.assertEqual(check.outcome, S.FAIL, check.reasons)
+        joined = " ".join(check.reasons)
+        self.assertIn("anchor.binary_sha256 moved", joined)
+        self.assertIn("one side names its tool", joined)
+
+    def test_a_triple_cannot_be_relabelled_as_another_tool(self):
+        cli = tool_anchor("llama-cli")
+        with self.assertRaises(ValueError) as ctx:
+            cli.for_tool("llama-bench")
+        self.assertIn("already bound", str(ctx.exception))
+        self.assertIs(cli.for_tool("llama-cli"), cli)
+        self.assertEqual(tool_anchor().for_tool("llama-bench").tool, "llama-bench")
+        self.assertEqual(tool_anchor().for_tool(" llama-bench ").tool, "llama-bench")
+
+    def test_a_tool_is_a_name_and_not_a_path_or_a_blank(self):
+        for bad in ("/mnt/raid0/llm/llama.cpp/build/bin/llama-bench", "llama bench",
+                    "llama-bench\n", "", "   "):
+            with self.subTest(tool=bad):
+                with self.assertRaises(ValueError):
+                    tool_anchor(bad)
+
+    def test_the_tool_survives_a_round_trip_and_absence_has_one_spelling(self):
+        named = tool_anchor("llama-bench")
+        parsed, reasons = api.AnchorIdentity.parse(named.to_dict())
+        self.assertEqual(reasons, ())
+        self.assertEqual(parsed, named)
+        self.assertEqual(named.to_dict()["tool"], "llama-bench")
+        # Unnamed omits the key entirely: a block written before the field existed
+        # and one written by a caller that named no tool are the same bytes.
+        self.assertNotIn("tool", tool_anchor().to_dict())
+        self.assertEqual(api.AnchorIdentity.parse(tool_anchor().to_dict())[0], tool_anchor())
+
+    def test_the_record_grammar_says_which_binary_the_denominator_came_from(self):
+        self.assertEqual(tool_anchor("llama-bench").short(),
+                         "llama-bench:" + tool_anchor().short())
+        outcome = run(req=request(anchor=tool_anchor("llama-bench",
+                                                     measurement_event_ids=("ake-a-1",))),
+                      eff=effect())
+        self.assertIn("vs anchor llama-bench:", outcome.grammar_line)
+
+    def test_the_emitted_record_carries_the_tool_and_still_validates(self):
+        outcome = run(req=request(anchor=tool_anchor("llama-bench",
+                                                     measurement_event_ids=("ake-a-1",))),
+                      eff=effect())
+        self.assertEqual(S.validate_evaluation_event(outcome.event), [])
+        self.assertEqual(outcome.event["anchor"]["tool"], "llama-bench")
+
+    def test_the_rule_reaches_the_verdict_through_the_anchor_precondition(self):
+        """End to end: a record measured with one tool, attested with another.
+
+        The window's open/close re-verification is where a campaign that bound
+        T0's `llama-cli` capture into a T1 record gets caught, and this is the
+        pair that used to be indistinguishable from a clean re-verification —
+        every digest agrees, because both sides came from the same capture.
+        """
+        bench, cli = tool_anchor("llama-bench"), tool_anchor("llama-cli")
+        mismatched = api.check_preconditions(
+            request(anchor=bench), window(anchor_at_open=cli, anchor_at_close=cli))
+        self.assertFalse(mismatched.satisfied)
+        self.assertIn("anchor.tool differs", " ".join(
+            r for _, chk in mismatched.checks for r in chk.reasons))
+        # Compliant-path control: the same window, attested with the tool the
+        # record's metric was measured with, is satisfied.
+        self.assertTrue(api.check_preconditions(
+            request(anchor=bench), window(anchor_at_open=bench, anchor_at_close=bench)
+        ).satisfied)
+
+
 if __name__ == "__main__":
     unittest.main()

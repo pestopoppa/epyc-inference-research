@@ -1319,7 +1319,18 @@ class T2Cell:
         ni_anchor = self.non_inferiority.verdict.anchor
         imp_anchor = self.improvement.verdict.anchor
         if ni_anchor is not None and imp_anchor is not None:
-            if ni_anchor.identity_matches(imp_anchor).outcome != schemas.PASS:
+            # FAIL only. `identity_matches` has three outcomes since 2026-08-04
+            # (`AnchorIdentity.tool`), and this list is a list of things that
+            # DISAGREE — every other entry above is a compared pair of values.
+            # `!= PASS` swept the third outcome in with them and made an
+            # unobserved tool name raise `CellInadmissible` saying the two halves
+            # are "reductions of DIFFERENT windows", which is a stronger claim
+            # than the comparator made. This follows
+            # `correctness._refuse_replay_mismatch`'s stated rule: FAIL raises,
+            # COULD_NOT_CHECK returns because nothing disagrees — and the
+            # unobserved component still surfaces downstream, as
+            # `_check_anchor_agreement`'s BLOCK_ANCHOR_ABSENT.
+            if ni_anchor.identity_matches(imp_anchor).outcome == schemas.FAIL:
                 mismatches.append("anchor identity")
         if mismatches:
             raise CellInadmissible(
@@ -3126,13 +3137,29 @@ def _check_anchor_agreement(champion: ChampionLineage,
             unknown.append(
                 f"cell {cell.cell_id!r} binds no anchor, so its ratio has no denominator")
             continue
+        # THREE outcomes, not two. `identity_matches` gained a third on
+        # 2026-08-04 (`AnchorIdentity.tool`: one side names the binary its digest
+        # came off and the other does not). `!= PASS` was written when the
+        # comparator answered only PASS or FAIL, and it files that third outcome
+        # under BLOCK_ANCHOR_MOVED — a record asserting that the denominator was
+        # REBUILT, on evidence that says only that one side did not say which
+        # tool it was. `unknown`/BLOCK_ANCHOR_ABSENT is this function's own
+        # existing bucket for exactly that, and it is where an unobserved
+        # component belongs: a detected difference is a fact, an unobserved one
+        # is not, and the two must not share a blocker name.
         match = champion.anchor.identity_matches(anchor)
-        if match.outcome != schemas.PASS:
+        if match.outcome == schemas.FAIL:
             reasons.append(
                 f"cell {cell.cell_id!r}: " + "; ".join(match.reasons)
                 + ". A rebuilt anchor is a different anchor, and a comparison whose "
                 "denominator no longer resolves is superseded, not reinterpreted "
                 "(AK-D22)")
+        elif match.outcome != schemas.PASS:
+            unknown.append(
+                f"cell {cell.cell_id!r}: " + "; ".join(match.reasons)
+                + ". Nothing about this cell's anchor DISAGREES with the champion's; "
+                "a component of the identity was not observed, which is not evidence "
+                "that the anchor moved")
     if reasons:
         return schemas.Check(schemas.FAIL, tuple(reasons) + tuple(unknown)), \
             (BLOCK_ANCHOR_MOVED,)

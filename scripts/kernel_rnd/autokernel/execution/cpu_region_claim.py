@@ -296,7 +296,53 @@ STATE_HELD = "held"
 #: strings. `unknown` is never collapsed into either of the others.
 LIVENESS_STATES = (LIVE, DEAD, UNKNOWN)
 
-_CLAIM_ID_PREFIX = "akc-"
+#: The candidate-id prefix `api.EvaluationRequest.__post_init__`, `schemas._need_id`,
+#: `integrity.BuildProvenance` and `worktree.BuildIdentity` all require. Duplicated
+#: as a literal rather than imported: this module is a resource claim and must not
+#: grow a dependency on the evaluator to mint an id. The literal is not left to be
+#: kept in step by memory — `_require_disjoint_id_namespaces` below fails the
+#: IMPORT if the two namespaces ever overlap again, and
+#: `test_cpu_region_claim.TestTheClaimIdIsNotACandidateId` resolves it against the
+#: real validator rather than against this copy.
+_CANDIDATE_ID_PREFIX = "akc-"
+
+#: `akclaim-`, NOT `akc-`. A claim id and a candidate id are different KINDS of
+#: name, and until 2026-08-04 they were spelled the same: `akc-` is what
+#: `api.EvaluationRequest` requires of a CANDIDATE id, so a claim id handed to a
+#: parameter expecting a candidate id passed the one validator written to catch
+#: exactly that substitution, and the record grammar rendered `res=akc-…` beside
+#: `candidate=akc-…` with nothing to tell a reader which was which. A shared
+#: prefix between two id kinds is how a validator becomes decorative.
+#: `akclaim-` is the spelling `t0_provider`'s own fixtures already used.
+_CLAIM_ID_PREFIX = "akclaim-"
+
+
+def _require_disjoint_id_namespaces(claim_prefix: str, candidate_prefix: str) -> None:
+    """Refuse a claim namespace an id validator could confuse with the candidate one.
+
+    Disjointness here is PREFIX-disjointness in both directions, not inequality:
+    if either prefix starts the other, then some id in one namespace satisfies the
+    other's `startswith` test, and every validator in this package tests ids by
+    prefix. `akclaim-` and `akc-` are disjoint because the fourth character is
+    `l`, not `-` — which is exactly the kind of fact that survives an edit only if
+    something checks it.
+
+    Called at import so a re-merge of the two namespaces cannot reach a campaign:
+    the package fails to load instead of minting ids that pass the wrong gate.
+    """
+    for name, value in (("claim", claim_prefix), ("candidate", candidate_prefix)):
+        if not isinstance(value, str) or not value:
+            raise ImportError(f"the {name} id prefix must be a non-empty string, got {value!r}")
+    if claim_prefix.startswith(candidate_prefix) or candidate_prefix.startswith(claim_prefix):
+        raise ImportError(
+            f"claim id prefix {claim_prefix!r} and candidate id prefix {candidate_prefix!r} "
+            "are not prefix-disjoint: an id minted in one namespace would satisfy the other "
+            "namespace's validator, which is how a claim id passed where a candidate id "
+            "belongs became undetectable. Pick a claim prefix that neither starts with nor "
+            "is started by the candidate prefix")
+
+
+_require_disjoint_id_namespaces(_CLAIM_ID_PREFIX, _CANDIDATE_ID_PREFIX)
 
 #: Validated, never rewritten (see DELIBERATE DEVIATIONS). Path separators, the
 #: `.lock` suffix's own dot rules and whitespace are all excluded; a leading

@@ -115,7 +115,7 @@ __all__ = [
     "ExecutionError", "ClaimNotHeld", "ProductionTreeRefusal", "CaptureUnavailable",
     "OutputParseError", "AnchorCaptureIncomplete", "ProcessEscaped",
     # identity
-    "PROVIDER_ID", "PRODUCER", "SCHEMA_FOLLOWUPS", "SEAMS",
+    "PROVIDER_ID", "PRODUCER", "SCHEMA_FOLLOWUPS", "SEAMS", "STATE_SAFETY_CANNOT_PASS",
     # process seam
     "CompletedProcess", "ProcessRunner", "SubprocessRunner", "RecordedProcessRunner",
     # claims
@@ -200,6 +200,43 @@ PRODUCER = "evaluator"
 
 PROVIDER_ID = "ak.t0.execution.provider/v1"
 
+#: `state_rollback_teardown_race` CANNOT PASS with today's collector, and this
+#: string is that fact written where the collector can attach it to the record
+#: rather than left to be rediscovered from the gate's source.
+#:
+#: The mechanism, end to end: `collect_state_safety` hardcodes
+#: `rollback_tested=False` because nothing here exercises a rollback, and
+#: `correctness.check_state_rollback_teardown_race` appends *"rollback was not
+#: tested"* to its reasons whenever `not evidence.rollback_tested`. So:
+#:
+#:   * `state_safety_probe=True`  -> evidence EXISTS -> FAIL, always, for every
+#:     candidate and every derived surface, whatever the candidate did. A gate
+#:     that fails identically on every input carries no information about any of
+#:     them, and a T0 FAIL is speed-blocking;
+#:   * `state_safety_probe=False` -> no evidence -> the gate answers from the
+#:     DERIVATION alone: PASS where the derivation determined the change touches
+#:     neither persistent state nor threading, COULD_NOT_CHECK where it did not
+#:     determine it, FAIL where it says the surface IS touched.
+#:
+#: The precise claim, and the one `TheStateSafetyGateCannotPass` in
+#: `test_t0_provider.py` proves by exhaustion, is therefore: **no state-safety
+#: MEASUREMENT can PASS.** Every PASS this surface can produce is a PASS by
+#: non-applicability, granted by the change surface and not by anything this
+#: module observed. That test is the tripwire: the day a real rollback probe
+#: exists it will fail, which is the reminder to delete this constant, delete the
+#: note, and wire the probe.
+STATE_SAFETY_CANNOT_PASS = (
+    "state_rollback_teardown_race CANNOT PASS ON EVIDENCE today: this collector has no "
+    "rollback probe, so `rollback_tested` is hardcoded False and "
+    "`check_state_rollback_teardown_race` FAILs on it unconditionally. With "
+    "state_safety_probe=True the gate is a guaranteed FAIL for every candidate and every "
+    "derived surface; with it False the gate is decided by the change derivation alone — "
+    "PASS by non-applicability, COULD_NOT_CHECK, or FAIL where the derivation says the "
+    "surface is touched. Leave the probe OFF until a rollback probe exists: a gate that "
+    "fails identically on every input says nothing about any of them, and a T0 FAIL blocks "
+    "speed ranking. The one real observation on this surface is `orphan_processes`, and it "
+    "is collected either way.")
+
 #: Schema follow-ups this module CANNOT close from here, reported rather than
 #: patched. `schemas.py` and the evidence dataclasses in `correctness.py` are
 #: owned by other agents this hour; denial 6 says a coverage gap is RECORDED.
@@ -244,7 +281,26 @@ SEAMS = (
      "`integrity.py` already derives all three from real ELF tables, build logs and parsed "
      "diffs; producing them again here would create a second derivation of the §8.5.1 gates, "
      "which `correctness.SEAMS` item 1 already records as an open integration decision. This "
-     "module accepts whatever `integrity.py` produced and does not compete with it."),
+     "module accepts whatever `integrity.py` produced and does not compete with it. AS OF "
+     "2026-08-04 the join exists: `execution/chain.py` carries `symbol_evidence`, "
+     "`build_evidence` and `diff_policy_evidence`, which are the projections from "
+     "integrity's records into correctness's, and `change_surface_from`, which is the same "
+     "join for `evaluator/surface.py`'s derivation. Supplying them to `plan.symbols`, "
+     "`plan.build`, `plan.diff` and `plan.change_surface` is what turns those surfaces from "
+     "COULD_NOT_CHECK into gates. Nothing here derives them; the seam is still a seam."),
+    ("The BEHAVIOURAL half of the change surface has no producer anywhere in this package, "
+     "and `chain.change_surface_from` closes only part of it. `surface.AffectedSurface`'s "
+     "axes are backends, link targets, op names, kernel symbols and dispatch predicates — "
+     "there is no memory / threading / persistent-state axis, so `derived_touches_memory`, "
+     "`derived_touches_threading` and `derived_touches_persistent_state` are classified "
+     "lexically from the diff body and can only be TRUE or UNDETERMINED. `False` is what "
+     "licenses `check_asan`'s PASS branch (\"the mechanical derivation finds it touches "
+     "neither memory nor threading\") and no analysis in this tree can establish it. "
+     "CONSEQUENCE, stated so a green report is not over-read: the sanitizer and state-safety "
+     "surfaces become REAL gates for a candidate that visibly touches those surfaces and "
+     "stay COULD_NOT_CHECK for one that does not. REQUIRED FOLLOW-UP: a whole-program or "
+     "call-graph reachability pass over the affected closure, which is a real instrument and "
+     "not a token list."),
     ("Dispatch-trace fallback detection sees INTER-backend assignment only. "
      "`GGML_SCHED_DEBUG=2` prints the scheduler's per-node backend assignment "
      "(ggml-backend.cpp:945-982), which catches an op that fell off the accelerator onto the "
@@ -1127,6 +1183,15 @@ class T0ExecutionPlan:
     symbols: Any = None
     build: Any = None
     diff: Any = None
+    #: The MECHANICALLY DERIVED change surface, from `evaluator/surface.py`'s
+    #: `derive_affected_surface` by way of `chain.change_surface_from`. `None`
+    #: means no derivation was supplied, and `_change_surface` then emits a
+    #: surface whose every `derived_touches_*` is `None` — which four T0 gates
+    #: read as COULD_NOT_CHECK. It is a REAL FIELD and not a `getattr` target:
+    #: `_change_surface` used to read `getattr(self._plan, "change_surface", None)`
+    #: against a dataclass that had no such field, so the pass-through it
+    #: documents was unreachable and no caller could have noticed.
+    change_surface: Any = None
     state_safety_probe: bool = False
 
     def __post_init__(self) -> None:
@@ -1162,6 +1227,29 @@ class T0ExecutionPlan:
         if self.backend not in schemas.BACKENDS:
             raise ValueError(f"plan.backend: {self.backend!r} is not one of "
                              f"{sorted(schemas.BACKENDS)}")
+        # The four pass-through evidence inputs are TYPE-CHECKED, and the reason
+        # is seam 1: `integrity.py` and `correctness.py` each define a
+        # `BuildProvenance`, they share no field name, and the wrong one arriving
+        # here is SILENT — `collect_static_analysis` reads `build.build_log_ref`
+        # with a `getattr`, `integrity.BuildProvenance` spells it
+        # `build_log_path`, and the whole static-analysis surface then reports
+        # COULD_NOT_CHECK for a reason that names the anchor instead of naming
+        # the mistake. Same shape for a `surface.AffectedSurface` handed straight
+        # to `change_surface` instead of through `chain.change_surface_from`.
+        for name, expected in (("symbols", correctness.SymbolTableDiff),
+                               ("build", correctness.BuildProvenance),
+                               ("diff", correctness.DiffPolicyEvidence),
+                               ("change_surface", correctness.ChangeSurface)):
+            value = getattr(self, name)
+            if value is not None and not isinstance(value, expected):
+                raise TypeError(
+                    f"plan.{name} must be a correctness.{expected.__name__} or None, got "
+                    f"{type(value).__module__}.{type(value).__name__}. The projections that "
+                    f"produce these live in execution/chain.py (symbol_evidence, "
+                    f"build_evidence, diff_policy_evidence, change_surface_from); a record "
+                    "from evaluator/integrity.py or evaluator/surface.py is a DIFFERENT "
+                    "class with overlapping names, and passing one here fails silently "
+                    "rather than loudly.")
 
 
 # =============================================================================
@@ -2597,8 +2685,19 @@ class ExecutedT0EvidenceProvider:
         errors, warnings, findings = parse_compiler_diagnostics(text)
         commit, binary_sha, linkage_sha = _anchor_triple(anchor)
         return correctness.StaticAnalysisEvidence(
-            compiler_id=getattr(build, "compiler_id", "unknown"),
-            compiler_version=getattr(build, "compiler_version", "unknown"),
+            # Attribute access, not `getattr(build, "compiler_id", "unknown")`.
+            # `plan.build` is type-checked to a `correctness.BuildProvenance`,
+            # whose two compiler fields are required non-empty, so the fallback
+            # was reachable only from the WRONG record — and the wrong record
+            # here is `integrity.BuildProvenance`, which spells its compiler
+            # `compiler` and its log ref `build_log_path`. It produced
+            # `compiler_id="unknown"`, a value no anchor can equal, so the gate
+            # FAILed with "the candidate was built with unknown unknown but the
+            # anchor with GNU 15.2.0" — a toolchain confound reported about a
+            # candidate whose toolchain was never read. The plan refuses the
+            # wrong record now; this reads the right one directly.
+            compiler_id=build.compiler_id,
+            compiler_version=build.compiler_version,
             anchor_compiler_id=anchor.compiler_id,
             anchor_compiler_version=anchor.compiler_version,
             error_count=errors,
@@ -2626,7 +2725,9 @@ class ExecutedT0EvidenceProvider:
         the fail-open shape.
         """
         if not self._plan.state_safety_probe:
+            collected.notes.append(f"state safety: probe OFF. {STATE_SAFETY_CANNOT_PASS}")
             return None
+        collected.notes.append(f"state safety: probe ON. {STATE_SAFETY_CANNOT_PASS}")
         return correctness.StateSafetyEvidence(
             rollback_tested=False,
             teardown_tested=True,
@@ -2751,8 +2852,17 @@ class ExecutedT0EvidenceProvider:
         `ChangeSurface`'s `None` means "the derivation did not determine it" and
         every consumer fails closed on it — turning that into a `False` here
         would PASS a behavioural surface on a fact nobody established.
+
+        `plan.change_surface` is where the derivation arrives, by way of
+        `chain.change_surface_from(derive_affected_surface(...), diff_text=…)`.
+        It is a declared field on `T0ExecutionPlan` and is type-checked there.
+        Until 2026-08-04 this method read it with
+        `getattr(self._plan, "change_surface", None)` against a dataclass that
+        had no such attribute, so the pass-through this docstring describes was
+        DEAD: every candidate got the all-`None` surface below and four gates
+        read COULD_NOT_CHECK with no way for a caller to supply otherwise.
         """
-        existing = getattr(self._plan, "change_surface", None)
+        existing = self._plan.change_surface
         if isinstance(existing, correctness.ChangeSurface):
             return existing
         return correctness.ChangeSurface(

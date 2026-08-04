@@ -3171,5 +3171,109 @@ class TheOneBackendDoorCoversCapacityDeltasTest(unittest.TestCase):
         self.assertIn(R.BLOCK_CAPACITY_REGRESSION, coverage.blockers)
 
 
+class AnchorComparatorHasThreeOutcomesTest(unittest.TestCase):
+    """`identity_matches` gained a third outcome; two `!= PASS` sites had two.
+
+    `api.AnchorIdentity` grew `tool` on 2026-08-04, and with it a
+    COULD_NOT_CHECK for *one side names the binary its digest came off and the
+    other does not*. Both readiness sites that consume the comparator were
+    written when it answered only PASS or FAIL and tested `!= PASS`, so the new
+    third outcome — an UNOBSERVED component — was filed as a DETECTED
+    difference. That is a record overstating what was measured, and it is the
+    inversion of the precedence the field's own docstring cites
+    (`state_machine.check_anchor_identity`: a fact outranks an absence, and an
+    absence is never promoted to a fact).
+
+    A named-vs-unnamed pair is not hypothetical: a champion lineage or a stored
+    cell written before the field existed is unnamed, and every anchor minted
+    through `chain.AnchorBinding.identity` now names its tool.
+    """
+
+    @staticmethod
+    def _named(tag: str = "v8", tool: str = "llama-bench") -> api.AnchorIdentity:
+        return anchor(tag).for_tool(tool)
+
+    # -- site 1: _check_anchor_agreement -----------------------------------
+
+    def test_an_unnamed_tool_is_anchor_ABSENT_not_anchor_MOVED(self):
+        """Every digest agrees; only the tool name is unobserved on one side."""
+        signal = green_signal(champion=champion(anchor=self._named()))
+        check = signal.matrix.anchor_agreement
+        self.assertEqual(check.outcome, S.COULD_NOT_CHECK, check.reasons)
+        self.assertIn(R.BLOCK_ANCHOR_ABSENT, signal.blockers)
+        self.assertNotIn(R.BLOCK_ANCHOR_MOVED, signal.blockers)
+        self.assertIn("not evidence that the anchor moved", " ".join(check.reasons))
+
+    def test_a_moved_anchor_is_still_anchor_MOVED(self):
+        """Compliant-path control: the real FAIL must survive the correction."""
+        drifted = cell("cell-decode-a", improvement=None,
+                       non_inferiority=non_inferior_evidence(anchor_=anchor("v7")))
+        signal = green_signal(cells=(drifted,) + green_cells()[1:])
+        self.assertEqual(signal.matrix.anchor_agreement.outcome, S.FAIL)
+        self.assertIn(R.BLOCK_ANCHOR_MOVED, signal.blockers)
+
+    def test_two_DIFFERENT_named_tools_are_still_anchor_MOVED(self):
+        """The new field's own FAIL is a fact and must keep the FAIL bucket."""
+        cli = cell("cell-decode-a", improvement=None,
+                   non_inferiority=non_inferior_evidence(
+                       anchor_=self._named(tool="llama-cli")))
+        signal = green_signal(champion=champion(anchor=self._named(tool="llama-bench")),
+                              cells=(cli,) + green_cells()[1:])
+        self.assertEqual(signal.matrix.anchor_agreement.outcome, S.FAIL)
+        self.assertIn(R.BLOCK_ANCHOR_MOVED, signal.blockers)
+
+    def test_the_whole_matrix_is_still_green_when_every_side_names_the_tool(self):
+        """Compliant-path control: naming the tool everywhere must still MEET.
+
+        `green_cells()` mirrored with `anchor_=` threaded through every piece of
+        evidence — the shape tomorrow's campaign produces, where every anchor
+        comes from `chain.AnchorBinding.identity` and therefore names its tool.
+        """
+        named = self._named()
+        cells = (
+            cell("cell-decode-a",
+                 non_inferiority=non_inferior_evidence(anchor_=named),
+                 improvement=improving_evidence(anchor_=named)),
+            cell("cell-decode-co", co_residency="co_resident:big-quarters",
+                 event_id="ake-cell-decode-co",
+                 non_inferiority=non_inferior_evidence(anchor_=named)),
+            cell("cell-prefill-a", phase="prefill", protocol_id=PREFILL_PROTOCOL,
+                 non_inferiority=non_inferior_evidence(
+                     anchor_=named, metric="prefill_tokens_per_s",
+                     raw_ref="ak-raw://champion/prefill/blocks.jsonl")),
+            cell("sent-t1", role=R.CELL_ROLE_NON_TARGET, production_share=0.0,
+                 non_inferiority=non_inferior_evidence(anchor_=named)),
+            cell("sent-t2", role=R.CELL_ROLE_DISPATCHER_BOUNDARY, production_share=0.0,
+                 non_inferiority=non_inferior_evidence(anchor_=named)),
+        )
+        signal = green_signal(champion=champion(anchor=named), cells=cells)
+        self.assertEqual(signal.matrix.anchor_agreement.outcome, S.PASS,
+                         signal.matrix.anchor_agreement.reasons)
+        self.assertIn("llama-bench:", signal.matrix.anchor_agreement.reasons[0])
+        self.assertEqual(signal.standing, R.STANDING_MET, signal.blockers)
+
+    # -- site 2: T2Cell admissibility --------------------------------------
+
+    def test_an_unnamed_tool_on_one_statement_does_not_make_two_windows(self):
+        """A cell must not become INADMISSIBLE because a component was unobserved."""
+        built = cell("cell-x",
+                     non_inferiority=parity_evidence(value=0.005, anchor_=self._named()),
+                     improvement=evidence(value=0.005, effect_per_block=0.005,
+                                          hypothesis=st.HYPOTHESIS_IMPROVEMENT,
+                                          margin=0.0, anchor_=anchor()))
+        self.assertEqual(built.anchor.tool, "llama-bench")
+
+    def test_two_statements_on_DIFFERENT_named_tools_are_still_two_windows(self):
+        """Compliant-path control for the raise: a real disagreement still raises."""
+        with self.assertRaises(R.CellInadmissible) as caught:
+            cell("cell-x",
+                 non_inferiority=parity_evidence(
+                     value=0.005, anchor_=self._named(tool="llama-cli")),
+                 improvement=evidence(value=0.005, effect_per_block=0.005,
+                                      hypothesis=st.HYPOTHESIS_IMPROVEMENT, margin=0.0,
+                                      anchor_=self._named(tool="llama-bench")))
+        self.assertIn("anchor identity", str(caught.exception))
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

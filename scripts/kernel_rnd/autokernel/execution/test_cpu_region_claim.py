@@ -1211,5 +1211,73 @@ class TestModuleHygiene(unittest.TestCase):
         self.assertNotIn("def heartbeat", source)
 
 
+class TestAClaimIdIsNotACandidateId(_ClaimTestBase):
+    """Two id KINDS, two namespaces, and a validator that can tell them apart.
+
+    Until 2026-08-04 both were spelled `akc-`. A claim id passed where a candidate
+    id belongs therefore satisfied the one validator written to catch exactly that
+    substitution, and the record grammar rendered `res=akc-…` beside
+    `candidate=akc-…` with nothing to say which was which. A shared prefix between
+    two id kinds is how a validator becomes decorative.
+    """
+
+    @staticmethod
+    def _request_with_candidate_id(candidate_id: str):
+        """Construct through the REAL validator, with every other field left None.
+
+        `EvaluationRequest.__post_init__` checks the three id prefixes FIRST, so a
+        request whose remaining fields are None still reaches — and only reaches —
+        the check under test. Resolving against the real class rather than against
+        this module's copy of the prefix is the point: the copy is what could be
+        wrong.
+        """
+        from autokernel.evaluator import api  # local: a claim module never imports it
+        fields = {name: None for name in api.EvaluationRequest.__dataclass_fields__}
+        fields.update(event_id="ake-1", campaign_id="ak-1", candidate_id=candidate_id)
+        return api.EvaluationRequest(**fields)
+
+    def test_a_minted_claim_id_is_refused_where_a_candidate_id_belongs(self):
+        claim_id = crc._new_id()
+        self.assertTrue(claim_id.startswith("akclaim-"), claim_id)
+        with self.assertRaises(ValueError) as ctx:
+            self._request_with_candidate_id(claim_id)
+        self.assertIn("candidate_id", str(ctx.exception))
+
+    def test_a_real_candidate_id_still_passes_that_same_validator(self):
+        """Compliant-path control: the guard must not forbid the legitimate id."""
+        with self.assertRaises(ValueError) as ctx:
+            self._request_with_candidate_id(crc._CANDIDATE_ID_PREFIX + "20260803-0001")
+        # It failed on the NEXT field (tier=None), which is the proof that the
+        # candidate id itself was accepted.
+        self.assertNotIn("candidate_id", str(ctx.exception))
+        self.assertIn("tier", str(ctx.exception))
+
+    def test_an_acquired_claims_receipt_carries_the_claim_namespace(self):
+        """The id that reaches the record's `res=` field, from a REAL flock."""
+        claim = self._acquire()
+        try:
+            self.assertTrue(claim.claim_id.startswith(crc._CLAIM_ID_PREFIX), claim.claim_id)
+            self.assertFalse(claim.claim_id.startswith(crc._CANDIDATE_ID_PREFIX),
+                             claim.claim_id)
+            self.assertEqual(claim.receipt().claim_id, claim.claim_id)
+        finally:
+            claim.release()
+
+    def test_the_two_namespaces_cannot_be_re_merged_by_a_later_edit(self):
+        """The import-time guard, driven with values it must refuse and must allow."""
+        for claim_prefix, candidate_prefix in (("akc-", "akc-"),
+                                               ("akc-x", "akc-"),
+                                               ("akc-", "akc-x"),
+                                               ("", "akc-")):
+            with self.subTest(claim=claim_prefix, candidate=candidate_prefix):
+                with self.assertRaises(ImportError):
+                    crc._require_disjoint_id_namespaces(claim_prefix, candidate_prefix)
+        # Compliant path: the constants this module actually ships, and any other
+        # genuinely disjoint pair.
+        self.assertIsNone(crc._require_disjoint_id_namespaces(
+            crc._CLAIM_ID_PREFIX, crc._CANDIDATE_ID_PREFIX))
+        self.assertIsNone(crc._require_disjoint_id_namespaces("akclaim-", "akc-"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

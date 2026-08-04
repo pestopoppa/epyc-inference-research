@@ -874,12 +874,30 @@ class EndToEndScenario(unittest.TestCase):
         self.assertEqual(self.effect.noise_floor, self.calibration.noise_floor_phi)
         self.assertTrue(self.reduction.mde.found)
         self.assertGreater(self.effect.mde, 0.0)
-        # The MDE is a function of the CALIBRATION material and the block count
-        # only: the candidate's own blocks are not an input to it.
-        again = self.reducer.mde_for(self.effect.paired_blocks,
+        # The MDE is a function of the CALIBRATION material and the campaign's
+        # DECLARED window only: the candidate's own blocks — including how many
+        # of them there turned out to be — are not an input to it.
+        #
+        # `b_min`, not `effect.paired_blocks`. `solve_mde`'s `block_count` is the
+        # BASE SEGMENT length and it adds `max_rounds * blocks_per_round` on top
+        # to build its resampling windows, so passing the realized count asks for
+        # the MDE of a window the stopping rule cannot license — optimistic by
+        # 18.8% (selection) and 43.5% (confirmation) on the execution layer's own
+        # campaign. Latent until runs started pooling their declared extension
+        # round, because until then `len(blocks) == b_min`. See
+        # `PairedBlockReducer`'s own docstring.
+        again = self.reducer.mde_for(self.reducer.campaign.b_min,
                                      stratum=api.STRATUM_SELECTION,
                                      metric_direction="higher_better")
         self.assertEqual(again.value, self.reduction.mde.value)
+        if self.effect.paired_blocks != self.reducer.campaign.b_min:
+            realized = self.reducer.mde_for(self.effect.paired_blocks,
+                                            stratum=api.STRATUM_SELECTION,
+                                            metric_direction="higher_better")
+            self.assertNotEqual(
+                realized.value, self.reduction.mde.value,
+                "this run realized more blocks than B_min, so the two MDEs are "
+                "different numbers and the test above is load-bearing")
 
     def test_the_t1_verdict_is_a_ranked_improvement_and_the_event_validates(self):
         outcome = self.t1_outcome

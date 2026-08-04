@@ -354,6 +354,42 @@ class TestOrderControl(unittest.TestCase):
         # verifiable at all.
         self.assertEqual(sched.orders(6), retry.retry().orders(6))
 
+    def test_deriving_at_an_attempt_is_the_same_schedule_as_retrying_to_it(self):
+        """THE BITE: `retry()` has no caller outside these tests.
+
+        Everything that builds a schedule builds it with `derive()` —
+        `MicrobenchPlan.schedule`, `CampaignStatistics.order_schedule` — so if
+        `derive` ignores the attempt, `retry()` is the only implementation of
+        *"a retry is a fresh reset in reversed order"* and nothing calls it: a
+        retried run re-ran the IDENTICAL order sequence, on both sides at once,
+        so nothing failed and the aliasing the reversal exists to break was
+        re-committed. Both spellings of attempt `n` must be one schedule.
+        """
+        first = st.OrderSchedule.derive(campaign_seed=CAMPAIGN_SEED,
+                                        candidate_id="akc-1", base_blocks=6)
+        walked = first
+        for attempt in (1, 2, 3):
+            walked = walked.retry()
+            derived = st.OrderSchedule.derive(campaign_seed=CAMPAIGN_SEED,
+                                              candidate_id="akc-1", base_blocks=6,
+                                              attempt=attempt)
+            self.assertEqual(derived, walked)
+            self.assertEqual(derived.orders(6), walked.orders(6))
+        self.assertNotEqual(
+            first.orders(6),
+            st.OrderSchedule.derive(campaign_seed=CAMPAIGN_SEED, candidate_id="akc-1",
+                                    base_blocks=6, attempt=1).orders(6))
+
+    def test_attempt_zero_is_unchanged_and_a_second_retry_reverses_back(self):
+        """Compliant control: the first attempt's schedule must not have moved."""
+        base = st.OrderSchedule.derive(campaign_seed=CAMPAIGN_SEED,
+                                       candidate_id="akc-1", base_blocks=6)
+        self.assertFalse(base.reversed_schedule)
+        self.assertEqual(
+            base.orders(6),
+            st.OrderSchedule.derive(campaign_seed=CAMPAIGN_SEED, candidate_id="akc-1",
+                                    base_blocks=6, attempt=2).orders(6))
+
     def test_blocked_design_is_named_as_such(self):
         sched = st.OrderSchedule.derive(campaign_seed=CAMPAIGN_SEED,
                                         candidate_id="akc-1", base_blocks=8)
@@ -2057,13 +2093,70 @@ class TestOverExtensionIsJournaledNotRaised(unittest.TestCase):
         self.assertIn("max_blocks_per_candidate", str(cm.exception))
 
     def test_an_over_extended_run_comes_back_as_a_reduction(self):
+        """Still refused, still journalable — and now the reason NAMES it.
+
+        Until 2026-08-04 the over-extension surfaced as `mde_derivable` FAIL,
+        because `reduce()` handed `len(blocks)` to `mde_for` and
+        `max_total_blocks` refused the over-ceiling `b_min`. That was the right
+        verdict reached through the wrong organ: the record said *"no MDE could
+        be derived"*, which reads as a bookkeeping failure, about a run whose
+        actual finding is that it used more blocks than its rule licenses —
+        exactly the complaint in this class's own docstring, one layer along.
+
+        `reduce()` now derives the MDE from `campaign.b_min` (it must: the
+        realized count asks `solve_mde` for a window the rule cannot license,
+        which is optimistic by 18.8-43.5%), so the MDE is derivable here. The
+        over-extension is named by `block_count` and by the new `mde_window`,
+        which bounds the realized count by `b_min + max_rounds * blocks_per_round`
+        — TIGHTER than `block_count`'s `max_blocks_per_candidate`, so it also
+        catches a run between the two.
+        """
         reduction = self.reducer.reduce(self.request, self._over_ceiling_blocks())
         self.assertEqual(reduction.check("block_count").outcome, S.FAIL)
-        self.assertEqual(reduction.check("mde_derivable").outcome, S.FAIL)
-        self.assertFalse(reduction.mde.found)
-        self.assertIsNotNone(reduction.mde.reason)
+        self.assertEqual(reduction.check("mde_window").outcome, S.FAIL)
+        self.assertIn("licenses at most",
+                      " ".join(reduction.check("mde_window").reasons))
+        self.assertTrue(reduction.mde.found)
         self.assertIsNone(reduction.estimate)
         S.canonical_json(reduction.to_dict())          # still journalable
+
+    def test_a_run_between_the_two_ceilings_is_caught_by_mde_window_alone(self):
+        """THE BITE for `mde_window`: `block_count` cannot see this run.
+
+        `max_blocks_per_candidate` is the campaign-wide ceiling; the rule's own
+        budget for ONE candidate is `b_min + max_rounds * blocks_per_round`. When
+        the second is smaller than the first, a run between them passes
+        `block_count` and is described by an MDE for a shorter window than it
+        actually ran.
+        """
+        b_min = self.campaign.b_min
+        rule = self.rule
+        licensed = rule.max_total_blocks(b_min)
+        if licensed >= rule.max_blocks_per_candidate:
+            self.skipTest("this campaign's extension budget exhausts the ceiling, "
+                          "so there is no gap between the two bounds")
+        n = licensed + 1
+        blocks = tuple(st.PairedBlock(
+            block_index=i, unit_id=selection_unit(self.split, i),
+            stratum=api.STRATUM_SELECTION, order=self.schedule.order_for(i),
+            anchor_samples=(100.0, 100.1, 99.9),
+            candidate_samples=(115.0, 115.1, 114.9),
+            segment=st.SEGMENT_BASE if i < b_min else st.SEGMENT_EXTENSION,
+            extension_round=None if i < b_min else 1, measured_at=NOW)
+            for i in range(n))
+        reduction = self.reducer.reduce(self.request, blocks)
+        self.assertEqual(reduction.check("block_count").outcome, S.PASS)
+        self.assertEqual(reduction.check("mde_window").outcome, S.FAIL)
+        self.assertIsNone(reduction.estimate)
+
+    def test_the_declared_window_is_the_compliant_control_for_mde_window(self):
+        """A run of exactly the licensed length passes `mde_window`."""
+        _seq, blocks = run_candidate(self.campaign, effect=0.15, seed=31)
+        reduction = self.reducer.reduce(self.request, blocks)
+        self.assertEqual(reduction.check("mde_window").outcome, S.PASS,
+                         reduction.check("mde_window").reasons)
+        self.assertLessEqual(len(blocks),
+                             self.rule.max_total_blocks(self.campaign.b_min))
 
     def test_the_seam_raises_the_journalable_refusal(self):
         with self.assertRaises(st.ReductionInadmissible) as cm:

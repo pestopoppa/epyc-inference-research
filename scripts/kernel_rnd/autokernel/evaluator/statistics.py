@@ -595,11 +595,13 @@ class OrderSchedule:
     run into a non-conforming one.
 
     *"A retry is a fresh reset in reversed order"* (`bench-cpu.md:48-49`) —
-    `retry()` flips every element and nothing else. The base draw deliberately
-    does NOT key on `attempt`: if a retry re-drew the schedule it would be a
+    `retry()` flips every element and nothing else. The base DRAW deliberately
+    does not key on `attempt`: if a retry re-drew the schedule it would be a
     fresh randomization, not a reversal, and "reversed order on retry" would be
-    unverifiable. `attempt` is therefore recorded provenance, and a second retry
-    reverses back, which is what alternating reversal means.
+    unverifiable. What the attempt keys is only the REVERSAL — `derive()` sets
+    `reversed_schedule` from the attempt's parity, so a retry is reversed and a
+    second retry reverses back, which is what alternating reversal means, and
+    `derive(attempt=n)` is the same schedule as `n` chained `retry()` calls.
 
     Extension pairs are *"fresh reversed-order pairs"*, so `order_for()` flips
     the base schedule for indices at or beyond the base block count.
@@ -628,8 +630,27 @@ class OrderSchedule:
     @classmethod
     def derive(cls, *, campaign_seed: str, candidate_id: str, base_blocks: int,
                attempt: int = 0) -> "OrderSchedule":
+        """The schedule for `attempt`. Reversal is the attempt's PARITY.
+
+        `reversed_schedule` used to be `False` here for every attempt, which made
+        `derive(attempt=1)` a different object from `derive(attempt=0).retry()` —
+        the same run, spelled two ways, with opposite orders. Since `retry()` has
+        no caller outside the tests and everything that builds a schedule builds
+        it with `derive` (`MicrobenchPlan.schedule`,
+        `CampaignStatistics.order_schedule`), the consequence was that a retry
+        re-ran the IDENTICAL order sequence: *"a retry is a fresh reset in
+        reversed order"* was documented, checkable, and false. Both sides agreed
+        with each other, so nothing failed — the aliasing the reversal exists to
+        break was simply re-committed.
+
+        Parity makes the two constructions the same object, so a retried run is
+        reversed however it was built, and a second retry reverses back. `attempt
+        = 0` is unchanged, byte for byte.
+        """
+        if isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 0:
+            raise MaterialError("order schedule attempt must be a non-negative int")
         return cls(campaign_seed=campaign_seed, candidate_id=candidate_id, attempt=attempt,
-                   base_blocks=base_blocks, reversed_schedule=False)
+                   base_blocks=base_blocks, reversed_schedule=bool(attempt % 2))
 
     def retry(self) -> "OrderSchedule":
         """A retry is a fresh reset in reversed order."""
@@ -659,20 +680,49 @@ class OrderSchedule:
     def orders(self, count: int) -> tuple:
         return tuple(self.order_for(i) for i in range(count))
 
-    def check_observed(self, blocks: Sequence[PairedBlock]) -> schemas.Check:
-        """PASS/FAIL on order control, naming a blocked design when it sees one."""
+    def check_observed(self, blocks: Sequence[PairedBlock], *,
+                       first_index: int = 0) -> schemas.Check:
+        """PASS/FAIL on order control, naming a blocked design when it sees one.
+
+        `first_index` is the schedule position the FIRST submitted block occupies.
+        It exists for the extension round: the reducer is handed the whole run at
+        once (base then extension, indices 0..n-1, so the default is right), but
+        the RUNNER produces one round per invocation, and an extension round's
+        blocks occupy positions `base_blocks..` — checking them against positions
+        0.. would compare every extension block against the base slot whose order
+        the extension deliberately REVERSES, and refuse every conforming
+        extension round.
+
+        It is not a free label. Each block's own `block_index` must equal
+        `first_index + position`, so a caller that declares the wrong window is
+        contradicted by the material rather than believed: declaring
+        `first_index=0` for blocks 5..9 fails on the index, and declaring
+        `first_index=5` for the base segment fails the same way. That is the
+        difference between a parameter and an assertion.
+        """
+        if isinstance(first_index, bool) or not isinstance(first_index, int) \
+                or first_index < 0:
+            raise MaterialError("check_observed first_index must be a non-negative int")
         if not blocks:
             return schemas.Check(schemas.COULD_NOT_CHECK,
                                  ("no blocks were submitted; order control is unevaluable",))
         reasons = []
         for position, block in enumerate(blocks):
-            expected = self.order_for(position)
+            index = first_index + position
+            if block.block_index != index:
+                reasons.append(
+                    f"the block at position {position} of this submission carries "
+                    f"block_index {block.block_index} but occupies schedule position "
+                    f"{index}; the order schedule is keyed on the block's position in the "
+                    f"run, so a block that does not know its own position cannot be "
+                    f"order-controlled")
+            expected = self.order_for(index)
             if block.order != expected:
                 reasons.append(
-                    f"block {position} ran {block.order!r} but the schedule derived from the "
+                    f"block {index} ran {block.order!r} but the schedule derived from the "
                     f"committed campaign seed requires {expected!r}")
         observed = {b.order for b in blocks}
-        expected_set = set(self.orders(len(blocks)))
+        expected_set = {self.order_for(first_index + p) for p in range(len(blocks))}
         if len(observed) == 1 and len(expected_set) > 1:
             reasons.append(
                 f"every block ran {next(iter(observed))!r}: this is a BLOCKED design "
@@ -3117,14 +3167,39 @@ class PairedBlockReducer:
 
     Every quantity the protocol requires published WITH the estimate is computed
     here and put in the same object: the e-value, its calibrated threshold, the
-    MDE at the realized block count, and the calibrated noise floor. None of them
-    can be attached afterwards, because `api.EffectEstimate` requires all of them
-    at construction.
+    MDE of the campaign's DECLARED window, and the calibrated noise floor. None
+    of them can be attached afterwards, because `api.EffectEstimate` requires all
+    of them at construction.
 
-    The MDE is a function of the CALIBRATION material and the block count only.
-    The candidate's own blocks are not an input to it. That is what makes
+    **The MDE is derived from `campaign.b_min`, never from `len(blocks)`, and the
+    difference is not cosmetic.** `solve_mde`'s `block_count` argument is the BASE
+    SEGMENT length: it replays the rule with `b_min=block_count` and draws its
+    resampling windows at `rule.max_total_blocks(block_count)`, which ADDS the
+    declared extension budget on top. Handing it the realized count therefore
+    asks for the MDE of a run `block_count + max_rounds * blocks_per_round` long
+    — a window the campaign's own stopping rule cannot license.
+
+    Found 2026-08-04, on the campaign fixture in `execution/test_execution_chain`
+    (`b_min = 5`, `max_rounds = 1`, `blocks_per_round = 5`, so the rule licenses
+    at most 10 blocks for one candidate):
+
+        mde_for(5)   window 10  selection 0.008584   confirmation 0.013294
+        mde_for(10)  window 15  selection 0.006972   confirmation 0.007511
+                                       -18.8%              -43.5%
+
+    It was latent while every run stopped at `B_min` — there `len(blocks) ==
+    b_min` by coincidence — and went live the moment the declared extension round
+    got a producer and runs started pooling to 10 blocks. The direction is the
+    one that overstates: `api._resolve_effect` reads `magnitude < mde` as *"no
+    detectable difference"*, so an understated MDE admits effects the run could
+    not resolve, and if the e-value crosses they are RANKED as improvements.
+
+    The MDE is a function of the CALIBRATION material and the declared window
+    only. The candidate's own blocks are not an input to it. That is what makes
     *"computed … and published WITH the result, not after seeing it"* a checkable
-    property rather than a promise.
+    property rather than a promise — and deriving it from `b_min` rather than
+    from the realized count strengthens exactly that property, because the
+    realized count IS a fact about the candidate's own run.
     """
 
     def __init__(self, campaign: CampaignStatistics) -> None:
@@ -3251,7 +3326,18 @@ class PairedBlockReducer:
                               hypothesis=campaign.hypothesis, margin=campaign.margin,
                               threshold=threshold)
         try:
-            mde = self.mde_for(len(blocks), stratum=stratum,
+            # `b_min`, NEVER `len(blocks)` — `solve_mde`'s `block_count` is the
+            # BASE SEGMENT and it adds the declared extension budget on top, so
+            # the realized count asks for the MDE of a window the rule cannot
+            # license. Argued, with the measured error, on this class.
+            #
+            # The over-extension this call used to detect is not lost: a run
+            # longer than the rule licenses fails `block_count` (above the
+            # declared ceiling) or `extension_structure` (more rounds than
+            # declared), both of which block the estimate the same way a
+            # not-found MDE does — and both name the finding instead of
+            # reporting it as a missing MDE.
+            mde = self.mde_for(b_min, stratum=stratum,
                                metric_direction=request.metric_direction)
         except (StoppingRuleViolation, InsufficientMaterial) as exc:
             # An over-extended run is exactly the run that must be JOURNALED as
@@ -3272,6 +3358,27 @@ class PairedBlockReducer:
                        else schemas.Check(schemas.FAIL, (
                            f"no MDE could be derived at {len(blocks)} blocks: {mde.reason}. "
                            "A record without a published MDE is INVALID.",))))
+
+        # The published MDE describes the window the RULE licenses. A run that
+        # realized more blocks than that is not described by it, and this is the
+        # only check that says so: `block_count` bounds by
+        # `max_blocks_per_candidate` (the campaign-wide ceiling), which is looser
+        # than `b_min + max_rounds * blocks_per_round` whenever the extension
+        # budget does not exhaust the ceiling — 10 vs 20 on the execution
+        # layer's own campaign. Before 2026-08-04 an over-extended run surfaced
+        # here as "no MDE could be derived", which reported the finding as a
+        # bookkeeping failure; now it is named.
+        licensed = campaign.stopping_rule.max_total_blocks(b_min)
+        if len(blocks) > licensed:
+            checks.append(("mde_window", schemas.Check(schemas.FAIL, (
+                f"the run realized {len(blocks)} paired blocks but rule "
+                f"{campaign.stopping_rule.rule_id!r} licenses at most {licensed} for one "
+                f"candidate (b_min={b_min} plus "
+                f"{campaign.stopping_rule.extension.max_rounds} round(s) of "
+                f"{campaign.stopping_rule.extension.blocks_per_round}); the published MDE "
+                "describes the DECLARED window and therefore a shorter run than this one",))))
+        else:
+            checks.append(("mde_window", schemas.Check(schemas.PASS)))
 
         raw_list = [b.to_list() for b in blocks]
         ref = raw_samples_ref or f"sha256:{schemas.content_hash(raw_list)}"

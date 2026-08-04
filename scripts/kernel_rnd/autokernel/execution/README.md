@@ -21,7 +21,7 @@ decides whether today is a campaign or a plumbing session.
 | `t0_provider.py` | Runs `test-backend-ops`, `verify_ggml_linkage.sh`, generations, sanitizers; returns `correctness.T0Evidence` | never launched a tool |
 | `microbench.py` | Runs the T1 paired-block `llama-bench` design under the claim | never spawned a bench |
 | `control_runner.py` | Scores the five controls through the same dispatcher a candidate uses | fixtures only |
-| `chain.py` | The **seams** between the above and the evaluator that reads them | pure projection, no I/O beyond hashing |
+| `chain.py` | The **seams** between the above and the evaluator that reads them, plus the four T0 evidence projections (build, symbols, diff, change surface) | projection only; reads ELF/diff/log text it is handed, spawns nothing |
 
 The evaluator, journal, storage, controller, release plane and operator surface
 were built and green before any of this existed. They are not the risk.
@@ -296,8 +296,16 @@ once per candidate — budget for it.
 ### Step 5 — T0
 
 ```python
+# The anchor's toolchain is MEASURED off THE ANCHOR'S OWN build log, not typed
+# and not the candidate's. Without it `collect_static_analysis` returns None and
+# the static gate is COULD_NOT_CHECK; with the CANDIDATE's log it used to return
+# a PASS on a self-comparison, so `candidate_build=` is required and the
+# candidate's own log is refused (§6.1a item 2).
+toolchain = chain.anchor_toolchain_from_build_log(
+    anchor_build_log_text, log_ref=f"file://{anchor_log_path}",
+    candidate_build=build_ev.provenance)
 capture = T0.capture_anchor(plan=anchor_plan, runner=T0.SubprocessRunner(),
-                            claim=binding.t0_claim)
+                            claim=binding.t0_claim, **toolchain.as_capture_kwargs())
 t0_anchor = chain.bind_anchor(capture, tool="llama-cli")
 
 provider = T0.ExecutedT0EvidenceProvider(
@@ -309,6 +317,58 @@ t0_report = correctness.T0CorrectnessRunner(provider=provider,
 
 `bind_anchor(..., tool=...)` is not decoration — see §6.2.
 
+**Four of the plan's fields are evidence, not configuration**, and each one is a
+T0 surface that reads COULD_NOT_CHECK when it is left `None`. The producers are
+in `chain.py`; `test_execution_chain.ChainLeg.t0_evidence_inputs` is the
+reference wiring.
+
+```python
+# symbols -> symbol_and_registration_preservation.
+# The ANCHOR BINDING, not a path: SymbolTableDiff carries no anchor triple, so
+# this is the only place "which anchor is this diff against?" is answerable, and
+# `symbol_evidence` refuses an anchor binary the binding did not measure. The
+# registration tables are mandatory — `removed_op_registrations=()` from an
+# extractor that was never constructed is the fail-open the whole gate is for.
+libggml_anchor = chain.bind_anchor(libggml_capture, tool="libggml.so.0")
+symbols = chain.symbol_evidence(
+    anchor_binary=f"{anchor_bin}/libggml.so.0",
+    candidate_binary=f"{plan.build_dir.path}/bin/libggml.so.0",
+    anchor=libggml_anchor,
+    declared=integrity.DeclaredSymbolDeltas.from_proposal(proposal),
+    anchor_op_registrations=…, candidate_op_registrations=…,
+    anchor_dispatch_predicates=…, candidate_dispatch_predicates=…)
+
+# diff -> semantic_diff_conformance AND schema_and_diff_policy.
+# `commit_was_pathspec_limited` is DERIVED from the commit argv, not declared;
+# `production_tree_paths` is measured by resolving each repo-relative diff path
+# against the worktree, which is the only way a `..` escape is visible at all.
+diff = chain.diff_policy_evidence(
+    diff_text=subprocess_output_of_git_diff,
+    worktree_root=wt.path.path,
+    declared_surface_files=proposal["declared_surface_files"],
+    envelope=correctness.ChangeClassEnvelope(change_class=…, max_changed_lines=…,
+                                             max_files_touched=…),
+    branch_name=wt.branch.name,
+    commit_argv=("git", "commit", "-m", msg, "--", *paths),
+    record_schema_violations=validate_candidate_records())
+
+# change_surface -> asan, ubsan, unseen_boundary_shapes, state_rollback_teardown_race,
+# and the derived-op set `check_backend_op_units` unions with the mandatory ops.
+surface_evidence = chain.change_surface_from(
+    surface.derive_affected_surface(candidate_id=…, diff=…, indexes=[…],
+                                    registrations=…),
+    diff_text=subprocess_output_of_git_diff)
+
+t0_plan = T0.T0ExecutionPlan(…, build=build_evidence.provenance,
+                             symbols=symbols.diff, diff=diff.policy,
+                             change_surface=surface_evidence.surface)
+```
+
+Read `symbols.checks`, `diff.checks` and `surface_evidence.checks` as well as the
+gate results: each carries facts the far-side dataclass has no field for — a
+registration arity change, a binary file with no line count, an ELF extractor
+coverage gap.
+
 ### Step 6 — T1
 
 ```python
@@ -317,11 +377,39 @@ from autokernel.execution import microbench as MB
 t1_anchor = chain.bind_anchor(anchor_bench_capture, tool="llama-bench")
 assert chain.check_anchor_build_is_one_build([t0_anchor, t1_anchor]).outcome == "PASS"
 
-run = MB.MicrobenchRunner(claim=binding.microbench_claim,
-                          policy=MB.HostStatePolicy(nominal_khz=<measured>),
-                          spawner=MB.SubprocessSpawner()).run(t1_plan)
-blocks = run.paired_blocks()          # RAISES if the run was refused
+runner = MB.MicrobenchRunner(claim=binding.microbench_claim,
+                             policy=MB.HostStatePolicy(nominal_khz=<measured>),
+                             spawner=MB.SubprocessSpawner())
+base_run = runner.run(t1_plan)        # t1_plan.base_blocks == campaign.b_min
 ```
+
+**The base segment cannot cross, so this is not the end of Step 6.** §6.3 is the
+arithmetic: at `B_min = 5` the sign-martingale tops out at `e = 5.5687` against a
+threshold of 10, at every true effect. A campaign that stops here banks nothing
+and reports `evidence_below_threshold` forever, which reads like "no candidate
+was good enough" and is actually "the instrument cannot resolve a win at all".
+Run the declared extension round and pool:
+
+```python
+# The licence comes off the CAMPAIGN — the same `statistics.CampaignStatistics`
+# the reduction runs under. There is no spelling that takes a rule and a
+# commitment: a pair the caller mints verifies against itself and against
+# nothing (§6.3).
+rounds = []
+for round_index in range(1, campaign.stopping_rule.extension.max_rounds + 1):
+    licence = MB.ExtensionAuthorization(campaign=campaign, round_index=round_index)
+    rounds.append(runner.run(t1_plan.extend(licence)))
+    # WHEN to extend is the rule's, not yours: drive it from
+    # `campaign.sequential_evaluation(...)`, which terminates itself.
+
+blocks = MB.assemble_run_blocks(base_run, rounds, campaign=campaign)
+# RAISES on a refused run, a round licensed by another campaign, a base segment
+# that is not B_min blocks, or two runs that are not the same plan.
+```
+
+`base_run.paired_blocks()` alone is the right call only for a campaign whose rule
+declares `max_rounds = 0`, and such a rule can never bank a candidate in this
+cell.
 
 **Dry-run it first.** `MB.RecordedSpawner` replays recorded output through the
 entire pipeline — argv, env, pairing, parsing, reduction — without spawning
@@ -333,7 +421,31 @@ to be malformed.
 The controls sweep, the `api.TierDispatcher` dispatch and the controller walk are
 composed exactly as `execution/test_execution_chain.py::ChainLeg` does it. That
 class is the reference composition; read it rather than reconstructing the order
-from prose.
+from prose. Its stages, in the order the code enforces them, are
+
+```
+claim -> worktree -> build -> artifact -> anchor -> t0
+      -> t1 -> extend -> reduce -> controls -> dispatch
+```
+
+and **`extend` is the one that is easy to leave out.** `ChainLeg.extend_and_pool()`
+runs every round `campaign.stopping_rule.extension` declares and pools them with
+the base segment through `MB.assemble_run_blocks`; `ChainLeg.reduce()` then
+reduces the **pooled** sequence, not `t1_run.paired_blocks()`. A leg without that
+stage is green in every other respect and banks `evidence_below_threshold` for
+every candidate at every true effect — this class itself did exactly that until
+2026-08-04, while Step 6 above already said to run the round.
+
+What a banked win looks like, and what a null looks like, are both pinned in
+`test_execution_chain.TestAWinIsReachableAndANullIsRefused`:
+
+| | base segment (5) | declared budget (10) | resolution | rule replay |
+|---|---|---|---|---|
+| candidate at a true +8% | `e = 5.5687` | `e = 42.2877`, crosses at block 7 | `improvement`, **ranked** | `evidence_threshold_crossed` -> `compose_into_champion_lineage` |
+| candidate with NO true effect | `e = 5.5687` *(worst-case draw)* | `e = 5.5687`, never crosses | not rankable | `extension_exhausted` -> `abandon` |
+
+Both rows end at `BANK_EVENT`. Banking is not the same as winning: a candidate
+that did not earn a rank is banked as an abandon, with its reason.
 
 ### Step 8 — release the claim and tear down
 
@@ -356,15 +468,32 @@ you have a finding that outranks everything else you did today.
   `BuildResult.log_disagrees_with_exit_code` is `False`.
 * `verify_ggml_linkage.sh` says `PASS: all linked ggml libraries resolve inside
   <your build>/bin`.
-* `t0_report` has **17** gates. Today, a good candidate looks like *8 PASS and 9
-  COULD_NOT_CHECK, zero FAIL* — see §6.1. A `FAIL` on
+* `t0_report` has **17** gates. Since 2026-08-04 a good candidate looks like
+  *13 PASS and 4 COULD_NOT_CHECK, zero FAIL* — see §6.1, and note that the four
+  remaining COULD_NOT_CHECKs each have a NAMED reason. A `FAIL` on
   `t0.source_integrity.clean_build_from_snapshot` or
   `t0.affected_surface_reconciliation` is a real finding about your candidate.
+  So, now, is a `FAIL` on `symbol_and_registration_preservation`,
+  `semantic_diff_conformance`, `schema_and_diff_policy`,
+  `static_and_compile_checks` or `unseen_boundary_shapes` — those five stopped
+  being free.
 * Every `llama-bench` argv begins with `taskset -c 0-95 numactl --interleave=all`
   and carries `-fa 1`, and every env carries the full OMP stack
   (`OMP_PROC_BIND=spread`, `OMP_PLACES=cores`, `OMP_WAIT_POLICY=active`,
   `OMP_DYNAMIC=false`, `GGML_IQK=1`). `llama-bench` defaults to `-fa 0`; a
   default-flags number is real and useless.
+* **T1 ran the whole declared budget.** `len(blocks)` after
+  `assemble_run_blocks` is `b_min + max_rounds * blocks_per_round` — **10** for
+  this campaign, not 5 — and `reduction.mde.window_length` is the same number. If
+  it is 5 you stopped at the base segment and nothing can cross (§6.3); if
+  `mde.window_length` is 15 you are on a build from before §6.7.
+* The reduction's `admissible` is PASS and `mde_window` is PASS.
+* A win looks like `e_value >= threshold` **and**
+  `verdict.effect_resolution == "improvement"` **and**
+  `verdict.speed_rank_admissible` **and** the rule replaying to
+  `evidence_threshold_crossed` -> `compose_into_champion_lineage`. All four, or
+  it is not a win. A candidate that reaches `BANK_EVENT` with
+  `evidence_below_threshold` has been banked, not won.
 * The record grammar line ends with `SEARCH RECORD, NOT A CLAIM` and carries
   `controls=5/5`.
 * The three frozen trees are byte-identical at the end.
@@ -412,34 +541,191 @@ four seconds. Run it after any edit to a plan.
 
 ## 6. Before a first campaign can start — the honest list
 
-These are ordered. The first one blocks a *win*; the rest shape what a green run
-means.
+These are ordered. §6.3 — the one that blocked a *win* outright — is **closed as
+of 2026-08-04**, and is kept here because the fact underneath it still governs
+how a campaign must be planned: nothing crosses on the base segment. §6.5 is
+**open** and is the one way left to manufacture a crossing from a null effect;
+read it before you run a second round of anything. §6.7 is **new on 2026-08-04**
+and is closed: the pooled reduction that §6.3 made possible published an MDE for
+a window the stopping rule cannot license. The rest shape what a green run means.
 
-### 6.1 T0 has no producer for eight of its seventeen surfaces
+**Status, in one line each.**
 
-A candidate through today's `ExecutedT0EvidenceProvider` gets **8 PASS and 9
-COULD_NOT_CHECK**. The COULD_NOT_CHECKs are not bugs — an unevaluated surface
-reading COULD_NOT_CHECK instead of PASS is the whole design — but you should know
-which they are before you interpret a report:
+| § | What | State |
+|---|---|---|
+| 6.1 | T0's unwired producers | **CLOSED** — 13 PASS / 4 COULD_NOT_CHECK, re-verified 2026-08-04 after §6.7 |
+| 6.1a | Four defects in what 6.1 produced | **CLOSED** — bite-tested |
+| 6.1b | The projections' refusal channel reaches nothing | **OPEN** — MEDIUM-HIGH, needs a plan-side channel |
+| 6.2 | One anchor triple cannot name two tools | **CLOSED** — `AnchorIdentity.tool`, enforced three ways |
+| 6.3 | The extension round had no producer | **CLOSED** — producer, *and* a reference composition that runs it |
+| 6.4 | Claim ids and candidate ids share a prefix | **CLOSED** — refused at import |
+| 6.5 | A declared round can be re-run until it crosses | **OPEN** — re-reproduced 2026-08-04; needs a durable run ledger |
+| 6.6 | Smaller, recorded rather than fixed | mixed, each noted |
+| 6.7 | The published MDE described an unlicensable window | **CLOSED** — `b_min`, plus a new `mde_window` check |
+| 6.8 | How much block noise the declared budget tolerates | **OPEN as a PLANNING decision** — read it before you declare a rule |
 
-| Surface | Why it is unmeasured |
-|---|---|
-| `symbol_and_registration_preservation` | needs a `correctness.SymbolTableDiff`; `integrity.extract_elf_symbols` exists and is not wired |
-| `semantic_diff_conformance`, `schema_and_diff_policy` | need `DiffPolicyEvidence`; `integrity.parse_unified_diff` exists and is not wired |
-| `static_and_compile_checks` | produced only when the anchor capture carries `compiler_id`/`compiler_version`; pass them |
-| `sanitizer.asan`, `sanitizer.ubsan`, `unseen_boundary_shapes`, `state_rollback_teardown_race` | all gate on `ChangeSurface.derived_touches_*`, which is `None` unless `evaluator/surface.py`'s derivation is supplied to the plan |
-| `exact_reference_comparison` | recorded as a deliberate gap: `test-backend-ops` prints its error metric only on FAILURE, so a passing case yields no observed ULP. Needs an exact-reference harness. |
+### 6.1 T0's unwired producers — WIRED 2026-08-04, four surfaces still open
 
-Wiring the diff and symbol producers is a few hours and turns four
-COULD_NOT_CHECKs into real gates. Supplying the surface derivation turns four
-more. Do that before you conclude anything from a T0 report.
+Was: *8 PASS and 9 COULD_NOT_CHECK*, because four of the nine were unevaluated
+only for want of a line of code carrying `integrity.py`'s and `surface.py`'s
+output across to `correctness.py`'s shape. Those lines are now
+`chain.symbol_evidence`, `chain.diff_policy_evidence`,
+`chain.anchor_toolchain_from_build_log` and `chain.change_surface_from`; the
+wiring is in Step 5 above and in `test_execution_chain.ChainLeg`. **A candidate
+now gets 13 PASS and 4 COULD_NOT_CHECK.**
 
-Separately: `collect_state_safety` hardcodes `rollback_tested=False`, so with
-`state_safety_probe=True` that gate can only be FAIL and with it False only
-COULD_NOT_CHECK. **It cannot PASS today.** Leave the probe off until there is a
-rollback probe.
+**Census re-verified 2026-08-04, after the extension round and the §6.7 MDE fix
+landed: still 17 gates, 13 PASS, 4 COULD_NOT_CHECK, 0 FAIL.** Neither change
+touches a T0 surface — the extension is T1 and the MDE is the reducer's — and
+the count is pinned by
+`TestTheChainFits.test_exactly_four_t0_surfaces_still_have_no_producer`, which
+fails if it moves. The thirteen, by name:
 
-### 6.2 The anchor triple cannot name two tools — bind two
+`symbol_and_registration_preservation`, `clean_build_from_snapshot`,
+`semantic_diff_conformance`, `schema_and_diff_policy`, `static_and_compile_checks`,
+`backend_op_units`, `unseen_boundary_shapes`, `affected_surface_reconciliation`,
+`no_fallback_dispatch_proof`, `output_coherence_vs_anchor`, `determinism_class`,
+`binary_and_linkage_identity`, `anti_reward_hacking`.
+
+Five surfaces moved, and each is a gate that can now FAIL your candidate:
+
+| Surface | What produces it | What newly FAILs |
+|---|---|---|
+| `symbol_and_registration_preservation` | `chain.symbol_evidence` over `integrity.extract_elf_symbols` + two `RegistrationTable` pairs | an undeclared symbol removal, an undeclared arity change *(symbol **or** op-registration — the second added by the red team below)*, a removed op registration or dispatch case, >60% exported-surface shrinkage |
+| `semantic_diff_conformance` | `chain.diff_policy_evidence` over `integrity.parse_unified_diff` | a file outside the declared surface, an unrelated deletion, a diff over its change-class envelope |
+| `schema_and_diff_policy` | same record | a production-named branch, a diff path resolving into a frozen tree, a commit that was **not** pathspec-limited |
+| `static_and_compile_checks` | `chain.anchor_toolchain_from_build_log(anchor_log, log_ref=…, candidate_build=…)` -> `capture_anchor(compiler_id=…, compiler_version=…, warning_count=…)` | a compiler error, an analyzer finding, a candidate/anchor toolchain mismatch, a new warning vs the anchor — **but only if you feed it the ANCHOR's log; see the red team below** |
+| `unseen_boundary_shapes` | `chain.change_surface_from` (`derived_touches_dispatch`) + a `HoldoutPlan` | a dispatch change with no holdout at all, a holdout the planner could see, any unseen/boundary failure |
+
+Two of those five need something the campaign must DECLARE, and there is no
+default for either — supplying nothing means no evidence and a COULD_NOT_CHECK,
+which is honest:
+
+* the backend adapter's **registration patterns**, for the two
+  `PatternRegistrationExtractor`s. `removed_op_registrations=()` from an
+  extractor that was never constructed is indistinguishable from a clean one;
+* the proposal's **declared surface files** and **declared symbol deltas**
+  (`integrity.DeclaredSymbolDeltas.from_proposal`, which RAISES on an absent
+  declaration rather than defaulting to empty).
+
+The four that remain COULD_NOT_CHECK, with the reason each one is still open —
+each reason re-read against the running code on 2026-08-04, not carried forward:
+
+| Surface | Why it is still unmeasured | Is it closable here? |
+|---|---|---|
+| `sanitizer.asan` | needs `derived_touches_memory` **or** `derived_touches_threading` to be `False` before it can PASS by non-applicability. `chain.classify_behavioural_surface` answers `True` or `None` and **never `False`** by construction — proving "no reachable path allocates" needs a whole-program analysis, not a token list. For THIS candidate the diff matches no memory or threading token, so the flag is `None`. | No. A candidate whose diff *does* touch memory gets a real, speed-blocking FAIL instead — `TestTheBehaviouralClassifierOnlyWidens` — so the surface is a gate whenever it can be one. |
+| `sanitizer.ubsan` | identical; the two share `derived_touches_*` and the same PASS branch. | No, same reason. |
+| `state_rollback_teardown_race` | `t0_provider.collect_state_safety` hardcodes `rollback_tested=False`, so `state_safety_probe=True` is a guaranteed FAIL for every candidate and `state_safety_probe=False` leaves the gate to the change derivation, which is `None` here. Proved by exhaustion in `test_t0_provider.TheStateSafetyGateCannotPass`. | No. It needs a rollback probe that does not exist. **Leave the probe off**; that test is the tripwire for when one lands. |
+| `exact_reference_comparison` | `test-backend-ops` prints its error metric only on FAILURE, so a passing case yields no observed ULP and there is nothing to compare against a reference. | No. Needs an exact-reference harness — `t0_provider.SEAMS[0]`. |
+
+None of the four is a want of wiring. Three of them cannot PASS on any evidence
+this package can produce, and the fourth (`asan`/`ubsan`) can only PASS on a
+negative nothing here can establish — which is why they read COULD_NOT_CHECK
+rather than PASS, and why a green report has exactly four of them.
+
+**Read this before you over-read the sanitizer surface.**
+`surface.AffectedSurface` has no memory / threading / persistent-state axis — its
+axes are backends, link targets, op names, kernel symbols and dispatch
+predicates. `chain.change_surface_from` therefore classifies those three flags
+**lexically, from the diff body**, and answers `True` or `None` and **never
+`False`**. That is deliberate: `False` is what licenses `check_asan`'s *"the
+mechanical derivation finds it touches neither memory nor threading"* PASS, and
+proving that needs a whole-program reachability pass, not a token list. So:
+
+* a candidate whose diff visibly allocates or threads gets a **real, speed-
+  blocking FAIL** if no ASAN/UBSAN run was recorded — that is the case that
+  matters and it is now covered;
+* a candidate whose diff does not gets COULD_NOT_CHECK, exactly as before.
+
+Adding a token to `chain.BEHAVIOURAL_TOKENS` can only turn a COULD_NOT_CHECK into
+a gate; it can never turn a FAIL into a PASS.
+
+#### 6.1a The red team on the above — four defects, fixed 2026-08-04
+
+The five surfaces really did move. Four of the gates they produced did not bite
+where this section said they did, and all four are now bite-tested in
+`test_execution_chain.py` section H.
+
+1. **A declared ARITY CHANGE excused an undeclared REMOVAL.**
+   `chain._declared_covering` matched a name in `SymbolDiff.removed` against
+   *either* `declared.removed` *or* `declared.arity_changed`, and
+   `SymbolDiff.removed` is by construction a removal with NO matching addition.
+   So a proposal saying *"I will change the arity of
+   `ggml::detail::kernel_dispatch`"* whose candidate DROPPED that specialization
+   PASSed `symbol_and_registration_preservation`, byte-identically to a candidate
+   that declared the removal honestly — §8.5.1's own headline example arriving
+   through the gate written to catch it. A removal is now excused by
+   `declared.removed` and nothing else; symmetrically, an arity change is excused
+   by `declared.arity_changed` and nothing else.
+   (`TestADeclaredArityChangeDoesNotExcuseARemoval`)
+
+2. **The anchor toolchain was measured off the CANDIDATE's build log.**
+   `ChainLeg.bind_anchor` — the reference composition this README tells you to
+   copy — passed `self.build_log_text`, the candidate's. Both of
+   `check_static_and_compile`'s cross-arm comparisons then had the same bytes on
+   both sides: the toolchain-mismatch branch could never fire, and the
+   new-warning delta was identically zero for every candidate that ever ran, so
+   the gate's PASS was a self-comparison. Measured, not argued: with the old
+   wiring, adding a warning to the candidate build takes the candidate count 2→3
+   *and the anchor count 2→3*. `anchor_toolchain_from_build_log` now REQUIRES the
+   candidate's `correctness.BuildProvenance` and refuses a log that resolves to
+   the candidate's own, and `ChainWorld.anchor_tree()` writes the anchor's own
+   `anchor-build.log`. (`TestTheAnchorToolchainIsMeasuredOffTheANCHORSLog`)
+
+3. **`git commit -i -- <paths>` read as pathspec-limited.** `--include` means
+   *"stage these paths IN ADDITION TO whatever is already staged"*; the default
+   for a pathspec commit is `--only`, which disregards the index. `-i` is
+   therefore the one spelling under which another session's staged files ride
+   into the artifact WITH a pathspec present — exactly the hazard
+   `commit_was_pathspec_limited` exists for — and it returned `True`. `-i`,
+   `--include` and any bundled cluster containing `i` or `p` are now refusals,
+   and the flag scan stops at `--` so a pathspec spelled like a flag is a
+   filename.
+
+4. **A registration ARITY change reached no gate at all.**
+   `GGML_CPU_OP(MUL_MAT, 2)` → `GGML_CPU_OP(MUL_MAT, 5)` changes no exported
+   name, links clean, and dispatches the op with the wrong operand count for
+   every shape. `integrity.RegistrationDiff` has reported it since it was
+   written; `correctness.SymbolTableDiff` had no field for it, so
+   `chain.symbol_evidence` could only put it in a `checks` tuple **that nothing
+   reads**, and T0 said PASS. `SymbolTableDiff.arity_changed_op_registrations`
+   now exists and `check_symbol_and_registration_preservation` FAILs on any entry
+   not declared. (`TestARegistrationArityChangeReachesTheGate`)
+
+#### 6.1b OPEN — the projections' refusal channel reaches nothing (MEDIUM-HIGH)
+
+**Still open on 2026-08-04, and the reason it is the next thing to close:**
+nothing reads `SymbolEvidence.checks`, `DiffEvidence.checks` or
+`ChangeSurfaceEvidence.checks`, and nothing reads their `worst` property — the T0
+plan takes the projected RECORD and drops the wrapper. Every finding those
+projections make that `correctness.py` has no field for therefore evaporates
+before the report, and all of them are COULD_NOT_CHECKs turning into silence:
+
+* registration `arity_not_comparable` — exactly one side's declared pattern
+  captured an arity, which is not "unchanged";
+* **`elf_extraction_complete`** — the ELF extractor reported a coverage gap, so
+  the symbol diff is over an incompletely-read table, and the gate still says
+  PASS. This is the one that matters most: it is the difference between "no
+  symbol was removed" and "no symbol was removed from the part we could read";
+* `diff_is_textual` — a binary blob in the diff contributes no changed lines, so
+  the §10.6 change-class envelope does not bound it;
+* the three `derived_touches_*` UNDETERMINEDs.
+
+All four turn a COULD_NOT_CHECK into silence, which is the direction that
+overstates. Recorded in `chain.SEAM_NOTES`. **The close is a plan-side channel:**
+`t0_provider._Collected.notes` already reaches the record, so the projections'
+checks need routing into it, or `T0ExecutionPlan` needs to take the wrappers
+rather than the bare records. Not attempted here because it changes what a T0
+report contains, and that is a schema-visible change that wants its own pass.
+
+*What to do tomorrow, meanwhile:* after `evaluate_t0`, read
+`symbols.checks`, `diff.checks` and `surface_evidence.checks` yourself — they are
+right there on the objects Step 5 built — and treat any non-PASS as a finding the
+report did not carry. `ChainLeg` keeps all three on the leg
+(`leg.symbol_evidence`, `leg.diff_evidence`, `leg.change_surface_evidence`) for
+exactly that.
+
+### 6.2 The anchor triple cannot name two tools — bind two — CLOSED 2026-08-04
 
 `api.AnchorIdentity.binary_sha256` is single-valued. T0 hashes the anchor
 `llama-cli`; `microbench` compares the plan's anchor digest against the anchor
@@ -448,49 +734,212 @@ two `chain.bind_anchor(..., tool=...)` bindings and tie them with
 `chain.check_anchor_build_is_one_build`, which enforces what genuinely must hold
 across tools of one build: same `source_commit`, same `linkage_sha256`.
 
-Required follow-up in `evaluator/api.py` (owned elsewhere): either a per-tool
-digest table on `AnchorIdentity`, or a documented rule that `binary_sha256` names
-the tool the record's `metric` is measured with.
-`controller/state_machine.AnchorIdentity` already keys its digests by backend, so
-the shape exists in the codebase — just not in the field the record uses.
+**The api.py half is now done.** Of the two options this section offered, the
+second is implemented and ENFORCED rather than documented: `AnchorIdentity.tool`
+names the tool whose binary `binary_sha256` is, and by rule that is the tool the
+record's `metric` was measured with. The enforcement is three-part —
+`identity_matches` FAILs two differently-named tools even when every digest
+agrees, `for_tool()` refuses to re-label a triple as another tool, and `short()`
+prefixes the tool into the record grammar (`vs anchor llama-bench:<commit>/…`).
+`AnchorBinding.identity` stamps it, so the tool no longer evaporates between the
+binding and the object the record reads. Not the per-tool digest table: this
+object is the denominator of ONE ratio measured by one tool, where
+`controller/state_machine.AnchorIdentity`'s per-backend table is the
+campaign-wide production identity that must describe every backend the tree
+serves. The argument is on the class; `test_api.AnchorNamesOneToolTest` and
+`test_execution_chain.TestTheChainFits.test_one_capture_bound_for_two_tools_is_two_anchors`
+hold it down.
 
-### 6.3 THE BLOCKER — no candidate can cross the evidence threshold
+`tool` is optional, because a record written before the field existed named no
+tool and must stay readable. It is never *silently* compatible: named-against-
+unnamed is COULD_NOT_CHECK, never PASS. Anything that builds an
+`AnchorIdentity` by copying another one field by field will therefore drop the
+name and degrade its own precondition — copy with `dataclasses.replace`.
 
-For the CPU decode cell the calibration solves `B_min = 5` and
-`threshold = 10`, and the sign-martingale e-value over 5 same-sign blocks tops
-out at **5.57**. No candidate can cross on the base segment alone, whatever its
-true effect — verified, not inferred (`ChainLeg` at factor 1.08, 1.3, 1.6 and 3.0
-all return `e_value = 5.5687`, because the construction is sign-based and the
-magnitude does not enter). Every win must come from the declared extension round.
+**Red-team follow-up, same day, three defects — all now closed.** (a) The rule
+*"`binary_sha256` is the digest of the tool the record's `metric` was measured
+with"* had no enforcement point: `for_tool` refuses a RE-label, but the FIRST
+label is a free string and `bind_anchor` accepts any of them, so an anchor
+captured off `llama-bench` and bound `tool="llama-cli"` had a digest that MATCHED
+the binary that ran, passed every check, and rendered `vs anchor llama-cli:…` as
+the denominator of a ratio `llama-bench` produced. `MicrobenchRunner`'s new
+`anchor_identity.tool` conjunct compares the plan's anchor against
+`recipes.get_recipe(plan.recipe_id).tool` — the only place both halves of the
+rule are present at once. (b) and (c) `identity_matches` now has THREE outcomes
+and two `release/readiness.py` sites tested `!= PASS`, written when it had two:
+`_check_anchor_agreement` filed an unobserved tool name as `BLOCK_ANCHOR_MOVED`
+(a record asserting the denominator was REBUILT), and `T2Cell._require_same_window`
+raised `CellInadmissible` saying the two halves were *"reductions of DIFFERENT
+windows"*. Both now branch on FAIL; COULD_NOT_CHECK goes to
+`BLOCK_ANCHOR_ABSENT`, which is that function's own existing bucket for an
+unobserved component. **Grep for `identity_matches` before adding a consumer:
+`!= PASS` is the wrong test.**
 
-And the extension round **has no producer**:
+### 6.3 THE BLOCKER — CLOSED 2026-08-04: the extension round has a producer
 
-* `statistics._check_extension_structure` already accepts base blocks followed by
-  whole extension rounds;
-* `microbench.plan_blocks` already takes `segment=` and `extension_round=`;
-* but `MicrobenchPlan` has no field for either, and `MicrobenchRunner.run()`
-  calls `plan_blocks` with the defaults — so the runner emits `SEGMENT_BASE` and
-  nothing else.
+**The fact, unchanged and still the reason this section exists.** For the CPU
+decode cell the calibration solves `B_min = 5` and `threshold = 10`, and the
+sign-martingale e-value over 5 same-sign blocks tops out at **5.5687**. No
+candidate can cross on the base segment alone, whatever its true effect —
+verified, not inferred (`ChainLeg` at factor 1.08, 1.3 and 3.0 all return
+`e_value = 5.5687`, because the construction is sign-based and the magnitude
+does not enter). Ten same-sign blocks reach **42.29**, crossing at block 7.
+**Every win comes from the declared extension round.** Do not plan a campaign
+that stops at `B_min`.
 
-Pinned by `test_execution_chain.TestTheExtensionRoundHasNoProducer`, which also
-demonstrates that the far side is ready. The fix is two fields on
-`MicrobenchPlan` threaded into that one `plan_blocks` call. It was deliberately
-not made here: whether the order schedule is re-derived or extended across two
-runner invocations is a statistical decision (`OrderSchedule.order_for` is
-prefix-stable, which suggests extended), and guessing it would put an
-unverifiable assumption under every effect estimate. **Settle this first; without
-it the campaign runs and banks `evidence_below_threshold` forever.**
+The producer now exists. `MicrobenchPlan` carries `segment` and an
+`ExtensionAuthorization`, `MicrobenchRunner.run()` threads them into
+`plan_blocks`, and `microbench.assemble_run_blocks(base_run, [round_1, ...])`
+pools the runs into the one block sequence the reducer reads. Regression cover:
+`test_execution_chain.TestTheExtensionRoundHasAProducer` (which replaced the pin
+that used to live here) and four classes in `test_microbench.py`.
 
-### 6.4 A claim id and a candidate id are spelled the same
+**And the reference composition now RUNS it — that half was still missing on the
+morning of 2026-08-04, and a producer nobody calls is not a closed blocker.**
+Step 6 above had been corrected to run the declared round; `ChainLeg`, which
+Step 7 tells you to copy for everything after T1, still ended at
+`run_t1()` + `reduce()` over five blocks. So the whole chain demonstrated a
+green, seventeen-gate, five-control, fully-attested leg that reached
+`BANK_EVENT` and banked **`evidence_below_threshold`** — the failure this
+section exists to prevent, arrived at by copying the file the runbook points at.
+`ChainLeg` now has an `extend` stage between `t1` and `reduce`
+(`extend_and_pool()`), `reduce()` defaults to the pooled sequence, and
+`walk()` runs the whole declared budget.
 
-`cpu_region_claim._CLAIM_ID_PREFIX` is `"akc-"`, which is the prefix
+**The demonstration, both directions, is
+`test_execution_chain.TestAWinIsReachableAndANullIsRefused`:** a candidate at a
+true +8% pools to `e = 42.2877`, crosses at block 7, resolves `improvement`, is
+speed-rank admissible, replays to `evidence_threshold_crossed` ->
+`compose_into_champion_lineage`, and reaches `BANK_EVENT`; a candidate with no
+true effect (`null_effect`, per-block factors centred exactly on 1.0 at the
+calibration's own noise) pools to `e = 0.9000`, never crosses at any prefix, is
+not rankable, and replays to `extension_exhausted` -> `abandon`. The hardest
+null in that class reaches **exactly 5.5687** on its base segment — five
+same-sign blocks from a true effect of zero — which is the clearest statement of
+why 5.5687 is not a near miss.
+
+**The schedule question is settled: EXTENDED, not re-derived.** One
+`OrderSchedule`, whose `base_blocks` stays `B_min`, indexed straight through the
+base segment and every round; round *r* starts at
+`B_min + (r-1) * blocks_per_round`. The argument is in `microbench.py`'s module
+docstring under *"the extension round is extended, not re-derived"* — five
+pieces of code that only make sense under it, most decisively that
+`OrderSchedule.order_for`'s reversed limb is unreachable under re-derivation, so
+a re-derived round would repeat the base orders, which `BoundedExtension`
+(`order="reversed"` only) cannot declare. A plan whose `base_blocks` disagrees
+with its authorization raises `ScheduleMismatch`; two runs that are not the same
+plan cannot be pooled.
+
+**An extension is declared, never granted after the fact.**
+`ExtensionAuthorization` takes the **campaign** — one
+`statistics.CampaignStatistics` — and reads `max_rounds`, `blocks_per_round`,
+`max_blocks_per_candidate` and the base length off it instead of accepting them.
+Round `max_rounds + 1`, a round that would pass `max_blocks_per_candidate`, a
+round index below 1, and `segment="extension"` with no authorization at all are
+each `ExtensionNotDeclared` at construction — before a process is spawned.
+
+It takes the campaign because taking a `(StoppingRule, StoppingRuleCommitment)`
+pair did **not** hold, and the first version of this section claimed it did.
+`commitment.verify(rule)` compares its two arguments to each other; a caller who
+wanted a budget the campaign never declared never had to mutate a committed rule,
+only to commit the rule it wanted. Red team, 2026-08-04, reproduced end to end:
+a licence for round 3 of a `max_rounds=3` rule with a ceiling of 100, campaign id
+`not-even-this-campaign` and `committed_at` in **2099**, constructed cleanly;
+rounds 1, 2 and 3 were **spawned** — real benchmark minutes on a held claim —
+and only the reducer refused the pooled 20 blocks afterwards. A single forged
+round of the campaign's own shape was not refused at all: it reduced to
+`admissible = PASS`, `e = 42.29`, banked, and its raw vector recorded
+`campaign_id: "some-other-campaign"` as the licence for the round. Because the
+campaign verifies its own commitment at construction and carries an accepted
+calibration for the cell, a licence derived from it is issued by the same object
+the evidence is reduced under.
+
+A second campaign is still buildable, so the binding is re-checked where it
+matters: `assemble_run_blocks(base_run, rounds, campaign=...)` takes the campaign
+as a **required** keyword and refuses a round whose licence names another one
+(`ExtensionAuthorization.licence_for`), a base segment that is not `B_min` blocks,
+and a run planned under another committed seed. `PairedBlock` carries a segment
+and a round number but never an authorization, so pooling is the last frame in
+which the question can be asked at all.
+
+What this does NOT do: decide *when* to extend. That is the rule's, and the rule
+already has a driver — `statistics.SequentialEvaluation` issues the
+`BlockRequest` for each block and terminates itself. Drive the round from it (see
+`test_the_stopping_rule_replays_to_a_crossing_on_the_pooled_blocks`), do not
+extend on your own judgement of whether the answer might still change.
+
+One related change on the far side: `OrderSchedule.check_observed` now takes
+`first_index=` so a single round can be order-controlled at its own window
+(default `0`, so the reducer's whole-run call is unchanged). It cross-checks each
+block's own `block_index` against that window, so the parameter cannot relabel a
+run.
+
+### 6.4 A claim id and a candidate id are spelled the same — CLOSED 2026-08-04
+
+`cpu_region_claim._CLAIM_ID_PREFIX` was `"akc-"`, which is the prefix
 `api.EvaluationRequest` requires of a **candidate** id. A claim id passed where a
-candidate id belongs therefore satisfies the one validator written to catch that
-class of mistake, and the record grammar renders it as `res=akc-…` beside
-`candidate=akc-…`. Change it to `akclaim-` (which `t0_provider`'s own fixtures
-already use) and update that module's assertions.
+candidate id belongs therefore satisfied the one validator written to catch that
+class of mistake, and the record grammar rendered it as `res=akc-…` beside
+`candidate=akc-…`.
 
-### 6.5 Smaller, recorded rather than fixed
+It is now `"akclaim-"` (the spelling `t0_provider`'s own fixtures already used),
+and the two namespaces cannot be re-merged by a later edit:
+`_require_disjoint_id_namespaces` runs at IMPORT and refuses any claim prefix
+that starts with, or is started by, the candidate prefix — prefix-disjointness in
+both directions, because every id validator in the package tests by
+`startswith`. `test_cpu_region_claim.TestAClaimIdIsNotACandidateId` resolves a
+minted id against the real `api.EvaluationRequest` rather than against the
+module's own copy of the prefix, with a real candidate id as the compliant-path
+control.
+
+### 6.5 OPEN — a declared round can be re-run until it crosses
+
+Found by the 2026-08-04 red team, **not fixed**, and it is the one remaining way
+to manufacture a crossing from a null effect. **Re-reproduced against the
+current code on 2026-08-04**, after `ExtensionAuthorization` was moved onto the
+campaign and after the reference composition started pooling: run round 1, keep
+the run, run round 1 again, pool the *second* run with the base segment —
+`assemble_run_blocks` accepts it and returns ten blocks. (Pooling *both* runs
+raises `ScheduleMismatch`: *"extension round 1 was submitted twice"*. Discarding
+one is what is invisible.) `assemble_run_blocks` refuses the
+same round *object* twice, and refuses a round from another plan or another
+campaign — but nothing anywhere refuses a **second run of the same declared
+round**, because a second run of the same plan is the same plan. Run round 1,
+pool, read the e-value, and if it did not cross, run round 1 again and pool that
+one instead. Every structural check passes: same seed, same candidate, same
+attempt, same instrument, one contiguous index line.
+
+Measured on the calibrated construction (`sign_martingale_predictable_lambda/v1`,
+λ cap 0.5, threshold 10, B_min 5, 5 blocks per round, 10 000 trials per row):
+
+| what was submitted | null crossing rate |
+|---|---|
+| base segment only (5 blocks) | 0.00 % |
+| base + one declared round (10 blocks) | 1.36 % |
+| best of 2 re-runs of round 1 | 2.63 % |
+| best of 5 | 4.71 % |
+| best of 10 | 6.33 % |
+| best of 25 | 9.76 % |
+| best of 50 | 13.12 % |
+
+The declared budget is α = 0.1 (threshold = 1/α = 10). Twenty-five re-runs
+exhaust the whole campaign's error budget on one candidate; fifty exceed it.
+Nothing in the package can see it, because detecting a **discarded** completed
+round needs a durable per-candidate run ledger, and the runner writes none:
+`MicrobenchRun` is a value, `assemble_run_blocks` sees only the runs it is
+handed, and `PairedBlock` carries a segment and a round number but no run
+identity at all.
+
+What closes it: journal every *completed* `MicrobenchRun` at the moment it
+completes (`autokernel/journal.py`), keyed on
+`(campaign_id, candidate_id, attempt, segment, extension_round)`, and have the
+pooling seam refuse when the journal holds a completed run for that key which is
+not the one being pooled. Until then, **the operator's own discipline is the
+control**: a round that completed is the round that counts, and a run that has to
+be repeated is a retry — `attempt + 1`, reversed schedule — not a re-roll of the
+same one.
+
+### 6.6 Smaller, recorded rather than fixed
 
 * `correctness.BuildProvenance` has no `produced_by`, so an evaluator-measured
   build record is indistinguishable from an actor-supplied one, and no field
@@ -505,6 +954,121 @@ already use) and update that module's assertions.
   child survives `SIGKILL` in uninterruptible D-state — plausible during a large
   build on this raid0. It does not report success falsely; it hangs. Reported by
   the worktree red-team, not fixed.
+* `OrderSchedule.order_for` folds the index modulo `base_blocks`, so with
+  `blocks_per_round == B_min` **round 2 draws round 1's orders exactly** (both
+  are the reversed limb of base slots 0..B_min-1). It is deterministic,
+  seed-derived and prefix-stable, and it does not affect the sign statistic — but
+  it means rounds ≥ 2 are not independent order draws, and the run's order
+  balance drifts by the base draw's own imbalance once per round (with the chain
+  campaign's seed: 5/5 at 10 blocks, 7/8 at 15, 9/11 at 20). Harmless at
+  `max_rounds = 1`, which is what the CPU decode cell declares. A campaign that
+  declares more rounds should key the reversal on the ROUND, the way `derive()`
+  now keys it on the attempt's parity.
+* `api.EffectReducer.reduce_blocks` — the ratified seam — takes no `attempt`, so
+  it always reduces at attempt 0. `PairedBlockReducer.reduce` does take one.
+  Since `derive()` now reverses on the attempt's parity, a **retried** run must
+  be reduced through `reduce()` with its attempt, or its order control fails.
+  That is the correct direction (it fails closed) but the api seam cannot express
+  it; thread the attempt at the call site.
+
+### 6.7 CLOSED 2026-08-04 — the published MDE described a window the rule cannot license
+
+Found while wiring §6.3's extension round into the reference composition, and it
+is **the defect that closing §6.3 made live**. Latent before, because every run
+in the package stopped at `B_min` and the two quantities below happened to be
+the same number.
+
+`statistics.solve_mde`'s `block_count` argument is the **base segment length**:
+it replays the stopping rule with `b_min=block_count` and draws its resampling
+windows at `rule.max_total_blocks(block_count)`, which ADDS
+`max_rounds * blocks_per_round` on top. `PairedBlockReducer.reduce` handed it
+`len(blocks)` — the **realized** count. For a pooled ten-block run that asks for
+the MDE of a fifteen-block window, and `max_rounds = 1` means this campaign can
+never license fifteen blocks for one candidate:
+
+| passed as `block_count` | window built | selection MDE | confirmation MDE |
+|---|---|---|---|
+| `b_min = 5` (correct) | 10 — the rule's own budget | 0.008584 | 0.013294 |
+| `len(blocks) = 10` (was) | 15 — **unlicensable** | 0.006972 | 0.007511 |
+| | | **-18.8 %** | **-43.5 %** |
+
+The direction overstates, and it reaches the verdict: `api._resolve_effect`
+reads `magnitude < mde` as `no_detectable_difference`, so an understated MDE
+admits effects the run could not resolve, and if the e-value crosses they are
+RANKED as improvements. The record's MDE is not decorative — *"a record without
+a published MDE is INVALID"* — so this is a headline number on every banked win.
+
+**Fixed** in `PairedBlockReducer.reduce`: the MDE comes from `campaign.b_min`,
+which is the only argument for which `solve_mde` builds a window the rule can
+actually license. The over-extension detection that used to arrive here as *"no
+MDE could be derived"* — a bookkeeping message for a rule violation — is now a
+named check, **`mde_window`**, which bounds the realized count by
+`b_min + max_rounds * blocks_per_round`. That bound is TIGHTER than
+`block_count`'s `max_blocks_per_candidate` (10 vs 20 on this campaign), so it
+also catches a run between the two, which nothing caught before. Cover:
+`test_statistics.TestOverExtensionIsJournaledNotRaised` (three tests, including
+the between-the-ceilings bite and a compliant-path control) and
+`test_execution_chain.TestAWinIsReachableAndANullIsRefused.test_the_pooled_records_MDE_describes_a_window_the_RULE_can_license`.
+
+**Residual, OPEN and lower severity:** `solve_mde` still cannot express *"the MDE
+of a run that realized N blocks and stopped"* — it always adds the extension
+budget. The design MDE at `b_min` is the right number to publish (it is the
+campaign's declared power, fixed before any candidate ran, which is what makes
+*"published WITH the result, not after seeing it"* checkable), but a reader who
+takes it as this run's own resolution is reading it slightly generously.
+Measured on this campaign: design MDE at `b_min` 0.008584 against roughly 0.0098
+for a ten-block window with a look at every block. Closing it means a
+`realized_blocks=` parameter on `solve_mde`, which is a ratified seam and wants
+its own pass.
+
+### 6.8 OPEN as a PLANNING decision — how little block noise the budget tolerates
+
+Not a defect, and not fixable in code: it is arithmetic about the rule you are
+about to declare, and nothing in the package will tell you before you spend the
+claim. Enumerated over all 1024 sign sequences of a ten-block run under
+`sign_martingale_predictable_lambda/v1` (the e-value is a deterministic function
+of the sign sequence, so this is exhaustive, not sampled):
+
+| blocks against the candidate | sequences | cross at 10 (selection) | cross at 20 (confirmation) |
+|---|---|---|---|
+| 0 | 1 | 1 | 1 |
+| 1 | 10 | 9 | 1 |
+| 2 | 45 | 3 | 0 |
+| 3 | 120 | 1 | 0 |
+| ≥ 4 | 848 | 0 | 0 |
+| **total** | **1024** | **14 (1.37 %)** | **2 (0.20 %)** |
+
+Read the last column first. **At the declared budget, a confirmation-stratum
+candidate crosses on exactly two sequences out of 1024: ten of ten same-sign, or
+nine of ten with the single adverse block LAST.** One adverse block anywhere
+else sinks it. The selection stratum is looser but not loose: every placement of
+even one adverse block is guaranteed to cross only at 15 blocks, and of three
+only at 20.
+
+| budget | selection (thr 10) | confirmation (thr 20) |
+|---|---|---|
+| 10 blocks (`max_rounds = 1`) | 0 adverse blocks tolerated in every placement | 0 |
+| 15 blocks (`max_rounds = 2`) | 2 | 1 |
+| 20 blocks (`max_rounds = 3`) | 3 | 3 |
+
+The bottom row of the first table is also the null crossing rate: **1.37 %** at
+selection, which is the exact value §6.5's Monte-Carlo table estimates at 1.36 %,
+and 0.20 % at confirmation. Both are far under the declared α of 0.1 — the
+instrument is honest; it is simply *tight*.
+
+**The decision, and it is the operator's, before the claim is acquired:** a
+`max_rounds = 1` campaign can bank a SELECTION win from a candidate whose effect
+is large relative to per-block noise, and will struggle to CONFIRM it, because
+confirmation demands a near-perfect run at half the α. If the campaign intends to
+reach `compose_into_champion_lineage` — which needs
+`confirmation_admission_count = 2` replications — declare `max_rounds = 2` and
+budget 15 blocks per candidate. The cost is 50 % more claim time per candidate;
+the alternative is a selection win that cannot be confirmed, banked, and
+mistaken for a candidate that failed to replicate.
+
+*(The MDE agrees and says it more gently: the solver finds a confirmation MDE at
+`b_min` of 0.0133 versus a selection MDE of 0.0086 — the confirmation stratum
+needs an effect ~55 % larger at the same budget.)*
 
 ---
 
@@ -512,7 +1076,15 @@ already use) and update that module's assertions.
 
 `execution/chain.py` holds the four seams and argues each one in its docstring.
 `execution/test_execution_chain.py::ChainLeg` is the reference composition —
-claim, worktree, build, T0, T1, controls, verdict, bank, teardown — and every
-negative path below it names the thing it refuses. Between them they are the
-documentation that is checked by the test suite, which the file you are reading
-is not.
+claim, worktree, build, artifact, anchor, T0, T1, **extend**, reduce, controls,
+dispatch, bank, teardown — and every negative path below it names the thing it
+refuses. Between them they are the documentation that is checked by the test
+suite, which the file you are reading is not.
+
+Two classes are worth reading before anything else:
+
+* `TestAWinIsReachableAndANullIsRefused` — the end-to-end proof that a real
+  effect banks and a null does not, with every number reproducible from the
+  fixtures in that file and none of them a measurement of any kernel;
+* `TestTheExtensionRoundHasAProducer` — the refusals around the extension: an
+  undeclared round, a round licensed by another campaign, a re-derived schedule.

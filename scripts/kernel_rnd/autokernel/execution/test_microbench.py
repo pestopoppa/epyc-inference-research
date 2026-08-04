@@ -1781,6 +1781,51 @@ class TestTheAnchorTripleIsVerifiedNotAsserted(unittest.TestCase):
                          self._run(make_plan(self.binding, blocks=1))
                          .anchor_receipt.binary_sha256)
 
+    # -- the anchor's NAME, not only its bytes ------------------------------
+
+    def test_an_anchor_named_for_the_WRONG_TOOL_is_refused(self):
+        """THE BITE: right bytes, wrong label — the digest check cannot see it.
+
+        One anchor BUILD ships both `llama-cli` and `llama-bench`, so an anchor
+        captured off the bench binary and bound `tool="llama-cli"` (the copy-paste
+        from the T0 leg, which legitimately names `llama-cli`) has a digest that
+        MATCHES the binary that runs. Every pre-existing check passes and the
+        record renders `vs anchor llama-cli:…` as the denominator of a ratio
+        `llama-bench` produced. `for_tool` refuses a re-label; the FIRST label is
+        a free string, so this is the only gate that can catch it.
+        """
+        truthful = anchor_identity(self.binding)
+        plan = make_plan(self.binding, blocks=1,
+                         anchor=truthful.for_tool("llama-cli"))
+        self.assertEqual(plan.anchor.binary_sha256, truthful.binary_sha256,
+                         "the bytes must agree, or this tests the digest check instead")
+        run = self._run(plan)
+        self.assertFalse(run.complete)
+        self.assertTrue(any("anchor_identity.tool" in r for r in run.refusals),
+                        run.refusals)
+        self.assertEqual(dict(run.checks)["anchor_identity.tool"].outcome, schemas.FAIL)
+        with self.assertRaises(M.RunRefused):
+            run.paired_blocks()
+
+    def test_the_anchor_named_for_the_recipes_own_tool_passes(self):
+        """Compliant-path control: the guard must not forbid the correct binding."""
+        plan = make_plan(self.binding, blocks=1,
+                         anchor=anchor_identity(self.binding).for_tool(
+                             recipes.get_recipe(RECIPE_ID).tool))
+        run = self._run(plan)
+        self.assertTrue(run.complete, run.refusals)
+        self.assertEqual(dict(run.checks)["anchor_identity.tool"].outcome, schemas.PASS)
+
+    def test_an_unnamed_anchor_tool_is_recorded_as_unobserved_not_as_a_pass(self):
+        """Backward compatibility is not silent compatibility."""
+        run = self._run(make_plan(self.binding, blocks=1))
+        self.assertTrue(run.complete, run.refusals)
+        check = dict(run.checks)["anchor_identity.tool"]
+        self.assertEqual(check.outcome, schemas.COULD_NOT_CHECK)
+        self.assertIn("names no tool", " ".join(check.reasons))
+        named = dict((n, c) for n, c in run_checks(run.raw_vector()))
+        self.assertIn("anchor_identity.tool", named)
+
 
 def run_checks(vector: dict):
     return [(name, payload) for name, payload in vector["checks"]]
@@ -2341,6 +2386,587 @@ class TestADisabledGuardIsNotAPassedGuard(unittest.TestCase):
         self.assertEqual(
             HEALTHY_POLICY.check_load(healthy_state(), cpu_count=96).outcome,
             schemas.PASS)
+
+
+# =============================================================================
+# The extension round — the producer, and everything that must refuse it
+#
+# Context, so the tests below are not read as plumbing: for the CPU decode cell
+# the calibration solves B_min=5 and threshold=10, and the sign-martingale
+# e-value over 5 same-sign blocks tops out at 5.5687 REGARDLESS of the true
+# effect, because the statistic is the sign. Nothing crosses on the base
+# segment. The extension round is the only path to a banked win, which is
+# exactly why it must be impossible to take one the rule did not declare.
+# =============================================================================
+
+def stopping_rule(*, max_rounds: int = 1, blocks_per_round: int = 5,
+                  ceiling: int = 20, rule_id: str = "ak-stop-test/v1"):
+    return statistics.StoppingRule(
+        rule_id=rule_id, final_table="t1_paired_block_table",
+        decisions=(("evidence_threshold_crossed", "compose_into_champion_lineage"),
+                   ("extension_exhausted", "abandon"),
+                   ("block_ceiling_reached", "abandon")),
+        extension=statistics.BoundedExtension(max_rounds=max_rounds,
+                                              blocks_per_round=blocks_per_round),
+        max_blocks_per_candidate=ceiling)
+
+
+def commitment_for(rule, *, campaign_id: str = "ak-test-0001",
+                   committed_at: str = "2026-08-03T23:00:00+00:00"):
+    return statistics.StoppingRuleCommitment.commit(
+        rule, campaign_id=campaign_id, committed_at=committed_at)
+
+
+#: The calibration outputs are LITERAL here on purpose. `solve_calibration` over
+#: 200 A/A blocks is the real solver and `test_statistics` exercises it; what
+#: these tests need is a `CampaignStatistics` with a known `B_min` and threshold
+#: to bind a licence to, and solving one per rule variant would buy nothing but
+#: seconds. The values match what the chain campaign's real solve produces for
+#: this cell (B_min=5, threshold=10).
+def calibration_outputs(*, b_min: int = 5) -> api.CalibrationOutputs:
+    return api.CalibrationOutputs(
+        backend="llama_cpu", phase="decode", cell_class="operator_microbench",
+        noise_floor_phi=0.01, b_min_blocks=b_min, alpha_sel=0.1, alpha_conf=0.02,
+        anchor_gate_band=(0.98, 1.02), accepted=True,
+        solve_order_recorded=api.CALIBRATION_SOLVE_ORDER,
+        samples_ref="ak-raw://ak-test-0001/calibration/0001",
+        e_process_construction_id="sign_martingale_predictable_lambda/v1")
+
+
+def campaign_for(rule=None, *, b_min: int = 5, campaign_id: str = "ak-test-0001",
+                 campaign_seed: str = "campaign-seed-2026-08-03",
+                 committed_at: str = "2026-08-03T23:00:00+00:00"
+                 ) -> statistics.CampaignStatistics:
+    """A `CampaignStatistics` — the only thing that can license an extension round."""
+    rule = rule if rule is not None else stopping_rule()
+    return statistics.CampaignStatistics(
+        campaign_id=campaign_id, campaign_seed=campaign_seed,
+        effect_scale=statistics.EFFECT_SCALE_RELATIVE,
+        hypothesis=statistics.HYPOTHESIS_IMPROVEMENT, margin=0.0, stopping_rule=rule,
+        stopping_rule_commitment=commitment_for(rule, campaign_id=campaign_id,
+                                                committed_at=committed_at),
+        split_rule=statistics.StratumSplitRule(
+            rule_id="ak-split-test/v1", campaign_seed=campaign_seed,
+            confirmation_fraction=0.3,
+            rotation=statistics.RotationSchedule(schedule_id="ak-rot-test/v1",
+                                                 period_campaigns=4)),
+        construction=statistics.select_construction(
+            "sign_martingale_predictable_lambda/v1"),
+        calibration=calibration_outputs(b_min=b_min),
+        aa_effect_pool=tuple(0.001 * ((i % 7) - 3) for i in range(200)),
+        anchor_calibration_values=tuple(100.0 + 0.1 * ((i % 5) - 2) for i in range(200)))
+
+
+def authorization(*, round_index: int = 1, base_blocks: int = 5, rule=None,
+                  campaign=None) -> M.ExtensionAuthorization:
+    """`base_blocks` is the campaign's calibrated B_min — it is not typeable."""
+    campaign = campaign if campaign is not None else campaign_for(rule, b_min=base_blocks)
+    return M.ExtensionAuthorization(campaign=campaign, round_index=round_index)
+
+
+class TestTheExtensionRoundIsDeclaredNotGranted(unittest.TestCase):
+    """`ExtensionAuthorization` reads its budget off the committed rule."""
+
+    def test_a_declared_round_is_authorized(self):
+        """Compliant control: the guard must not refuse the honest round."""
+        auth = authorization(round_index=1, base_blocks=5)
+        self.assertEqual(auth.blocks_per_round, 5)
+        self.assertEqual(auth.max_rounds, 1)
+        self.assertEqual(auth.first_block_index, 5)
+        every_round = stopping_rule(max_rounds=3, ceiling=20)
+        for index in (1, 2, 3):
+            self.assertEqual(
+                authorization(round_index=index, base_blocks=5,
+                              rule=every_round).first_block_index, 5 * index)
+
+    def test_a_round_beyond_the_declared_maximum_cannot_be_constructed(self):
+        with self.assertRaises(M.ExtensionNotDeclared):
+            authorization(round_index=2, base_blocks=5)
+
+    def test_a_rule_that_declares_no_extension_authorizes_nothing(self):
+        with self.assertRaises(M.ExtensionNotDeclared):
+            authorization(round_index=1, base_blocks=5,
+                          rule=stopping_rule(max_rounds=0))
+
+    def test_a_round_index_below_one_is_not_a_round(self):
+        for index in (0, -1, True):
+            with self.assertRaises(M.ExtensionNotDeclared):
+                authorization(round_index=index, base_blocks=5)
+
+    def test_a_round_that_would_pass_the_block_ceiling_is_refused(self):
+        """`max_blocks_per_candidate` bounds the rounds the rule could otherwise run."""
+        rule = stopping_rule(max_rounds=3, blocks_per_round=5, ceiling=12)
+        self.assertIsNotNone(authorization(round_index=1, base_blocks=5, rule=rule))
+        with self.assertRaises(M.ExtensionNotDeclared):
+            authorization(round_index=2, base_blocks=5, rule=rule)
+
+    def test_a_rule_mutated_after_the_commitment_authorizes_nothing(self):
+        """THE BITE: this is 'the caller extended itself after seeing the result'.
+
+        The refusal is now at the CAMPAIGN, which is where it has teeth: a rule
+        bumped after the commitment cannot become the campaign the reduction
+        runs under, so there is no object left to license a round off.
+        """
+        committed = stopping_rule(max_rounds=1)
+        greedier = replace(committed, extension=statistics.BoundedExtension(
+            max_rounds=9, blocks_per_round=5))
+        honest = campaign_for(committed)
+        with self.assertRaises(statistics.StoppingRuleMutated):
+            replace(honest, stopping_rule=greedier)
+        with self.assertRaises(M.ExtensionNotDeclared):
+            M.ExtensionAuthorization(campaign=honest, round_index=2)
+
+    def test_an_authorization_needs_the_campaign_itself(self):
+        """A rule and a commitment verify against EACH OTHER and nothing else.
+
+        THE BITE for the 2026-08-04 red team: the pair the caller used to hand
+        this object was self-certifying — mint the rule you want, commit THAT,
+        and `verify` passes by construction. There is now no such spelling.
+        """
+        rule = stopping_rule(max_rounds=3, ceiling=100)
+        for bad in (rule, campaign_for(rule).to_dict(), commitment_for(rule), None):
+            with self.assertRaises(M.ExtensionNotDeclared):
+                M.ExtensionAuthorization(campaign=bad, round_index=1)
+        with self.assertRaises(TypeError):
+            M.ExtensionAuthorization(rule=rule, commitment=commitment_for(rule),
+                                     round_index=1, base_blocks=5)
+
+    def test_the_authorization_travels_in_the_record(self):
+        payload = authorization().to_dict()
+        self.assertEqual(payload["extension"]["max_rounds"], 1)
+        self.assertEqual(payload["round_index"], 1)
+        self.assertEqual(payload["rule_content_hash"], stopping_rule().content_hash())
+        schemas.canonical_json(payload)
+
+
+class TestTheExtensionPlanCannotReDeriveTheSchedule(unittest.TestCase):
+    """The schedule decision, enforced at plan construction."""
+
+    def setUp(self):
+        self.binding = BindingFixture(self)
+        self.base = make_plan(self.binding, blocks=5)
+
+    def test_extend_carries_every_schedule_identity_field_across(self):
+        extended = self.base.extend(authorization())
+        self.assertEqual(extended.schedule(), self.base.schedule())
+        for name in ("campaign_seed", "candidate_id", "attempt", "base_blocks"):
+            self.assertEqual(getattr(extended, name), getattr(self.base, name))
+        self.assertEqual(extended.segment, statistics.SEGMENT_EXTENSION)
+        self.assertEqual(extended.extension_round, 1)
+        self.assertEqual(extended.blocks_to_run, 5)
+        self.assertEqual(extended.block_index_offset, 5)
+
+    def test_the_base_plan_is_unchanged_and_still_runs_the_base_segment(self):
+        """Compliant control: `extend()` must not mutate what it extends."""
+        self.base.extend(authorization())
+        self.assertEqual(self.base.segment, statistics.SEGMENT_BASE)
+        self.assertIsNone(self.base.extension)
+        self.assertEqual(self.base.blocks_to_run, 5)
+        self.assertEqual(self.base.block_index_offset, 0)
+
+    def test_an_authorization_for_a_different_base_length_is_a_schedule_mismatch(self):
+        with self.assertRaises(M.ScheduleMismatch):
+            make_plan(self.binding, blocks=8).extend(authorization(base_blocks=5))
+        with self.assertRaises(M.ScheduleMismatch):
+            self.base.extend(authorization(base_blocks=8))
+
+    def test_the_extension_segment_cannot_be_declared_without_an_authorization(self):
+        with self.assertRaises(M.ExtensionNotDeclared):
+            replace(self.base, segment=statistics.SEGMENT_EXTENSION)
+
+    def test_an_authorization_on_a_base_plan_is_refused(self):
+        with self.assertRaises(M.ExtensionNotDeclared):
+            replace(self.base, extension=authorization())
+
+    def test_an_unknown_segment_is_refused(self):
+        with self.assertRaises(ValueError):
+            replace(self.base, segment="continuation")
+
+    def test_round_two_comes_off_the_base_plan_not_off_round_one(self):
+        rule = stopping_rule(max_rounds=2, ceiling=20)
+        first = self.base.extend(authorization(round_index=1, rule=rule))
+        with self.assertRaises(M.ExtensionNotDeclared):
+            first.extend(authorization(round_index=2, rule=rule))
+        second = self.base.extend(authorization(round_index=2, rule=rule))
+        self.assertEqual(second.block_index_offset, 10)
+
+
+class TestPlanBlocksPlacesRoundsOnOneIndexLine(unittest.TestCase):
+
+    def setUp(self):
+        self.schedule = statistics.OrderSchedule.derive(
+            campaign_seed="seed-2026-08-03", candidate_id="cand-1", base_blocks=5)
+
+    def _plan(self, *, round_index, count=5, units=("u",)):
+        return M.plan_blocks(self.schedule, count=count, pairs=1, unit_ids=units,
+                             stratum=api.STRATUM_SELECTION,
+                             segment=statistics.SEGMENT_EXTENSION,
+                             extension_round=round_index)
+
+    def test_rounds_do_not_collide_on_the_index_line(self):
+        """Round 2 used to restart at `base_blocks` and re-issue round 1's indices."""
+        first = [p.block_index for p in self._plan(round_index=1)]
+        second = [p.block_index for p in self._plan(round_index=2)]
+        self.assertEqual(first, [5, 6, 7, 8, 9])
+        self.assertEqual(second, [10, 11, 12, 13, 14])
+        self.assertFalse(set(first) & set(second))
+
+    def test_extension_orders_are_the_reversed_base_orders(self):
+        base = M.plan_blocks(self.schedule, count=5, pairs=1, unit_ids=("u",),
+                             stratum=api.STRATUM_SELECTION)
+        extension = self._plan(round_index=1)
+        for planned, base_plan in zip(extension, base):
+            self.assertNotEqual(planned.order, base_plan.order)
+
+    def test_the_unit_cycle_continues_across_the_round_boundary(self):
+        base = M.plan_blocks(self.schedule, count=5, pairs=1, unit_ids=("a", "b"),
+                             stratum=api.STRATUM_SELECTION)
+        extension = self._plan(round_index=1, units=("a", "b"))
+        units = [p.unit_id for p in base] + [p.unit_id for p in extension]
+        self.assertEqual(units.count("a"), units.count("b"),
+                         "restarting the cycle each round over-weights the first units")
+
+    def test_an_extension_round_must_name_its_round(self):
+        with self.assertRaises(ValueError):
+            M.plan_blocks(self.schedule, count=5, pairs=1, unit_ids=("u",),
+                          stratum=api.STRATUM_SELECTION,
+                          segment=statistics.SEGMENT_EXTENSION)
+
+    def test_a_base_segment_must_not_name_a_round(self):
+        with self.assertRaises(ValueError):
+            M.plan_blocks(self.schedule, count=5, pairs=1, unit_ids=("u",),
+                          stratum=api.STRATUM_SELECTION, extension_round=1)
+
+    def test_a_block_plan_mirrors_the_paired_blocks_own_segment_rule(self):
+        with self.assertRaises(ValueError):
+            M.BlockPlan(block_index=0, order=statistics.ORDER_ANCHOR_FIRST, pairs=1,
+                        unit_id="u", stratum=api.STRATUM_SELECTION, segment="continuation")
+        with self.assertRaises(ValueError):
+            M.BlockPlan(block_index=5, order=statistics.ORDER_ANCHOR_FIRST, pairs=1,
+                        unit_id="u", stratum=api.STRATUM_SELECTION,
+                        segment=statistics.SEGMENT_EXTENSION)
+        with self.assertRaises(ValueError):
+            M.BlockPlan(block_index=0, order=statistics.ORDER_ANCHOR_FIRST, pairs=1,
+                        unit_id="u", stratum=api.STRATUM_SELECTION, extension_round=1)
+
+
+class TestTheRunnerProducesTheExtensionRound(unittest.TestCase):
+    """The blocker itself: `MicrobenchRunner.run()` emitting SEGMENT_EXTENSION."""
+
+    def setUp(self):
+        self.binding = BindingFixture(self)
+        self.out = read_fixture(CANONICAL)
+        self.candidate_out = scaled_fixture(CANONICAL, factor=1.08,
+                                            build_commit="cafe12345")
+        self.base_plan = make_plan(self.binding, blocks=5)
+
+    def _run(self, plan) -> M.MicrobenchRun:
+        return M.MicrobenchRunner(
+            claim=StubClaim(), policy=HEALTHY_POLICY,
+            spawner=arm_aware_spawner(candidate_stdout=self.candidate_out,
+                                      anchor_stdout=self.out),
+            host_state=HostStateStub([healthy_state()])).run(plan)
+
+    def test_the_run_emits_whole_declared_rounds_at_the_right_indices(self):
+        run = self._run(self.base_plan.extend(authorization()))
+        blocks = run.paired_blocks()
+        self.assertEqual([b.block_index for b in blocks], [5, 6, 7, 8, 9])
+        for block in blocks:
+            self.assertEqual(block.segment, statistics.SEGMENT_EXTENSION)
+            self.assertEqual(block.extension_round, 1)
+
+    def test_the_base_segment_still_emits_base_blocks(self):
+        """Compliant control: the producer must not have turned every run into one."""
+        for block in self._run(self.base_plan).paired_blocks():
+            self.assertEqual(block.segment, statistics.SEGMENT_BASE)
+            self.assertIsNone(block.extension_round)
+
+    def test_a_round_is_as_long_as_the_rule_declared_not_as_long_as_the_base(self):
+        """`blocks_to_run` is the rule's `blocks_per_round`, not `base_blocks`.
+
+        With the two equal — as they are in the chain campaign — a runner that
+        read `base_blocks` here would look correct and would emit a round of the
+        wrong length for every other rule, then refuse it as short.
+        """
+        rule = stopping_rule(max_rounds=1, blocks_per_round=3)
+        plan = self.base_plan.extend(authorization(round_index=1, rule=rule))
+        self.assertEqual(plan.blocks_to_run, 3)
+        self.assertNotEqual(plan.blocks_to_run, plan.base_blocks)
+        run = self._run(plan)
+        self.assertTrue(run.complete, run.refusals)
+        self.assertEqual([b.block_index for b in run.paired_blocks()], [5, 6, 7])
+
+    def test_a_short_round_emits_no_number(self):
+        """`blocks_to_run`, not `base_blocks`, is what completeness is measured against."""
+        run = self._run(self.base_plan.extend(authorization()))
+        truncated = replace(run, blocks=run.blocks[:-1])
+        self.assertFalse(truncated.complete)
+        with self.assertRaises(M.RunRefused):
+            truncated.paired_blocks()
+
+    def test_order_control_is_evaluated_at_the_rounds_own_window(self):
+        """THE BITE for `check_observed(first_index=)`.
+
+        Checked against positions 0.. an extension round FAILS on every block —
+        it deliberately reverses the base segment's orders — so without the
+        window the runner would refuse every conforming extension round and no
+        candidate could ever cross.
+        """
+        run = self._run(self.base_plan.extend(authorization()))
+        self.assertEqual(run.order_control.outcome, schemas.PASS,
+                         run.order_control.reasons)
+        blocks = run.paired_blocks()
+        self.assertEqual(
+            self.base_plan.schedule().check_observed(blocks).outcome, schemas.FAIL)
+        self.assertEqual(
+            self.base_plan.schedule().check_observed(blocks, first_index=5).outcome,
+            schemas.PASS)
+
+    def test_a_window_the_blocks_contradict_is_refused(self):
+        """`first_index` is checked against the material, not believed."""
+        base_blocks = self._run(self.base_plan).paired_blocks()
+        check = self.base_plan.schedule().check_observed(base_blocks, first_index=5)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertTrue(any("occupies schedule position" in r for r in check.reasons),
+                        check.reasons)
+
+    def test_the_raw_vector_says_which_round_it_is_and_what_licensed_it(self):
+        run = self._run(self.base_plan.extend(authorization()))
+        vector = run.raw_vector()
+        self.assertEqual(vector["segment"], statistics.SEGMENT_EXTENSION)
+        self.assertEqual(vector["extension_round"], 1)
+        self.assertEqual(vector["extension_authorization"]["rule_content_hash"],
+                         stopping_rule().content_hash())
+        self.assertEqual(vector["order_schedule"]["first_block_index"], 5)
+        self.assertEqual(vector["order_schedule"]["orders"],
+                         [b["plan"]["order"] for b in vector["blocks"]])
+        schemas.canonical_json(vector)
+
+    def test_the_base_runs_raw_vector_is_unchanged_in_shape(self):
+        """Compliant control: the base segment's record must still read as before."""
+        vector = self._run(self.base_plan).raw_vector()
+        self.assertEqual(vector["segment"], statistics.SEGMENT_BASE)
+        self.assertIsNone(vector["extension_round"])
+        self.assertIsNone(vector["extension_authorization"])
+        self.assertEqual(vector["order_schedule"]["first_block_index"], 0)
+        self.assertEqual(len(vector["order_schedule"]["orders"]), 5)
+
+
+class TestPoolingBaseAndExtensionIsChecked(unittest.TestCase):
+    """`assemble_run_blocks` — the only sanctioned way to build the pooled set."""
+
+    def setUp(self):
+        self.binding = BindingFixture(self)
+        self.out = read_fixture(CANONICAL)
+        self.candidate_out = scaled_fixture(CANONICAL, factor=1.08,
+                                            build_commit="cafe12345")
+        self.base_plan = make_plan(self.binding, blocks=5)
+        self.base_run = self._run(self.base_plan)
+        self.campaign = campaign_for()
+
+    def _run(self, plan) -> M.MicrobenchRun:
+        return M.MicrobenchRunner(
+            claim=StubClaim(), policy=HEALTHY_POLICY,
+            spawner=arm_aware_spawner(candidate_stdout=self.candidate_out,
+                                      anchor_stdout=self.out),
+            host_state=HostStateStub([healthy_state()])).run(plan)
+
+    def _extension(self, *, round_index=1, plan=None, campaign=None):
+        base = plan if plan is not None else self.base_plan
+        return self._run(base.extend(authorization(
+            round_index=round_index, campaign=campaign or self.campaign)))
+
+    def _pool(self, runs, *, base=None, campaign=None):
+        return M.assemble_run_blocks(base if base is not None else self.base_run, runs,
+                                     campaign=campaign or self.campaign)
+
+    def test_the_pooled_set_is_one_contiguous_index_line(self):
+        pooled = self._pool([self._extension()])
+        self.assertEqual([b.block_index for b in pooled], list(range(10)))
+        self.assertEqual([b.segment for b in pooled],
+                         [statistics.SEGMENT_BASE] * 5
+                         + [statistics.SEGMENT_EXTENSION] * 5)
+
+    def test_the_base_run_alone_pools_to_itself(self):
+        """Compliant control: no extension is not an error."""
+        self.assertEqual(self._pool([]), self.base_run.paired_blocks())
+
+    def test_two_rounds_pool_in_declared_order(self):
+        two = campaign_for(stopping_rule(max_rounds=2, ceiling=20))
+        second = self._extension(round_index=2, campaign=two)
+        first = self._extension(round_index=1, campaign=two)
+        pooled = self._pool([second, first], campaign=two)
+        self.assertEqual([b.block_index for b in pooled], list(range(15)))
+        self.assertEqual([b.extension_round for b in pooled[5:]], [1] * 5 + [2] * 5)
+
+    def test_a_round_from_another_campaign_seed_is_a_hard_error(self):
+        """THE BITE: `_check_extension_structure` never sees the seed and cannot catch this."""
+        other = replace(self.base_plan, campaign_seed="a-different-committed-seed")
+        with self.assertRaises(M.ScheduleMismatch):
+            self._pool([self._extension(plan=other)])
+
+    def test_a_round_from_another_candidate_is_a_hard_error(self):
+        other = replace(self.base_plan, candidate_id="cand-beta")
+        with self.assertRaises(M.ScheduleMismatch):
+            self._pool([self._extension(plan=other)])
+
+    def test_a_round_measured_through_another_instrument_is_a_hard_error(self):
+        other = replace(self.base_plan, params=dict(default_params(), n_gen=256))
+        with self.assertRaises(M.ScheduleMismatch):
+            self._pool([self._extension(plan=other)])
+
+    def test_the_same_round_cannot_be_submitted_twice(self):
+        run = self._extension()
+        with self.assertRaises(M.ScheduleMismatch):
+            self._pool([run, run])
+
+    def test_rounds_must_be_consecutive_from_one(self):
+        two = campaign_for(stopping_rule(max_rounds=2, ceiling=20))
+        with self.assertRaises(M.ScheduleMismatch):
+            self._pool([self._extension(round_index=2, campaign=two)], campaign=two)
+
+    def test_a_base_run_is_not_an_extension_round(self):
+        with self.assertRaises(M.ScheduleMismatch):
+            self._pool([self.base_run])
+
+    def test_an_extension_run_is_not_a_base_segment(self):
+        with self.assertRaises(M.ScheduleMismatch):
+            self._pool([], base=self._extension())
+
+    def test_an_incomplete_round_refuses_rather_than_pooling_what_it_got(self):
+        run = self._extension()
+        truncated = replace(run, refusals=("the host throttled mid-round",))
+        with self.assertRaises(M.RunRefused):
+            self._pool([truncated])
+
+    def test_the_pooled_set_satisfies_the_reducers_structural_checks(self):
+        """The far side reads it: order control, extension structure, block identity."""
+        pooled = self._pool([self._extension()])
+        schedule = self.base_plan.schedule()
+        self.assertEqual(schedule.check_observed(pooled).outcome, schemas.PASS)
+        self.assertEqual(
+            statistics._check_extension_structure(
+                pooled, b_min=5, rule=stopping_rule()).outcome, schemas.PASS)
+        self.assertEqual(statistics._check_block_identity(pooled).outcome, schemas.PASS)
+
+
+class TestALicenceIsThisCampaignsOrItIsNothing(unittest.TestCase):
+    """The 2026-08-04 red team: a self-certifying licence is not a licence.
+
+    `ExtensionAuthorization` used to take a `(StoppingRule,
+    StoppingRuleCommitment)` pair and verify one against the other. That check
+    is satisfied by any caller willing to type two lines — mint the rule you
+    want, `StoppingRuleCommitment.commit()` THAT rule, and the verification
+    passes by construction. Reproduced end to end before the fix: a licence for
+    round 3 of a `max_rounds=3` rule with a ceiling of 100, campaign id
+    `"not-even-this-campaign"` and `committed_at` in 2099, constructed cleanly;
+    rounds 1..3 were SPAWNED; the reducer refused the pooled 20 blocks only
+    afterwards. A single forged round of the campaign's own shape was not
+    refused at all — it reduced to `admissible=PASS`, `e = 42.29`, and its raw
+    vector recorded `campaign_id: "some-other-campaign"` as the licence.
+
+    Two things close it: the licence is now derived from the CAMPAIGN, and the
+    pooling seam re-checks it against the campaign the evidence is reduced under.
+    """
+
+    def setUp(self):
+        self.binding = BindingFixture(self)
+        self.out = read_fixture(CANONICAL)
+        self.candidate_out = scaled_fixture(CANONICAL, factor=1.08,
+                                            build_commit="cafe12345")
+        self.campaign = campaign_for()
+        self.base_plan = make_plan(self.binding, blocks=5)
+        self.base_run = self._run(self.base_plan)
+        #: Same shape as the campaign's rule, so nothing structural distinguishes
+        #: the round it licenses: one round of five blocks, ceiling 20.
+        self.other = campaign_for(stopping_rule(rule_id="ak-stop-attacker/v1"),
+                                  campaign_id="some-other-campaign",
+                                  committed_at="2099-06-06T00:00:00+00:00")
+
+    def _run(self, plan) -> M.MicrobenchRun:
+        return M.MicrobenchRunner(
+            claim=StubClaim(), policy=HEALTHY_POLICY,
+            spawner=arm_aware_spawner(candidate_stdout=self.candidate_out,
+                                      anchor_stdout=self.out),
+            host_state=HostStateStub([healthy_state()])).run(plan)
+
+    def _round(self, campaign, *, round_index=1, plan=None):
+        base = plan if plan is not None else self.base_plan
+        return self._run(base.extend(M.ExtensionAuthorization(
+            campaign=campaign, round_index=round_index)))
+
+    # -- the compliant path, first ----------------------------------------
+    def test_the_campaigns_own_round_pools_and_is_licensed(self):
+        """Compliant control: the honest round must still bank."""
+        run = self._round(self.campaign)
+        self.assertEqual(run.plan.extension.licence_for(self.campaign).outcome,
+                         schemas.PASS)
+        pooled = M.assemble_run_blocks(self.base_run, [run], campaign=self.campaign)
+        self.assertEqual([b.block_index for b in pooled], list(range(10)))
+
+    # -- the refusals -----------------------------------------------------
+    def test_a_round_licensed_by_another_campaign_cannot_be_pooled(self):
+        """THE BITE. Before the fix this pooled to 10 blocks and reduced PASS."""
+        run = self._round(self.other)
+        self.assertTrue(run.complete, run.refusals)
+        with self.assertRaises(M.ExtensionNotDeclared) as caught:
+            M.assemble_run_blocks(self.base_run, [run], campaign=self.campaign)
+        message = str(caught.exception)
+        self.assertIn("ak-stop-attacker/v1", message)
+        self.assertIn("some-other-campaign", message)
+
+    def test_the_licence_check_names_the_committed_rule_it_is_not(self):
+        check = self._round(self.other).plan.extension.licence_for(self.campaign)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertTrue(any("licence issued by another campaign" in r
+                            for r in check.reasons), check.reasons)
+
+    def test_the_same_rule_under_another_campaign_id_is_still_another_licence(self):
+        """Byte-identical rule content; the commitment is what identifies it."""
+        twin = campaign_for(stopping_rule(), campaign_id="ak-test-0002")
+        self.assertEqual(twin.stopping_rule.content_hash(),
+                         self.campaign.stopping_rule.content_hash())
+        with self.assertRaises(M.ExtensionNotDeclared):
+            M.assemble_run_blocks(self.base_run, [self._round(twin)],
+                                  campaign=self.campaign)
+
+    def test_the_pooling_seam_has_no_campaign_default(self):
+        """A default would skip the check exactly for the caller who omits it."""
+        with self.assertRaises(TypeError):
+            M.assemble_run_blocks(self.base_run, [self._round(self.campaign)])
+        with self.assertRaises(TypeError):
+            M.assemble_run_blocks(self.base_run, [], campaign=self.campaign.to_dict())
+
+    def test_a_base_segment_that_is_not_b_min_long_cannot_be_pooled(self):
+        """The base segment is exactly B_min blocks; pooling is where that is asked."""
+        longer = self._run(make_plan(self.binding, blocks=8))
+        with self.assertRaises(M.ScheduleMismatch) as caught:
+            M.assemble_run_blocks(longer, [], campaign=self.campaign)
+        self.assertIn("calibrated B_min", str(caught.exception))
+
+    def test_a_base_segment_under_another_committed_seed_cannot_be_pooled(self):
+        other_seed = self._run(replace(self.base_plan, campaign_seed="another-seed"))
+        with self.assertRaises(M.ScheduleMismatch):
+            M.assemble_run_blocks(other_seed, [], campaign=self.campaign)
+
+    def test_a_licence_cannot_outrun_the_campaigns_declared_rounds(self):
+        """Round 2 under a `max_rounds=1` campaign: refused before a spawn."""
+        with self.assertRaises(M.ExtensionNotDeclared):
+            M.ExtensionAuthorization(campaign=self.campaign, round_index=2)
+
+    def test_the_licence_check_is_could_not_check_rather_than_pass_without_a_campaign(self):
+        """Fail-closed: an unevaluable licence must never read as a licensed one."""
+        check = self._round(self.campaign).plan.extension.licence_for(None)
+        self.assertEqual(check.outcome, schemas.COULD_NOT_CHECK)
+
+    def test_the_recorded_licence_is_the_campaigns_own(self):
+        """What the raw vector asserts is now what the pooling seam enforced."""
+        payload = self._round(self.campaign).raw_vector()["extension_authorization"]
+        self.assertEqual(payload["campaign_id"], self.campaign.campaign_id)
+        self.assertEqual(payload["rule_content_hash"],
+                         self.campaign.stopping_rule_commitment.rule_content_hash)
+        self.assertEqual(payload["committed_at"],
+                         self.campaign.stopping_rule_commitment.committed_at)
 
 
 if __name__ == "__main__":                                # pragma: no cover

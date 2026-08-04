@@ -45,7 +45,7 @@ if str(_HERE.parents[2]) not in sys.path:
     sys.path.insert(0, str(_HERE.parents[2]))
 
 from autokernel import schemas                                    # noqa: E402
-from autokernel.evaluator import api, correctness, recipes        # noqa: E402
+from autokernel.evaluator import api, correctness, integrity, recipes  # noqa: E402
 from autokernel.execution import t0_provider as t0                # noqa: E402
 from autokernel.execution import cpu_region_claim               # noqa: E402
 
@@ -2034,6 +2034,219 @@ class AssertedSurfacesAreRecordedAsGaps(unittest.TestCase):
                         "environment_probe_findings=()",
                         "timing_dependent_branch_findings=()"):
             self.assertIn(literal, source)
+
+
+class ThePlanCarriesTheDerivationAndTypeChecksIt(unittest.TestCase):
+    """§6.1 item 4. `_change_surface`'s pass-through was UNREACHABLE.
+
+    The method reads `getattr(self._plan, "change_surface", None)` and
+    `T0ExecutionPlan` had no such field, so no caller could supply a derivation
+    and every candidate got the all-`None` surface — which four gates read as
+    COULD_NOT_CHECK. These tests fail on the pre-fix module: the first with
+    `TypeError: unexpected keyword argument 'change_surface'`.
+    """
+
+    @staticmethod
+    def _surface(**overrides):
+        kwargs = dict(
+            derived_touches_memory=True, derived_touches_threading=None,
+            derived_touches_dispatch=True, derived_touches_persistent_state=None,
+            derived_ops=("MUL_MAT_ID",), derived_files=("ggml/src/ggml-cpu/ggml-cpu.c",),
+            declared_touches_memory=None, declared_touches_threading=None,
+            declared_ops=(), touches_shared_core_header=False,
+            derivation_ref="ref://test-derivation")
+        kwargs.update(overrides)
+        return correctness.ChangeSurface(**kwargs)
+
+    def test_a_supplied_derivation_reaches_the_provider(self):
+        supplied = self._surface()
+        plan = execution_plan(change_surface=supplied)
+        provider = t0.ExecutedT0EvidenceProvider(plan=plan, runner=t0.RecordedProcessRunner([]))
+        self.assertIs(provider._change_surface(), supplied)
+
+    def test_without_a_derivation_every_behavioural_flag_is_undetermined(self):
+        """The COULD_NOT_CHECK default is BY DESIGN and must not change."""
+        provider = t0.ExecutedT0EvidenceProvider(plan=execution_plan(),
+                                                 runner=t0.RecordedProcessRunner([]))
+        derived = provider._change_surface()
+        for name in ("derived_touches_memory", "derived_touches_threading",
+                     "derived_touches_dispatch", "derived_touches_persistent_state"):
+            self.assertIsNone(getattr(derived, name), name)
+        self.assertIsNone(derived.sanitizers_mandatory)
+
+    def test_a_surface_derivation_object_is_not_a_change_surface(self):
+        """The projection is `chain.change_surface_from`, not an assignment."""
+        with self.assertRaises(TypeError) as ctx:
+            execution_plan(change_surface={"derived_touches_memory": True})
+        self.assertIn("chain.py", str(ctx.exception))
+
+    def test_the_integrity_build_provenance_is_refused_where_correctness_is_required(self):
+        """Seam 1, at the door. The wrong record used to fail SILENTLY.
+
+        `integrity.BuildProvenance` has no `build_log_ref` and no `compiler_id`;
+        `collect_static_analysis` read both with `getattr` defaults, so the whole
+        static-analysis surface disappeared into a COULD_NOT_CHECK whose stated
+        reason named the anchor.
+        """
+        wrong = integrity.BuildProvenance(
+            candidate_id="akc-0001", snapshot_sha256=SHA_A,
+            source_root=WORKTREE, actor_worktree=WORKTREE, build_dir=BUILD_DIR,
+            build_dir_created_for_this_build=True,
+            build_dir_pre_build_digest=integrity.EMPTY_TREE_SHA256,
+            toolchain="cmake + GNU make", compiler="CXX GNU 15.2.0",
+            command=f"cmake --build {BUILD_DIR}",
+            build_log_path=f"{BUILD_DIR}/build.log",
+            build_log_sha256=SHA_B, output_binary_sha256=SHA_D,
+            incremental_output_binary_sha256=None,
+            production_tree_paths=tuple(correctness.PRODUCTION_TREE_ROOTS))
+        self.assertFalse(hasattr(wrong, "build_log_ref"))
+        self.assertFalse(hasattr(wrong, "compiler_id"))
+        with self.assertRaises(TypeError) as ctx:
+            execution_plan(build=wrong)
+        self.assertIn("BuildProvenance", str(ctx.exception))
+        self.assertIn("fails silently", str(ctx.exception))
+
+    def test_the_correctness_build_provenance_is_the_compliant_control(self):
+        """The guard must not forbid the idiom it exists to require."""
+        right = correctness.BuildProvenance(
+            built_from_snapshot_sha256=SHA_A, build_dir=BUILD_DIR,
+            build_dir_was_fresh=True, incremental_objects_present=False,
+            compiler_id="CXX GNU", compiler_version="15.2.0",
+            build_log_ref=f"file://{BUILD_DIR}/build.log#sha256={SHA_B}",
+            production_tree_paths_touched=(), output_binary_sha256=SHA_D)
+        plan = execution_plan(build=right, change_surface=self._surface())
+        self.assertIs(plan.build, right)
+
+
+class TheStaticAnalysisSurfaceNamesTheCandidatesOwnToolchain(unittest.TestCase):
+    """§6.1 item 3. `compiler_id` was `getattr(build, "compiler_id", "unknown")`.
+
+    `"unknown"` is not an absent value: it is a compiler identity no anchor can
+    equal, so the gate FAILed with "the candidate was built with unknown unknown
+    but the anchor with CXX GNU 15.2.0" — a toolchain confound reported about a
+    candidate whose toolchain was never read.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.log = Path(self._tmp.name) / "build.log"
+        self.log.write_text(
+            "ggml/src/ggml-cpu/ggml-cpu.c:12:5: warning: unused variable 'x'\n",
+            encoding="utf-8")
+        self.build = correctness.BuildProvenance(
+            built_from_snapshot_sha256=SHA_A, build_dir=BUILD_DIR,
+            build_dir_was_fresh=True, incremental_objects_present=False,
+            compiler_id="CXX GNU", compiler_version="15.2.0",
+            build_log_ref=f"file://{self.log}", production_tree_paths_touched=(),
+            output_binary_sha256=SHA_D)
+
+    def _evidence(self, anchor):
+        plan = execution_plan(build=self.build)
+        provider = t0.ExecutedT0EvidenceProvider(
+            plan=plan, runner=t0.RecordedProcessRunner([]), anchor_capture=anchor)
+        return provider.collect_static_analysis(t0._Collected())
+
+    def test_the_anchor_toolchain_is_what_makes_the_surface_produced_at_all(self):
+        """No compiler_id/version on the capture -> no evidence -> COULD_NOT_CHECK."""
+        self.assertIsNone(self._evidence(anchor_capture()))
+
+    def test_with_the_anchor_toolchain_the_gate_is_real(self):
+        anchor = anchor_capture(compiler_id="CXX GNU", compiler_version="15.2.0",
+                                warning_count=1)
+        evidence = self._evidence(anchor)
+        self.assertIsNotNone(evidence)
+        self.assertEqual(evidence.compiler_id, "CXX GNU")
+        self.assertEqual(evidence.compiler_version, "15.2.0")
+        self.assertNotIn("unknown", (evidence.compiler_id, evidence.compiler_version))
+        gate = correctness.check_static_and_compile(evidence, anchor.identity())
+        self.assertEqual(gate.check.outcome, schemas.PASS, gate.check.reasons)
+
+    def test_a_real_toolchain_difference_still_fails(self):
+        """The compliant path passes and the confound it exists to catch still bites."""
+        anchor = anchor_capture(compiler_id="CXX Clang", compiler_version="19.1.0",
+                                warning_count=1)
+        gate = correctness.check_static_and_compile(self._evidence(anchor),
+                                                    anchor.identity())
+        self.assertEqual(gate.check.outcome, schemas.FAIL)
+        self.assertTrue(any("toolchain comparison" in r for r in gate.check.reasons))
+
+    def test_an_absent_anchor_warning_count_leaves_the_delta_unknowable(self):
+        anchor = anchor_capture(compiler_id="CXX GNU", compiler_version="15.2.0")
+        gate = correctness.check_static_and_compile(self._evidence(anchor),
+                                                    anchor.identity())
+        self.assertEqual(gate.check.outcome, schemas.COULD_NOT_CHECK)
+        self.assertTrue(any("anchor warning count" in r for r in gate.check.reasons))
+
+
+class TheStateSafetyGateCannotPass(unittest.TestCase):
+    """The impossibility, proved by exhaustion rather than described in a runbook.
+
+    `collect_state_safety` hardcodes `rollback_tested=False` and
+    `check_state_rollback_teardown_race` FAILs on it unconditionally, so **no
+    state-safety MEASUREMENT can PASS**. Every PASS this surface can produce
+    comes from the probe being OFF and the derivation declaring the surface not
+    applicable — a PASS granted by the change surface, not by anything observed.
+
+    This test is the tripwire: it fails the day a real rollback probe exists,
+    which is when the constant, the note and the README paragraph all have to go.
+    """
+
+    @staticmethod
+    def _surface(**overrides):
+        kwargs = dict(
+            derived_touches_memory=None, derived_touches_threading=None,
+            derived_touches_dispatch=None, derived_touches_persistent_state=None,
+            derived_ops=(), derived_files=(), declared_touches_memory=None,
+            declared_touches_threading=None, declared_ops=(),
+            touches_shared_core_header=False, derivation_ref="ref://test-derivation")
+        kwargs.update(overrides)
+        return correctness.ChangeSurface(**kwargs)
+
+    def _outcomes(self, probe):
+        plan = execution_plan(state_safety_probe=probe)
+        provider = t0.ExecutedT0EvidenceProvider(
+            plan=plan, runner=t0.RecordedProcessRunner([]), claim=FakeClaim())
+        collected = t0._Collected()
+        evidence = provider.collect_state_safety(collected)
+        outcomes = set()
+        for threading in (True, False, None):
+            for persistent in (True, False, None):
+                gate = correctness.check_state_rollback_teardown_race(
+                    evidence, self._surface(derived_touches_threading=threading,
+                                            derived_touches_persistent_state=persistent))
+                outcomes.add(gate.check.outcome)
+        return outcomes, collected.notes
+
+    def test_the_probe_on_is_a_guaranteed_fail_for_every_surface(self):
+        """Nine derived surfaces, one outcome. The gate says nothing about any of them."""
+        outcomes, _notes = self._outcomes(True)
+        self.assertEqual(outcomes, {schemas.FAIL})
+
+    def test_every_pass_this_surface_can_produce_comes_from_the_probe_being_off(self):
+        """A PASS by non-applicability is not a measurement that passed.
+
+        With the probe off there is no evidence at all, so the gate answers from
+        `ChangeSurface` alone — and it is the derivation, not this collector,
+        that granted the PASS. That is the honest reading; the point of the test
+        is that it is the ONLY reading under which this surface ever passes.
+        """
+        outcomes, _notes = self._outcomes(False)
+        self.assertEqual(outcomes, {schemas.PASS, schemas.FAIL, schemas.COULD_NOT_CHECK})
+        provider = t0.ExecutedT0EvidenceProvider(
+            plan=execution_plan(state_safety_probe=False),
+            runner=t0.RecordedProcessRunner([]), claim=FakeClaim())
+        self.assertIsNone(provider.collect_state_safety(t0._Collected()))
+
+    def test_the_impossibility_is_recorded_on_the_collection_either_way(self):
+        for probe in (True, False):
+            _outcomes, notes = self._outcomes(probe)
+            self.assertTrue(any(t0.STATE_SAFETY_CANNOT_PASS in note for note in notes),
+                            f"state_safety_probe={probe} recorded no note")
+
+    def test_the_constant_says_why_and_names_the_one_real_observation(self):
+        self.assertIn("rollback probe", t0.STATE_SAFETY_CANNOT_PASS)
+        self.assertIn("orphan_processes", t0.STATE_SAFETY_CANNOT_PASS)
 
 
 if __name__ == "__main__":                                        # pragma: no cover

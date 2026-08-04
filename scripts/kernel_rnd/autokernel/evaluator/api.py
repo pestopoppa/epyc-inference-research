@@ -89,7 +89,7 @@ import ast
 import math
 import re
 from collections import namedtuple
-from dataclasses import InitVar, dataclass
+from dataclasses import InitVar, dataclass, replace
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional, Protocol, Sequence
 
@@ -559,12 +559,50 @@ class AnchorIdentity:
     Precondition 4. A constructed `AnchorIdentity` is always well-formed; use
     `parse()` when the input may be malformed, because a malformed anchor must
     become an INVALID verdict, not an exception in the caller's face.
+
+    **`binary_sha256` NAMES ONE TOOL, and `tool` is which one.** One anchor build
+    ships several binaries — T0 hashes the anchor `llama-cli`, `microbench`
+    compares the plan's anchor digest against the anchor `llama-bench` it is
+    about to spawn — and a single-valued digest cannot honestly name both. The
+    ENFORCED RULE is therefore: *`binary_sha256` is the digest of the tool the
+    record's `metric` was measured with, and `tool` is that tool's name.* The
+    rule is enforced, not merely documented, in three places:
+
+      * `identity_matches` REFUSES to call two differently-named tools the same
+        anchor, even when every digest agrees — see its docstring. That is the
+        one comparison every consumer already goes through
+        (`_anchor_precondition`, `correctness._refuse_replay_mismatch`,
+        `chain.check_anchor_matches`, `release.readiness`), so evidence captured
+        against tool A cannot reach evidence captured against tool B without the
+        difference surfacing as a Check.
+      * `for_tool()` is the only way to attach a name, and it REFUSES to rename a
+        triple already bound to a different tool — relabelling one tool's digest
+        as another's is precisely the lie this field exists to prevent.
+      * `short()` renders the tool into the record grammar's anchor field, so a
+        journalled line says which binary the denominator came from.
+
+    `tool` is OPTIONAL because records written before it existed named no tool,
+    and an unnamed anchor must stay readable. It is never *silently* compatible
+    with a named one: named-vs-unnamed is COULD_NOT_CHECK, never PASS.
+
+    WHY NOT A PER-TOOL DIGEST TABLE. `controller.state_machine.AnchorIdentity`
+    keys `binary_sha256`/`linkage_sha256` BY BACKEND, and that shape is right
+    *there*: it is the campaign-wide production identity, which must describe
+    every backend the tree serves so that a repointed symlink is caught for all
+    of them at once. This object is a different thing — the DENOMINATOR OF ONE
+    RATIO, measured by one tool. A table here would put digests into the record
+    that the record's own number was not measured against, which is the same
+    class of defect as a single digest naming the wrong tool, arriving by the
+    other door. Tools of one anchor build are tied instead by what genuinely must
+    hold across them — same `source_commit`, same `linkage_sha256` —
+    in `execution.chain.check_anchor_build_is_one_build`.
     """
 
     source_commit: str
     binary_sha256: str
     linkage_sha256: str
     measurement_event_ids: tuple = ()
+    tool: Optional[str] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.source_commit, str) or not _COMMIT_RE.match(self.source_commit):
@@ -577,6 +615,23 @@ class AnchorIdentity:
             raise TypeError("anchor.measurement_event_ids must be a tuple")
         for eid in self.measurement_event_ids:
             _require_nonempty_str(eid, "anchor.measurement_event_ids[]")
+        if self.tool is not None:
+            _require_nonempty_str(self.tool, "anchor.tool")
+            # A NAME, not a path: `llama-bench`, the way `recipes.CellRecipe.tool`
+            # spells it. `/mnt/.../bin/llama-bench` and `llama-bench` would be two
+            # spellings of one tool and would compare unequal, which turns the
+            # check below into a source of false FAILs. Deliberately NOT a closed
+            # enum: `recipes` accepts an open tool string, and a second registry
+            # here would drift and reject a tool the recipe layer admits.
+            if self.tool != self.tool.strip() or any(c.isspace() for c in self.tool):
+                raise ValueError(
+                    f"anchor.tool: {self.tool!r} carries whitespace; it is a tool NAME "
+                    "and two spellings of one name are two anchors to every comparison")
+            if "/" in self.tool or "\\" in self.tool:
+                raise ValueError(
+                    f"anchor.tool: {self.tool!r} looks like a path. Name the tool "
+                    "(`llama-bench`), not where this run happened to find it — the "
+                    "path is `recipes.ToolBinding`'s field and it varies per worktree")
 
     @classmethod
     def parse(cls, obj: Any):
@@ -590,17 +645,59 @@ class AnchorIdentity:
                 binary_sha256=obj.get("binary_sha256"),
                 linkage_sha256=obj.get("linkage_sha256"),
                 measurement_event_ids=tuple(ids) if isinstance(ids, (list, tuple)) else ids,
+                tool=obj.get("tool"),
             ), ()
         except (ValueError, TypeError) as exc:
             return None, (str(exc),)
 
+    def for_tool(self, tool: str) -> "AnchorIdentity":
+        """This triple, naming the tool its `binary_sha256` was taken off.
+
+        RAISES on a rename. A capture is hashed off exactly one file, so calling
+        `for_tool("llama-bench")` on a triple already bound to `llama-cli` would
+        not correct a label — it would assert that the cli's digest is the
+        bench's, which is the single-valued-field defect written down as a fact.
+        Re-naming with the SAME tool is the identity and returns self.
+        """
+        _require_nonempty_str(tool, "anchor.tool")
+        if self.tool is not None and self.tool != tool.strip():
+            raise ValueError(
+                f"anchor.binary_sha256 is already bound to {self.tool!r} and cannot be "
+                f"re-named {tool.strip()!r}: one digest is the hash of one file. Two "
+                "tools of one anchor build need TWO identities, tied by "
+                "`chain.check_anchor_build_is_one_build` (same commit, same linkage)")
+        if self.tool == tool.strip():
+            return self
+        return replace(self, tool=tool.strip())
+
     def short(self) -> str:
-        """`<commit[:12]>/<binary[:12]>/<linkage[:12]>` — the grammar's anchor field."""
-        return (f"{self.source_commit[:12]}/{self.binary_sha256[:12]}/"
-                f"{self.linkage_sha256[:12]}")
+        """`[<tool>:]<commit[:12]>/<binary[:12]>/<linkage[:12]>` — the grammar's anchor field.
+
+        The tool is PREFIXED when it is named, so the record grammar's `vs anchor
+        …` field says which binary the denominator was measured with. An unnamed
+        anchor renders exactly as it always did: an old record is not retroactively
+        made to claim a tool it never recorded.
+        """
+        triple = (f"{self.source_commit[:12]}/{self.binary_sha256[:12]}/"
+                  f"{self.linkage_sha256[:12]}")
+        return triple if self.tool is None else f"{self.tool}:{triple}"
 
     def identity_matches(self, other: Optional["AnchorIdentity"]) -> schemas.Check:
-        """Byte-for-byte re-verification. *"A rebuilt anchor is a different anchor."*"""
+        """Byte-for-byte re-verification. *"A rebuilt anchor is a different anchor."*
+
+        Three components plus the tool, and the tool is why this is not a pure
+        digest comparison: two triples that agree on all three digests but name
+        DIFFERENT tools are not one anchor, they are one impossible anchor — the
+        same bytes cannot be both binaries — and the usual way to produce that
+        pair is to derive both stages' identity from a single capture and let the
+        tool evaporate at the boundary. That is FAIL, not a silent PASS.
+
+        A tool named on one side and absent on the other is COULD_NOT_CHECK, on
+        `controller.state_machine.check_anchor_identity`'s rule: a detected
+        difference is a FACT and outranks an incomplete observation, and an
+        unobserved component is never PASS. Both sides unnamed compares exactly
+        as it did before the field existed.
+        """
         if other is None:
             return schemas.Check(schemas.COULD_NOT_CHECK,
                                  ("no anchor identity was captured to compare against",))
@@ -609,15 +706,42 @@ class AnchorIdentity:
             mine, theirs = getattr(self, name), getattr(other, name)
             if mine != theirs:
                 reasons.append(f"anchor.{name} moved: {mine!r} -> {theirs!r}")
-        return schemas.Check(schemas.FAIL, tuple(reasons)) if reasons else schemas.Check(schemas.PASS)
+        unnamed = []
+        if self.tool is not None and other.tool is not None and self.tool != other.tool:
+            reasons.append(
+                f"anchor.tool differs: {self.tool!r} vs {other.tool!r}. `binary_sha256` "
+                "names ONE tool, so these are two anchors and evidence measured with one "
+                "is not comparable against the other. Tools of one build are tied by "
+                "`chain.check_anchor_build_is_one_build`, not by this check")
+        elif (self.tool is None) != (other.tool is None):
+            unnamed.append(
+                f"one side names its tool ({self.tool!r} vs {other.tool!r}) and the other "
+                "does not, so which binary the digest belongs to is unobserved on one "
+                "side; not naming a tool is not evidence that it is the same tool")
+        if reasons:
+            return schemas.Check(schemas.FAIL, tuple(reasons + unnamed))
+        if unnamed:
+            return schemas.Check(schemas.COULD_NOT_CHECK, tuple(unnamed))
+        return schemas.Check(schemas.PASS)
 
     def to_dict(self) -> dict:
-        return {
+        """The record's anchor block. `tool` appears only when it is named.
+
+        Omitted-when-unnamed rather than `"tool": null`, so absence has ONE
+        representation — the same rule `schemas._check_anchor_block_v3` applies to
+        the anchor block itself — and so a record written before this field
+        existed and one written by a caller that named no tool are byte-identical
+        rather than two spellings of the same silence.
+        """
+        block = {
             "source_commit": self.source_commit,
             "binary_sha256": self.binary_sha256,
             "linkage_sha256": self.linkage_sha256,
             "measurement_event_ids": list(self.measurement_event_ids),
         }
+        if self.tool is not None:
+            block["tool"] = self.tool
+        return block
 
 
 @dataclass(frozen=True)
@@ -2296,6 +2420,13 @@ def render_search_record_grammar(*,
         controls=<4/5|5/5>[ (HISTORICAL_REPLAY_UNAVAILABLE)], campaign=<campaign_id>,
         eval=<bundle_sha256[:12]>, srclabel=<ref>, recipe=<id>@<sha[:12]>,
         res=<claim_receipt>, host=<host_receipt>, raw=<raw_samples_ref>, YYYY-MM-DD]
+
+    The anchor field is `AnchorIdentity.short()`, which PREFIXES the tool when the
+    anchor names one (`llama-bench:<commit>/<binary>/<linkage>`). The protocol's
+    template is unchanged: the triple is still the triple, and the prefix says
+    which binary of that build the single-valued digest is — without it a reader
+    cannot tell whether the denominator came from the tool the metric was
+    measured with.
 
     A field with no value for this record renders `n/a` rather than being dropped,
     and `check_record_grammar_complete()` is what decides whether that is legal.
