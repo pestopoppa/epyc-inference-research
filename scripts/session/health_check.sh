@@ -37,11 +37,21 @@ uv run python -m py_compile \
   scripts/benchmark/aa_omniscience_manifest.py \
   scripts/benchmark/clean_window_manifest.py \
   scripts/validate_model_registry.py \
+  scripts/validate/check_evidence_durability.py \
   scripts/autopilot/candidate_eval_gate.py \
   scripts/halo/closed_loop_observation_surface.py \
   scripts/halo/convert_tap_to_otel.py
 
 bash -n scripts/session/emergency_cleanup.sh
+
+echo
+echo "== registry evidence durability =="
+# Every evidence path the registry cites must still RESOLVE on this host: no scratch
+# roots, nothing pointing at a file that is gone. Reads one YAML, stdlib only, ~50 ms —
+# and it is the check that turns "the artifact behind this ratified hash was swept" from
+# a silent event into a red health check. Deliberately NOT a check that the evidence is
+# committed: raw campaign output is gitignored on purpose (2026-08-03 operator ruling).
+uv run python scripts/validate/check_evidence_durability.py
 
 echo
 echo "== no-inference manifest dry-runs =="

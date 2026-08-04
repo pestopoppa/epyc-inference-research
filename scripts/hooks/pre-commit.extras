@@ -1,0 +1,82 @@
+# Repo-specific pre-commit extras for epyc-inference-research.
+#
+# VERSIONED SOURCE OF TRUTH. This file is TRACKED. `epyc-root
+# scripts/hooks/install_git_hooks.sh` installs it to `.git/hooks/pre-commit.extras`,
+# where the generated pre-commit wrapper sources it.
+#
+# It lives here rather than only in `.git/hooks/` because `.git/` is versioned by
+# nothing: an extras file written straight into `.git/hooks/` works on exactly one
+# host, no clone ever receives it, and no review ever sees it. That is the same
+# defect `install_git_hooks.sh` was written to fix for the wrapper itself — the
+# wrapper announced "Auto-installed by epyc-root" while no installer existed in
+# tracked code — and it was reintroduced one layer down when the extras were
+# hand-written on 2026-08-03. Found and closed 2026-08-04.
+#
+# SOURCED, not executed. Accumulate into $status; never call `exit` here — that
+# would skip the wrapper's own final status handling and suppress any hook that
+# runs after this file.
+
+# Repo root, resolved without assuming a host layout. git sets the hook's cwd to the
+# work-tree root, but `git` is stubbed in the hook tests, so fall back to this file's
+# own location. Both install sites (`scripts/hooks/` and `.git/hooks/`) sit exactly
+# two levels below the repo root, so one fallback serves both.
+_evd_repo="$(git rev-parse --show-toplevel 2>/dev/null)"
+if [[ -z "${_evd_repo:-}" || ! -d "${_evd_repo}/orchestration" ]]; then
+    _evd_repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+fi
+
+# ---------------------------------------------------------------------------
+# Evidence citations in the model registry must RESOLVE (2026-08-02 durability
+# incident; retargeted 2026-08-03).
+#
+# WHY A HOOK AT ALL. The checker existed since 2026-08-02 and was referenced by
+# exactly one thing: a comment inside model_registry.yaml. It had therefore never
+# run automatically, on any commit, in any repo. The incident it was written for
+# — 157 ratified, production-affecting claims citing artifacts under the scratch
+# root, one `rm -rf` from unverifiable — is a drift failure, and drift is only
+# caught by something that runs without being remembered.
+#
+# WHAT IT CHECKS. Resolvability, not committedness: a cited path must resolve on
+# this host to a readable artifact that is not in a scratch directory. In-repo,
+# out-of-repo and gitignored are all fine — the 2026-08-03 operator ruling puts
+# raw campaign output on local disk and OUT of git deliberately, so a hook that
+# demanded in-tree evidence would fail the compliant state.
+#
+# SCOPED, on purpose. Fires only when the commit stages the registry, which is
+# the only file it reads. An over-broad guard applies steady pressure toward
+# `git commit --no-verify`, and that escape ALSO skips the PII and hermes-drift
+# checks in the wrapper above — scope creep in one guard weakens its neighbours
+# (origin: the epyc-orchestrator contention-matrix hook, scoped 2026-07-31).
+#
+# THE STAGED BLOB, not the working tree. `git diff --cached` tells us the registry
+# is being committed; the working-tree copy is not necessarily what is being
+# committed (`git add -p`, or an edit made after staging). A pre-commit hook that
+# validates different bytes than the ones it is gating is a hook you cannot trust
+# the green from. The checker takes the registry path as an argument, so handing
+# it the staged blob costs two lines.
+#
+# python3, not the repo venv: the checker is stdlib-only, so the hook cannot
+# break on a missing or half-built .venv. Runtime is ~50 ms on the 421 citations
+# the registry currently carries.
+# ---------------------------------------------------------------------------
+EVIDENCE_REGISTRY='orchestration/model_registry.yaml'
+
+if git diff --cached --name-only --diff-filter=ACMR \
+        | grep -qxF "$EVIDENCE_REGISTRY"; then
+    echo "pre-commit: staged files touch the model registry — checking evidence durability"
+    _evd_staged="$(mktemp -t staged_model_registry.XXXXXX.yaml)"
+    if git show ":${EVIDENCE_REGISTRY}" > "$_evd_staged"; then
+        python3 \
+            "${_evd_repo}/scripts/validate/check_evidence_durability.py" \
+            "$_evd_staged" \
+            --repo "${_evd_repo}" \
+            || status=1
+    else
+        echo "pre-commit: could not read the staged registry blob — failing closed"
+        status=1
+    fi
+    rm -f "$_evd_staged"
+    unset _evd_staged
+fi
+
+unset _evd_repo

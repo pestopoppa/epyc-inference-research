@@ -1,4 +1,4 @@
-.PHONY: help setup lint test health docs docs-check analysis analysis-check security-check autopilot-gate
+.PHONY: help setup lint test health docs docs-check analysis analysis-check security-check evidence-check autopilot-gate
 
 UV ?= uv
 PYTHON_SMOKE := scripts/research/xmas_winner_table.py \
@@ -6,6 +6,7 @@ PYTHON_SMOKE := scripts/research/xmas_winner_table.py \
 	scripts/docs/generate_docs_index.py \
 	scripts/analysis/generate_analysis_reports_index.py \
 	scripts/security/audit_repository.py \
+	scripts/validate/check_evidence_durability.py \
 	scripts/autopilot/candidate_eval_gate.py \
 	scripts/halo/closed_loop_observation_surface.py \
 	scripts/halo/convert_tap_to_otel.py
@@ -19,6 +20,7 @@ PYTEST_SMOKE := scripts/research/test_xmas_winner_table.py
 PYTEST_SMOKE += scripts/docs/test_generate_docs_index.py
 PYTEST_SMOKE += scripts/analysis/test_generate_analysis_reports_index.py
 PYTEST_SMOKE += scripts/security/test_audit_repository.py
+PYTEST_SMOKE += scripts/validate/test_check_evidence_durability.py
 PYTEST_SMOKE += scripts/autopilot/test_candidate_eval_gate.py
 PYTEST_SMOKE += scripts/halo/test_closed_loop_observation_surface.py
 PYTEST_SMOKE += scripts/benchmark/test_capture_contract_guard.py
@@ -100,7 +102,7 @@ PYTEST_SMOKE += scripts/kernel_rnd/autokernel/execution/test_microbench.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/execution/test_control_runner.py
 
 help:
-	@printf '%s\n' 'Targets: setup lint test health docs docs-check analysis analysis-check security-check autopilot-gate'
+	@printf '%s\n' 'Targets: setup lint test health docs docs-check analysis analysis-check security-check evidence-check autopilot-gate'
 
 setup:
 	scripts/setup.sh
@@ -128,6 +130,14 @@ analysis-check:
 
 security-check:
 	$(UV) run python scripts/security/audit_repository.py
+
+# Evidence citations in the model registry must RESOLVE: no scratch paths, nothing
+# pointing at a file that is gone. Not a committedness check — raw campaign output is
+# gitignored on purpose (2026-08-03 operator ruling), which is exactly why something has
+# to prove the local artifact behind each ratified hash is still there.
+# Also enforced per-commit by .git/hooks/pre-commit.extras when the registry is staged.
+evidence-check:
+	$(UV) run python scripts/validate/check_evidence_durability.py
 
 autopilot-gate:
 	$(UV) run python scripts/autopilot/candidate_eval_gate.py --execute

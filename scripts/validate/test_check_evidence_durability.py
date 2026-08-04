@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for the evidence-durability validator.
 
-Two things these tests care about beyond the obvious.
+Three things these tests care about beyond the obvious.
 
 FIRST, the guard must not forbid its own idiom. A validator that only ever gets
 exercised on broken input can be quietly wrong about correct input, and the failure
@@ -13,10 +13,22 @@ SECOND, a waiver must never be a silent pass. `ARTIFACT LOST` suppresses an erro
 it is exactly the mechanism someone reaches for to make a red tree green. It is
 therefore asserted to stay VISIBLE (severity "warn", never "ok") and to be caught by
 `--warnings-as-errors`.
+
+THIRD -- added with the 2026-08-03 retarget -- the two halves of the old rule must move
+in OPPOSITE directions, and both directions are asserted. The location half is gone:
+gitignored, absolute, sibling-repo and out-of-repo-entirely are now all OK, because the
+operator ruled that raw research material must NOT be committed regardless of size, and
+a checker that grades committedness would fail exactly the citations the ruling creates
+(see `TestRetargetedRule`). The resolvability half is unchanged and slightly HARDER:
+scratch is still an ungrantable error and is now caught through symlinks, absence is
+still an error, and existing-but-unreadable was added because a hash you cannot
+recompute is an assertion just the same. A retarget that relaxed both halves would look
+identical in a green suite, so the strictness assertions are explicit.
 """
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -27,11 +39,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from check_evidence_durability import (  # noqa: E402
     ARTIFACT_TREES,
-    Citation,
     check,
-    classify,
     expand_braces,
-    extract_citations,
     main,
 )
 
@@ -216,15 +225,6 @@ def test_missing_is_an_error(repo):
     assert (c.verdict, c.severity) == ("MISSING", "error")
 
 
-def test_outside_repo_is_an_error(repo, tmp_path, no_ephemeral_tmp):
-    stray = tmp_path / "elsewhere"
-    (stray / "data").mkdir(parents=True)
-    (stray / "data" / "x.json").write_text("{}")
-    reg = write_registry(repo, f"evidence: {stray}/data/x.json\n")
-    (c,) = check(reg, repo).citations
-    assert (c.verdict, c.severity) == ("OUTSIDE_REPO", "error")
-
-
 def test_repo_membership_beats_the_scratch_heuristic(repo):
     """The ephemeral roots are a PROXY for "not in a repository". pytest builds its
     fixtures under /tmp, so this repo genuinely lives under a scratch root -- and its own
@@ -237,24 +237,270 @@ def test_repo_membership_beats_the_scratch_heuristic(repo):
     assert c.verdict == "OK"
 
 
-def test_absolute_in_repo_warns_and_names_the_relative_form(repo):
-    reg = write_registry(repo, f"evidence: {repo}/data/good_campaign_20260801/summary.json\n")
-    (c,) = check(reg, repo).citations
-    assert (c.verdict, c.severity) == ("ABSOLUTE_IN_REPO", "warn")
-    assert "data/good_campaign_20260801/summary.json" in c.hint
+def test_unreadable_artifact_is_an_error(repo):
+    """Resolving is not enough. A file whose bytes cannot be read cannot have its hash
+    recomputed, so the citation is an assertion for exactly the reason a missing file is
+    -- a different cause of the same failure, and worth its own verdict so the remedy
+    (fix the mode) is not confused with re-measuring."""
+    art = repo / "data" / "good_campaign_20260801" / "locked.json"
+    art.write_text("{}")
+    art.chmod(0o000)
+    try:
+        reg = write_registry(repo, "evidence: data/good_campaign_20260801/locked.json\n")
+        (c,) = check(reg, repo).citations
+        assert (c.verdict, c.severity) == ("UNREADABLE", "error")
+    finally:
+        art.chmod(0o644)
 
 
-def test_sibling_repo_warns_but_does_not_fail(repo, monkeypatch, no_ephemeral_tmp):
-    import check_evidence_durability as m
-    sib = repo.parent / "epyc-root"
-    (sib / "data" / "compliance").mkdir(parents=True)
-    (sib / "data" / "compliance" / "SUMMARY.md").write_text("x")
-    monkeypatch.setattr(m, "SIBLING_REPO_ROOTS", (str(sib),))
-    reg = write_registry(repo, f"src: {sib}/data/compliance/SUMMARY.md\n")
-    res = check(reg, repo)
-    (c,) = res.citations
-    assert (c.verdict, c.severity) == ("SIBLING_REPO", "warn")
-    assert not res.errors
+def test_unreadable_is_not_waivable_by_the_lost_marker(repo):
+    """`ARTIFACT LOST` asserts the artifact is GONE. This one demonstrably is not, so the
+    marker must not silence it -- otherwise the waiver becomes a general mute button."""
+    art = repo / "data" / "good_campaign_20260801" / "locked2.json"
+    art.write_text("{}")
+    art.chmod(0o000)
+    try:
+        reg = write_registry(
+            repo,
+            "evidence: data/good_campaign_20260801/locked2.json  "
+            "# ARTIFACT LOST — recorded 2026-08-03\n")
+        (c,) = check(reg, repo).citations
+        assert c.verdict == "UNREADABLE"
+        assert c.severity == "error"
+    finally:
+        art.chmod(0o644)
+
+
+def test_symlink_into_scratch_is_still_scratch(repo, tmp_path, no_ephemeral_tmp):
+    """The scratch guard is a prefix test, and a prefix test on the SPELLING of a citation
+    is defeated by one symlink. `storage.py:is_scratch_path` resolves symlinks for this
+    reason; the two guards must agree or the weaker one is the real policy.
+
+    NOTE: this test covers the ABSOLUTE arm only. It passed for months while the relative
+    arm was wide open -- see `TestRelativeCitationsGetTheSameGuard` below, which is the
+    arm that carries 416 of the registry's 421 citations."""
+    target = Path("/dev/shm") / f"evd_{os.getpid()}_{id(repo)}.json"
+    target.write_text("{}")
+    stray = tmp_path / "elsewhere" / "data"
+    stray.mkdir(parents=True)
+    link = stray / "summary.json"
+    link.symlink_to(target)
+    try:
+        reg = write_registry(repo, f"evidence: {link}\n")
+        (c,) = check(reg, repo).citations
+        assert (c.verdict, c.severity) == ("EPHEMERAL", "error")
+    finally:
+        target.unlink(missing_ok=True)
+
+
+# ------------------------------------------- the relative arm (regression, 2026-08-04)
+#
+# `classify()` computed `inside_repo = (not absolute) or resolved.resolve()...`, which is
+# unconditionally True for a relative citation, and the scratch guard is gated on
+# `not inside_repo`. So the symlink hardening above applied to absolute citations ONLY.
+# 416 of the registry's 421 citations are relative, and `_FIX_PLAYBOOK["EPHEMERAL"]`
+# tells people to migrate scratch citations INTO that form -- so the guard was absent
+# from exactly the shape it spends its whole remediation text producing.
+#
+# These tests are written against the INVARIANT, not the implementation: a citation must
+# resolve to a readable artifact that is not in a scratch directory, judged after
+# following symlinks, identically however the path is spelled.
+
+class TestRelativeCitationsGetTheSameGuard:
+
+    @staticmethod
+    def _link_into(repo: Path, scratch_root: str, name: str) -> Path:
+        """A durable-LOOKING relative citation whose bytes live in a scratch root."""
+        target = Path(scratch_root) / f"evd_rel_{os.getpid()}_{name}.json"
+        target.write_text("{}")
+        camp = repo / "data" / f"linked_{name}"
+        camp.mkdir(parents=True, exist_ok=True)
+        (camp / "summary.json").symlink_to(target)
+        return target
+
+    @pytest.mark.parametrize("scratch_root", ["/dev/shm", "/tmp"])
+    def test_relative_path_symlinked_into_scratch_is_ephemeral(self, repo, scratch_root):
+        slug = scratch_root.strip("/").replace("/", "_")
+        target = self._link_into(repo, scratch_root, slug)
+        try:
+            reg = write_registry(repo, f"evidence: data/linked_{slug}/summary.json\n")
+            (c,) = check(reg, repo).citations
+            assert (c.verdict, c.severity) == ("EPHEMERAL", "error"), (
+                f"a relative citation resolving to {target} was graded {c.verdict}")
+        finally:
+            target.unlink(missing_ok=True)
+
+    def test_a_genuine_relative_citation_still_passes(self, repo):
+        """The compliant path, asserted in the same class as the hostile one. A guard that
+        fails the idiom its own playbook mandates gets switched off, so tightening the
+        relative arm must not cost the ordinary `data/<campaign>/x.json` citation --
+        including in this fixture, whose repo genuinely lives under /tmp."""
+        assert str(repo).startswith("/tmp/"), "fixture no longer exercises the precedence"
+        reg = write_registry(repo, "evidence: data/good_campaign_20260801/summary.json\n")
+        (c,) = check(reg, repo).citations
+        assert (c.verdict, c.severity) == ("OK", "ok")
+
+    def test_relative_and_absolute_spellings_of_one_bad_link_agree(self, repo):
+        """The symmetry the scope test already asserts for extraction, now asserted for
+        CLASSIFICATION: a citation must not change verdict by being spelled differently."""
+        target = self._link_into(repo, "/dev/shm", "sym")
+        try:
+            rel = check(write_registry(
+                repo, "evidence: data/linked_sym/summary.json\n"), repo).citations[0]
+            ab = check(write_registry(
+                repo, f"evidence: {repo}/data/linked_sym/summary.json\n"), repo).citations[0]
+            assert rel.verdict == ab.verdict == "EPHEMERAL"
+        finally:
+            target.unlink(missing_ok=True)
+
+    def test_deleting_the_scratch_target_does_not_buy_a_pass(self, repo):
+        """"Make it green by removing what the guard inspects" is the failure mode that
+        matters most here, because the remedy the EPHEMERAL hint asks for (copy somewhere
+        durable, repoint) is more work than `rm`. Both deletions must stay red:
+        killing the target leaves a dangling link, killing the link leaves nothing."""
+        target = self._link_into(repo, "/dev/shm", "del")
+        reg = write_registry(repo, "evidence: data/linked_del/summary.json\n")
+        try:
+            assert check(reg, repo).citations[0].verdict == "EPHEMERAL"
+
+            target.unlink()                       # dangling symlink into scratch
+            (c,) = check(reg, repo).citations
+            assert c.severity == "error", "dangling scratch link graded non-error"
+            assert c.verdict == "EPHEMERAL"
+
+            (repo / "data" / "linked_del" / "summary.json").unlink()   # link gone too
+            (c,) = check(reg, repo).citations
+            assert (c.verdict, c.severity) == ("MISSING", "error")
+        finally:
+            target.unlink(missing_ok=True)
+
+    def test_the_hint_for_a_live_relative_scratch_citation_is_not_the_gone_hint(self, repo):
+        """Existence must be tested on the REPO-resolved path, not on the raw citation.
+
+        `os.path.exists("data/x/summary.json")` asks about the checker's cwd, so a live
+        artifact was reported "already GONE" -- which sends the reader to demote or
+        re-measure a claim whose evidence is still on disk and still recoverable. The
+        wrong remedy is worse than no hint: it destroys a result that was salvageable."""
+        target = self._link_into(repo, "/dev/shm", "hint")
+        try:
+            reg = write_registry(repo, "evidence: data/linked_hint/summary.json\n")
+            (c,) = check(reg, repo).citations
+            assert c.verdict == "EPHEMERAL"
+            assert "still exists" in c.hint, c.hint
+            assert "already GONE" not in c.hint
+            assert str(target) in c.hint, "the hint must name where the bytes really are"
+        finally:
+            target.unlink(missing_ok=True)
+
+    def test_a_dead_relative_scratch_citation_still_gets_the_gone_hint(self, repo):
+        """The complement: the fix must not make every hint say "still exists"."""
+        camp = repo / "data" / "linked_dead"
+        camp.mkdir(parents=True)
+        (camp / "summary.json").symlink_to("/dev/shm/evd_no_such_file_20260804.json")
+        reg = write_registry(repo, "evidence: data/linked_dead/summary.json\n")
+        (c,) = check(reg, repo).citations
+        assert c.verdict == "EPHEMERAL"
+        assert "already GONE" in c.hint, c.hint
+
+    def test_relative_citation_escaping_the_repo_into_scratch_is_caught(self, repo):
+        """No symlink needed: `..` out of the repo is the same hole with different
+        syntax, and resolving before judging closes both at once."""
+        stray = Path("/dev/shm") / f"evd_esc_{os.getpid()}"
+        stray.mkdir(parents=True, exist_ok=True)
+        (stray / "x.json").write_text("{}")
+        rel = os.path.relpath(stray / "x.json", repo)
+        try:
+            reg = write_registry(repo, f"evidence: data/../{rel}\n")
+            cites = check(reg, repo).citations
+            assert cites, "token was not even extracted; the escape is untested"
+            assert all(c.severity == "error" for c in cites), [
+                (c.path, c.verdict) for c in cites]
+        finally:
+            (stray / "x.json").unlink(missing_ok=True)
+            stray.rmdir()
+
+
+# ------------------------------------------------------- the 2026-08-03 retarget
+#
+# The operator ruled that research material reaches GitHub ONLY as distilled knowledge
+# and references in the wiki -- never as raw material, regardless of size. Benchmark
+# suites, campaign output, run bundles and logs stay on local disk and gitignored. The
+# checker used to grade the opposite: it warned on absolute paths, warned on sibling
+# repos, and ERRORED on anything durable that lived outside a repository. Those verdicts
+# would now fail precisely the citations the ruling produces, so they are gone.
+#
+# Each test below is a case the OLD rule punished and the new one must accept. They are
+# the delete-half of the retarget; the strictness half is asserted in the scratch,
+# missing and unreadable tests, which did not move.
+
+class TestRetargetedRule:
+
+    def test_absolute_path_inside_the_repo_is_ok(self, repo):
+        reg = write_registry(
+            repo, f"evidence: {repo}/data/good_campaign_20260801/summary.json\n")
+        res = check(reg, repo)
+        (c,) = res.citations
+        assert (c.verdict, c.severity) == ("OK", "ok")      # was ABSOLUTE_IN_REPO/warn
+        assert not res.errors and not res.warnings
+
+    def test_sibling_repo_is_ok(self, repo, monkeypatch, no_ephemeral_tmp):
+        import check_evidence_durability as m
+        sib = repo.parent / "epyc-root"
+        (sib / "data" / "compliance").mkdir(parents=True)
+        (sib / "data" / "compliance" / "SUMMARY.md").write_text("x")
+        monkeypatch.setattr(m, "SIBLING_REPO_ROOTS", (str(sib),))
+        reg = write_registry(repo, f"src: {sib}/data/compliance/SUMMARY.md\n")
+        res = check(reg, repo)
+        (c,) = res.citations
+        assert (c.verdict, c.severity) == ("OK", "ok")      # was SIBLING_REPO/warn
+        assert not res.errors and not res.warnings
+
+    def test_durable_path_in_no_repository_at_all_is_ok(self, repo, tmp_path,
+                                                       no_ephemeral_tmp):
+        """The headline reversal. Campaign output on a durable local mount, versioned by
+        nothing, is the state the ruling MANDATES for raw material -- it used to be the
+        script's hardest non-scratch error."""
+        stray = tmp_path / "elsewhere"
+        (stray / "data").mkdir(parents=True)
+        (stray / "data" / "x.json").write_text("{}")
+        reg = write_registry(repo, f"evidence: {stray}/data/x.json\n")
+        res = check(reg, repo)
+        (c,) = res.citations
+        assert (c.verdict, c.severity) == ("OK", "ok")      # was OUTSIDE_REPO/error
+        assert not res.errors
+
+    def test_a_gitignored_in_repo_artifact_is_ok(self, repo):
+        """The concrete shape the ruling created in this repo: whole campaign trees are
+        gitignored (`data/judge_suite_headtohead_20260802/`, `data/cpu_prefill_compute/*/`,
+        ...) while their citations stay in the registry. A committedness check would fail
+        every one of them, which is how a correct policy turns into a switched-off guard."""
+        (repo / ".gitignore").write_text("data/heavy_campaign/\n")
+        (repo / "data" / "heavy_campaign").mkdir(parents=True)
+        (repo / "data" / "heavy_campaign" / "runs.jsonl").write_text("{}\n")
+        reg = write_registry(repo, "evidence: data/heavy_campaign/runs.jsonl\n")
+        res = check(reg, repo)
+        (c,) = res.citations
+        assert (c.verdict, c.severity) == ("OK", "ok")
+        assert not res.errors and not res.warnings
+
+    def test_committedness_verdicts_are_gone_from_the_vocabulary(self):
+        """Guard against a half-revert: the retarget is only real if these cannot be
+        produced at all. Leaving the strings behind invites someone to wire them back in
+        against a ruling they have not read."""
+        src = Path(SCRIPT).read_text()
+        body = src.split('"""', 2)[-1]      # ignore the docstring, which EXPLAINS them
+        for dead in ("ABSOLUTE_IN_REPO", "SIBLING_REPO\"", "OUTSIDE_REPO"):
+            assert dead not in body, f"{dead} still reachable in code"
+
+    def test_scratch_is_still_ungrantable(self, repo):
+        """The half that must NOT have moved. Stated as its own test so a future relaxer
+        has to delete an assertion that says why, not just edit a tuple."""
+        import check_evidence_durability as m
+        assert m.EPHEMERAL_ROOTS == ("/mnt/raid0/llm/tmp", "/tmp", "/var/tmp",
+                                     "/dev/shm", "/run/user")
+        reg = write_registry(repo, "evidence: /mnt/raid0/llm/tmp/campaign/summary.json\n")
+        (c,) = check(reg, repo).citations
+        assert (c.verdict, c.severity) == ("EPHEMERAL", "error")
 
 
 # ---------------------------------------------------------------------- lost artifacts
