@@ -1675,12 +1675,41 @@ class TestSelfAudit(unittest.TestCase):
         self.assertEqual(result.outcome, S.FAIL)
 
     def test_audit_permits_a_literal_read_open(self):
+        """The compliant-path control: this module opens ELF binaries and source
+        trees, so the rule is "no opener that could WRITE", not "no opener".
+
+        The snippet declares `MODULE_ID` because the audit gained an identity
+        binding on 2026-08-04 — a clean result is a statement about THIS module,
+        and before the binding `audit_no_write_or_process_paths("")` returned PASS.
+        Declaring it keeps the assertion at PASS rather than weakening it to
+        `!= FAIL`, which would stop distinguishing "permitted" from "could not
+        tell" — and that distinction is the entire point of the control.
+        """
         result = I.audit_no_write_or_process_paths(
             "from pathlib import Path\n"
+            f"MODULE_ID = {I.MODULE_ID!r}\n"
             "def f(p):\n"
             "    with Path(p).open('rb') as fh:\n"
             "        return fh.read()\n")
         self.assertEqual(result.outcome, S.PASS)
+
+    def test_a_clean_foreign_module_is_not_certified(self):
+        """The binding itself: clean text that is not this module cannot PASS.
+
+        Bites the hole the 2026-08-03 pass recorded as closed at five sites and
+        left live here, because the plan that scheduled the fix skipped this
+        module as condemned — and it then survived the deletion, since
+        `worktree.py` and `microbench.py` both need it.
+        """
+        clean = "import re\nPAT = re.compile('x')\ndef f():\n    return PAT\n"
+        self.assertEqual(
+            I.audit_no_write_or_process_paths(clean).outcome, S.COULD_NOT_CHECK)
+        self.assertEqual(I.audit_no_write_or_process_paths("").outcome,
+                         S.COULD_NOT_CHECK)
+        # A finding is about the TEXT, so FAIL still outranks the identity question.
+        self.assertEqual(
+            I.audit_no_write_or_process_paths(
+                "def f():\n    open('/x', 'w')\n").outcome, S.FAIL)
 
     def test_audit_of_unparseable_source_is_could_not_check(self):
         self.assertEqual(

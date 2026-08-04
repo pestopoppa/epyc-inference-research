@@ -479,6 +479,90 @@ passed its own suite; the defects were all *between* them.
 
 ---
 
+## The scar-tissue refactor — Steps 0–2 (2026-08-04)
+
+The refactor plan
+([`/workspace/artifacts/operator/autokernel-refactor-plan.md`](/workspace/artifacts/operator/autokernel-refactor-plan.md))
+found that ~21,000 of the ~22,700 duplicated lines lived inside the code the
+simplification review had already condemned, so **the volume prize was collected
+by the deletion, not by refactoring.** What was left in the keep set was four
+live defects and two small hoists. Those are Steps 0–2 and they are done. Steps
+3–5 (`capability.py`, the `Derived` mixin) were **not** done and are not
+scheduled: Step 3 is *run the loop*.
+
+**Read the line accounting before the prose.** Steps 0–2 deleted **196** lines of
+production code and added 470, for a **net +274**; with tests the net is
+**+1,112**. The plan's headline "~1,300 lines collapsed in surviving code" was
+never Steps 0–2's to deliver — its own table attributes ~430 of that to Step 4
+alone, and Step 2's own text calls the validator prize "57 redundant lines … a
+trivial line prize". **This refactor made the package larger.** What it bought is
+below, and it is a property, not a line count.
+
+### What is now impossible
+
+| Was | Is |
+|---|---|
+| `correctness.BuildProvenance.output_binary_sha256` — the identity of the built candidate — accepted `"0" * 64` | Refused. `schemas.require.sha256` is the one body and it calls `schemas.is_placeholder_digest`. |
+| `worktree._req_sha256` accepted `"0" * 64` | Refused. The one legitimate filler-shaped digest, `integrity.EMPTY_TREE_SHA256` (= `sha256("")`, the reading that proves a build dir was clean), goes through `worktree._req_tree_digest`, which admits that value and nothing else — verified by execution against `"0"*64` and `"f"*64`. |
+| `BuildProvenance` and `DiffPolicyEvidence` carried no `produced_by`, so a candidate-supplied record was indistinguishable from a measured one | Both carry it, `_req_producer` validates it, and `check_clean_build_from_snapshot`, `check_semantic_diff_conformance` and `check_schema_and_diff_policy` each **FAIL** a record whose producer is not the evaluator. The field is not inert: same record, producer flipped, outcome flips PASS↔FAIL. |
+| `api.audit_no_write_or_process_paths("")` returned **PASS** — the guarantee obtained by deleting the thing under inspection | `COULD_NOT_CHECK`, for `""`, whitespace, a comment, a lone docstring and `x = 1`. The no-argument path is additionally bound to `MODULE_ID` by `_defines_this_module`, so the self-audit proves it read its own file instead of assuming it. |
+| Nine of eleven `Check` reducers derived **PASS from zero sub-checks** | `schemas.Check.worst_of` is the one lattice; an empty vector is `COULD_NOT_CHECK` with a stated reason. All four keep-set reducers delegate. Verified: no input — `()`, `[]`, `iter([])`, an exhausted generator, `""`, `{}`, `set()` — yields PASS, and a non-`Check` element raises rather than being skipped. |
+
+The **outcome** of every reducer is unchanged on non-empty vectors: 168
+one-to-three-element vectors over PASS / PASS-with-prose / COULD_NOT_CHECK /
+FAIL, differentially compared against the pre-refactor bodies, agree in every
+case. **Reasons did change** — non-PASS reasons are now prefixed `[FAIL]` /
+`[COULD_NOT_CHECK]`, and reasons attached to a PASS sub-check are dropped. The
+only consumer of a reduced `.reasons` is `campaign.py:1593`, and it reads them
+only on the non-PASS path, where they are preserved.
+
+### What is NOT closed, and must not be read as closed
+
+- **The identity-audit hole (S4) is still live.** `evaluator/integrity.py:3526`
+  returns **PASS** for `""`, for a comment-only module and for `X = 1` — verified
+  by execution, today, on the current tree. It has its own AST walker and does
+  not delegate, so it did not inherit the `api.py` fix. It is untouched on
+  purpose (`integrity.py` is condemned; the plan forbids refactoring code about
+  to be removed). `evaluator/controls.py:2389` still has the same
+  `source: Optional[str] = None` signature hole but **delegates** to `api`, so it
+  now answers `COULD_NOT_CHECK` — closed by inheritance, not at source. The other
+  two sites the plan named, `controller/guards.py:3556` and `release/t3.py:6124`,
+  were **deleted** rather than fixed. So the class stands at: one fixed, one
+  fixed by delegation, two deleted, **one live**. The full closure is Step 4's
+  required `module_id` kwarg on `capability.prove`, which is deferred until after
+  campaign #1.
+- **`evaluator/api._require_sha256` is shape-only and accepts `"0" * 64`.**
+  `AnchorIdentity.binary_sha256` / `linkage_sha256` — the fields precondition 4
+  exists for — are validated by it. Migrating it errors 152 tests, 8 of them in
+  `evaluator/test_surface.py` (condemned) and 3 in `test_program_md.py`, so it
+  unblocks the day those land. It is enumerated in
+  `test_schemas_require.KNOWN_WEAKER_DIGEST_VALIDATORS`, the list fails if it
+  grows, and `test_the_known_weaker_entry_is_still_earned` fails the day the debt
+  is paid and the licence is left behind.
+- **A validator is not the same thing as a validated field.** Of the 30 keep-set
+  records carrying a digest field, 11 validate it strictly; 5 (all in
+  `evaluator/api.py`) use the weak validator above; and **6 have no
+  `__post_init__` at all** — `journal.TornTail`, `journal.Views`,
+  `storage.ExpirableArtifact`, `statistics.CalibrationSolve` and
+  `worktree.BuildResult` accept `"0" * 64` in a digest field today. This is
+  pre-existing (verified identical before the refactor) and outside what
+  `test_schemas_require.py` can see: that guard proves no module *re-derives* a
+  validator, never that a record *uses* one.
+
+### What makes the hoist durable
+
+Not the hoist. `test_schemas_require.py` (32 tests, in `PYTEST_SMOKE`). Writing a
+fourth `_req_sha256` needs the shape and the predicate; both live only in
+`schemas`, so there are two routes and the quiet one is closed — no keep-set
+module may contain `^[0-9a-f]{64}$` as a whole-string pattern (deliberately not a
+substring rule: `storage._SHA256SUMS_LINE_RE` and `t0_provider._BUILD_LOG_REF_RE`
+legitimately *parse* a line containing a digest), no second `*placeholder*`
+predicate may exist, every promoted name must resolve to `schemas.require.<family>`
+by AST **and** by `assertIs` identity. The remaining route is
+`import schemas; schemas.SHA256_RE`, which is a line on the diff.
+
+---
+
 ## The shared lock root, and the follow-up that belongs to `epyc-orchestrator`
 
 `device_claim.py` writes `gpu_device.<device_id>.lock` into **the same on-disk
@@ -1227,6 +1311,22 @@ implementation (deliberately — AK-D25 keeps cadence an operator policy).
 
 ### Known, documented holes in what *is* implemented
 
+- **`evaluator/integrity.py:3526` `audit_no_write_or_process_paths` still returns
+  PASS for source that defines nothing** (`""`, a comment, `X = 1`). The same
+  defect was fixed at `evaluator/api.py` on 2026-08-04 and deleted with
+  `controller/guards.py` and `release/t3.py`; `integrity.py` has its own walker,
+  does not delegate, and is on the deletion list, so it was deliberately left.
+  **Do not read the S4 class as closed.** See
+  [§ *The scar-tissue refactor*](#the-scar-tissue-refactor--steps-02-2026-08-04).
+- **`evaluator/api._require_sha256` accepts `"0" * 64`**, so
+  `AnchorIdentity.binary_sha256` and `ArtifactIdentity`'s digests can carry a
+  fabricated identity. Named in `KNOWN_WEAKER_DIGEST_VALIDATORS`; unblocks when
+  `test_surface.py` and `test_program_md.py` fixtures land.
+- **Six keep-set records validate no digest at all** (`journal.TornTail`,
+  `journal.Views`, `storage.ExpirableArtifact`, `statistics.CalibrationSolve`,
+  `worktree.BuildResult`) — they have no `__post_init__`. Pre-existing; the
+  `schemas.require` conformance guard cannot see it, because it proves no module
+  re-derives a validator, not that a record uses one.
 - Unlinking a held lock file hides its live holder from the `/proc/locks`
   witness — a tmp reaper over `/mnt/raid0/llm/tmp` does it, no attacker needed.
   Tracked as an `expectedFailure` in `test_preflight.py`.

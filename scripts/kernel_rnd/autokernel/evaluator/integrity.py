@@ -3523,6 +3523,34 @@ _FORBIDDEN_IMPORTS = frozenset({
 _READ_MODES = frozenset({"r", "rb", "rt", "br", "tr"})
 
 
+#: Bound by `audit_no_write_or_process_paths` so the self-audit proves it read its
+#: OWN module. Added 2026-08-04: this hole was found by the refactor mining pass,
+#: recorded as CLOSED at five sites by commit 4e96fdc0, and left LIVE here — the
+#: plan that scheduled the fix skipped this module because it was condemned to
+#: deletion. It then SURVIVED the deletion, because `worktree.py` takes its
+#: build-identity receipt from here and `microbench.py` hashes the benchmarked
+#: binary with `sha256_file`. A fix skipped on the grounds that the code was going
+#: away is a fix that never happens when the code does not go away.
+MODULE_ID = "autokernel.evaluator.integrity/v1"
+
+
+def _defines_this_module(tree: ast.AST) -> bool:
+    """True when the parsed source assigns this module's own `MODULE_ID`.
+
+    Mirrors `api._defines_this_module` deliberately rather than importing it:
+    `api` does not import `integrity`, and reversing that edge to share nine lines
+    would put a cycle between the evaluator's two audit surfaces.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "MODULE_ID" and \
+                        isinstance(node.value, ast.Constant) and \
+                        node.value.value == MODULE_ID:
+                    return True
+    return False
+
+
 def audit_no_write_or_process_paths(source: Optional[str] = None) -> schemas.Check:
     """Prove from this module's own AST that it reads but cannot write or signal.
 
@@ -3534,6 +3562,7 @@ def audit_no_write_or_process_paths(source: Optional[str] = None) -> schemas.Che
     COULD_NOT_CHECK when the source cannot be read or parsed — an unreadable
     module is not an audited one.
     """
+    supplied = source is not None
     if source is None:
         try:
             source = Path(__file__).read_text(encoding="utf-8")
@@ -3577,5 +3606,17 @@ def audit_no_write_or_process_paths(source: Optional[str] = None) -> schemas.Che
                     findings.append(f"line {node.lineno}: calls .{func.attr}()")
 
     if findings:
+        # A forbidden construct is a finding ABOUT THE TEXT, so it is returned
+        # before any identity question — FAIL never depends on whose module it is.
         return schemas.Check(FAIL, tuple(findings))
+    if not _defines_this_module(tree):
+        # A clean bill of health is a statement about THIS module. Without this
+        # branch `audit_no_write_or_process_paths("")` returned PASS — the
+        # guarantee obtained by deleting the thing it inspects. Bound here rather
+        # than trusted, whether the source was supplied or read from `__file__`
+        # (which a repointed `__file__` would otherwise let lie).
+        return schemas.Check(COULD_NOT_CHECK, (
+            "the audited source does not define this module's MODULE_ID "
+            f"({MODULE_ID!r}), so a clean result says nothing about "
+            f"{'the supplied source' if supplied else 'this module'}",))
     return schemas.Check(PASS)
