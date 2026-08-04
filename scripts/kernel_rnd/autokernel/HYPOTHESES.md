@@ -106,12 +106,38 @@ To see everything at once: `tracker.still_open()`, `tracker.resolved()`, and
 
 ---
 
-## Two things this does not do yet
+## Handing one to a campaign
 
-* **Nothing runs it on a schedule.** `campaign.py` — the entrypoint that actually
-  starts a run — does not reach this module, so intake, adoption and the round block
-  happen when an agent working the campaign calls them. Your file is read; it is not
-  polled.
+```bash
+python3 -m scripts.kernel_rnd.autokernel.campaign --model /path/to/model.gguf \
+    --journal-root /some/durable/root \
+    --hypothesis akh-fuse-norm-cluster --hypothesis-store /path/to/this/file.json
+```
+
+That takes your file into the ledger (step 1 above) and then authorizes the claim
+against the id you named — and it is the point where the falsifier stops being
+optional. Three ways it stops before anything is acquired, no worktree, no build,
+no claim:
+
+| what you wrote | what happens |
+|---|---|
+| no `falsifier` at all | refused: `FalsifierRequiredBeforeCompute` — *the falsifier is 'absent'; call propose_falsifier() and record the predicate, then authorize.* An agent's job, not yours |
+| `"falsifier": "tbd"` | refused: `FalsifierMissing` — *a placeholder; it is an empty string wearing a hat.* A different state, a different message and a different remedy |
+| an id nothing tracks | refused: `UnknownHypothesis`. Never silently downgraded to an unbound run |
+
+Without `--hypothesis` the campaign is **exploratory** and its record says so
+outright, so a run that chose not to test a stated prediction cannot be confused
+afterwards with one whose binding was dropped. With it, the falsifier is written
+into the CLAIM's own receipt as well as the ledger's, so "what did we spend the
+card on" and "what would have refuted it" are one lookup.
+
+---
+
+## One thing this does not do yet
+
+* **Nothing runs it on a schedule.** A campaign reads your file when one is started
+  with `--hypothesis-store`; adoption and the round block still happen when an agent
+  working the campaign calls them. Your file is read; it is not polled.
 * **An idea with no `mechanism` in its regime cannot be checked against memory.** The
   do-not-repeat ledger matches on *what change is being made*, and a one-line idea
   usually does not name one. That case comes back COULD_NOT_CHECK, not "clear" — the

@@ -29,13 +29,36 @@ surface — was provably unreachable from the path between "an idea for a kernel
 and "a measured number". That split was computed by walking the import graph, not
 asserted, and the operator acted on it: those planes were removed, about 79,600
 lines including their tests, recoverable from the tag
-`autokernel-preserve-20260804`. What is still deferred is `controller/`'s memory
-half — the hypothesis store and the do-not-repeat ledger, read by whoever
-proposes a candidate and by nothing that measures one.
-[`FOOTPRINT.md`](FOOTPRINT.md) carries the current totals and every module's
-reachability row by row, and `test_campaign_footprint.py` turns the suite red if
-the document and the tree disagree. **The figures live there and only there** — a
-number stated in two documents drifts in exactly one of them.
+`autokernel-preserve-20260804`. Later the same day the last deferred prefix,
+`controller/`, was opened *module by module* — see **A question, or an
+exploration** below — so no module in this package is unreachable now, and the
+boundary that used to say "half of this is inert" now guards the *next* module
+instead. [`FOOTPRINT.md`](FOOTPRINT.md) carries the current totals and every
+module's reachability row by row, and `test_campaign_footprint.py` turns the
+suite red if the document and the tree disagree. **The figures live there and
+only there** — a number stated in two documents drifts in exactly one of them.
+
+### A question, or an exploration
+
+```bash
+python3 -m scripts.kernel_rnd.autokernel.campaign --model /path/to/model.gguf \
+    --journal-root /some/durable/root \
+    --hypothesis akh-fuse-norm-cluster --hypothesis-store /path/to/operator_hypotheses.json
+```
+
+With `--hypothesis`, the region claim is acquired through
+`controller/hypotheses.py::claim_for_hypothesis`, so a question with **no
+falsifier** — or a placeholder one (`"tbd"`) — cannot reach a claim, and the
+refusal lands before anything is acquired and before the worktree exists. The
+falsifier travels into the claim's own receipt, so the resource record and the
+question record say the same thing. Without `--hypothesis` the campaign is
+**exploratory** and the record says so in as many words: an unexplained absence
+and a declared exploratory run must not read the same afterwards.
+
+That gate had been written, documented as *"The ONLY route from a hypothesis to a
+resource claim"*, and never called by anything but its own tests — the driver
+acquired the claim directly. Writing your own question:
+[`HYPOTHESES.md`](HYPOTHESES.md).
 
 ### The two things the harness is built around
 

@@ -44,6 +44,31 @@ still unreachable from the campaign path, and the DELETED prefixes get the one
 assertion that is still meaningful about them:
 `test_re_adding_a_deleted_plane_and_importing_it_is_caught`.
 
+THE SAME LESSON, ONE LEVEL DOWN — 2026-08-04, later the same day
+----------------------------------------------------------------
+`campaign.py` gained `--hypothesis`, and with it the falsifier-before-compute
+gate: the region claim is now acquired through
+`hypotheses.claim_for_hypothesis`, so a question with no falsifier — or a
+placeholder one — cannot reach a claim. That gate is the reason this boundary's
+`controller` entry was WRONG. It read *"read by whoever PROPOSES a candidate and
+by nothing that measures one"*, which is true of strategy and false of claims:
+the driver is what SPENDS the claim, and while the ban stood, "the ONLY route
+from a hypothesis to a resource claim" had zero non-test callers.
+
+So the prefix is narrowed MODULE BY MODULE (`CONTROLLER_ALLOWED`), never by
+prefix — a prefix allowance would silently re-admit anything added under
+`controller/` later. And the plants moved again for exactly the reason above:
+they had been re-pointed at `controller.hypotheses` / `controller.do_not_repeat`,
+which are now named exceptions, so all five would have gone quiet with the target
+absent rather than the bite. Each now imports a module PLANTED under
+`controller/` in the copy — still banned, still real, still off the campaign
+path — and `test_an_allow_listed_controller_module_is_not_a_finding` is the
+control on the other side.
+
+There is now no unreachable module left in this package. The boundary is not
+therefore decorative: what it guards is the NEXT module, and the four checks
+below are all still exercised against a real tree with a real edge in it.
+
 It also fails LOUDLY the first time someone reintroduces a dependency on the
 deferred half, which is the failure mode that produced the 94k lines in the first
 place.
@@ -145,6 +170,14 @@ CAMPAIGN_ROOTS = {
         "earlyoom, whose argv names what it guards",
     f"{ROOT_PKG}.resource.claim_witness":
         "a claim that is observed but never held is not a claim (invariant 9)",
+    f"{ROOT_PKG}.controller.hypotheses":
+        "`claim_for_hypothesis` calls itself the ONLY route from a hypothesis to a "
+        "resource claim and had ZERO non-test callers until 2026-08-04 — a guard "
+        "defined and never wired, the fifth of that shape in this package",
+    f"{ROOT_PKG}.controller.do_not_repeat":
+        "`authorize_claim(ledger=…)` has no default and a token with no do-not-repeat "
+        "verdict is refused at the door, so the driver cannot mint a spendable one "
+        "without the §19.2 ledger this module compiles",
 }
 
 
@@ -157,10 +190,14 @@ CAMPAIGN_ROOTS = {
 #: "autokernel.release_notes".
 DEFERRED = {
     f"{ROOT_PKG}.controller":
-        "MEMORY, not the campaign path: `hypotheses` is the operator's drop-in and "
-        "`do_not_repeat` is the §19.2 ledger, both read by whoever PROPOSES a candidate "
-        "and by nothing that measures one. `controller/__init__.py` binds both, so "
-        "reaching any module under this prefix executes the whole surviving plane",
+        "banned by PREFIX and opened module by module: see CONTROLLER_ALLOWED. The "
+        "entry used to read 'read by whoever PROPOSES a candidate and by nothing that "
+        "measures one', which was right about STRATEGY and wrong about CLAIMS — the "
+        "driver is what SPENDS the claim, so the falsifier-before-compute gate belongs "
+        "there, and while this entry banned the whole prefix `claim_for_hypothesis` (\"the "
+        "ONLY route from a hypothesis to a resource claim\") had zero non-test callers. "
+        "The prefix stays banned so that a module ADDED under `controller/` later is a "
+        "finding rather than a silent re-admission",
     f"{ROOT_PKG}.release":
         "needed to SHIP a champion, never to FIND one; committed the day before the code "
         "that can compile a candidate",
@@ -197,13 +234,59 @@ DELETED_BY_OPERATOR: tuple = (
 #: concern shared by two modules belongs and where this package has never had a
 #: place to put one.
 #:
-#: `controller` therefore does NOT appear above: three modules under it are still
+#: `controller` therefore does NOT appear above: four modules under it are still
 #: on disk, so it stays in `DEFERRED` as a live prefix — which is also what keeps
 #: this boundary from becoming decorative. `DEFERRED` and `DELETED_BY_OPERATOR`
 #: are now disjoint sets with different jobs: the first names a plane the campaign
 #: path must not reach and CAN still be reached (so the checks below have
 #: something to bite on in the real tree), the second names prefixes that may
 #: never come back onto the path at all.
+
+
+# =============================================================================
+# The one narrowing of a deferred prefix: an explicit, per-module allow-list
+# =============================================================================
+#
+# 2026-08-04. `campaign.py` gained `--hypothesis`, and with it the
+# falsifier-before-compute gate: the claim is acquired through
+# `hypotheses.claim_for_hypothesis` so a question with no falsifier — or a
+# placeholder one — cannot reach a claim. That gate had been written, documented
+# as "the ONLY route from a hypothesis to a resource claim", and never called by
+# anything but its own tests, because this boundary put it on the far side of the
+# line. The line was in the wrong place: whoever PROPOSES a candidate is not the
+# one that spends the card, and the driver is.
+#
+# THIS IS A LIST, NOT A PREFIX, and that is the entire design. Allowing
+# `autokernel.controller.*` would re-admit anything a future session drops into
+# that directory, silently and forever — the same shape as a `DEFERRED` entry
+# whose targets were all deleted. Every module below is named, and every one has
+# to say why the CAMPAIGN PATH (not the package, not the plane) needs it.
+#
+# `test_the_allow_list_is_exact` proves this is not a prefix, and
+# `test_a_new_module_under_controller_is_still_caught` plants a real module under
+# `controller/` in the copied tree and asserts the prefix ban still bites.
+CONTROLLER_ALLOWED = {
+    f"{ROOT_PKG}.controller":
+        "the package __init__ itself. Importing ANY module under a package executes "
+        "its `__init__`, so this row is not a choice — it is the consequence of the "
+        "two rows below, stated rather than left as an unexplained edge",
+    f"{ROOT_PKG}.controller.hypotheses":
+        "`claim_for_hypothesis` — the gate `campaign.py` now acquires its region claim "
+        "through. A falsifier is optional when the operator writes a question and "
+        "MANDATORY before a claim is spent on it, and the spend happens in the driver",
+    f"{ROOT_PKG}.controller.do_not_repeat":
+        "NOT 'just in case', and the check was made before admitting it: "
+        "`check_do_not_repeat(*, regime, matches)` is pure and the driver never calls "
+        "it — but `HypothesisTracker.authorize_claim(ledger=…)` has NO default and "
+        "`claim_for_hypothesis` raises `LedgerNotConsulted` on a token carrying no "
+        "verdict, so no SPENDABLE token exists without a real ledger. "
+        "`compile_for_tracker` builds it from the tracker's own record and lives here. "
+        "It is also reached unconditionally via `controller/__init__.py`",
+    f"{ROOT_PKG}.controller.shared":
+        "`ControllerError`, `selection_block()` and `LEDGER_DIMENSIONS` — the six lines "
+        "the two modules above were pinned to the removed AK4 plane by. Reached only "
+        "through them; the campaign path names nothing in it",
+}
 
 
 # =============================================================================
@@ -680,10 +763,19 @@ def campaign_edges() -> dict:
 
 
 def deferred_findings(graph: "ImportGraph", edges: dict) -> list:
+    """Every deferred module the campaign path reaches, minus the named exceptions.
+
+    The exception set is `CONTROLLER_ALLOWED`, matched by EXACT MODULE NAME. A
+    membership test rather than a prefix test is the whole of the narrowing: a
+    prefix allowance would re-admit every module added under `controller/` after
+    today, which is the failure mode this file exists to make loud.
+    """
+    allowed = {name.replace(ROOT_PKG, graph.root, 1) for name in CONTROLLER_ALLOWED}
     findings = []
     for prefix, reason in sorted(DEFERRED.items()):
         prefix = prefix.replace(ROOT_PKG, graph.root, 1)
-        for module in sorted(m for m in edges if graph.under(m, prefix)):
+        for module in sorted(m for m in edges
+                             if graph.under(m, prefix) and m not in allowed):
             findings.append(
                 f"{module} is reachable from the campaign path via "
                 f"{graph.importers_of(edges, module)} — deferred because: {reason}")
@@ -1049,33 +1141,83 @@ class TestCampaignFootprint(unittest.TestCase):
     #: plus `__init__.py` and `shared.py`, measured at 6,913 lines on this date.
     #:
     #: The derivation, so the number can be re-derived rather than trusted: the
-    #: property being defended is "no deferred MODULE migrated onto the campaign
-    #: path". The cheapest way to break it is to move the SMALLER of the two,
-    #: which would leave 6,913 - 2,205 = 4,708. So the bound sits above that and
-    #: below the tree, at 5,000: either module moving fails this check, and ~1,900
-    #: lines of ordinary editing churn — by any of the sessions that share this
-    #: clone — does not.
-    DEFERRED_FLOOR = 5_000
+    #: property being defended is "the ALLOW-LISTED plane is still a plane, where
+    #: the allow-list says it is". The cheapest way to break it is to move the
+    #: SMALLER of the two modules out from under the prefix, which would leave
+    #: 6,913 - 2,205 = 4,708. So the bound sits above that and below the tree, at
+    #: 5,000: either module moving fails this check, and ~1,900 lines of ordinary
+    #: editing churn — by any of the sessions that share this clone — does not.
+    #:
+    #: SECOND CORRECTION, same day: the assertion below used to be called "the
+    #: deferred half is a real share of the tree", and after `--hypothesis` was
+    #: wired that name is false — every module under the one live `DEFERRED`
+    #: prefix is now named in `CONTROLLER_ALLOWED`, so the deferred half is empty.
+    #: The MEASUREMENT is unchanged and still bites for its original reason (a
+    #: module leaving `controller/` collapses the count); only the claim it makes
+    #: has been corrected to the one it can support.
+    CONTROLLER_PLANE_FLOOR = 5_000
 
-    def test_the_deferred_half_is_a_real_share_of_the_tree(self):
-        """Second anti-vacuity check: the deferred half must be substantial.
+    def test_the_allow_listed_plane_is_a_real_share_of_the_tree(self):
+        """Anti-vacuity for the ALLOW-LIST, which is now the exception that matters.
 
         If a refactor moved `hypotheses.py` out of `controller/` into a module the
-        campaign path imports, every reachability assertion above would still
-        pass and the boundary would mean nothing.
+        campaign path already imports, every reachability assertion above would
+        still pass — the module would simply be somewhere no prefix bans — and the
+        one narrowing this boundary grants would have quietly become a hole.
         """
-        deferred_lines = 0
+        lines = 0
         for prefix in sorted(DEFERRED):
             if prefix in DELETED_BY_OPERATOR:
                 continue
             sub = PKG_DIR.joinpath(*prefix.split(".")[1:])
             for path in sub.rglob("*.py"):
                 if not path.name.startswith("test_"):
-                    deferred_lines += len(path.read_text(encoding="utf-8").splitlines())
-        self.assertGreater(deferred_lines, self.DEFERRED_FLOOR,
-                           f"the deferred half is under {self.DEFERRED_FLOOR:,} lines; "
-                           "either it was deleted (say so in DELETED_BY_OPERATOR) or a "
-                           "module moved onto the campaign path")
+                    lines += len(path.read_text(encoding="utf-8").splitlines())
+        self.assertGreater(lines, self.CONTROLLER_PLANE_FLOOR,
+                           f"the live deferred prefix is under "
+                           f"{self.CONTROLLER_PLANE_FLOOR:,} lines; either it was deleted "
+                           "(say so in DELETED_BY_OPERATOR) or a module moved out from "
+                           "under the allow-list")
+
+    # -- the allow-list itself ---------------------------------------------
+
+    def test_every_allow_listed_module_is_real(self):
+        """An allow-list naming a module that does not exist grants nothing and
+        hides the fact that the thing it was granted for has moved."""
+        missing = [m for m in sorted(CONTROLLER_ALLOWED)
+                   if self.graph.module_path(m) is None]
+        self.assertEqual(missing, [],
+                         f"CONTROLLER_ALLOWED names modules with no file: {missing}")
+
+    def test_every_allow_listed_module_sits_under_a_deferred_prefix(self):
+        """The allow-list is an EXCEPTION to a ban. A row naming something no ban
+        covers is not an exception; it is a comment that reads like a rule."""
+        stray = [m for m in sorted(CONTROLLER_ALLOWED)
+                 if not any(self.graph.under(m, p) for p in DEFERRED)]
+        self.assertEqual(stray, [], f"CONTROLLER_ALLOWED rows outside DEFERRED: {stray}")
+
+    def test_every_allow_listed_module_states_why_the_campaign_path_needs_it(self):
+        thin = [m for m, why in sorted(CONTROLLER_ALLOWED.items()) if len(why) < 40]
+        self.assertEqual(thin, [], f"allow-list rows with no argument: {thin}")
+
+    def test_the_allow_list_is_exact_and_not_a_prefix(self):
+        """THE BITE, stated as an assertion rather than as a comment.
+
+        A sibling module under the same package must NOT be allowed by the fact
+        that its neighbours are. This is checked against the allow-list's own
+        matching rule, so it fails the moment someone rewrites the membership
+        test as `startswith`.
+        """
+        allowed = set(CONTROLLER_ALLOWED)
+        for module in sorted(allowed):
+            sibling = module + ".revenant"
+            self.assertNotIn(sibling, allowed,
+                             f"{sibling} is allowed by prefix; the list must be exact")
+        edges = dict(self.edges)
+        edges[f"{ROOT_PKG}.controller.revenant"] = []
+        self.assertTrue(deferred_findings(self.graph, edges),
+                        "a module under an allow-listed package produced no finding; "
+                        "the allow-list has become a prefix allowance")
 
     def test_the_entrypoint_exists(self):
         """The boundary is drawn AROUND an entrypoint; without one it guards nothing.
@@ -1328,6 +1470,32 @@ class TestTheBoundaryCatchesRealTreeViolations(unittest.TestCase):
         self.assertTrue(any(needle in f for f in findings),
                         f"caught something else than {needle!r}: {findings}")
 
+    # -- planting a module under a live DEFERRED prefix ---------------------
+
+    #: The module every deferred plant below imports. It does not exist in the
+    #: real tree, it is written into the COPY, and it is deliberately NOT in
+    #: `CONTROLLER_ALLOWED` — which is exactly the case the prefix ban is kept
+    #: for now that the four real controller modules are named exceptions.
+    REVENANT = f"{ROOT_PKG}.controller.revenant"
+
+    def plant_controller_module(self) -> None:
+        """Write `controller/revenant.py` (and a subpackage) into the COPY.
+
+        Two shapes, because two different mechanisms are tested through them:
+        `revenant.py` is a plain module a probe can import directly, and
+        `revenant_pkg/` is a package whose `__init__` imports a submodule — the
+        invisible edge, the one no reading of the probe's own source reveals.
+        """
+        sub = self.copy_dir / "controller"
+        (sub / "revenant.py").write_text("VALUE = 1\n", encoding="utf-8")
+        pkg = sub / "revenant_pkg"
+        pkg.mkdir(exist_ok=True)
+        (pkg / "__init__.py").write_text(
+            "from . import hidden\n\n__all__ = ['hidden']\n", encoding="utf-8")
+        (pkg / "hidden.py").write_text("VALUE = 2\n", encoding="utf-8")
+        self.addCleanup(shutil.rmtree, pkg, True)
+        self.addCleanup((sub / "revenant.py").unlink, True)
+
     # -- the deferred half --------------------------------------------------
     #
     # RE-POINTED 2026-08-04. Every planted violation below used to name a module
@@ -1337,20 +1505,36 @@ class TestTheBoundaryCatchesRealTreeViolations(unittest.TestCase):
     # of these tests failed with "planted violation was NOT caught" — the walker's
     # bite reported as absent when what was absent was the target.
     #
-    # They are re-pointed at `controller/`, which is the choice that keeps the
-    # MECHANISM under test intact: it is a live `DEFERRED` prefix, it is really on
-    # disk, its `__init__` really binds its submodules, and it is really absent
-    # from the campaign closure — so each of these still runs against the real
-    # 95k-line tree with a real edge planted in it, which is the entire reason
-    # this class exists beside `TestTheWalkerItself`.
+    # RE-POINTED AGAIN, same day, for the same reason one level down. They were
+    # pointed at `controller.hypotheses` / `controller.do_not_repeat`, and those
+    # two are now NAMED EXCEPTIONS (`CONTROLLER_ALLOWED`) because `campaign.py`
+    # acquires its claim through the falsifier gate. A plant that names an
+    # allow-listed module is not a violation, so all five would have gone quiet —
+    # the same "the target is what is absent" failure, arrived at from the other
+    # direction. Each now imports a module PLANTED under `controller/` in the
+    # copy: still a live `DEFERRED` prefix, still really on disk, still really
+    # absent from the campaign closure, and — the point of the allow-list being a
+    # list — still banned. Every mechanism each test was written for is intact.
     #
     # The other reading — "assert that re-adding a DELETED module is caught" — is
     # not dropped; it is `test_re_adding_a_deleted_plane_and_importing_it_is_caught`
     # below, which is the one thing the deleted prefixes can still be tested for.
 
     def test_a_direct_import_of_controller_is_caught(self):
-        self.assert_caught("from .controller import do_not_repeat\n",
-                           deferred_findings, f"{ROOT_PKG}.controller.do_not_repeat")
+        self.plant_controller_module()
+        self.assert_caught("from .controller import revenant\n",
+                           deferred_findings, self.REVENANT)
+
+    def test_an_allow_listed_controller_module_is_not_a_finding(self):
+        """CONTROL, and the one that stops the four plants passing vacuously.
+
+        `controller.hypotheses` is the module `campaign.py` imports for the
+        falsifier gate. If it produced a finding, the boundary and the driver
+        would be in permanent disagreement and someone would eventually silence
+        the wrong one of the two.
+        """
+        self.assertEqual(
+            self._findings("from .controller import hypotheses\n", deferred_findings), [])
 
     def test_re_adding_a_deleted_plane_and_importing_it_is_caught(self):
         """The DELETED prefixes, and the only honest assertion left about them.
@@ -1379,31 +1563,37 @@ class TestTheBoundaryCatchesRealTreeViolations(unittest.TestCase):
             finally:
                 shutil.rmtree(sub)
 
-    def test_importing_one_controller_module_pulls_the_whole_surviving_plane(self):
-        """`controller/__init__.py` binds `hypotheses`; the edge is invisible here.
+    def test_importing_one_package_pulls_what_its_dunder_init_binds(self):
+        """The invisible edge: a package `__init__` importing a submodule.
 
-        `shared.py` imports nothing under `controller`, so the ONLY route from
-        this probe to `hypotheses` is the parent package's `__init__` running as
-        a side effect of the import — which is the form `surface/__init__.py`
-        used to demonstrate and which no reading of the probe's own source shows.
+        The probe names `controller.revenant_pkg` and nothing else. The ONLY
+        route from it to `revenant_pkg.hidden` is the parent package's `__init__`
+        running as a side effect of the import — the form `surface/__init__.py`
+        used to demonstrate, and which no reading of the probe's own source shows.
+        (`controller/__init__.py` binds `hypotheses` and `do_not_repeat` the same
+        way; both are now named exceptions, so the mechanism is demonstrated on a
+        planted package instead of on them.)
         """
-        self.assert_caught("from .controller import shared\n",
-                           deferred_findings, f"{ROOT_PKG}.controller.hypotheses")
+        self.plant_controller_module()
+        self.assert_caught("from .controller import revenant_pkg\n",
+                           deferred_findings, f"{self.REVENANT}_pkg.hidden")
 
     def test_a_function_level_import_of_controller_is_caught(self):
+        self.plant_controller_module()
         self.assert_caught("""
             def later():
-                from .controller import hypotheses
-                return hypotheses
-        """, deferred_findings, f"{ROOT_PKG}.controller.hypotheses")
+                from .controller import revenant
+                return revenant
+        """, deferred_findings, self.REVENANT)
 
     def test_a_dynamic_import_string_into_controller_is_caught(self):
+        self.plant_controller_module()
         self.assert_caught("""
             import importlib
 
             def later():
-                return importlib.import_module("autokernel.controller.hypotheses")
-        """, deferred_findings, f"{ROOT_PKG}.controller.hypotheses")
+                return importlib.import_module("autokernel.controller.revenant")
+        """, deferred_findings, self.REVENANT)
 
     def test_a_compliant_module_produces_no_deferred_finding(self):
         """CONTROL."""
@@ -1512,30 +1702,34 @@ class TestTheBoundaryCatchesRealTreeViolations(unittest.TestCase):
     # -- dynamic imports ------------------------------------------------------
 
     def test_a_relative_dynamic_import_into_controller_is_caught(self):
+        self.plant_controller_module()
         self.assert_caught("""
             import importlib
 
             def later():
-                return importlib.import_module(".controller.do_not_repeat", __package__)
-        """, deferred_findings, f"{ROOT_PKG}.controller.do_not_repeat")
+                return importlib.import_module(".controller.revenant", __package__)
+        """, deferred_findings, self.REVENANT)
 
     def test_an_fstring_dynamic_import_is_reported_unresolved(self):
         """FAIL-CLOSED: what the walk cannot follow must not read as a clean pass.
 
-        The named module has to EXIST for the first half to say anything: against
-        `controller.guards`, which was deleted, "no deferred finding" is what a
-        walk that resolved the f-string perfectly would also report, so the
-        assertion held for the wrong reason. Against `controller.hypotheses` —
-        which `test_a_dynamic_import_string_into_controller_is_caught` proves IS
-        caught when the same string is a literal — silence here is a statement
-        about the f-string and nothing else.
+        The named module has to EXIST *and be banned* for the first half to say
+        anything: against `controller.guards`, which was deleted, "no deferred
+        finding" is what a walk that resolved the f-string perfectly would also
+        report, so the assertion held for the wrong reason. The same is now true
+        of `controller.hypotheses`, which is an allow-listed exception. Against
+        the PLANTED `controller.revenant` — which
+        `test_a_dynamic_import_string_into_controller_is_caught` proves IS caught
+        when the same string is a literal — silence here is a statement about the
+        f-string and nothing else.
         """
+        self.plant_controller_module()
         self.assertEqual(
             self._findings("""
                 import importlib
 
                 def later():
-                    return importlib.import_module(f"{__package__}.controller.hypotheses")
+                    return importlib.import_module(f"{__package__}.controller.revenant")
             """, deferred_findings), [],
             "an f-string names no module statically; it must surface as unresolved, "
             "not as a deferred finding")
@@ -1543,7 +1737,7 @@ class TestTheBoundaryCatchesRealTreeViolations(unittest.TestCase):
             import importlib
 
             def later():
-                return importlib.import_module(f"{__package__}.controller.hypotheses")
+                return importlib.import_module(f"{__package__}.controller.revenant")
         """, unresolved_import_findings, "import_module")
 
     def test_the_real_campaign_path_has_no_unresolved_dynamic_import(self):
@@ -1599,9 +1793,53 @@ def parse_footprint(text: str) -> dict:
     return rows
 
 
+#: The three rows `refresh_footprint` regenerates. Stripped from the text before
+#: the restatement check below, because "stated once" is a rule about the PROSE,
+#: not about the table: two total rows may legitimately carry the same figure —
+#: they do whenever the deferred half is empty — and neither of them can drift,
+#: since both are rewritten from the same walk.
+_TOTAL_ROW_LABELS = ("ON THE CAMPAIGN PATH", "DEFERRED", "TOTAL")
+
+
+def _outside_the_total_rows(text: str) -> str:
+    for label in _TOTAL_ROW_LABELS:
+        text = re.sub(rf"^\|\s*\*\*{re.escape(label)}\*\*.*$", "", text,
+                      flags=re.MULTILINE)
+    return text
+
+
+#: SCOPE LIMIT of the restatement rule, stated rather than left to be discovered.
+#:
+#: A three-digit or smaller total has no distinctive digits, and no textual rule
+#: can tell a restatement of it from an unrelated literal. `0` — the DEFERRED
+#: total since `--hypothesis` put the controller plane on the campaign path —
+#: occurs inside `T0`, `/mnt/raid0/llm`, `t0_provider.py` and `Device 0: CPU`,
+#: six times in the real document, none of them a figure. So the restatement rule
+#: applies only to totals of 1,000 and up, which every real footprint total is.
+#:
+#: What is NOT weakened: the VALUE check above is exact at every magnitude and is
+#: what actually says "a plane moved". This limit is on the secondary rule about
+#: the same figure appearing twice, and it is asserted in both directions by
+#: `TestTheTotalsCheckBites`.
+RESTATEMENT_CHECK_FLOOR = 1_000
+
+
 def total_findings(text: str, imported: int, deferred: int, tolerance: int) -> list:
-    """The three headline totals, each checked in its OWN row and stated once."""
+    """The three headline totals, each checked in its OWN row and restated nowhere.
+
+    CORRECTED 2026-08-04, when the deferred half went to zero. `text.count(best)`
+    was a SUBSTRING count over the whole document, and it has two defects that
+    only surfaced once the figures stopped being three distinct five-digit
+    numbers: a deferred total of `0` matched inside every date and every line
+    count (80 hits), and `ON THE CAMPAIGN PATH == TOTAL` — true whenever nothing
+    is deferred — reported the table's own other row as a drifting copy. Both are
+    the check failing on its own arithmetic rather than on a document defect. The
+    rule it was written for is unchanged and is now stated directly: a total may
+    not be restated OUTSIDE the rows that regenerate, and the match is on the
+    whole number rather than on a run of digits inside a longer one.
+    """
     findings = []
+    prose = _outside_the_total_rows(text)
     for label, value in (("ON THE CAMPAIGN PATH", imported), ("DEFERRED", deferred),
                          ("TOTAL", imported + deferred)):
         row = re.search(rf"^\|\s*\*\*{re.escape(label)}\*\*.*$", text, re.MULTILINE)
@@ -1616,10 +1854,14 @@ def total_findings(text: str, imported: int, deferred: int, tolerance: int) -> l
         if abs(int(best.replace(",", "")) - value) > tolerance:
             findings.append(f"the **{label}** row says {stated}, the tree says {value:,} — "
                             "that is a plane MOVING, not a plane being edited")
-        elif text.count(best) != 1:
-            findings.append(f"{best} is stated {text.count(best)} times in FOOTPRINT.md; "
-                            f"only the **{label}** row regenerates, so the other copies "
-                            "drift silently")
+            continue
+        if value < RESTATEMENT_CHECK_FLOOR:
+            continue
+        elsewhere = len(re.findall(rf"(?<![0-9,]){re.escape(best)}(?![0-9,])", prose))
+        if elsewhere:
+            findings.append(f"{best} is stated {elsewhere} time(s) outside the "
+                            f"**{label}** row; only the row regenerates, so the other "
+                            "copies drift silently")
     return findings
 
 
@@ -1676,7 +1918,57 @@ class TestTheTotalsCheckBites(unittest.TestCase):
     def test_a_total_restated_in_the_prose_is_rejected(self):
         text = self.TABLE + "\nThe deferred half is 70,000 lines.\n"
         findings = total_findings(text, 30_000, 70_000, 1_000)
-        self.assertTrue(any("70,000 is stated 2 times" in f for f in findings), findings)
+        self.assertTrue(any("70,000 is stated 1 time(s) outside" in f for f in findings),
+                        findings)
+
+    def test_two_rows_carrying_the_same_figure_are_accepted(self):
+        """CONTROL for the 2026-08-04 correction, and it is the tree TODAY.
+
+        When nothing is deferred, ON THE CAMPAIGN PATH and TOTAL are the same
+        number by arithmetic. Reporting that as a drifting copy would be the
+        check failing on its own construction — and the fix for it, deleting the
+        restatement rule, would have thrown away the thing it does catch (below).
+        """
+        table = ("| **ON THE CAMPAIGN PATH** | **57,410** |\n"
+                 "| **DEFERRED** (provably unreachable) | **0** |\n"
+                 "| **TOTAL** | **57,410** |\n")
+        self.assertEqual(total_findings(table, 57_410, 0, 1_000), [])
+
+    def test_the_restatement_rule_does_not_apply_below_its_floor(self):
+        """SCOPE LIMIT, asserted so it cannot be mistaken for cover.
+
+        `0` — the DEFERRED total since `--hypothesis` put the controller plane on
+        the campaign path — is a substring of `T0`, `raid0`, `t0_provider.py` and
+        `Device 0: CPU`, six times over in the real document and not one of them
+        a figure. `RESTATEMENT_CHECK_FLOOR` is where the rule stops applying, and
+        this is the assertion that the limit is real rather than incidental.
+
+        What is NOT given up is checked one test down: the VALUE of that same row
+        is still compared against the tree, exactly, at every magnitude.
+        """
+        table = ("| **ON THE CAMPAIGN PATH** | **57,410** |\n"
+                 "| **DEFERRED** (provably unreachable) | **0** |\n"
+                 "| **TOTAL** | **57,410** |\n"
+                 "\nT0 runs first; the trees live under /mnt/raid0/llm.\n")
+        self.assertEqual(total_findings(table, 57_410, 0, 1_000), [])
+
+    def test_a_zero_deferred_total_is_still_checked_for_its_value(self):
+        """CONTROL for the limit above: the row is exempt from ONE rule, not two."""
+        table = ("| **ON THE CAMPAIGN PATH** | **57,410** |\n"
+                 "| **DEFERRED** (provably unreachable) | **0** |\n"
+                 "| **TOTAL** | **57,410** |\n")
+        findings = total_findings(table, 50_000, 7_410, 1_000)
+        self.assertTrue(any("DEFERRED" in f for f in findings), findings)
+
+    def test_a_four_digit_total_is_still_restatement_checked(self):
+        """The floor is a floor, not an off switch."""
+        table = ("| **ON THE CAMPAIGN PATH** | **30,000** |\n"
+                 "| **DEFERRED** (provably unreachable) | **1,200** |\n"
+                 "| **TOTAL** | **31,200** |\n"
+                 "\nThe deferred half is 1,200 lines.\n")
+        findings = total_findings(table, 30_000, 1_200, 1_000)
+        self.assertTrue(any("1,200 is stated 1 time(s) outside" in f for f in findings),
+                        findings)
 
     def test_a_missing_row_is_rejected(self):
         findings = total_findings("| **TOTAL** | **100,000** |\n", 30_000, 70_000, 1_000)

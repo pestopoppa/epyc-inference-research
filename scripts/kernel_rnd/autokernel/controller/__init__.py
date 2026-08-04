@@ -39,6 +39,21 @@ failed" from "never tried" re-runs dead ideas until someone notices.
 Neither decides what to try next. That is the agent's job, per the operator, and
 that is the whole point of the removal above.
 
+ON THE CAMPAIGN PATH SINCE 2026-08-04
+-------------------------------------
+`campaign.py` imports both. It had not, and that was the defect:
+`hypotheses.claim_for_hypothesis` calls itself *"The ONLY route from a hypothesis
+to a resource claim"* and had ZERO non-test callers, because the driver acquired
+its region claim directly. The driver is what SPENDS the claim, so
+`campaign.py --hypothesis` now acquires through the gate, and `do_not_repeat`
+comes with it — `authorize_claim(ledger=…)` has no default and a token carrying
+no verdict is refused at the door, so no spendable token exists without a real
+ledger.
+
+Note what this does NOT change: neither module ranks anything, and neither is
+consulted about what to try. The campaign path reaches the gate that decides
+whether a claim may be spent on a question — not a strategy plane.
+
 Governing instrument: `epyc-root/measurement/protocols/kernel-research.md`
 (Annex K, **P-AK-SEARCH-1**, RATIFIED 2026-08-03).
 """

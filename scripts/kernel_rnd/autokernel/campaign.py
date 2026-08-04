@@ -12,7 +12,7 @@ statistic — is why AutoKernel has produced no results. The executors, the
 evaluator, the journal and the seams (`execution/chain.py`) were all built and
 green; nothing composed them into something a shell could run.
 
-So this module is a DRIVER, not machinery. It owns exactly three things that
+So this module is a DRIVER, not machinery. It owns exactly four things that
 live nowhere else:
 
   1. **The order of the loop**, and the two places that order is load-bearing —
@@ -20,7 +20,14 @@ live nowhere else:
      every exit path including the failure ones.
   2. **The accept rule**, which is thirty lines of arithmetic justified below
      from a measurement rather than from principle.
-  3. **The boundary.** `MODULES_THE_DRIVER_USES` below is the whole of what a
+  3. **The falsifier-before-compute gate** (`--hypothesis`). The driver is what
+     SPENDS the claim, so the gate that decides whether a question may be spent
+     on belongs here and nowhere else. Without `--hypothesis` a campaign is
+     EXPLORATORY and the record says so in as many words; with it, the claim is
+     acquired through `hypotheses.claim_for_hypothesis` and a question with no
+     falsifier — or a placeholder one — cannot reach a claim at all. See the
+     section by that name below for what was broken before it was wired.
+  4. **The boundary.** `MODULES_THE_DRIVER_USES` below is the whole of what a
      campaign needs. `MODULES_DELIBERATELY_NOT_USED` is the rest of the
      package, and `test_campaign.py` enforces both against this file's own AST.
      Nothing here deletes anything; the boundary is drawn so that deletion
@@ -154,6 +161,7 @@ from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 
 from . import journal as journal_module
 from . import schemas, storage
+from .controller import do_not_repeat, hypotheses
 from .evaluator import api, correctness, devices, recipes
 from .execution import chain, cpu_region_claim, microbench, t0_provider, worktree
 from .resource import claim_witness, device_claim, preflight
@@ -179,6 +187,10 @@ __all__ = [
     "T0Outcome",
     "AcceptRuleMisuse",
     "decide",
+    "EXPLORATORY_NOTE",
+    "HypothesisBindingError",
+    "campaign_purpose",
+    "authorize_for",
     "CampaignSpec",
     "Step",
     "ResourceLedger",
@@ -204,6 +216,20 @@ MODULES_THE_DRIVER_USES: Mapping[str, str] = {
     "storage": "the 2026-07-04 async-prefetch win was written to /mnt/raid0/llm/tmp/ "
                "and that directory no longer exists; assert_not_scratch refuses it",
     "journal": "AutoPilot lost 232 trials / ~16 days to an unjournaled loop",
+    "controller.hypotheses": "the falsifier-before-compute gate. `claim_for_hypothesis` "
+                             "calls itself THE ONLY route from a hypothesis to a "
+                             "resource claim and had ZERO non-test callers until "
+                             "2026-08-04: this driver acquired the region claim "
+                             "directly, so the rule was enforced on nothing. The driver "
+                             "is what SPENDS the claim, so the gate belongs here",
+    "controller.do_not_repeat": "not a taste and not 'just in case': "
+                                "`authorize_claim(ledger=…)` has NO default and "
+                                "`claim_for_hypothesis` raises `LedgerNotConsulted` on a "
+                                "token carrying no verdict, so a SPENDABLE token cannot "
+                                "be minted without a real ledger. "
+                                "`compile_for_tracker(tracker)` is the only honest one — "
+                                "a driver-local stub returning 'nothing matched' would "
+                                "be the fail-open this package refuses everywhere else",
     "evaluator.api": "a Verdict/identity is constructible only through this module",
     "evaluator.correctness": "T0. Throughput is reward-hackable; T0 is what makes "
                              "deleting the computation lose",
@@ -237,13 +263,19 @@ MODULES_THE_DRIVER_USES: Mapping[str, str] = {
 #: still checkable — `FOOTPRINT.md` for the reachability record and
 #: `test_campaign_footprint.DELETED_BY_OPERATOR` for the prefixes that may
 #: never come back onto this path.
+#:
+#: 2026-08-04, second correction: `controller` LEFT this table. It said the
+#: campaign path "reaches none of it… a hypothesis store is read by the agent
+#: proposing, not by the driver measuring". The first half of that is right about
+#: STRATEGY and wrong about CLAIMS: the driver is what SPENDS the claim, so the
+#: falsifier-before-compute gate belongs where the spending happens, and while it
+#: sat on the other side of this boundary `claim_for_hypothesis` — "the ONLY route
+#: from a hypothesis to a resource claim" — had zero non-test callers. Two modules
+#: under `controller` are now named in `MODULES_THE_DRIVER_USES`, one by one; the
+#: prefix is NOT open, and `test_campaign_footprint.CONTROLLER_ALLOWED` is the
+#: matching allow-list on the closure side (a prefix allowance there would
+#: silently re-admit anything added under `controller/` later).
 MODULES_DELIBERATELY_NOT_USED: Mapping[str, str] = {
-    "controller": "the AK4 strategy plane it used to hold is gone; what survives is "
-                  "MEMORY — hypotheses (the operator's drop-in), do_not_repeat (the "
-                  "§19.2 ledger) and the six lines they shared. The campaign path "
-                  "reaches none of it: the loop below is the state walk, and a "
-                  "hypothesis store is read by the agent proposing, not by the driver "
-                  "measuring",
     "evaluator.integrity": "one of two coexisting derivations of the same §8.5.1 gates; "
                            "reached transitively through chain.py, which is the single "
                            "derivation this driver consumes",
@@ -716,6 +748,134 @@ def decide(pairs: Sequence[Pair], *, t0: T0Outcome, blocks_precommitted: int,
 
 
 # =============================================================================
+# The falsifier-before-compute gate — `--hypothesis`
+# =============================================================================
+#
+# THE DEFECT THIS CLOSES. `controller/hypotheses.py::claim_for_hypothesis`
+# documents itself as *"The ONLY route from a hypothesis to a resource claim"*
+# and enforces the operator-approved rule that a falsifier is OPTIONAL when a
+# hypothesis is written and MANDATORY before a claim is spent on it. Until
+# 2026-08-04 it had ZERO non-test callers: `HostOps.acquire_claim` called
+# `cpu_region_claim.acquire_cpu_region_claim` directly, so the gate enforced
+# nothing. That is the fifth instance of one shape in this package —
+# `_WORKTREE_MUTATING_SUBCOMMANDS` referenced only by its own definition,
+# `OrderSchedule.retry()` with no caller, `check_do_not_repeat` with no ledger,
+# control seed rotation declared/hashed/callerless — and it is why the wiring
+# lives in the DRIVER rather than beside the proposer: the driver is what
+# SPENDS the claim.
+#
+# TWO MODES, AND THE RECORD DISTINGUISHES THEM
+#
+#   * no `--hypothesis` -> EXPLORATORY. The claim is acquired exactly as before.
+#     The record SAYS so (`EXPLORATORY_NOTE`), because an unexplained absence and
+#     a declared exploratory run must not read the same afterwards — that is the
+#     same confusion `ClaimAuthorization.do_not_repeat_outcome` refuses one field
+#     over ("nobody asked" has no default there either).
+#   * `--hypothesis akh-…` -> the claim is acquired THROUGH
+#     `claim_for_hypothesis`, whose type gate cannot be satisfied by a question
+#     with an absent or placeholder falsifier.
+#
+# AND THE REFUSAL IS AT THE DOOR. `authorize_for` runs in `main()`, before the
+# ops object is used, before the region claim, before the worktree, before the
+# build — the same reason `unimplemented_seams` is checked there. A gate that
+# fires an hour into a held window has already cost the thing it was protecting.
+
+#: What the record says when no question was declared. Written into the campaign
+#: record so "exploratory by decision" is a positive statement rather than a
+#: field that happens to be missing.
+EXPLORATORY_NOTE = (
+    "EXPLORATORY: no --hypothesis was declared, so this campaign is bound to no "
+    "question and resolves none. The claim was acquired directly rather than through "
+    "hypotheses.claim_for_hypothesis, which is legal only because nothing here claims "
+    "to be testing a stated prediction."
+)
+
+#: Who the ledger records as having authorized the spend. The DRIVER, by name:
+#: the authorization is machine-made at campaign start, and a record that named a
+#: person would be attributing a decision nobody made at that moment.
+AUTHORIZED_BY = "campaign.py"
+
+
+class HypothesisBindingError(Exception):
+    """`--hypothesis` was given but the campaign cannot bind it to a record.
+
+    Distinct from every refusal `controller/hypotheses.py` raises: those are the
+    GATE saying no (no falsifier, a placeholder, an unknown question, a receipted
+    repeat). This one is the DRIVER saying it was not given enough to ask the
+    gate at all — and the two must not be confused, because the second is fixed
+    by adding a flag and the first is not fixed by anything the caller can type.
+    """
+
+
+def campaign_purpose(spec: "CampaignSpec") -> str:
+    """What a claim's own receipt says this hold is for, before any question.
+
+    `cpu_region_claim` refuses an unattributable claim, so this string is not
+    decoration. On the hypothesis path it is the PREFIX that
+    `ClaimAuthorization.claim_purpose` appends the falsifier to, which is how the
+    resource record and the question record end up saying the same thing without
+    anyone keeping them in step.
+    """
+    return f"AutoKernel campaign {spec.campaign_id} / {spec.candidate_id}"
+
+
+def authorize_for(spec: "CampaignSpec", hypothesis_id: str, *,
+                  store_path: Optional[str] = None, dry_run: bool = True,
+                  authorized_by: str = AUTHORIZED_BY):
+    """Mint the ONE token that lets this campaign's claim be spent on a question.
+
+    Raises rather than returning a degraded value, and every refusal below is
+    somebody else's:
+
+    * an absent falsifier          -> `FalsifierRequiredBeforeCompute` (from
+      `ClaimAuthorization.__post_init__`, which is the one place that refusal is
+      worded);
+    * a placeholder falsifier      -> `FalsifierMissing`, from the STORE loader,
+      naming the file and the entry index. A different type and a different
+      message from the line above, deliberately: the two states are distinct all
+      the way down, and collapsing them is the defect the hypothesis work closed;
+    * an unknown id                -> `UnknownHypothesis`. Never treated as
+      "no hypothesis declared": a typo must not silently downgrade a bound
+      campaign into an exploratory one;
+    * a receipted repeat           -> `RepeatsAReceiptedNegative` (§8.4, §19.2).
+
+    `dry_run` is carried into the PURPOSE rather than used to skip the gate. A
+    gate that only runs under `--execute` is a gate wired to the one mode no test
+    can exercise, which is the defect this whole function exists to remove; and a
+    CLAIM_AUTHORIZED record that did not say a composition pass minted it would
+    be a record of a spend that never happened.
+    """
+    if not str(hypothesis_id or "").strip():
+        raise HypothesisBindingError("--hypothesis needs a hypothesis id (akh-…)")
+    if not spec.journal_root:
+        raise HypothesisBindingError(
+            f"--hypothesis {hypothesis_id} names a question whose authorization is a "
+            "DURABLE record, and --journal-root is where this campaign's records live. "
+            "Authorizing into a root nobody declared would spend a claim against a "
+            "question whose ledger the next session cannot find. Pass --journal-root.")
+    root = storage.assert_not_scratch(spec.journal_root, what="campaign journal root")
+    book = journal_module.Journal(root, campaign_id=spec.campaign_id)
+    book.initialize()
+    tracker = hypotheses.HypothesisTracker(
+        journal_=book, root=root, campaign_id=spec.campaign_id)
+    # The operator's drop-in file, if this campaign has one. `intake` is IDEMPOTENT
+    # and is what turns a line the operator typed into a tracked question; passing
+    # None is how a campaign says it has no operator channel, and is NOT the same
+    # as pointing at a path that may not be mounted (`load()` raises on absence).
+    store = (hypotheses.OperatorHypothesisStore(store_path)
+             if store_path else None)
+    tracker.intake(store)
+    # Recompiled here, per campaign, rather than held: `compile_for_tracker` reads
+    # BOTH halves off the same tracker so the journal and the hypothesis ledger
+    # can never be from two different campaigns.
+    ledger = do_not_repeat.compile_for_tracker(tracker)
+    purpose = campaign_purpose(spec) + (
+        " [DRY RUN: composed only, no claim was spent]" if dry_run else "")
+    return tracker.authorize_claim(hypothesis_id, purpose=purpose,
+                                   authorized_by=authorized_by, ledger=ledger)
+
+
+# =============================================================================
 # The pre-committed campaign spec
 # =============================================================================
 
@@ -777,6 +937,13 @@ class CampaignSpec:
     build_root: str = "/mnt/raid0/llm/ak-build"
     claim_journal_path: str = "/mnt/raid0/llm/ak-claims/region.jsonl"
     max_hold_s: int = 6 * 3600
+    #: The `hypotheses.ClaimAuthorization` this campaign's claim will be spent
+    #: through, or `None` for an EXPLORATORY campaign. It is on the SPEC and not
+    #: on the ops object for the same reason `blocks` is: it must be fixed before
+    #: the claim, it governs what the claim's own receipt says, and it has to
+    #: reach the durable record — `to_dict()` carries it, so "what did we spend
+    #: the card on" and "what would have refuted it" are one lookup.
+    authorization: Optional[Any] = None
     created_at: str = field(default_factory=_utc_now)
 
     def __post_init__(self) -> None:
@@ -794,6 +961,18 @@ class CampaignSpec:
             raise ValueError("blocks (the PRE-COMMITTED N) must be an int >= 2")
         if not str(self.candidate_ref).strip():
             raise ValueError("candidate_ref must name the patch or branch under test")
+        if self.authorization is not None:
+            if not isinstance(self.authorization, hypotheses.ClaimAuthorization):
+                raise TypeError(
+                    "authorization must be a hypotheses.ClaimAuthorization or None; got "
+                    f"{type(self.authorization).__name__}. A claim is spent on a question "
+                    "through a capability, never through a string somebody typed")
+            if self.authorization.campaign_id not in (None, self.campaign_id):
+                raise ValueError(
+                    f"authorization was minted for campaign "
+                    f"{self.authorization.campaign_id!r}, not {self.campaign_id!r}. A "
+                    "token that travelled between campaigns would charge this run's "
+                    "claim to another run's question")
         object.__setattr__(self, "t0_ops", require_op_suite_covers_moe_dispatch(self.t0_ops))
         if self.recipe_id is None:
             object.__setattr__(self, "recipe_id", DEFAULT_RECIPE_BY_BACKEND[self.backend])
@@ -845,6 +1024,47 @@ class CampaignSpec:
     @property
     def drift_bound(self) -> float:
         return drift_bound_for_metric(self.metric)
+
+    @property
+    def hypothesis_id(self) -> Optional[str]:
+        """The question this campaign is bound to, or None. Read off the TOKEN.
+
+        Never a second field. A campaign carrying an id beside an authorization
+        could have the two disagree, and the one a reader would trust is the
+        string rather than the capability.
+        """
+        return None if self.authorization is None else self.authorization.hypothesis_id
+
+    @property
+    def claim_purpose(self) -> str:
+        """What the region claim's own receipt will say, in BOTH modes.
+
+        On the hypothesis path this is the token's `claim_purpose` verbatim —
+        the same string `claim_for_hypothesis` passes to the acquirer, which is
+        why the composition pass can print it and the executed run cannot print
+        anything else.
+        """
+        if self.authorization is None:
+            return campaign_purpose(self) + " [exploratory: no --hypothesis declared]"
+        return self.authorization.claim_purpose
+
+    @property
+    def hypothesis_record(self) -> dict:
+        """What the durable record says about the question — in BOTH modes.
+
+        An absent key would make "we chose to explore" and "somebody forgot the
+        flag existed" the same record, which is the one distinction this whole
+        seam is for. Same discipline as
+        `ClaimAuthorization.do_not_repeat_outcome`, which has no default for the
+        same reason one field over.
+        """
+        if self.authorization is None:
+            return {"bound": False, "hypothesis_id": None, "falsifier": None,
+                    "note": EXPLORATORY_NOTE}
+        return {"bound": True,
+                "hypothesis_id": self.authorization.hypothesis_id,
+                "falsifier": self.authorization.falsifier,
+                "authorization": self.authorization.to_dict()}
 
     @property
     def cpu_list(self) -> str:
@@ -919,6 +1139,8 @@ class CampaignSpec:
             "cpu_list": self.cpu_list, "worktree": self.worktree_path,
             "build_dir": self.build_dir, "journal_root": self.journal_root,
             "created_at": self.created_at,
+            "hypothesis": self.hypothesis_record,
+            "claim_purpose": self.claim_purpose,
             "anchor": {"repo": PRODUCTION_REPO, "branch": PRODUCTION_BRANCH,
                        "expected_commit": PRODUCTION_COMMIT},
         }
@@ -1135,15 +1357,32 @@ class DryRunOps:
             "dry run: nothing was read from the host",))
 
     def acquire_claim(self, spec: CampaignSpec) -> Any:
-        self._step("acquire_claim",
-                   "would acquire the CPU region claim covering the argv's own footprint "
-                   "and bind it for BOTH consumers (chain.bind_claim: t0_provider reads "
-                   "verify_held()/covers(), microbench calls attest()).",
-                   cpu_list=spec.cpu_list, role="autokernel",
-                   campaign_id=spec.campaign_id,
-                   claim_journal=spec.claim_journal_path,
-                   max_hold_s=spec.max_hold_s)
-        return _DRY_RUN_CLAIM
+        """Composes the acquisition — THROUGH the same door the host path uses.
+
+        A composition pass that skipped `claim_for_hypothesis` would compose a
+        loop different from the one `--execute` runs, at exactly the step the
+        gate is on. So the door is crossed here too; only the acquirer is
+        different, and it acquires nothing.
+        """
+        def acquire(*, purpose: str, **detail: Any) -> Any:
+            self._step("acquire_claim",
+                       "would acquire the CPU region claim covering the argv's own "
+                       "footprint and bind it for BOTH consumers (chain.bind_claim: "
+                       "t0_provider reads verify_held()/covers(), microbench calls "
+                       "attest()).",
+                       cpu_list=spec.cpu_list, role="autokernel",
+                       campaign_id=spec.campaign_id,
+                       claim_journal=spec.claim_journal_path,
+                       max_hold_s=spec.max_hold_s,
+                       # The claim's own receipt, verbatim. On the hypothesis path
+                       # `claim_for_hypothesis` supplies it and it carries the
+                       # falsifier; the driver never gets to write its own.
+                       purpose=purpose, **detail)
+            return _DRY_RUN_CLAIM
+
+        if spec.authorization is None:
+            return acquire(purpose=spec.claim_purpose)
+        return hypotheses.claim_for_hypothesis(spec.authorization, acquire)
 
     def release_claim(self, claim: Any) -> Any:
         self._step("release_claim", "would release the CPU region claim.")
@@ -1455,14 +1694,30 @@ class HostOps:
         So this method is transactional: anything acquired here is released here
         if the acquisition as a whole does not complete. After it returns, the
         ledger owns all of it through `release_claim`.
+
+        THE ONE CALL SITE. `acquire_cpu_region_claim` is named exactly once
+        below, inside a closure both modes go through, so the hypothesis gate
+        cannot be bypassed by a second acquisition growing beside it — the same
+        one-door discipline `audit_falsifier_required_before_claim` proves from
+        the AST on the other side of the seam. On the bound path the acquirer is
+        handed to `claim_for_hypothesis`, which supplies `purpose` off the token
+        and refuses one from the caller: the falsifier the claim is being spent
+        against therefore lands in the CLAIM JOURNAL, not only in the hypothesis
+        ledger.
         """
         journal = cpu_region_claim.RegionClaimJournal(
             storage.assert_not_scratch(spec.claim_journal_path, what="claim journal"))
-        claim = cpu_region_claim.acquire_cpu_region_claim(
-            spec.cpu_list, role="autokernel",
-            purpose=f"AutoKernel campaign {spec.campaign_id} / {spec.candidate_id}",
-            campaign_id=spec.campaign_id, journal=journal,
-            timeout_s=600.0, max_hold_s=float(spec.max_hold_s))
+
+        def acquire(*, purpose: str) -> Any:
+            return cpu_region_claim.acquire_cpu_region_claim(
+                spec.cpu_list, role="autokernel", purpose=purpose,
+                campaign_id=spec.campaign_id, journal=journal,
+                timeout_s=600.0, max_hold_s=float(spec.max_hold_s))
+
+        if spec.authorization is None:
+            claim = acquire(purpose=spec.claim_purpose)
+        else:
+            claim = hypotheses.claim_for_hypothesis(spec.authorization, acquire)
         try:
             binding = chain.bind_claim(claim, cpu_list=spec.cpu_list)
             satisfies = chain.check_claim_satisfies_both_seams(claim, cpu_list=spec.cpu_list)
@@ -2121,6 +2376,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--i-hold-the-host", action="store_true", default=False,
                         help="attest that this session owns the machine for the claim "
                              "window. Required by --execute.")
+    parser.add_argument("--hypothesis", default=None, metavar="AKH-ID",
+                        help="bind this campaign to ONE stated question (akh-…). The "
+                             "claim is then acquired through "
+                             "hypotheses.claim_for_hypothesis, so a question with no "
+                             "falsifier — or a placeholder one ('tbd') — cannot reach a "
+                             "claim, and the refusal happens here rather than an hour "
+                             "into a held window. WITHOUT it the campaign is EXPLORATORY "
+                             "and the record says so. Requires --journal-root")
+    parser.add_argument("--hypothesis-store", default=None, metavar="PATH",
+                        help="the operator's drop-in JSON file (HYPOTHESES.md). Its "
+                             "entries are taken into the ledger before the claim is "
+                             "authorized, which is what makes a line the operator typed "
+                             "a tracked question. Omit it when the id is already tracked")
     parser.add_argument("--json", dest="as_json", action="store_true",
                         help="print the result document as JSON on stdout")
     return parser
@@ -2177,8 +2445,31 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
                   "the whole loop and executes nothing).", file=sys.stderr)
             return 2
 
+    # THE GATE, and it is here for the same reason the block above is: nothing
+    # has been acquired yet, no worktree exists, and the banner has not printed a
+    # line saying a bound campaign started. A hypothesis with no falsifier, a
+    # placeholder one, an unknown id or a receipted repeat all stop on this
+    # statement. `--hypothesis` is NOT downgraded to exploratory by any failure:
+    # a typo that silently produced an unbound run would be worse than the typo.
+    if args.hypothesis is not None:
+        try:
+            spec = replace(spec, authorization=authorize_for(
+                spec, args.hypothesis, store_path=args.hypothesis_store,
+                dry_run=args.dry_run))
+        except (HypothesisBindingError, hypotheses.HypothesisError,
+                do_not_repeat.DoNotRepeatError, storage.StorageError,
+                journal_module.JournalError, ValueError, TypeError, OSError) as exc:
+            print(f"refusing to start: --hypothesis {args.hypothesis}: "
+                  f"{type(exc).__name__}: {exc}", file=sys.stderr)
+            return 2
+
     print(f"AutoKernel campaign {spec.campaign_id} / {spec.candidate_id} — "
           f"{'DRY RUN (nothing will be executed)' if args.dry_run else 'EXECUTING'}",
+          file=stream)
+    print("  question    "
+          + (f"{spec.hypothesis_id} — falsifier: {spec.authorization.falsifier}"
+             if spec.authorization is not None
+             else "EXPLORATORY (no --hypothesis; this run resolves no question)"),
           file=stream)
     print(f"  cell        {spec.recipe_id}  metric={spec.metric}", file=stream)
     print(f"  accept      min(delta) > 0 over {spec.blocks} pre-committed pairs AND "

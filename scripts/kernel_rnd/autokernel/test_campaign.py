@@ -29,7 +29,9 @@ import argparse
 import ast
 import contextlib
 import io
+import json
 import os
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -1610,6 +1612,50 @@ class TestTheBoundaryIsStructural(unittest.TestCase):
         self.assertEqual(set(campaign.MODULES_THE_DRIVER_USES)
                          & set(campaign.MODULES_DELIBERATELY_NOT_USED), set())
 
+    # -- the two boundary DECLARATIONS, pinned against each other --------------
+    #
+    # There are two of them, and they are written in different files for good
+    # reasons: `campaign.py` declares what the DRIVER imports (checked against its
+    # own AST), `test_campaign_footprint.py` declares what the CLOSURE may reach
+    # (checked by walking it). Until 2026-08-04 nothing compared them directly —
+    # agreement was enforced only transitively, by both being true of the same
+    # tree. That is the shape this package has been burned by twice: two spellings
+    # of one fact, and the one that can disagree is the one nobody reads. These
+    # two assertions are the direct comparison.
+
+    @staticmethod
+    def _footprint_tables():
+        """The other declaration, by import. `test_campaign_footprint` deliberately
+        never imports the package it guards, so the comparison lives on this side,
+        where `campaign` is already imported."""
+        from . import test_campaign_footprint as fp
+        prefix = f"{fp.ROOT_PKG}."
+        deferred = {p[len(prefix):] for p in fp.DEFERRED if p.startswith(prefix)}
+        allowed = {m[len(prefix):] for m in fp.CONTROLLER_ALLOWED if m.startswith(prefix)}
+        return deferred, allowed
+
+    def test_nothing_the_driver_imports_is_banned_by_the_other_declaration(self):
+        """A module in `MODULES_THE_DRIVER_USES` that the closure walk still bans
+        is a boundary at war with itself, and the resolution is always to silence
+        one of the two rather than to look at which is right."""
+        deferred, allowed = self._footprint_tables()
+        conflicting = sorted(
+            name for name in campaign.MODULES_THE_DRIVER_USES
+            if name not in allowed
+            and any(name == d or name.startswith(d + ".") for d in deferred))
+        self.assertEqual(
+            conflicting, [],
+            f"campaign.py imports {conflicting}, which test_campaign_footprint.DEFERRED "
+            "bans and CONTROLLER_ALLOWED does not except")
+
+    def test_nothing_the_driver_disowns_is_excepted_by_the_other_declaration(self):
+        """The mirror: an allow-list row for a module this file says is not used."""
+        _deferred, allowed = self._footprint_tables()
+        contradicted = sorted(set(campaign.MODULES_DELIBERATELY_NOT_USED) & allowed)
+        self.assertEqual(
+            contradicted, [],
+            f"{contradicted} is both deliberately-not-used here and allow-listed there")
+
     def test_no_e_process_is_reachable_from_the_driver(self):
         """The measured 1.6-1.9% CV does not justify one, and it was UNPASSABLE.
 
@@ -1649,7 +1695,11 @@ class TestTheBoundaryIsStructural(unittest.TestCase):
         tree = ast.parse(self.PATH.read_text(encoding="utf-8"))
         aliases = {"schemas", "storage", "journal_module", "api", "correctness", "devices",
                    "recipes", "chain", "cpu_region_claim", "microbench", "t0_provider",
-                   "worktree", "claim_witness", "device_claim", "preflight"}
+                   "worktree", "claim_witness", "device_claim", "preflight",
+                   # 2026-08-04: the hypothesis plane. Every module the driver
+                   # imports carries the ones IT imports as attributes, and these
+                   # two are no exception — `hypotheses.schemas` resolves.
+                   "hypotheses", "do_not_repeat"}
         forbidden_tails = {name.split(".")[-1]
                            for name in campaign.MODULES_DELIBERATELY_NOT_USED}
         forbidden_tails |= {"surface_module", "statistics"}
@@ -1846,3 +1896,351 @@ class TestTheDryRunShowsPerArmLinkage(unittest.TestCase):
         self.assertNotIn(campaign.PRODUCTION_REPO,
                          candidate.split(os.pathsep)[0],
                          "the candidate's FIRST library path is production's")
+
+
+# =============================================================================
+# 7. The falsifier-before-compute gate — `--hypothesis`
+# =============================================================================
+#
+# THE DEFECT. `controller/hypotheses.py::claim_for_hypothesis` documents itself
+# as "The ONLY route from a hypothesis to a resource claim" and enforces the rule
+# that a falsifier is optional when a question is written and MANDATORY before a
+# claim is spent on it. It had ZERO non-test callers: `HostOps.acquire_claim`
+# called `cpu_region_claim.acquire_cpu_region_claim` directly, so the gate
+# enforced nothing — a guard defined and never wired, the fifth of that shape in
+# this package.
+#
+# Every test below drives `main()`, because "refused" is a statement about the
+# ENTRYPOINT, not about a helper: the whole point is that the refusal lands
+# before a claim is acquired and before a worktree exists. Nothing here spawns,
+# claims or builds; the only files written are under a temp tree that is removed.
+
+#: Not `/tmp`: `storage.assert_not_scratch` refuses a scratch journal root (the
+#: 2026-07-04 win was written to `/mnt/raid0/llm/tmp/` and that directory no
+#: longer exists), and a hypothesis authorization is a durable record. This is
+#: the same non-scratch root `execution/test_execution_chain.py` uses.
+HYPOTHESIS_SCRATCH_ROOT = "/mnt/raid0/llm/.scratch"
+
+#: An operator entry with NO falsifier. Legal — that is the 2026-08-04 amendment,
+#: and the reason the barrier moved to the claim rather than to the entry.
+ENTRY_NO_FALSIFIER = {
+    "hypothesis_id": "akh-test-absent",
+    "statement": "the elementwise/norm cluster is where the B=128 decode time goes",
+}
+
+#: The same operator, typing the thing HYPOTHESES.md tells them not to type.
+ENTRY_PLACEHOLDER = {
+    "hypothesis_id": "akh-test-placeholder",
+    "statement": "fusing the norm cluster should be worth 15%",
+    "falsifier": "tbd",
+}
+
+ENTRY_STATED = {
+    "hypothesis_id": "akh-test-stated",
+    "statement": "fusing the elementwise/norm cluster lands >= 15% at B=128",
+    "falsifier": "a current wall-share map shows the cluster under 20%",
+    "regime": {"backend": "llama_cpu", "phase": "decode"},
+}
+
+
+class _HypothesisGateCase(unittest.TestCase):
+    """One temp record per test, and a snapshot of everything a spend would touch."""
+
+    def setUp(self) -> None:
+        os.makedirs(HYPOTHESIS_SCRATCH_ROOT, exist_ok=True)
+        self._tmp = tempfile.TemporaryDirectory(prefix="ak-hypothesis-",
+                                                dir=HYPOTHESIS_SCRATCH_ROOT)
+        self.addCleanup(self._tmp.cleanup)
+        self.root = os.path.join(self._tmp.name, "record")
+        os.makedirs(self.root)
+        self.campaign_id = "ak-hypothesis-test"
+        # What a spend would touch, BEFORE anything runs. `refused` has to mean
+        # "nothing was acquired", not "the exit code was 2".
+        self.claim_journal = spec().claim_journal_path
+        self.worktree_path = spec(campaign_id=self.campaign_id).worktree_path
+        self.claim_journal_before = self._claim_journal_state()
+
+    def _claim_journal_state(self):
+        """(exists, size, mtime_ns) of the region-claim journal. Never its bytes:
+        it is a shared file and another session may legitimately be appending to
+        it — what this asserts is that THIS process did not."""
+        try:
+            st = os.stat(self.claim_journal)
+        except FileNotFoundError:
+            return (False, 0, 0)
+        return (True, st.st_size, st.st_mtime_ns)
+
+    def store(self, *entries) -> str:
+        path = os.path.join(self._tmp.name, f"store-{len(entries)}-{id(entries)}.json")
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump({"schema": "epyc.autokernel.operator_hypotheses.v1",
+                       "hypotheses": list(entries)}, handle, indent=2)
+        return path
+
+    def run_main(self, *extra, ops=None):
+        out, err = io.StringIO(), io.StringIO()
+        argv = ["--campaign-id", self.campaign_id, "--candidate-id", "akc-hypothesis",
+                "--model", MODEL, "--journal-root", self.root, *extra]
+        with contextlib.redirect_stderr(err):
+            code = campaign.main(argv, out=out, ops=ops)
+        return code, out.getvalue(), err.getvalue()
+
+    def assert_nothing_was_acquired(self, ops) -> None:
+        """The assertion the whole gate exists for. A refusal that still spent a
+        claim is the defect, not the fix."""
+        self.assertEqual(ops.calls, [],
+                         f"the loop ran despite the refusal: {ops.calls}")
+        self.assertEqual(self._claim_journal_state(), self.claim_journal_before,
+                         f"{self.claim_journal} was written to by a REFUSED campaign")
+        self.assertFalse(os.path.exists(self.worktree_path),
+                         f"{self.worktree_path} exists; the refusal came too late")
+
+
+class TestAHypothesisWithNoFalsifierCannotReachAClaim(_HypothesisGateCase):
+    """§8.4.0: optional on entry, mandatory before compute. THE BITE."""
+
+    def test_it_is_refused_and_nothing_is_acquired(self):
+        ops = SpyOps()
+        code, _out, err = self.run_main(
+            "--hypothesis", "akh-test-absent",
+            "--hypothesis-store", self.store(ENTRY_NO_FALSIFIER), ops=ops)
+        self.assertEqual(code, 2, err)
+        self.assertIn("FalsifierRequiredBeforeCompute", err)
+        self.assertIn("'absent'", err)
+        self.assert_nothing_was_acquired(ops)
+
+    def test_the_refusal_says_what_to_do_about_it(self):
+        """A refusal that does not name the way out gets worked around."""
+        _code, _out, err = self.run_main(
+            "--hypothesis", "akh-test-absent",
+            "--hypothesis-store", self.store(ENTRY_NO_FALSIFIER), ops=SpyOps())
+        self.assertIn("propose_falsifier()", err)
+
+
+class TestAPlaceholderFalsifierCannotReachAClaimEither(_HypothesisGateCase):
+    """'tbd' is an empty string wearing a hat, and it is a DIFFERENT state.
+
+    Absent and placeholder are distinct all the way down — different refusal
+    types, different messages, different remedies — and collapsing them is a
+    defect the hypothesis work specifically closed. A single merged refusal
+    would prove only that something was rejected.
+    """
+
+    def test_it_is_refused_and_nothing_is_acquired(self):
+        ops = SpyOps()
+        code, _out, err = self.run_main(
+            "--hypothesis", "akh-test-placeholder",
+            "--hypothesis-store", self.store(ENTRY_PLACEHOLDER), ops=ops)
+        self.assertEqual(code, 2, err)
+        self.assertIn("placeholder", err)
+        self.assert_nothing_was_acquired(ops)
+
+    def test_absent_and_placeholder_are_not_the_same_refusal(self):
+        """THE BITE: two states, two refusal TYPES, and two different remedies.
+
+        Not asserted by "the word 'absent' appears in one and not the other" —
+        the placeholder refusal names the absent state deliberately, to say that
+        leaving the field out would have been legal and typing 'tbd' is not.
+        What distinguishes them is the exception each raises and the way out each
+        offers, and that is what is pinned.
+        """
+        _c1, _o1, absent = self.run_main(
+            "--hypothesis", "akh-test-absent",
+            "--hypothesis-store", self.store(ENTRY_NO_FALSIFIER), ops=SpyOps())
+        _c2, _o2, placeholder = self.run_main(
+            "--hypothesis", "akh-test-placeholder",
+            "--hypothesis-store", self.store(ENTRY_PLACEHOLDER), ops=SpyOps())
+        self.assertNotEqual(absent, placeholder)
+        self.assertIn("FalsifierRequiredBeforeCompute", absent)
+        self.assertNotIn("FalsifierRequiredBeforeCompute", placeholder)
+        self.assertIn("FalsifierMissing", placeholder)
+        self.assertNotIn("FalsifierMissing", absent)
+        # The remedies differ, which is the practical half of the distinction:
+        # write the predicate, versus stop writing a hat.
+        self.assertIn("propose_falsifier()", absent)
+        self.assertNotIn("propose_falsifier()", placeholder)
+        self.assertIn("is a placeholder", placeholder)
+        self.assertNotIn("is a placeholder", absent)
+
+
+class TestAStatedFalsifierReachesTheClaimAndTravelsWithIt(_HypothesisGateCase):
+    """The COMPLIANT PATH for the gate: a real falsifier proceeds.
+
+    Without this, a gate that refused every hypothesis — including every
+    legitimate one — would look like the strongest enforcement in the file.
+    """
+
+    def compose(self):
+        ops = campaign.DryRunOps(out=io.StringIO())
+        code, out, err = self.run_main(
+            "--hypothesis", "akh-test-stated",
+            "--hypothesis-store", self.store(ENTRY_STATED), ops=ops)
+        return code, out, err, ops
+
+    def claim_step(self, ops):
+        for step in ops.steps:
+            if step.name == "acquire_claim":
+                return step.detail
+        self.fail(f"no acquire_claim step was composed: {ops.calls}")
+
+    def test_the_campaign_proceeds(self):
+        code, _out, err, ops = self.compose()
+        self.assertEqual(code, 0, err)
+        self.assertIn("acquire_claim", ops.calls)
+
+    def test_the_claims_own_purpose_carries_the_falsifier(self):
+        """THE BITE, and it is why `claim_for_hypothesis` takes `purpose` OFF the
+        token rather than from the caller: the resource record and the question
+        record then say the same thing without anyone keeping them in step."""
+        _code, _out, _err, ops = self.compose()
+        purpose = self.claim_step(ops)["purpose"]
+        self.assertIn(ENTRY_STATED["falsifier"], purpose)
+        self.assertIn("akh-test-stated", purpose)
+        self.assertIn("stated_with_the_hypothesis", purpose)
+
+    def test_the_banner_names_the_question(self):
+        _code, out, _err, _ops = self.compose()
+        self.assertIn("akh-test-stated", out)
+        self.assertIn(ENTRY_STATED["falsifier"], out)
+
+    def test_a_caller_supplied_purpose_is_refused_by_the_door(self):
+        """The gate's own rule, asserted from this side of the seam: the driver
+        must not be able to write the claim's purpose when a token exists."""
+        token = campaign.authorize_for(
+            spec(campaign_id=self.campaign_id, journal_root=self.root),
+            "akh-test-stated", store_path=self.store(ENTRY_STATED))
+        with self.assertRaises(ValueError):
+            campaign.hypotheses.claim_for_hypothesis(
+                token, lambda **kw: kw, purpose="something else")
+
+
+class TestNoHypothesisIsExploratoryAndSaysSo(_HypothesisGateCase):
+    """COMPLIANT PATH: the default is unchanged, and the record is not silent."""
+
+    def compose(self, *extra):
+        ops = campaign.DryRunOps(out=io.StringIO())
+        code, out, err = self.run_main(*extra, ops=ops)
+        return code, out, err, ops
+
+    def test_a_campaign_without_a_hypothesis_still_works(self):
+        code, _out, err, ops = self.compose()
+        self.assertEqual(code, 0, err)
+        self.assertEqual(
+            ops.calls,
+            ["preflight", "acquire_claim", "create_worktree", "apply_candidate",
+             "build", "t0", "paired_blocks", "keep_or_revert", "teardown_worktree",
+             "release_claim", "prove_production_unchanged", "journal"])
+
+    def test_the_record_says_exploratory_rather_than_saying_nothing(self):
+        """THE BITE. An unexplained absence and a declared exploratory run must
+        not read the same afterwards — the same discipline
+        `ClaimAuthorization.do_not_repeat_outcome` applies one field over, where
+        a defaulted verdict would make "we asked" and "we never wired it up"
+        indistinguishable."""
+        record = spec().to_dict()["hypothesis"]
+        self.assertFalse(record["bound"])
+        self.assertIsNone(record["hypothesis_id"])
+        self.assertIn("EXPLORATORY", record["note"])
+        self.assertEqual(record["note"], campaign.EXPLORATORY_NOTE)
+
+    def test_the_claim_purpose_declares_it_too(self):
+        """The RESOURCE record, not only the campaign record: a claim journal
+        entry that just said 'AutoKernel campaign …' cannot be told apart from
+        one whose hypothesis binding was dropped on the floor."""
+        _code, _out, _err, ops = self.compose()
+        purpose = next(s.detail["purpose"] for s in ops.steps
+                       if s.name == "acquire_claim")
+        self.assertIn("exploratory", purpose)
+        self.assertNotIn("[hypothesis", purpose)
+
+    def test_the_banner_says_it_resolves_no_question(self):
+        _code, out, _err, _ops = self.compose()
+        self.assertIn("EXPLORATORY", out)
+
+
+class TestAnUnknownHypothesisIsRefusedNotIgnored(_HypothesisGateCase):
+    """A typo must not silently downgrade a bound campaign to an exploratory one.
+
+    That is the fail-open direction: the run happens, the record says
+    "exploratory", and nobody learns that the question they meant to spend a
+    claim on was never asked.
+    """
+
+    def test_it_is_refused(self):
+        ops = SpyOps()
+        code, _out, err = self.run_main(
+            "--hypothesis", "akh-does-not-exist",
+            "--hypothesis-store", self.store(ENTRY_STATED), ops=ops)
+        self.assertEqual(code, 2, err)
+        self.assertIn("UnknownHypothesis", err)
+        self.assert_nothing_was_acquired(ops)
+
+    def test_it_is_not_treated_as_no_hypothesis_at_all(self):
+        _code, out, err = self.run_main(
+            "--hypothesis", "akh-does-not-exist",
+            "--hypothesis-store", self.store(ENTRY_STATED), ops=SpyOps())
+        self.assertNotIn("EXPLORATORY", out)
+        self.assertNotIn("state:", out)
+
+    def test_a_hypothesis_without_a_record_root_is_refused_before_anything(self):
+        """`--hypothesis` needs somewhere to write the authorization down.
+
+        Refused at the door rather than defaulted to a root nobody declared: an
+        authorization whose ledger the next session cannot find is an
+        authorization with nothing behind it.
+        """
+        ops = SpyOps()
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code = campaign.main(
+                ["--campaign-id", self.campaign_id, "--candidate-id", "akc-hypothesis",
+                 "--model", MODEL, "--hypothesis", "akh-test-stated"],
+                out=out, ops=ops)
+        self.assertEqual(code, 2, err.getvalue())
+        self.assertIn("--journal-root", err.getvalue())
+        self.assert_nothing_was_acquired(ops)
+
+
+class TestTheGateIsTheSameGateInBothModes(_HypothesisGateCase):
+    """A gate that only runs under `--execute` is a gate wired to the one mode no
+    test can exercise — which is the shape of the defect being fixed."""
+
+    def test_the_dry_run_authorization_says_it_was_a_dry_run(self):
+        token = campaign.authorize_for(
+            spec(campaign_id=self.campaign_id, journal_root=self.root),
+            "akh-test-stated", store_path=self.store(ENTRY_STATED), dry_run=True)
+        self.assertIn("DRY RUN", token.purpose)
+        self.assertIn("no claim was spent", token.purpose)
+
+    def test_an_executing_authorization_does_not(self):
+        """CONTROL: the marker is a statement about the run, not decoration."""
+        token = campaign.authorize_for(
+            spec(campaign_id=self.campaign_id, journal_root=self.root),
+            "akh-test-stated", store_path=self.store(ENTRY_STATED), dry_run=False)
+        self.assertNotIn("DRY RUN", token.purpose)
+
+    def test_the_authorization_is_a_durable_record(self):
+        """`authorize_claim` writes a CLAIM_AUTHORIZED event before it returns a
+        token; a token with no record behind it is not an authorization."""
+        campaign.authorize_for(
+            spec(campaign_id=self.campaign_id, journal_root=self.root),
+            "akh-test-stated", store_path=self.store(ENTRY_STATED))
+        ledger = os.path.join(self.root, "hypotheses.jsonl")
+        self.assertTrue(os.path.exists(ledger))
+        with open(ledger, encoding="utf-8") as handle:
+            kinds = [json.loads(line)["kind"] for line in handle if line.strip()]
+        self.assertIn("HYPOTHESIS_CLAIM_AUTHORIZED", kinds)
+
+    def test_a_token_from_another_campaign_is_refused_by_the_spec(self):
+        """A capability that travelled between campaigns would charge this run's
+        claim to another run's question."""
+        token = campaign.authorize_for(
+            spec(campaign_id=self.campaign_id, journal_root=self.root),
+            "akh-test-stated", store_path=self.store(ENTRY_STATED))
+        with self.assertRaises(ValueError):
+            spec(campaign_id="ak-somewhere-else", authorization=token)
+
+    def test_a_string_is_not_an_authorization(self):
+        """CONTROL on the type gate: the spec takes a capability, not a name."""
+        with self.assertRaises(TypeError):
+            spec(authorization="akh-test-stated")
