@@ -67,6 +67,37 @@ accepts nothing else, so there is no path along which state (i) or (ii) reaches 
 — not by constructing a token, not by calling the acquirer directly from this module
 (`audit_falsifier_required_before_claim()` proves the second from this module's AST).
 
+THE MEMORY PLANE IS CONSULTED BEFORE COMPUTE, NOT AFTER (2026-08-04)
+---------------------------------------------------------------------
+This module used to say, at the top of `check_do_not_repeat`, that it *"does not BUILD
+that ledger (the memory-update plane owns it); it consumes matches and disposes them"*
+— and the memory-update plane did not exist. A correct guard wired to nothing is the
+defect shape this package has hit repeatedly, and the cost here is specific: without a
+ledger the loop cannot tell **"tried and failed"** from **"never tried"**, so it
+re-tries dead ideas forever and pays a resource claim for each one.
+
+`do_not_repeat.py` is now that plane, and `authorize_claim(..., ledger=...)` is the
+seam. **`ledger` is a REQUIRED argument** — a default would have rebuilt the original
+defect exactly, since every caller that forgot it would silently get the unconsulted
+behaviour. `None` is refused too: an empty `do_not_repeat.CompiledLedger()` is one pure
+call away and states the true thing, so "no memory configured" is not a position.
+
+What the verdict does:
+
+* **FAIL** (a receipted `MATCHED_NEGATIVE` or `HARD_CONSTRAINT` in a matching regime)
+  -> `RepeatsAReceiptedNegative`, raised from `ClaimAuthorization.__post_init__`, so
+  the token CANNOT EXIST and no `CLAIM_AUTHORIZED` record is written.
+* **COULD_NOT_CHECK** -> the claim proceeds, and the verdict rides on the token. This
+  is the operator's own case (a one-line idea rarely names a `mechanism`, so the ledger
+  refuses to compare it) and blocking on it would make the operator channel unusable.
+  The direction is deliberate: §19.3 — a wrong suppression is SILENT and permanent, a
+  wasted re-run is LOUD and costs one claim.
+* **PASS** -> proceeds, with the verdict recorded.
+
+`claim_for_hypothesis()` re-derives BOTH gates at the door, so a token that reached an
+acquirer without a verdict (`LedgerNotConsulted`) or with a FAIL edited into it is
+refused there as well.
+
 ADOPTION TRANSFERS OWNERSHIP (2026-08-04, operator-approved)
 ------------------------------------------------------------
 *"if the agents choose to pick up one of my hypotheses, it should be removed from
@@ -200,6 +231,7 @@ __all__ = [
     "HypothesisLedgerCorruption", "UnknownHypothesis", "HypothesisNotOpen",
     "HypothesisAlreadyTracked", "QuestionRewritten", "ResolutionEvidenceMissing",
     "FalsifierRequiredBeforeCompute", "FalsifierAlreadyStated",
+    "LedgerNotConsulted", "RepeatsAReceiptedNegative",
     "HypothesisAlreadyAdopted", "HypothesisNotInStore", "AdoptionLockUnavailable",
     "AdoptionLockInconsistent", "StoreRewriteRefused",
     # vocabulary
@@ -304,6 +336,28 @@ class FalsifierRequiredBeforeCompute(HypothesisError):
     is legal in the store (the operator's barrier to entry is zero) and illegal only
     HERE, at the point compute is committed. Typing it as a store error would send a
     reader to the operator's file looking for a defect that is not in it.
+    """
+
+
+class LedgerNotConsulted(HypothesisError):
+    """A resource claim was going to be spent without asking the memory plane.
+
+    Distinct from `RepeatsAReceiptedNegative`, and the distinction is the whole point:
+    *"the ledger says this failed"* and *"nobody asked the ledger"* are different
+    states, and collapsing them is how `check_do_not_repeat()` came to be a correct
+    guard wired to nothing. Not asking is not a clear result — the module's own words —
+    so the door refuses a token that carries no verdict at all.
+    """
+
+
+class RepeatsAReceiptedNegative(HypothesisError):
+    """The §19.2 ledger already records this idea, in this regime, with a receipt.
+
+    §8.4 rejects a repeat of a receipted negative. This is the ONE do-not-repeat class
+    that refuses a claim: `SUPERSEDED_FACT`, `CONDITIONAL_NEGATIVE`, `CONFOUNDED_RESULT`
+    and `LOW_VALUE` are advisory and leave the question open, and COULD_NOT_CHECK does
+    NOT refuse — a wrong suppression is silent and permanent (§19.3), a re-run is loud
+    and costs one claim, so the ambiguous case is failed toward spending the claim.
     """
 
 
@@ -628,6 +682,20 @@ def _require_refs(value: Any, what: str, *, error=ValueError) -> tuple:
         if not isinstance(ref, str) or not ref.strip():
             raise error(f"{what}[{index}] must be a non-empty reference string")
     return refs
+
+
+def _reasons_from_record(value: Any) -> tuple:
+    """A do-not-repeat reason list read back OUT of a record. Absent means empty.
+
+    Separate from `_refs_from_record` because the two fields differ on the empty case:
+    an empty EVIDENCE list is "no evidence" and must be refused, while an empty REASON
+    list is what a clean PASS legitimately carries.
+    """
+    if value is None:
+        return ()
+    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
+        raise TypeError("do_not_repeat_reasons must be a sequence of strings")
+    return tuple(value)
 
 
 def _refs_from_record(value: Any, what: str, *, error) -> tuple:
@@ -1098,6 +1166,16 @@ class ClaimAuthorization:
     authorized_by: str
     authorized_at: str
     ledger_seq: int
+    #: What the §19.2 do-not-repeat plane said about this question when the claim was
+    #: authorized: `schemas.PASS`, `schemas.COULD_NOT_CHECK`, or `None` for **nobody
+    #: asked**. It has NO DEFAULT for the same reason `falsifier` has none — a defaulted
+    #: verdict makes "we consulted the ledger and it was clear" indistinguishable from
+    #: "we never wired the ledger up", which is the exact confusion this whole seam
+    #: exists to end. `schemas.FAIL` cannot be constructed: see `__post_init__`.
+    do_not_repeat_outcome: Optional[str]
+    #: The reasons behind that verdict, carried so an operator reading the ledger can
+    #: see WHY memory allowed the spend without re-deriving it.
+    do_not_repeat_reasons: tuple = ()
     campaign_id: Optional[str] = None
 
     def __post_init__(self) -> None:
@@ -1135,6 +1213,40 @@ class ClaimAuthorization:
                 f"{EVENT_CLAIM_AUTHORIZED} record; an authorization with no record "
                 "behind it is not an authorization"
             )
+        if self.do_not_repeat_outcome == schemas.FAIL:
+            # Same discipline as the falsifier, one axis over: the token cannot EXIST
+            # for a receipted repeat, so there is no object a caller could choose to
+            # ignore. A `Check` returning FAIL is advice; a type that refuses to be
+            # constructed is a gate.
+            raise RepeatsAReceiptedNegative(
+                f"{self.hypothesis_id}: the do-not-repeat ledger already records this "
+                "idea in this regime with a receipt (§8.4, §19.2), so no claim may be "
+                "spent on it. Reopen it on new evidence, move the anchor, or state a "
+                "different question — reasons: "
+                + "; ".join(str(r) for r in self.do_not_repeat_reasons)
+            )
+        if self.do_not_repeat_outcome is not None and self.do_not_repeat_outcome not in (
+            schemas.PASS, schemas.COULD_NOT_CHECK
+        ):
+            raise ValueError(
+                f"do_not_repeat_outcome: {self.do_not_repeat_outcome!r} is not a "
+                f"schemas.Check outcome; expected {schemas.PASS!r}, "
+                f"{schemas.COULD_NOT_CHECK!r} or None (nobody asked)"
+            )
+        # An EMPTY reason list is legal here (a clear PASS has nothing to say) and a
+        # bare string is not: `tuple("no match")` is nine one-character reasons, which
+        # is the same shape `_refs_from_record` exists to refuse one field over.
+        if (isinstance(self.do_not_repeat_reasons, (str, bytes))
+                or not isinstance(self.do_not_repeat_reasons, Sequence)):
+            raise TypeError("do_not_repeat_reasons must be a sequence of strings")
+        for index, reason in enumerate(self.do_not_repeat_reasons):
+            if not isinstance(reason, str) or not reason.strip():
+                raise ValueError(
+                    f"do_not_repeat_reasons[{index}] must be a non-empty string"
+                )
+        object.__setattr__(
+            self, "do_not_repeat_reasons", tuple(self.do_not_repeat_reasons)
+        )
         if self.campaign_id is not None:
             _require_text(self.campaign_id, "campaign_id")
 
@@ -1166,6 +1278,8 @@ class ClaimAuthorization:
             "authorized_by": self.authorized_by,
             "authorized_at": self.authorized_at,
             "ledger_seq": self.ledger_seq,
+            "do_not_repeat_outcome": self.do_not_repeat_outcome,
+            "do_not_repeat_reasons": list(self.do_not_repeat_reasons),
             "campaign_id": self.campaign_id,
             "entry_evidence_grade": self.evidence_grade,
         }
@@ -1180,6 +1294,11 @@ class ClaimAuthorization:
         } - set(obj))
         if missing:
             raise ValueError(f"claim authorization record is missing {missing}")
+        # `do_not_repeat_outcome` is NOT in the required set, and that is the honest
+        # reading of a record written before this seam existed: it did not consult the
+        # ledger, so the absent key means exactly what `None` means. Requiring it would
+        # turn every historical record into ledger CORRUPTION, which is a different
+        # claim and a false one.
         return ClaimAuthorization(
             hypothesis_id=obj["hypothesis_id"],
             falsifier=obj["falsifier"],
@@ -1189,6 +1308,10 @@ class ClaimAuthorization:
             authorized_by=obj["authorized_by"],
             authorized_at=obj["authorized_at"],
             ledger_seq=obj["ledger_seq"],
+            do_not_repeat_outcome=obj.get("do_not_repeat_outcome"),
+            do_not_repeat_reasons=_reasons_from_record(
+                obj.get("do_not_repeat_reasons")
+            ),
             campaign_id=obj.get("campaign_id"),
         )
 
@@ -1248,6 +1371,28 @@ def claim_for_hypothesis(authorization: ClaimAuthorization, acquire, /, **kwargs
             f"{state!r} falsifier, so it was not built by the constructor that refuses "
             "one. A token whose invariant was checked once and can be edited afterwards "
             "is a flag, not a capability"
+        )
+    # The SECOND gate, re-derived at the door for the same reason as the first. The
+    # memory plane is consulted in `authorize_claim`; a token that reaches here with no
+    # verdict came from somewhere that skipped it, and "the ledger was never consulted"
+    # is precisely the state that let the loop re-try dead ideas forever.
+    if authorization.do_not_repeat_outcome is None:
+        raise LedgerNotConsulted(
+            f"{authorization.hypothesis_id}: this ClaimAuthorization carries NO "
+            "do-not-repeat verdict, so the §19.2 memory plane was never asked whether "
+            "this has already been tried. Not checking is not a clear result: mint the "
+            "token with HypothesisTracker.authorize_claim(..., ledger=...), which is "
+            "the only thing that records one"
+        )
+    if authorization.do_not_repeat_outcome == schemas.FAIL:
+        # Unreachable through the constructor, which refuses FAIL outright — and
+        # REACHABLE through `object.__setattr__` on the frozen token, which is the very
+        # seam the falsifier re-derivation above exists for. Both gates fail the same
+        # way, and both are tested through that seam.
+        raise RepeatsAReceiptedNegative(
+            f"{authorization.hypothesis_id}: this ClaimAuthorization records a "
+            "receipted repeat (§8.4), so it was not built by the constructor that "
+            "refuses one"
         )
     if not callable(acquire):
         raise TypeError(f"acquire must be callable, got {type(acquire).__name__}")
@@ -3116,6 +3261,18 @@ class HypothesisTracker:
         return self._ledger
 
     @property
+    def journal(self) -> journal.Journal:
+        """The journal this tracker's events are ordered against. READ access.
+
+        Exposed so the memory-update plane can fold BOTH halves of the record — the
+        journal's proposals and evaluation events, and this tracker's hypothesis events
+        — without being handed two objects that could be from two different campaigns.
+        A `Journal` is itself append-only, so handing it over grants nothing this
+        module was withholding.
+        """
+        return self._journal
+
+    @property
     def campaign_id(self) -> Optional[str]:
         return self._campaign_id
 
@@ -3359,10 +3516,69 @@ class HypothesisTracker:
                 EVENT_FALSIFIER_PROPOSED, hypothesis_id, {"proposal": proposal.to_dict()}
             )
 
+    def _consult(self, tracked: TrackedHypothesis, ledger) -> schemas.Check:
+        """Ask the §19.2 memory plane about one question. NEVER a silent pass.
+
+        The seam is a duck-typed `DoNotRepeatLedger` rather than an import, because
+        `do_not_repeat` imports THIS module: the memory plane conforms to the consumer,
+        and reversing that would be a cycle. `None` is not accepted — "no ledger
+        configured" is not a position, since an empty `CompiledLedger` is one pure call
+        away and says the true thing ("nothing has been tried") instead of nothing.
+
+        A ledger that REFUSES the question (`CompiledLedger.matches_for` raises when it
+        cannot compare) is `matches=None`, which `check_do_not_repeat` already maps to
+        COULD_NOT_CHECK. That is the operator's own case: a one-line idea usually names
+        no `mechanism`, so it cannot be compared, and the refusal is the ledger being
+        honest rather than the ledger being empty. It does not block the claim — see
+        `RepeatsAReceiptedNegative` for why the ambiguous case is failed toward
+        spending — and it is recorded on the token so it is visible afterwards.
+
+        NOT OVERCLAIMED: the ledger is a SNAPSHOT the caller compiled, before the
+        journal write lock this runs under was taken. The consultation is therefore
+        atomic with respect to the record it writes, and NOT with respect to another
+        process appending a negative in between. `do_not_repeat.compile_for_tracker()`
+        is cheap and pure, so the discipline is to recompile per round rather than to
+        hold one ledger across a campaign.
+        """
+        if ledger is None:
+            raise LedgerNotConsulted(
+                f"{tracked.hypothesis_id}: authorize_claim() requires a do-not-repeat "
+                "ledger. There is no 'no memory configured' position — an empty "
+                "do_not_repeat.CompiledLedger() is a pure, free answer meaning 'nothing "
+                "has been tried', and passing None would mean 'do not ask', which is "
+                "how this guard came to be wired to nothing in the first place"
+            )
+        matcher = getattr(ledger, "matches_for", None)
+        if not callable(matcher):
+            raise TypeError(
+                f"ledger must implement DoNotRepeatLedger.matches_for(regime, "
+                f"statement); {type(ledger).__name__} does not"
+            )
+        try:
+            matches = matcher(tracked.hypothesis.regime, tracked.hypothesis.statement)
+        except ControllerError as exc:
+            # The ledger declined to answer. `check_do_not_repeat` is total over the
+            # three outcomes and already has a value for this; inventing a fourth here
+            # would be a second opinion about what an unanswered question means.
+            return schemas.Check(schemas.COULD_NOT_CHECK, (
+                f"the do-not-repeat ledger could not compare this question: {exc}",
+            ))
+        return check_do_not_repeat(regime=tracked.hypothesis.regime, matches=matches)
+
     def authorize_claim(
-        self, hypothesis_id: str, *, purpose: str, authorized_by: str
+        self, hypothesis_id: str, *, purpose: str, authorized_by: str, ledger
     ) -> ClaimAuthorization:
         """Mint the token that lets a resource claim be spent on this question.
+
+        THIS is also where the §19.2 memory plane is consulted, and `ledger` is a
+        REQUIRED argument for exactly that reason. `hypotheses.py:261` said the ledger
+        belonged to a plane that did not exist, so `check_do_not_repeat()` sat correct
+        and unreachable and the loop could not tell *"tried and failed"* from *"never
+        tried"*. A default would have rebuilt that: every caller that forgot the
+        argument would get the old behaviour and the guard would be wired to nothing
+        again, silently. A receipted repeat raises `RepeatsAReceiptedNegative`;
+        everything else mints a token that CARRIES the verdict, so the spend and what
+        memory said about it are one record.
 
         THIS is where a falsifier stops being optional. The three states are checked
         HERE and not at the point the record was made, because the point of the
@@ -3410,11 +3626,16 @@ class HypothesisTracker:
                     authorized_by=authorized_by,
                     authorized_at=self._clock(),
                     ledger_seq=1,
+                    do_not_repeat_outcome=None,
                     campaign_id=self._campaign_id,
                 )
                 raise HypothesisError(  # pragma: no cover - the line above always raises
                     f"{hypothesis_id}: falsifier state {state!r} did not refuse a claim"
                 )
+            # Ordered AFTER the falsifier gate on purpose: a question with no predicate
+            # cannot be compared against anything, so asking memory about it first would
+            # report an incomparability whose real cause is the missing falsifier.
+            verdict = self._consult(tracked, ledger)
             authorization = ClaimAuthorization(
                 hypothesis_id=hypothesis_id,
                 falsifier=tracked.falsifier,
@@ -3427,6 +3648,11 @@ class HypothesisTracker:
                 # against it below. An authorization whose `ledger_seq` named a record
                 # that does not exist would be an authorization with nothing behind it.
                 ledger_seq=1,
+                # FAIL never reaches the token: the constructor raises
+                # `RepeatsAReceiptedNegative` from here, before any record is written,
+                # so a refused spend leaves no CLAIM_AUTHORIZED event behind it.
+                do_not_repeat_outcome=verdict.outcome,
+                do_not_repeat_reasons=tuple(verdict.reasons),
                 campaign_id=self._campaign_id,
             )
             event = self._record(EVENT_CLAIM_AUTHORIZED, hypothesis_id, {
@@ -4122,6 +4348,11 @@ def _authorization_probe(falsifier: Optional[str]) -> Optional[Exception]:
             authorized_by="audit",
             authorized_at="2026-08-04T00:00:00.000000Z",
             ledger_seq=1,
+            # The probe is about the FALSIFIER axis, so the memory axis is set to the
+            # value that lets a token exist: a PASS the audit did not have to earn.
+            # Leaving it unset would make every probe fail on the wrong field and the
+            # audit would report a claim gate that is shut for a reason nobody meant.
+            do_not_repeat_outcome=schemas.PASS,
         )
     except Exception as exc:  # noqa: BLE001 - the audit reports the type it got
         return exc

@@ -23,6 +23,15 @@ conforms to that consumer rather than inventing a shape the consumer would have 
 adapted to; `CompiledLedger` satisfies the `hypotheses.DoNotRepeatLedger` protocol as
 written, `matches_for(regime, statement)` included.
 
+AND IT IS WIRED (2026-08-04). Building the plane was only half the fix: for one commit
+nothing outside this file imported `fold_journal`, nothing built a
+`matches_by_hypothesis` mapping, and claims were still spent without asking — the same
+defect one level up. `compile_for_tracker()`, `matches_by_hypothesis()` and
+`planner_round_block()` at the foot of this module are that wiring, and
+`hypotheses.HypothesisTracker.authorize_claim()` now takes a REQUIRED `ledger`
+argument, so a claim cannot be authorized without a verdict from here. The whole path
+is exercised over real files by `test_hypothesis_path_end_to_end.py`.
+
 WHAT IS MATCHED ON, AND WHAT IS DELIBERATELY NOT
 ------------------------------------------------
 "Has this been tried?" is a similarity question and both errors are expensive, in
@@ -142,6 +151,7 @@ __all__ = [
     # pure functions and checks
     "canonical_token", "canonical_dimension", "normalize_dimensions",
     "structural_target", "read_facets", "fold_journal", "disposition",
+    "compile_for_tracker", "matches_by_hypothesis", "planner_round_block",
     "audit_matching_ignores_prose",
 ]
 
@@ -1990,6 +2000,119 @@ def disposition(regime: Mapping[str, Any], ledger: "CompiledLedger") -> schemas.
     if not blockers or check.outcome == schemas.FAIL:
         return check
     return schemas.Check(schemas.COULD_NOT_CHECK, blockers + tuple(check.reasons))
+
+
+# =============================================================================
+# The seam — somebody has to walk through the door
+# =============================================================================
+#
+# `disposition()` and `CompiledLedger` were the door, and for one commit nothing
+# outside this module walked through it: nothing imported `fold_journal`, nothing built
+# `planner_round_block(matches_by_hypothesis=...)`, and `hypotheses.authorize_claim()`
+# spent claims without asking. That is the same defect one level up from the one this
+# module was written to fix, so the three functions below are the wiring, and each is a
+# PURE read of two append-only records.
+
+
+def compile_for_tracker(
+    tracker,
+    *,
+    current_anchor: Optional[Any] = None,
+    satisfied_reopen_predicates: frozenset = frozenset(),
+) -> CompiledLedger:
+    """Compile the do-not-repeat ledger from ONE tracker's whole record.
+
+    Both halves come off the same object — `tracker.journal` for proposals, candidates,
+    evaluation events and compiled constraints, `tracker.read().events` for the
+    hypothesis history — so the two can never be from two different campaigns. That is
+    the entire reason this takes a tracker rather than two sequences: a fold over a
+    journal from campaign A and a hypothesis ledger from campaign B would compile
+    cleanly and suppress the wrong ideas.
+
+    A TORN TAIL IS A REFUSAL, not a shorter ledger. `HypothesisLedger.read()` reports
+    the fragment it discarded; folding the surviving prefix silently would mean the
+    ledger's answer to "has this been tried?" depends on whether a process was killed
+    mid-append — a suppression that comes and goes, which is worse than either answer.
+    `HypothesisTracker.repair_torn_tail()` clears one deliberately.
+
+    `current_anchor=None` is a real position, not a missing argument: with no anchor
+    NOTHING can be shown to still bind, every measurement-derived negative folds to
+    `SUPERSEDED_FACT`, and the ledger rejects on hard constraints alone.
+    """
+    if not isinstance(tracker, hypotheses.HypothesisTracker):
+        raise TypeError(
+            f"tracker must be a hypotheses.HypothesisTracker, got "
+            f"{type(tracker).__name__}"
+        )
+    read = tracker.read()
+    if read.discarded_tail_bytes:
+        raise LedgerFoldError(
+            f"{tracker.ledger.path}: the hypothesis ledger has a torn tail of "
+            f"{read.discarded_tail_bytes} bytes. Folding the prefix would make the "
+            "answer to 'has this been tried?' depend on where a process died; call "
+            "HypothesisTracker.repair_torn_tail() first"
+        )
+    return fold_journal(
+        journal_entries=tracker.journal.read_all(),
+        hypothesis_events=read.events,
+        current_anchor=current_anchor,
+        satisfied_reopen_predicates=satisfied_reopen_predicates,
+    )
+
+
+def matches_by_hypothesis(tracker, ledger: "CompiledLedger") -> dict:
+    """`{hypothesis_id: matches | None}` for every question the tracker holds.
+
+    The mapping `hypotheses.HypothesisTracker.planner_round_block` already consumes and
+    nothing built. `None` is a REAL value here and is the reason this is not a
+    comprehension over `matches_for`: a question the ledger cannot compare (an operator
+    one-liner naming no `mechanism`) maps to `None`, which the round block renders as
+    COULD_NOT_CHECK. Mapping it to `()` instead would state, in the consumer's own
+    vocabulary, that the ledger was consulted and found nothing — the silent PASS this
+    whole plane exists to prevent.
+
+    Every question is keyed, open and resolved alike, because a missing key already
+    means "not consulted" and a resolved question that quietly went missing would read
+    as one nobody asked about.
+    """
+    if not isinstance(tracker, hypotheses.HypothesisTracker):
+        raise TypeError(
+            f"tracker must be a hypotheses.HypothesisTracker, got "
+            f"{type(tracker).__name__}"
+        )
+    if not isinstance(ledger, CompiledLedger):
+        raise TypeError(f"ledger must be a CompiledLedger, got {type(ledger).__name__}")
+    out: dict = {}
+    for hypothesis_id, tracked in tracker.state().items():
+        try:
+            out[hypothesis_id] = ledger.matches_for(
+                tracked.hypothesis.regime, tracked.hypothesis.statement
+            )
+        except DoNotRepeatError:
+            out[hypothesis_id] = None
+    return out
+
+
+def planner_round_block(
+    tracker,
+    ledger: "CompiledLedger",
+    *,
+    round_id: str,
+    include_resolved: bool = True,
+) -> dict:
+    """The round block, with memory actually consulted. The one-call form.
+
+    `HypothesisTracker.planner_round_block(round_id=...)` on its own renders every
+    question as COULD_NOT_CHECK — correctly, since nothing consulted anything. This is
+    the call that makes the do-not-repeat field mean something, and it exists so that
+    the wiring is one function rather than three lines every caller writes for
+    themselves (and one of them writes `{}` instead of the mapping, which reads clean).
+    """
+    return tracker.planner_round_block(
+        round_id=round_id,
+        matches_by_hypothesis=matches_by_hypothesis(tracker, ledger),
+        include_resolved=include_resolved,
+    )
 
 
 # =============================================================================

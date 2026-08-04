@@ -30,9 +30,9 @@ a module it never looked at.
 
 | | non-test lines |
 |---|---:|
-| **ON THE CAMPAIGN PATH** | **49,685** |
-| **DEFERRED** (provably unreachable) | **50,190** |
-| **TOTAL** | **99,875** |
+| **ON THE CAMPAIGN PATH** | **49,877** |
+| **DEFERRED** (provably unreachable) | **51,142** |
+| **TOTAL** | **101,019** |
 
 **Roughly half of this package is not on the path from "an idea for a
 kernel" to "a measured number."** The three figures above are regenerated from
@@ -75,7 +75,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 
 | module | lines | campaign #1 | reason |
 |---|---:|:---:|---|
-| `campaign.py` | 2,169 | yes | THE ENTRYPOINT. Before it landed, `grep -rl "__main__|argparse|def main("` over every non-test module returned nothing: 94k lines, 5,695 passing tests, and no way to start it — which is the whole reason this package has produced no result |
+| `campaign.py` | 2,195 | yes | THE ENTRYPOINT. Before it landed, `grep -rl "__main__|argparse|def main("` over every non-test module returned nothing: 94k lines, 5,695 passing tests, and no way to start it — which is the whole reason this package has produced no result |
 | `__init__.py` | 14 | yes | package docstring; `schemas` is declared here as the single source of record shape |
 | `schemas.py` | 2,790 | yes | one record shape — every module is written against it and none invents its own |
 | `journal.py` | 2,127 | yes | AutoPilot lost 232 trials and ~16 days when a restart came up empty and nothing objected |
@@ -91,7 +91,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `evaluator/surface.py` | 3,195 | yes | **change-class constants only** — `AffectedSurface`, the core/shared-header fanout classes. `SurfaceGateRunner` is fenced off |
 | `execution/__init__.py` | 24 | yes | docstring only; states the deny-8 limits every executor inherits |
 | `execution/worktree.py` | 2,645 | yes | no candidate exists without it: production-tip anchoring, campaign worktree, build, build-identity receipt |
-| `execution/microbench.py` | 3,027 | yes | paired ALTERNATING blocks — 2026-08-04 A/A decode declined monotonically over four runs, so candidate-then-anchor charges the second arm ~4% systematically and repetitions do not remove it |
+| `execution/microbench.py` | 3,193 | yes | paired ALTERNATING blocks — 2026-08-04 A/A decode declined monotonically over four runs, so candidate-then-anchor charges the second arm ~4% systematically and repetitions do not remove it |
 | `execution/t0_provider.py` | 3,052 | yes | the predecessor harness tested MUL_MAT only, so a kernel that broke MUL_MAT_ID — MoE dispatch, every token in production — passed it cleanly |
 | `execution/control_runner.py` | 1,546 | yes | runs the neutral / A-A controls that the measured drift makes mandatory rather than optional |
 | `execution/cpu_region_claim.py` | 2,408 | yes | 2026-08-04: two A/A runs were destroyed by a legitimate co-tenant because the loop held no claim. Before this module a claim could be READ but never acquired |
@@ -104,13 +104,13 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `controller/selection.py` | 2,953 | no | 22 rejection codes and zero domain knowledge about what makes an EPYC or an MI210 kernel fast |
 | `controller/guards.py` | 3,670 | no | deterministic stop conditions for a loop that has never taken a step |
 | `controller/context.py` | 3,167 | no | compiles context for an LLM planner; campaign #1's proposals come from the session, not from a compiled context |
-| `controller/hypotheses.py` | 3,959 | no | an operator hypothesis channel with no campaign to feed it |
+| `controller/hypotheses.py` | 4,481 | no | an operator hypothesis channel with no campaign to feed it |
 | `controller/critic.py` | 2,077 | no | pre/post-run critics gating proposals that no producer emits yet |
 | `controller/state_machine.py` | 1,972 | no | states for a loop with no entrypoint; campaign #1 is one candidate, run once, by hand |
 | `controller/composition.py` | 2,165 | no | champion-lineage maintenance before a single champion exists |
 | `controller/planner.py` | 1,397 | no | research strategy in Python, replacing 114 lines of prose in autoresearch's `program.md` |
 | `controller/oracles.py` | 405 | no | a §6.5 oracle registry whose two consumers are both in this deferred plane |
-| `controller/do_not_repeat.py` | 1,766 | no | the §19.2 memory-update plane `hypotheses.py` says it does not own; it feeds `check_do_not_repeat()` and `selection.match_ledger()`, both of which are in this same deferred plane |
+| `controller/do_not_repeat.py` | 2,196 | no | the §19.2 memory-update plane `hypotheses.py` says it does not own; it feeds `check_do_not_repeat()` and `selection.match_ledger()`, both of which are in this same deferred plane |
 | `controller/fingerprint.py` | 144 | no | proposal identity for proposals nothing produces |
 | `release/__init__.py` | 31 | no | binds `plan`; the release plane ships a champion and campaign #1 has none |
 | `release/t3.py` | 6,660 | no | the T3 freeze gate — explicitly outside P-AK-SEARCH-1, and `api.admit_tier()` refuses T3/T4 by name on the search path |

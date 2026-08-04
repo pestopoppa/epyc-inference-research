@@ -68,6 +68,46 @@ G15_FALSIFIER = "a current wall-share map shows the cluster under 20%"
 G15_REGIME = {"backend": "llama_gpu", "phase": "decode", "batch_band": "b128"}
 
 
+class _FakeLedger:
+    """The smallest thing that satisfies `H.DoNotRepeatLedger`.
+
+    This suite is the UNIT suite for `hypotheses`, so the memory plane it is handed is
+    a stub: `do_not_repeat.CompiledLedger` is the real implementation and the two are
+    joined for real in `test_hypothesis_path_end_to_end.py`. A stub is honest here and
+    would be dishonest there.
+    """
+
+    def __init__(self, matches=(), *, refuses: str = "") -> None:
+        self._matches = tuple(matches)
+        self._refuses = refuses
+        self.asked = []
+
+    def matches_for(self, regime, statement):
+        self.asked.append((dict(regime), statement))
+        if self._refuses:
+            # What `CompiledLedger.matches_for` does with a question it cannot compare:
+            # it REFUSES rather than returning `()`, because `()` already means
+            # "consulted, matched nothing" and comes back PASS.
+            raise SM.ControllerError(self._refuses)
+        return self._matches
+
+
+def _clear_ledger() -> _FakeLedger:
+    """A ledger that was consulted and matched nothing. The compliant path."""
+    return _FakeLedger()
+
+
+def _receipted_negative(**over) -> H.LedgerMatch:
+    kwargs = {
+        "entry_id": "dnr-0001",
+        "entry_class": H.MATCH_CLASS_MATCHED_NEGATIVE,
+        "match_dimensions": {"regime": dict(G15_REGIME)},
+        "receipt": "rcpt-ake-20260803-0001@67a433bf",
+    }
+    kwargs.update(over)
+    return H.LedgerMatch(**kwargs)
+
+
 def _hypothesis(
     hid: str = "akh-g15-fusion",
     *,
@@ -1696,7 +1736,7 @@ class ClaimGateTest(_TempCase):
         self.tr.open_hypothesis(self.absent)
         with self.assertRaises(H.FalsifierRequiredBeforeCompute) as ctx:
             self.tr.authorize_claim("akh-operator-hunch", purpose="B=128 decode sweep",
-                                    authorized_by="mainA")
+                                    authorized_by="mainA", ledger=_clear_ledger())
         self.assertIn("'absent'", str(ctx.exception))
         self.assertIn("propose_falsifier", str(ctx.exception))
         # And nothing was recorded: a refused spend is not a spend.
@@ -1709,6 +1749,7 @@ class ClaimGateTest(_TempCase):
                 falsifier_source=H.FALSIFIER_SOURCE_STATED,
                 origin=H.ORIGIN_OPERATOR, purpose="p", authorized_by="a",
                 authorized_at="2026-08-04T00:00:00.000000Z", ledger_seq=1,
+                    do_not_repeat_outcome=S.PASS,
             )
 
     # ---- (ii) placeholder --------------------------------------------------
@@ -1722,6 +1763,7 @@ class ClaimGateTest(_TempCase):
                         falsifier_source=H.FALSIFIER_SOURCE_STATED,
                         origin=H.ORIGIN_OPERATOR, purpose="p", authorized_by="a",
                         authorized_at="2026-08-04T00:00:00.000000Z", ledger_seq=1,
+                    do_not_repeat_outcome=S.PASS,
                     )
                 self.assertIn("'placeholder'", str(ctx.exception))
                 self.assertIn("wearing a hat", str(ctx.exception))
@@ -1735,6 +1777,7 @@ class ClaimGateTest(_TempCase):
                     falsifier_source=H.FALSIFIER_SOURCE_STATED,
                     origin=H.ORIGIN_OPERATOR, purpose="p", authorized_by="a",
                     authorized_at="2026-08-04T00:00:00.000000Z", ledger_seq=1,
+                    do_not_repeat_outcome=S.PASS,
                 )
             except H.FalsifierRequiredBeforeCompute as exc:
                 return str(exc)
@@ -1751,6 +1794,7 @@ class ClaimGateTest(_TempCase):
         self.tr.open_hypothesis(_hypothesis())
         token = self.tr.authorize_claim(
             "akh-g15-fusion", purpose="B=128 decode sweep", authorized_by="mainA",
+            ledger=_clear_ledger(),
         )
         self.assertIsInstance(token, H.ClaimAuthorization)
         self.assertEqual(token.falsifier, G15_FALSIFIER)
@@ -1781,7 +1825,8 @@ class ClaimGateTest(_TempCase):
         self.assertEqual(tracked.falsifier_source, H.FALSIFIER_SOURCE_PROPOSED)
         self.assertTrue(tracked.may_spend_a_claim)
         token = self.tr.authorize_claim("akh-operator-hunch", purpose="sweep",
-                                        authorized_by="mainA")
+                                        authorized_by="mainA",
+                                        ledger=_clear_ledger())
         self.assertEqual(token.falsifier_source, H.FALSIFIER_SOURCE_PROPOSED)
         self.assertIn(token.falsifier, token.claim_purpose)
 
@@ -1789,11 +1834,13 @@ class ClaimGateTest(_TempCase):
         self.tr.open_hypothesis(_hypothesis())
         self.tr.resolve("akh-g15-fusion", _evidence())
         with self.assertRaises(H.HypothesisNotOpen):
-            self.tr.authorize_claim("akh-g15-fusion", purpose="p", authorized_by="a")
+            self.tr.authorize_claim("akh-g15-fusion", purpose="p", authorized_by="a",
+                                    ledger=_clear_ledger())
 
     def test_an_untracked_question_cannot_take_a_claim(self):
         with self.assertRaises(H.UnknownHypothesis):
-            self.tr.authorize_claim("akh-never-opened", purpose="p", authorized_by="a")
+            self.tr.authorize_claim("akh-never-opened", purpose="p", authorized_by="a",
+                                    ledger=_clear_ledger())
 
     # ---- the door ----------------------------------------------------------
 
@@ -1811,7 +1858,8 @@ class ClaimGateTest(_TempCase):
     def test_the_door_passes_the_falsifier_into_the_claims_own_receipt(self):
         self.tr.open_hypothesis(_hypothesis())
         token = self.tr.authorize_claim("akh-g15-fusion", purpose="B=128 decode sweep",
-                                        authorized_by="mainA")
+                                        authorized_by="mainA",
+                                        ledger=_clear_ledger())
         seen = {}
 
         def fake_acquire(**kwargs):
@@ -1830,7 +1878,8 @@ class ClaimGateTest(_TempCase):
     def test_the_caller_cannot_supply_its_own_purpose(self):
         self.tr.open_hypothesis(_hypothesis())
         token = self.tr.authorize_claim("akh-g15-fusion", purpose="p",
-                                        authorized_by="a")
+                                        authorized_by="a",
+                                        ledger=_clear_ledger())
         with self.assertRaises(ValueError) as ctx:
             H.claim_for_hypothesis(token, lambda **kw: kw, purpose="something else")
         self.assertIn("taken from the authorization", str(ctx.exception))
@@ -1838,7 +1887,8 @@ class ClaimGateTest(_TempCase):
     def test_the_door_refuses_a_non_callable_acquirer(self):
         self.tr.open_hypothesis(_hypothesis())
         token = self.tr.authorize_claim("akh-g15-fusion", purpose="p",
-                                        authorized_by="a")
+                                        authorized_by="a",
+                                        ledger=_clear_ledger())
         with self.assertRaises(TypeError):
             H.claim_for_hypothesis(token, "not-callable")
 
@@ -2595,7 +2645,7 @@ class OperatorTraceabilityTest(_TempCase):
             rationale="the claim is that the LAYER is the dispatcher; this isolates it",
         )
         self.tr.authorize_claim("akh-last", purpose="dispatcher A/B",
-                                authorized_by="mainA")
+                                authorized_by="mainA", ledger=_clear_ledger())
         self.tr.note_attempt("akh-last", proposal_id="akp-7", disposition="evaluated",
                              bears_on_falsifier=True, note="paired blocks, five reps",
                              refs=("akj-000000000009-abcdef123456",))
@@ -3150,7 +3200,8 @@ class TheTokenIsReDerivedAtTheDoorTest(_TempCase):
         tracker = self.tracker()
         tracker.intake(store)
         return tracker.authorize_claim(
-            "akh-g15-fusion", purpose="one decode sweep", authorized_by="agent-a")
+            "akh-g15-fusion", purpose="one decode sweep", authorized_by="agent-a",
+            ledger=_clear_ledger())
 
     def test_a_token_whose_falsifier_was_edited_after_construction_is_refused(self):
         import copy as _copy

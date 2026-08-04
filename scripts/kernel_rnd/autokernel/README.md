@@ -23,8 +23,8 @@ and that, not a missing gate and not a missing statistic, is why 100k lines and
 6,000 passing tests have produced no results. What still stands between here and
 a first number is [§ *The honest list*](execution/README.md#6-before-a-first-campaign-can-start--the-honest-list).
 
-**Essential vs deferred.** Of 99,875 non-test lines, **49,685 are on the path**
-from "an idea for a kernel" to "a measured number" and **50,190 are provably
+**Essential vs deferred.** Of 101,019 non-test lines, **49,877 are on the path**
+from "an idea for a kernel" to "a measured number" and **51,142 are provably
 unreachable from it** — the controller's research strategy, the release plane,
 the adapters, the second copy of the gate derivation. That split is computed by
 walking the import graph, not asserted: [`FOOTPRINT.md`](FOOTPRINT.md) carries it
