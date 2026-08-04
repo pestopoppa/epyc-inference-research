@@ -51,3 +51,38 @@ pair, not of the TTS kernel alone — and the recognizer used here is unrecorded
 as part of Annex S, requires `stt_instrument=<binary_sha256[:12]>/<model_sha256[:12]>` in its
 grammar for exactly this reason. The existing figure cannot satisfy that grammar and should be
 treated as provenance, not as a baseline, until it is re-measured with the instrument named.
+
+## Follow-up audit, 2026-08-04: the latency figure is CORRECT
+
+The supersession receipt (`ratify_speech_wer_correction_20260804.json`, RATIFIED
+2026-08-04T15:48:15Z) left one operator action open: *"decide whether
+`latency_s_11s_clip` warrants the same attribution audit — it was not checked."* It is
+checkable from this file, so it was checked rather than left as a decision.
+
+The receipt records `whisper_cpp.measurements_anchored.latency_s_11s_clip = 0.21` for an
+11-second clip. Dividing 11 s by each arm's `xrt_overall`:
+
+| arm | xrt_overall | implied latency for 11 s |
+|---|---|---|
+| `faster-whisper large-v3-turbo int8 CPU 48t` | 1.58 | 6.962 s |
+| `Qwen3-ASR-1.7B Q8_0 MI210 GPU` | 4.02 | 2.736 s |
+| `Qwen3-ASR-1.7B Q8_0 + bf16 projector, MI210` | 17.55 | 0.627 s |
+| **`whisper.cpp large-v3-turbo f16 MI210 GPU`** | **51.86** | **0.212 s** ← recorded 0.21 |
+| `whisper.cpp large-v3-turbo f16 MI210 GPU beam5` | 40.49 | 0.272 s |
+| `whisper.cpp large-v3 f16 MI210 GPU` | 24.02 | 0.458 s |
+
+The match is 2.1 ms and the nearest competing arm is 3× away. **The latency figure came
+from the production whisper.cpp arm. Only the WER came from faster-whisper.**
+
+**Why that conclusion is worth more than closing one checkbox.** Both figures were
+transcribed out of this same file into adjacent lines of the same receipt, and one of them
+is right. So the defect was a **single copy error on one line**, not systematic
+mis-sourcing of the speech freeze's measurements — which means the receipt's other anchored
+values do not need re-auditing on suspicion. A correction whose scope nobody bounded is how
+a one-line error turns into a re-audit of everything it sat next to.
+
+Still open, and not fixable by correction: `qwentts_cpp.measurements_anchored.
+roundtrip_wer_pct = 1.49` names no STT instrument (see above). `P-TTS-2`, ratified in Annex
+S on 2026-08-03, now requires `stt_instrument=<binary_sha256[:12]>/<model_sha256[:12]>` in
+its grammar, so that figure can no longer satisfy the protocol governing it. It gets fixed
+by re-measuring, which needs the same quiet host the first AutoKernel campaign is waiting on.
