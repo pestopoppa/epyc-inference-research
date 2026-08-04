@@ -210,6 +210,8 @@ __all__ = [
     "HeldClaim", "ClaimAttestation", "CpuRegionClaimAdapter",
     # host state
     "HostState", "HostStatePolicy", "read_host_state", "DEFAULT_BASE_ENV_KEYS",
+    "FREQUENCY_JUDGED", "FREQUENCY_UNEVALUABLE", "FREQUENCY_DEFERRED_IDLE",
+    "FREQUENCY_CLASSIFICATIONS",
     # env
     "assemble_env", "EnvAssembly",
     # receipt
@@ -614,9 +616,57 @@ def read_host_state(*, cpu_list: str, sysfs_root: Any = "/sys/devices/system/cpu
         source=str(sysfs), unreadable=tuple(unreadable))
 
 
+#: How `check_frequency` arrived at its outcome. Three CLASSIFICATIONS, which are
+#: not the same axis as the three OUTCOMES: `JUDGED` says the reading was
+#: compared against the healthy reference (outcome PASS or FAIL), `UNEVALUABLE`
+#: says the comparison could not be set up at all (disabled, unreadable, no
+#: reference), and `DEFERRED_IDLE` says the comparison was well-formed but the
+#: host was not under enough load for a clock reading to carry information.
+#:
+#: Callers need the classification because they must treat the two
+#: COULD_NOT_CHECKs differently, and telling them apart by matching on the reason
+#: PROSE is the kind of guard that dies at the first rewording. See
+#: `frequency_verdict`.
+FREQUENCY_JUDGED = "judged"
+FREQUENCY_UNEVALUABLE = "unevaluable"
+FREQUENCY_DEFERRED_IDLE = "deferred_idle"
+
+FREQUENCY_CLASSIFICATIONS = (FREQUENCY_JUDGED, FREQUENCY_UNEVALUABLE,
+                             FREQUENCY_DEFERRED_IDLE)
+
+
 @dataclass(frozen=True)
 class HostStatePolicy:
     """When a host is too throttled or too busy to produce a usable number.
+
+    THE IDLE-FREQUENCY TRAP, measured on this host 2026-08-04
+    ---------------------------------------------------------
+    A clock reading taken from an IDLE host says nothing about whether that host
+    is throttled. An idle EPYC parks its cores: this machine reported **16 cores
+    above 2.5 GHz at idle and 117 under load**, and `cpuinfo_min_freq` here is
+    1.2 GHz, so an idle core sits AT the driver's own minimum — which is the
+    exact signature this policy used to call "a throttled host, not a quiet one".
+
+    That made the run-open gate unsatisfiable, and not as a matter of degree.
+    `check_load` PASSes only at `load1/core <= max_load_per_core`, and a clock
+    reading only carries information at `load1/core >= max_load_per_core`. The
+    two gates at run open are evaluated against the SAME denominator and the
+    SAME constant in opposite directions, so **a host quiet enough to pass the
+    contention gate is by construction too quiet for the frequency gate to
+    mean anything.** Both configurations refused: with `nominal_khz` supplied the
+    idle reading fell below the floor and FAILed, and without it the check was
+    COULD_NOT_CHECK — and the runner refused on anything but PASS. `AutoKernel
+    could not take a measurement on a perfectly healthy machine`, which is how a
+    guard gets switched off within a week.
+
+    The fix is to move the judgement to where it discriminates, not to soften it.
+    `frequency_verdict` DEFERS on an idle host instead of failing it, the runner
+    does not refuse a deferred reading, and the check still bites at block close
+    — where the benchmark's own load is what makes the clock informative. The
+    anti-fail-open control is in `MicrobenchRunner`: a run that never once
+    managed to JUDGE the frequency under load emits no number. So an idle host
+    no longer aborts the run, and a host that is throttled for the whole run
+    still cannot produce a number.
 
     `nominal_khz` has NO DEFAULT and is not derived from `cpuinfo_max_freq`.
     That file reports the single-core boost ceiling (4.51 GHz on this part); an
@@ -654,9 +704,30 @@ class HostStatePolicy:
             if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
                 raise ValueError(f"{name} must be a positive number")
 
-    def check_frequency(self, state: HostState) -> schemas.Check:
+    def frequency_verdict(self, state: HostState, *,
+                          under_load: bool = True) -> tuple:
+        """`(classification, Check)`. THE single computation site for both.
+
+        `under_load` is the CALLER's structural statement that the claimed
+        footprint was being driven when `state` was read. It is not inferred
+        from `/proc/loadavg`: load1 is a one-minute damped average, so it lags
+        the thing it would be standing in for, and the runner does not have to
+        guess — it knows whether it has just spawned work on these cores.
+
+        With `under_load=False` a well-formed check DEFERS rather than judging.
+        An idle EPYC parks its cores, so a low clock there is evidence of
+        idleness and not of throttle (16 boosting idle vs 117 under load on this
+        host, 2026-08-04). Deferred is COULD_NOT_CHECK — never a pass.
+
+        Order is load-bearing. Configuration defects (disabled, unreadable, no
+        healthy reference) are reported BEFORE the idle deferral, because they
+        are properties of the setup rather than of the host, and deferring them
+        would hide a missing `--nominal-khz` until the host happened to be busy.
+        """
         if not isinstance(state, HostState):
-            raise TypeError("check_frequency takes a HostState")
+            raise TypeError("frequency_verdict takes a HostState")
+        if not isinstance(under_load, bool):
+            raise TypeError("under_load must be a bool")
         if not self.require_frequency:
             # NOT a PASS. A check the caller switched off did not happen, and
             # this module's own rule everywhere else is that COULD_NOT_CHECK is
@@ -665,12 +736,12 @@ class HostStatePolicy:
             # guard is the fail-open shape that makes a guard worth nothing: the
             # multi-day throttle that poisoned every number taken in its window
             # would have produced exactly this record.
-            return schemas.Check(schemas.COULD_NOT_CHECK, (
+            return FREQUENCY_UNEVALUABLE, schemas.Check(schemas.COULD_NOT_CHECK, (
                 "frequency checking was disabled by the caller "
                 "(HostStatePolicy.require_frequency=False), so the host's clock was "
                 "never read; a run under this policy does not emit a number",))
         if not state.readable:
-            return schemas.Check(schemas.COULD_NOT_CHECK, (
+            return FREQUENCY_UNEVALUABLE, schemas.Check(schemas.COULD_NOT_CHECK, (
                 "no cpu in the claimed footprint reported scaling_cur_freq; a multi-day "
                 "host throttle has silently poisoned results here before, so an "
                 "unverifiable frequency is not a passing frequency",) + state.unreadable)
@@ -678,29 +749,62 @@ class HostStatePolicy:
         min_khz = state.min_khz
         if state.unreadable:
             reasons.extend(state.unreadable)
+        # The idle deferral, and it must come BEFORE the driver-minimum test
+        # below: parking at `cpuinfo_min_freq` is precisely what a healthy idle
+        # EPYC does, so that test cannot tell an idle host from a throttled one
+        # either. Everything below this line reads the clock as evidence about
+        # the host's HEALTH, and that inference is only valid when the cores
+        # were being asked to do something.
+        #
+        # It also comes before the missing-`nominal_khz` branch, which is a
+        # configuration defect rather than a host reading. That is safe because
+        # the defect is caught earlier and harder: `campaign.py` makes
+        # `--nominal-khz` a REQUIREMENT of `--execute`, at argument-parse time,
+        # so a run reaching here without one has already been refused.
+        if not under_load:
+            return FREQUENCY_DEFERRED_IDLE, schemas.Check(
+                schemas.COULD_NOT_CHECK, tuple(reasons) + (
+                    f"the claimed footprint was not under load when this reading was "
+                    f"taken, so {min_khz} kHz is evidence of idleness and not of "
+                    f"throttle: an idle EPYC parks its cores (16 boosting idle vs 117 "
+                    f"under load on this host, 2026-08-04), and parks them AT "
+                    f"cpuinfo_min_freq. DEFERRED, not passed — the run must still judge "
+                    f"the frequency under its own load before it may emit a number.",))
+
+        # The one throttle shape that needs no operator-supplied reference, so
+        # it is tested before `nominal_khz` is required.
         if state.driver_min_khz is not None and min_khz is not None \
                 and min_khz <= state.driver_min_khz:
-            return schemas.Check(schemas.FAIL, tuple(reasons) + (
+            return FREQUENCY_JUDGED, schemas.Check(schemas.FAIL, tuple(reasons) + (
                 f"cpu frequency is pinned at the driver's own minimum "
-                f"({min_khz} kHz <= cpuinfo_min_freq {state.driver_min_khz} kHz); "
+                f"({min_khz} kHz <= cpuinfo_min_freq {state.driver_min_khz} kHz) while "
+                f"the claimed footprint is under load; "
                 f"this is a throttled host, not a quiet one",))
         if self.nominal_khz is None:
-            return schemas.Check(schemas.COULD_NOT_CHECK, tuple(reasons) + (
-                "HostStatePolicy.nominal_khz was not supplied, so the observed "
-                f"{min_khz} kHz cannot be compared against a healthy reference for this "
-                "cell. cpuinfo_max_freq is the single-core boost ceiling and is NOT a "
-                "valid all-core reference; record a healthy observation instead.",))
+            return FREQUENCY_UNEVALUABLE, schemas.Check(
+                schemas.COULD_NOT_CHECK, tuple(reasons) + (
+                    "HostStatePolicy.nominal_khz was not supplied, so the observed "
+                    f"{min_khz} kHz cannot be compared against a healthy reference for "
+                    "this cell. cpuinfo_max_freq is the single-core boost ceiling and is "
+                    "NOT a valid all-core reference; record a healthy observation "
+                    "instead.",))
         floor = self.nominal_khz * self.min_frequency_ratio
         if min_khz is not None and min_khz < floor:
-            return schemas.Check(schemas.FAIL, tuple(reasons) + (
+            return FREQUENCY_JUDGED, schemas.Check(schemas.FAIL, tuple(reasons) + (
                 f"slowest claimed cpu is at {min_khz} kHz, below "
                 f"{self.min_frequency_ratio:.2f} x nominal {self.nominal_khz} kHz "
                 f"({floor:.0f} kHz); refusing to emit a number from a throttled host",))
         if reasons:
-            return schemas.Check(schemas.COULD_NOT_CHECK, tuple(reasons))
-        return schemas.Check(schemas.PASS, (
+            return FREQUENCY_UNEVALUABLE, schemas.Check(schemas.COULD_NOT_CHECK,
+                                                        tuple(reasons))
+        return FREQUENCY_JUDGED, schemas.Check(schemas.PASS, (
             f"min {min_khz} kHz >= {floor:.0f} kHz "
-            f"({self.min_frequency_ratio:.2f} x nominal {self.nominal_khz} kHz)",))
+            f"({self.min_frequency_ratio:.2f} x nominal {self.nominal_khz} kHz), "
+            f"judged under load",))
+
+    def check_frequency(self, state: HostState) -> schemas.Check:
+        """The Check alone. `frequency_verdict` is the one that computes it."""
+        return self.frequency_verdict(state)[1]
 
     def check_load(self, state: HostState, *, cpu_count: int) -> schemas.Check:
         if not self.require_load:
@@ -2520,6 +2624,12 @@ class MicrobenchRunner:
         refusals: list = []
         attestations: list = []
         blocks: list = []
+        # Every frequency classification this run produced, in order. `_finish`
+        # refuses a run in which none of them is JUDGED: deferring the idle
+        # readings is only safe if SOMETHING eventually judged the clock under
+        # load, and this list is what makes that a structural property of the
+        # run rather than a hope about the load average.
+        freq_classifications: list = []
 
         commands = {
             ARM_CANDIDATE: recipes.construct(plan.recipe_id, binding=plan.candidate_binding,
@@ -2575,18 +2685,32 @@ class MicrobenchRunner:
         # benchmark is running it saturates the claimed cores itself, so a
         # mid-run load reading measures this runner, not a foreign process.
         open_state = self._read_host_state(cpu_list=footprint.cpu_list)
-        freq_check = self._policy.check_frequency(open_state)
+        # `under_load=False` is a fact about this line's position in the loop,
+        # not a reading: nothing has been spawned yet, so the claimed footprint
+        # is idle by construction.
+        freq_class, freq_check = self._policy.frequency_verdict(
+            open_state, under_load=False)
+        freq_classifications.append(freq_class)
         load_check = self._policy.check_load(open_state, cpu_count=footprint.cpu_count)
         checks.append(("host_frequency_open", freq_check))
         checks.append(("host_load_open", load_check))
-        for name, check in (("frequency", freq_check), ("contention", load_check)):
-            if check.outcome != schemas.PASS:
-                refusals.append(f"host {name} at run open: {check.outcome} — "
-                                f"{'; '.join(check.reasons)}")
+        # The frequency reading at run open is DEFERRED, not refused, when the
+        # host is idle. It has to be: `load_check` PASSes only below the very
+        # load threshold above which the clock reading means anything, so a host
+        # that passes contention here can never pass frequency here. Refusing on
+        # it made the gate unsatisfiable on a healthy machine — see
+        # HostStatePolicy's docstring. Every OTHER non-PASS still refuses, so a
+        # disabled, unreadable or reference-less check is as fatal as it was.
+        if freq_class != FREQUENCY_DEFERRED_IDLE and freq_check.outcome != schemas.PASS:
+            refusals.append(f"host frequency at run open: {freq_check.outcome} — "
+                            f"{'; '.join(freq_check.reasons)}")
+        if load_check.outcome != schemas.PASS:
+            refusals.append(f"host contention at run open: {load_check.outcome} — "
+                            f"{'; '.join(load_check.reasons)}")
 
         if refusals:
             return self._finish(plan, started_at, blocks, refusals, checks, scope,
-                                attestations, receipts)
+                                attestations, receipts, freq_classifications)
 
         schedule = statistics.OrderSchedule.derive(
             campaign_seed=plan.campaign_seed, candidate_id=plan.candidate_id,
@@ -2601,31 +2725,41 @@ class MicrobenchRunner:
 
         for block_plan in plans:
             record = self._run_block(plan, block_plan, commands, envs, receipts,
-                                     expectations, footprint, attestations)
+                                     expectations, footprint, attestations,
+                                     freq_classifications)
             blocks.append(record)
             if not record.complete:
                 refusals.extend(record.refusals)
                 break
 
         return self._finish(plan, started_at, blocks, refusals, checks, scope,
-                            attestations, receipts)
+                            attestations, receipts, freq_classifications)
 
     def _run_block(self, plan: MicrobenchPlan, block_plan: BlockPlan, commands: Mapping,
                    envs: Mapping, receipts: Mapping, expectations: Mapping,
-                   footprint: recipes.ClaimFootprint, attestations: list) -> BlockRecord:
+                   footprint: recipes.ClaimFootprint, attestations: list,
+                   freq_classifications: list) -> BlockRecord:
         open_state = self._read_host_state(cpu_list=footprint.cpu_list)
-        checks: list = [("host_frequency_block_open",
-                         self._policy.check_frequency(open_state))]
+        # Between blocks the claimed cores are idle by construction too: the
+        # previous block's last invocation has already exited.
+        open_class, open_freq = self._policy.frequency_verdict(
+            open_state, under_load=False)
+        freq_classifications.append(open_class)
+        checks: list = [("host_frequency_block_open", open_freq)]
         refusals: list = []
         invocations: list = []
 
-        if checks[0][1].outcome != schemas.PASS:
+        # Same deferral as at run open, and for the same reason: between blocks
+        # the claimed cores are idle by construction, so the first block would
+        # otherwise refuse on every healthy host. The block CLOSE reading below
+        # is the one taken under the benchmark's own load, and it still refuses.
+        if open_class != FREQUENCY_DEFERRED_IDLE and open_freq.outcome != schemas.PASS:
             return BlockRecord(plan=block_plan, invocations=(), host_state_open=open_state,
                                host_state_close=None, paired_block=None,
                                checks=tuple(checks),
                                refusals=(f"block {block_plan.block_index}: host frequency "
-                                         f"{checks[0][1].outcome} — "
-                                         f"{'; '.join(checks[0][1].reasons)}",))
+                                         f"{open_freq.outcome} — "
+                                         f"{'; '.join(open_freq.reasons)}",))
 
         for position, arm in enumerate(block_plan.arm_sequence):
             try:
@@ -2710,10 +2844,20 @@ class MicrobenchRunner:
             if refusals:
                 break
 
+        # Block CLOSE is the reading that matters. The benchmark has just driven
+        # the claimed footprint, so the clock here is evidence about the host
+        # rather than about its idleness, and a FAIL is a real throttle. This is
+        # where the guard the idle deferral preserved actually bites.
+        # `bool(invocations)` and not a bare True: a block that broke out before
+        # spawning anything did NOT drive the footprint, and claiming it did
+        # would let an empty block manufacture the JUDGED reading that the
+        # run-level control in `_finish` is looking for.
         close_state = self._read_host_state(cpu_list=footprint.cpu_list)
-        close_freq = self._policy.check_frequency(close_state)
+        close_class, close_freq = self._policy.frequency_verdict(
+            close_state, under_load=bool(invocations))
+        freq_classifications.append(close_class)
         checks.append(("host_frequency_block_close", close_freq))
-        if close_freq.outcome != schemas.PASS:
+        if close_class != FREQUENCY_DEFERRED_IDLE and close_freq.outcome != schemas.PASS:
             refusals.append(
                 f"block {block_plan.block_index}: host frequency at block close is "
                 f"{close_freq.outcome} — {'; '.join(close_freq.reasons)}; a throttle that "
@@ -2734,7 +2878,29 @@ class MicrobenchRunner:
 
     def _finish(self, plan: MicrobenchPlan, started_at: str, blocks: list, refusals: list,
                 checks: list, scope: api.ScopeDenominator, attestations: list,
-                receipts: Mapping) -> MicrobenchRun:
+                receipts: Mapping,
+                freq_classifications: Optional[Sequence[str]] = None) -> MicrobenchRun:
+        # THE CONTROL ON THE IDLE DEFERRAL. Deferring an idle frequency reading
+        # is only sound because the run is about to load the host itself; if it
+        # never did — every reading deferred, start to finish — then the throttle
+        # guard never ran, and the multi-day throttle that poisoned every number
+        # in its window (`feedback_host_throttle_check`) would sail straight
+        # through. A guard that can be satisfied by never evaluating it is worth
+        # nothing, so a run with blocks and no JUDGED reading emits no number.
+        #
+        # Scoped to runs that actually produced blocks: a run that refused
+        # before planning any has a real refusal already and does not need a
+        # second, more confusing one.
+        classifications = tuple(freq_classifications or ())
+        if blocks and FREQUENCY_JUDGED not in classifications:
+            refusals.append(
+                f"the host frequency was never judged under load: "
+                f"{len(classifications)} reading(s), classified "
+                f"{sorted(set(classifications))}, and not one of them was "
+                f"{FREQUENCY_JUDGED!r}. Idle readings are DEFERRED so a healthy quiet "
+                f"host can start a run; a run that stays under the load threshold to the "
+                f"end never exercised the throttle guard at all, and this host has sat at "
+                f"-60% for days undetected. No number is emitted.")
         if len(blocks) < plan.blocks_to_run and not refusals:
             refusals.append(
                 f"only {len(blocks)}/{plan.blocks_to_run} paired blocks completed; a run "

@@ -1,19 +1,85 @@
-# `autokernel` — the AutoKernel research-loop substrate
+# `autokernel` — a search for faster llama.cpp kernels
+
+**What it is.** A harness that takes one experimental kernel change, builds it in
+a throwaway worktree off the *current* frozen production tip, proves it still
+computes the right answer, measures it against production in interleaved paired
+blocks, and keeps or reverts it. Production is never touched.
+
+**The one command** — from `/mnt/raid0/llm/epyc-inference-research`:
+
+```bash
+python3 -m scripts.kernel_rnd.autokernel.campaign --model /path/to/model.gguf
+```
+
+**Dry run is the default.** It composes and prints all twelve steps, including
+the exact argv and env both arms would be spawned with, and executes nothing.
+`--execute` additionally requires `--i-hold-the-host`.
+
+**Status: no candidate has ever been built, and no benchmark has ever been run
+by this package.** Not one. The loop above has been composed end to end and
+never executed. Until 2026-08-04 there was no entrypoint at all — `grep -rln
+'__main__|argparse|def main('` over every non-test module returned nothing —
+and that, not a missing gate and not a missing statistic, is why 100k lines and
+6,000 passing tests have produced no results. What still stands between here and
+a first number is [§ *The honest list*](execution/README.md#6-before-a-first-campaign-can-start--the-honest-list).
+
+**Essential vs deferred.** Of 99,875 non-test lines, **49,685 are on the path**
+from "an idea for a kernel" to "a measured number" and **50,190 are provably
+unreachable from it** — the controller's research strategy, the release plane,
+the adapters, the second copy of the gate derivation. That split is computed by
+walking the import graph, not asserted: [`FOOTPRINT.md`](FOOTPRINT.md) carries it
+row by row and `test_campaign_footprint.py` turns the suite red if the document
+and the tree disagree. **Nothing is deleted by it.** Deletion stays a separate
+one-line decision for the operator; the boundary exists to make that decision
+cheap, not to pre-empt it.
+
+### The two things the harness is built around
+
+1. **T0 before any speed number at all.** Throughput is reward-hackable —
+   deleting the computation is the fastest kernel there is. The predecessor
+   harness tested `MUL_MAT` only, so a kernel that broke `MUL_MAT_ID` (MoE
+   dispatch, on *every* token in production) passed it cleanly. If T0 fails,
+   `run_campaign` returns before a single block is planned.
+2. **Interleaved paired blocks, because drift was measured.** Four A/A runs of
+   *identical* code on a quiet host declined monotonically on decode (52.76 →
+   52.31 → 51.62 → 50.52). A candidate-then-anchor A/B therefore charges the
+   second arm a systematic ~4%, and *more repetitions do not remove it.* The
+   accept rule is `min(delta) > 0` over N pre-committed pairs AND
+   `median(relative) >` a drift bound derived from that A/A — not an e-process;
+   1.6–1.9% CV does not justify one. Evidence:
+   [`data/autokernel_aa_20260804/`](../../../data/autokernel_aa_20260804/README.md).
+
+### Where to read next
+
+| You want | Go to |
+|---|---|
+| To run a campaign | [`campaign.py`](campaign.py)'s module docstring — the loop order, the accept rule, and the import boundary |
+| What blocks a first result | [`execution/README.md` §6](execution/README.md) — the honest list |
+| The research programme | [`program.md`](program.md) |
+| What is on the path and what is not | [`FOOTPRINT.md`](FOOTPRINT.md) |
+
+---
+
+## Scope and authority
 
 Owning design: [`/workspace/handoffs/active/autokernel-research-loop.md`](/workspace/handoffs/active/autokernel-research-loop.md)
 (the `epyc-root` handoff). Section references below (`§5.8`, `invariant 7`, …)
 are to that document.
 
-AutoKernel is the campaign/control plane that proposes, builds, and measures
-experimental kernel candidates against a frozen production anchor. **Its
-release-side job ends at a *release package*.** A human executes every freeze
-and cutover (§1.3, invariant 5); nothing in this package carries freeze or
-cutover authority, and `schemas.find_authority_flavoured_keys()` refuses any
-auth-flavoured key in a machine-authored record so the absence is *checked*, not
-merely intended.
+**AutoKernel's release-side job ends at a *release package*.** A human executes
+every freeze and cutover (§1.3, invariant 5); nothing in this package carries
+freeze or cutover authority, and `schemas.find_authority_flavoured_keys()`
+refuses any auth-flavoured key in a machine-authored record so the absence is
+*checked*, not merely intended.
 
-Nothing here writes to a production kernel tree, starts a process, runs a
-benchmark, or runs inference.
+Nothing here writes to a production kernel tree. Nothing outside `execution/`
+starts a process, runs a benchmark, or runs inference; `execution/`'s five
+executors do, under a held claim, and only when the driver is run with
+`--execute`. `--execute` is refused at argv time — before any claim — while
+`HostOps.unimplemented_seams()` is non-empty: `apply_candidate`,
+`_anchor_identity_for_bench`, `t0_evidence` and `--nominal-khz` each need a
+value the campaign must supply, and each would otherwise raise where it is
+reached, after the claim and after the build.
 
 ---
 

@@ -798,6 +798,77 @@ class TestHostStateGuards(unittest.TestCase):
         self.assertEqual(check.outcome, schemas.FAIL)
         self.assertTrue(any("driver's own minimum" in r for r in check.reasons))
 
+    def test_an_idle_host_parked_at_the_driver_minimum_is_deferred_not_failed(self):
+        """THE bug. This exact reading is what a healthy idle EPYC produces.
+
+        `cpuinfo_min_freq` on this host is 1.2 GHz and an idle core sits there,
+        which the old gate called "a throttled host, not a quiet one" — so a
+        perfectly good machine could not start a run. Under `under_load=False`
+        the same reading is DEFERRED: still not a pass, but not a refusal
+        either.
+        """
+        sysfs = fake_sysfs(self.root, cpus=range(4), khz=1200000, min_khz=1200000)
+        proc = fake_proc(self.root, load1=0.1)
+        state = M.read_host_state(cpu_list="0-3", sysfs_root=sysfs, proc_root=proc)
+        policy = M.HostStatePolicy(nominal_khz=3500000)
+        klass, check = policy.frequency_verdict(state, under_load=False)
+        self.assertEqual(klass, M.FREQUENCY_DEFERRED_IDLE)
+        self.assertEqual(check.outcome, schemas.COULD_NOT_CHECK)
+        self.assertFalse(check.passed, "deferred is not a pass")
+
+    def test_the_same_reading_under_load_is_a_throttle_and_fails(self):
+        """The guard still bites. Same clock, same host, load-bearing difference."""
+        sysfs = fake_sysfs(self.root, cpus=range(4), khz=1200000, min_khz=1200000)
+        proc = fake_proc(self.root, load1=0.1)
+        state = M.read_host_state(cpu_list="0-3", sysfs_root=sysfs, proc_root=proc)
+        policy = M.HostStatePolicy(nominal_khz=3500000)
+        klass, check = policy.frequency_verdict(state, under_load=True)
+        self.assertEqual(klass, M.FREQUENCY_JUDGED)
+        self.assertEqual(check.outcome, schemas.FAIL)
+
+    def test_a_healthy_clock_under_load_passes(self):
+        """Compliant-path control: the fix must not make PASS unreachable."""
+        sysfs = fake_sysfs(self.root, cpus=range(4), khz=3500000)
+        proc = fake_proc(self.root, load1=3.0)
+        state = M.read_host_state(cpu_list="0-3", sysfs_root=sysfs, proc_root=proc)
+        klass, check = M.HostStatePolicy(nominal_khz=3500000).frequency_verdict(
+            state, under_load=True)
+        self.assertEqual(klass, M.FREQUENCY_JUDGED)
+        self.assertEqual(check.outcome, schemas.PASS)
+
+    def test_a_disabled_check_is_unevaluable_and_never_deferred(self):
+        """The two COULD_NOT_CHECKs must not collapse into one.
+
+        `require_frequency=False` is a configuration defect the runner must keep
+        refusing on. If it classified as DEFERRED it would inherit the idle
+        deferral's free pass — switching the guard off would become the way to
+        run on a throttled host.
+        """
+        sysfs = fake_sysfs(self.root, cpus=range(4), khz=3500000)
+        proc = fake_proc(self.root, load1=0.1)
+        state = M.read_host_state(cpu_list="0-3", sysfs_root=sysfs, proc_root=proc)
+        policy = M.HostStatePolicy(nominal_khz=3500000, require_frequency=False)
+        for under_load in (True, False):
+            klass, check = policy.frequency_verdict(state, under_load=under_load)
+            self.assertEqual(klass, M.FREQUENCY_UNEVALUABLE)
+            self.assertEqual(check.outcome, schemas.COULD_NOT_CHECK)
+
+    def test_an_unreadable_clock_is_unevaluable_and_never_deferred(self):
+        state = M.read_host_state(cpu_list="0-3", sysfs_root=self.root / "absent",
+                                  proc_root=fake_proc(self.root, load1=0.1))
+        klass, _ = M.HostStatePolicy(nominal_khz=3500000).frequency_verdict(
+            state, under_load=False)
+        self.assertEqual(klass, M.FREQUENCY_UNEVALUABLE)
+
+    def test_check_frequency_judges_by_default(self):
+        """`check_frequency` is the Check half of `frequency_verdict`, judging."""
+        sysfs = fake_sysfs(self.root, cpus=range(4), khz=3500000)
+        proc = fake_proc(self.root, load1=3.0)
+        state = M.read_host_state(cpu_list="0-3", sysfs_root=sysfs, proc_root=proc)
+        policy = M.HostStatePolicy(nominal_khz=3500000)
+        self.assertEqual(policy.check_frequency(state),
+                         policy.frequency_verdict(state, under_load=True)[1])
+
     def test_an_unreadable_frequency_is_not_a_passing_frequency(self):
         proc = fake_proc(self.root, load1=0.1)
         state = M.read_host_state(cpu_list="0-3", sysfs_root=self.root / "absent",
@@ -1069,7 +1140,24 @@ class TestRunnerRefusesRatherThanEmitting(unittest.TestCase):
         with self.assertRaises(M.RunRefused):
             run.paired_blocks()
 
-    def test_a_throttled_host_refuses_before_spawning(self):
+    def test_a_throttled_host_emits_no_number_and_costs_at_most_one_block(self):
+        """A throttled host is caught at the first block CLOSE, not at run open.
+
+        This test used to assert `spawner.calls == []` — a refusal before any
+        spawn at all. That is not achievable and asserting it was what made the
+        runner unusable: at run open the claimed footprint is idle by
+        construction, and **an idle EPYC is indistinguishable from a throttled
+        one by clock alone** (16 cores boosting idle vs 117 under load on this
+        host, 2026-08-04; idle cores park AT `cpuinfo_min_freq`). The old gate
+        therefore refused every healthy host too, in both configurations, and
+        `MicrobenchRunner` could not take a measurement on a good machine.
+
+        So the guard moved to the first reading that can discriminate — block
+        close, under the benchmark's own load — and what is preserved is the
+        property that actually matters: **no number is emitted.** What is spent
+        to learn it is one block, which is the honest price of a signal that
+        does not exist before the host is loaded.
+        """
         spawner = self._spawner()
         throttled = replace(healthy_state(),
                             khz_by_cpu=tuple((c, 1400000) for c in range(96)))
@@ -1077,8 +1165,58 @@ class TestRunnerRefusesRatherThanEmitting(unittest.TestCase):
             claim=StubClaim(), spawner=spawner, policy=HEALTHY_POLICY,
             host_state=HostStateStub([throttled]))
         run = runner.run(make_plan(self.binding, blocks=2))
-        self.assertEqual(spawner.calls, [])
-        self.assertTrue(any("frequency" in r for r in run.refusals))
+        self.assertFalse(run.complete)
+        self.assertTrue(any("frequency" in r for r in run.refusals), run.refusals)
+        with self.assertRaises(M.RunRefused):
+            run.paired_blocks()
+        # Exactly one block was spent: the run stops at the first block that
+        # refuses rather than grinding through the declared count.
+        self.assertEqual(len(run.blocks), 1)
+        self.assertEqual(len(spawner.calls), 2)
+
+    def test_an_idle_host_at_run_open_is_deferred_not_refused(self):
+        """The compliant-path control for the deferral: a healthy host RUNS.
+
+        The paired opposite of the test above. `healthy_state()` is quiet — that
+        is what a host looks like at run open — and the run must proceed to
+        completion rather than aborting on a clock reading that only means the
+        cores had nothing to do yet.
+        """
+        spawner = self._spawner()
+        runner = M.MicrobenchRunner(
+            claim=StubClaim(), spawner=spawner, policy=HEALTHY_POLICY,
+            host_state=HostStateStub([healthy_state()]))
+        run = runner.run(make_plan(self.binding, blocks=2))
+        self.assertTrue(run.complete, run.refusals)
+        open_checks = [c for name, c in run.checks if name == "host_frequency_open"]
+        self.assertEqual([c.outcome for c in open_checks], [schemas.COULD_NOT_CHECK])
+        self.assertTrue(any("not under load" in r for r in open_checks[0].reasons))
+
+    def test_a_run_that_never_judges_the_frequency_emits_no_number(self):
+        """The control ON the deferral: deferring everywhere must not fail open.
+
+        Deferring the idle readings is only sound because the run goes on to
+        load the host itself. A runner that reported `under_load=False` at every
+        reading would never exercise the throttle guard at all — and this host
+        has sat at -60% for days undetected. So a run with blocks but no JUDGED
+        reading emits nothing, however green everything else looks.
+        """
+        spawner = self._spawner()
+
+        class NeverJudges(M.HostStatePolicy):
+            def frequency_verdict(self, state, *, under_load=True):
+                return super().frequency_verdict(state, under_load=False)
+
+        runner = M.MicrobenchRunner(
+            claim=StubClaim(), spawner=spawner,
+            policy=NeverJudges(nominal_khz=3500000),
+            host_state=HostStateStub([healthy_state()]))
+        run = runner.run(make_plan(self.binding, blocks=2))
+        self.assertFalse(run.complete)
+        self.assertTrue(any("never judged under load" in r for r in run.refusals),
+                        run.refusals)
+        with self.assertRaises(M.RunRefused):
+            run.paired_blocks()
 
     def test_a_throttle_that_develops_mid_run_voids_the_block_it_developed_in(self):
         spawner = self._spawner()

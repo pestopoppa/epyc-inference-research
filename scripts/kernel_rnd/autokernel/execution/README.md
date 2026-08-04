@@ -22,9 +22,36 @@ decides whether today is a campaign or a plumbing session.
 | `microbench.py` | Runs the T1 paired-block `llama-bench` design under the claim | never spawned a bench |
 | `control_runner.py` | Scores the five controls through the same dispatcher a candidate uses | fixtures only |
 | `chain.py` | The **seams** between the above and the evaluator that reads them, plus the four T0 evidence projections (build, symbols, diff, change surface) | projection only; reads ELF/diff/log text it is handed, spawns nothing |
+| `../campaign.py` | **The entrypoint.** Composes everything above into one loop and gives it a `main()` | dry-run composition yes; no candidate built, no bench spawned |
 
 The evaluator, journal, storage, controller, release plane and operator surface
 were built and green before any of this existed. They are not the risk.
+
+**Read `../campaign.py` before working through §2 by hand.** Until 2026-08-04 this
+package had NO entrypoint at all — `grep -rln '__main__|argparse|def main('` over
+every non-test module returned nothing — and that, not a missing gate, is why it
+had produced no results. §2 below is now a driver rather than a procedure:
+
+```bash
+# from /mnt/raid0/llm/epyc-inference-research — composes every step, executes NOTHING
+python3 -m scripts.kernel_rnd.autokernel.campaign --model /path/to/model.gguf
+```
+
+Dry run is the **default**; `--execute` additionally requires `--i-hold-the-host`
+AND an ops object with no unimplemented seams (refused at argv time, before the
+claim — see `HostOps.unimplemented_seams`).
+
+The driver's accept rule is `min(delta) > 0` over N pre-committed paired blocks
+AND `median(relative) >` the drift bound measured in
+[`data/autokernel_aa_20260804/`](../../../../data/autokernel_aa_20260804/README.md)
+— not an e-process; §6.8's arithmetic and the A/A's 1.6–1.9 % CV are why. Because
+N is pre-committed and there is no extension round, **§6.5's re-run-until-it-crosses
+hole has nothing to re-run under this driver.**
+
+`OrderSchedule` is a per-block coin flip on the campaign seed, **not** an
+alternation: five blocks land all one way once in sixteen runs, and such a run
+is a sequential A/B. The driver refuses that draw twice — from the plan, before
+the blocks are spent, and again in `decide()` from the recorded orders.
 
 ---
 

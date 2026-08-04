@@ -100,6 +100,18 @@ PYTEST_SMOKE += scripts/kernel_rnd/autokernel/execution/test_worktree.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/execution/test_t0_provider.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/execution/test_microbench.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/execution/test_control_runner.py
+# The DRIVER — `campaign.py`, the entrypoint this package spent 100k lines not
+# having. These four guard the things a reader and an operator actually touch:
+# the loop order and accept rule (`test_campaign`), the import boundary that
+# makes deleting the deferred half a one-line decision
+# (`test_campaign_footprint`), the research programme's prose against the code
+# that runs (`test_program_md`), and the README's one command — driven, with
+# every spawn primitive booby-trapped, so "dry run executes nothing" is an
+# assertion rather than a promise (`test_readme`).
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_campaign.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_campaign_footprint.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_program_md.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_readme.py
 
 help:
 	@printf '%s\n' 'Targets: setup lint test health docs docs-check analysis analysis-check security-check evidence-check autopilot-gate'

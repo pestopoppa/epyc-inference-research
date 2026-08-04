@@ -49,6 +49,7 @@ from . import (
     composition,
     context,
     critic,
+    do_not_repeat,
     fingerprint,
     guards,
     hypotheses,
@@ -58,13 +59,13 @@ from . import (
     state_machine,
 )
 
-#: All ten, not the three that happened to exist when this file was written. The
-#: six modules built in parallel each landed after it and none re-exported itself,
-#: so `import autokernel.controller` bound a package that could not reach most of
-#: its own plane. Importing them here is also what makes the cross-module
+#: All eleven, not the three that happened to exist when this file was written.
+#: The six modules built in parallel each landed after it and none re-exported
+#: itself, so `import autokernel.controller` bound a package that could not reach
+#: most of its own plane. Importing them here is also what makes the cross-module
 #: agreements (`oracles`, `fingerprint`, the shared closure vocabulary) resolve at
 #: package import rather than at whichever consumer happened to be imported first.
 __all__ = [
-    "composition", "context", "critic", "fingerprint", "guards", "hypotheses",
-    "oracles", "planner", "selection", "state_machine",
+    "composition", "context", "critic", "do_not_repeat", "fingerprint", "guards",
+    "hypotheses", "oracles", "planner", "selection", "state_machine",
 ]

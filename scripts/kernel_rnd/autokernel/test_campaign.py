@@ -1,0 +1,1801 @@
+#!/usr/bin/env python3
+"""test_campaign.py — the driver's guarantees, as tests that BITE.
+
+Every test below either (a) fails if a specific defect is reintroduced, with a
+compliant-path control beside it so the guard cannot pass by forbidding its own
+idiom, or (b) pins a property the loop's correctness rests on.
+
+NOTHING HERE TOUCHES THE HOST. No process is spawned, no claim is acquired, no
+worktree is created, no file outside a `tempfile` tree is written, and no
+benchmark is run. The whole suite is `DryRunOps`, a recording spy, and
+arithmetic over the recorded A/A numbers.
+
+The five things it proves, in the order they matter:
+
+  1. The dry-run composition walks every step end to end, on a busy host, and
+     emits NO speed number.
+  2. Every failure path — at every stage — releases the claim and tears down
+     the worktree, in that order, and still proves production untouched.
+  3. A failed T0 computes no speed number AT ALL: `run_paired_blocks` is never
+     called, and `decide()` refuses to be called.
+  4. The accept rule accepts a real win and rejects a null, where the null is
+     built from the MEASURED A/A drift rather than from an imagined one.
+  5. The import boundary is real, and it is enforced against this file's AST
+     rather than described in a comment.
+"""
+from __future__ import annotations
+
+import argparse
+import ast
+import contextlib
+import io
+import unittest
+from pathlib import Path
+from unittest import mock
+
+from . import campaign, schemas
+from .resource import claim_witness
+
+MODEL = "/mnt/raid0/llm/models/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf"
+
+
+def spec(**overrides) -> campaign.CampaignSpec:
+    kwargs = dict(campaign_id="ak-test", candidate_id="akc-test",
+                  candidate_ref="candidate.patch", model=MODEL)
+    kwargs.update(overrides)
+    return campaign.CampaignSpec(**kwargs)
+
+
+# =============================================================================
+# Fixtures built from the MEASURED A/A, not from an imagined noise model
+# =============================================================================
+
+def drifting(start: float, end: float, positions: int) -> tuple:
+    """`positions` readings on the straight line the A/A actually walked.
+
+    The A/A produced four whole-run readings; a run of five paired blocks makes
+    ten invocations. Interpolating the observed endpoints across those ten
+    positions is the honest way to put the MEASURED drift into a block-level
+    fixture — it reproduces the direction, the magnitude and the monotonicity,
+    which are the three properties that decided the design.
+    """
+    step = (end - start) / (positions - 1)
+    return tuple(start + i * step for i in range(positions))
+
+
+TG128_OVER_TEN_POSITIONS = drifting(campaign.AA_TG128_RUNS[0],
+                                    campaign.AA_TG128_RUNS[-1], 10)
+
+
+def pairs_from_positions(positions: tuple, *, candidate_factor: float = 1.0,
+                         orders: tuple = ()) -> tuple:
+    """Lay `positions` down as blocks of two, applying a true candidate effect.
+
+    `orders` says which arm ran FIRST in each block. That is the whole point of
+    the fixture: with `anchor_first` everywhere, the candidate always draws the
+    later — and by measurement, slower — slot, which is exactly the systematic
+    penalty a sequential A/B pays.
+    """
+    blocks = len(positions) // 2
+    orders = orders or ("anchor_first",) * blocks
+    out = []
+    for i in range(blocks):
+        first, second = positions[2 * i], positions[2 * i + 1]
+        if orders[i] == "anchor_first":
+            anchor, candidate = first, second * candidate_factor
+        else:
+            candidate, anchor = first * candidate_factor, second
+        out.append(campaign.Pair(block_index=i, anchor=anchor, candidate=candidate,
+                                 order=orders[i]))
+    return tuple(out)
+
+
+BALANCED = ("anchor_first", "candidate_first", "anchor_first", "candidate_first",
+            "anchor_first")
+
+PASSING_T0 = campaign.T0Outcome(all_pass=True, gates=(
+    ("t0.everything", schemas.PASS, ()),))
+FAILING_T0 = campaign.T0Outcome(all_pass=False, gates=(
+    ("t0.correctness.backend_op_units", schemas.FAIL,
+     ("MUL_MAT_ID produced a wrong result",)),))
+
+
+# =============================================================================
+# A recording spy for the loop's ORDER and its failure paths
+# =============================================================================
+
+class SpyOps:
+    """Records every call; fails whichever stage it was told to fail.
+
+    `executes=True` so the loop takes the branches an executing run takes —
+    which is what makes the T0 short-circuit testable at all.
+    """
+
+    executes = True
+
+    def __init__(self, *, fail_at: str = "", t0: campaign.T0Outcome = PASSING_T0,
+                 pairs=None, release_raises: bool = False,
+                 preflight_outcome: str = schemas.PASS) -> None:
+        self.calls: list = []
+        self.steps: tuple = ()
+        self._fail_at = fail_at
+        self._t0 = t0
+        self._pairs = pairs
+        self._release_raises = release_raises
+        self._preflight_outcome = preflight_outcome
+
+    def _record(self, name: str):
+        self.calls.append(name)
+        if self._fail_at == name:
+            raise RuntimeError(f"induced failure at {name}")
+
+    def preflight(self, spec_):
+        self._record("preflight")
+        return schemas.Check(self._preflight_outcome, ("spy",))
+
+    def acquire_claim(self, spec_):
+        self._record("acquire_claim")
+        return "claim"
+
+    def release_claim(self, claim):
+        self.calls.append("release_claim")
+        if self._release_raises:
+            raise RuntimeError("the flock could not be released")
+        return "released"
+
+    def create_worktree(self, spec_):
+        self._record("create_worktree")
+        return "worktree"
+
+    def apply_candidate(self, spec_, tree):
+        self._record("apply_candidate")
+
+    def build(self, spec_, tree):
+        self._record("build")
+        return "build"
+
+    def run_t0(self, spec_, build):
+        self._record("run_t0")
+        return self._t0
+
+    def run_paired_blocks(self, spec_, build, claim):
+        self._record("run_paired_blocks")
+        return self._pairs
+
+    def teardown_worktree(self, spec_, tree):
+        self.calls.append("teardown_worktree")
+        return "torn down"
+
+    def keep_or_revert(self, spec_, tree, decision):
+        self.calls.append("keep_or_revert")
+
+    def prove_production_unchanged(self, spec_):
+        self.calls.append("prove_production_unchanged")
+        return schemas.Check(schemas.PASS, ("spy",))
+
+    def journal(self, spec_, payload):
+        self.calls.append("journal")
+        self.journaled = dict(payload)
+
+
+# =============================================================================
+# 1. The dry run composes, end to end, and emits no number
+# =============================================================================
+
+class TestTheDryRunComposesEndToEnd(unittest.TestCase):
+
+    def compose(self, **overrides):
+        out = io.StringIO()
+        ops = campaign.DryRunOps(out=out)
+        result = campaign.run_campaign(spec(**overrides), ops)
+        return result, ops, out.getvalue()
+
+    def test_every_step_of_the_loop_is_composed(self):
+        result, ops, _text = self.compose()
+        self.assertEqual(result.state, campaign.STATE_COMPOSED)
+        self.assertEqual(
+            ops.calls,
+            ["preflight", "acquire_claim", "create_worktree", "apply_candidate",
+             "build", "t0", "paired_blocks", "keep_or_revert", "teardown_worktree",
+             "release_claim", "prove_production_unchanged", "journal"])
+
+    def test_the_dry_run_emits_no_speed_number(self):
+        """A dry run that produces a number is a real run with a flag on it."""
+        result, _ops, text = self.compose()
+        self.assertEqual(result.pairs, ())
+        self.assertIsNone(result.decision)
+        self.assertIsNone(result.to_dict()["decision"])
+        self.assertNotIn("tokens per second", text)
+
+    def test_the_composed_argv_is_the_canonical_recipe(self):
+        """The argv is what drifted to 46% of canonical when nobody reviewed it."""
+        _result, _ops, text = self.compose()
+        self.assertIn("taskset -c 0-95 numactl --interleave=all", text)
+        self.assertIn("-t 96 -fa 1 -mmp 0", text)
+        for name in ("OMP_PROC_BIND", "OMP_PLACES", "OMP_WAIT_POLICY", "OMP_DYNAMIC",
+                     "GGML_IQK"):
+            self.assertIn(name, text)
+
+    def test_both_arms_differ_only_in_the_binary(self):
+        rendered = campaign.render_bench_commands(spec())
+        anchor, candidate = rendered["anchor"]["argv"], rendered["candidate"]["argv"]
+        self.assertEqual(len(anchor), len(candidate))
+        differing = [i for i, (a, c) in enumerate(zip(anchor, candidate)) if a != c]
+        self.assertEqual(len(differing), 1, f"arms differ at {differing}")
+        self.assertIn("llama-bench", anchor[differing[0]])
+
+    def test_the_ledger_released_everything(self):
+        result, _ops, _text = self.compose()
+        self.assertTrue(all(r.released for r in result.releases))
+        self.assertEqual([r.name for r in result.releases],
+                         ["campaign_worktree", "cpu_region_claim"])
+
+    def test_composition_and_execution_walk_the_same_steps(self):
+        """A second spelling of the loop is the defect chain.py warns about.
+
+        The composition pass and an executing pass must call the same ops in the
+        same order; the only licensed difference is the T0 short-circuit, which
+        a composition pass cannot take because it executed no T0.
+        """
+        _result, dry, _text = self.compose()
+        spy = SpyOps(pairs=pairs_from_positions(TG128_OVER_TEN_POSITIONS,
+                                                candidate_factor=1.08, orders=BALANCED))
+        campaign.run_campaign(spec(), spy)
+        rename = {"t0": "run_t0", "paired_blocks": "run_paired_blocks"}
+        self.assertEqual([rename.get(c, c) for c in dry.calls], spy.calls)
+
+
+# =============================================================================
+# 2. Dry run is the DEFAULT
+# =============================================================================
+
+class TestDryRunIsTheDefault(unittest.TestCase):
+
+    def test_the_parser_defaults_to_dry_run(self):
+        args = campaign.build_parser().parse_args(["--model", MODEL])
+        self.assertTrue(args.dry_run)
+
+    def test_execute_without_the_host_attestation_refuses(self):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code = campaign.main(["--model", MODEL, "--execute"], out=out)
+        self.assertEqual(code, 2)
+        self.assertIn("--i-hold-the-host", err.getvalue())
+
+    def test_execute_with_the_attestation_is_accepted_by_the_parser(self):
+        """The compliant-path control: the guard must not forbid its own idiom."""
+        args = campaign.build_parser().parse_args(
+            ["--model", MODEL, "--execute", "--i-hold-the-host"])
+        self.assertFalse(args.dry_run)
+        self.assertTrue(args.i_hold_the_host)
+
+    def test_main_runs_the_composition_and_exits_zero(self):
+        out = io.StringIO()
+        code = campaign.main(["--model", MODEL], out=out,
+                             ops=campaign.DryRunOps(out=out))
+        self.assertEqual(code, 0)
+        self.assertIn("dry_run_composed", out.getvalue())
+
+    def test_main_refuses_a_bad_spec_before_anything_starts(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            code = campaign.main(["--model", MODEL, "--campaign-id", "nope"],
+                                 out=io.StringIO())
+        self.assertEqual(code, 2)
+
+
+# =============================================================================
+# 3. Every failure path releases the claim and tears down the worktree
+# =============================================================================
+
+def _raising(exc, ops, name):
+    def stage(*_args, **_kwargs):
+        ops.calls.append(name)
+        raise exc
+    return stage
+
+
+class TestEveryFailurePathReleases(unittest.TestCase):
+
+    STAGES_AFTER_THE_CLAIM = ("create_worktree", "apply_candidate", "build", "run_t0",
+                              "run_paired_blocks")
+
+    def test_a_failure_at_any_stage_releases_the_claim(self):
+        for stage in self.STAGES_AFTER_THE_CLAIM:
+            with self.subTest(stage=stage):
+                ops = SpyOps(fail_at=stage)
+                result = campaign.run_campaign(spec(), ops)
+                self.assertEqual(result.state, campaign.STATE_ERROR)
+                self.assertIn("release_claim", ops.calls)
+                released = {r.name: r.released for r in result.releases}
+                self.assertTrue(released.get("cpu_region_claim"),
+                                f"{stage}: the claim was not released")
+
+    def test_a_failure_after_the_worktree_exists_tears_it_down(self):
+        for stage in ("apply_candidate", "build", "run_t0", "run_paired_blocks"):
+            with self.subTest(stage=stage):
+                ops = SpyOps(fail_at=stage)
+                campaign.run_campaign(spec(), ops)
+                self.assertIn("teardown_worktree", ops.calls)
+                self.assertLess(ops.calls.index("teardown_worktree"),
+                                ops.calls.index("release_claim"),
+                                "the worktree must be torn down INSIDE the claim window")
+
+    def test_a_failure_before_the_claim_acquires_nothing_to_leak(self):
+        ops = SpyOps(fail_at="acquire_claim")
+        result = campaign.run_campaign(spec(), ops)
+        self.assertEqual(result.state, campaign.STATE_ERROR)
+        self.assertEqual(result.releases, ())
+        self.assertNotIn("release_claim", ops.calls)
+
+    def test_the_production_proof_runs_on_the_failing_path_too(self):
+        """The check that mattered must not be skipped by the failure that made it matter."""
+        for stage in self.STAGES_AFTER_THE_CLAIM:
+            with self.subTest(stage=stage):
+                ops = SpyOps(fail_at=stage)
+                result = campaign.run_campaign(spec(), ops)
+                self.assertIn("prove_production_unchanged", ops.calls)
+                self.assertIsNotNone(result.production_unchanged)
+
+    def test_a_refused_preflight_stops_before_the_claim(self):
+        ops = SpyOps(preflight_outcome=schemas.FAIL)
+        result = campaign.run_campaign(spec(), ops)
+        self.assertEqual(result.state, campaign.STATE_PREFLIGHT_REFUSED)
+        self.assertNotIn("acquire_claim", ops.calls)
+
+    def test_a_keyboard_interrupt_still_releases_the_claim(self):
+        """The realistic early exit: Ctrl-C an hour into a claim window.
+
+        `KeyboardInterrupt` is not an `Exception`, so a driver that caught only
+        `Exception` would leave the one interruption an operator actually
+        performs as the one path that leaks the claim.
+        """
+        ops = SpyOps()
+        ops.build = _raising(KeyboardInterrupt("operator pressed Ctrl-C"), ops, "build")
+        result = campaign.run_campaign(spec(), ops)
+        self.assertEqual(result.state, campaign.STATE_ERROR)
+        self.assertIn("release_claim", ops.calls)
+        self.assertTrue(all(r.released for r in result.releases))
+
+    def test_a_release_that_raises_is_recorded_not_swallowed(self):
+        ops = SpyOps(fail_at="build", release_raises=True)
+        result = campaign.run_campaign(spec(), ops)
+        released = {r.name: r.released for r in result.releases}
+        self.assertFalse(released["cpu_region_claim"])
+        self.assertFalse(result.ok, "a leaked claim must not report a clean campaign")
+        # ... and the OTHER release still ran.
+        self.assertTrue(released["campaign_worktree"])
+
+    def test_a_failing_production_proof_makes_the_campaign_not_ok(self):
+        ops = SpyOps(pairs=pairs_from_positions(TG128_OVER_TEN_POSITIONS,
+                                                candidate_factor=1.08, orders=BALANCED))
+        ops.prove_production_unchanged = lambda _s: schemas.Check(
+            schemas.FAIL, ("llama.cpp moved",))
+        result = campaign.run_campaign(spec(), ops)
+        self.assertFalse(result.ok)
+
+
+class TestTheResourceLedger(unittest.TestCase):
+
+    def test_it_releases_in_reverse_order(self):
+        seen: list = []
+        ledger = campaign.ResourceLedger()
+        ledger.hold("first", lambda: seen.append("first"))
+        ledger.hold("second", lambda: seen.append("second"))
+        ledger.release_all()
+        self.assertEqual(seen, ["second", "first"])
+
+    def test_it_is_idempotent(self):
+        seen: list = []
+        ledger = campaign.ResourceLedger()
+        ledger.hold("only", lambda: seen.append("only"))
+        first = ledger.release_all()
+        second = ledger.release_all()
+        self.assertEqual(seen, ["only"])
+        self.assertIs(first, second)
+
+    def test_a_failing_release_does_not_strand_the_rest(self):
+        seen: list = []
+
+        def boom():
+            raise OSError("flock is gone")
+
+        ledger = campaign.ResourceLedger()
+        ledger.hold("claim", lambda: seen.append("claim"))
+        ledger.hold("worktree", boom)
+        records = {r.name: r for r in ledger.release_all()}
+        self.assertEqual(seen, ["claim"], "the claim must still be released")
+        self.assertFalse(records["worktree"].released)
+        self.assertIn("flock is gone", records["worktree"].detail)
+
+    def test_registering_after_release_is_refused(self):
+        ledger = campaign.ResourceLedger()
+        ledger.release_all()
+        with self.assertRaises(RuntimeError):
+            ledger.hold("late", lambda: None)
+
+
+# =============================================================================
+# 4. A failed T0 computes no speed number AT ALL
+# =============================================================================
+
+class TestAFailedT0ComputesNoSpeedNumber(unittest.TestCase):
+
+    def test_the_blocks_are_never_run(self):
+        ops = SpyOps(t0=FAILING_T0)
+        result = campaign.run_campaign(spec(), ops)
+        self.assertEqual(result.state, campaign.STATE_T0_FAILED)
+        self.assertNotIn("run_paired_blocks", ops.calls,
+                         "a wrong kernel got as far as a benchmark")
+        self.assertEqual(result.pairs, ())
+        self.assertIsNone(result.decision)
+
+    def test_the_claim_is_still_released_and_production_still_proved(self):
+        ops = SpyOps(t0=FAILING_T0)
+        result = campaign.run_campaign(spec(), ops)
+        self.assertTrue(all(r.released for r in result.releases))
+        self.assertIn("prove_production_unchanged", ops.calls)
+
+    def test_the_rule_itself_refuses_to_rank_a_wrong_kernel(self):
+        """The second lock on the same door: ordering alone is a convention."""
+        pairs = pairs_from_positions(TG128_OVER_TEN_POSITIONS, candidate_factor=1.5,
+                                     orders=BALANCED)
+        with self.assertRaises(campaign.AcceptRuleMisuse):
+            campaign.decide(pairs, t0=FAILING_T0, blocks_precommitted=5,
+                            drift_bound=0.02)
+
+    def test_the_compliant_path_still_ranks(self):
+        pairs = pairs_from_positions(TG128_OVER_TEN_POSITIONS, candidate_factor=1.5,
+                                     orders=BALANCED)
+        decision = campaign.decide(pairs, t0=PASSING_T0, blocks_precommitted=5,
+                                   drift_bound=0.02)
+        self.assertTrue(decision.keep)
+
+    def test_an_ops_that_declares_itself_a_dry_run_still_cannot_rank_a_wrong_kernel(self):
+        """The T0 short-circuit is guarded by `ops.executes`, which is the ops
+        object's own word. An object that says `executes = False` and returns
+        real blocks anyway walks straight past the short-circuit — and is then
+        stopped by the rule itself, which is why the second lock exists.
+
+        The campaign ends in ERROR with NO decision and NO speed rank.
+        """
+        class Lying(SpyOps):
+            executes = False
+
+        ops = Lying(t0=FAILING_T0,
+                    pairs=pairs_from_positions(TG128_OVER_TEN_POSITIONS,
+                                               candidate_factor=1.5, orders=BALANCED))
+        result = campaign.run_campaign(spec(), ops)
+        self.assertEqual(result.state, campaign.STATE_ERROR)
+        self.assertIsNone(result.decision)
+        self.assertIn("AcceptRuleMisuse", result.error)
+        self.assertTrue(all(r.released for r in result.releases))
+
+
+# =============================================================================
+# 5. The accept rule, against the measured A/A
+# =============================================================================
+
+class TestTheAcceptRule(unittest.TestCase):
+
+    BOUND = campaign.DRIFT_BOUND_BY_METRIC["decode_tokens_per_s"]
+
+    def decide(self, pairs, **kw):
+        kwargs = dict(t0=PASSING_T0, blocks_precommitted=5, drift_bound=self.BOUND)
+        kwargs.update(kw)
+        return campaign.decide(pairs, **kwargs)
+
+    # -- the null ---------------------------------------------------------
+
+    def test_the_measured_AA_drift_alone_is_rejected(self):
+        """The null fixture is the A/A itself: identical code, real drift."""
+        pairs = pairs_from_positions(TG128_OVER_TEN_POSITIONS, candidate_factor=1.0,
+                                     orders=BALANCED)
+        decision = self.decide(pairs)
+        self.assertFalse(decision.keep)
+        self.assertIn("REVERT", decision.reason)
+
+    def test_a_sequential_design_would_have_charged_the_candidate_for_the_drift(self):
+        """Anchor-first EVERYWHERE: the candidate always draws the later, slower slot.
+
+        This is the measurement that made interleaving mandatory, expressed as a
+        test: with identical code, every pair reads against the candidate.
+        """
+        pairs = pairs_from_positions(TG128_OVER_TEN_POSITIONS, candidate_factor=1.0)
+        self.assertTrue(all(p.delta < 0 for p in pairs))
+        decision = self.decide(pairs)
+        self.assertFalse(decision.keep)
+        self.assertLess(decision.min_delta, 0)
+
+    def test_a_marginal_win_inside_the_measured_noise_is_rejected(self):
+        """+1.5% on a host whose own A/A spread is 4.3% is not resolvable."""
+        pairs = pairs_from_positions(TG128_OVER_TEN_POSITIONS, candidate_factor=1.015,
+                                     orders=BALANCED)
+        decision = self.decide(pairs)
+        self.assertFalse(decision.keep)
+        self.assertGreater(decision.min_delta, 0, "the sign test alone would have passed it")
+        self.assertIn("drift bound", decision.reason)
+
+    def test_one_adverse_block_sinks_an_otherwise_positive_candidate(self):
+        pairs = list(pairs_from_positions(TG128_OVER_TEN_POSITIONS,
+                                          candidate_factor=1.08, orders=BALANCED))
+        good = pairs[2]
+        pairs[2] = campaign.Pair(block_index=good.block_index, anchor=good.anchor,
+                                 candidate=good.anchor * 0.999, order=good.order)
+        decision = self.decide(tuple(pairs))
+        self.assertFalse(decision.keep)
+        self.assertIn("did not favour", decision.reason)
+
+    # -- the win ----------------------------------------------------------
+
+    def test_a_real_win_is_accepted(self):
+        pairs = pairs_from_positions(TG128_OVER_TEN_POSITIONS, candidate_factor=1.08,
+                                     orders=BALANCED)
+        decision = self.decide(pairs)
+        self.assertTrue(decision.keep, decision.reason)
+        self.assertGreater(decision.min_delta, 0)
+        self.assertGreater(decision.median_relative, self.BOUND)
+        self.assertIn("KEEP", decision.reason)
+
+    def test_a_win_survives_the_drift_it_was_measured_through(self):
+        """Same true effect, under the worst ADMISSIBLE order draw: 4-1.
+
+        The interleaving does not remove the drift, it bounds it to one step;
+        a real effect must therefore still clear the bound under the most
+        lopsided draw the order control still admits, and this is that
+        assertion. (5-0 is a different thing — a sequential A/B — and is
+        refused outright by `TestTheOrderDrawMustNotBeDegenerate`.)
+        """
+        lopsided = ("anchor_first",) * 4 + ("candidate_first",)
+        pairs = pairs_from_positions(TG128_OVER_TEN_POSITIONS, candidate_factor=1.08,
+                                     orders=lopsided)
+        decision = self.decide(pairs)
+        self.assertTrue(decision.keep, decision.reason)
+
+    # -- the neutral control ----------------------------------------------
+
+    def test_a_run_whose_anchor_arm_moved_is_inadmissible(self):
+        """THE BITE. Interleaving hides drift; it does not detect it.
+
+        The candidate here is a genuine +8%, so both accept conjuncts pass —
+        and the run is still refused, because the anchor arm (identical code)
+        slid further across the run than an A/A of identical code ever did.
+        Without this, "this kernel is faster" and "this kernel ran first" are
+        the same record.
+        """
+        collapsing = drifting(52.76, 39.14, 10)   # the retracted E/F magnitude
+        pairs = pairs_from_positions(collapsing, candidate_factor=1.08, orders=BALANCED)
+        decision = self.decide(pairs)
+        self.assertFalse(decision.keep)
+        self.assertIn("inadmissible", decision.reason)
+        self.assertGreater(decision.anchor_drift, self.BOUND)
+        # ... and it was NOT refused for lack of a candidate effect.
+        self.assertGreater(decision.min_delta, 0)
+        self.assertGreater(decision.median_relative, self.BOUND)
+
+    def test_a_stable_run_is_admissible(self):
+        """Compliant-path control: the measured A/A drift itself is within bound."""
+        pairs = pairs_from_positions(TG128_OVER_TEN_POSITIONS, candidate_factor=1.08,
+                                     orders=BALANCED)
+        decision = self.decide(pairs)
+        self.assertLessEqual(decision.anchor_drift, self.BOUND)
+        self.assertTrue(decision.keep, decision.reason)
+
+    def test_the_control_reads_the_anchor_arm_the_run_already_produced(self):
+        pairs = pairs_from_positions(TG128_OVER_TEN_POSITIONS, candidate_factor=1.08,
+                                     orders=BALANCED)
+        self.assertEqual(campaign.anchor_drift(pairs),
+                         max(abs(s) for s in campaign.adjacent_relative_steps(
+                             [p.anchor for p in pairs])))
+
+    def test_the_control_is_evaluated_in_block_order_not_argument_order(self):
+        """A shuffled sequence must not be able to flatten the drift it contains."""
+        pairs = pairs_from_positions(drifting(52.76, 39.14, 10), candidate_factor=1.08,
+                                     orders=BALANCED)
+        shuffled = (pairs[2], pairs[0], pairs[4], pairs[1], pairs[3])
+        self.assertAlmostEqual(campaign.anchor_drift(shuffled),
+                               campaign.anchor_drift(pairs))
+        self.assertFalse(self.decide(shuffled).keep)
+
+    # -- no optional stopping ---------------------------------------------
+
+    def test_more_blocks_than_precommitted_are_refused(self):
+        """§6.5's re-run-until-it-crosses hole has nothing to re-run."""
+        pairs = pairs_from_positions(drifting(52.76, 50.52, 12), candidate_factor=1.08)
+        self.assertEqual(len(pairs), 6)
+        with self.assertRaises(campaign.AcceptRuleMisuse) as raised:
+            self.decide(pairs)
+        self.assertIn("optional stopping", str(raised.exception))
+
+    def test_fewer_blocks_than_precommitted_are_refused(self):
+        pairs = pairs_from_positions(drifting(52.76, 50.52, 8), candidate_factor=1.08)
+        with self.assertRaises(campaign.AcceptRuleMisuse):
+            self.decide(pairs)
+
+    def test_exactly_the_precommitted_count_is_accepted(self):
+        """Compliant-path control for the two refusals above."""
+        pairs = pairs_from_positions(TG128_OVER_TEN_POSITIONS, candidate_factor=1.08,
+                                     orders=BALANCED)
+        self.assertEqual(len(pairs), 5)
+        self.assertTrue(self.decide(pairs).keep)
+
+    # -- the record --------------------------------------------------------
+
+    def test_the_decision_publishes_every_number_it_read(self):
+        pairs = pairs_from_positions(TG128_OVER_TEN_POSITIONS, candidate_factor=1.08,
+                                     orders=BALANCED)
+        payload = self.decide(pairs).to_dict()
+        for key in ("keep", "reason", "blocks", "min_delta", "median_relative",
+                    "drift_bound", "deltas", "relatives"):
+            self.assertIn(key, payload)
+        self.assertEqual(len(payload["deltas"]), 5)
+
+    def test_a_zero_or_negative_reading_is_not_a_measurement(self):
+        with self.assertRaises(ValueError):
+            campaign.Pair(block_index=0, anchor=0.0, candidate=1.0, order="anchor_first")
+
+    def test_a_block_must_name_an_order_the_planner_can_derive(self):
+        with self.assertRaises(ValueError):
+            campaign.Pair(block_index=0, anchor=1.0, candidate=1.0, order="whatever")
+
+
+class TestTheDriftBoundIsDerivedFromTheMeasurement(unittest.TestCase):
+
+    def test_it_is_the_largest_adjacent_step_in_the_recorded_series(self):
+        steps = campaign.adjacent_relative_steps(campaign.AA_TG128_RUNS)
+        self.assertEqual(len(steps), 3)
+        self.assertAlmostEqual(campaign.drift_bound_from(campaign.AA_TG128_RUNS),
+                               max(abs(s) for s in steps))
+
+    def test_the_recorded_series_are_the_ones_that_were_measured(self):
+        """If the A/A is re-run, these change and the rule changes with them."""
+        self.assertEqual(campaign.AA_PP512_RUNS, (899.95, 894.70, 867.16, 886.16))
+        self.assertEqual(campaign.AA_TG128_RUNS, (52.76, 52.31, 51.62, 50.52))
+
+    def test_decode_declined_monotonically(self):
+        """The fact that made interleaved paired blocks mandatory."""
+        runs = campaign.AA_TG128_RUNS
+        self.assertTrue(all(runs[i + 1] < runs[i] for i in range(len(runs) - 1)))
+
+    def test_the_bounds_bracket_the_measured_values(self):
+        self.assertAlmostEqual(campaign.DRIFT_BOUND_BY_METRIC["prefill_tokens_per_s"],
+                               0.03077, places=4)
+        self.assertAlmostEqual(campaign.DRIFT_BOUND_BY_METRIC["decode_tokens_per_s"],
+                               0.02131, places=4)
+
+    def test_an_unmeasured_cell_gets_the_most_conservative_bound(self):
+        self.assertEqual(campaign.drift_bound_for_metric("op_throughput_gflops"),
+                         max(campaign.DRIFT_BOUND_BY_METRIC.values()))
+
+    def test_a_single_observation_cannot_produce_a_bound(self):
+        with self.assertRaises(ValueError):
+            campaign.drift_bound_from((52.76,))
+
+
+# =============================================================================
+# 6. The idle-frequency trap
+# =============================================================================
+
+class TestTheBoostCheckIsOnlyEvaluatedUnderLoad(unittest.TestCase):
+    """Bite, control, and the guard still biting — all three, on real readings.
+
+    The numbers are this host's, measured 2026-08-04: 16 cores above 2.5 GHz at
+    idle, 117 under load, 35 while another session's stack was coming up.
+    """
+
+    def test_an_idle_healthy_host_is_not_a_failure(self):
+        """THE BITE. The check as written aborts a campaign on a good machine."""
+        check = campaign.check_boost_under_load(boosting_cores=16, load1=3.3,
+                                                cpu_count=96)
+        self.assertEqual(check.outcome, schemas.COULD_NOT_CHECK)
+        self.assertIn("IDLE", " ".join(check.reasons))
+
+    def test_it_is_not_a_pass_either(self):
+        """COULD_NOT_CHECK is a third outcome. An unread throttle check is not clean."""
+        check = campaign.check_boost_under_load(boosting_cores=16, load1=3.3,
+                                                cpu_count=96)
+        self.assertNotEqual(check.outcome, schemas.PASS)
+
+    def test_a_healthy_loaded_host_passes(self):
+        """THE COMPLIANT-PATH CONTROL: 117 boosting under our own bench.
+
+        `-t 96` on the 96 claimed cores drives load to roughly 1.0/core, which
+        is where the boost count means what the recipe says it means.
+        """
+        check = campaign.check_boost_under_load(boosting_cores=117, load1=96.0,
+                                                cpu_count=96)
+        self.assertEqual(check.outcome, schemas.PASS)
+
+    def test_a_throttled_loaded_host_still_FAILS(self):
+        """The guard must still bite, or fixing it is deleting it.
+
+        `feedback_host_throttle_check`: this host sat at roughly 40% of its
+        normal clock for days, undetected. Under our own bench that reads as a
+        collapsed boost count, and it must FAIL rather than annotate.
+        """
+        check = campaign.check_boost_under_load(boosting_cores=35, load1=96.0,
+                                                cpu_count=96)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("poisoned", " ".join(check.reasons))
+
+    def test_a_co_tenant_stack_coming_up_is_not_a_verdict_on_our_clock(self):
+        """The reading that voided A/A runs E and F: load 23.9, 35 boosting.
+
+        That was another session's seven `llama-server` instances, not our
+        bench. It is neither a healthy host nor a throttled one, and the check
+        must decline to rule rather than blame the CPU for a co-tenant.
+        """
+        check = campaign.check_boost_under_load(boosting_cores=35, load1=23.9,
+                                                cpu_count=96)
+        self.assertEqual(check.outcome, schemas.COULD_NOT_CHECK)
+
+    def test_the_load_floor_is_the_packages_own_contention_ceiling(self):
+        """Derived, not chosen: the same number microbench refuses to start above."""
+        from .execution import microbench
+        self.assertEqual(campaign.LOADED_ENOUGH_TO_JUDGE_BOOST,
+                         microbench.HostStatePolicy().max_load_per_core)
+
+    def test_an_unreadable_load_is_could_not_check(self):
+        check = campaign.check_boost_under_load(boosting_cores=117, load1=None,
+                                                cpu_count=96)
+        self.assertEqual(check.outcome, schemas.COULD_NOT_CHECK)
+
+    def test_the_threshold_is_exactly_the_canonical_one(self):
+        self.assertEqual(campaign.BOOST_THRESHOLD_KHZ, 2_500_000)
+        self.assertEqual(campaign.BOOST_MIN_CORES, 80)
+        at_threshold = campaign.check_boost_under_load(boosting_cores=80, load1=96.0,
+                                                       cpu_count=96)
+        below = campaign.check_boost_under_load(boosting_cores=79, load1=96.0,
+                                                cpu_count=96)
+        self.assertEqual(at_threshold.outcome, schemas.PASS)
+        self.assertEqual(below.outcome, schemas.FAIL)
+
+
+# =============================================================================
+# 7. The MoE-dispatch hole
+# =============================================================================
+
+class TestTheOpSuiteMustCoverMoEDispatch(unittest.TestCase):
+
+    def test_a_suite_without_MUL_MAT_ID_is_refused(self):
+        """THE BITE. The predecessor harness tested MUL_MAT only."""
+        with self.assertRaises(ValueError) as raised:
+            campaign.require_op_suite_covers_moe_dispatch(("MUL_MAT",))
+        self.assertIn("MUL_MAT_ID", str(raised.exception))
+
+    def test_a_suite_with_it_is_accepted(self):
+        """Compliant-path control."""
+        self.assertEqual(
+            campaign.require_op_suite_covers_moe_dispatch(("MUL_MAT", "MUL_MAT_ID")),
+            ("MUL_MAT", "MUL_MAT_ID"))
+
+    def test_the_campaign_spec_cannot_be_built_without_it(self):
+        with self.assertRaises(ValueError):
+            spec(t0_ops=("MUL_MAT",))
+
+    def test_the_default_spec_covers_it(self):
+        self.assertIn(campaign.MOE_DISPATCH_OP, spec().t0_ops)
+
+    def test_an_empty_suite_is_refused(self):
+        with self.assertRaises(ValueError):
+            campaign.require_op_suite_covers_moe_dispatch(())
+
+
+# =============================================================================
+# 8. The spec is a PRE-COMMITMENT
+# =============================================================================
+
+class TestTheSpecIsAPreCommitment(unittest.TestCase):
+
+    def test_it_is_frozen(self):
+        with self.assertRaises(Exception):
+            spec().blocks = 9
+
+    def test_a_claim_id_namespace_cannot_be_used_for_a_candidate(self):
+        with self.assertRaises(ValueError):
+            spec(candidate_id="akclaim-0001")
+
+    def test_the_cpu_list_is_derived_from_the_argv_that_pins_it(self):
+        """Never retyped: production drifted off interleave on a 1.7% warm A/B."""
+        from .evaluator import recipes
+        prefix = list(recipes.CANONICAL_PREFIX)
+        built = spec()
+        self.assertEqual(built.cpu_list, prefix[prefix.index("-c") + 1])
+        self.assertIn(f"-c {built.cpu_list}",
+                      " ".join(campaign.render_bench_commands(built)["candidate"]["argv"]))
+
+    def test_the_gpu_cell_claims_the_cores_it_actually_pins(self):
+        """THE BITE. The GPU cell pins 184-191, not the canonical 0-95.
+
+        Claiming the canonical prefix here would leave every measured core
+        unprotected while looking, in every journal field, exactly like a
+        claimed run — and `MicrobenchRunner._attest_claim` would refuse it an
+        hour into the claim window, after the build.
+        """
+        from .evaluator import recipes
+        gpu = spec(backend="llama_gpu", devices=("ROCm0",),
+                   device_names=("AMD Instinct MI210",))
+        canonical = list(recipes.CANONICAL_PREFIX)
+        self.assertNotEqual(gpu.cpu_list, canonical[canonical.index("-c") + 1])
+        self.assertIn(f"-c {gpu.cpu_list}",
+                      " ".join(campaign.render_bench_commands(gpu)["candidate"]["argv"]))
+
+    def test_both_arms_pin_the_same_footprint(self):
+        for built in (spec(), spec(backend="llama_gpu", devices=("ROCm0",),
+                                   device_names=("AMD Instinct MI210",))):
+            with self.subTest(backend=built.backend):
+                rendered = campaign.render_bench_commands(built)
+                self.assertEqual(rendered["anchor"]["cpu_list"],
+                                 rendered["candidate"]["cpu_list"])
+
+    def test_a_gpu_campaign_must_name_a_device(self):
+        with self.assertRaises(ValueError):
+            spec(backend="llama_gpu")
+
+    def test_a_gpu_cell_is_not_satisfied_by_a_cpu_device_name(self):
+        """THE BITE. 'Device 0: CPU' is what evaluator/devices.py exists to catch."""
+        with self.assertRaises(ValueError) as raised:
+            spec(backend="llama_gpu", devices=("ROCm0",),
+                 device_names=("Device 0: CPU",))
+        self.assertIn("GPU lane", str(raised.exception))
+
+    def test_an_unrecognised_device_name_is_also_refused(self):
+        """COULD_NOT_CHECK establishes neither lane, so it is not a pass either."""
+        with self.assertRaises(ValueError):
+            spec(backend="llama_gpu", devices=("ROCm0",), device_names=("thing-0",))
+
+    def test_a_gpu_campaign_with_a_gpu_device_is_accepted(self):
+        """Compliant-path control for the device-vocabulary guard."""
+        built = spec(backend="llama_gpu", devices=("ROCm0",),
+                     device_names=("AMD Instinct MI210",))
+        self.assertEqual(built.devices, ("ROCm0",))
+        self.assertEqual(built.bench_params["device_id"], "ROCm0")
+
+    def test_a_scratch_journal_root_is_refused(self):
+        """The 2026-07-04 win was written to /mnt/raid0/llm/tmp/ and is gone."""
+        with self.assertRaises(Exception):
+            spec(journal_root="/mnt/raid0/llm/tmp/ak-journal")
+
+    def test_n_of_one_is_refused(self):
+        with self.assertRaises(ValueError):
+            spec(blocks=1)
+
+    def test_the_drift_bound_follows_the_cell(self):
+        decode = spec()
+        prefill = spec(recipe_id="t1b.llama_cpu.llama_bench_prefill.v1")
+        self.assertNotEqual(decode.drift_bound, prefill.drift_bound)
+        self.assertEqual(decode.drift_bound,
+                         campaign.DRIFT_BOUND_BY_METRIC["decode_tokens_per_s"])
+
+    def test_a_missing_required_recipe_parameter_is_refused_before_the_claim(self):
+        with self.assertRaises(Exception):
+            spec(model=None)
+
+
+# =============================================================================
+# 7b. The exit code, and the second Ctrl-C
+# =============================================================================
+
+class TestAnUnprovenProductionTreeIsNotASuccess(unittest.TestCase):
+    """`_finish` turns a proof that RAISED into COULD_NOT_CHECK and says, in its
+    own reason, that this "outranks everything else in this run" — and the run
+    then exited 0 anyway, because `ok` only rejected an outright FAIL.
+
+    COULD_NOT_CHECK is exactly what a proof reaches when the thing it inspects
+    has been disturbed. Treating it as clean is the fail-open shape.
+    """
+
+    class Ops(SpyOps):
+        def __init__(self, *, proof, **kw):
+            super().__init__(**kw)
+            self._proof = proof
+
+        def prove_production_unchanged(self, spec_):
+            self.calls.append("prove_production_unchanged")
+            if isinstance(self._proof, BaseException):
+                raise self._proof
+            return self._proof
+
+    def campaign_run(self, proof, **kw):
+        ops = self.Ops(proof=proof, pairs=pairs_from_positions(
+            TG128_OVER_TEN_POSITIONS, candidate_factor=1.08, orders=BALANCED), **kw)
+        return campaign.run_campaign(spec(), ops)
+
+    def test_a_proof_that_raised_is_not_a_clean_run(self):
+        """THE BITE: this returned ok=True, and `main` exited 0."""
+        result = self.campaign_run(RuntimeError("git rev-parse died"))
+        self.assertEqual(result.production_unchanged.outcome, schemas.COULD_NOT_CHECK)
+        self.assertFalse(result.ok)
+
+    def test_an_unfingerprinted_tree_is_not_a_clean_run(self):
+        result = self.campaign_run(schemas.Check(schemas.COULD_NOT_CHECK, ("no fingerprint",)))
+        self.assertFalse(result.ok)
+
+    def test_the_compliant_path_is_still_a_success(self):
+        """CONTROL: a PASS on an executing run is ok, KEEP or REVERT alike."""
+        result = self.campaign_run(schemas.Check(schemas.PASS, ("byte-identical",)))
+        self.assertTrue(result.ok)
+        self.assertTrue(result.executed)
+
+    def test_a_dry_run_is_exempt_because_it_fingerprinted_nothing(self):
+        """CONTROL, and the one that stops this becoming 'always FAIL': a
+        composition pass reads nothing from the frozen trees and claims
+        nothing about them, so its COULD_NOT_CHECK is honest and clean."""
+        out = io.StringIO()
+        result = campaign.run_campaign(spec(), campaign.DryRunOps(out=out))
+        self.assertFalse(result.executed)
+        self.assertEqual(result.production_unchanged.outcome, schemas.COULD_NOT_CHECK)
+        self.assertTrue(result.ok)
+
+    def test_the_record_says_which_kind_of_run_it_was(self):
+        self.assertTrue(self.campaign_run(schemas.Check(schemas.PASS, ()))
+                        .to_dict()["executed"])
+
+
+class TestAResultThatCouldNotBeWrittenDownIsNotASuccess(unittest.TestCase):
+    """A journal failure printed a warning to stderr and the process exited 0.
+
+    A wrapper reading the status learned nothing, which is the shape of the
+    incident the journal exists for: AutoPilot lost 232 trials / ~16 days to a
+    loop that held its results in memory.
+    """
+
+    ROOT = "/mnt/raid0/llm/epyc-inference-research/data/ak-test-journal"
+
+    def _run(self, *, journal_root, raises):
+        ops = SpyOps(pairs=pairs_from_positions(TG128_OVER_TEN_POSITIONS,
+                                                candidate_factor=1.08, orders=BALANCED))
+        if raises:
+            def explode(spec_, payload):
+                ops.calls.append("journal")
+                raise OSError("read-only file system")
+            ops.journal = explode
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            return campaign.run_campaign(spec(journal_root=journal_root), ops)
+
+    def test_a_journal_that_failed_makes_the_campaign_not_ok(self):
+        """THE BITE."""
+        result = self._run(journal_root=self.ROOT, raises=True)
+        self.assertIsNotNone(result.journal_error)
+        self.assertFalse(result.ok)
+        self.assertEqual(result.to_dict()["journal_error"][:7], "OSError")
+
+    def test_the_result_is_still_returned(self):
+        """The failure must not HIDE the result — only the exit code changes."""
+        result = self._run(journal_root=self.ROOT, raises=True)
+        self.assertEqual(result.state, campaign.STATE_DECIDED)
+        self.assertIsNotNone(result.decision)
+
+    def test_a_campaign_that_asked_for_no_journal_is_unaffected(self):
+        """CONTROL: `--journal-root` is optional and its absence is not a failure."""
+        result = self._run(journal_root=None, raises=True)
+        self.assertIsNotNone(result.journal_error)
+        self.assertTrue(result.ok)
+
+    def test_the_compliant_path_journals_and_is_ok(self):
+        """CONTROL."""
+        result = self._run(journal_root=self.ROOT, raises=False)
+        self.assertIsNone(result.journal_error)
+        self.assertTrue(result.ok)
+
+
+class TestASecondInterruptDoesNotStrandTheRest(unittest.TestCase):
+    """`run_campaign` catches `BaseException` because Ctrl-C is the realistic
+    early exit. The releases themselves caught only `Exception`, so the SECOND
+    Ctrl-C — the one during teardown — stranded every release after the one it
+    landed on, the claim among them.
+    """
+
+    def test_an_interrupt_in_one_release_does_not_strand_the_others(self):
+        """THE BITE."""
+        ledger = campaign.ResourceLedger()
+        released = []
+        ledger.hold("claim", lambda: released.append("claim"))
+        ledger.hold("worktree", _interrupting)
+        records = ledger.release_all()
+        self.assertEqual(released, ["claim"])
+        self.assertEqual([r.name for r in records], ["worktree", "claim"])
+        self.assertEqual([r.released for r in records], [False, True])
+
+    def test_an_interrupt_in_keep_or_revert_still_releases_the_claim(self):
+        """THE BITE, one layer up: `keep_or_revert` runs BEFORE the releases."""
+        ops = SpyOps(pairs=pairs_from_positions(TG128_OVER_TEN_POSITIONS,
+                                                candidate_factor=1.08, orders=BALANCED))
+        ops.keep_or_revert = _interrupting
+        result = campaign.run_campaign(spec(), ops)
+        self.assertIn("release_claim", ops.calls)
+        self.assertTrue(all(r.released for r in result.releases))
+
+    def test_a_clean_release_is_still_recorded_as_one(self):
+        """CONTROL."""
+        ledger = campaign.ResourceLedger()
+        ledger.hold("claim", lambda: "released")
+        records = ledger.release_all()
+        self.assertEqual([r.released for r in records], [True])
+
+
+def _interrupting(*_args, **_kwargs):
+    raise KeyboardInterrupt()
+
+
+class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
+    """`HostOps` has never been run and four of its seams need a value the
+    campaign must supply. Each raises where it is REACHED — after the region
+    claim, after the worktree, after a forty-minute build — so the cost of
+    discovering it was the claim window. It is knowable at argv time.
+    """
+
+    ARGV = ["--model", MODEL, "--execute", "--i-hold-the-host"]
+
+    def test_the_stock_host_ops_is_refused_before_anything_is_acquired(self):
+        """THE BITE."""
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code = campaign.main(self.ARGV, out=io.StringIO(),
+                                 ops=campaign.HostOps())
+        self.assertEqual(code, 2)
+        for seam in ("apply_candidate", "_anchor_identity_for_bench", "t0_evidence",
+                     "nominal_khz"):
+            self.assertIn(seam, err.getvalue())
+
+    def test_an_override_clears_its_own_seam(self):
+        """Derived from what is bound, not from a flag someone has to flip."""
+        class Wired(campaign.HostOps):
+            def apply_candidate(self, spec_, tree):
+                return None
+
+            def _anchor_identity_for_bench(self, spec_):
+                return None
+
+        self.assertEqual(Wired(t0_evidence=lambda **kw: {}, nominal_khz=2_900_000)
+                         .unimplemented_seams(), ())
+        self.assertIn("apply_candidate", campaign.HostOps().unimplemented_seams())
+
+    def test_a_runnable_ops_is_not_refused(self):
+        """CONTROL: the guard must not forbid its own compliant path."""
+        ops = SpyOps(pairs=pairs_from_positions(TG128_OVER_TEN_POSITIONS,
+                                                candidate_factor=1.08, orders=BALANCED))
+        code = campaign.main(self.ARGV, out=io.StringIO(), ops=ops)
+        self.assertEqual(code, 0)
+        self.assertIn("run_paired_blocks", ops.calls)
+
+    def test_a_dry_run_is_never_refused_for_an_unwired_seam(self):
+        """CONTROL: composing the loop needs none of them."""
+        out = io.StringIO()
+        self.assertEqual(campaign.main(["--model", MODEL], out=out,
+                                       ops=campaign.DryRunOps(out=out)), 0)
+
+
+# =============================================================================
+# 8a. HostOps holds nothing it cannot release
+#
+# `HostOps` is the only class here that touches the host, and no line of it has
+# ever been run. These tests substitute the module-level functions it calls —
+# nothing is spawned, no lock is taken, no git command runs — and pin the one
+# property whose absence is a leaked claim on a shared machine.
+# =============================================================================
+
+class FakeClaim:
+    def __init__(self, name="region"):
+        self.name = name
+        self.released = 0
+
+    def release(self):
+        self.released += 1
+        return self
+
+    def to_dict(self):
+        return {"claim": self.name, "released": self.released}
+
+
+class TestTheClaimIsNeverHeldWithoutAReleaser(unittest.TestCase):
+    """The ledger registers the releaser only once `acquire_claim` RETURNS.
+
+    Everything after `acquire_cpu_region_claim` — the seam check, and every
+    device claim after the first — can raise, and until this was fixed the
+    region claim was then held by a process on its way out with no releaser
+    anywhere. "Released by the ledger" was true only on the happy path.
+    """
+
+    def setUp(self):
+        self.ops = campaign.HostOps()
+        self.spec = spec()
+        self.gpu_spec = spec(backend="llama_gpu", devices=("ROCm0", "ROCm1"),
+                             device_names=("AMD Instinct MI210", "AMD Instinct MI210"))
+        self.region = FakeClaim()
+        patches = [
+            mock.patch.object(campaign.cpu_region_claim, "RegionClaimJournal",
+                              lambda *a, **k: object()),
+            mock.patch.object(campaign.cpu_region_claim, "acquire_cpu_region_claim",
+                              lambda *a, **k: self.region),
+            mock.patch.object(campaign.chain, "bind_claim", lambda *a, **k: object()),
+        ]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def _seams(self, outcome):
+        return mock.patch.object(
+            campaign.chain, "check_claim_satisfies_both_seams",
+            lambda *a, **k: schemas.Check(outcome, ("fake",)))
+
+    def test_a_claim_that_fails_the_seam_check_is_released_here(self):
+        """THE BITE. The seam check raises AFTER the flock is held."""
+        with self._seams(schemas.FAIL):
+            with self.assertRaises(RuntimeError):
+                self.ops.acquire_claim(self.spec)
+        self.assertEqual(self.region.released, 1,
+                         "the region claim was acquired and never released")
+
+    def test_the_compliant_path_holds_the_claim_it_returns(self):
+        """CONTROL: a passing seam check must NOT release what it just took."""
+        with self._seams(schemas.PASS):
+            claim = self.ops.acquire_claim(self.spec)
+        self.assertIs(claim, self.region)
+        self.assertEqual(self.region.released, 0)
+
+    def test_a_device_claim_that_fails_releases_the_region_and_its_predecessor(self):
+        """THE BITE, GPU: two devices, the second raises."""
+        taken = []
+
+        def acquire(device_id, **kwargs):
+            if len(taken) == 1:
+                raise RuntimeError("someone else holds ROCm1")
+            claim = FakeClaim(device_id)
+            taken.append(claim)
+            return claim
+
+        with self._seams(schemas.PASS), \
+                mock.patch.object(campaign.device_claim, "acquire_device_claim", acquire):
+            with self.assertRaises(RuntimeError):
+                self.ops.acquire_claim(self.gpu_spec)
+        self.assertEqual([c.released for c in taken], [1])
+        self.assertEqual(self.region.released, 1)
+
+    def test_device_claims_are_released_with_the_region_claim(self):
+        """THE OTHER BITE: they were acquired and NEVER released at all.
+
+        Nothing held a reference to them, so the flocks survived until the
+        process died and the lock files went on naming a holder that no longer
+        existed — the next GPU campaign meets a stale-grace wait or
+        `DeviceClaimInconsistent`. A corpse holding the MI210.
+        """
+        taken = []
+
+        def acquire(device_id, **kwargs):
+            claim = FakeClaim(device_id)
+            taken.append(claim)
+            return claim
+
+        with self._seams(schemas.PASS), \
+                mock.patch.object(campaign.device_claim, "acquire_device_claim", acquire):
+            claim = self.ops.acquire_claim(self.gpu_spec)
+            self.assertEqual([c.released for c in taken], [0, 0])
+            self.ops.release_claim(claim)
+        self.assertEqual([c.released for c in taken], [1, 1])
+        self.assertEqual(self.region.released, 1)
+
+    def test_a_device_release_that_raises_does_not_strand_the_region_claim(self):
+        class Stubborn(FakeClaim):
+            def release(self):
+                raise RuntimeError("the device flock could not be released")
+
+        stubborn = Stubborn("ROCm0")
+        with self._seams(schemas.PASS), \
+                mock.patch.object(campaign.device_claim, "acquire_device_claim",
+                                  lambda *a, **k: stubborn):
+            claim = self.ops.acquire_claim(spec(backend="llama_gpu", devices=("ROCm0",),
+                                                device_names=("AMD Instinct MI210",)))
+            record = self.ops.release_claim(claim)
+        self.assertEqual(self.region.released, 1)
+        self.assertIn("error", record["devices"][0])
+
+    def test_a_cpu_campaign_claims_no_device(self):
+        """CONTROL: the device loop must not fire on the CPU cell."""
+        def refuse(*_a, **_k):
+            raise AssertionError("a llama_cpu campaign claimed a device")
+
+        with self._seams(schemas.PASS), \
+                mock.patch.object(campaign.device_claim, "acquire_device_claim", refuse):
+            self.ops.acquire_claim(self.spec)
+
+
+class TestTheWorktreeIsNotLeftBehind(unittest.TestCase):
+    """`create_worktree` raises AFTER the worktree exists, and before it returns.
+
+    The ledger never hears about it, so the directory survives under the
+    campaign id and the next attempt at the same campaign fails on a worktree
+    nobody remembers creating.
+    """
+
+    class FakeTree:
+        path = "/mnt/raid0/llm/ak-worktrees/ak-test"
+
+    def _patched(self, holds):
+        proof = mock.Mock(holds=holds, differences=("production moved",))
+        return [
+            mock.patch.object(campaign.worktree, "GitRepo", lambda *a, **k: object()),
+            mock.patch.object(campaign.worktree, "resolve_anchor",
+                              lambda *a, **k: object()),
+            mock.patch.object(campaign.worktree, "create_campaign_worktree",
+                              lambda *a, **k: (self.FakeTree(), proof)),
+        ]
+
+    def test_a_mutated_production_tree_still_tears_the_worktree_down(self):
+        """THE BITE."""
+        torn = []
+        patches = self._patched(False) + [
+            mock.patch.object(campaign.worktree, "teardown_worktree",
+                              lambda tree, **k: torn.append(tree)),
+        ]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+        with self.assertRaises(campaign.worktree.ProductionMutated) as raised:
+            campaign.HostOps().create_worktree(spec())
+        self.assertEqual(len(torn), 1, "the campaign worktree was left on disk")
+        self.assertIn("torn down", str(raised.exception))
+
+    def test_a_teardown_that_fails_does_not_replace_the_mutation_report(self):
+        """The mutation is the news; the leaked worktree is carried beside it."""
+        def explode(*_a, **_k):
+            raise RuntimeError("rm -rf refused")
+
+        patches = self._patched(False) + [
+            mock.patch.object(campaign.worktree, "teardown_worktree", explode),
+        ]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+        with self.assertRaises(campaign.worktree.ProductionMutated) as raised:
+            campaign.HostOps().create_worktree(spec())
+        self.assertIn("production tree", str(raised.exception))
+        self.assertIn("could not be torn down", str(raised.exception))
+
+    def test_the_compliant_path_tears_nothing_down(self):
+        """CONTROL: a worktree that was created correctly must survive."""
+        torn = []
+        patches = self._patched(True) + [
+            mock.patch.object(campaign.worktree, "teardown_worktree",
+                              lambda tree, **k: torn.append(tree)),
+        ]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+        tree = campaign.HostOps().create_worktree(spec())
+        self.assertIsInstance(tree, self.FakeTree)
+        self.assertEqual(torn, [])
+
+
+class TestThePreflightIsWiredToSomethingThatExists(unittest.TestCase):
+    """`device_claim_witness_reader()` takes the ids it is a witness FOR.
+
+    They are required-positional, so the call raised `TypeError` on the first
+    line of every executing run: `--execute` could not get past step 0. Nothing
+    caught it because no test has ever constructed a `HostOps` preflight.
+    """
+
+    def _patched(self, verdict, *, boosting=117, load1=96.0):
+        state = mock.Mock(khz_by_cpu=tuple((c, 3_000_000) for c in range(boosting))
+                          + tuple((c, 1_000_000) for c in range(boosting, 96)),
+                          load1=load1)
+        return [
+            mock.patch.object(campaign.worktree, "frozen_tree_paths", lambda: ()),
+            mock.patch.object(campaign.cpu_region_claim, "verify_host_topology",
+                              lambda *a, **k: schemas.Check(schemas.PASS, ())),
+            mock.patch.object(campaign.preflight, "preflight",
+                              lambda *a, **k: mock.Mock(verdict=verdict,
+                                                        reasons=("fake",))),
+            mock.patch.object(campaign.microbench, "read_host_state",
+                              lambda **k: state),
+        ]
+
+    def _run(self, verdict, **kw):
+        for patch in self._patched(verdict, **kw):
+            patch.start()
+            self.addCleanup(patch.stop)
+        return campaign.HostOps().preflight(spec())
+
+    def test_the_preflight_runs_at_all_on_both_cells(self):
+        """THE BITE: `HostOps.preflight` raised TypeError on its own third line.
+
+        `device_claim_witness_reader()` was called with no arguments and the
+        device ids it is a witness FOR are required-positional. The claim
+        sources are built before the (patched) verdict call, so this exercises
+        the real wiring on both cells; before the fix it raised.
+        """
+        for patch in self._patched(schemas.PASS, boosting=16, load1=3.3):
+            patch.start()
+            self.addCleanup(patch.stop)
+        for built in (spec(), spec(backend="llama_gpu", devices=("ROCm0",),
+                                   device_names=("AMD Instinct MI210",))):
+            with self.subTest(backend=built.backend):
+                check = campaign.HostOps().preflight(built)
+                self.assertIn(check.outcome,
+                              (schemas.PASS, schemas.COULD_NOT_CHECK, schemas.FAIL))
+        self.assertTrue(callable(claim_witness.gpu_claim_sources(()).gpu_claim_reader))
+
+    def test_an_unevaluable_concurrency_check_refuses_the_run(self):
+        """FAIL-OPEN, closed: 'I could not tell' must not start a benchmark.
+
+        `preflight.require_no_concurrent_inference` — the module's own
+        recommended call site — refuses anything but PASS. Folding
+        COULD_NOT_CHECK softly meant an unreadable lock root started a run on a
+        host somebody else might be measuring on.
+        """
+        # A QUIET host — load 3.3 over 96 cores — so the only non-PASS input is
+        # the concurrency verdict. Otherwise the load ceiling supplies the FAIL
+        # and the test passes without the guard.
+        check = self._run(schemas.COULD_NOT_CHECK, boosting=16, load1=3.3)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("concurrent_inference", " ".join(check.reasons))
+
+    def test_an_idle_host_is_still_startable(self):
+        """CONTROL, and it is the one that matters: the boost check's own
+        COULD_NOT_CHECK is the NORMAL reading before a run, and hardening the
+        concurrency layer must not resurrect the idle-frequency trap."""
+        check = self._run(schemas.PASS, boosting=16, load1=3.3)
+        self.assertNotEqual(check.outcome, schemas.FAIL)
+        self.assertIn("IDLE", " ".join(check.reasons))
+
+    def test_the_boost_gate_cannot_rule_in_a_preflight_and_the_run_proceeds(self):
+        """PINS A KNOWN LIMIT rather than asserting a property that cannot hold.
+
+        `LOADED_ENOUGH_TO_JUDGE_BOOST` and `HostStatePolicy.max_load_per_core`
+        are THE SAME NUMBER with opposite senses: below 0.25/core the boost
+        count is declared unevaluable, and above 0.25/core `check_load` refuses
+        the run outright. The only load at which the boost gate can PASS is
+        exactly 0.25/core. So a `HostOps` preflight never returns PASS, and the
+        `if outcome == PASS` branch at the end of it is unreachable.
+
+        That is not a fail-open — the run still proceeds, and the clock is
+        judged where it is valid — but it must be recorded rather than believed
+        away, and the preflight's record carries the reading either way.
+        """
+        quiet = self._run(schemas.PASS, boosting=16, load1=3.3)
+        self.assertEqual(quiet.outcome, schemas.COULD_NOT_CHECK)
+        self.assertEqual(campaign.LOADED_ENOUGH_TO_JUDGE_BOOST,
+                         campaign.microbench.HostStatePolicy().max_load_per_core)
+
+    def test_a_loaded_host_is_refused_by_the_load_ceiling(self):
+        """CONTROL, on the other side of the same threshold: the guard bites."""
+        check = self._run(schemas.PASS, boosting=90, load1=96.0)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("contention", " ".join(check.reasons))
+
+
+# =============================================================================
+# 8b. The order draw — `Pair.order` was recorded and never read
+# =============================================================================
+
+class TestTheOrderDrawMustNotBeDegenerate(unittest.TestCase):
+    """`statistics.OrderSchedule` is a COIN FLIP PER BLOCK, not an alternation.
+
+    `_base_order()` hashes `(campaign_seed, "order", candidate_id, index)` and
+    takes the parity, so five blocks land all one way once in sixteen runs. The
+    accept rule carried `Pair.order` into its record and never looked at it,
+    which made the field documentation: a 5-0 run is a sequential A/B, and the
+    two existing controls cannot see it —
+
+      * the anchor-arm control reads BETWEEN blocks, and a host that boosts at
+        each block's start and sags inside it leaves the anchor series flat;
+      * the drift bound is a between-run quantity for the same reason.
+
+    In a 5-0 run the within-block slot effect is perfectly confounded with the
+    candidate effect, so it is refused in BOTH directions rather than in the
+    one that happens to flatter.
+    """
+
+    BOUND = campaign.DRIFT_BOUND_BY_METRIC["decode_tokens_per_s"]
+
+    def decide(self, pairs):
+        return campaign.decide(pairs, t0=PASSING_T0, blocks_precommitted=5,
+                               drift_bound=self.BOUND)
+
+    #: A within-block sag with NO between-block trend: each block starts at 52.0
+    #: and drops 4% inside itself, then the next block starts at 52.0 again.
+    #: This is boost behaviour, and it is invisible to every between-block
+    #: control in the rule.
+    @staticmethod
+    def sawtooth(orders):
+        out = []
+        for i, order in enumerate(orders):
+            fast, slow = 52.0, 52.0 * 0.96
+            if order == "candidate_first":
+                candidate, anchor = fast, slow
+            else:
+                anchor, candidate = fast, slow
+            out.append(campaign.Pair(block_index=i, anchor=anchor, candidate=candidate,
+                                     order=order))
+        return tuple(out)
+
+    def test_a_five_zero_draw_that_flatters_the_candidate_is_refused(self):
+        """THE BITE. Identical code, 5-0 candidate-first, a manufactured +4.2%.
+
+        Every conjunct of the accept rule passes: every pair favours the
+        candidate, the median relative gain is above the drift bound, and the
+        anchor arm did not move at all between blocks. Before the order control
+        this KEPT a null.
+        """
+        pairs = self.sawtooth(("candidate_first",) * 5)
+        decision = self.decide(pairs)
+        self.assertFalse(decision.keep, decision.reason)
+        self.assertIn("inadmissible", decision.reason)
+        # ...and it was NOT caught by either existing control.
+        self.assertGreater(decision.min_delta, 0)
+        self.assertGreater(decision.median_relative, self.BOUND)
+        self.assertAlmostEqual(decision.anchor_drift, 0.0, places=12)
+
+    def test_a_five_zero_draw_the_other_way_is_refused_too(self):
+        """Both directions. Which way it runs is the number this design cannot
+        measure — it is confounded with the effect — so 'it only handicapped the
+        candidate' is an assumption, not a reading."""
+        pairs = self.sawtooth(("anchor_first",) * 5)
+        decision = self.decide(pairs)
+        self.assertFalse(decision.keep)
+        self.assertIn("inadmissible", decision.reason)
+
+    def test_a_four_one_draw_is_admitted(self):
+        """THE COMPLIANT-PATH CONTROL, and it must be the lopsided one.
+
+        A guard that refused every imbalance would discard 37.5% of five-block
+        runs after spending the whole claim window. Only the degenerate draw —
+        where NO block ever gave the other arm the earlier slot — is refused.
+        """
+        pairs = pairs_from_positions(
+            TG128_OVER_TEN_POSITIONS, candidate_factor=1.08,
+            orders=("candidate_first",) * 4 + ("anchor_first",))
+        decision = self.decide(pairs)
+        self.assertTrue(decision.keep, decision.reason)
+
+    def test_the_orders_are_published_in_the_record(self):
+        """A number the rule read must be in the record it wrote."""
+        pairs = pairs_from_positions(TG128_OVER_TEN_POSITIONS, candidate_factor=1.08,
+                                     orders=BALANCED)
+        decision = self.decide(pairs)
+        self.assertEqual(decision.orders, BALANCED)
+        self.assertEqual(decision.to_dict()["orders"], list(BALANCED))
+
+    def test_the_remedy_named_is_not_the_one_that_does_not_work(self):
+        """`retry()` flips every element: a 5-0 draw becomes the mirror 5-0."""
+        pairs = self.sawtooth(("candidate_first",) * 5)
+        reason = self.decide(pairs).reason
+        self.assertIn("fresh campaign seed", reason)
+        self.assertIn("does NOT fix this", reason)
+
+
+# =============================================================================
+# 8c. The boost floor is a RATIO of the claimed footprint
+# =============================================================================
+
+class TestTheBoostFloorScalesToTheFootprint(unittest.TestCase):
+    """`80 # of 96` is a count AND a denominator. The GPU cell pins eight cores.
+
+    Applied verbatim to `184-191`, "80 boosting" is unreachable by a perfectly
+    healthy MI210 host, so the preflight FAILed the compliant path — the shape
+    `feedback_guard_must_not_forbid_its_own_idiom` is about, and the first thing
+    anyone does with a gate like that is switch it off.
+    """
+
+    def test_the_gpu_cells_eight_cores_can_pass(self):
+        """THE BITE. Eight of eight boosting under load is a healthy host."""
+        check = campaign.check_boost_under_load(boosting_cores=8, load1=8.0, cpu_count=8)
+        self.assertEqual(check.outcome, schemas.PASS, " ".join(check.reasons))
+
+    def test_a_throttled_eight_core_footprint_still_FAILS(self):
+        """The guard must still bite on the footprint it was rescaled for."""
+        check = campaign.check_boost_under_load(boosting_cores=3, load1=8.0, cpu_count=8)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("poisoned", " ".join(check.reasons))
+
+    def test_the_canonical_footprint_is_unchanged_where_it_was_ratified(self):
+        self.assertEqual(campaign.required_boosting_cores(96), campaign.BOOST_MIN_CORES)
+        self.assertEqual(campaign.required_boosting_cores(192), campaign.BOOST_MIN_CORES)
+
+    def test_the_floor_is_the_ratified_ratio(self):
+        self.assertEqual(campaign.required_boosting_cores(8), 7)   # ceil(8 * 80/96)
+        self.assertEqual(campaign.required_boosting_cores(1), 1)
+
+    def test_a_footprint_of_no_cores_is_not_a_footprint(self):
+        with self.assertRaises(ValueError):
+            campaign.required_boosting_cores(0)
+
+    def test_the_gpu_cell_reports_its_own_footprint(self):
+        built = spec(backend="llama_gpu", devices=("ROCm0",),
+                     device_names=("AMD Instinct MI210",))
+        self.assertEqual(built.cpu_list, "184-191")
+        self.assertEqual(built.cpu_count, 8)
+        self.assertEqual(spec().cpu_count, 96)
+
+
+# =============================================================================
+# 9. The boundary — enforced against this module's AST
+# =============================================================================
+
+#: The package's own absolute prefix. An import that spells it out reaches the
+#: same modules a relative one does, and a walker that only understands `from .`
+#: is a boundary anyone can step over by typing more.
+PACKAGE_PREFIX = "scripts.kernel_rnd.autokernel."
+
+
+def _relative(dotted: str) -> str:
+    """`scripts.kernel_rnd.autokernel.controller.selection` -> `controller.selection`."""
+    for prefix in (PACKAGE_PREFIX, "autokernel."):
+        if dotted.startswith(prefix):
+            return dotted[len(prefix):]
+    return dotted
+
+
+def internal_imports_in(source: str) -> set:
+    """Every package-internal module `source` imports, as package-relative names.
+
+    `ast.walk`, so an import nested inside a function or an `if` is found too —
+    a lazy import is the obvious way around a boundary that only reads the top
+    of the file. Absolute spellings are normalized to the relative ones the
+    boundary tables use, for the same reason.
+    """
+    tree = ast.parse(source)
+    found: set = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            base = node.module or ""
+            if node.level:
+                for alias in node.names:
+                    found.add(f"{base}.{alias.name}" if base else alias.name)
+            elif base.startswith(PACKAGE_PREFIX) or base.startswith("autokernel."):
+                relative = _relative(base)
+                for alias in node.names:
+                    found.add(f"{relative}.{alias.name}" if relative else alias.name)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.startswith(PACKAGE_PREFIX) \
+                        or alias.name.startswith("autokernel") \
+                        or alias.name.startswith("."):
+                    found.add(_relative(alias.name))
+    return found
+
+
+def internal_imports(path: Path) -> set:
+    return internal_imports_in(path.read_text(encoding="utf-8"))
+
+
+class TestTheBoundaryIsStructural(unittest.TestCase):
+    """The boundary is a test, not a paragraph. Deletion stays the operator's call.
+
+    This is the whole mechanism by which "what is essential" becomes checkable:
+    nothing is deleted, nothing is moved, and the driver's own import list is
+    pinned against the declared one in both directions.
+    """
+
+    PATH = Path(campaign.__file__)
+
+    def test_the_driver_imports_exactly_what_it_declares(self):
+        self.assertEqual(internal_imports(self.PATH),
+                         set(campaign.MODULES_THE_DRIVER_USES),
+                         "campaign.py's imports and MODULES_THE_DRIVER_USES disagree")
+
+    def test_no_over_engineered_subsystem_is_imported(self):
+        imported = internal_imports(self.PATH)
+        for forbidden in campaign.MODULES_DELIBERATELY_NOT_USED:
+            with self.subTest(module=forbidden):
+                self.assertNotIn(forbidden, imported)
+                if "." not in forbidden:
+                    # A whole SUBPACKAGE is out: nothing under it may be reached
+                    # either. (A dotted entry names one module of a package the
+                    # driver does use, so the prefix sweep does not apply.)
+                    self.assertFalse(
+                        any(name.startswith(forbidden + ".") for name in imported),
+                        f"campaign.py reaches into {forbidden}")
+
+    def test_every_declared_module_is_real(self):
+        """The boundary must not drift into naming modules that do not exist."""
+        root = self.PATH.parent
+        for declared in (set(campaign.MODULES_THE_DRIVER_USES)
+                         | set(campaign.MODULES_DELIBERATELY_NOT_USED)):
+            with self.subTest(module=declared):
+                stem = root.joinpath(*declared.split("."))
+                self.assertTrue(stem.is_dir() or stem.with_suffix(".py").exists(),
+                                f"{declared} names nothing on disk")
+
+    def test_every_declared_module_states_why(self):
+        for table in (campaign.MODULES_THE_DRIVER_USES,
+                      campaign.MODULES_DELIBERATELY_NOT_USED):
+            for name, reason in table.items():
+                with self.subTest(module=name):
+                    self.assertGreater(len(reason), 30,
+                                       f"{name} is on the boundary with no argument")
+
+    def test_the_two_tables_do_not_overlap(self):
+        self.assertEqual(set(campaign.MODULES_THE_DRIVER_USES)
+                         & set(campaign.MODULES_DELIBERATELY_NOT_USED), set())
+
+    def test_no_e_process_is_reachable_from_the_driver(self):
+        """The measured 1.6-1.9% CV does not justify one, and it was UNPASSABLE.
+
+        Scanned over IDENTIFIERS, not over the file's text: naming the extension
+        round in a docstring to say why it is not run is exactly the argument
+        this file is supposed to carry, and a text scan would forbid it.
+        """
+        tree = ast.parse(self.PATH.read_text(encoding="utf-8"))
+        names: set = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name):
+                names.add(node.id)
+            elif isinstance(node, ast.Attribute):
+                names.add(node.attr)
+        for forbidden in ("e_value", "sequential_evaluation", "ExtensionAuthorization",
+                          "solve_mde", "PairedBlockReducer", "reduce_blocks"):
+            with self.subTest(symbol=forbidden):
+                self.assertNotIn(forbidden, names)
+
+    def test_integrity_is_reached_exactly_once_and_through_the_seam(self):
+        """`chain` owns the projection; a second consumer is a second derivation."""
+        source = self.PATH.read_text(encoding="utf-8")
+        code = "\n".join(line for line in source.splitlines()
+                         if "chain.integrity" in line and not line.strip().startswith("#"))
+        self.assertEqual(code.count("chain.integrity"), 1, code)
+        self.assertIn("hash_source_tree", code)
+
+    def test_no_forbidden_module_is_reached_through_an_allowed_alias(self):
+        """A re-export is an import with extra steps. `chain.surface_module` is
+        right there, and `microbench.statistics` is too: every module the driver
+        imports carries the ones IT imports as attributes, so a boundary that
+        reads `import` statements only is a boundary over one spelling.
+
+        The single licensed reach is `chain.integrity`, which the driver argues
+        for by name and the next test pins to exactly one call.
+        """
+        tree = ast.parse(self.PATH.read_text(encoding="utf-8"))
+        aliases = {"schemas", "storage", "journal_module", "api", "correctness", "devices",
+                   "recipes", "chain", "cpu_region_claim", "microbench", "t0_provider",
+                   "worktree", "claim_witness", "device_claim", "preflight"}
+        forbidden_tails = {name.split(".")[-1]
+                           for name in campaign.MODULES_DELIBERATELY_NOT_USED}
+        forbidden_tails |= {"surface_module", "statistics"}
+        reached = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) \
+                    and node.value.id in aliases and node.attr in forbidden_tails:
+                reached.add(f"{node.value.id}.{node.attr}")
+        self.assertEqual(reached, {"chain.integrity"},
+                         f"the driver reaches a deferred subsystem through an alias: "
+                         f"{sorted(reached - {'chain.integrity'})}")
+
+    def test_only_HostOps_can_reach_a_spawner(self):
+        """A composition pass must not be able to spawn even by mistake.
+
+        `--dry-run` being the default is an argv property; this is the
+        structural one. The two things in this package that start a process —
+        `microbench.SubprocessSpawner` and `t0_provider.SubprocessRunner` — are
+        named inside the `HostOps` class body and nowhere else, so no path
+        through `DryRunOps`, `run_campaign` or `main` reaches one.
+        """
+        tree = ast.parse(self.PATH.read_text(encoding="utf-8"))
+        host_ops = next(node for node in ast.walk(tree)
+                        if isinstance(node, ast.ClassDef) and node.name == "HostOps")
+        inside = {id(node) for node in ast.walk(host_ops)}
+        stray = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) \
+                    and node.attr in ("SubprocessSpawner", "SubprocessRunner") \
+                    and id(node) not in inside:
+                stray.append(node.attr)
+        self.assertEqual(stray, [], f"a spawner is reachable outside HostOps: {stray}")
+
+    def test_the_driver_imports_nothing_dynamically(self):
+        """`importlib.import_module('...controller.selection')` is an import that
+        no AST import-walker sees. It is refused by identifier, with the
+        compliant idiom (a plain relative import) untouched."""
+        tree = ast.parse(self.PATH.read_text(encoding="utf-8"))
+        names = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+        names |= {node.attr for node in ast.walk(tree) if isinstance(node, ast.Attribute)}
+        for forbidden in ("importlib", "import_module", "__import__", "exec", "eval"):
+            with self.subTest(symbol=forbidden):
+                self.assertNotIn(forbidden, names)
+
+    def test_the_driver_spawns_nothing_by_name_pattern(self):
+        """INC-20260731. No pkill, no pgrep, no killall, no ps | grep | kill."""
+        source = self.PATH.read_text(encoding="utf-8").lower()
+        for forbidden in ("pkill", "pgrep", "killall", "os.kill", "shell=true"):
+            with self.subTest(token=forbidden):
+                # Named in prose is fine; called is not.
+                self.assertNotIn(forbidden + "(", source)
+
+
+class TestTheBoundaryWalkerItself(unittest.TestCase):
+    """A guard is only as good as the forms it can see. Each of these is a way
+    around an import boundary that reads `from . import x` at the top of a file,
+    and each is asserted against the walker on synthetic source — so the guard
+    is proven to bite without campaign.py having to contain the violation.
+    """
+
+    def test_a_lazy_import_inside_a_function_is_seen(self):
+        found = internal_imports_in(
+            "def go():\n    from .controller import selection\n    return selection\n")
+        self.assertIn("controller.selection", found)
+
+    def test_a_conditional_import_is_seen(self):
+        found = internal_imports_in(
+            "import os\nif os.environ.get('X'):\n    from . import release\n")
+        self.assertIn("release", found)
+
+    def test_an_absolute_import_of_this_package_is_seen(self):
+        """THE BITE: `import scripts.kernel_rnd.autokernel.controller.selection`
+        reaches exactly what the relative form reaches, and the walker used to
+        ignore it because the dotted name starts with 'scripts'."""
+        found = internal_imports_in(
+            "import scripts.kernel_rnd.autokernel.controller.selection\n")
+        self.assertIn("controller.selection", found)
+
+    def test_an_absolute_from_import_is_normalized_too(self):
+        found = internal_imports_in(
+            "from scripts.kernel_rnd.autokernel.evaluator import statistics\n")
+        self.assertIn("evaluator.statistics", found)
+
+    def test_a_try_except_import_is_seen(self):
+        found = internal_imports_in(
+            "try:\n    from .release import readiness\nexcept ImportError:\n    pass\n")
+        self.assertIn("release.readiness", found)
+
+    def test_no_package_dunder_init_smuggles_a_deferred_subsystem(self):
+        """The last import route: `from . import schemas` executes
+        `autokernel/__init__.py`, and every subpackage's `__init__` runs the
+        same way. If one of them imported `controller`, the boundary would be
+        decorative no matter what campaign.py says. They are docstring-only.
+        """
+        root = Path(campaign.__file__).parent
+        # Only the `__init__` files the driver's own imports EXECUTE. A deferred
+        # subpackage's `__init__` re-exporting its own modules is that package's
+        # business — nothing on the driver's path runs it. (`release/__init__`
+        # and `surface/__init__` do exactly that, which is why the sweep is
+        # scoped rather than global: a test that fails on someone else's file
+        # gets deleted, not obeyed.)
+        on_the_path = {name.split(".")[0] for name in campaign.MODULES_THE_DRIVER_USES}
+        inits = [root / "__init__.py"] + sorted(
+            root / package / "__init__.py" for package in on_the_path
+            if (root / package).is_dir())
+        self.assertGreater(len(inits), 3)
+        for init in inits:
+            with self.subTest(init=str(init.relative_to(root))):
+                found = internal_imports_in(init.read_text(encoding="utf-8"))
+                forbidden = {name for name in found
+                             if any(name == bad or name.startswith(bad + ".")
+                                    for bad in campaign.MODULES_DELIBERATELY_NOT_USED)}
+                self.assertEqual(forbidden, set(),
+                                 f"{init} smuggles {sorted(forbidden)} onto the path")
+
+    def test_an_unrelated_third_party_import_is_not_a_finding(self):
+        """CONTROL: the walker must not forbid its own idiom. `json` and
+        `scripts.lib.canonical_recipe` are not this package."""
+        found = internal_imports_in(
+            "import json\nfrom scripts.lib import canonical_recipe\n")
+        self.assertEqual(found, set())
+
+    def test_the_permitted_imports_are_still_recognised(self):
+        """CONTROL: the compliant spelling must survive normalization."""
+        found = internal_imports_in("from .evaluator import recipes\nfrom . import storage\n")
+        self.assertEqual(found, {"evaluator.recipes", "storage"})
+
+
+class TestTheEntrypointExists(unittest.TestCase):
+    """The one thing whose absence is why this package produced nothing."""
+
+    def test_the_module_has_a_main(self):
+        self.assertTrue(callable(campaign.main))
+
+    def test_the_module_has_a_dunder_main_guard(self):
+        source = Path(campaign.__file__).read_text(encoding="utf-8")
+        self.assertIn('if __name__ == "__main__":', source)
+
+    def test_the_parser_offers_the_four_declared_flags(self):
+        parser = campaign.build_parser()
+        options = {action.dest for action in parser._actions}
+        for flag in ("dry_run", "candidate_ref", "backend", "blocks", "campaign_id"):
+            self.assertIn(flag, options)
+
+    def test_the_parser_help_does_not_raise(self):
+        self.assertIsInstance(campaign.build_parser(), argparse.ArgumentParser)
+
+
+if __name__ == "__main__":  # pragma: no cover
+    unittest.main()
