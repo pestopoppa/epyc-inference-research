@@ -1117,14 +1117,18 @@ class TestControlHarness(unittest.TestCase):
     def test_run_all_calls_the_runner_once_per_control(self):
         harness, runner = self._harness()
         observations = harness.run_all(run_context=_run_context(),
-                                       historical=_available())
+                                       historical=_available(),
+                                       campaign_seed="ak-seed-fixture",
+                                       windows_completed=0)
         self.assertEqual(len(observations), 5)
         self.assertEqual([cid for cid, _ in runner.calls], list(controls.CONTROL_IDS))
 
     def test_run_all_skips_control_5_when_it_is_unavailable(self):
         harness, runner = self._harness()
         observations = harness.run_all(run_context=_run_context(),
-                                       historical=_unavailable())
+                                       historical=_unavailable(),
+                                       campaign_seed="ak-seed-fixture",
+                                       windows_completed=0)
         self.assertEqual(len(observations), 4)
         self.assertNotIn(controls.CONTROL_HISTORICAL_WIN_REPLAY,
                          [cid for cid, _ in runner.calls])
@@ -1134,7 +1138,8 @@ class TestControlHarness(unittest.TestCase):
                  for cid in controls.CONTROL_IDS}
         harness, _ = self._harness(wrong)
         with self.assertRaises(controls.ControlWiringError):
-            harness.run_all(run_context=_run_context(), historical=_available())
+            harness.run_all(run_context=_run_context(), historical=_available(),
+                            campaign_seed="ak-seed-fixture", windows_completed=0)
 
     def test_a_runner_returning_the_wrong_type_raises(self):
         class _Bad:
@@ -1145,7 +1150,8 @@ class TestControlHarness(unittest.TestCase):
 
         harness = controls.ControlHarness(bundle=_bundle(), runner=_Bad())
         with self.assertRaises(controls.ControlWiringError):
-            harness.run_all(run_context=_run_context(), historical=_available())
+            harness.run_all(run_context=_run_context(), historical=_available(),
+                            campaign_seed="ak-seed-fixture", windows_completed=0)
 
     def test_a_missing_observation_is_not_run_not_a_pass(self):
         harness, _ = self._harness()
@@ -1203,16 +1209,21 @@ class TestControlHarness(unittest.TestCase):
             result.may_rank = True
         with self.assertRaises(TypeError):
             dataclasses.replace(result, may_rank=True)
-        # Removing the panel removes the licence, and nothing can put it back.
-        stripped = dataclasses.replace(result, panel=None)
-        self.assertFalse(stripped.may_rank)
-        self.assertIsNone(stripped.marker)
+        # `replace()` used to hand back a mutated result, and the guarantee was
+        # only that `may_rank` could not be stamped ON one. It is now stronger:
+        # `replace()` cannot produce a ControlPanelResult AT ALL, because the
+        # InitVar mint defaults to None on the rebuild. A stripped panel is no
+        # longer a thing that exists to be reasoned about.
+        with self.assertRaises(controls.ControlPanelForged):
+            dataclasses.replace(result, panel=None)
 
     def test_result_must_cover_every_control(self):
         harness, _ = self._harness()
         result = harness.evaluate(observations=_all_observations(), context=_context(),
                                   aa_cadence=schemas.Check(schemas.PASS))
-        with self.assertRaises(ValueError):
+        # Same reason: the missing-control check is still in __post_init__, but
+        # `replace()` no longer reaches it — it is refused at the mint.
+        with self.assertRaises(controls.ControlPanelForged):
             dataclasses.replace(result, outcomes=result.outcomes[:4])
 
     def test_result_dict_is_canonicalizable_and_names_the_requirements(self):

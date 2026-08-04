@@ -70,6 +70,7 @@ PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_plan.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_readiness.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_t3.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_t3_protocol_binding_redteam.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_t3_waiver_authority_redteam.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_packager.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/adapters/test_serving_runtime.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/adapters/test_whisper_stt.py
@@ -85,6 +86,18 @@ PYTEST_SMOKE += scripts/kernel_rnd/autokernel/surface/test_dashboard_contract.py
 # owns, so this one runs first among the surface suites in spirit and must never
 # be dropped — a seam nobody checks is two modules drifting in private.
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/surface/test_surface_seam.py
+# AK3 execution layer — the modules that actually build a candidate and run a
+# measurement. `test_execution_chain.py` comes FIRST for the reason every other
+# seam suite above it does: it is the only suite that composes all five executors
+# with the evaluator that reads them, and the two BuildProvenance classes it
+# reconciles were each green in their own module while naming different records.
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/execution/test_execution_chain.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/execution/test_cpu_region_claim.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/execution/test_cpu_region_claim_redteam.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/execution/test_worktree.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/execution/test_t0_provider.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/execution/test_microbench.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/execution/test_control_runner.py
 
 help:
 	@printf '%s\n' 'Targets: setup lint test health docs docs-check analysis analysis-check security-check autopilot-gate'

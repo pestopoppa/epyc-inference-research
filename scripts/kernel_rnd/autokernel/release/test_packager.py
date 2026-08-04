@@ -252,6 +252,13 @@ def t3_request(**overrides) -> t3.T3Request:
         "supplied_components": {name: digest(f"component:{name}")
                                 for name in t3.SUPPLIED_COMPONENTS},
         "cooldown_seconds": 86400,
+        # Where THIS RUN holds that operator attestations live. No suite can write to
+        # `/workspace/artifacts/operator/` — the reader's default and the operator's
+        # own tree — so every read waiver in this package comes from an
+        # `artifacts/operator/` directory inside this checkout, which `verify_waiver`
+        # refuses unless the RUN declares it. Production declares nothing and gets
+        # the real root; see `t3.T3Request.attestation_roots`.
+        "attestation_roots": (str(storage.REPO_ROOT / "artifacts" / "operator"),),
         "release_reps_by_protocol": {"P-BENCH-1": 10, "P-BENCH-PREFILL-1": 5,
                                      "P-KERNEL-FREEZE-1": 1},
         # Per-phase `ProtocolBinding`s, not bare ids: `P-BENCH-1` and
@@ -1745,6 +1752,62 @@ class TestDecisionPackage(unittest.TestCase):
                 linkage_receipts=(linkage_receipt("llama_cpu"),))))
         self.assertNotIn("scoped-operator-waiver",
                          [o.option_id for o in spine.decision_package.options])
+
+    def test_a_quoted_waiver_is_reported_as_unread_not_merely_unverified(self):
+        """"T3 refused it" and "nobody read it" are different states, and they
+        collapsed into one finding, so the package could not tell an operator which
+        had happened. `t3.WaiverBinding` carries a document, a path and a digest that
+        are three independent assertions by the party being gated.
+        """
+        binding = unverified_waiver_binding()
+        self.assertFalse(binding.was_read)
+        package = release_package(waivers=(binding,))
+        codes = codes_of(package)
+        self.assertIn("WAIVER_PINNED_UNREAD", codes)
+        self.assertIn("WAIVER_PINNED_BUT_UNVERIFIED", codes)
+        unread = next(f for f in package.findings
+                      if f.code == "WAIVER_PINNED_UNREAD")
+        self.assertEqual(unread.outcome, schemas.COULD_NOT_CHECK)
+        self.assertIn("QUOTATION", unread.detail)
+        self.assertNotEqual(package.state, packager.STATE_READY)
+
+    def test_a_binding_that_merely_declares_itself_read_is_still_unread(self):
+        """The package is the durable record — the one place a lie outlives the run.
+
+        `was_read` is a PROPERTY, and a property is something a caller overrides:
+
+            class Liar(t3.WaiverBinding):
+                @property
+                def was_read(self): return True
+
+        Measured, that object was written into the package as `read: True` and
+        skipped `WAIVER_PINNED_UNREAD` entirely, so the durable record asserted that
+        somebody opened a file nobody opened. The packager now asks
+        `t3.waiver_read_violations`, which inspects the reader's mint token, and a
+        property override cannot reach it.
+        """
+        class Liar(t3.WaiverBinding):
+            @property
+            def was_read(self):
+                return True
+
+        honest = unverified_waiver_binding()
+        liar = Liar(waiver_id=honest.waiver_id, pinned_sha256=honest.pinned_sha256,
+                    document=honest.document, document_path=honest.document_path,
+                    covers_cell_ids=honest.covers_cell_ids,
+                    observed_sha256=honest.observed_sha256)
+        self.assertTrue(liar.was_read)  # the property it defeats
+        package = release_package(waivers=(liar,))
+        self.assertIn("WAIVER_PINNED_UNREAD", codes_of(package))
+        self.assertIs(package.to_dict()["waiver_bindings"][0]["read"], False)
+        self.assertNotEqual(package.state, packager.STATE_READY)
+
+    def test_the_binding_record_says_whether_the_document_was_read(self):
+        binding = unverified_waiver_binding()
+        self.assertIs(binding.to_dict()["read"], False)
+        self.assertIsNone(binding.to_dict()["read_receipt"])
+        package = release_package(waivers=(binding,))
+        self.assertIs(package.to_dict()["waiver_bindings"][0]["read"], False)
 
     def test_an_incomplete_package_recommends_supplying_the_evidence(self):
         package = release_package(waivers=(unverified_waiver_binding(),))

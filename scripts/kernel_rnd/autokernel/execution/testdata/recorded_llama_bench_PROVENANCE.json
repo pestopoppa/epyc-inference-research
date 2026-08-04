@@ -1,0 +1,24 @@
+{
+  "schema": "epyc.autokernel.microbench_testdata_provenance.v1",
+  "note": "Verbatim copies of REAL llama-bench -o json output taken on this host. Nothing here is synthesised. test_microbench.py re-hashes each copy against its source when the source is present, so a fixture edited to make a test pass fails that test instead.",
+  "files": {
+    "recorded_llama_bench_cpu_decode_canonical.json": {
+      "source_path": "data/op2_canonical_bench_window/op2-canonical-bench-window-20260719-live5/canonical-v6/frontdoor_q8_tg128.results.json",
+      "sha256": "6fff3c9db55a74d3d28b29e3cbb1f42daa3aa43e456d6744c4bc5431e1fe07ab",
+      "source_sha256": "6fff3c9db55a74d3d28b29e3cbb1f42daa3aa43e456d6744c4bc5431e1fe07ab",
+      "rows": 1
+    },
+    "recorded_llama_bench_cpu_decode_fa_off.json": {
+      "source_path": "data/cpu_optimization/2026-04-23/thread-sweep/t096.json",
+      "sha256": "17211f36aebe60dbe460ea08f5725f230c0fed29db56bdb0498737db19dcaf66",
+      "source_sha256": "17211f36aebe60dbe460ea08f5725f230c0fed29db56bdb0498737db19dcaf66",
+      "rows": 1
+    },
+    "recorded_llama_bench_cpu_decode_192t.json": {
+      "source_path": "data/cpu_optimization/2026-04-23/thread-sweep/t192-quiet.json",
+      "sha256": "e0cb680297ae9efc6e8189576793b6855e8a5c269f2b5371492c83b270f9d54e",
+      "source_sha256": "e0cb680297ae9efc6e8189576793b6855e8a5c269f2b5371492c83b270f9d54e",
+      "rows": 1
+    }
+  }
+}

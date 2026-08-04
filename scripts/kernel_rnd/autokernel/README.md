@@ -228,8 +228,12 @@ form could pass without inspecting anything:
   than a fixture of it" was true of the ratification and false of the half that
   decides PASS_WITH_WAIVER. `waive_q8_cpu_prefill_v8_20260725.json` is now read
   too, and its sha256 is checked against `evidence_sha256.waive_q8` **on the
-  ratification** — the attestation hashes its own waiver, so for this preserved
-  pair the authenticity gap below is genuinely closed.
+  ratification** — the attestation hashes its own waiver. That is a CONSISTENCY
+  fact about two operator-owned documents, and it is worth having; it is not
+  authenticity, and this README used to claim it was. The ratification is itself an
+  unsigned JSON file in the same directory, so anyone who can rewrite the waiver can
+  rewrite the digest that pins it. See *Closed by the 2026-08-03 hardening pass* for
+  what reading the file does and does not buy.
 - **Absence is a FAILURE, never a skip.** `TestPreservedV8Calibration` used to call
   `self.skipTest()` when the artifact was missing. Removing the file turned the one
   check that says the compiler is right into a silent `ran=0, failures=0` — a
@@ -564,15 +568,22 @@ future cross-suite fixture reuse.
 
 ### Remaining in AK2
 
-- **Worktree managers and build layout.** Nothing creates
-  `llama.cpp-ak-<campaign_id>` worktrees, namespaces `ak/<campaign_id>/…`
-  branches, does pathspec-limited commits in the shared clone, or produces build
-  identity receipts. Production source/build path denial exists only in
-  `storage.plan_expiry` (for deletion), not for writes.
-- **CPU region claim *acquisition*.** `preflight.read_region_claims` **reads**
-  the region-lock namespace; nothing in this package acquires a CPU region
-  claim. That is the orchestrator's `cpu_region_lock`, and invariant 9 requires
-  the acquisition, not the read.
+- **CLOSED 2026-08-03/04 — worktree managers and build layout.**
+  `execution/worktree.py` creates `llama.cpp-ak-<campaign_id>` worktrees off the
+  re-resolved production tip, namespaces `ak/<campaign_id>/…` branches, does
+  pathspec-limited commits in the shared clone, configures and builds with
+  `GGML_CCACHE=OFF` forced and a load-average cap that is a precondition rather
+  than a note, and emits a build-identity receipt. Production-path denial is now
+  a TYPE (`SandboxPath`) rather than a check, and `GitRepo` — the only class that
+  may address a frozen tree — carries no content-mutating git verb. NOT RUN: no
+  build has been executed by it.
+- **CLOSED 2026-08-03/04 — CPU region claim *acquisition*.**
+  `execution/cpu_region_claim.py` acquires it: per-region `flock`s with a payload,
+  a journal, partial-acquisition unwind, and a `verify_held()` that re-reads the
+  lock rather than returning a cached flag. `check_precondition_1` is the
+  conjunction of "the locks are held" and "the footprint is covered".
+  Cross-repo integration with the orchestrator's `cpu_region_lock` remains open
+  (see the three items above).
 - **Co-residency policy integration.** `evaluation_event.co_residency` is
   validated; nothing decides it.
 - **Owned cgroup / PID-receipt process scope with verified teardown.** Not
@@ -597,19 +608,70 @@ future cross-suite fixture reuse.
 The evaluator is the machinery, not the run. Everything below is a real gap and
 none of it is closed by the suites above.
 
-- **Nothing has been executed.** No candidate has been built, no op suite has
-  run, no microbench has been taken, no calibration block has been solved on real
-  A/A material. Every number in every test is synthetic. AK3's own acceptance
-  criterion — *"the first phase that consumes inference"* — is **not met**: the
-  machinery exists, the campaign does not.
-- **The runner seams are unimplemented on purpose.** `api.TierGateRunner` has
-  three fixture implementations (`correctness.T0CorrectnessRunner`,
-  `integrity.SourceIntegrityGateRunner`, `surface.SurfaceGateRunner`) and every
-  one of them consumes evidence somebody else must produce.
-  `correctness.T0EvidenceProvider` has exactly one implementation,
-  `StaticEvidenceProvider`, which serves a dict. **Nothing builds a candidate,
-  runs `test-backend-ops`, collects a dispatch trace, or takes a paired block.**
-  `controls.ControlRunner` likewise has no implementation.
+- **PARTLY CLOSED 2026-08-03/04 — the execution layer is WRITTEN, and it has
+  still NEVER BEEN RUN.** `execution/` now holds the five executors the seams
+  were declared for: `cpu_region_claim.py` (CPU region claim acquisition, real
+  `flock`s), `worktree.py` (production-tip anchoring, campaign worktrees, cmake
+  build, build-identity receipt), `t0_provider.py` (the real
+  `correctness.T0EvidenceProvider` — it launches `test-backend-ops`,
+  `verify_ggml_linkage.sh`, generations and the sanitizers), `microbench.py` (the
+  T1 paired-block `llama-bench` runner) and `control_runner.py` (the real
+  `controls.ControlRunner`). `execution/chain.py` holds the projections between
+  them and the evaluator, and `execution/test_execution_chain.py` walks the whole
+  composition — claim, worktree, build, T0, T1, controls, verdict, bank,
+  teardown — and asserts the frozen trees are byte-identical afterwards.
+
+  **What has NOT happened: any of it running.** No candidate has been built by
+  this code, no op suite has been launched, no benchmark has been taken, no
+  calibration block has been solved on real A/A material. Every number in every
+  test is still synthetic or a recorded fixture replayed through
+  `RecordedProcessRunner`/`RecordedSpawner`. AK3's acceptance criterion — *"the
+  first phase that consumes inference"* — is therefore **still not met**: the
+  machinery now exists end to end, the campaign does not. The host was at load
+  ~67 with six resident `llama-server` instances when this was written, and a
+  bench under that is garbage data and theft besides.
+
+  `execution/README.md` is the runbook for the session that owns compute: cold
+  start to a first candidate, what to check before starting, what "it is working"
+  looks like, what should abort it, and the honest list of what still blocks a
+  first campaign. Three items on that list matter before anything is run:
+
+  1. **No candidate can cross the evidence threshold.** For the CPU decode cell
+     the calibration solves `B_min = 5` and `threshold = 10`, and the
+     sign-martingale e-value over five same-sign blocks tops out at 5.57 —
+     verified at four different effect magnitudes, all returning the same
+     e-value, because the construction is sign-based. Crossing needs the declared
+     extension round, and `MicrobenchPlan` has no `segment`/`extension_round`
+     field, so `MicrobenchRunner` emits `SEGMENT_BASE` and nothing else.
+     `statistics._check_extension_structure` and `microbench.plan_blocks` are
+     both already ready for it. Pinned by
+     `test_execution_chain.TestTheExtensionRoundHasNoProducer`.
+  2. **T0 produces nine of seventeen surfaces.** A clean candidate today reads
+     8 PASS / 9 COULD_NOT_CHECK / 0 FAIL. Symbol tables, the parsed diff, the
+     sanitizer and boundary-shape gates and the state-safety gate all need
+     producers or a `ChangeSurface` derivation the plan does not currently carry.
+  3. **The anchor triple cannot name two tools.** `api.AnchorIdentity.binary_sha256`
+     is single-valued; T0 hashes the anchor `llama-cli` and `microbench` compares
+     against the anchor `llama-bench`. `chain.bind_anchor(..., tool=…)` plus
+     `chain.check_anchor_build_is_one_build` is the workaround; the api.py change
+     is a required follow-up.
+- **Four seams between the executors and the evaluator were mismatched and are
+  now projections with tests** (`execution/chain.py`): two different
+  `BuildProvenance` records with an INVERTING field
+  (`production_tree_paths` is a denylist, `production_tree_paths_touched` is a
+  violation list); artifact digests that must be MEASURED rather than copied off
+  the receipt, or the clean-build gate's equality becomes `x == x`; the anchor,
+  per tool; and one claim object that two Protocols want in two different shapes.
+  Each has a mutation-verified test and a compliant-path control.
+- **The remaining runner seams.** `api.TierGateRunner` still has three
+  evidence-consuming implementations (`correctness.T0CorrectnessRunner`,
+  `integrity.SourceIntegrityGateRunner`, `surface.SurfaceGateRunner`).
+  `correctness.T0EvidenceProvider` now has two implementations —
+  `StaticEvidenceProvider` (a dict, for replay) and
+  `execution.t0_provider.ExecutedT0EvidenceProvider` (the real one) — and
+  `controls.ControlRunner` has `execution.control_runner.ExecutedControlRunner`.
+  `integrity.SourceIntegrityGateRunner` and `surface.SurfaceGateRunner` still
+  consume evidence nothing produces.
 - **Two derivations of the §8.5.1 gates coexist.** `integrity.py` implements them
   over ELF tables, parsed diffs and build provenance; `correctness.py` carries
   three shallower `t0.source_integrity.*` gates over self-declared evidence
@@ -773,6 +835,65 @@ carried-forward list nobody ever *removes* from stops being read.
 - **The packager's four self-audits** are now alias-, dispatch- and rebinding-aware,
   and package assembly checks that the sealed candidate **is** the graded one and
   that era-row kinds are **traced from `rows[]`** rather than declared.
+- **Sub-floor estimates could be selected as the weakest or the best protected
+  cell** — the readiness figure ranked precisely the cells the evaluator refused
+  to rank. `evaluator/api.py`'s `_RANKABLE_RESOLUTIONS` is `(improvement,
+  regression)` and its comment is the governing text: *"Below the noise floor is
+  not a small win; it is not a win… a result you cannot order."*
+  `release/readiness.py::_phase_figure` filtered only on `_rank_admissible`,
+  which is about VERDICT VALIDITY (INVALID, prior gate failed, INCONCLUSIVE) and
+  says nothing about effect resolution — and selecting a cell as *weakest* or
+  *best* IS a rank.
+
+  **This was an operator decision, not a red-team call**, because the obvious fix
+  is wrong on its own: under §1.6's non-inferiority half a HEALTHY backend
+  produces cells at `no_detectable_difference`, so simply excluding them makes
+  the most common healthy outcome render as `None` — "no protected-cell figure",
+  an absence. Absences read as coverage gaps, and a coverage gap is what a later
+  session closes by loosening the gate. Three options were put to the operator
+  and **option B was chosen**: make the states structurally distinct rather than
+  overloading one representation. `_phase_figure` now returns exactly one of
+  three things and `PhaseStanding.__post_init__` refuses a fourth
+  (`PHASE_FIGURE_TYPES`):
+
+  | State | Representation | Rendered line |
+  |---|---|---|
+  | nothing measured | `None` | `no protected-cell figure` |
+  | all at parity | `ParityFigure` — counts, ids, census, and the **binding** sensitivity (`max(mde, floor)`) of the blindest cell, with that cell and its event named. `value`/`best_value` RAISE rather than being absent, because `getattr(fig, "value", None)` is how a caller restores the absence | `2/2 protected cells at parity, nothing above +/-0.018 distinguishable — measured, no detectable difference at any of them` |
+  | orderable | `ReadinessFigure`, selected over the orderable subset only, disclosing `N/M protected cells, P at parity` | `weakest orderable protected cell …` |
+
+  **What a parity standing claims, and what it does not.** It claims: every
+  protected cell in the phase was measured, and none produced an effect this
+  campaign's own sensitivity can separate from nothing — at a stated bound, from
+  a named cell and a named event. It does **not** claim the effect is zero:
+  sub-floor means the sign and the size are both unknown, which is why there is
+  no number to read off it. It does **not** claim the objective was met — §1.6
+  requires an improvement, so a wholly-parity backend is `non_inferior=PASS`,
+  `improved=FAIL`, `standing=objective_not_met`. And it does not claim to be
+  informative on its own: when the phase could not have resolved the campaign's
+  own advisory reference gain, the line says **UNDERPOWERED FOR THIS CAMPAIGN**
+  and names the parity result as a statement about the measurement rather than
+  about the candidate. The reference comparison stays `COULD_NOT_CHECK` either
+  way — AK-D3 made that figure advisory and labelling it cannot make it a gate.
+
+  **The stop rule consumes this, and the seam is typed.**
+  `ParityFigure.observation_fields()` carries no `readiness` key, so
+  `guards.ReadinessObservation(**fields)` is a `TypeError`; the controller's
+  series entries are two TYPES under `ReadinessSeriesEntry`
+  (`ReadinessObservation` has a magnitude, `ParityObservation`'s `readiness`
+  property raises), and `observation_from_fields()` is the one seam reader,
+  branching on which keys exist and defaulting nothing. `guard_plateau` counts
+  parity rounds as rounds — dropping them would trend a self-chosen
+  subsequence — while they contribute nothing to `best`, and it emits
+  `PLATEAU_STOP` on one of two named bases (`plateau_basis`): a measured
+  improvement below the floor, or **no detectable effect in any round**, the
+  latter reported with no `improvement`/`opening_readiness`/`best_readiness` at
+  all, because a substituted `0.0` is a trend in a quantity nobody measured. The
+  all-parity basis is admissible only when every round could have seen the
+  campaign's target; otherwise, and when no target was declared, the guard
+  answers `COULD_NOT_EVALUATE` — conditions a campaign can fix, unlike the
+  categorical refusal they replaced, which never terminated a converged
+  non-inferiority campaign.
 - **The cardinal-rule audit corpus was 18 of 42 modules** — found by this pass, not
   reported by any red team. `TestNoProductionWritePathsAnywhere` globbed `release/`
   and `adapters/` non-recursively. Rule 1 ("writes nothing at all") is correctly
@@ -785,6 +906,82 @@ carried-forward list nobody ever *removes* from stops being read.
   source, and the suite never handed it over. Rule 2 now runs over the whole
   package, discovery is recursive, and the corpus is asserted to contain the
   write-capable modules so it cannot pass by inspecting nothing.
+- **§10.4 waivers are READ, not quoted — the largest residual in the release
+  plane, and the last one on this list.** `t3.WaiverBinding` carried `document`,
+  `document_path` and `observed_sha256` as three independent caller assertions with
+  **nothing reading the file**, so a document the caller invented, pinned to its own
+  digest, at a path that does not exist verified — and took its *authorship* from
+  `attribution_source="operator_owned_path"`, borrowing the standing of a directory
+  it was not in. §10.4 turns a FAIL into PASS_WITH_WAIVER, so that was the authority
+  path of the entire freeze gate resting on the honesty of the party being gated.
+
+  `t3.waiver_binding_from_path()` is now the only constructor of a trusted binding.
+  It checks the citation shape before any I/O, `lstat`s (refusing a symlink, a
+  non-regular file, a hardlink, an oversized one), reads **once**, re-`lstat`s for
+  `(dev, ino, size, mtime, ctime)`, refuses a resolved path in scratch / a
+  production tree / outside the declared `DEFAULT_ATTESTATION_ROOTS`, refuses a BOM
+  or a duplicate JSON key (one file that means two things), hashes the **raw bytes**
+  (`schemas.raw_bytes_digest` — *not* `content_hash`, which matches no ratified
+  `evidence_sha256`), and optionally requires the digest a preserved ratification
+  pins. It returns a `ReadWaiver` carrying a `WaiverReadReceipt` that only this
+  function can mint, and the receipt's document is asserted to be the parse of the
+  very `bytes` object that was hashed, **by object identity** — there is one `bytes`
+  object in the function, so "the document returned is the one whose bytes were
+  hashed" is a fact rather than a hope. The gate asks
+  `t3.waiver_read_violations(binding)`, deliberately **not**
+  `isinstance(b, ReadWaiver)`: a three-line subclass that declines to run
+  `__post_init__` satisfies the isinstance test with no receipt at all, so the
+  capability is the mint token and only something that inspects the token tests for
+  it.
+
+  `WaiverBinding` survives as the QUOTATION type, because *"I did not read the
+  file"* must stay expressible — a design that made it inexpressible would push
+  callers into asserting digests they never computed, which is worse than the
+  defect. It fails **closed**: COULD_NOT_CHECK → a blocking identity-phase reason,
+  so an unread waiver does not merely suppress nothing, it stops the run. A REFUSAL
+  to read is a third state and raises `WaiverNotReadable`; it is never downgraded to
+  "nobody looked".
+
+  Three AST audits keep it true after this session:
+  `audit_waiver_reader_is_the_only_reader()` (one read call, no second door, the
+  mint token named exactly three times), `audit_reader_narrowing_is_never_widened()`
+  (no shipping module passes `attestation_roots` / `max_bytes` / `boundary`), and
+  `audit_waiver_binding_is_constructed_only_by_the_reader()` — an allowlist of
+  `(module, enclosing function)` covering the **three** construction sites that
+  exist, so a fourth is a test failure rather than a code review someone has to
+  catch. Test modules are out of scope on purpose: proving a quotation suppresses
+  nothing is most of the evidence the fix works.
+
+  **What reading the file does NOT give us — read this before citing the above.**
+  Reading buys **provenance** (these bytes came from an operator-owned path this
+  process opened, not from the caller's argument list) and **integrity** (they hash
+  to what was pinned, and did not change under the read). It does **not** buy
+  **authenticity**. There is still **no signature anywhere in this system**. Nothing
+  proves a human wrote the waiver; the evidence is a filesystem location and a
+  digest, and any process that can write `/workspace/artifacts/operator/` can
+  produce a document that passes every check in this paragraph — including the
+  ratification cross-check, since the ratification is an unsigned JSON file in the
+  same directory. `attribution_source="operator_owned_path"` is *"it was where the
+  operator keeps things"*, which is a much weaker claim than *"the operator signed
+  it"* and must not be quoted as the stronger one. The honest summary is that a
+  waiver is now as trustworthy as the write permissions on one directory. Closing
+  the remaining gap needs a signature contract (detached signature or a
+  human-only-writable ratification chain) and is a measurement-constitution
+  amendment, not a code change — the trust boundary is human-amendment-only.
+
+  Residual, named: the fd-based `os.open(O_NOFOLLOW|O_NONBLOCK)` + `fstat(fd)`
+  design is **not implementable inside `t3.py`** — `audit_no_write_or_process_paths`
+  and rule 1 forbid the release plane from importing `os` or calling `open` in any
+  spelling. The reader uses lstat-before / read / lstat-after instead, so a race
+  that swaps a regular file for a symlink *between* the pre-`lstat` and the read is
+  caught after the fact rather than in the syscall, and the FIFO case is not caught
+  at all — swapping in a FIFO at that instant **blocks the gate indefinitely**
+  (availability, not authenticity: it needs an attacker who can already write the
+  waiver). The trade is deliberate: the capability audit holds against every future
+  edit of the module, and rule 1 was **not** relaxed for the reader — reading is not
+  writing, `release/t3.py` takes zero rule-1 findings unexempted, and
+  `test_the_10_4_waiver_reader_needed_no_exemption` asserts exactly that, so a
+  future edit cannot buy itself an exemption it does not need.
 
 ### Remaining in AK5/AK6 (the release plane)
 
@@ -797,19 +994,6 @@ carried-forward list nobody ever *removes* from stops being read.
   `ReleaseProtocolNotRatified` for `mode="release"` under an unratified protocol,
   so **every** run this package can currently perform is a dry run. Ratification
   is human-only and is the gate on AK5 being usable at all.
-- **Waivers are structurally validated, not authenticated — `WaiverBinding` is
-  three independent caller assertions.** `document`, `document_path` and
-  `observed_sha256` are all supplied by the party being gated; **nothing reads the
-  file**. `document_path="artifacts/operator/w.json"` verifies with no manifest and
-  no filesystem at all, so `pinned_sha256` pins bytes the caller handed over rather
-  than bytes read from an operator-owned path. What the hardening pass *did* close
-  is the trust-boundary shape: the path must now resolve under a real checkout root
-  (`schemas.operator_owned_path_check`), the loop's own scratch root
-  `/mnt/raid0/llm/tmp/` can no longer spell the attestation root, and no spelling of
-  the loop can be the author. Closing the rest needs a mandatory
-  `waiver_binding_from_path()` reader as T3's only constructor — every caller and
-  fixture changes. **Recommended as its own item.** (The preserved v8 pair is the
-  one exception: the ratification hashes its own waiver, so that binding is real.)
 - **§1.6's `regression_band` is compared to nothing measured.** The pass made
   `expected_gain` realisable against the measured standing; the *band* stays
   structurally uncheckable at T3 because `PhaseStanding` carries a vocabulary
@@ -822,10 +1006,10 @@ carried-forward list nobody ever *removes* from stops being read.
   human-authored manifest is interpreted, and making `autokernel` disagree with
   `session_bus.py validate`'s matcher would be worse than the widening. Operator
   call.
-- **`WaiverVerification.covered_cell_ids` is populated even when the check FAILs.**
-  Inert today (`compute_verdict` guards on `.verified`) and no consumer exists
-  outside `t3.py`, but it lands in the durable bundle as a waived-looking coverage
-  list on a refused waiver.
+- **CLOSED 2026-08-03 — `WaiverVerification.covered_cell_ids` is `()` unless the
+  check PASSed.** It used to be populated regardless, so a refused waiver landed in
+  the durable bundle carrying a waived-looking coverage list — the same defect (a
+  record asserting coverage nobody verified) one layer out from the reader above.
 - **Identity re-joining can false-positive on a two-part human name** whose parts
   concatenate to a machine token (`"Bo T"` → `bot`). Fail-closed, and documented in
   `schemas.identity_candidates`; introduced by the hardening pass itself.
@@ -889,9 +1073,11 @@ by the seam integration and is reported rather than quietly carried:
   operator amendment, not a red-team call. Either narrow it (a one-line predicate
   plus its control) or amend `_CO_RESIDENT_WHY` to stop asserting a mechanism the
   check does not enforce.
-- **Coverage/repetition checks still count inadmissible cells**, and sub-floor
-  estimates can still be selected as weakest or best — an operator call, because
-  excluding them makes a phase measured entirely at parity report "no figure".
+- **Coverage/repetition checks still count inadmissible cells.** A cell whose
+  verdict is INVALID, or which failed a prior gate, still counts toward the §9.7
+  coverage and repetition tallies. (The *other* half of this item — sub-floor
+  estimates being selected as weakest or best — was decided by the operator and
+  is closed; see the readiness-figure entry in the 2026-08-03 list above.)
 
 ### Remaining in AK8/AK9 (the adapters)
 
@@ -948,6 +1134,19 @@ by the seam integration and is reported rather than quietly carried:
   large-v3-turbo int8 CPU 48t* (44/1870). The `whisper.cpp large-v3-turbo f16
   MI210 GPU` arm is **3.37 % (63/1870)**. A ratified receipt is corrected by a
   superseding receipt, which is human-only.
+- **§10.4 waivers have provenance and integrity but no AUTHENTICITY, and closing
+  that is not a code change.** After the reader (above), a waiver is trusted because
+  it was read from `/workspace/artifacts/operator/` and hashes to what a preserved
+  ratification pins. Neither fact distinguishes a document an operator wrote from
+  one any process with write access to that directory produced — the ratification
+  that pins the digest is an unsigned file in the same directory. Every mechanism
+  available *inside* this package is now spent; the next step is a signature
+  contract (a detached signature, or a ratification chain rooted somewhere the
+  agents cannot write), and the measurement trust boundary is human-amendment-only.
+  **Operator decision**, not deferred work: whether the freeze gate needs
+  cryptographic waiver authenticity, or whether directory permissions plus the
+  digest chain are the accepted bar. The gate is safe under either answer — it just
+  should not be described as authenticated under the second.
 
 ### Not started at all
 

@@ -1,0 +1,21 @@
+# RECORDED 2026-08-03 on the epyc host, verbatim stdout+stderr, exit 0.
+# scripts/utils/verify_ggml_linkage.sh <binary>  with the LAUNCHER'S OWN LD_LIBRARY_PATH set.
+# ---8<--- verbatim below this line ---8<---
+binary : /mnt/raid0/llm/llama.cpp-experimental/build-v8-sanitize/bin/test-backend-ops
+expect : libraries under /mnt/raid0/llm/llama.cpp-experimental/build-v8-sanitize/bin
+
+  OK   libllama-common.so.0         -> /mnt/raid0/llm/llama.cpp-experimental/build-v8-sanitize/bin/libllama-common.so.0
+  OK   libllama.so.0                -> /mnt/raid0/llm/llama.cpp-experimental/build-v8-sanitize/bin/libllama.so.0
+  OK   libggml.so.0                 -> /mnt/raid0/llm/llama.cpp-experimental/build-v8-sanitize/bin/libggml.so.0
+  OK   libggml-cpu.so.0             -> /mnt/raid0/llm/llama.cpp-experimental/build-v8-sanitize/bin/libggml-cpu.so.0
+  OK   libggml-base.so.0            -> /mnt/raid0/llm/llama.cpp-experimental/build-v8-sanitize/bin/libggml-base.so.0
+
+LD_LIBRARY_PATH order as the loader sees it:
+         1	/mnt/raid0/llm/llama.cpp-experimental/build-v8-sanitize/bin
+
+PASS: all linked ggml libraries resolve inside /mnt/raid0/llm/llama.cpp-experimental/build-v8-sanitize/bin
+NOTE: ggml backends (ggml-hip, ggml-cpu-<arch>) are dlopened at RUNTIME and
+      are not covered by ldd. Confirm the intended device appears in the
+      program's own startup log (e.g. 'Device 0: AMD Instinct MI210') and
+      do not trust a 'use gpu = 1' flag alone — that flag reports what was
+      REQUESTED, not what was loaded.

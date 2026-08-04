@@ -1,0 +1,60 @@
+[  0%] Building C object ggml/src/CMakeFiles/ggml-base.dir/ggml.c.o
+[  0%] Building C object ggml/src/CMakeFiles/ggml-base.dir/ggml-alloc.c.o
+[  0%] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml-opt.cpp.o
+[  0%] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml-threading.cpp.o
+[  1%] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml-backend.cpp.o
+[  1%] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml-backend-meta.cpp.o
+[  2%] Building C object examples/gguf-hash/CMakeFiles/sha256.dir/deps/sha256/sha256.c.o
+[  2%] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml.cpp.o
+[  2%] Building C object ggml/src/CMakeFiles/ggml-base.dir/ggml-quants.c.o
+[  2%] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/gguf.cpp.o
+[  3%] Building C object examples/gguf-hash/CMakeFiles/xxhash.dir/deps/xxhash/xxhash.c.o
+[  3%] Building CXX object vendor/cpp-httplib/CMakeFiles/cpp-httplib.dir/httplib.cpp.o
+[  3%] Building CXX object common/CMakeFiles/llama-common-base.dir/build-info.cpp.o
+[  3%] Building CXX object tools/mtmd/CMakeFiles/llama-llava-cli.dir/deprecation-warning.cpp.o
+[  3%] Building CXX object tools/ui/CMakeFiles/llama-ui-embed.dir/embed.cpp.o
+[  3%] Building CXX object tools/mtmd/CMakeFiles/llama-minicpmv-cli.dir/deprecation-warning.cpp.o
+[  3%] Building CXX object tools/mtmd/CMakeFiles/llama-gemma3-cli.dir/deprecation-warning.cpp.o
+[  3%] Building C object examples/gguf-hash/CMakeFiles/sha1.dir/deps/sha1/sha1.c.o
+[  3%] Building CXX object tools/mtmd/CMakeFiles/llama-qwen2vl-cli.dir/deprecation-warning.cpp.o
+[  3%] Built target sha256
+[... elided; excerpt of the recorded log ...]
+.svelte-kit/output/server/chunks/trash-2.js                                         1.15 kB
+.svelte-kit/output/server/entries/pages/(chat)/chat/_id_/_page.svelte.js            1.23 kB
+.svelte-kit/output/server/chunks/exports.js                                         1.46 kB
+.svelte-kit/output/server/chunks/url.js                                             1.60 kB
+.svelte-kit/output/server/chunks/input.js                                           1.62 kB
+.svelte-kit/output/server/chunks/label.js                                           1.78 kB
+.svelte-kit/output/server/chunks/render-context.js                                  1.81 kB
+.svelte-kit/output/server/chunks/DialogModelNotAvailable.js                         2.69 kB
+.svelte-kit/output/server/chunks/internal.js                                        2.84 kB
+.svelte-kit/output/server/chunks/index2.js                                          3.40 kB
+.svelte-kit/output/server/chunks/dialog-footer.js                                   5.35 kB
+.svelte-kit/output/server/chunks/workbox-window.prod.es5.js                         5.75 kB
+.svelte-kit/output/server/entries/pages/_error.svelte.js                            8.52 kB
+.svelte-kit/output/server/entries/pages/mcp-servers/_page.svelte.js                 9.35 kB
+.svelte-kit/output/server/chunks/McpServerIdentity.js                              10.57 kB
+.svelte-kit/output/server/remote-entry.js                                          14.02 kB
+.svelte-kit/output/server/chunks/utils.js                                          15.12 kB
+.svelte-kit/output/server/chunks/popper-layer-force-mount.js                       15.40 kB
+.svelte-kit/output/server/chunks/conversations.svelte.js                           19.04 kB
+.svelte-kit/output/server/chunks/index.js                                          20.65 kB
+.svelte-kit/output/server/chunks/ActionIcon.js                                     22.79 kB
+.svelte-kit/output/server/chunks/DialogConfirmation.js                             35.83 kB
+.svelte-kit/output/server/chunks/root.js                                           40.18 kB
+.svelte-kit/output/server/entries/pages/_layout.svelte.js                          45.73 kB
+.svelte-kit/output/server/chunks/url2.js                                           52.53 kB
+.svelte-kit/output/server/index.js                                                 57.10 kB
+[... elided; excerpt of the recorded log ...]
+[ 99%] Building CXX object tools/server/CMakeFiles/llama-server-impl.dir/server-models.cpp.o
+[ 99%] Building CXX object tools/server/CMakeFiles/llama-server-impl.dir/server.cpp.o
+[ 99%] Linking CXX shared library ../../bin/libllama-server-impl.so
+[ 99%] Built target llama-server-impl
+[ 99%] Building CXX object app/CMakeFiles/llama-app.dir/llama.cpp.o
+[ 99%] Building CXX object app/CMakeFiles/llama-app.dir/__/license.cpp.o
+[100%] Building CXX object tools/server/CMakeFiles/llama-server.dir/main.cpp.o
+[100%] Linking CXX executable ../../bin/llama-server
+[100%] Built target llama-server
+[100%] Linking CXX executable ../bin/llama
+[100%] Built target llama-app
+BUILD_OK

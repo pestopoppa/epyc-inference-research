@@ -84,7 +84,9 @@ Owning design: `epyc-root/handoffs/active/autokernel-research-loop.md` §1.3,
 from __future__ import annotations
 
 import ast
+import json
 import re
+import stat as stat_module
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -109,11 +111,13 @@ __all__ = [
     "OBJECTIVE_SATISFYING_STANDINGS", "QUALITY_MODES", "BUNDLE_COMPONENTS",
     "SUPPLIED_COMPONENTS", "COMPUTED_COMPONENTS", "KNOWN_WAIVER_SCHEMAS",
     "LINKAGE_VERIFIER_RELPATH", "RERUN_CODES", "ARCHIVE_GENERATIONS",
-    "EPYC_ROOT", "TRUST_BOUNDARY_MANIFEST", "FINGERPRINT_FACETS",
+    "EPYC_ROOT", "TRUST_BOUNDARY_MANIFEST", "DEFAULT_ATTESTATION_ROOTS",
+    "FINGERPRINT_FACETS",
     "RELEASE_READINESS_BY_BACKEND",
     # errors
     "T3Error", "T3InputError", "StackChangePathRequired",
     "ReleaseProtocolNotRatified", "ProductionWriteRefused", "RerunRefused",
+    "WaiverNotReadable",
     # inputs
     "ProtocolBinding", "PhaseProtocolBinding", "phase_protocol_binding",
     "declared_ratified_protocol_ids",
@@ -121,20 +125,25 @@ __all__ = [
     "TransferReceipt", "LinkageReceipt", "BackendInventory", "DeterminismDeclaration",
     "Cell", "CellResult", "PhaseStanding", "PhaseTradeException", "CapacityFloor",
     "QualityEvidence", "StabilityEvidence", "ArchivedBuild", "IncumbentArchive",
-    "TransactionPlan", "WaiverBinding", "T3Attempt", "StageRepair", "T3Request",
+    "TransactionPlan", "WaiverBinding", "ReadWaiver", "WaiverReadReceipt",
+    "T3Attempt", "StageRepair", "T3Request",
     # outputs
     "PhaseResult", "WaiverVerification", "ReleaseReceipt", "ReleaseBundle",
     "RerunDisposition", "T3Result",
     # functions
     "release_plan_view", "release_plan_view_from_compiled", "unchanged_view",
     "unchanged_results_from_plan", "transfer_receipts_from_plan",
-    "human_only_boundary", "verify_waiver", "sealed_fingerprint", "check_rerun",
+    "human_only_boundary", "waiver_binding_from_path", "waiver_read_violations",
+    "verify_waiver",
+    "sealed_fingerprint", "check_rerun",
     "phase_identity_preflight", "phase_build_linkage", "phase_backend_correctness",
     "phase_performance_matrix", "phase_quality", "phase_stability",
     "phase_capacity_utility", "phase_transaction_dry_run", "phase_seal",
     "compute_verdict", "run_t3", "T3Runner",
     "audit_no_write_or_process_paths", "audit_phase_coverage_totality",
-    "audit_backend_readiness_is_consulted",
+    "audit_backend_readiness_is_consulted", "audit_waiver_reader_is_the_only_reader",
+    "audit_reader_narrowing_is_never_widened",
+    "audit_waiver_binding_is_constructed_only_by_the_reader",
     # calibration (§10.4 "expect the v8 dry-run to FAIL without its waiver")
     "PreservedFreeze", "preserved_freeze_from_v8_artifacts",
     "preserved_freeze_from_speech_artifact", "calibration_request",
@@ -2330,6 +2339,23 @@ EPYC_ROOT = Path("/workspace")
 #: so the two planes cannot disagree about which file is the boundary.
 TRUST_BOUNDARY_MANIFEST = EPYC_ROOT / schemas.HUMAN_ONLY_PATHS_MANIFEST
 
+#: Where the operator's attestations ACTUALLY live, as absolute, symlink-resolved
+#: roots. `waiver_binding_from_path` requires the resolved document to sit under one
+#: of these IN ADDITION to passing `schemas.operator_owned_path_check`.
+#:
+#: The two answer different questions and both are needed. The schemas check is the
+#: CITATION-SHAPE authority: it deals in the repo-relative vocabulary the manifest is
+#: written in, and so "operator-owned" there means *spelled `artifacts/operator/…`
+#: inside ANY checkout* — which today includes
+#: `/mnt/raid0/llm/epyc-inference-research/artifacts/operator/`, a directory this
+#: repository's own agents can create with `mkdir -p`. That is correct for a citation
+#: check and wrong for a READ, so the narrowing lives here, in the reader, and
+#: `operator_owned_path_check` is left exactly as the hardened session left it: a
+#: check whose answer cannot be widened by any caller.
+DEFAULT_ATTESTATION_ROOTS = (
+    str(Path(EPYC_ROOT / schemas.OPERATOR_ATTESTATION_ROOT).resolve()),
+)
+
 
 def human_only_boundary(manifest: Optional[Any] = None) -> schemas.TrustBoundary:
     """Read `human_only_paths.yaml` — the trust boundary, as data (§1.3 item 4).
@@ -2354,13 +2380,38 @@ def human_only_boundary(manifest: Optional[Any] = None) -> schemas.TrustBoundary
 
 @dataclass(frozen=True)
 class WaiverBinding:
-    """A waiver as T3 receives it: pinned hash, observed hash, document, coverage.
+    """A waiver as SOMEBODY QUOTED IT: pinned hash, quoted hash, document, coverage.
 
-    `observed_sha256` is what somebody actually computed over the file's bytes.
-    It is Optional because the honest answer to "did you read the file?" is
-    sometimes no, and that answer must be expressible: an unread waiver yields
-    COULD_NOT_CHECK and suppresses nothing, rather than being trusted because it
-    was quoted.
+    This is the QUOTATION type, and every one of its five facts is a caller
+    assertion. `document`, `document_path` and `observed_sha256` are three
+    INDEPENDENT assertions in particular: nothing here reads a file, so
+    `WaiverBinding(document_path="artifacts/operator/w.json", document={...},
+    observed_sha256=<sha of that dict>)` is constructible with no filesystem at all,
+    and the digest it pins is a digest of bytes the party being gated handed over.
+
+    That is not a defect in this type — it is what a quotation IS. It is a defect
+    only if a quotation can suppress something, so it cannot:
+
+      * `verify_waiver` evaluates a `read` predicate FIRST, and only a `ReadWaiver`
+        (the return type of `waiver_binding_from_path`, the sole constructor that
+        opens the file) can satisfy it. A quotation is at best COULD_NOT_CHECK.
+      * `run_t3` turns COULD_NOT_CHECK into a BLOCKING identity-phase reason, so an
+        unread waiver does not merely suppress nothing — it stops the run.
+      * `WaiverVerification.covered_cell_ids` is `()` unless the check PASSed, so a
+        refused waiver cannot even land in the durable bundle looking like coverage.
+
+    `observed_sha256` stays Optional, and stays a caller assertion, ON PURPOSE. The
+    honest answer to *"did you read the file?"* is sometimes no, and that answer
+    must be expressible: a design that made "unread" INEXPRESSIBLE would push
+    callers into asserting a digest they never computed, which is strictly worse
+    than a quotation that is labelled as one. Unread is available, and it fails
+    CLOSED.
+
+    A REFUSAL to read is a different thing from an unread waiver: when
+    `waiver_binding_from_path` is asked to read and cannot — absent, symlinked,
+    oversized, hash-mismatched — it RAISES `WaiverNotReadable`. It never degrades
+    into one of these, because "the reader refused these bytes" must never be
+    recorded as "nobody looked".
     """
 
     waiver_id: str
@@ -2381,12 +2432,586 @@ class WaiverBinding:
         if self.observed_sha256 is not None:
             _sha256(self.observed_sha256, "WaiverBinding.observed_sha256")
 
+    @property
+    def was_read(self) -> bool:
+        """Did THIS PROCESS read these bytes? Computed, never declared.
+
+        Deliberately not a `read: bool` field: a flag makes ONE type carry TWO
+        meanings, so every downstream consumer must remember to ask, and forgetting
+        is silent.
+
+        Equally deliberately, this is not `return False` on the quotation type and
+        `return True` on `ReadWaiver`. A per-class constant is a fact about the
+        class, and a class is something a caller writes — a three-line subclass
+        answered True with no receipt at all. It delegates to
+        `waiver_read_violations`, which inspects the mint token on the receipt, so
+        the answer is a fact about the OBJECT. Overriding this property still lies to
+        anything that reads it, which is why the gate (`verify_waiver`) and the
+        package call the function and never the property.
+        """
+        return not waiver_read_violations(self)
+
     def to_dict(self) -> dict:
         return {"waiver_id": self.waiver_id, "pinned_sha256": self.pinned_sha256,
                 "document_path": self.document_path,
                 "covers_cell_ids": list(self.covers_cell_ids),
                 "observed_sha256": self.observed_sha256,
+                "read": not waiver_read_violations(self), "read_receipt": None,
                 "schema": self.document.get("schema")}
+
+
+#: Minted at import, named by exactly ONE function in this package
+#: (`waiver_binding_from_path`), and absent from `__all__`. A receipt cannot be
+#: constructed without it.
+#:
+#: Python has no real privacy, so a sentinel is unforgeable only by convention —
+#: which is why it sits on the RECEIPT, an object with no other reason to exist,
+#: rather than on the binding, which has many. Forging a read therefore requires
+#: writing the literal token name into source, which is greppable, and
+#: `audit_reader_token_is_named_once` greps for it.
+_READER_TOKEN = object()
+
+
+class WaiverNotReadable(T3Error):
+    """The reader was asked to read a waiver and refused.
+
+    NOT a subclass of `T3InputError` and NOT convertible into an unread
+    `WaiverBinding`: a caller that asked to read and got a refusal must not be able
+    to record that as "nobody looked". Every refusal below is a fact about the
+    bytes or the location, never about the caller's typing.
+    """
+
+
+@dataclass(frozen=True)
+class WaiverReadReceipt:
+    """What the reader OBSERVED, minted only by `waiver_binding_from_path`.
+
+    Every field is a measurement, not an assertion. `document` is the object
+    `json.loads` produced from the very `bytes` object `bytes_sha256` digests —
+    `ReadWaiver.__post_init__` asserts that by OBJECT IDENTITY, which is what makes
+    "the document returned is the one whose bytes were hashed" a fact rather than a
+    hope. Hashing a file and separately parsing it proves nothing about the parsed
+    object.
+    """
+
+    resolved_path: str
+    citation: str
+    st_dev: int
+    st_ino: int
+    st_size: int
+    st_mtime_ns: int
+    byte_length: int
+    bytes_sha256: str
+    document: Mapping
+    boundary_source: str = ""
+    attestation_root: str = ""
+    ratification_pin: Optional[str] = None
+    _minted: Any = None
+
+    def __post_init__(self) -> None:
+        if self._minted is not _READER_TOKEN:
+            raise T3InputError(
+                "WaiverReadReceipt: a read receipt is MINTED by "
+                "`waiver_binding_from_path`, never constructed. Building one by hand "
+                "would be asserting a read that did not happen, which is the exact "
+                "defect the reader exists to close (§10.4).")
+        _text(self.resolved_path, "WaiverReadReceipt.resolved_path")
+        _text(self.citation, "WaiverReadReceipt.citation")
+        _sha256(self.bytes_sha256, "WaiverReadReceipt.bytes_sha256")
+        if not isinstance(self.document, Mapping):
+            raise T3InputError("WaiverReadReceipt.document: must be a mapping")
+
+    def to_dict(self) -> dict:
+        return {"resolved_path": self.resolved_path, "citation": self.citation,
+                "st_dev": self.st_dev, "st_ino": self.st_ino,
+                "st_size": self.st_size, "st_mtime_ns": self.st_mtime_ns,
+                "byte_length": self.byte_length, "bytes_sha256": self.bytes_sha256,
+                "boundary_source": self.boundary_source,
+                "attestation_root": self.attestation_root,
+                "ratification_pin": self.ratification_pin}
+
+
+@dataclass(frozen=True)
+class ReadWaiver(WaiverBinding):
+    """A waiver whose document was READ from an operator-owned path by this process.
+
+    The only type `verify_waiver` can return a PASS for. A SUBCLASS rather than a
+    separate type on purpose: `_typed_tuple(..., WaiverBinding)`,
+    `isinstance(binding, WaiverBinding)` and the packager all keep working unchanged,
+    and the one exact test — `isinstance(x, ReadWaiver)` — is in the safe direction,
+    because a read waiver arriving where a quotation is accepted is a strengthening.
+    """
+
+    read_receipt: WaiverReadReceipt = field(kw_only=True)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        violations = waiver_read_violations(self)
+        if violations:
+            raise T3InputError("ReadWaiver: " + " ".join(violations))
+
+    def to_dict(self) -> dict:
+        out = super().to_dict()
+        out["read_receipt"] = self.read_receipt.to_dict()
+        return out
+
+
+def waiver_read_violations(binding: Any) -> tuple:
+    """Why `binding` is NOT a document this process read. Empty ⇒ it is one.
+
+    THE authority on "was this read", and a module FUNCTION over a duck-typed object
+    rather than `isinstance(binding, ReadWaiver)` or a `was_read` property, because
+    both of those are satisfied by a three-line subclass:
+
+        @dataclass(frozen=True)
+        class Sneaky(ReadWaiver):
+            def __post_init__(self): pass
+
+        Sneaky(waiver_id="FORGED", pinned_sha256="a"*64, document={...},
+               document_path="/workspace/artifacts/operator/does-not-exist.json",
+               covers_cell_ids=(...), observed_sha256="a"*64, read_receipt=None)
+
+    MEASURED, not hypothesised: that object satisfied `isinstance(x, ReadWaiver)`,
+    took `read=PASS` and `attribution_source="operator_owned_path"`, verified, and
+    covered its failing cell — the entire §10.4 defect restored with no filesystem,
+    no receipt and no token, by declining to run a constructor. A capability test a
+    subclass can inherit is not a capability test. The capability is the TOKEN
+    OBJECT, so only something that looks at the token can test for it, and every
+    invariant `ReadWaiver.__post_init__` asserts is re-asserted HERE, at the gate,
+    where skipping a constructor cannot skip it.
+
+    Pure: no I/O, no re-read. It answers "does this object carry a receipt this
+    process minted, for these exact bytes", never "is the file still there" — a
+    second read would be a second set of bytes (see `_read_operator_file`).
+    """
+    receipt = getattr(binding, "read_receipt", None)
+    if receipt is None:
+        return ("was never read from disk: it carries no read receipt, so its "
+                "document, its path and its digest are three independent assertions "
+                "by the party being gated (use `waiver_binding_from_path()`).",)
+    out: list = []
+    # The token, FIRST and unconditionally. `isinstance(receipt, WaiverReadReceipt)`
+    # is not asked at all: a receipt subclass that skips its own `__post_init__`
+    # passes that test while never having been minted, and a non-receipt object that
+    # somehow held the token would be indistinguishable from one anyway. The token is
+    # the whole check; the rest is consistency.
+    if getattr(receipt, "_minted", None) is not _READER_TOKEN:
+        out.append(
+            "carries a read receipt that `waiver_binding_from_path` did not mint. A "
+            "receipt is the reader's own record of opening a file; one built by hand, "
+            "or by a subclass that declines to run the constructor, asserts a read "
+            "that did not happen.")
+        return tuple(out)
+    # OBJECT IDENTITY, not equality. An equal-but-distinct mapping is a document
+    # parsed from some OTHER bytes that happens to compare equal; the whole point of
+    # the receipt is that these are one object.
+    if getattr(binding, "document", None) is not receipt.document:
+        out.append(
+            "document is not the object the receipt hashed. The receipt attests to "
+            "the bytes it digested and the document it parsed from those same bytes; "
+            "substituting an equal mapping re-opens the gap between 'hashed' and "
+            "'parsed' the reader exists to close.")
+    if getattr(binding, "observed_sha256", None) != receipt.bytes_sha256:
+        out.append(
+            f"observed_sha256 must be the digest the receipt records "
+            f"({receipt.bytes_sha256[:12]}), not "
+            f"{getattr(binding, 'observed_sha256', None)!r}.")
+    if schemas.canonical_citation(
+            getattr(binding, "document_path", None)) != receipt.citation:
+        out.append(
+            f"document_path must be the citation the receipt read "
+            f"({receipt.citation!r}), not "
+            f"{getattr(binding, 'document_path', None)!r}. A binding whose stated "
+            "path is not the path that was opened is the "
+            "three-independent-assertions defect wearing a receipt.")
+    return tuple(out)
+
+
+def _read_operator_file(citation: str, *, boundary: schemas.TrustBoundary,
+                        attestation_roots: tuple, max_bytes: int,
+                        what: str) -> tuple:
+    """Read one operator-owned document. Returns `(resolved_path, raw, stat_after)`.
+
+    Order is load-bearing — most-refusing and cheapest FIRST, so a path outside the
+    boundary is never opened at all.
+
+    DEVIATION FROM THE `os.open(O_RDONLY|O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC)` DESIGN,
+    stated here rather than discovered later. `t3.audit_no_write_or_process_paths`
+    (and rule 1 over the whole `release/` plane) forbid this module from importing
+    `os` and from calling `open` in ANY spelling — `open()`, `.open()`, or
+    `getattr(x, "open")()` — because `open` is the one call that takes a mode, so
+    allowing it for reading allows `open(path, "w")` by omission. That audit is a
+    ratified property of the release plane and is asserted PASS by this module's own
+    suite. So the fd-based discipline is not available here, and the closest honest
+    equivalent is used instead:
+
+      * `lstat()` BEFORE the read refuses a symlink final component, a non-regular
+        file (FIFO, device, socket, directory), a hardlinked file, and an oversized
+        one — so a FIFO is never opened and `read_bytes` cannot block in the syscall;
+      * `read_bytes()` produces exactly ONE `bytes` object;
+      * `lstat()` AFTER the read requires `(dev, ino, size, mtime_ns, ctime_ns)`
+        unchanged, so a file swapped or rewritten under the read is refused.
+
+    What is NOT closed by this, stated at its real strength rather than its
+    comfortable one. A race that replaces the regular file strictly between the
+    pre-`lstat` and the `read_bytes` has TWO outcomes, not one:
+
+      * replaced by another REGULAR file — caught after the fact by the post-`lstat`,
+        whose `(dev, ino, size, mtime_ns, ctime_ns)` comparison refuses it. Measured.
+      * replaced by a FIFO — NOT caught at all. `read_bytes` blocks in `open()`
+        waiting for a writer and the gate hangs indefinitely; there is no "after the
+        fact" because control never returns. Measured, by injecting the swap into
+        that exact window: the process wedged until the probe's alarm fired.
+        `O_NOFOLLOW|O_NONBLOCK` would have refused it in the syscall.
+
+    Closing it needs an fd, and an fd needs `open`, which `audit_no_write_or_process_
+    paths` forbids across the whole `release/` plane because `open` is the one call
+    that takes a mode. The trade is deliberate and the residual is an availability
+    failure, not an authenticity one: an attacker who can create a FIFO inside
+    `/workspace/artifacts/operator/` can already write the waiver itself, so what
+    they gain by racing is a hang rather than a forged PASS. It is recorded here
+    because a hang in a release gate is a real outcome that a reader of this module
+    must be able to predict.
+    """
+    located = schemas.operator_owned_path_check(citation, boundary=boundary)
+    if located.outcome != schemas.PASS:
+        raise WaiverNotReadable(
+            f"{what}: {citation!r} is not established as an operator-owned citation "
+            f"({located.outcome}): {'; '.join(located.reasons) or 'no reason given'}. "
+            "§10.4 stores a waiver under the trust-boundary path set; the reader "
+            "refuses to open anything else.")
+
+    target = Path(citation)
+    try:
+        before = target.lstat()
+    except (OSError, ValueError) as exc:
+        # ValueError as well as OSError: an embedded NUL byte makes `lstat` raise
+        # `ValueError: embedded null character in path`, which escaped this reader as
+        # an uncaught exception of a type no caller is told to expect. `WaiverNotReadable`
+        # documents itself as covering every refusal, and a driver catching `T3Error`
+        # to RECORD a refusal instead crashed on `artifacts/operator/w\x00.json`.
+        raise WaiverNotReadable(
+            f"{what}: {citation!r} could not be stat'd: {exc}. An absent or "
+            "unreadable attestation is a REFUSAL, never an unread quotation.") from exc
+
+    if stat_module.S_ISLNK(before.st_mode):
+        raise WaiverNotReadable(
+            f"{what}: {citation!r} is a symbolic link. The citation is what §10.4 "
+            "speaks about, and a link at the operator's path is a document the "
+            "operator did not write sitting where one they did would be.")
+    if not stat_module.S_ISREG(before.st_mode):
+        raise WaiverNotReadable(
+            f"{what}: {citation!r} is not a regular file (mode "
+            f"{stat_module.filemode(before.st_mode)}). A FIFO, device, socket or "
+            "directory is not an attestation, and a FIFO would block the read.")
+    if before.st_nlink != 1:
+        raise WaiverNotReadable(
+            f"{what}: {citation!r} has {before.st_nlink} hard links. A second name "
+            "for these bytes is a second door into them, and the loop may own it.")
+    if before.st_size > max_bytes:
+        raise WaiverNotReadable(
+            f"{what}: {citation!r} is {before.st_size} bytes, over the {max_bytes}-byte "
+            "ceiling for an operator attestation (the preserved v8 waiver is 1,267).")
+
+    # The RESOLVED location, checked as well as the citation — never instead of it.
+    # The citation check is what §10.4 speaks about and is written in repo-relative
+    # vocabulary; resolving first would launder a symlinked PARENT directory whose
+    # target happens to be operator-owned into a citation the operator never wrote.
+    # Checking only the citation is today's behaviour and cannot see that parent at all.
+    try:
+        resolved = schemas.canonical_citation(str(target.resolve()))
+    except (OSError, ValueError) as exc:  # symlink loop, ELOOP, NUL byte
+        raise WaiverNotReadable(
+            f"{what}: {citation!r} could not be resolved: {exc}") from exc
+    # Most SPECIFIC refusal first, so the reason names the actual hazard rather than
+    # the general one that also covers it.
+    if storage.is_scratch_path(resolved):
+        raise WaiverNotReadable(
+            f"{what}: {citation!r} resolves into the loop's own scratch root "
+            f"({resolved!r}). A path the loop can write is a path the loop can author.")
+    if schemas.under_any_root(resolved, storage.production_tree_forms()):
+        raise WaiverNotReadable(
+            f"{what}: {citation!r} resolves inside a FROZEN production kernel tree "
+            f"({resolved!r}). Those trees are records, never a waiver source.")
+    resolved_check = schemas.operator_owned_path_check(resolved, boundary=boundary)
+    if resolved_check.outcome != schemas.PASS:
+        raise WaiverNotReadable(
+            f"{what}: {citation!r} resolves to {resolved!r}, which is not "
+            f"operator-owned ({resolved_check.outcome}). A parent-directory symlink "
+            "is invisible to the citation check by construction.")
+    if not schemas.under_any_root(resolved, attestation_roots):
+        raise WaiverNotReadable(
+            f"{what}: {citation!r} resolves to {resolved!r}, which is under none of "
+            f"the declared attestation roots {list(attestation_roots)}. "
+            "`operator_owned_path_check` answers a question about the SPELLING of a "
+            "citation (`artifacts/operator/…` inside any checkout); the reader "
+            "additionally requires the bytes to be where the operator actually keeps "
+            "them.")
+
+    try:
+        raw = target.read_bytes()
+    except (OSError, ValueError) as exc:
+        # A permission failure, an EISDIR from a directory that appeared under the
+        # check, a NUL byte — all of them are the reader REFUSING these bytes, and all
+        # of them escaped as raw OSError before, outside the exception type this
+        # module tells its callers to expect.
+        raise WaiverNotReadable(
+            f"{what}: {citation!r} could not be read: {exc}") from exc
+
+    try:
+        after = target.lstat()
+    except (OSError, ValueError) as exc:
+        raise WaiverNotReadable(
+            f"{what}: {citation!r} could not be re-stat'd after the read: {exc}") from exc
+    identity_before = (before.st_dev, before.st_ino, before.st_size,
+                       before.st_mtime_ns, before.st_ctime_ns)
+    identity_after = (after.st_dev, after.st_ino, after.st_size,
+                      after.st_mtime_ns, after.st_ctime_ns)
+    if identity_before != identity_after:
+        raise WaiverNotReadable(
+            f"{what}: {citation!r} changed underneath the read "
+            f"({identity_before} -> {identity_after}). The bytes that were hashed are "
+            "not the bytes that are there.")
+    if len(raw) != before.st_size:
+        raise WaiverNotReadable(
+            f"{what}: {citation!r} yielded {len(raw)} bytes for a stat'd size of "
+            f"{before.st_size}.")
+    return (resolved, raw, before)
+
+
+#: Byte-order marks `json.loads(bytes)` silently honours. `json.detect_encoding`
+#: sniffs these and decodes UTF-16/UTF-32 for you, so a UTF-16-LE waiver parsed and
+#: VERIFIED end to end here while `json.loads(raw.decode("utf-8"))` — what the v8
+#: freeze script, `jq`, and every other consumer of an operator attestation on this
+#: host do — raised `UnicodeDecodeError` on byte 0. One authority document with two
+#: readings, one of which is "this file is unreadable", is the parser differential
+#: §10.4 can least afford.
+_BYTE_ORDER_MARKS = (
+    (b"\xef\xbb\xbf", "UTF-8"), (b"\x00\x00\xfe\xff", "UTF-32-BE"),
+    (b"\xff\xfe\x00\x00", "UTF-32-LE"), (b"\xfe\xff", "UTF-16-BE"),
+    (b"\xff\xfe", "UTF-16-LE"),
+)
+
+
+def _no_duplicate_keys(pairs: Any) -> dict:
+    """`object_pairs_hook` that REFUSES a JSON object with a repeated key.
+
+    `json` keeps the LAST value for a duplicate key and says nothing. On an operator
+    attestation that is a document that reads one way to the human who ratified it
+    and another to the gate: a waiver whose bytes contain `"protocol_changed": true`
+    followed by `"protocol_changed": false` parsed as False, took `protocol_stable:
+    PASS`, verified, and suppressed its cell — while the operator scrolling the file
+    they signed sees `true` at the top. The digest is honest about the bytes and
+    silent about which of the two readings the gate took.
+
+    Raises `ValueError`, which is what `json.loads` already raises for malformed
+    input, so the caller's existing refusal path carries it. Applied to every nested
+    object, not just the top level.
+    """
+    seen: dict = {}
+    for key, value in pairs:
+        if key in seen:
+            raise ValueError(
+                f"duplicate key {key!r} in a JSON object: the file states {key!r} more "
+                "than once, so the bytes a human ratified and the value this gate "
+                "reads are two different facts")
+        seen[key] = value
+    return seen
+
+
+def _json_object_from_bytes(raw: bytes, *, what: str, citation: str) -> Mapping:
+    """The ONE way this module turns operator bytes into a document.
+
+    Strict UTF-8, no byte-order mark, no duplicate keys, and a JSON object at the top
+    level. Every one of those was permissive before and each admitted a document that
+    verified while meaning something other than what it appears to mean.
+    """
+    for mark, name in _BYTE_ORDER_MARKS:
+        if raw.startswith(mark):
+            raise WaiverNotReadable(
+                f"{what}: {citation!r} begins with a {name} byte-order mark. An "
+                "operator attestation on this host is UTF-8 without a BOM; `json` "
+                "would sniff this and decode it while a strict-UTF-8 consumer of the "
+                "same bytes cannot read the file at all.")
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise WaiverNotReadable(
+            f"{what}: {citation!r} is not UTF-8: {exc}") from exc
+    try:
+        document = json.loads(text, object_pairs_hook=_no_duplicate_keys)
+    except ValueError as exc:
+        raise WaiverNotReadable(f"{what}: {citation!r} is not JSON: {exc}") from exc
+    if not isinstance(document, Mapping):
+        raise WaiverNotReadable(
+            f"{what}: {citation!r} decodes to {type(document).__name__}, not a JSON "
+            "object.")
+    return document
+
+
+def waiver_binding_from_path(
+        document_path: Any, *, pinned_sha256: str, waiver_id: str,
+        covers_cell_ids: Iterable[str],
+        boundary: Optional[schemas.TrustBoundary] = None,
+        attestation_roots: Optional[Sequence[str]] = None,
+        ratification_pin: Optional[tuple] = None,
+        max_bytes: int = schemas.MAX_OPERATOR_WAIVER_BYTES) -> ReadWaiver:
+    """READ a §10.4 waiver from an operator-owned path. T3's only trusted constructor.
+
+    THE DEFECT THIS CLOSES. `WaiverBinding` carries `document`, `document_path` and
+    `observed_sha256` as three independent caller assertions and nothing reads the
+    file, so a document the caller invented, pinned to its own digest, at a path that
+    does not exist, verified — and took its AUTHORSHIP from
+    `attribution_source="operator_owned_path"`, borrowing the standing of a directory
+    it was not in. §10.4 turns a FAIL into PASS_WITH_WAIVER, so that is the authority
+    path of the whole freeze gate resting on the honesty of the party being gated.
+
+    WHAT IS RETURNED. A `ReadWaiver` carrying a `WaiverReadReceipt`, which is minted
+    here and nowhere else. There is exactly ONE `bytes` object in this function:
+    `bytes_sha256` digests it, `document` is `json.loads` of it, and
+    `ReadWaiver.__post_init__` asserts the two are the same object by identity.
+
+    WHAT RAISES. Everything: a citation outside the trust boundary, an absent file, a
+    symlink, a non-regular file, a hardlink, an oversized file, a resolved location
+    outside the declared attestation roots or inside scratch or a production tree, a
+    file that changed under the read, a digest that is not the pin, or bytes that are
+    not a JSON object. A refusal is NEVER downgraded to an unread `WaiverBinding`.
+
+    `pinned_sha256` is over RAW FILE BYTES (`schemas.raw_bytes_digest`), not
+    `schemas.content_hash`: the v8 ratification pins
+    `sha256(waive_q8_cpu_prefill_v8_20260725.json)`, and `content_hash` of the same
+    parsed document matches nothing anybody ratified.
+
+    `ratification_pin=(ratification_path, key)` is the only AUTHENTICITY fact
+    available anywhere in this system: when a preserved attestation hashes the waiver
+    — v8's `evidence_sha256.waive_q8` — the digest read here must equal the digest
+    that record pins. Optional because a brand-new waiver has nothing ratified
+    pinning it yet.
+    """
+    _text(waiver_id, "waiver_binding_from_path: waiver_id")
+    _sha256(pinned_sha256, "waiver_binding_from_path: pinned_sha256")
+    if not isinstance(max_bytes, int) or isinstance(max_bytes, bool) or max_bytes <= 0:
+        raise T3InputError("waiver_binding_from_path: max_bytes must be a positive int")
+    if max_bytes > schemas.MAX_OPERATOR_WAIVER_BYTES:
+        # `max_bytes` may only ever NARROW. A parameter that raises a ceiling is not a
+        # ceiling, it is a default: `max_bytes=10**9` read a 1 MiB file that the
+        # constant exists to refuse. Every knob on this reader is a guard, and a guard
+        # the party being gated can turn off is decoration.
+        raise T3InputError(
+            f"waiver_binding_from_path: max_bytes={max_bytes} exceeds "
+            f"schemas.MAX_OPERATOR_WAIVER_BYTES ({schemas.MAX_OPERATOR_WAIVER_BYTES}). "
+            "The parameter may narrow the ceiling for a caller that wants a tighter "
+            "one; it may not raise it.")
+    citation = schemas.canonical_citation(document_path)
+    if not citation:
+        raise T3InputError(
+            "waiver_binding_from_path: document_path must be a non-empty string")
+    if boundary is None:
+        boundary = human_only_boundary()
+    elif not isinstance(boundary, schemas.TrustBoundary):
+        raise T3InputError(
+            "waiver_binding_from_path: boundary must be a schemas.TrustBoundary")
+    roots = tuple(DEFAULT_ATTESTATION_ROOTS if attestation_roots is None
+                  else _str_tuple(attestation_roots,
+                                  "waiver_binding_from_path: attestation_roots"))
+    if not roots:
+        raise T3InputError(
+            "waiver_binding_from_path: attestation_roots must name at least one root; "
+            "an empty root set would read as 'anywhere'.")
+    # A declared root must ITSELF be operator-owned. The root set is documented as a
+    # NARROWING of `operator_owned_path_check` — the reader additionally requires the
+    # bytes to sit where the operator actually keeps them — but it was a free
+    # substitution: `attestation_roots=("/mnt/raid0/llm/epyc-inference-research",)`
+    # admitted the whole research checkout, so the composite guard was weaker than the
+    # citation check it claims to narrow, and the narrowing was undone by one keyword
+    # argument supplied by the party being gated. Requiring each root to pass the
+    # citation check makes the root set a SUBSET by construction: the reader's answer
+    # can be tightened by a caller and never widened, which is the property
+    # `operator_owned_path_check` already has and the reason this parameter is safe to
+    # expose at all.
+    for root in roots:
+        root_check = schemas.operator_owned_path_check(root, boundary=boundary)
+        if root_check.outcome != schemas.PASS:
+            raise T3InputError(
+                f"waiver_binding_from_path: attestation root {root!r} is not itself "
+                f"operator-owned ({root_check.outcome}: "
+                f"{'; '.join(root_check.reasons) or 'no reason given'}). The root set "
+                "narrows where an attestation may live; a root outside the trust "
+                "boundary would widen it instead.")
+
+    resolved, raw, before = _read_operator_file(
+        citation, boundary=boundary, attestation_roots=roots, max_bytes=max_bytes,
+        what=f"waiver {waiver_id}")
+
+    observed = schemas.raw_bytes_digest(raw)
+    if observed != pinned_sha256:
+        raise WaiverNotReadable(
+            f"waiver {waiver_id}: {citation!r} hashes to {observed[:12]} but the "
+            f"caller pinned {pinned_sha256[:12]}. The waiver that was authorised is "
+            "not the waiver that is here.")
+
+    pinned_by_ratification = None
+    if ratification_pin is not None:
+        pinned_by_ratification = _ratification_pinned_digest(
+            ratification_pin, boundary=boundary, attestation_roots=roots,
+            max_bytes=max_bytes, what=f"waiver {waiver_id}")
+        if pinned_by_ratification != observed:
+            raise WaiverNotReadable(
+                f"waiver {waiver_id}: the preserved ratification pins "
+                f"{str(pinned_by_ratification)[:12]} for this waiver, and "
+                f"{citation!r} hashes to {observed[:12]}. A waiver that its own "
+                "ratification does not hash to is not the ratified waiver.")
+
+    document = _json_object_from_bytes(raw, what=f"waiver {waiver_id}",
+                                       citation=citation)
+
+    return ReadWaiver(
+        waiver_id=waiver_id, pinned_sha256=pinned_sha256, document=document,
+        document_path=citation, covers_cell_ids=tuple(covers_cell_ids),
+        observed_sha256=observed,
+        read_receipt=WaiverReadReceipt(
+            resolved_path=resolved, citation=citation, st_dev=before.st_dev,
+            st_ino=before.st_ino, st_size=before.st_size,
+            st_mtime_ns=before.st_mtime_ns, byte_length=len(raw),
+            bytes_sha256=observed, document=document,
+            boundary_source=boundary.source,
+            attestation_root=next(
+                (r for r in roots if schemas.under_any_root(resolved, (r,))), ""),
+            ratification_pin=pinned_by_ratification,
+            _minted=_READER_TOKEN))
+
+
+def _ratification_pinned_digest(ratification_pin: Any, *, boundary, attestation_roots,
+                                max_bytes: int, what: str) -> str:
+    """The digest a preserved ratification pins for a waiver, read from ITS file.
+
+    Read with the same discipline as the waiver, from the same declared roots: an
+    authenticity cross-check sourced from a document the caller supplied would be
+    the same defect one level out.
+    """
+    if not (isinstance(ratification_pin, (tuple, list)) and len(ratification_pin) == 2):
+        raise T3InputError(
+            "waiver_binding_from_path: ratification_pin must be "
+            "(ratification_path, evidence_key)")
+    ratification_path, key = ratification_pin
+    ratification_citation = schemas.canonical_citation(ratification_path)
+    if not ratification_citation or not isinstance(key, str) or not key.strip():
+        raise T3InputError(
+            "waiver_binding_from_path: ratification_pin needs a path and a key")
+    _, raw, _ = _read_operator_file(
+        ratification_citation, boundary=boundary, attestation_roots=attestation_roots,
+        max_bytes=max_bytes, what=f"{what} ratification")
+    ratification = _json_object_from_bytes(
+        raw, what=what, citation=ratification_citation)
+    evidence = ratification.get("evidence_sha256") if isinstance(
+        ratification, Mapping) else None
+    pinned = evidence.get(key) if isinstance(evidence, Mapping) else None
+    if not isinstance(pinned, str) or not pinned.strip():
+        raise WaiverNotReadable(
+            f"{what}: {ratification_citation!r} pins no digest at "
+            f"evidence_sha256.{key}. A cross-check against a key that is not there "
+            "is not a weaker check, it is no check.")
+    return pinned
 
 
 @dataclass(frozen=True)
@@ -2457,8 +3082,32 @@ def _waiver_structural_violations(document: Mapping) -> list:
 #: model/shape vocabulary the operator actually writes in (the preserved v8 record
 #: names `qwen36_q8-pp2048-iqk1`, not a cell id) and are matched as tokens.
 _WAIVER_EXACT_SCOPE_KEYS = ("covers_cell_ids", "excluded_cell_ids")
-_WAIVER_TOKEN_SCOPE_KEYS = ("excluded_pairs", "excluded_models")
-_WAIVER_TOKEN_SCOPE_SCALARS = ("excluded_model",)
+#: SPECIFIC scope: the operator named a model/shape arm, which resolves to a cell.
+_WAIVER_PAIR_SCOPE_KEYS = ("excluded_pairs",)
+#: BROAD scope: the operator named a model. Every cell of that model in every phase,
+#: on every backend, in every source tree, carries the model's name.
+_WAIVER_MODEL_SCOPE_KEYS = ("excluded_models",)
+_WAIVER_MODEL_SCOPE_SCALARS = ("excluded_model",)
+
+
+def _cell_id_components(cell_id: str) -> tuple:
+    """A cell id's dot-separated components. The matrix vocabulary is dotted
+    (`llama_cpu.prefill`, `llama_cpu.pair.qwen36_q8-pp2048-iqk1`,
+    `llama_gpu.backend_correctness`), so a component is the smallest unit an
+    operator's token can name without naming part of a word."""
+    return tuple(part for part in str(cell_id).split(".") if part)
+
+
+def _scope_token_matches(token: str, cell_id: str) -> bool:
+    """Does an operator scope token NAME this cell?
+
+    Whole cell id, or one whole dotted component of it — never a raw substring.
+    `token in cell_id` matched `qwen36_q8` inside `x_qwen36_q8_y`, so a token the
+    operator wrote to name a model authorised any cell whose id merely CONTAINED
+    those characters. §10.4 scopes a waiver to the cells the operator named;
+    resolving a name is mechanical, matching a fragment of one is inventing coverage.
+    """
+    return token == cell_id or token in _cell_id_components(cell_id)
 
 
 def _waiver_scope(document: Mapping) -> tuple:
@@ -2466,24 +3115,43 @@ def _waiver_scope(document: Mapping) -> tuple:
 
     Returns empty tuples when the document declares no resolvable scope. Nothing is
     inferred and nothing is normalised: this reads a ratified attestation.
+
+    MOST SPECIFIC DECLARATION WINS. A document that names cells or arms has said
+    which ones; the model name beside them is CONTEXT for that list, not a second,
+    wider grant. Flattening the two together made the model name the operative
+    scope, and the genuine v8 WAIVE-Q8 attestation — a CPU prefill eligibility-floor
+    exclusion of two arms, forfeiting only *"No v8 Q8 non-regression claim"* — then
+    covered `llama_gpu.qwen36_q8.backend_correctness` and
+    `llama_gpu.qwen36_q8.quality` as well, because both carry `qwen36_q8`. A
+    correctness FAIL suppressed by a prefill waiver is a claim nobody forfeited.
+
+    Demotion is fail-closed and it does not touch the ratified record: v8 names its
+    two arms in `excluded_pairs`, both of its real cells resolve through those, and a
+    document that names ONLY a model keeps the model as its scope.
     """
     scope = document.get("scope")
     if not isinstance(scope, Mapping):
         return ((), ())
     exact: list = []
-    tokens: list = []
+    pairs: list = []
+    models: list = []
     for key in _WAIVER_EXACT_SCOPE_KEYS:
         value = scope.get(key)
         if isinstance(value, (list, tuple)):
             exact.extend(v for v in value if isinstance(v, str) and v.strip())
-    for key in _WAIVER_TOKEN_SCOPE_KEYS:
+    for key in _WAIVER_PAIR_SCOPE_KEYS:
         value = scope.get(key)
         if isinstance(value, (list, tuple)):
-            tokens.extend(v for v in value if isinstance(v, str) and v.strip())
-    for key in _WAIVER_TOKEN_SCOPE_SCALARS:
+            pairs.extend(v for v in value if isinstance(v, str) and v.strip())
+    for key in _WAIVER_MODEL_SCOPE_KEYS:
+        value = scope.get(key)
+        if isinstance(value, (list, tuple)):
+            models.extend(v for v in value if isinstance(v, str) and v.strip())
+    for key in _WAIVER_MODEL_SCOPE_SCALARS:
         value = scope.get(key)
         if isinstance(value, str) and value.strip():
-            tokens.append(value)
+            models.append(value)
+    tokens = pairs if (pairs or exact) else models
     return (tuple(dict.fromkeys(exact)), tuple(dict.fromkeys(tokens)))
 
 
@@ -2491,7 +3159,8 @@ def verify_waiver(binding: WaiverBinding, *, candidate_commit: str,
                   production_base_commit: str, campaign_id: str,
                   known_cell_ids: Iterable[str], failing_cell_ids: Iterable[str],
                   now: str,
-                  boundary: Optional[schemas.TrustBoundary] = None
+                  boundary: Optional[schemas.TrustBoundary] = None,
+                  attestation_roots: Optional[Sequence[str]] = None
                   ) -> WaiverVerification:
     """Verify a waiver's HASH and PREDICATE. Never its merits (§10.4).
 
@@ -2516,6 +3185,13 @@ def verify_waiver(binding: WaiverBinding, *, candidate_commit: str,
     live one; pass an explicit `schemas.TrustBoundary` to verify against a stated
     boundary instead. An unreadable boundary yields COULD_NOT_CHECK on any path
     outside the operator-attestation root, which suppresses nothing.
+
+    `attestation_roots` is where THIS GATE holds that operator attestations live,
+    and it defaults to the real one. It is not the same argument as the reader's:
+    `waiver_binding_from_path` takes its roots from its caller, so a caller could
+    read a document out of a directory it had just written and get back the trusted
+    type. The narrowing has to be re-stated by the party that acts on the waiver, or
+    it is not a narrowing at all — it is a preference the party being gated sets.
     """
     if not isinstance(binding, WaiverBinding):
         raise T3InputError("verify_waiver: binding must be a WaiverBinding")
@@ -2523,12 +3199,87 @@ def verify_waiver(binding: WaiverBinding, *, candidate_commit: str,
         boundary = human_only_boundary()
     elif not isinstance(boundary, schemas.TrustBoundary):
         raise T3InputError("verify_waiver: boundary must be a schemas.TrustBoundary")
+    roots = tuple(DEFAULT_ATTESTATION_ROOTS if attestation_roots is None
+                  else _str_tuple(attestation_roots,
+                                  "verify_waiver: attestation_roots"))
+    if not roots:
+        raise T3InputError(
+            "verify_waiver: attestation_roots must name at least one root; an empty "
+            "root set would read as 'anywhere', which is the state this argument "
+            "exists to refuse.")
     known = set(known_cell_ids)
     failing = set(failing_cell_ids)
     document = binding.document
     reasons: list = []
     unknown: list = []
     results: dict = {}
+
+    # --- read: was this document read from disk, or quoted? ------------------
+    # FIRST, because every predicate below it is a statement about `document`, and
+    # on a quotation `document` is whatever the party being gated handed over. The
+    # hash predicate in particular compares two numbers the SAME caller supplied.
+    #
+    # `waiver_read_violations` and NOT `isinstance(binding, ReadWaiver)`. The type was
+    # the test until a red-team pass built `class Sneaky(ReadWaiver)` with a `__post_
+    # init__` that does nothing, handed it `read_receipt=None` and a path that does not
+    # exist, and watched it take `read=PASS`, `attribution_source="operator_owned_path"`
+    # and coverage of a failing gating cell. Inheritance is a thing the caller writes,
+    # so a capability that inheritance confers is a flag the caller sets. The capability
+    # is the mint token on the receipt, and the invariants tying the binding to that
+    # receipt are re-asserted here rather than trusted from a constructor that a
+    # subclass may decline to run.
+    read_violations = waiver_read_violations(binding)
+    if not read_violations and not schemas.under_any_root(
+            binding.read_receipt.resolved_path, roots):
+        # WHICH operator root, and judged HERE rather than only at the read. The
+        # reader narrows to `DEFAULT_ATTESTATION_ROOTS` because
+        # `operator_owned_path_check` answers a question about the SPELLING of a
+        # citation — `artifacts/operator/…` inside ANY checkout, including
+        # `/mnt/raid0/llm/epyc-inference-research/artifacts/operator/`, which this
+        # repository's own agents create with `mkdir -p`. But that narrowing was a
+        # KEYWORD ARGUMENT of the reader, so the loop could hand itself the root it
+        # had just written to and get back the trusted type: MEASURED, a document the
+        # loop authored in its own checkout, naming `autokernel` as its author, read
+        # with `attestation_roots=(<that directory>,)`, verified PASS with
+        # `read=PASS` and `attribution_source="operator_owned_path"` and suppressed a
+        # GPU correctness FAIL. The entire defect, restored by an argument the reader
+        # offers.
+        #
+        # A reader cannot defend a boundary the caller supplies to it. So the party
+        # that decides a waiver SUPPRESSES a failing gate states, itself, where
+        # operator attestations live — defaulting to the real root, never to
+        # whatever the reader was told. A read from anywhere else is COULD_NOT_CHECK:
+        # the bytes were genuinely read, and nothing establishes that an operator
+        # wrote them.
+        unknown.append(
+            f"waiver {binding.waiver_id}: was read from "
+            f"{binding.read_receipt.resolved_path!r}, which is under none of the "
+            f"attestation roots this gate holds ({list(roots)}). The reader was told "
+            "where to look by its caller; the gate is not. An `artifacts/operator/` "
+            "directory inside a checkout the loop can write is operator-SHAPED, not "
+            "operator-owned.")
+        results["read"] = schemas.COULD_NOT_CHECK
+        results["attestation_root"] = schemas.COULD_NOT_CHECK
+    elif not read_violations:
+        # PASS/FAIL/COULD_NOT_CHECK only. Deliberately NOT the resolved path: two
+        # waivers differing solely in where their bytes sit must produce identical
+        # predicate results, or the gate is grading something §10.4 does not ask
+        # about. The path is on the receipt, which is where a fact about the read
+        # belongs.
+        results["read"] = schemas.PASS
+        results["attestation_root"] = schemas.PASS
+    elif isinstance(binding, ReadWaiver) \
+            or getattr(binding, "read_receipt", None) is not None:
+        # An AFFIRMATIVE claim of a read that did not happen is not the same state as
+        # "nobody looked", and must not be recorded as one. A quotation is honest and
+        # answers COULD_NOT_CHECK; a binding wearing the read TYPE, or a receipt it was
+        # not given, is a forgery and answers FAIL — which no later evidence
+        # rehabilitates, where COULD_NOT_CHECK invites somebody to go and look.
+        reasons.extend(f"waiver {binding.waiver_id}: {v}" for v in read_violations)
+        results["read"] = schemas.FAIL
+    else:
+        unknown.extend(f"waiver {binding.waiver_id}: {v}" for v in read_violations)
+        results["read"] = schemas.COULD_NOT_CHECK
 
     # --- hash ---------------------------------------------------------------
     if binding.observed_sha256 is None:
@@ -2716,7 +3467,7 @@ def verify_waiver(binding: WaiverBinding, *, candidate_commit: str,
         unauthorised = [
             cell_id for cell_id in binding.covers_cell_ids
             if cell_id not in exact_scope
-            and not any(token in cell_id for token in scope_tokens)
+            and not any(_scope_token_matches(token, cell_id) for token in scope_tokens)
         ]
         if unauthorised:
             reasons.append(
@@ -2738,13 +3489,19 @@ def verify_waiver(binding: WaiverBinding, *, candidate_commit: str,
             "forfeited claim explicitly (\"No v8 Q8 non-regression claim may be made from "
             "this campaign.\"); a waiver that forfeits nothing is an approval.")
 
-    covered = tuple(c for c in binding.covers_cell_ids if c in failing)
     if reasons:
         check = _fail(*reasons)
     elif unknown:
         check = _cnc(*unknown)
     else:
         check = schemas.Check(schemas.PASS)
+    # Coverage is stated ONLY by a verification that PASSed. Populated regardless,
+    # a refused waiver landed in the durable bundle carrying a waived-LOOKING
+    # coverage list — the same defect this function exists to refuse (a record
+    # asserting coverage nobody verified), one layer out. Inert for `compute_verdict`,
+    # which guards on `.verified`; not inert for anything that reads the bundle.
+    covered = (tuple(c for c in binding.covers_cell_ids if c in failing)
+               if check.outcome == schemas.PASS else ())
     return WaiverVerification(
         waiver_id=binding.waiver_id, check=check, covered_cell_ids=covered,
         forfeited_claims=forfeited, predicate_results=results,
@@ -2846,6 +3603,15 @@ class RerunDisposition:
 #: exactly the misdirection the scope predicate refuses — and hashing only the
 #: digest gave two runs that suppress different cells one fingerprint, so §9.1's
 #: idempotence would have refused the second as "already sealed".
+#:
+#: The `WaiverReadReceipt` is DELIBERATELY ABSENT, and the naive move here is wrong.
+#: A rerun that re-reads the same bytes from the same path gets a new inode number
+#: and a new mtime whenever the operator touched the file; hashing the receipt would
+#: make that a different fingerprint and send an identical rerun into
+#: REFUSED_UNCHANGED_FINGERPRINT. §9.1's identity is over the EVIDENCE, and the
+#: evidence is the digest (already here as `active_waiver_sha256`) plus the coverage,
+#: not the filesystem metadata of the read. What DOES change the fingerprint is a
+#: quotation becoming a read waiver of DIFFERENT bytes — because the digest changes.
 FINGERPRINT_FACETS = (
     "candidate_id", "source_tree", "candidate_branch", "production_base_commit",
     "candidate_commit", "seal_sha256", "binary_sha256", "linkage_sha256",
@@ -3098,6 +3864,14 @@ class T3Request:
     #: declared"). One load/unload is not repetition.
     stability_min_cycles: Optional[int] = None
     waivers: tuple = ()
+    #: Where THIS RUN holds that operator attestations live. Empty means
+    #: `DEFAULT_ATTESTATION_ROOTS`, which is the only correct answer in production;
+    #: it is a request field so that a run reading attestations from anywhere else
+    #: has to SAY SO, in the request, where the fingerprint hashes it and the
+    #: package records it. `waiver_binding_from_path` takes its roots from its
+    #: caller, so without this the gate inherited the party-being-gated's opinion of
+    #: where an operator writes — see `verify_waiver`.
+    attestation_roots: tuple = ()
     complexity: Mapping = field(default_factory=dict)
     attempt_ledger: tuple = ()
     stage_repair: Optional[StageRepair] = None
@@ -3163,6 +3937,8 @@ class T3Request:
                 getattr(self, name), f"T3Request.{name}", klass))
         if self.stage_repair is not None and not isinstance(self.stage_repair, StageRepair):
             raise T3InputError("T3Request.stage_repair: must be a StageRepair or None")
+        object.__setattr__(self, "attestation_roots", _str_tuple(
+            self.attestation_roots, "T3Request.attestation_roots", non_empty=False))
         for name in ("release_reps_by_protocol", "phase_protocols", "complexity"):
             if not isinstance(getattr(self, name), Mapping):
                 raise T3InputError(f"T3Request.{name}: must be a mapping")
@@ -3552,7 +4328,8 @@ def phase_identity_preflight(request: T3Request) -> tuple:
             binding, candidate_commit=sealed.candidate_commit,
             production_base_commit=sealed.production_base_commit,
             campaign_id=request.campaign_id, known_cell_ids=known_cell_ids,
-            failing_cell_ids=failing_cell_ids, now=request.now, boundary=boundary)
+            failing_cell_ids=failing_cell_ids, now=request.now, boundary=boundary,
+            attestation_roots=request.attestation_roots or None)
         verifications.append(verification)
         if verification.check.outcome == schemas.FAIL:
             blocking.append(
@@ -4804,6 +5581,16 @@ class PreservedFreeze:
     promotion_decision: Optional[bool] = None
     waiver_document: Optional[Mapping] = None
     waiver_sha256: Optional[str] = None
+    #: WHERE the waiver lives, when the caller knows. With it, `calibration_request`
+    #: READS the attestation through `waiver_binding_from_path` and the calibration's
+    #: authority document is a file on disk. Without it, the calibration falls back to
+    #: a quotation, which now yields COULD_NOT_CHECK and BLOCKS — a behaviour change
+    #: for that caller and the correct one: the §10.4 calibration is the one check
+    #: that says the compiler is right, and it must not rest on a synthetic path.
+    waiver_path: Optional[str] = None
+    #: The preserved ratification that HASHES the waiver, so the reader can require
+    #: the bytes to be the ones the freeze record pins (v8's `evidence_sha256.waive_q8`).
+    ratification_path: Optional[str] = None
     excluded_pairs: tuple = ()
     notes: tuple = ()
 
@@ -4839,12 +5626,16 @@ class PreservedFreeze:
                 "quality_baseline_kernel": self.quality_baseline_kernel,
                 "promotion_decision": self.promotion_decision,
                 "waiver_sha256": self.waiver_sha256,
+                "waiver_path": self.waiver_path,
+                "ratification_path": self.ratification_path,
                 "excluded_pairs": list(self.excluded_pairs),
                 "notes": list(self.notes)}
 
 
 def preserved_freeze_from_v8_artifacts(ratification: Mapping,
-                                       waiver: Optional[Mapping] = None
+                                       waiver: Optional[Mapping] = None,
+                                       *, waiver_path: Optional[str] = None,
+                                       ratification_path: Optional[str] = None
                                        ) -> PreservedFreeze:
     """Read `artifacts/operator/ratify_v8_final_freeze_20260725.json` (+ its waiver).
 
@@ -4852,6 +5643,13 @@ def preserved_freeze_from_v8_artifacts(ratification: Mapping,
     a document that is not one; it never edits, normalises, or upgrades the
     attestation, because a ratified operator record that has been rewritten to fit a
     newer schema is no longer the record that was ratified.
+
+    `waiver_path` / `ratification_path` are where those two documents LIVE. Supplying
+    them is what lets `calibration_request` build its waiver through
+    `waiver_binding_from_path` instead of quoting one. `waiver` (the mapping) stays
+    positional and stays supported so a caller with only a document can still read
+    the freeze identity, but a calibration built from it alone now BLOCKS on an
+    unread waiver rather than trusting it.
     """
     if not isinstance(ratification, Mapping):
         raise T3InputError("preserved_freeze_from_v8_artifacts: ratification mapping")
@@ -4902,6 +5700,8 @@ def preserved_freeze_from_v8_artifacts(ratification: Mapping,
         promotion_decision=ratification.get("promotion_decision"),
         waiver_document=waiver,
         waiver_sha256=waiver_sha,
+        waiver_path=waiver_path,
+        ratification_path=ratification_path,
         excluded_pairs=excluded,
         notes=tuple(notes),
     )
@@ -5112,8 +5912,34 @@ def calibration_request(freeze: PreservedFreeze, *, now: str,
         rollback_head=freeze.rollback_head,
     )
 
+    # --- the §10.4 authority document ---------------------------------------
+    # This was the single worst construction site in the tree: the calibration is the
+    # one check that says the compiler is right, and its waiver was a caller-supplied
+    # document, pinned to a digest asserted equal to itself, at a SYNTHETIC path
+    # (`artifacts/operator/<label>/waiver.json`) that has never existed on this host.
+    # With `freeze.waiver_path` the document is READ, and the read is additionally
+    # cross-checked against the digest the preserved ratification pins for it — the
+    # only authenticity fact available anywhere in this system.
     waivers: tuple = ()
-    if include_waiver and freeze.waiver_document is not None and freeze.waiver_sha256:
+    if include_waiver and freeze.waiver_path and freeze.waiver_sha256:
+        covered = tuple(f"{backend}.pair.{p}" for p in freeze.excluded_pairs)
+        pin = ((freeze.ratification_path, "waive_q8")
+               if freeze.ratification_path else None)
+        waivers = (waiver_binding_from_path(
+            freeze.waiver_path, pinned_sha256=freeze.waiver_sha256,
+            # The genuine v8 record carries NO `waiver_id` key — its keys are exactly
+            # candidate_head, consequences, decision, production_head, protocol,
+            # protocol_changed, ratified_at, reason,
+            # runner_sha256_before_waiver_implementation, schema, scope — so `decision`
+            # ("WAIVE-Q8") is the identifier the operator actually wrote.
+            waiver_id=str(freeze.waiver_document.get("decision") or "waiver")
+            if isinstance(freeze.waiver_document, Mapping) else "waiver",
+            covers_cell_ids=covered, ratification_pin=pin),)
+    elif include_waiver and freeze.waiver_document is not None and freeze.waiver_sha256:
+        # No path: the honest shape is a QUOTATION, which `verify_waiver` answers
+        # COULD_NOT_CHECK and `phase_identity_preflight` turns into a blocking reason.
+        # Deliberately not silently dropped — the calibration must say that a waiver
+        # was cited and that nobody read it, not pretend none was offered.
         waivers = (WaiverBinding(
             waiver_id=str(freeze.waiver_document.get("decision") or "waiver"),
             pinned_sha256=freeze.waiver_sha256,
@@ -5342,6 +6168,320 @@ def audit_no_write_or_process_paths(source: Optional[str] = None) -> schemas.Che
                     findings.append(
                         f"line {node.lineno}: reaches {named.value!r} through "
                         f"{func.id}(), which routes around the attribute denylist")
+    if findings:
+        return _fail(*findings)
+    return schemas.Check(schemas.PASS)
+
+
+#: Every way this module could read a file. `waiver_binding_from_path` is allowed
+#: exactly ONE of them, once; `human_only_boundary` reads the manifest with
+#: `read_text` and `audit_no_write_or_process_paths` reads this file's own source.
+_FILE_READ_ATTRS = frozenset({"read_bytes", "read_text", "readlines", "readline",
+                              "read"})
+
+#: The functions permitted to read from the filesystem AT ALL, and the read attribute
+#: each is permitted. Anything else that reads is a second, unhardened door onto the
+#: same evidence.
+_PERMITTED_READERS = {
+    "human_only_boundary": {"read_text"},
+    "audit_no_write_or_process_paths": {"read_text"},
+    "audit_waiver_reader_is_the_only_reader": {"read_text"},
+    "audit_reader_narrowing_is_never_widened": {"read_text"},
+    "audit_waiver_binding_is_constructed_only_by_the_reader": {"read_text"},
+    "audit_backend_readiness_is_consulted": {"read_text"},
+    "_read_operator_file": {"read_bytes"},
+}
+
+
+def audit_waiver_reader_is_the_only_reader(source: Optional[str] = None
+                                           ) -> schemas.Check:
+    """The §10.4 reader's discipline, enforced mechanically rather than by review.
+
+    Three properties, each of which a future edit would otherwise silently undo:
+
+      1. `_read_operator_file` performs EXACTLY ONE read call. Two reads is two
+         different sets of bytes, and every guarantee in the reader is phrased over
+         "the bytes that were hashed".
+      2. No other function in this module reads a file except the three that
+         legitimately do (the boundary manifest and the two source audits). A
+         `Path(document_path).read_text()` added anywhere else re-opens the defect
+         from a new direction.
+      3. `_READER_TOKEN` is named in exactly THREE places — where the receipt's own
+         constructor checks it, where the reader spends it, and where
+         `waiver_read_violations` re-checks it at the gate — so "forge a read
+         receipt" means writing the token's name into source, which is greppable,
+         rather than passing a flag or inheriting from `ReadWaiver`.
+
+    COULD_NOT_CHECK when the source cannot be read or parsed: an unreadable module is
+    not an audited one.
+    """
+    if source is None:
+        try:
+            source = Path(__file__).read_text(encoding="utf-8")
+        except OSError as exc:
+            return _cnc(f"could not read {__file__}: {exc}")
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as exc:
+        return _cnc(f"could not parse module: {exc}")
+
+    findings: list = []
+    reads_by_function: dict = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for inner in ast.walk(node):
+            if isinstance(inner, ast.Call) and isinstance(inner.func, ast.Attribute) \
+                    and inner.func.attr in _FILE_READ_ATTRS:
+                reads_by_function.setdefault(node.name, []).append(
+                    (inner.lineno, inner.func.attr))
+
+    for name, reads in sorted(reads_by_function.items()):
+        permitted = _PERMITTED_READERS.get(name)
+        if permitted is None:
+            findings.append(
+                f"{name}() reads the filesystem at line(s) "
+                f"{[line for line, _ in reads]}; only {sorted(_PERMITTED_READERS)} may")
+            continue
+        for line, attr in reads:
+            if attr not in permitted:
+                findings.append(f"line {line}: {name}() calls .{attr}(), "
+                                f"only {sorted(permitted)} is permitted there")
+    operator_reads = reads_by_function.get("_read_operator_file", [])
+    if len(operator_reads) != 1:
+        findings.append(
+            f"_read_operator_file() performs {len(operator_reads)} read calls; the "
+            "single-bytes-object guarantee requires exactly one")
+
+    # Loads only: the module-level `_READER_TOKEN = object()` is a Store and is the
+    # mint itself, not a use of it.
+    token_mentions = [n.lineno for n in ast.walk(tree)
+                      if isinstance(n, ast.Name) and n.id == "_READER_TOKEN"
+                      and isinstance(n.ctx, ast.Load)]
+    if len(token_mentions) != 3:
+        findings.append(
+            f"_READER_TOKEN is named at lines {token_mentions}; it must be named "
+            "exactly three times — checked in WaiverReadReceipt.__post_init__, spent "
+            "in waiver_binding_from_path, and re-checked in waiver_read_violations "
+            "(the gate must not take a constructor's word for a capability)")
+
+    if findings:
+        return _fail(*findings)
+    return schemas.Check(schemas.PASS)
+
+
+#: The reader's guards that are exposed as keyword arguments, and therefore the ones
+#: a CALLER could relax. Each may only narrow at runtime; this audit additionally
+#: proves no shipping module reaches for them at all.
+_READER_NARROWING_KWARGS = ("attestation_roots", "max_bytes", "boundary")
+
+
+def audit_reader_narrowing_is_never_widened(package_root: Optional[Any] = None
+                                            ) -> schemas.Check:
+    """No SHIPPING module relaxes `waiver_binding_from_path`'s guards.
+
+    `attestation_roots`, `max_bytes` and `boundary` exist so a test can point the
+    reader at a fixture root and so a caller can be STRICTER than the default. Each
+    is now runtime-clamped — a declared root must itself pass
+    `operator_owned_path_check`, `max_bytes` may not exceed
+    `schemas.MAX_OPERATOR_WAIVER_BYTES` — but a clamp bounds how far a caller can go,
+    not whether it goes. The strongest statement available about the SHIPPING gate is
+    that no module outside the test files touches them, and that is a static fact,
+    checkable over every future edit rather than over the call sites that exist today.
+
+    Scans every non-test `.py` in the `autokernel` package. COULD_NOT_CHECK when a
+    module cannot be read or parsed: an unaudited module is not an audited one.
+    """
+    root = Path(package_root) if package_root is not None \
+        else Path(__file__).resolve().parents[1]
+    findings: list = []
+    scanned = 0
+    for module in sorted(root.rglob("*.py")):
+        if module.name.startswith("test_") or module.name == "conftest.py":
+            continue
+        try:
+            tree = ast.parse(module.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError) as exc:
+            return _cnc(f"could not audit {module}: {exc}")
+        scanned += 1
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = func.attr if isinstance(func, ast.Attribute) else \
+                getattr(func, "id", None)
+            if name != "waiver_binding_from_path":
+                continue
+            for kw in node.keywords:
+                if kw.arg in _READER_NARROWING_KWARGS:
+                    findings.append(
+                        f"{module.name}:{node.lineno}: passes {kw.arg}= to "
+                        "waiver_binding_from_path. That argument relaxes a guard the "
+                        "party being gated should not be able to reach; the shipping "
+                        "gate uses the defaults.")
+    if not scanned:
+        return _cnc(f"no modules found under {root}")
+    if findings:
+        return _fail(*findings)
+    return schemas.Check(schemas.PASS)
+
+
+#: THE CONSTRUCTOR ALLOWLIST — every place in the SHIPPING package where one of the
+#: three waiver types may be built, keyed by `(package-relative module, enclosing
+#: function)`. Anything not listed here is a finding.
+#:
+#: This exists because the §10.4 fix is a DISCIPLINE, not a patch. Migrating the call
+#: sites that existed on 2026-08-03 fixed 2026-08-03; the defect returns the first
+#: time somebody writes `WaiverBinding(document=..., observed_sha256=...)` in a new
+#: module, and that edit looks entirely reasonable in review — it is a dataclass with
+#: public fields being used as one. Nothing about the type's shape stops it, so the
+#: stop has to be a test.
+#:
+#: Keyed by function, never by line number: a line-numbered allowlist is invalidated
+#: by every unrelated edit above it, and an allowlist people routinely have to
+#: re-bless stops being read. Keyed by EXACT function name, never a module prefix,
+#: for the same reason `_RULE_ONE_EXEMPT_MODULES` uses exact paths — a
+#: module-shaped entry would silently cover the next construction added beside it.
+_WAIVER_CONSTRUCTOR_SITES = {
+    "ReadWaiver": {
+        ("release/t3.py", "waiver_binding_from_path"):
+            "the reader itself. A `ReadWaiver` built anywhere else is a second, "
+            "unhardened door onto the same authority: it would carry a receipt this "
+            "module did not mint beside the bytes it attests to.",
+    },
+    "WaiverReadReceipt": {
+        ("release/t3.py", "waiver_binding_from_path"):
+            "minted beside the single `bytes` object it digests. A receipt built "
+            "anywhere else asserts a read that some other code performed, which is "
+            "the three-independent-assertions defect one level down.",
+    },
+    "WaiverBinding": {
+        ("release/t3.py", "calibration_request"):
+            "the deliberate QUOTATION fallback: a preserved freeze with a waiver "
+            "DOCUMENT but no waiver PATH must still say that a waiver was cited and "
+            "that nobody opened it. It suppresses nothing and blocks the run, which "
+            "is the whole reason 'unread' stayed expressible.",
+    },
+}
+
+#: Names the scanned corpus MUST define for this audit's answer to be ABOUT the
+#: waiver types. Without it, "no unlisted construction found" is satisfied perfectly
+#: by a root containing no waiver code at all — the same failure mode
+#: `_READINESS_AUDIT_IDENTITY` exists to stop, and the one that would make this
+#: guard rot silently the day somebody moves `t3.py`.
+_WAIVER_CONSTRUCTOR_AUDIT_IDENTITY = ("WaiverBinding", "ReadWaiver",
+                                      "WaiverReadReceipt")
+
+
+def _enclosing_function_names(tree: ast.AST) -> dict:
+    """`{id(Call node): nearest enclosing function name}` for one module AST.
+
+    Nearest, not any: a helper nested inside an allowlisted function is its own
+    function and gets its own entry, so the allowlist cannot be inherited by
+    anything defined underneath it.
+    """
+    out: dict = {}
+
+    def walk(node, current):
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                walk(child, child.name)
+                continue
+            if isinstance(child, ast.Call):
+                out[id(child)] = current
+            walk(child, current)
+
+    walk(tree, "<module>")
+    return out
+
+
+def audit_waiver_binding_is_constructed_only_by_the_reader(
+        package_root: Optional[Any] = None) -> schemas.Check:
+    """No shipping module builds a waiver binding outside `_WAIVER_CONSTRUCTOR_SITES`.
+
+    §10.4 turns a FAIL into PASS_WITH_WAIVER, so `WaiverBinding` is the authority
+    type of the whole freeze gate — and it is an ordinary frozen dataclass with
+    public fields. `waiver_binding_from_path` is only T3's *only* trusted constructor
+    for as long as nobody writes the obvious thing somewhere else, and the obvious
+    thing is one line that reads like normal code.
+
+    AST, never grep. A textual scan cannot tell a construction from the word
+    appearing in a docstring, an `isinstance` check or a comment — this module's own
+    `WaiverBinding` docstring quotes the defective call verbatim, so a grep-based
+    guard would either fail on its own documentation or be weakened until it stopped
+    biting. Two things are checked:
+
+      1. Every CALL to `WaiverBinding`, `ReadWaiver` or `WaiverReadReceipt` (bare or
+         attribute-qualified) sits at an allowlisted `(module, function)`.
+      2. No module ALIASES one of those names (`_WB = t3.WaiverBinding`), which would
+         otherwise walk straight past check 1 while constructing exactly the same
+         object. `isinstance(x, WaiverBinding)` and `_typed_tuple(..., WaiverBinding)`
+         are untouched: passing the class as a value is not rebinding it to a name.
+
+    Test modules are OUT of scope on purpose. Tests must be able to build a quotation
+    — proving that a quotation suppresses nothing is most of the evidence that this
+    fix works, and a guard that forbade it would forbid its own compliant path.
+
+    COULD_NOT_CHECK, never PASS, when a module cannot be read or parsed, when the
+    root holds no modules, or when the corpus does not define the three types.
+    """
+    root = Path(package_root) if package_root is not None \
+        else Path(__file__).resolve().parents[1]
+    guarded = set(_WAIVER_CONSTRUCTOR_SITES)
+    findings: list = []
+    defined: set = set()
+    scanned = 0
+    for module in sorted(root.rglob("*.py")):
+        if module.name.startswith("test_") or module.name == "conftest.py":
+            continue
+        if "__pycache__" in module.parts:
+            continue
+        try:
+            tree = ast.parse(module.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError) as exc:
+            return _cnc(f"could not audit {module}: {exc}")
+        scanned += 1
+        try:
+            rel = module.relative_to(root).as_posix()
+        except ValueError:                                    # pragma: no cover
+            rel = module.name
+        enclosing = _enclosing_function_names(tree)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef) and node.name in guarded:
+                defined.add(node.name)
+            if isinstance(node, ast.Call):
+                func = node.func
+                name = func.attr if isinstance(func, ast.Attribute) else \
+                    getattr(func, "id", None)
+                if name not in guarded:
+                    continue
+                where = enclosing.get(id(node), "<module>")
+                allowed = _WAIVER_CONSTRUCTOR_SITES[name]
+                if (rel, where) in allowed:
+                    continue
+                findings.append(
+                    f"{rel}:{node.lineno}: {where}() constructs {name}(). The only "
+                    f"permitted site(s) are "
+                    f"{sorted(f'{m}::{fn}' for m, fn in allowed)}. Build it with "
+                    "waiver_binding_from_path(), which READS the document from an "
+                    "operator-owned path; a hand-built binding's document, path and "
+                    "digest are three assertions by the party being gated (§10.4).")
+            if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                value = node.value
+                alias = value.attr if isinstance(value, ast.Attribute) else (
+                    value.id if isinstance(value, ast.Name) else None)
+                if alias in guarded:
+                    findings.append(
+                        f"{rel}:{node.lineno}: aliases {alias} to another name. An "
+                        "alias constructs the same object while naming something "
+                        "this audit does not look for.")
+    if not scanned:
+        return _cnc(f"no modules found under {root}")
+    missing = [n for n in _WAIVER_CONSTRUCTOR_AUDIT_IDENTITY if n not in defined]
+    if missing:
+        return _cnc(
+            f"the corpus under {root} defines no {missing}; an audit of modules that "
+            "do not contain the waiver types is not a passing audit of them")
     if findings:
         return _fail(*findings)
     return schemas.Check(schemas.PASS)

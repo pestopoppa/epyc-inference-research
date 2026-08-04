@@ -1,0 +1,66 @@
+[  0%] Building CXX object vendor/cpp-httplib/CMakeFiles/cpp-httplib.dir/httplib.cpp.o
+[  0%] Building C object ggml/src/CMakeFiles/ggml-base.dir/ggml-alloc.c.o
+[  0%] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/gguf.cpp.o
+[  0%] Building C object ggml/src/CMakeFiles/ggml-base.dir/ggml.c.o
+[  0%] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml.cpp.o
+[  0%] Building CXX object common/CMakeFiles/llama-common-base.dir/build-info.cpp.o
+[  0%] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml-threading.cpp.o
+[  0%] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml-backend-meta.cpp.o
+[  0%] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml-opt.cpp.o
+[  2%] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml-backend.cpp.o
+[  2%] Building C object ggml/src/CMakeFiles/ggml-base.dir/ggml-quants.c.o
+[  2%] Linking CXX static library libllama-common-base.a
+[  2%] Built target llama-common-base
+[  4%] Linking CXX shared library ../../bin/libggml-base.so
+[  4%] Built target ggml-base
+[  4%] Building C object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu.c.o
+[  4%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu.cpp.o
+[  4%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/hbm.cpp.o
+[  4%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/repack.cpp.o
+[  6%] Building C object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/quants.c.o
+[  6%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/unary-ops.cpp.o
+[  6%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/amx/mmq.cpp.o
+[  6%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/iqk/iqk_gemm_kquants.cpp.o
+[  6%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/iqk/iqk_mul_mat.cpp.o
+[  6%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/amx/amx.cpp.o
+[  8%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/iqk/iqk_quantize_min.cpp.o
+[  6%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/traits.cpp.o
+[  8%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ops.cpp.o
+[  8%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/binary-ops.cpp.o
+[ 11%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/vec.cpp.o
+[ 11%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/iqk/iqk_stubs.cpp.o
+[ 11%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/iqk/iqk_gemm_legacy_quants.cpp.o
+[ 11%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/llamafile/sgemm.cpp.o
+[ 11%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/iqk/iqk_dispatch.cpp.o
+[ 13%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/arch/x86/repack.cpp.o
+[ 13%] Building C object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/arch/x86/quants.c.o
+In file included from /mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/ggml-cpu/iqk/iqk_common.h:31,
+                 from /mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/ggml-cpu/iqk/iqk_stubs.cpp:18:
+/mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/ggml-cpu/iqk/iqk_quantize.h:23:9: warning: ‘GGML_RESTRICT’ redefined
+   23 | #define GGML_RESTRICT
+[... 3245 lines elided; excerpt of the recorded log ...]
+      |                                      ~~~~^~~~~~~~~~
+/usr/include/c++/15/bits/regex_automaton.h: In member function ‘bool std::__detail::_Compiler<_TraitsT>::_M_assertion() [with _TraitsT = std::__cxx11::regex_traits<char>]’:
+/usr/include/c++/15/bits/regex_automaton.h:318:17: note: ‘__tmp’ declared here
+  318 |         _StateT __tmp(_S_opcode_subexpr_lookahead);
+      |                 ^~~~~
+In member function ‘bool std::_Function_base::_M_empty() const’,
+    inlined from ‘std::function<_Res(_ArgTypes ...)>::operator bool() const [with _Res = bool; _ArgTypes = {char}]’ at /usr/include/c++/15/bits/std_function.h:576:25,
+    inlined from ‘std::function<_Res(_ArgTypes ...)>::function(std::function<_Res(_ArgTypes ...)>&&) [with _Res = bool; _ArgTypes = {char}]’ at /usr/include/c++/15/bits/std_function.h:409:6,
+    inlined from ‘std::__detail::_State<_Char_type>::_State(std::__detail::_State<_Char_type>&&) [with _Char_type = char]’ at /usr/include/c++/15/bits/regex_automaton.h:152:4,
+    inlined from ‘std::__detail::_State<_Char_type>::_State(std::__detail::_State<_Char_type>&&) [with _Char_type = char]’ at /usr/include/c++/15/bits/regex_automaton.h:149:7,
+    inlined from ‘std::__detail::_StateIdT std::__detail::_NFA<_TraitsT>::_M_insert_lookahead(std::__detail::_StateIdT, bool) [with _TraitsT = std::__cxx11::regex_traits<char>]’ at /usr/include/c++/15/bits/regex_automaton.h:321:24,
+    inlined from ‘bool std::__detail::_Compiler<_TraitsT>::_M_assertion() [with _TraitsT = std::__cxx11::regex_traits<char>]’ at /usr/include/c++/15/bits/regex_compiler.tcc:167:8:
+/usr/include/c++/15/bits/std_function.h:249:37: warning: ‘*(const std::_Function_base*)((char*)&__tmp + offsetof(std::__detail::_StateT, std::__detail::_State<char>::<unnamed>.std::__detail::_State_base::<unnamed>)).std::_Function_base::_M_manager’ may be used uninitialized [-Wmaybe-uninitialized]
+  249 |     bool _M_empty() const { return !_M_manager; }
+      |                                     ^~~~~~~~~~
+/usr/include/c++/15/bits/regex_automaton.h: In member function ‘bool std::__detail::_Compiler<_TraitsT>::_M_assertion() [with _TraitsT = std::__cxx11::regex_traits<char>]’:
+/usr/include/c++/15/bits/regex_automaton.h:318:17: note: ‘__tmp’ declared here
+  318 |         _StateT __tmp(_S_opcode_subexpr_lookahead);
+      |                 ^~~~~
+[100%] Linking CXX shared library ../../bin/libllama-bench-impl.so
+[100%] Built target llama-bench-impl
+[100%] Building CXX object tools/llama-bench/CMakeFiles/llama-bench.dir/main.cpp.o
+[100%] Linking CXX executable ../../bin/llama-bench
+[100%] Built target llama-bench
+BUILD_EXIT=0

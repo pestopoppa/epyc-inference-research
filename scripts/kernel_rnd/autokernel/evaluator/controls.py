@@ -68,7 +68,7 @@ calibration. One solve order, in the module whose subject is statistics.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import InitVar, dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping, Optional, Protocol, Sequence
 
@@ -82,7 +82,7 @@ __all__ = [
     "CONTROL_DEFINITIONS", "CONTROL_DEFINITIONS_DIGEST", "CONTROL_PREDICATES_DIGEST",
     "HISTORICAL_REPLAY_UNAVAILABLE",
     # errors
-    "ControlsError", "ControlBundleDrift", "ControlWiringError",
+    "ControlsError", "ControlBundleDrift", "ControlWiringError", "ControlPanelForged",
     # definitions and the bundle
     "ControlDefinition", "SeedRotationSchedule", "AACadence", "ControlBundle",
     "resolve_control_bundle", "verify_control_definitions", "derive_control_seed",
@@ -131,6 +131,40 @@ class ControlWiringError(ControlsError):
     These raise rather than becoming findings: they are defects in the evaluator,
     not facts about the gate.
     """
+
+
+class ControlPanelForged(ControlsError):
+    """A `ControlPanelResult` was built by a route other than a control sweep, or
+    its outcomes do not follow from the observations it carries.
+
+    `ControlPanelResult.may_rank` is a LICENCE: it is the object the rest of the
+    loop consults before ranking anything. Until this existed, one built by hand
+    with five PASS `ControlOutcome`s answered `may_rank=True` with no control
+    ever run — the same hole `api.Verdict` closes by re-deriving its status and
+    refusing a stamped one, in the object that authorises ranking rather than the
+    object that reports one candidate's score.
+
+    Two locks, deliberately the same two `api.Verdict` uses:
+
+      1. the module-private mint token, which only `ControlHarness.evaluate()`
+         passes — this stops the ACCIDENT, and nothing more. It is not a
+         capability: `_PANEL_MINT_TOKEN` is reachable by name from any module in
+         the process, and `dataclasses.replace(result, mint=_PANEL_MINT_TOKEN)`
+         constructs one. Lock 2 is the load-bearing one; and
+      2. re-derivation of `outcomes`, `panel` and `blocked_reason` from the
+         `observations` and `context` stored on the very same object, through the
+         live `_EVALUATORS` — this stops the determined caller. Reaching in for
+         the token buys nothing, because every PASS must now follow from an
+         observation, and an observation that RAN must carry an `api.Verdict`,
+         which only `api.compute_verdict()` mints. A fabricated all-PASS panel
+         therefore requires fabricating five real verdicts first, which is the
+         wall `api` already built.
+    """
+
+
+#: The mint token. Module-private, and never exported: `ControlPanelResult` is
+#: constructible only by the harness that ran the sweep.
+_PANEL_MINT_TOKEN = object()
 
 
 # =============================================================================
@@ -1767,6 +1801,153 @@ class GateDefectFinding:
                 "halts_campaign": True, "escalation_required": True}
 
 
+# -----------------------------------------------------------------------------
+# The single derivation of a control sweep's outcomes. Called twice on purpose:
+# once by `ControlHarness.evaluate()` to produce them, and once by
+# `ControlPanelResult.__post_init__` to prove the object's own contents imply
+# them. Two call sites, ONE derivation — a second copy would drift, and both
+# copies would keep returning a panel.
+# -----------------------------------------------------------------------------
+
+def _index_observations(observations: Sequence[ControlObservation]) -> dict:
+    by_id: dict = {}
+    for observation in observations:
+        if not isinstance(observation, ControlObservation):
+            raise ControlWiringError(
+                f"observations must be ControlObservation, got "
+                f"{type(observation).__name__}")
+        if observation.control_id in by_id:
+            raise ControlWiringError(
+                f"two observations for control {observation.control_id!r}; a control "
+                "has one result per window and choosing between two would be the "
+                "harness selecting its own answer")
+        by_id[observation.control_id] = observation
+    return by_id
+
+
+def _dispose_unavailable_control_5(definition: ControlDefinition,
+                                   historical: HistoricalWinResolution,
+                                   escalation: Optional[OperatorEscalation]):
+    """Dispose of the unavailable branch. Never a silent skip, never the
+    controller's call."""
+    marker_reason = (f"{HISTORICAL_REPLAY_UNAVAILABLE}: backend "
+                     f"{historical.backend}: {historical.reason()}")
+    if escalation is None:
+        return ControlOutcome(
+            control_id=definition.control_id, definition=definition,
+            check=schemas.Check(
+                schemas.COULD_NOT_CHECK,
+                (marker_reason,
+                 "no operator escalation is on the record; the campaign MUST NOT "
+                 "silently run four controls and report as though it ran five",)),
+            disposition=DISPOSITION_NOT_RUN,
+        ), ("control 5 is unavailable and was not escalated to the operator; whether "
+            "the campaign proceeds on four controls is the operator's call, taken "
+            "once, on the record — not the controller's")
+    if escalation.decision == OPERATOR_DECISION_PENDING:
+        return ControlOutcome(
+            control_id=definition.control_id, definition=definition,
+            check=schemas.Check(
+                schemas.COULD_NOT_CHECK,
+                (marker_reason,
+                 f"escalated to the operator at {escalation.escalation_ref}; the "
+                 "decision is still PENDING")),
+            disposition=DISPOSITION_NOT_RUN,
+        ), (f"control 5 is unavailable and escalation {escalation.escalation_ref} is "
+            "pending an operator decision")
+    if escalation.decision == OPERATOR_DECISION_HALT:
+        return ControlOutcome(
+            control_id=definition.control_id, definition=definition,
+            check=schemas.Check(
+                schemas.FAIL,
+                (marker_reason,
+                 f"the operator halted the campaign at {escalation.escalation_ref} "
+                 f"({escalation.decided_by}, {escalation.decided_at})")),
+            disposition=DISPOSITION_UNAVAILABLE_RECORDED,
+        ), f"the operator halted this campaign at {escalation.escalation_ref}"
+    return ControlOutcome(
+        control_id=definition.control_id, definition=definition,
+        check=schemas.Check(
+            schemas.PASS,
+            (marker_reason,
+             f"the operator authorised proceeding on four controls at "
+             f"{escalation.escalation_ref} ({escalation.decided_by}, "
+             f"{escalation.decided_at}); every record emitted by this campaign "
+             f"carries controls=4/5 ({HISTORICAL_REPLAY_UNAVAILABLE})")),
+        disposition=DISPOSITION_UNAVAILABLE_RECORDED,
+    ), None
+
+
+def _build_panel(outcomes: Sequence[ControlOutcome],
+                 historical: HistoricalWinResolution,
+                 escalation: Optional[OperatorEscalation]) -> Optional[api.ControlPanel]:
+    by_id = {o.control_id: o for o in outcomes}
+    fields = {
+        _PANEL_FIELD_BY_CONTROL[cid]: by_id[cid].check
+        for cid in MANDATORY_CONTROL_IDS
+    }
+    if historical.available:
+        fields["historical_replay"] = by_id[CONTROL_HISTORICAL_WIN_REPLAY].check
+        return api.ControlPanel(**fields)
+    if escalation is None or escalation.decision != OPERATOR_DECISION_PROCEED_ON_FOUR:
+        # `api.ControlPanel` would happily take a reason and an escalation ref
+        # here; refusing to build one at all is stronger, because a panel is a
+        # licence to rank and the operator has not granted it.
+        return None
+    return api.ControlPanel(
+        historical_replay=None,
+        historical_replay_unavailable_reason=(
+            f"backend {historical.backend}: {historical.reason()}"),
+        operator_escalation_ref=escalation.escalation_ref,
+        **fields)
+
+
+def _derive_panel_result_parts(*, observations: Sequence[ControlObservation],
+                               context: "ControlContext",
+                               escalation: Optional[OperatorEscalation]) -> tuple:
+    """Return `(outcomes, panel, blocked_reason)` — everything derivable.
+
+    Reads the module-level `CONTROL_DEFINITIONS` and `_EVALUATORS`, deliberately
+    NOT a bundle's copy of them: the definitions a result is scored against are
+    the ones under the measurement trust boundary, and a bundle whose copy has
+    drifted from them is what `verify_control_definitions()` is for.
+    """
+    if not isinstance(context, ControlContext):
+        raise TypeError("context must be a ControlContext")
+    by_id = _index_observations(observations)
+    outcomes: list = []
+    blocked_reason: Optional[str] = None
+    for definition in CONTROL_DEFINITIONS:
+        cid = definition.control_id
+        if cid == CONTROL_HISTORICAL_WIN_REPLAY and not context.historical.available:
+            outcome, blocked_reason = _dispose_unavailable_control_5(
+                definition, context.historical, escalation)
+            outcomes.append(outcome)
+            continue
+        observation = by_id.get(cid)
+        if observation is None:
+            outcomes.append(ControlOutcome(
+                control_id=cid, definition=definition,
+                check=schemas.Check(
+                    schemas.COULD_NOT_CHECK,
+                    (f"no observation was produced for the {cid} control; a control "
+                     "with no result is not a control that passed",)),
+                disposition=DISPOSITION_NOT_RUN))
+            continue
+        check = _EVALUATORS[cid](definition, observation, context)
+        outcomes.append(ControlOutcome(
+            control_id=cid, definition=definition, check=check,
+            disposition=(DISPOSITION_SATISFIED if check.outcome == schemas.PASS
+                         else definition.failure_disposition),
+            detail=tuple(observation.notes)))
+
+    panel = _build_panel(outcomes, context.historical, escalation)
+    if panel is None and blocked_reason is None:
+        blocked_reason = ("no control panel could be built for this window; see the "
+                          "control outcomes for which control could not be disposed of")
+    return tuple(outcomes), panel, blocked_reason
+
+
 @dataclass(frozen=True)
 class ControlPanelResult:
     """Everything one control sweep produced.
@@ -1776,6 +1957,18 @@ class ControlPanelResult:
     the same guarantee is available more cheaply here by never storing the derived
     values at all — there is no attribute to disagree with, and
     `dataclasses.replace()` cannot manufacture a rankable panel.
+
+    (`dataclasses.replace()` cannot manufacture a rankable panel *by accident* —
+    it can with the mint token in hand, and lock 2 below is what refuses it then.)
+
+    That reasoning was right about the *properties* and wrong about the *object*:
+    nothing stopped a caller building the whole result by hand out of five PASS
+    `ControlOutcome`s, and `may_rank` then answered True with no control ever run.
+    `observations` and `context` are stored for that reason, and
+    `__post_init__` re-derives `outcomes`, `panel` and `blocked_reason` from them
+    and refuses on disagreement — so a PASS on this object is now backed by an
+    `api.Verdict` per control, and those can only be minted by
+    `api.compute_verdict()`. See `ControlPanelForged`.
     """
 
     outcomes: tuple
@@ -1784,9 +1977,21 @@ class ControlPanelResult:
     escalation: Optional[OperatorEscalation]
     aa_cadence: schemas.Check
     definitions_check: schemas.Check
+    observations: tuple
+    context: "ControlContext"
     blocked_reason: Optional[str] = None
+    mint: InitVar[Any] = None
 
-    def __post_init__(self) -> None:
+    def __post_init__(self, mint: Any) -> None:
+        if mint is not _PANEL_MINT_TOKEN:
+            raise ControlPanelForged(
+                "ControlPanelResult is not constructible directly — it is the licence "
+                "to rank, and it derives from a control sweep that actually ran. Call "
+                "ControlHarness.evaluate().")
+        if not isinstance(self.context, ControlContext):
+            raise ControlPanelForged("result.context must be a ControlContext")
+        if not isinstance(self.observations, tuple):
+            raise ControlPanelForged("result.observations must be a tuple")
         ids = tuple(o.control_id for o in self.outcomes)
         if ids != CONTROL_IDS:
             raise ValueError(
@@ -1802,6 +2007,30 @@ class ControlPanelResult:
                 raise TypeError(f"result.{name} must be a {klass.__name__}")
         if self.escalation is not None and not isinstance(self.escalation, OperatorEscalation):
             raise TypeError("result.escalation must be an OperatorEscalation or None")
+        if self.historical != self.context.historical:
+            raise ControlPanelForged(
+                "result.historical is not the resolution the controls were scored "
+                "against (result.context.historical); control 5's availability decides "
+                "whether the unavailable branch or the replay predicate ran, so two "
+                "answers to it would let a result be scored one way and reported another")
+
+        # Lock 2. Everything derivable is re-derived from this object's OWN
+        # observations and context, through the live predicate table. A stamped
+        # PASS now has to survive being recomputed from a `ControlObservation`,
+        # and an observation that ran carries an `api.Verdict` — which only
+        # `api.compute_verdict()` mints.
+        derived_outcomes, derived_panel, derived_blocked = _derive_panel_result_parts(
+            observations=self.observations, context=self.context,
+            escalation=self.escalation)
+        for name, stored, derived in (
+                ("outcomes", self.outcomes, derived_outcomes),
+                ("panel", self.panel, derived_panel),
+                ("blocked_reason", self.blocked_reason, derived_blocked)):
+            if stored != derived:
+                raise ControlPanelForged(
+                    f"result.{name} does not follow from the observations this result "
+                    f"carries: stored {stored!r}, derived {derived!r}. A control panel is "
+                    "computed from control results; it is never supplied.")
 
     def outcome_for(self, control_id: str) -> ControlOutcome:
         for outcome in self.outcomes:
@@ -1883,6 +2112,10 @@ class ControlPanelResult:
     def to_dict(self) -> dict:
         return {
             "outcomes": [o.to_dict() for o in self.outcomes],
+            # The proof-of-run, journaled rather than asserted: every outcome above
+            # is re-derived from these, and an observation that ran carries a minted
+            # verdict. A reader can recompute the panel from this list.
+            "observations": [o.to_dict() for o in self.observations],
             "panel": None if self.panel is None else self.panel.to_dict(),
             "historical": self.historical.to_dict(),
             "escalation": None if self.escalation is None else self.escalation.to_dict(),
@@ -1923,19 +2156,69 @@ class ControlHarness:
         self.bundle = bundle
         self.runner = runner
 
+    def seed_plan(self, *, campaign_seed: str, windows_completed: int) -> dict:
+        """`{control_id: seed}` for this rotation epoch. Derived, never chosen.
+
+        `derive_control_seed()`, `ControlBundle.seed_for()` and
+        `SeedRotationSchedule.check_rotation()` were all declared, hashed into the
+        campaign digest, and had NO CALLER: `run_all` handed one `run_context` —
+        and therefore ONE seed — to all five controls. Five controls sharing a
+        seed is five controls sharing a holdout, and *"a never-rotated holdout is
+        an evaluator coverage defect"* applies with more force to a holdout that
+        was never even per-control.
+
+        This is the caller. `run_all` uses it; `execution.control_runner` reads it
+        for the record's seed ledger, and gets the same values because it is the
+        same derivation rather than a second one.
+        """
+        _require_nonempty_str(campaign_seed, "campaign_seed")
+        if isinstance(windows_completed, bool) or not isinstance(windows_completed, int) \
+                or windows_completed < 0:
+            raise ValueError("windows_completed must be a non-negative int")
+        plan = {
+            definition.control_id: self.bundle.seed_for(
+                campaign_seed=campaign_seed, control_id=definition.control_id,
+                windows_completed=windows_completed)
+            for definition in self.bundle.definitions
+        }
+        if len(set(plan.values())) != len(plan):
+            # `derive_control_seed` keys on the control id, so collisions are not
+            # reachable from the ratified derivation — which is exactly why a
+            # collision here means the derivation is no longer the ratified one.
+            raise ControlWiringError(
+                "two controls were assigned the same seed; the seed derivation keys on "
+                f"the control id, so this means it has been substituted: {plan!r}")
+        return plan
+
     def run_all(self, *, run_context: ControlRunContext,
-                historical: HistoricalWinResolution) -> tuple:
-        """Call the runner once per control the harness has decided to run."""
+                historical: HistoricalWinResolution,
+                campaign_seed: str,
+                windows_completed: int) -> tuple:
+        """Call the runner once per control the harness has decided to run.
+
+        `campaign_seed` and `windows_completed` are REQUIRED and have no defaults.
+        A default would restore the same-seed-for-everything behaviour this method
+        used to have, silently, at exactly the call sites that forgot to rotate —
+        and the resulting panel would still read as a clean five-control sweep.
+
+        `run_context.seed` is OVERRIDDEN per control from `seed_plan()`. It is not
+        merely ignored: a run context whose seed happens to equal a derived one is
+        indistinguishable from a rotated sweep, so the placeholder must never
+        reach a runner, and `test_control_runner` asserts it does not.
+        """
         if not isinstance(run_context, ControlRunContext):
             raise TypeError("run_context must be a ControlRunContext")
         if not isinstance(historical, HistoricalWinResolution):
             raise TypeError("historical must be a HistoricalWinResolution")
+        plan = self.seed_plan(campaign_seed=campaign_seed,
+                              windows_completed=windows_completed)
         observations = []
         for definition in self.bundle.definitions:
             if definition.control_id == CONTROL_HISTORICAL_WIN_REPLAY \
                     and not historical.available:
                 continue
-            observation = self.runner.run_control(definition, run_context)
+            context = replace(run_context, seed=plan[definition.control_id])
+            observation = self.runner.run_control(definition, context)
             if not isinstance(observation, ControlObservation):
                 raise ControlWiringError(
                     f"runner returned {type(observation).__name__} for control "
@@ -1958,18 +2241,8 @@ class ControlHarness:
             raise TypeError("context must be a ControlContext")
         if not isinstance(aa_cadence, schemas.Check):
             raise TypeError("aa_cadence must be a schemas.Check")
-        by_id: dict = {}
-        for observation in observations:
-            if not isinstance(observation, ControlObservation):
-                raise ControlWiringError(
-                    f"observations must be ControlObservation, got "
-                    f"{type(observation).__name__}")
-            if observation.control_id in by_id:
-                raise ControlWiringError(
-                    f"two observations for control {observation.control_id!r}; a control "
-                    "has one result per window and choosing between two would be the "
-                    "harness selecting its own answer")
-            by_id[observation.control_id] = observation
+        observations = tuple(observations)
+        _index_observations(observations)  # raises on a duplicate or a wrong type
 
         # `or` here treated a supplied-but-empty pin as "no pin supplied" and fell
         # back to the bundle's own digest — a PASS built out of a manifest field
@@ -1982,117 +2255,15 @@ class ControlHarness:
                                        else pinned_definitions_digest),
             pinned_campaign_digest=pinned_campaign_digest)
 
-        outcomes = []
-        blocked_reason = None
-        for definition in self.bundle.definitions:
-            cid = definition.control_id
-            if cid == CONTROL_HISTORICAL_WIN_REPLAY and not context.historical.available:
-                outcome, blocked_reason = self._unavailable_control_5(
-                    definition, context.historical, escalation)
-                outcomes.append(outcome)
-                continue
-            observation = by_id.get(cid)
-            if observation is None:
-                outcomes.append(ControlOutcome(
-                    control_id=cid, definition=definition,
-                    check=schemas.Check(
-                        schemas.COULD_NOT_CHECK,
-                        (f"no observation was produced for the {cid} control; a control "
-                         "with no result is not a control that passed",)),
-                    disposition=DISPOSITION_NOT_RUN))
-                continue
-            check = _EVALUATORS[cid](definition, observation, context)
-            outcomes.append(ControlOutcome(
-                control_id=cid, definition=definition, check=check,
-                disposition=(DISPOSITION_SATISFIED if check.outcome == schemas.PASS
-                             else definition.failure_disposition),
-                detail=tuple(observation.notes)))
-
-        panel = self._build_panel(outcomes, context.historical, escalation)
-        if panel is None and blocked_reason is None:
-            blocked_reason = ("no control panel could be built for this window; see the "
-                              "control outcomes for which control could not be disposed of")
+        outcomes, panel, blocked_reason = _derive_panel_result_parts(
+            observations=observations, context=context, escalation=escalation)
         return ControlPanelResult(
-            outcomes=tuple(outcomes), panel=panel, historical=context.historical,
+            outcomes=outcomes, panel=panel, historical=context.historical,
             escalation=escalation, aa_cadence=aa_cadence,
-            definitions_check=definitions_check, blocked_reason=blocked_reason)
+            definitions_check=definitions_check,
+            observations=observations, context=context,
+            blocked_reason=blocked_reason, mint=_PANEL_MINT_TOKEN)
 
-    @staticmethod
-    def _unavailable_control_5(definition: ControlDefinition,
-                               historical: HistoricalWinResolution,
-                               escalation: Optional[OperatorEscalation]):
-        """Dispose of the unavailable branch. Never a silent skip, never the
-        controller's call."""
-        marker_reason = (f"{HISTORICAL_REPLAY_UNAVAILABLE}: backend "
-                         f"{historical.backend}: {historical.reason()}")
-        if escalation is None:
-            return ControlOutcome(
-                control_id=definition.control_id, definition=definition,
-                check=schemas.Check(
-                    schemas.COULD_NOT_CHECK,
-                    (marker_reason,
-                     "no operator escalation is on the record; the campaign MUST NOT "
-                     "silently run four controls and report as though it ran five",)),
-                disposition=DISPOSITION_NOT_RUN,
-            ), ("control 5 is unavailable and was not escalated to the operator; whether "
-                "the campaign proceeds on four controls is the operator's call, taken "
-                "once, on the record — not the controller's")
-        if escalation.decision == OPERATOR_DECISION_PENDING:
-            return ControlOutcome(
-                control_id=definition.control_id, definition=definition,
-                check=schemas.Check(
-                    schemas.COULD_NOT_CHECK,
-                    (marker_reason,
-                     f"escalated to the operator at {escalation.escalation_ref}; the "
-                     "decision is still PENDING")),
-                disposition=DISPOSITION_NOT_RUN,
-            ), (f"control 5 is unavailable and escalation {escalation.escalation_ref} is "
-                "pending an operator decision")
-        if escalation.decision == OPERATOR_DECISION_HALT:
-            return ControlOutcome(
-                control_id=definition.control_id, definition=definition,
-                check=schemas.Check(
-                    schemas.FAIL,
-                    (marker_reason,
-                     f"the operator halted the campaign at {escalation.escalation_ref} "
-                     f"({escalation.decided_by}, {escalation.decided_at})")),
-                disposition=DISPOSITION_UNAVAILABLE_RECORDED,
-            ), f"the operator halted this campaign at {escalation.escalation_ref}"
-        return ControlOutcome(
-            control_id=definition.control_id, definition=definition,
-            check=schemas.Check(
-                schemas.PASS,
-                (marker_reason,
-                 f"the operator authorised proceeding on four controls at "
-                 f"{escalation.escalation_ref} ({escalation.decided_by}, "
-                 f"{escalation.decided_at}); every record emitted by this campaign "
-                 f"carries controls=4/5 ({HISTORICAL_REPLAY_UNAVAILABLE})")),
-            disposition=DISPOSITION_UNAVAILABLE_RECORDED,
-        ), None
-
-    @staticmethod
-    def _build_panel(outcomes: Sequence[ControlOutcome],
-                     historical: HistoricalWinResolution,
-                     escalation: Optional[OperatorEscalation]) -> Optional[api.ControlPanel]:
-        by_id = {o.control_id: o for o in outcomes}
-        fields = {
-            _PANEL_FIELD_BY_CONTROL[cid]: by_id[cid].check
-            for cid in MANDATORY_CONTROL_IDS
-        }
-        if historical.available:
-            fields["historical_replay"] = by_id[CONTROL_HISTORICAL_WIN_REPLAY].check
-            return api.ControlPanel(**fields)
-        if escalation is None or escalation.decision != OPERATOR_DECISION_PROCEED_ON_FOUR:
-            # `api.ControlPanel` would happily take a reason and an escalation ref
-            # here; refusing to build one at all is stronger, because a panel is a
-            # licence to rank and the operator has not granted it.
-            return None
-        return api.ControlPanel(
-            historical_replay=None,
-            historical_replay_unavailable_reason=(
-                f"backend {historical.backend}: {historical.reason()}"),
-            operator_escalation_ref=escalation.escalation_ref,
-            **fields)
 
 
 # =============================================================================

@@ -3718,7 +3718,14 @@ def assemble_release_package(*, package_id: str, created_at: str,
     active = tuple(
         {"waiver_id": waiver_id, "sha256": bound[waiver_id].pinned_sha256,
          "document_path": bound[waiver_id].document_path,
-         "covers_cell_ids": list(bound[waiver_id].covers_cell_ids)}
+         "covers_cell_ids": list(bound[waiver_id].covers_cell_ids),
+         # WAS THE DOCUMENT READ, and what did it hash to when it was? The package is
+         # what a human executes, so it must state which of its waivers is a file
+         # somebody opened and which is a quotation. `t3.waiver_read_violations` and
+         # not the `was_read` property: a property is overridable by a subclass, and
+         # the package is a durable record — the one place a lie survives the run.
+         "read": not t3.waiver_read_violations(bound[waiver_id]),
+         "observed_sha256": bound[waiver_id].observed_sha256}
         for waiver_id in sorted(used_ids & set(bound)))
     for waiver_id in sorted(used_ids - set(bound)):
         note("WAIVER_SUPPRESSED_BUT_UNPINNED",
@@ -3728,6 +3735,23 @@ def assemble_release_package(*, package_id: str, created_at: str,
         note("WAIVER_PINNED_BUT_UNVERIFIED",
              f"waiver {waiver_id!r} is pinned into the package and T3 did not verify it; "
              "an unverified waiver suppresses nothing and must not read as active",
+             outcome=schemas.COULD_NOT_CHECK)
+    # "T3 refused it" and "nobody read it" are two different states and they collapsed
+    # into one finding above, so the package could not tell an operator which had
+    # happened. A quotation is not a weaker attestation, it is a DIFFERENT object:
+    # `t3.WaiverBinding` carries a document, a path and a digest that are three
+    # independent assertions by the party being gated, and only
+    # `t3.waiver_binding_from_path` produces one whose bytes were read.
+    for binding in sorted(bindings, key=lambda b: (b.waiver_id, b.pinned_sha256)):
+        if not t3.waiver_read_violations(binding):
+            continue
+        note("WAIVER_PINNED_UNREAD",
+             f"waiver {binding.waiver_id!r} ({binding.pinned_sha256[:12]}) is pinned "
+             f"from {binding.document_path!r} as a QUOTATION: nothing read that file, "
+             "so its document, its path and its digest are all assertions by the party "
+             "being gated. §10.4's evaluator verifies a waiver's hash, and a hash over "
+             "bytes the caller handed over verifies nothing "
+             "(t3.waiver_binding_from_path)",
              outcome=schemas.COULD_NOT_CHECK)
     # §10.4 waivers are HUMAN-only. The vocabulary that decides whether an identity
     # is a machine now lives in `schemas.py`, so `t3.verify_waiver` refuses a

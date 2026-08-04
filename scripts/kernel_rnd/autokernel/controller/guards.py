@@ -89,6 +89,7 @@ from . import state_machine as sm
 __all__ = [
     # errors
     "GuardError", "GuardInputError", "GuardEvidenceError", "GuardVocabularyError",
+    "ParityHasNoMagnitude",
     # outcome vocabulary
     "CONTINUE", "REFUSE", "STOP", "COULD_NOT_EVALUATE", "OUTCOMES",
     # directives
@@ -103,6 +104,8 @@ __all__ = [
     "GUARD_PLANNER_HEALTH", "GUARD_EXHAUSTED", "GUARD_PLATEAU",
     "GUARD_COMMAND_RETRY", "GUARD_REPAIR_CAP", "GUARD_SPEND_BREAKER",
     "GUARD_STOP_REQUEST", "GUARD_IDS",
+    "PLATEAU_BASIS_MEASURED_IMPROVEMENT", "PLATEAU_BASIS_NO_DETECTABLE_EFFECT",
+    "PLATEAU_BASES",
     "STOP_PRECEDENCE", "GUARD_BY_STOP", "NON_GUARD_STOPS", "ESCALATING_STOPS",
     # constitutional constants
     "HOST_UPTIME_CEILING_SECONDS", "MAX_COMMAND_RETRIES", "BUDGET_DIMENSIONS",
@@ -119,7 +122,8 @@ __all__ = [
     "AcceptSideControlReceipt", "ACCEPT_CONTROL_PROMOTED",
     "ACCEPT_CONTROL_FAILED_TO_PROMOTE", "ACCEPT_CONTROL_UNAVAILABLE",
     "ACCEPT_CONTROL_STATUSES",
-    "ReadinessObservation", "PlateauPolicy",
+    "ReadinessSeriesEntry", "ReadinessObservation", "ParityObservation",
+    "observation_from_fields", "PlateauPolicy",
     "CommandRetryLedger", "RepairLedger",
     # guards
     "guard_integrity", "guard_anchor_moved", "guard_host_uptime",
@@ -167,6 +171,18 @@ class GuardVocabularyError(GuardError):
     Raised at import. A stop state that no guard decides is a stop that can only
     be entered by narration, and a guard for a state §8.10 does not declare is a
     condition with two spellings.
+    """
+
+
+class ParityHasNoMagnitude(GuardError):
+    """Something read a round that produced NO readiness as though it had one.
+
+    A `ParityObservation` records a round in which every protected cell was
+    measured and none was orderable. There is no magnitude on it, because the
+    release plane refused to invent one: sub-floor does not mean zero, it means
+    the sign and the size are both unknown. Substituting `0.0` would make the
+    plateau rule trend a number nobody measured, and substituting `None` would
+    make a completed round look like a missing one.
     """
 
 
@@ -236,6 +252,27 @@ GUARD_COMMAND_RETRY = "command_retry"
 GUARD_REPAIR_CAP = "repair_cap"
 GUARD_SPEND_BREAKER = "spend_breaker"
 GUARD_STOP_REQUEST = "stop_request_disposal"
+
+#: How a `PLATEAU_STOP` was reached. ONE §8.10 stop state, TWO kinds of evidence
+#: for it, and they are not interchangeable:
+#:
+#:  * `measured_improvement_below_floor` — the window opened on a magnitude, the
+#:    best round in it is a magnitude, and the SUBTRACTION came out at or below
+#:    the campaign's derived floor.
+#:  * `no_detectable_effect_in_any_round` — every round in the window measured
+#:    its protected cells and NONE produced an orderable effect. There is no
+#:    subtraction here and the detail carries no `improvement`, no
+#:    `opening_readiness` and no `best_readiness`: substituting `0.0` for the
+#:    rounds that had no magnitude would report "readiness improved by 0.0" for a
+#:    quantity nobody measured — a plateau of zeros — and it would look exactly
+#:    like the first basis in the journal.
+#:
+#: They are separate words because the second is only admissible when the rounds
+#: could have SEEN the campaign's own target, and an operator auditing a stop has
+#: to be able to ask which question was answered.
+PLATEAU_BASIS_MEASURED_IMPROVEMENT = "measured_improvement_below_floor"
+PLATEAU_BASIS_NO_DETECTABLE_EFFECT = "no_detectable_effect_in_any_round"
+PLATEAU_BASES = (PLATEAU_BASIS_MEASURED_IMPROVEMENT, PLATEAU_BASIS_NO_DETECTABLE_EFFECT)
 
 GUARD_IDS = (
     GUARD_INTEGRITY, GUARD_ANCHOR, GUARD_HOST_UPTIME, GUARD_RESOURCE,
@@ -1433,8 +1470,26 @@ class AcceptSideControlReceipt:
         }
 
 
+class ReadinessSeriesEntry:
+    """One round's readiness RESULT — of which there are two kinds, and the split
+    between them is a TYPE, not a field.
+
+    A round either produced an orderable readiness magnitude
+    (`ReadinessObservation`) or it did not (`ParityObservation`), and the plateau
+    rule's arithmetic is only defined on the first. The alternative design — one
+    class with a number and an `at_parity` boolean beside it — puts the whole
+    guarantee in the consumer's hands: `max(o.readiness for o in window)` reads
+    the number whether or not anyone checked the flag, and every "flag it and
+    hope the consumer checks" design in this package has turned out to be a
+    defect. Here `ParityObservation` has no magnitude to read at all, so the
+    wrong reading is not discouraged, it is unavailable.
+    """
+
+    __slots__ = ()
+
+
 @dataclass(frozen=True)
-class ReadinessObservation:
+class ReadinessObservation(ReadinessSeriesEntry):
     """One reduced readiness figure, from the CONFIRMATION stratum, with its event.
 
     Two refusals live in the constructor:
@@ -1446,6 +1501,10 @@ class ReadinessObservation:
         controller computes readiness from records and *"the LLM may request,
         never declare"*, so a readiness number with no record behind it is not a
         readiness number.
+
+    A third refusal is structural rather than written: `readiness` is a REQUIRED
+    argument, so the release plane's parity mapping — which carries no
+    `readiness` key — cannot construct one of these at all.
     """
 
     round_index: int
@@ -1471,7 +1530,223 @@ class ReadinessObservation:
             "round_index": self.round_index, "readiness": self.readiness,
             "at": self.at, "source_event_id": self.source_event_id,
             "stratum": self.stratum,
+            # Carried on BOTH kinds of round, because `ParityObservation` publishes
+            # `orderable: false` and a reader will branch on it. A discriminator
+            # present only on the negative side makes
+            # `entry.get("orderable", False)` answer "no round is orderable", which
+            # empties the window silently instead of failing — and `guard_plateau`'s
+            # detail serialises the whole window, so that reader is downstream of
+            # every stop decision this guard records.
+            "orderable": True,
         }
+
+
+@dataclass(frozen=True)
+class ParityObservation(ReadinessSeriesEntry):
+    """One round in which every protected cell was measured and NONE was orderable.
+
+    This is a completed round with a result, not a missing round: under a
+    non-inferiority objective, cells at `no_detectable_difference` are *"a result
+    and a decision, not a failed experiment"*. So it enters the series — a
+    plateau rule that simply never saw these rounds would be trending a
+    subsequence it chose, and would report "no observations" for a campaign that
+    ran every one of them.
+
+    What it does NOT carry is a magnitude, and `readiness` raises rather than
+    being merely absent so that `getattr(observation, "readiness", 0.0)` cannot
+    quietly reintroduce one. `protected_cells`, `cells_at_parity`, `mde` and
+    `noise_floor` are carried instead, because "nothing moved" is only meaningful
+    against the sensitivity it was judged at.
+    """
+
+    round_index: int
+    protected_cells: int
+    cells_at_parity: int
+    mde: float
+    noise_floor: float
+    sensitivity_bound: float
+    at: str
+    source_event_id: str
+    stratum: str = evaluator_api.STRATUM_CONFIRMATION
+    reference_gain: Optional[float] = None
+
+    def __post_init__(self) -> None:
+        _nonneg_int(self.round_index, "round_index")
+        _nonneg_int(self.protected_cells, "protected_cells")
+        _nonneg_int(self.cells_at_parity, "cells_at_parity")
+        if self.protected_cells < 1:
+            raise GuardInputError(
+                "protected_cells: a parity observation with no protected cell behind "
+                "it reports a result for a round that measured nothing")
+        if self.cells_at_parity > self.protected_cells:
+            raise GuardInputError(
+                f"cells_at_parity {self.cells_at_parity} exceeds protected_cells "
+                f"{self.protected_cells}")
+        object.__setattr__(self, "mde", _finite_number(self.mde, "mde"))
+        object.__setattr__(
+            self, "noise_floor", _finite_number(self.noise_floor, "noise_floor"))
+        object.__setattr__(self, "sensitivity_bound", _finite_number(
+            self.sensitivity_bound, "sensitivity_bound", minimum=0.0))
+        # The producer computes the bound (`ParityFigure.sensitivity_bound`) and
+        # this side does not recompute it — a second derivation is a second thing
+        # to drift. What it DOES refuse is a bound sharper than the two numbers
+        # published beside it, because that is the only direction that hurts: a
+        # bound smaller than the cell's own MDE or floor claims the round could
+        # see finer than the cell that produced it, and a round that looks
+        # sharper than it is turns "we could not have seen it" into "nothing
+        # happened". A COARSER bound is admitted: the producer may bind on
+        # something this side has never heard of, and being told the run was
+        # blinder than these two numbers can only make the guard more reluctant.
+        published = max(self.mde, self.noise_floor)
+        if self.sensitivity_bound < published:
+            raise GuardInputError(
+                f"sensitivity_bound {self.sensitivity_bound} is sharper than the "
+                f"round's own MDE {self.mde} / floor {self.noise_floor}; a parity "
+                "round cannot resolve finer than the cell it came from, and an "
+                "understated bound reads an underpowered round as a clean result")
+        _timestamp(self.at, "at")
+        _text(self.source_event_id, "source_event_id")
+        if self.reference_gain is not None:
+            object.__setattr__(self, "reference_gain", _finite_number(
+                self.reference_gain, "reference_gain"))
+        if self.stratum != evaluator_api.STRATUM_CONFIRMATION:
+            raise GuardInputError(
+                f"stratum: {self.stratum!r} — a readiness series admits only "
+                f"{evaluator_api.STRATUM_CONFIRMATION!r} evidence; selection evidence "
+                "is structurally unfit to report how ready a candidate is"
+            )
+
+    def could_have_detected(self, magnitude: float) -> bool:
+        """Would an effect of this size have been visible in this round?
+
+        The seam mirror of `release.readiness.ParityFigure.could_have_detected`,
+        and deliberately one line over a bound the producer published rather than
+        one this side derived. False means this round cannot tell "nothing moved"
+        from "an effect of `magnitude` moved and we could not see it", so nothing
+        may be concluded from it about a change of that size.
+
+        The two planes cannot import each other, so the anti-drift mechanism is a
+        test that runs BOTH over one figure and asserts they answer the same
+        (`test_the_two_planes_answer_the_power_question_identically`) rather than
+        a comment asking the next author to keep them aligned.
+        """
+        return _finite_number(magnitude, "magnitude") > self.sensitivity_bound
+
+    @property
+    def readiness(self) -> float:
+        raise ParityHasNoMagnitude(
+            f"round {self.round_index}: {self.cells_at_parity} of "
+            f"{self.protected_cells} protected cell(s) resolved below the campaign's "
+            f"own sensitivity (MDE {self.mde}, floor {self.noise_floor}) and none was "
+            "orderable. There is no readiness magnitude on this round, and a plateau "
+            "computed through a substituted one would be a trend in a quantity nobody "
+            "measured")
+
+    def to_dict(self) -> dict:
+        """The serialized round — carrying NO `readiness` key, not a null one.
+
+        `readiness` raises on the object and the dict must not undo that. These
+        dicts are what land in `GuardDecision.detail["window"]` and from there in
+        a journal, where the type is gone and only the mapping survives; a
+        `"readiness": None` sitting in that window is `entry["readiness"] or 0.0`
+        away from being trended as a round that measured zero improvement. Absent
+        means a reader that assumes a magnitude gets a `KeyError` at the line that
+        assumed it, which is the same refusal one layer out.
+        """
+        return {
+            "round_index": self.round_index, "at": self.at,
+            "protected_cells": self.protected_cells,
+            "cells_at_parity": self.cells_at_parity,
+            "mde": self.mde, "noise_floor": self.noise_floor,
+            "sensitivity_bound": self.sensitivity_bound,
+            "reference_gain": self.reference_gain,
+            "source_event_id": self.source_event_id, "stratum": self.stratum,
+            "orderable": False, "no_magnitude_reason": (
+                f"{self.cells_at_parity} of {self.protected_cells} protected cell(s) "
+                f"resolved below the campaign's own sensitivity (MDE {self.mde}, floor "
+                f"{self.noise_floor}); sub-floor does not mean zero"),
+        }
+
+
+def _required(fields: Mapping, key: str):
+    """Read a key the producer must have sent, or refuse. Never a fallback.
+
+    A default here would be a number nobody measured wearing the shape of one
+    that was measured, and the seam's whole job is that the shape decides.
+    """
+    if key not in fields:
+        raise GuardInputError(
+            f"fields is missing {key!r} ({sorted(fields)}); a figure's "
+            "observation_fields() always carries it, so a mapping without it came "
+            "from somewhere else. Substituting a default would put a value the "
+            "producer never sent into the series — and for the sensitivity keys the "
+            "default reads as the SHARPEST possible measurement, not a missing one")
+    return fields[key]
+
+
+def observation_from_fields(*, round_index: int, at: str,
+                            fields: Mapping) -> ReadinessSeriesEntry:
+    """Build the RIGHT series entry from a release-plane figure's own fields.
+
+    AK5 does not import AK4 — the controller consumes the release plane, not the
+    other way round — so what crosses the seam is a mapping produced by
+    `release.readiness.<figure>.observation_fields()`. This is the ONE place that
+    reads its shape, and it reads it as an EITHER-OR: a mapping carrying
+    `readiness` builds a `ReadinessObservation`, a mapping carrying
+    `cells_at_parity` builds a `ParityObservation`, and a mapping carrying both
+    or neither is refused rather than resolved by precedence.
+
+    There is deliberately no path here that can produce a magnitude for a round
+    that had none, and no caller that has to remember to check anything: the
+    branch is on which keys EXIST, and the parity mapping does not contain a
+    number that could be mistaken for readiness.
+
+    NOTHING HERE IS DEFAULTED, and that is the second mechanism. The branch is on
+    which keys exist, so a `.get(key, fallback)` for anything else would mean an
+    ABSENT key silently becomes a value the producer never sent — on the parity
+    side the fallbacks would have been `mde=0.0` and `noise_floor=0.0`, which is
+    not a missing sensitivity but the SHARPEST one expressible: "we resolved to
+    zero and nothing moved" is the strongest parity claim there is, invented from
+    a dropped key. `stratum` is worse again: defaulting an absent one to
+    `confirmation` enforces P-AK-SEARCH-1 only against producers that volunteer
+    the field, which is not enforcement. A mapping that lost a key is a mapping
+    nobody can interpret, and this refuses it.
+    """
+    if not isinstance(fields, Mapping):
+        raise GuardInputError(
+            f"fields: expected a mapping of a figure's observation_fields(), got "
+            f"{type(fields).__name__}")
+    has_readiness = "readiness" in fields
+    has_parity = "cells_at_parity" in fields
+    if has_readiness and has_parity:
+        raise GuardInputError(
+            "fields carries both 'readiness' and 'cells_at_parity'; a round either "
+            "produced an orderable magnitude or it did not, and a mapping claiming "
+            "both would be resolved here by whichever branch happened to be first")
+    if not has_readiness and not has_parity:
+        raise GuardInputError(
+            f"fields carries neither 'readiness' nor 'cells_at_parity' "
+            f"({sorted(fields)}); a series entry with no result is not a round that "
+            "happened")
+    stratum = _required(fields, "stratum")
+    if has_readiness:
+        return ReadinessObservation(
+            round_index=round_index, readiness=fields["readiness"], at=at,
+            source_event_id=_required(fields, "source_event_id"), stratum=stratum)
+    return ParityObservation(
+        round_index=round_index,
+        protected_cells=_required(fields, "protected_cells"),
+        cells_at_parity=fields["cells_at_parity"],
+        mde=_required(fields, "mde"),
+        noise_floor=_required(fields, "noise_floor"),
+        # Required even though `None` is a legal VALUE. A campaign that declared
+        # no target and a producer that dropped the key are different facts, and
+        # `.get("reference_gain")` would render them identically — as the first,
+        # which is the one that silently disables the only branch able to
+        # conclude anything from an all-parity window.
+        sensitivity_bound=_required(fields, "sensitivity_bound"),
+        reference_gain=_required(fields, "reference_gain"), at=at,
+        source_event_id=_required(fields, "source_event_id"), stratum=stratum)
 
 
 @dataclass(frozen=True)
@@ -2637,7 +2912,7 @@ def guard_exhausted_surface(
 def guard_plateau(
     *,
     reason: str,
-    series: Sequence[ReadinessObservation],
+    series: Sequence[ReadinessSeriesEntry],
     policy: PlateauPolicy,
     closure: ClosureLedger,
     accept_control: AcceptSideControlReceipt,
@@ -2657,10 +2932,53 @@ def guard_plateau(
     window minus the readiness the window opened at — a non-negative quantity, so
     a declining series plateaus rather than reading as an improvement of the wrong
     sign.
+
+    ROUNDS WITH NO MAGNITUDE. The series admits `ParityObservation`s, which are
+    completed rounds that produced no orderable readiness. They are counted as
+    rounds — dropping them would let the guard trend a subsequence of its own
+    choosing — and they contribute NOTHING to `best`, because there is nothing on
+    them to contribute. A parity round therefore cannot raise `best`, so a
+    campaign returning parity is a campaign that is not improving, which is
+    precisely what a plateau is.
+
+    But "contributes nothing to the subtraction" is not the same as "says
+    nothing", and reading it as the second is how this guard stalls. Under a
+    NON-INFERIORITY objective parity is the most common HEALTHY outcome, and a
+    converged campaign goes all-parity and stays there — so a rule that answers
+    COULD_NOT_EVALUATE to an all-parity window answers it forever, on exactly the
+    campaign that most needs stopping. Two misreadings sit either side of that
+    and they point opposite ways: reading parity as `0.0` STOPS on an invented
+    trend, and refusing to read it at all never stops. Neither is taken:
+
+      * ALL ROUNDS AT PARITY — there is no subtraction to do, so none is done and
+        the detail carries no improvement. What the window says instead is
+        direct: `window_rounds` consecutive rounds measured their protected cells
+        and not one produced a detectable effect. That is a `PLATEAU_STOP` on the
+        `no_detectable_effect_in_any_round` basis — but ONLY if every round could
+        have SEEN the campaign's own target (`reference_gain`, published by the
+        release plane and compared through `could_have_detected`). A window too
+        coarse to resolve the effect being hunted has not observed its absence,
+        and a campaign that declared no target has not said what it would take to
+        be found; both answer COULD_NOT_EVALUATE, and both are conditions a
+        campaign can FIX, unlike the categorical refusal they replace.
+      * A WINDOW THAT OPENS AT PARITY but contains orderable rounds has no
+        opening magnitude, so `best - opening` stays undefined and the guard
+        still answers COULD_NOT_EVALUATE. That is not a stall: the window slides,
+        so this shape is transient by construction — the next rounds either push
+        the parity round out of the window or make the window all-parity, and
+        both of those have answers.
+      * A PARITY ROUND INSIDE A STOPPING WINDOW is checked before the stop is
+        taken. Its true readiness is unknown within `±sensitivity_bound`, so it
+        could have been the best round in the window by more than the floor
+        without anyone seeing it — if it could, the window has not shown the
+        absence of improvement and the guard says so instead of stopping. This
+        only ever runs on the STOP side: a window that MEASURED an improvement
+        above the floor continues on that measurement, and a blind round cannot
+        argue with it.
     """
     if not isinstance(policy, PlateauPolicy):
         raise GuardInputError("policy: must be a PlateauPolicy")
-    observations = _typed_tuple(series, "series", ReadinessObservation, non_empty=False)
+    observations = _typed_tuple(series, "series", ReadinessSeriesEntry, non_empty=False)
     rounds = [observation.round_index for observation in observations]
     if rounds != sorted(set(rounds)):
         raise GuardInputError(
@@ -2692,17 +3010,92 @@ def guard_plateau(
         )
 
     window = observations[-policy.window_rounds:]
+    orderable = [observation for observation in window
+                 if isinstance(observation, ReadinessObservation)]
+    at_parity = [observation for observation in window
+                 if isinstance(observation, ParityObservation)]
+    parity_detail = {
+        "parity_rounds": len(at_parity),
+        "parity_round_indices": [observation.round_index for observation in at_parity],
+    }
+
+    def _stop(*, basis: str, extra: Mapping) -> GuardDecision:
+        """Assemble the §8.10 stop. ONE assembly, so the two bases cannot diverge.
+
+        `basis` rides in the detail rather than in `reason`, because `reason` is
+        the caller's narrative and §8.10 reserves its vocabulary; an auditor
+        needs to know which question the guard answered without parsing prose.
+        """
+        detail = closure.to_detail()
+        detail.update({
+            "window_rounds": policy.window_rounds,
+            "improvement_floor": policy.improvement_floor,
+            "floor_receipt": policy.floor_receipt,
+            "orderable_rounds": len(orderable),
+            "window": [observation.to_dict() for observation in window],
+            "plateau_basis": basis,
+            **parity_detail,
+        })
+        detail.update(extra)
+        detail.update({
+            "accept_side_control": accept_control.to_dict(),
+            # §8.10's mandatory receipt. `degraded_ruled_out` is True because
+            # `_closure_preconditions` verified a CONTINUE from
+            # guard_planner_degraded over this exact health digest — never
+            # because it was asserted.
+            "planner_health": {
+                **health.to_dict(),
+                "degraded_ruled_out": True,
+                "ruled_out_by": planner_decision.reason,
+                "health_digest": health.digest,
+            },
+        })
+        return GuardDecision(
+            guard_id=GUARD_PLATEAU,
+            outcome=STOP,
+            stop_state=sm.PLATEAU_STOP,
+            reason=reason,
+            detail=detail,
+            evidence=(
+                tuple(o.source_event_id for o in window)
+                + closure.receipts
+                + (policy.floor_receipt, accept_control.event_id)
+            ),
+        )
+
+    if not orderable:
+        return _all_parity_plateau(
+            window=window, policy=policy, parity_detail=parity_detail,
+            observations=observations, stop=_stop)
+
+    if not isinstance(window[0], ReadinessObservation):
+        return GuardDecision(
+            guard_id=GUARD_PLATEAU,
+            outcome=COULD_NOT_EVALUATE,
+            reason=(
+                f"the window opens on round {window[0].round_index}, which produced no "
+                "orderable readiness, so 'improvement across the window' has no opening "
+                "magnitude to be measured from. Reading that round as zero would "
+                "manufacture an improvement equal to whatever the best round happened "
+                "to be"
+            ),
+            detail={
+                "observations": len(observations),
+                "window_rounds": policy.window_rounds,
+                "orderable_rounds": len(orderable),
+                "floor_receipt": policy.floor_receipt,
+                "window": [observation.to_dict() for observation in window],
+                **parity_detail,
+            },
+        )
+
     opening = window[0].readiness
-    best = max(observation.readiness for observation in window)
+    best = max(observation.readiness for observation in orderable)
     improvement = best - opening
-    window_detail = {
-        "window_rounds": policy.window_rounds,
+    measured_detail = {
         "improvement": improvement,
-        "improvement_floor": policy.improvement_floor,
-        "floor_receipt": policy.floor_receipt,
         "opening_readiness": opening,
         "best_readiness": best,
-        "window": [observation.to_dict() for observation in window],
     }
 
     if improvement > policy.improvement_floor:
@@ -2713,36 +3106,146 @@ def guard_plateau(
                 f"readiness improved by {improvement} across the window, above the "
                 f"derived floor of {policy.improvement_floor}"
             ),
-            detail=window_detail,
+            detail={
+                "window_rounds": policy.window_rounds,
+                "improvement_floor": policy.improvement_floor,
+                "floor_receipt": policy.floor_receipt,
+                "orderable_rounds": len(orderable),
+                "window": [observation.to_dict() for observation in window],
+                **measured_detail,
+                **parity_detail,
+            },
             evidence=tuple(o.source_event_id for o in window) + (policy.floor_receipt,),
         )
 
-    detail = closure.to_detail()
-    detail.update(window_detail)
-    detail.update({
-        "accept_side_control": accept_control.to_dict(),
-        # §8.10's mandatory receipt. `degraded_ruled_out` is True because
-        # `_closure_preconditions` verified a CONTINUE from guard_planner_degraded
-        # over this exact health digest — never because it was asserted.
-        "planner_health": {
-            **health.to_dict(),
-            "degraded_ruled_out": True,
-            "ruled_out_by": planner_decision.reason,
-            "health_digest": health.digest,
-        },
-    })
-    return GuardDecision(
-        guard_id=GUARD_PLATEAU,
-        outcome=STOP,
-        stop_state=sm.PLATEAU_STOP,
-        reason=reason,
-        detail=detail,
-        evidence=(
-            tuple(o.source_event_id for o in window)
-            + closure.receipts
-            + (policy.floor_receipt, accept_control.event_id)
-        ),
-    )
+    # The subtraction says "no improvement". Before that becomes a stop, the
+    # rounds with no magnitude get their say: one of them could have been the
+    # best round in the window by more than the floor and nobody would have seen
+    # it. `opening + floor` is the readiness a round would need to reach to
+    # contradict the stop; a round that could not have resolved that magnitude
+    # has not shown it did not happen.
+    blind = [observation for observation in at_parity
+             if not observation.could_have_detected(opening + policy.improvement_floor)]
+    if blind:
+        blindest = max(blind, key=lambda observation: observation.sensitivity_bound)
+        return GuardDecision(
+            guard_id=GUARD_PLATEAU,
+            outcome=COULD_NOT_EVALUATE,
+            reason=(
+                f"the window measured no improvement above the derived floor of "
+                f"{policy.improvement_floor}, but round {blindest.round_index} produced "
+                f"no orderable readiness at a sensitivity of +/-"
+                f"{blindest.sensitivity_bound} — coarser than the "
+                f"{opening + policy.improvement_floor} it would have had to reach to "
+                "beat the window's opening by the floor. That round could have been the "
+                "best in the window and gone unseen, so this window has not shown the "
+                "absence of improvement"
+            ),
+            detail={
+                "observations": len(observations),
+                "window_rounds": policy.window_rounds,
+                "improvement_floor": policy.improvement_floor,
+                "floor_receipt": policy.floor_receipt,
+                "orderable_rounds": len(orderable),
+                "window": [observation.to_dict() for observation in window],
+                "blind_round_indices": [o.round_index for o in blind],
+                "magnitude_that_would_contradict": opening + policy.improvement_floor,
+                **measured_detail,
+                **parity_detail,
+            },
+        )
+
+    return _stop(basis=PLATEAU_BASIS_MEASURED_IMPROVEMENT, extra=measured_detail)
+
+
+def _all_parity_plateau(*, window: Sequence["ParityObservation"],
+                        policy: "PlateauPolicy", parity_detail: Mapping,
+                        observations: Sequence, stop) -> GuardDecision:
+    """Every round in the window measured its cells and none produced an effect.
+
+    This is the branch that keeps a converged non-inferiority campaign from
+    running forever. There is no opening magnitude and no best, so nothing is
+    subtracted and no `improvement` is reported — the evidence is the ABSENCE of
+    a detectable effect across `window_rounds` consecutive rounds, which is a
+    different fact from a subtraction that came out small, and it is named as
+    one (`plateau_basis`).
+
+    An absence is only evidence at a sensitivity fine enough to have seen the
+    thing. The campaign's own advisory reference gain is what the search is
+    looking for, so `could_have_detected(reference_gain)` on EVERY round is the
+    admission test: pass, and the window has observed the absence of the effect
+    being hunted; fail, and it has observed nothing. A campaign that declared no
+    target has not said what "found it" would mean and gets the same answer —
+    and unlike the blanket refusal this replaces, both of those are things a
+    campaign can change (declare the reference policy, or buy sensitivity with
+    blocks).
+
+    The window is not required to be a `ParityObservation` sequence by type here
+    because the caller reached this branch by finding no `ReadinessObservation`
+    in it; the guard's own `_typed_tuple` already refused anything that is
+    neither.
+    """
+    detail = {
+        "observations": len(observations),
+        "window_rounds": policy.window_rounds,
+        "improvement_floor": policy.improvement_floor,
+        "floor_receipt": policy.floor_receipt,
+        "orderable_rounds": 0,
+        "window": [observation.to_dict() for observation in window],
+        **parity_detail,
+    }
+    coarsest = max(window, key=lambda observation: observation.sensitivity_bound)
+    targets = {observation.reference_gain for observation in window}
+    if None in targets or len(targets) != 1:
+        declared = sorted(t for t in targets if t is not None)
+        return GuardDecision(
+            guard_id=GUARD_PLATEAU,
+            outcome=COULD_NOT_EVALUATE,
+            reason=(
+                f"every one of the {len(window)} rounds in the window measured its "
+                "protected cells and none produced a detectable effect, but the window "
+                f"does not carry one campaign target to judge that against (declared: "
+                f"{declared or 'none'}). 'Nothing moved' is only a result against a "
+                "magnitude worth ruling out; without one there is nothing to say the "
+                "run was sensitive enough to have found"
+            ),
+            detail={**detail,
+                    "coarsest_sensitivity_bound": coarsest.sensitivity_bound,
+                    "reference_gains_declared": declared},
+        )
+    target = targets.pop()
+    blind = [observation for observation in window
+             if not observation.could_have_detected(target)]
+    if blind:
+        return GuardDecision(
+            guard_id=GUARD_PLATEAU,
+            outcome=COULD_NOT_EVALUATE,
+            reason=(
+                f"every one of the {len(window)} rounds in the window is at parity, but "
+                f"round {coarsest.round_index} resolved no finer than +/-"
+                f"{coarsest.sensitivity_bound} — coarser than the campaign's own target "
+                f"of {target}. A run too blind to see the effect it is hunting has not "
+                "observed its absence, and reading this window as a plateau would stop "
+                "the campaign on a measurement rather than on a result"
+            ),
+            detail={**detail, "reference_gain": target,
+                    "coarsest_sensitivity_bound": coarsest.sensitivity_bound,
+                    "blind_round_indices": [o.round_index for o in blind]},
+        )
+    return stop(
+        basis=PLATEAU_BASIS_NO_DETECTABLE_EFFECT,
+        extra={
+            "reference_gain": target,
+            "coarsest_sensitivity_bound": coarsest.sensitivity_bound,
+            # Named so that nothing downstream reads the ABSENCE of `improvement`
+            # as a serialization accident and helpfully supplies a zero.
+            "no_improvement_magnitude_reason": (
+                f"all {len(window)} rounds in the window are at parity, so there is no "
+                "opening magnitude and no best magnitude to subtract. Every round could "
+                f"have resolved the campaign's target of {target} (coarsest sensitivity "
+                f"+/-{coarsest.sensitivity_bound}) and none did: the plateau is the "
+                "absence of a detectable effect, not an improvement measured at zero"),
+        })
 
 
 def guard_command_retries(ledger: CommandRetryLedger) -> GuardDecision:

@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import json
 import sys
 import tempfile
 import unittest
@@ -60,6 +61,7 @@ from autokernel import journal as J  # noqa: E402
 from autokernel import schemas as S  # noqa: E402
 from autokernel import storage as ST  # noqa: E402
 from autokernel.controller import guards as G  # noqa: E402
+from autokernel.evaluator import api as evaluator_api  # noqa: E402
 from autokernel.controller import state_machine as SM  # noqa: E402
 
 V8_COMMIT = "67a433bf45a8a091d83b4ea0b32ff0735fd51800"
@@ -192,6 +194,44 @@ def _series(values) -> tuple:
         )
         for index, value in enumerate(values)
     )
+
+
+def _parity_round(index: int, **overrides) -> G.ParityObservation:
+    """A round that measured everything and resolved nothing.
+
+    `reference_gain` is left at `None` by default on purpose: the fixture that
+    says nothing about what the campaign is looking for must not be the one that
+    unlocks the branch able to STOP on an all-parity window. Tests that want that
+    branch declare the target, and the declaration is visible in the test.
+    """
+    kwargs = dict(
+        round_index=index, protected_cells=12, cells_at_parity=12, mde=0.018,
+        noise_floor=0.01, sensitivity_bound=0.018, at=NOW,
+        source_event_id=f"ev-parity-{index}",
+    )
+    kwargs.update(overrides)
+    return G.ParityObservation(**kwargs)
+
+
+def _mixed_series(entries, **parity_overrides) -> tuple:
+    """A series whose rounds are ORDERABLE floats or the marker `PARITY`."""
+    built: list = []
+    for index, entry in enumerate(entries):
+        if entry is PARITY:
+            built.append(_parity_round(index, **parity_overrides))
+        else:
+            built.append(G.ReadinessObservation(
+                round_index=index, readiness=entry, at=NOW,
+                source_event_id=f"ev-readiness-{index}"))
+    return tuple(built)
+
+
+#: Marker for "this round produced no orderable readiness" in `_mixed_series`.
+PARITY = object()
+
+#: What the campaign is looking for. Coarser than `_parity_round`'s +/-0.018
+#: bound, so a round at parity really could have seen it.
+CAMPAIGN_TARGET = 0.25
 
 
 def _plateau_policy(**overrides) -> G.PlateauPolicy:
@@ -680,6 +720,204 @@ class ClosureGuardTests(unittest.TestCase):
         ):
             self.assertEqual(decision.outcome, G.REFUSE)
             self.assertIn("searcher", decision.reason)
+
+    # -- rounds that produced no orderable readiness -------------------------
+    #
+    # The release plane withholds a readiness magnitude when every protected cell
+    # of a phase resolved below the campaign's own floor or MDE. Those rounds
+    # HAPPENED and must stay in the series — a plateau computed over a
+    # subsequence the guard chose for itself is a trend in a sample nobody
+    # defined — but there is no number on them, and the arithmetic below is only
+    # defined on rounds that have one.
+
+    def test_a_parity_round_has_no_readiness_to_read(self):
+        observation = _parity_round(0)
+        with self.assertRaises(G.ParityHasNoMagnitude):
+            observation.readiness
+        # `getattr(..., default)` is the usual way an absent attribute becomes a
+        # silent zero; a raising property closes that door too.
+        with self.assertRaises(G.ParityHasNoMagnitude):
+            getattr(observation, "readiness", 0.0)
+        # And the SERIALIZED round carries no `readiness` key — not a null one.
+        # `to_dict()` lands in `GuardDecision.detail["window"]` and from there in
+        # a journal, where the type is gone; `entry["readiness"] or 0.0` on a null
+        # is the same substituted zero the property refuses.
+        wire = observation.to_dict()
+        self.assertNotIn("readiness", wire)
+        self.assertFalse(wire["orderable"])
+        self.assertIn("sub-floor does not mean zero", wire["no_magnitude_reason"])
+
+    def test_a_parity_round_cannot_raise_the_window_best(self):
+        """If parity were read as a magnitude the window would trend through it."""
+        decision = self._plateau(
+            series=_mixed_series([0.30, 0.30, PARITY, PARITY, 0.30, 0.30]))
+        self.assertEqual(decision.outcome, G.STOP)
+        self.assertEqual(decision.detail["improvement"], 0.0)
+        self.assertEqual(decision.detail["parity_rounds"], 2)
+        self.assertEqual(decision.detail["orderable_rounds"], 3)
+
+    def test_a_parity_round_is_counted_as_a_round_that_happened(self):
+        """Dropping it would make a full campaign look like a partial window."""
+        decision = self._plateau(
+            series=_mixed_series([PARITY, 0.30, PARITY, PARITY, PARITY, 0.30]))
+        self.assertEqual(decision.outcome, G.STOP)
+        # The declared 5-round window is full: three of its rounds are parity and
+        # they are still rounds, so this is a plateau rather than a partial window.
+        self.assertEqual(decision.detail["parity_rounds"], 3)
+        self.assertEqual(decision.detail["improvement"], 0.0)
+
+    def test_a_window_that_opens_at_parity_cannot_be_evaluated(self):
+        """`best - opening` has no opening; zero would manufacture an improvement."""
+        decision = self._plateau(
+            series=_mixed_series([0.10, PARITY, 0.10, 0.10, 0.90, 0.90]))
+        self.assertEqual(decision.outcome, G.COULD_NOT_EVALUATE)
+        self.assertIn("no orderable readiness", decision.reason)
+        self.assertNotIn("improvement", decision.detail)
+
+    def test_an_all_parity_window_does_not_stop_on_an_invented_trend(self):
+        """Whatever it answers, it never answers by substituting zeros."""
+        decision = self._plateau(
+            series=_mixed_series([0.30, PARITY, PARITY, PARITY, PARITY, PARITY]))
+        self.assertEqual(decision.detail["orderable_rounds"], 0)
+        for invented in ("improvement", "opening_readiness", "best_readiness"):
+            self.assertNotIn(invented, decision.detail)
+
+    def test_real_improvement_still_continues_with_parity_rounds_present(self):
+        """The control: parity rounds must not turn every window into a stop."""
+        decision = self._plateau(
+            series=_mixed_series([0.30, 0.31, PARITY, 0.33, 0.34, 0.35]))
+        self.assertEqual(decision.outcome, G.CONTINUE)
+        self.assertEqual(decision.detail["parity_rounds"], 1)
+
+    # -- a converged campaign must terminate, and not on invented numbers ----
+    #
+    # Under a NON-INFERIORITY objective parity is the most common HEALTHY
+    # outcome, and a converged campaign goes all-parity and STAYS there. So the
+    # two misreadings of an all-parity window point opposite ways and both are
+    # live: reading parity as `0.0` stops on a trend nobody measured, and
+    # refusing to read the window at all never stops — the second is the one the
+    # first version of this guard chose, and on a converged campaign it is
+    # permanent.
+
+    def _all_parity(self, rounds: int = 5, **parity_overrides):
+        return self._plateau(
+            series=_mixed_series([PARITY] * rounds, **parity_overrides))
+
+    def test_a_converged_campaign_stops_rather_than_spending_forever(self):
+        decision = self._all_parity(reference_gain=CAMPAIGN_TARGET)
+        self.assertEqual(decision.outcome, G.STOP)
+        self.assertEqual(decision.stop_state, SM.PLATEAU_STOP)
+        self.assertEqual(decision.detail["plateau_basis"],
+                         G.PLATEAU_BASIS_NO_DETECTABLE_EFFECT)
+        self.assertEqual(decision.detail["reference_gain"], CAMPAIGN_TARGET)
+        self.assertEqual(decision.detail["coarsest_sensitivity_bound"], 0.018)
+        self.assertEqual(decision.detail["parity_rounds"], 5)
+
+    def test_the_converged_stop_is_not_a_plateau_of_zeros(self):
+        """The stop must not report an improvement it did not measure.
+
+        A `0.0` here is not a harmless placeholder: it is indistinguishable in
+        the journal from a window that opened at a magnitude, reached the same
+        magnitude and genuinely did not move — and the two are different results.
+        """
+        decision = self._all_parity(reference_gain=CAMPAIGN_TARGET)
+        for invented in ("improvement", "opening_readiness", "best_readiness"):
+            self.assertNotIn(invented, decision.detail)
+        self.assertIn("absence of a detectable effect",
+                      decision.detail["no_improvement_magnitude_reason"])
+        # And the two bases are not the same word: an auditor can tell which
+        # question the guard answered.
+        self.assertNotEqual(G.PLATEAU_BASIS_NO_DETECTABLE_EFFECT,
+                            G.PLATEAU_BASIS_MEASURED_IMPROVEMENT)
+
+    def test_a_measured_plateau_still_names_itself_a_measured_one(self):
+        """The control on the basis: the subtraction branch keeps its numbers."""
+        decision = self._plateau(series=_mixed_series([0.30, 0.30, PARITY, 0.30,
+                                                       0.30, 0.30]))
+        self.assertEqual(decision.outcome, G.STOP)
+        self.assertEqual(decision.detail["plateau_basis"],
+                         G.PLATEAU_BASIS_MEASURED_IMPROVEMENT)
+        self.assertEqual(decision.detail["improvement"], 0.0)
+        self.assertEqual(decision.detail["opening_readiness"], 0.30)
+
+    def test_a_window_too_blind_to_see_the_target_has_observed_nothing(self):
+        """Parity at +/-0.4 rules out nothing a campaign hunting 0.25 cares about."""
+        decision = self._all_parity(reference_gain=CAMPAIGN_TARGET,
+                                    mde=0.4, sensitivity_bound=0.4)
+        self.assertEqual(decision.outcome, G.COULD_NOT_EVALUATE)
+        self.assertIn("too blind to see the effect it is hunting", decision.reason)
+        self.assertEqual(decision.detail["blind_round_indices"], [0, 1, 2, 3, 4])
+        self.assertNotIn("improvement", decision.detail)
+
+    def test_a_window_with_no_declared_target_has_nothing_to_rule_out(self):
+        """`None` is the fixture default: an undeclared target cannot unlock a stop."""
+        decision = self._all_parity()
+        self.assertEqual(decision.outcome, G.COULD_NOT_EVALUATE)
+        self.assertIn("does not carry one campaign target", decision.reason)
+        self.assertEqual(decision.detail["reference_gains_declared"], [])
+
+    def test_a_window_that_disagrees_about_the_target_is_not_resolved_by_picking_one(self):
+        series = (_parity_round(0, reference_gain=CAMPAIGN_TARGET),
+                  _parity_round(1, reference_gain=CAMPAIGN_TARGET),
+                  _parity_round(2, reference_gain=0.10),
+                  _parity_round(3, reference_gain=CAMPAIGN_TARGET),
+                  _parity_round(4, reference_gain=CAMPAIGN_TARGET))
+        decision = self._plateau(series=series)
+        self.assertEqual(decision.outcome, G.COULD_NOT_EVALUATE)
+        self.assertEqual(decision.detail["reference_gains_declared"],
+                         [0.10, CAMPAIGN_TARGET])
+
+    def test_a_blind_parity_round_cannot_be_read_as_evidence_of_non_improvement(self):
+        """A round nobody could see into is not a round that showed nothing.
+
+        The window opens at 0.30 and the floor is 0.01, so a round would have to
+        reach 0.31 to contradict the stop. A parity round resolving no finer than
+        +/-0.5 could have been there and gone unseen.
+        """
+        decision = self._plateau(series=_mixed_series(
+            [0.30, 0.30, PARITY, 0.30, 0.30, 0.30], mde=0.5, sensitivity_bound=0.5))
+        self.assertEqual(decision.outcome, G.COULD_NOT_EVALUATE)
+        self.assertEqual(decision.detail["blind_round_indices"], [2])
+        self.assertAlmostEqual(
+            decision.detail["magnitude_that_would_contradict"], 0.31)
+
+    def test_a_sighted_parity_round_still_lets_the_window_stop(self):
+        """The control on that check: it must not veto every stop with a parity round."""
+        decision = self._plateau(series=_mixed_series([0.30, 0.30, PARITY, 0.30,
+                                                       0.30, 0.30]))
+        self.assertEqual(decision.outcome, G.STOP)
+        self.assertNotIn("blind_round_indices", decision.detail)
+
+    def test_a_blind_round_cannot_argue_with_a_measured_improvement(self):
+        """Blindness only ever threatens the STOP side.
+
+        A window that MEASURED an improvement above the floor continues on that
+        measurement; a round with no magnitude has nothing to set against it, and
+        letting it veto the CONTINUE would stall a campaign that is working.
+        """
+        decision = self._plateau(series=_mixed_series(
+            [0.30, 0.31, PARITY, 0.33, 0.34, 0.35], mde=0.5, sensitivity_bound=0.5))
+        self.assertEqual(decision.outcome, G.CONTINUE)
+
+    def test_a_parity_round_refuses_a_bound_sharper_than_its_own_numbers(self):
+        """An understated bound reads an underpowered round as a clean result."""
+        with self.assertRaises(G.GuardInputError) as ctx:
+            _parity_round(0, mde=0.018, noise_floor=0.30, sensitivity_bound=0.018)
+        self.assertIn("sharper than", str(ctx.exception))
+        # A COARSER bound is admitted: it can only make the guard more reluctant.
+        self.assertEqual(_parity_round(0, sensitivity_bound=0.5).sensitivity_bound, 0.5)
+
+    def test_the_series_still_refuses_something_that_is_not_an_observation(self):
+        with self.assertRaises(G.GuardInputError):
+            self._plateau(series=(0.30, 0.31, 0.32, 0.33, 0.34, 0.35))
+
+    def test_a_parity_round_still_carries_its_stratum_and_its_event(self):
+        with self.assertRaises(G.GuardInputError):
+            _parity_round(0, stratum="selection")
+        with self.assertRaises(G.GuardInputError):
+            _parity_round(0, source_event_id="")
+        with self.assertRaises(G.GuardInputError):
+            _parity_round(0, cells_at_parity=13)
 
     def test_a_stale_clean_verdict_cannot_be_paired_with_a_fresh_plateau(self):
         """The clean verdict must have been computed over THIS health snapshot."""
@@ -1867,6 +2105,408 @@ class RedTeamRegressionTests(unittest.TestCase):
         ))
         self.assertEqual(stopping.outcome, G.STOP)
         self.assertEqual(stopping.evidence, ("ev-int-498", "ev-int-499"))
+
+
+class TheReleasePlaneSeamCannotHandOverAPhantomMagnitudeTest(unittest.TestCase):
+    """The AK5 -> AK4 seam, exercised across it rather than assumed on both sides.
+
+    `release.readiness` returns a MAPPING (AK5 does not import AK4), and the
+    guarantee this file is responsible for is that the parity mapping cannot
+    become a number in the plateau series. Asserting that inside AK5 alone would
+    be asserting it against a consumer that was never run.
+    """
+
+    def _fields(self, cells):
+        from ..release import readiness as R  # local: AK4 does not depend on AK5
+        from ..release import test_readiness as T
+        signal = T.green_signal(cells=cells)
+        return R, T, signal.figure_for("decode").observation_fields()
+
+    def test_a_parity_mapping_cannot_construct_a_readiness_observation(self):
+        from ..release import test_readiness as T
+        _R, _T, fields = self._fields(T.parity_cells())
+        with self.assertRaises(TypeError):
+            G.ReadinessObservation(round_index=0, at=NOW, **fields)
+
+    def test_the_seam_builds_a_parity_round_for_a_parity_phase(self):
+        from ..release import test_readiness as T
+        _R, _T, fields = self._fields(T.parity_cells())
+        entry = G.observation_from_fields(round_index=3, at=NOW, fields=fields)
+        self.assertIsInstance(entry, G.ParityObservation)
+        self.assertNotIsInstance(entry, G.ReadinessObservation)
+        with self.assertRaises(G.ParityHasNoMagnitude):
+            entry.readiness
+
+    def test_the_seam_builds_a_readiness_round_for_an_orderable_phase(self):
+        """The control."""
+        from ..release import test_readiness as T
+        _R, _T, fields = self._fields(T.green_cells())
+        entry = G.observation_from_fields(round_index=3, at=NOW, fields=fields)
+        self.assertIsInstance(entry, G.ReadinessObservation)
+        self.assertEqual(entry.readiness, fields["readiness"])
+
+    def test_both_states_land_in_one_series_the_plateau_rule_accepts(self):
+        from ..release import test_readiness as T
+        _R, _T, parity_fields = self._fields(T.parity_cells())
+        _R2, _T2, orderable_fields = self._fields(T.green_cells())
+        series = (
+            G.observation_from_fields(round_index=0, at=NOW, fields=orderable_fields),
+            G.observation_from_fields(round_index=1, at=NOW, fields=parity_fields),
+        )
+        self.assertEqual([type(entry).__name__ for entry in series],
+                         ["ReadinessObservation", "ParityObservation"])
+
+    def test_a_mapping_claiming_both_or_neither_is_refused(self):
+        with self.assertRaises(G.GuardInputError):
+            G.observation_from_fields(
+                round_index=0, at=NOW,
+                fields={"readiness": 0.3, "cells_at_parity": 4, "protected_cells": 4,
+                        "mde": 0.02, "noise_floor": 0.01, "source_event_id": "ev-1"})
+        with self.assertRaises(G.GuardInputError):
+            G.observation_from_fields(round_index=0, at=NOW,
+                                      fields={"source_event_id": "ev-1"})
+
+    def test_the_seam_takes_a_mapping_not_whatever_it_is_handed(self):
+        with self.assertRaises(G.GuardInputError):
+            G.observation_from_fields(round_index=0, at=NOW, fields=[("readiness", 0.3)])
+
+    def test_the_seam_carries_the_sensitivity_the_producer_published(self):
+        """Not one this side re-derived from the numbers beside it.
+
+        A consumer that recomputed `max(mde, noise_floor)` would be a second copy
+        of a rule that lives in `ParityFigure`, free to drift the moment the
+        producer's bound binds on something else.
+        """
+        from ..release import test_readiness as T
+        _R, _T, fields = self._fields(T.parity_cells())
+        entry = G.observation_from_fields(round_index=0, at=NOW, fields=fields)
+        figure = T.green_signal(cells=T.parity_cells()).figure_for("decode")
+        self.assertEqual(entry.sensitivity_bound, figure.sensitivity_bound)
+        self.assertEqual(entry.reference_gain, figure.comparable_reference_gain)
+
+    def test_the_two_planes_answer_the_power_question_identically(self):
+        """The anti-drift mechanism for the one predicate that exists on both sides.
+
+        `ParityFigure.could_have_detected` renders the operator's "UNDERPOWERED
+        FOR THIS CAMPAIGN" clause and `ParityObservation.could_have_detected`
+        decides whether a window may be read as a plateau. They cannot import
+        each other, so what keeps them honest is running both over one figure.
+        """
+        from ..release import test_readiness as T
+        figure = T.green_signal(cells=T.parity_cells()).figure_for("decode")
+        entry = G.observation_from_fields(
+            round_index=0, at=NOW, fields=figure.observation_fields())
+        for magnitude in (0.0, figure.sensitivity_bound, 0.02, 0.25, -0.5):
+            self.assertEqual(figure.could_have_detected(magnitude),
+                             entry.could_have_detected(magnitude), magnitude)
+
+
+class AConvergingCampaignReachesAnAnswerEndToEndTest(unittest.TestCase):
+    """A whole campaign, driven from real release-plane figures into the stop rule.
+
+    THE SHAPE THIS EXISTS FOR: an early round finds a real improvement, and the
+    rounds after it measure every protected cell and resolve nothing. That is
+    what convergence looks like under a non-inferiority objective — parity is the
+    HEALTHY outcome — and it is the case the stop rule exists to recognise.
+
+    Two misreadings sit either side of it and they point opposite ways. Reading a
+    parity round as `0.0` invents a trend and stops (or continues) on a quantity
+    nobody measured; refusing to read the window at all never stops, and since a
+    converged campaign goes all-parity and STAYS all-parity, "never" is literal.
+    Both are checked here across the seam rather than on either side of it,
+    because each plane on its own can be green while the pair is wrong.
+    """
+
+    TARGET = 0.25
+    WINDOW = 5
+
+    def _plane(self):
+        from ..release import readiness as R  # local: AK4 does not depend on AK5
+        from ..release import test_readiness as T
+        return R, T
+
+    def _policy(self):
+        R, _T = self._plane()
+        return R.ReferencePolicy(reference_point_gain=self.TARGET,
+                                 reference_lcb_gain=0.20)
+
+    def _improving_fields(self, value: float) -> dict:
+        """A round whose weakest protected prefill cell measured a real gain."""
+        _R, T = self._plane()
+        cells = T.green_cells()
+        prefill = T.cell(
+            "cell-prefill-a", phase="prefill", protocol_id=T.PREFILL_PROTOCOL,
+            non_inferiority=T.non_inferior_evidence(
+                value=value, effect_per_block=value, metric="prefill_tokens_per_s",
+                raw_ref="ak-raw://champion/prefill/blocks.jsonl"))
+        signal = T.green_signal(cells=cells[:2] + (prefill,) + cells[3:],
+                                reference=self._policy())
+        return signal.figure_for("prefill").observation_fields()
+
+    def _parity_fields(self) -> dict:
+        """A round that measured its protected prefill cell and resolved nothing."""
+        _R, T = self._plane()
+        signal = T.green_signal(cells=T.parity_cells(), reference=self._policy())
+        return signal.figure_for("prefill").observation_fields()
+
+    def _series(self, fields_by_round):
+        return tuple(G.observation_from_fields(round_index=index, at=NOW, fields=fields)
+                     for index, fields in enumerate(fields_by_round))
+
+    def _decide(self, series):
+        health = _health()
+        return G.guard_plateau(
+            reason="the campaign converged: no round in the window resolved an effect",
+            series=series, policy=_plateau_policy(window_rounds=self.WINDOW),
+            closure=_closure(), accept_control=_accept(), health=health,
+            planner_decision=_clean_planner_decision(health))
+
+    # -- fixture honesty: the campaign really has the shape claimed -----------
+
+    def test_the_campaign_really_is_one_gain_followed_by_parity(self):
+        """Without this the two tests below could both be passing on nothing."""
+        opening = self._series([self._improving_fields(0.06)])[0]
+        self.assertIsInstance(opening, G.ReadinessObservation)
+        self.assertAlmostEqual(opening.readiness, 0.06)
+        later = self._series([self._parity_fields()])[0]
+        self.assertIsInstance(later, G.ParityObservation)
+        # And the parity rounds could have SEEN the campaign's target, so the
+        # tests below are about the candidate and not about the instrument.
+        self.assertTrue(later.could_have_detected(self.TARGET))
+        self.assertLess(later.sensitivity_bound, self.TARGET)
+
+    # -- the two window positions --------------------------------------------
+
+    def test_convergence_is_a_plateau_while_the_winning_round_is_still_in_view(self):
+        """Window = [gain, parity x4]. The subtraction is real and comes out flat."""
+        series = self._series([self._improving_fields(0.06)]
+                              + [self._parity_fields()] * 4)
+        decision = self._decide(series)
+        self.assertEqual(decision.outcome, G.STOP)
+        self.assertEqual(decision.stop_state, SM.PLATEAU_STOP)
+        self.assertEqual(decision.detail["plateau_basis"],
+                         G.PLATEAU_BASIS_MEASURED_IMPROVEMENT)
+        self.assertAlmostEqual(decision.detail["improvement"], 0.0)
+        # The zero is a SUBTRACTION of two measured magnitudes, not a substituted
+        # one: both ends of it are the round that actually measured something.
+        self.assertAlmostEqual(decision.detail["opening_readiness"], 0.06)
+        self.assertAlmostEqual(decision.detail["best_readiness"], 0.06)
+        self.assertEqual(decision.detail["parity_rounds"], 4)
+        for entry in decision.detail["window"][1:]:
+            self.assertNotIn("readiness", entry)
+
+    def test_the_answer_does_not_become_a_stall_when_that_round_slides_out(self):
+        """Window = [parity x5]. THE case the guard used to refuse forever.
+
+        The campaign is more converged than it was one round earlier, not less,
+        so an answer that flips from STOP to "cannot evaluate" the moment the
+        last orderable round leaves the window is the guard reporting its own
+        arithmetic rather than the campaign.
+        """
+        series = self._series([self._improving_fields(0.06)]
+                              + [self._parity_fields()] * 5)
+        decision = self._decide(series)
+        self.assertEqual(decision.outcome, G.STOP)
+        self.assertEqual(decision.stop_state, SM.PLATEAU_STOP)
+        self.assertEqual(decision.detail["plateau_basis"],
+                         G.PLATEAU_BASIS_NO_DETECTABLE_EFFECT)
+        self.assertEqual(decision.detail["orderable_rounds"], 0)
+        self.assertEqual(decision.detail["reference_gain"], self.TARGET)
+        # ... and NOT as a plateau of zeros. Nothing was subtracted, so nothing
+        # is reported as having been subtracted.
+        for invented in ("improvement", "opening_readiness", "best_readiness"):
+            self.assertNotIn(invented, decision.detail)
+        for entry in decision.detail["window"]:
+            self.assertIs(entry["orderable"], False)
+            self.assertNotIn("readiness", entry)
+
+    def test_it_keeps_stopping_as_the_converged_campaign_runs_on(self):
+        """"Never stops" is not a state a longer run gets out of. Nor should the fix be."""
+        rounds = [self._improving_fields(0.06)] + [self._parity_fields()] * 8
+        for length in range(self.WINDOW + 1, len(rounds) + 1):
+            decision = self._decide(self._series(rounds[:length]))
+            self.assertEqual(decision.outcome, G.STOP, length)
+            self.assertEqual(decision.detail["plateau_basis"],
+                             G.PLATEAU_BASIS_NO_DETECTABLE_EFFECT, length)
+
+    # -- the controls ---------------------------------------------------------
+
+    def test_a_campaign_still_finding_gains_is_not_stopped(self):
+        """The compliant path, with a parity round sitting in the middle of it."""
+        series = self._series([self._improving_fields(0.06),
+                               self._improving_fields(0.10),
+                               self._parity_fields(),
+                               self._improving_fields(0.20),
+                               self._improving_fields(0.30)])
+        decision = self._decide(series)
+        self.assertEqual(decision.outcome, G.CONTINUE)
+        self.assertAlmostEqual(decision.detail["improvement"], 0.24)
+        self.assertEqual(decision.detail["parity_rounds"], 1)
+
+    def test_a_converged_campaign_that_never_declared_a_target_is_not_stopped(self):
+        """No reference policy: the release plane publishes `None` and the guard says so.
+
+        This is the one shape that still cannot be concluded — and unlike the
+        blanket refusal it replaces, it names something the campaign can fix.
+        """
+        _R, T = self._plane()
+        fields = T.green_signal(cells=T.parity_cells()).figure_for(
+            "prefill").observation_fields()
+        self.assertIsNone(fields["reference_gain"])
+        decision = self._decide(self._series([fields] * self.WINDOW))
+        self.assertEqual(decision.outcome, G.COULD_NOT_EVALUATE)
+        self.assertIn("does not carry one campaign target", decision.reason)
+
+
+class TheTwoKindsOfRoundStaySeparateOnTheWireTest(unittest.TestCase):
+    """`guard_plateau` serialises its whole window into the stop detail.
+
+    Whatever reads that detail reads `to_dict()`, so the type split has to survive
+    the trip. `ParityObservation` publishes `orderable: false`, which is the key a
+    reader will branch on — and a discriminator carried only on the negative side
+    makes `entry.get("orderable", False)` answer "no round is orderable", silently
+    emptying the window rather than failing.
+    """
+
+    def test_the_discriminator_is_carried_on_both_kinds_of_round(self):
+        self.assertIs(
+            G.ReadinessObservation(round_index=0, readiness=0.3, at=NOW,
+                                   source_event_id="ev-0").to_dict()["orderable"], True)
+        self.assertIs(_parity_round(1).to_dict()["orderable"], False)
+
+    def test_a_defaulting_reader_cannot_lose_the_orderable_rounds(self):
+        health = _health()
+        decision = G.guard_plateau(
+            reason=CLOSURE_REASON,
+            series=_mixed_series([0.30, 0.31, PARITY, 0.33, 0.34, 0.35]),
+            policy=_plateau_policy(), closure=_closure(), accept_control=_accept(),
+            health=health, planner_decision=_clean_planner_decision(health))
+        window = decision.detail["window"]
+        orderable = [entry for entry in window if entry.get("orderable", False)]
+        self.assertEqual(len(orderable), len(window) - decision.detail["parity_rounds"])
+        self.assertGreater(len(orderable), 0)
+
+    def test_the_two_kinds_are_distinguishable_after_a_json_round_trip(self):
+        pair = [G.ReadinessObservation(round_index=0, readiness=0.3, at=NOW,
+                                       source_event_id="ev-0").to_dict(),
+                _parity_round(1).to_dict()]
+        revived = [json.loads(json.dumps(entry, sort_keys=True)) for entry in pair]
+        self.assertIs(revived[0]["orderable"], True)
+        self.assertIs(revived[1]["orderable"], False)
+        # Two independent refusals on the wire, and they must not collapse into
+        # one: the parity payload carries no magnitude at all, AND it says which
+        # kind of round it is. A reader that only checks for a `readiness` key
+        # gets a KeyError; a reader that branches on `orderable` gets an answer.
+        self.assertEqual(revived[0]["readiness"], 0.3)
+        self.assertNotIn("readiness", revived[1])
+
+
+class TheSeamDefaultsNothingTest(unittest.TestCase):
+    """A key the producer did not send may not become a value it never sent.
+
+    `observation_from_fields` branches on which keys EXIST, and it used to fill
+    the rest in with `.get(key, fallback)`. On the parity side those fallbacks
+    were `mde=0.0` and `noise_floor=0.0` — not a missing sensitivity but the
+    SHARPEST one expressible, so a mapping that lost a key produced the strongest
+    parity claim there is: "we resolved to zero and nothing moved". `stratum`
+    defaulted to `confirmation`, which enforces P-AK-SEARCH-1 only against
+    producers that volunteer the field, and that is not enforcement.
+    """
+
+    def _parity_fields(self, **over):
+        fields = dict(protected_cells=12, cells_at_parity=12, mde=0.018,
+                      noise_floor=0.01, sensitivity_bound=0.018,
+                      reference_gain=CAMPAIGN_TARGET, source_event_id="ev-p",
+                      stratum=evaluator_api.STRATUM_CONFIRMATION)
+        fields.update(over)
+        return fields
+
+    def _build(self, fields):
+        return G.observation_from_fields(round_index=0, at=NOW, fields=fields)
+
+    def test_a_missing_sensitivity_is_refused_not_read_as_perfect_resolution(self):
+        for key in ("mde", "noise_floor", "sensitivity_bound"):
+            fields = self._parity_fields()
+            del fields[key]
+            with self.assertRaises(G.GuardInputError, msg=key) as ctx:
+                self._build(fields)
+            self.assertIn(key, str(ctx.exception))
+            # And refused BY THE SEAM, for being absent — not caught downstream
+            # by an invariant that happens to dislike the substituted value. A
+            # default that a later constructor rejects is still a default, and
+            # the next producer to publish a genuine zero would sail through it.
+            self.assertIn("is missing", str(ctx.exception), key)
+
+    def test_a_missing_protected_cell_count_is_refused(self):
+        fields = self._parity_fields()
+        del fields["protected_cells"]
+        with self.assertRaises(G.GuardInputError):
+            self._build(fields)
+
+    def test_a_missing_campaign_target_is_refused_though_none_is_a_legal_value(self):
+        """The one key whose absence and whose `None` mean different things.
+
+        `reference_gain=None` says "this campaign declared no target". A DROPPED
+        key would render as the same thing under `.get()` — and that reading
+        disables the only branch that can conclude anything from an all-parity
+        window, so a producer bug would present as a campaign that never stops.
+        """
+        fields = self._parity_fields()
+        del fields["reference_gain"]
+        with self.assertRaises(G.GuardInputError) as ctx:
+            self._build(fields)
+        self.assertIn("reference_gain", str(ctx.exception))
+        # And the explicit None is accepted, because it is an answer.
+        self.assertIsNone(self._build(self._parity_fields(reference_gain=None))
+                          .reference_gain)
+
+    def test_a_missing_stratum_is_not_promoted_to_confirmation(self):
+        """On BOTH branches: the only stratum a series admits is not a fallback."""
+        for fields in (self._parity_fields(),
+                       dict(readiness=0.3, source_event_id="ev-r",
+                            stratum=evaluator_api.STRATUM_CONFIRMATION)):
+            del fields["stratum"]
+            with self.assertRaises(G.GuardInputError) as ctx:
+                self._build(fields)
+            self.assertIn("stratum", str(ctx.exception))
+
+    def test_a_missing_source_event_is_refused_rather_than_blanked(self):
+        for fields in (self._parity_fields(),
+                       dict(readiness=0.3, stratum=evaluator_api.STRATUM_CONFIRMATION,
+                            source_event_id="ev-r")):
+            del fields["source_event_id"]
+            with self.assertRaises(G.GuardInputError):
+                self._build(fields)
+
+    def test_the_complete_mappings_still_build_both_kinds(self):
+        """The control. A whole mapping from either figure must still pass."""
+        self.assertIsInstance(self._build(self._parity_fields()), G.ParityObservation)
+        orderable = self._build(dict(readiness=0.3, source_event_id="ev-r",
+                                     stratum=evaluator_api.STRATUM_CONFIRMATION))
+        self.assertIsInstance(orderable, G.ReadinessObservation)
+        self.assertEqual(orderable.readiness, 0.3)
+
+    def test_a_defaulting_reader_cannot_lose_the_orderable_rounds(self):
+        health = _health()
+        decision = G.guard_plateau(
+            reason=CLOSURE_REASON,
+            series=_mixed_series([0.30, 0.31, PARITY, 0.33, 0.34, 0.35]),
+            policy=_plateau_policy(), closure=_closure(), accept_control=_accept(),
+            health=health, planner_decision=_clean_planner_decision(health))
+        window = decision.detail["window"]
+        orderable = [entry for entry in window if entry.get("orderable", False)]
+        self.assertEqual(len(orderable), len(window) - decision.detail["parity_rounds"])
+        self.assertGreater(len(orderable), 0)
+
+    def test_the_two_kinds_are_distinguishable_after_a_json_round_trip(self):
+        pair = [G.ReadinessObservation(round_index=0, readiness=0.3, at=NOW,
+                                       source_event_id="ev-0").to_dict(),
+                _parity_round(1).to_dict()]
+        revived = [json.loads(json.dumps(entry, sort_keys=True)) for entry in pair]
+        self.assertIs(revived[0]["orderable"], True)
+        self.assertIs(revived[1]["orderable"], False)
+        self.assertIn("readiness", revived[0])
+        self.assertNotIn("readiness", revived[1])
 
 
 if __name__ == "__main__":  # pragma: no cover

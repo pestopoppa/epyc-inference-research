@@ -93,6 +93,26 @@ discharges no co-residency requirement and evidences no repetition strength:
 one"*, and each of those requirements asserts that the matrix learned something at
 that cell.
 
+THE PHASE FIGURE HAS THREE STATES AND NONE IS EXPRESSIBLE AS ANOTHER
+--------------------------------------------------------------------
+`_phase_figure` returns `None`, a `ParityFigure`, or a `ReadinessFigure`:
+
+  * **nothing measured** — `None`. No admissible cell produced an effect at all.
+  * **all at parity** — a `ParityFigure`, carrying the COUNT and the SENSITIVITY
+    and no orderable value. §1.6's first half is NON-INFERIORITY, so a backend
+    that genuinely did not regress produces cells at `no_detectable_difference`,
+    and that is the most common HEALTHY outcome. Reporting it as `None` would
+    render success as an absence; absences read as coverage gaps, and a coverage
+    gap is what a later session closes by loosening the gate.
+  * **orderable** — a `ReadinessFigure`, selected over the ORDERABLE cells only.
+
+The exclusion predicate is the evaluator's own (`api.is_sub_floor_resolution`,
+beside `_RANKABLE_RESOLUTIONS`), not a second copy: the evaluator already
+withholds a speed rank from a sub-floor cell, and selecting one as "the weakest"
+or "the best" IS a rank. In the MIXED case the figure discloses how many
+protected cells it excluded and on which resolutions — an undisclosed exclusion
+is how a figure becomes a lie without anyone writing one.
+
 THE THREE OUTCOMES, AND WHY `FAIL` AND `COULD_NOT_CHECK` DIFFER ONLY IN THE REASON
 ---------------------------------------------------------------------------------
 Every per-cell judgement is a `schemas.Check`, so *"inability to evaluate"* is a
@@ -168,7 +188,7 @@ __all__ = [
     "ReadinessError", "CrossBackendComposite", "ChampionMismatch", "StratumViolation",
     "ProtocolBoundaryCrossed", "CellInadmissible", "MatrixSpecInvalid",
     "TriggerAuthorityError", "CapabilityObjectiveInvalid", "StandingNotDerived",
-    "CampaignMismatch",
+    "CampaignMismatch", "ParityHasNoOrderableValue",
     # vocabularies
     "CELL_ROLES", "CELL_ROLE_PROTECTED", "CELL_ROLE_DISPATCHER_BOUNDARY",
     "CELL_ROLE_NON_TARGET", "STANDINGS", "STANDING_MET", "STANDING_NOT_MET",
@@ -184,7 +204,8 @@ __all__ = [
     "CapabilityObjective", "ReferencePolicy",
     # outputs
     "CellStanding", "PhaseStanding", "MatrixCoverage", "PhaseTradeAssessment",
-    "ReferenceComparison", "CapabilityStanding", "ReadinessFigure", "ReadinessSignal",
+    "ReferenceComparison", "CapabilityStanding", "ReadinessFigure", "ParityFigure",
+    "PHASE_FIGURE_TYPES", "ReadinessSignal",
     "ReadinessReport", "CrossBackendAnalysisView", "TriggerDecision",
     # functions
     "evaluate_t2_trigger", "check_matrix_coverage", "cell_standing", "phase_standing",
@@ -317,6 +338,21 @@ class StandingNotDerived(ReadinessError):
     met while its own phase standings said otherwise. `api.Verdict` solved the
     identical problem by re-deriving its status in `__post_init__` and raising
     `VerdictTampering`; this is the same lock on the same shape of hole.
+    """
+
+
+class ParityHasNoOrderableValue(ReadinessError):
+    """Something asked a `ParityFigure` for a magnitude it does not have.
+
+    A parity phase measured every protected cell and every estimate landed inside
+    the campaign's own floor or MDE. There is no number to hand back, and the two
+    ways of pretending otherwise are both worse than raising: returning `0.0`
+    invents a measurement (sub-floor does not mean zero — it means the sign and
+    the size are both unknown), and returning `None` turns the RESULT back into
+    the ABSENCE that `ParityFigure` exists to stop it being read as.
+
+    It is a raise rather than a missing attribute because `getattr(figure,
+    "value", None)` is exactly how a caller silently reintroduces the `None`.
     """
 
 
@@ -1206,6 +1242,41 @@ class T2Cell:
                 ("improvement", self.improvement))
 
     def _require_same_window(self) -> None:
+        """The two statements must be reductions of ONE window. Everything the
+        window fixes must agree; only what the HYPOTHESIS fixes may differ.
+
+        The split matters, and getting it wrong in either direction is a defect:
+
+          * `metric`, `metric_direction`, `noise_floor`, `raw_samples_ref`,
+            `paired_blocks`, `stratum` and the estimate are fixed by the WINDOW.
+            `statistics.BlockReduction` reads metric and direction off the one
+            `EvaluationRequest` and takes `noise_floor=cal.noise_floor_phi`, a
+            CAMPAIGN A/A calibration that knows nothing about which null was
+            tested. Two statements that disagree about any of them are two
+            windows, and a §1.6 conjunction over two windows is a reconstructed
+            net. The noise floor especially: it is the boundary between "no win"
+            and a magnitude, so halves that disagree about it let a cell be
+            *inside* the campaign floor for one statement and orderable for the
+            other — ranking noise through whichever door was left open.
+          * `mde` and `threshold` and `e_value` are NOT bound, because
+            `statistics.solve_mde` takes `hypothesis` and `margin`: the smallest
+            detectable shift genuinely depends on where the null sits. Requiring
+            one MDE for both halves would forbid a correctly computed pair.
+
+        What the MDEs may NOT do is invert. `solve_mde` evaluates both halves on
+        the SAME resampled A/A windows and differs only in
+        `null_boundary_for()`: non-inferiority tests against `-margin`, improvement
+        against `0`. A null the candidate has a `margin` head start on is reached
+        by a SMALLER shift, so for one window the non-inferiority MDE is at or
+        below the improvement MDE — measured on this construction the gap is the
+        margin exactly. An inverted pair is not a coarser measurement, it is a
+        pair `statistics.py` cannot emit, and it is the ONLY shape that makes a
+        phase report `improved=PASS` beside a `ParityFigure` reading *"no
+        detectable difference at any of them"* — one release line asserting both
+        that a detectable improvement was resolved and that nothing was
+        detectable. Refusing the pair closes that at its source instead of
+        teaching every downstream reader which half to believe.
+        """
         ni_effect = self.non_inferiority.verdict.effect
         imp_effect = self.improvement.verdict.effect
         if ni_effect is None or imp_effect is None:
@@ -1222,6 +1293,29 @@ class T2Cell:
             mismatches.append(f"stratum {ni_effect.stratum} vs {imp_effect.stratum}")
         if ni_effect.value != imp_effect.value:
             mismatches.append(f"estimate {ni_effect.value!r} vs {imp_effect.value!r}")
+        if ni_effect.metric != imp_effect.metric:
+            mismatches.append(f"metric {ni_effect.metric!r} vs {imp_effect.metric!r}")
+        if ni_effect.metric_direction != imp_effect.metric_direction:
+            mismatches.append(
+                f"metric direction {ni_effect.metric_direction!r} vs "
+                f"{imp_effect.metric_direction!r}; the two halves would orient one "
+                "estimate two ways and disagree about its sign")
+        if ni_effect.noise_floor != imp_effect.noise_floor:
+            mismatches.append(
+                f"campaign noise floor {ni_effect.noise_floor!r} vs "
+                f"{imp_effect.noise_floor!r}; the floor is an A/A calibration of the "
+                "window, not a property of the null, so two values for one window "
+                "would let the same estimate be sub-floor for one statement and "
+                "orderable for the other")
+        if ni_effect.mde > imp_effect.mde:
+            mismatches.append(
+                f"the non-inferiority MDE {ni_effect.mde!r} is COARSER than the "
+                f"improvement MDE {imp_effect.mde!r}; both are solved on the same A/A "
+                "windows and non-inferiority tests against a null the candidate has a "
+                "margin's head start on, so it cannot be the less sensitive of the "
+                "two. An inverted pair is the one shape that makes a phase report "
+                "improved=PASS beside a figure saying no cell showed a detectable "
+                "difference")
         ni_anchor = self.non_inferiority.verdict.anchor
         imp_anchor = self.improvement.verdict.anchor
         if ni_anchor is not None and imp_anchor is not None:
@@ -1680,6 +1774,96 @@ def cell_standing(cell: T2Cell) -> CellStanding:
 # Derived: per-phase standing
 # =============================================================================
 
+def _resolution_of(cell: T2Cell) -> str:
+    """The EVALUATOR's resolution for this cell's non-inferiority estimate.
+
+    Read, never re-derived. `_resolve_effect` lives in `evaluator/api.py` and it
+    is the one place that knows the floor/MDE/threshold ladder; a second
+    classifier here would be a second copy of that arithmetic, and this module is
+    supposed to contain no arithmetic at all.
+    """
+    return cell.non_inferiority.verdict.effect_resolution
+
+
+def _resolution_census(cells: Sequence[T2Cell]) -> tuple:
+    """How many measured cells landed on each effect resolution.
+
+    Counting, not reducing: no estimate is folded into another, and no number a
+    cell measured is altered. The census exists because an exclusion nobody can
+    see is how a figure becomes a lie without anyone writing one — a selection
+    over a subset must publish which cells were NOT in the subset and why, in the
+    evaluator's own vocabulary and in its declared order.
+    """
+    census: list = []
+    for resolution in api.EFFECT_RESOLUTIONS:
+        matching = [cell for cell in cells if _resolution_of(cell) == resolution]
+        if matching:
+            census.append((resolution, len(matching)))
+    return tuple(census)
+
+
+def _census_text(census: Sequence[tuple]) -> str:
+    return ", ".join(f"{resolution}:{count}" for resolution, count in census)
+
+
+def _validate_census(census: Any, label: str) -> tuple:
+    entries = _tuple_of(census, label, tuple)
+    for entry in entries:
+        if len(entry) != 2:
+            raise CellInadmissible(
+                f"{label}: every entry must be (resolution, count), got {entry!r}")
+        resolution, count = entry
+        if resolution not in api.EFFECT_RESOLUTIONS:
+            raise CellInadmissible(
+                f"{label}: {resolution!r} is not one of "
+                f"{list(api.EFFECT_RESOLUTIONS)}")
+        if isinstance(count, bool) or not isinstance(count, int) or count < 1:
+            raise CellInadmissible(
+                f"{label}: {resolution!r} has count {count!r}; a census entry with no "
+                "cells behind it reports coverage nobody measured")
+    return entries
+
+
+def _require_selected_resolution(resolution: Any) -> str:
+    """The resolution the HEADLINE number was read off, and it may not be parity.
+
+    `ReadinessFigure.kind` says "weakest ORDERABLE protected cell", and until this
+    field existed the word `orderable` was the figure's own assertion about
+    itself: the `resolution_census` said which resolutions the phase contained
+    but not which one supplied the number, so a reader looking at
+    `{evidence_below_threshold: 1, improvement: 1}` could not tell whether the
+    figure they were reading was the degradation or the win.
+
+    It matters most for `evidence_below_threshold`, which IS admitted to the
+    ordering here and for which `api` sets `speed_rank_admissible=False` — the
+    estimate cleared the floor and the MDE (a detectable magnitude, and exactly
+    what an operator must see) but its e-process fell short. Both facts now ride
+    on the figure and onto the rendered line, so "the evaluator withheld a speed
+    rank from the cell this number came from" is something the operator reads
+    rather than something they would have to re-derive.
+
+    The one thing it may NOT be is sub-floor: `_phase_figure` excludes those, so a
+    figure claiming one is a figure built by something that bypassed the
+    selection.
+    """
+    if not isinstance(resolution, str):
+        raise CellInadmissible(
+            f"figure.selected_effect_resolution: expected a str, got {resolution!r}")
+    if api.is_sub_floor_resolution(resolution):
+        raise CellInadmissible(
+            f"figure.selected_effect_resolution: {resolution!r} is sub-floor, and the "
+            "evaluator withholds a speed rank from such a cell. Selecting it as the "
+            "weakest IS a rank; a phase whose cells are all sub-floor is a ParityFigure")
+    return resolution
+
+
+def _cell_count(value: Any, label: str, *, minimum: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        raise CellInadmissible(
+            f"{label}: expected an int >= {minimum}, got {value!r}")
+    return value
+
+
 @dataclass(frozen=True)
 class ReadinessFigure:
     """The number the operator reads, carried WHOLE out of one cell's estimate.
@@ -1690,12 +1874,24 @@ class ReadinessFigure:
     from one named event, and there is no arithmetic in this module that could
     have produced any other number.
 
-    The cell chosen is the **weakest protected cell** of the phase, because §1.6
-    quantifies non-inferiority over EVERY protected cell, so the binding
-    constraint is the worst one. `best_cell_id` rides along so the operator sees
-    the spread rather than only its floor. Neither is an average: an average over
-    cells would be a composite of measurements taken on different roles, which is
-    the same defect as a composite across backends, one scope down.
+    The cell chosen is the **weakest ORDERABLE protected cell** of the phase.
+    §1.6 quantifies non-inferiority over EVERY protected cell, so the binding
+    constraint is the worst one — but a cell whose estimate never cleared the
+    campaign's own floor or MDE has no place on the ordering at all
+    (`api.is_sub_floor_resolution`), and selecting it as "the weakest" would be
+    ranking noise. `best_cell_id` rides along so the operator sees the spread
+    rather than only its floor. Neither is an average: an average over cells
+    would be a composite of measurements taken on different roles, which is the
+    same defect as a composite across backends, one scope down.
+
+    THE WORD "ORDERABLE" IS LOAD-BEARING, AND SO IS THE DISCLOSURE THAT GOES WITH
+    IT. Once the selection is over a subset, the figure covers fewer cells than
+    the phase has, and an operator reading it as "the weakest protected cell"
+    reads it as covering cells it does not cover. `protected_cell_count`,
+    `orderable_cell_count`, `parity_cell_ids` and `resolution_census` are
+    REQUIRED — no defaults — because an exclusion that a caller may omit is an
+    exclusion that will be omitted, and an undisclosed exclusion is how a figure
+    becomes a lie without anyone writing one.
     """
 
     backend: str
@@ -1716,20 +1912,28 @@ class ReadinessFigure:
     lcb_descriptive: Optional[float]
     best_cell_id: Optional[str]
     best_value: Optional[float]
+    protected_cell_count: int
+    orderable_cell_count: int
+    parity_cell_ids: tuple
+    resolution_census: tuple
+    selected_effect_resolution: str
+    selected_speed_rank_admissible: bool
     reference: Optional["ReferenceComparison"] = None
 
-    #: What `kind` says: the figure is a SELECTED cell, never a reduction.
-    KIND_WEAKEST_PROTECTED_CELL: ClassVar[str] = "weakest_protected_cell"
+    #: What `kind` says: the figure is a SELECTED cell, never a reduction — and
+    #: the selection ran over the ORDERABLE cells, not over all of them.
+    KIND_WEAKEST_ORDERABLE_PROTECTED_CELL: ClassVar[str] = \
+        "weakest_orderable_protected_cell"
 
     def __post_init__(self) -> None:
         _backend(self.backend, "figure.backend")
         _text(self.phase, "figure.phase")
         _text(self.protocol_id, "figure.protocol_id")
-        if self.kind != self.KIND_WEAKEST_PROTECTED_CELL:
+        if self.kind != self.KIND_WEAKEST_ORDERABLE_PROTECTED_CELL:
             raise CellInadmissible(
                 f"figure.kind: {self.kind!r} is not "
-                f"{self.KIND_WEAKEST_PROTECTED_CELL!r}; this module reports selected "
-                "cells and has no other kind of figure to report")
+                f"{self.KIND_WEAKEST_ORDERABLE_PROTECTED_CELL!r}; this module reports "
+                "selected cells and has no other kind of orderable figure to report")
         _text(self.cell_id, "figure.cell_id")
         _text(self.event_id, "figure.event_id")
         _finite(self.value, "figure.value")
@@ -1737,6 +1941,38 @@ class ReadinessFigure:
             raise StratumViolation(
                 f"figure.stratum: {self.stratum!r}; a readiness figure admits only "
                 f"{api.STRATUM_CONFIRMATION!r} evidence")
+        _cell_count(self.protected_cell_count, "figure.protected_cell_count", minimum=1)
+        _cell_count(self.orderable_cell_count, "figure.orderable_cell_count", minimum=1)
+        _tuple_of(self.parity_cell_ids, "figure.parity_cell_ids", str)
+        _validate_census(self.resolution_census, "figure.resolution_census")
+        covered = self.orderable_cell_count + len(self.parity_cell_ids)
+        if covered > self.protected_cell_count:
+            raise CellInadmissible(
+                f"figure: {self.orderable_cell_count} orderable plus "
+                f"{len(self.parity_cell_ids)} at parity is more cells than the "
+                f"{self.protected_cell_count} protected cells the phase has; the "
+                "disclosure describes a matrix nobody measured")
+        _require_selected_resolution(self.selected_effect_resolution)
+        if not isinstance(self.selected_speed_rank_admissible, bool):
+            raise CellInadmissible(
+                "figure.selected_speed_rank_admissible must be a bool; the "
+                "evaluator's answer is not optional and not inferable")
+        if self.selected_effect_resolution not in [
+                resolution for resolution, _count in self.resolution_census]:
+            raise CellInadmissible(
+                f"figure.selected_effect_resolution "
+                f"{self.selected_effect_resolution!r} does not appear in this "
+                f"figure's own census {list(self.resolution_census)}; the headline "
+                "number would be attributed to a resolution the phase did not measure")
+
+    @property
+    def parity_cell_count(self) -> int:
+        """Protected cells excluded from the selection as sub-floor.
+
+        Derived from the ids rather than stored beside them, so the count and the
+        list cannot disagree about which cells the figure does not cover.
+        """
+        return len(self.parity_cell_ids)
 
     def observation_fields(self) -> dict:
         """The fields `controller.guards.ReadinessObservation` needs.
@@ -1746,6 +1982,11 @@ class ReadinessFigure:
         one series per (backend, phase) and never one series for a whole host —
         a plateau computed over a folded number would be a plateau of a quantity
         nobody measured.
+
+        This is the ORDERABLE shape, and it is the only shape that carries a
+        `readiness` key. `ParityFigure.observation_fields()` returns a mapping
+        with no such key, so a parity round cannot be fed to the constructor that
+        takes one.
         """
         return {"readiness": self.value, "source_event_id": self.event_id,
                 "stratum": self.stratum}
@@ -1761,8 +2002,298 @@ class ReadinessFigure:
             "stratum": self.stratum, "lcb_descriptive": self.lcb_descriptive,
             "lcb_label": "descriptive", "best_cell_id": self.best_cell_id,
             "best_value": self.best_value,
+            # The wire discriminator, and it is carried on BOTH sides on purpose.
+            # `ParityFigure` publishes `orderable: false`, so a JSON reader will
+            # branch on it — and a key present only on the negative side turns
+            # `row.get("orderable", False)` into "no figure is ever orderable",
+            # which silently empties the orderable set instead of failing. A
+            # distinction that survives in Python and collapses in JSON is not a
+            # distinction.
+            "orderable": True,
+            "protected_cell_count": self.protected_cell_count,
+            "orderable_cell_count": self.orderable_cell_count,
+            "parity_cell_count": self.parity_cell_count,
+            "parity_cell_ids": list(self.parity_cell_ids),
+            "resolution_census": [list(entry) for entry in self.resolution_census],
+            "selected_effect_resolution": self.selected_effect_resolution,
+            "selected_speed_rank_admissible": self.selected_speed_rank_admissible,
             "reference": None if self.reference is None else self.reference.to_dict(),
         }
+
+
+@dataclass(frozen=True)
+class ParityFigure:
+    """Protected cells WERE measured and none of them carries an orderable effect.
+
+    THIS IS A RESULT, NOT AN ABSENCE, and that is the entire reason it is a type
+    of its own rather than `None`. §1.6's first half is NON-INFERIORITY, so a
+    backend that genuinely did not regress produces cells at
+    `no_detectable_difference` — *"a result and a decision, not a failed
+    experiment"*. Reporting the most common HEALTHY outcome as `None` would
+    render it as "no protected-cell figure"; an absence reads as a coverage gap,
+    and a coverage gap is something a later session closes by loosening the gate.
+    That would be a worse defect than ranking sub-floor cells, which is the defect
+    this type exists to close. It is the same lesson as absent-versus-empty on the
+    operator surface: make the states structurally distinct rather than
+    overloading one representation.
+
+    What it carries instead of a value is the COUNT and the SENSITIVITY — how
+    many protected cells were measured, how many landed at parity, the coarsest
+    MDE and the calibrated floor they were judged against, and the cell and event
+    that sensitivity came from. That is what makes "at parity" a claim an
+    operator can size: parity at ±1.8% and parity at ±18% are different results.
+
+    `value` and `best_value` RAISE rather than being absent, because
+    `getattr(figure, "value", None)` is precisely how a caller silently converts
+    this result back into the absence it is not.
+    """
+
+    backend: str
+    phase: str
+    protocol_id: str
+    kind: str
+    protected_cell_count: int
+    measured_cell_ids: tuple
+    parity_cell_ids: tuple
+    resolution_census: tuple
+    mde: float
+    noise_floor: float
+    sensitivity_cell_id: str
+    sensitivity_event_id: str
+    metric: str
+    metric_direction: str
+    stratum: str
+    reference: Optional["ReferenceComparison"] = None
+
+    #: The only kind. Every measured protected cell resolved below the campaign's
+    #: own floor or MDE. There is no second kind on purpose: a cell carrying a
+    #: DETECTABLE magnitude whose e-process fell short of threshold
+    #: (`evidence_below_threshold`) is NOT at parity and is not excluded from the
+    #: ordering here, so a figure that mixed the two could not exist without
+    #: someone first deciding to hide a measured degradation.
+    KIND_ALL_PROTECTED_CELLS_AT_PARITY: ClassVar[str] = "all_protected_cells_at_parity"
+
+    KINDS: ClassVar[tuple] = (KIND_ALL_PROTECTED_CELLS_AT_PARITY,)
+
+    def __post_init__(self) -> None:
+        _backend(self.backend, "parity_figure.backend")
+        _text(self.phase, "parity_figure.phase")
+        _text(self.protocol_id, "parity_figure.protocol_id")
+        if self.kind not in self.KINDS:
+            raise CellInadmissible(
+                f"parity_figure.kind: {self.kind!r} is not one of {list(self.KINDS)}")
+        _text(self.sensitivity_cell_id, "parity_figure.sensitivity_cell_id")
+        _text(self.sensitivity_event_id, "parity_figure.sensitivity_event_id")
+        _text(self.metric, "parity_figure.metric")
+        _finite(self.mde, "parity_figure.mde")
+        _finite(self.noise_floor, "parity_figure.noise_floor")
+        if self.stratum != api.STRATUM_CONFIRMATION:
+            raise StratumViolation(
+                f"parity_figure.stratum: {self.stratum!r}; a readiness figure admits "
+                f"only {api.STRATUM_CONFIRMATION!r} evidence")
+        _cell_count(self.protected_cell_count, "parity_figure.protected_cell_count",
+                    minimum=1)
+        measured = _tuple_of(self.measured_cell_ids, "parity_figure.measured_cell_ids",
+                             str)
+        parity = _tuple_of(self.parity_cell_ids, "parity_figure.parity_cell_ids", str)
+        if not measured:
+            raise CellInadmissible(
+                "parity_figure.measured_cell_ids is empty; a phase where nothing was "
+                "measured is the NOTHING MEASURED state and is reported as no figure at "
+                "all. A parity figure that names no cell would make an unmeasured phase "
+                "read as a healthy one")
+        if len(measured) > self.protected_cell_count:
+            raise CellInadmissible(
+                f"parity_figure: {len(measured)} measured cells against "
+                f"{self.protected_cell_count} protected cells")
+        for cell_id in parity:
+            if cell_id not in measured:
+                raise CellInadmissible(
+                    f"parity_figure.parity_cell_ids: {cell_id!r} is not among the "
+                    "measured cells")
+        _validate_census(self.resolution_census, "parity_figure.resolution_census")
+        # The kind is not a label a caller applies, it is a fact about the cells.
+        # A figure that says "at parity" while holding a cell that measured a
+        # detectable magnitude would dress an unresolved possible regression as a
+        # clean non-inferior result — which is the exact misreport this type
+        # exists to prevent, running in the other direction.
+        if len(parity) != len(measured):
+            raise CellInadmissible(
+                f"parity_figure: {len(measured) - len(parity)} of {len(measured)} "
+                "measured cell(s) are not at parity, so this phase is not "
+                f"{self.KIND_ALL_PROTECTED_CELLS_AT_PARITY!r}. A cell whose estimate "
+                "cleared the floor and the MDE is a DETECTABLE magnitude and belongs on "
+                "the ordering; calling it parity would hide it")
+
+    @property
+    def measured_cell_count(self) -> int:
+        return len(self.measured_cell_ids)
+
+    @property
+    def parity_cell_count(self) -> int:
+        return len(self.parity_cell_ids)
+
+    @property
+    def sensitivity_bound(self) -> float:
+        """The magnitude the BLINDEST measured cell could not have told from nothing.
+
+        A cell is sub-floor for one of two reasons and they bind at different
+        numbers: `below_noise_floor` says `|effect| <= floor`, and
+        `no_detectable_difference` says `|effect| < mde`. So the size a parity
+        claim actually rules out at a cell is the LARGER of that cell's two
+        published numbers, and `_parity_figure` selects the cell where that is
+        greatest. Quoting the MDE alone would understate the claim whenever the
+        calibrated floor is coarser than the MDE — a noisy co-resident cell with
+        a large phi can measure a five-percent swing, resolve `below_noise_floor`,
+        and be reported under a two-percent MDE as though nothing above two
+        percent had happened anywhere.
+
+        A selection between two numbers of ONE named cell, not a pooled quantity:
+        both `mde` and `noise_floor` are that cell's own published pair, from that
+        cell's own event.
+        """
+        return max(self.mde, self.noise_floor)
+
+    def could_have_detected(self, magnitude: float) -> bool:
+        """Would a real effect of this size have been visible at the blindest cell?
+
+        The one question that separates *"the backend did not move"* from *"the
+        run was too coarse to see it move"* — two different facts with the same
+        shape, and the whole reason a parity claim is unfalsifiable without its
+        sensitivity beside it. False means this parity result cannot distinguish
+        "no effect" from an effect of `magnitude`, and must not be read as the
+        first.
+
+        A question, not a gate: it answers about a magnitude the caller supplies
+        and decides nothing here.
+        """
+        return _finite(magnitude, "magnitude") > self.sensitivity_bound
+
+    @property
+    def comparable_reference_gain(self) -> Optional[float]:
+        """The magnitude the campaign is LOOKING FOR — when it is comparable at all.
+
+        `None` is a real answer and not a missing one: a campaign with no
+        reference policy has declared no target magnitude, and an ABSOLUTE-scale
+        campaign cannot be measured against a percentage yardstick (the same
+        category error `_compare_reference` refuses one layer up, and
+        `stats.block_effect` refuses one layer down). In both cases the question
+        *"could this run have seen what the search is looking for?"* has no
+        answer, and inventing one would put a target nobody declared behind a
+        power claim.
+
+        This is the ONE place the gate is written. `_parity_power_clause` renders
+        it for an operator and `observation_fields()` publishes it to the
+        controller; neither restates the two conditions, so the rendered sentence
+        and the stop rule cannot come to disagree about what the campaign wants.
+        """
+        reference = self.reference
+        if reference is None:
+            return None
+        if reference.effect_scale != stats.EFFECT_SCALE_RELATIVE:
+            return None
+        return reference.reference_point_gain
+
+    @property
+    def value(self) -> float:
+        raise ParityHasNoOrderableValue(
+            f"{self.backend} {self.phase}: {self.parity_cell_count} of "
+            f"{self.measured_cell_count} measured protected cell(s) resolved below the "
+            f"campaign's own sensitivity (MDE {self.mde}, floor {self.noise_floor}) and "
+            "none is orderable. There is no value to read: sub-floor does not mean zero, "
+            "it means the sign and the size are both unknown")
+
+    @property
+    def best_value(self) -> float:
+        raise ParityHasNoOrderableValue(
+            f"{self.backend} {self.phase}: there is no best cell, because there is no "
+            "ordering. Selecting a cell as the best IS a rank, and the evaluator "
+            "withheld a speed rank from every one of these cells")
+
+    def observation_fields(self) -> dict:
+        """The fields the controller's series needs for a round with NO readiness.
+
+        There is deliberately no `readiness` key, and that absence is the whole
+        mechanism. `guards.ReadinessObservation` takes `readiness` as a required
+        argument, so this mapping cannot construct one — a parity round is not
+        merely discouraged from entering the plateau series as a magnitude, it is
+        unable to. A boolean `at_parity` flag beside a number would have left the
+        consumer free to not check it, and every "flag it and hope the consumer
+        checks" design in this package has turned out to be a defect.
+
+        WHAT MAKES THE ROUND USABLE ON THE OTHER SIDE. A round with no magnitude
+        is still evidence — *"nothing above +/-b moved"* — but only against the
+        bound `b` and only against a magnitude worth ruling out. So the mapping
+        carries `sensitivity_bound` (the binding one, not the MDE alone: see
+        `sensitivity_bound`) and `reference_gain`, and the controller's plateau
+        rule decides with them rather than around them. Both are published rather
+        than re-derived over there: a consumer that recomputed the bound from
+        `mde` and `noise_floor` would be a second copy of a rule that lives here,
+        and a consumer that had neither would be left with COULD_NOT_EVALUATE
+        forever on the most common HEALTHY outcome — which is a stall wearing the
+        costume of caution.
+
+        `reference_gain` is always PRESENT and may be `None`. An absent key would
+        make a producer that lost it indistinguishable from a campaign that
+        declared no target, and the seam refuses keys it was not sent.
+        """
+        return {"protected_cells": self.protected_cell_count,
+                "cells_at_parity": self.parity_cell_count,
+                "mde": self.mde, "noise_floor": self.noise_floor,
+                "sensitivity_bound": self.sensitivity_bound,
+                "reference_gain": self.comparable_reference_gain,
+                "source_event_id": self.sensitivity_event_id,
+                "stratum": self.stratum}
+
+    def to_dict(self) -> dict:
+        return {
+            "backend": self.backend, "phase": self.phase,
+            "protocol_id": self.protocol_id, "kind": self.kind,
+            "protected_cell_count": self.protected_cell_count,
+            "measured_cell_count": self.measured_cell_count,
+            "measured_cell_ids": list(self.measured_cell_ids),
+            "parity_cell_count": self.parity_cell_count,
+            "parity_cell_ids": list(self.parity_cell_ids),
+            "resolution_census": [list(entry) for entry in self.resolution_census],
+            "mde": self.mde, "noise_floor": self.noise_floor,
+            "sensitivity_bound": self.sensitivity_bound,
+            "sensitivity_cell_id": self.sensitivity_cell_id,
+            "sensitivity_event_id": self.sensitivity_event_id,
+            "metric": self.metric, "metric_direction": self.metric_direction,
+            "stratum": self.stratum,
+            # NO `value` key, and not a null one. `value` RAISES on this object
+            # precisely because `getattr(figure, "value", None)` is how a caller
+            # reintroduces the absence; `dict.get("value")` is the same move one
+            # serialization out, and `to_dict()` is the form that survives into a
+            # report where the type no longer does. Absent means the reader that
+            # assumed a magnitude fails at the line that assumed it.
+            "orderable": False, "no_orderable_value_reason": (
+                f"{self.parity_cell_count} of {self.measured_cell_count} measured "
+                f"protected cell(s) resolved below the campaign's own sensitivity "
+                f"(MDE {self.mde}, floor {self.noise_floor}); sub-floor does not mean "
+                "zero, it means the sign and the size are both unknown"),
+            "reference": None if self.reference is None else self.reference.to_dict(),
+        }
+
+
+#: The two figure types a phase can carry. `None` is the third state and is not a
+#: type: nothing was measured. Anything that stores a figure validates against
+#: this tuple, so a third kind of figure cannot be introduced by a caller.
+PHASE_FIGURE_TYPES = (ReadinessFigure, ParityFigure)
+
+
+def _orderable_value(figure: Any) -> Optional[float]:
+    """The figure's orderable magnitude, or `None` when it has none.
+
+    The one place that turns the three states into the two answers a MAGNITUDE
+    question can have. A `ParityFigure` raises on `.value`, so every caller that
+    wants to ask "how big was it" must come through here and say what it means by
+    "there was no number" — rather than discovering it as an AttributeError at
+    the point where it is least expected.
+    """
+    if isinstance(figure, ReadinessFigure):
+        return figure.value
+    return None
 
 
 @dataclass(frozen=True)
@@ -1823,9 +2354,40 @@ class ReferenceComparison:
 
 def _compare_reference(figure_value: Optional[float], lcb: Optional[float], *,
                        policy: Optional[ReferencePolicy],
-                       effect_scale: str) -> Optional[ReferenceComparison]:
+                       effect_scale: str,
+                       no_value_reason: Optional[str] = None
+                       ) -> Optional[ReferenceComparison]:
+    """The advisory +25%/+20% comparison, or an honest refusal to make it.
+
+    `no_value_reason` is how a PARITY phase gets an ANSWER rather than a verdict.
+    Comparing "no orderable effect" to a percentage yardstick is a category error
+    in exactly the way an absolute effect scale is, and it is the more dangerous
+    of the two: a `FAIL` here would read as a regression against the reference,
+    and no regression was measured. So both comparisons are COULD_NOT_CHECK and
+    NEITHER can be anything else on this branch — it returns before any threshold
+    is looked at.
+
+    The observed point and the LCB are dropped rather than reported alongside.
+    An LCB carried out of a sub-floor estimate is a plausible-looking number
+    sitting next to a threshold, and something downstream would eventually
+    compare the two.
+    """
     if policy is None:
         return None
+    if no_value_reason is not None:
+        if figure_value is not None:
+            raise CellInadmissible(
+                "_compare_reference() was handed both an orderable value and a reason "
+                "there is none; a comparison cannot be simultaneously answerable and "
+                "unanswerable, and whichever of the two won would be silent about the "
+                "other")
+        unanswerable = schemas.Check(schemas.COULD_NOT_CHECK, (no_value_reason,))
+        return ReferenceComparison(
+            effect_scale=effect_scale,
+            reference_point_gain=policy.reference_point_gain,
+            reference_lcb_gain=policy.reference_lcb_gain,
+            observed_point=None, observed_lcb_descriptive=None,
+            point_at_or_above=unanswerable, lcb_at_or_above=unanswerable)
     if effect_scale != stats.EFFECT_SCALE_RELATIVE:
         unusable = schemas.Check(schemas.COULD_NOT_CHECK, (
             f"the campaign's effect scale is {effect_scale!r}; the reference gains are "
@@ -1840,15 +2402,15 @@ def _compare_reference(figure_value: Optional[float], lcb: Optional[float], *,
 
     if figure_value is None:
         point = schemas.Check(schemas.COULD_NOT_CHECK,
-                              ("no protected-cell figure was available",))
+                              ("no orderable protected-cell figure was available",))
     elif figure_value >= policy.reference_point_gain:
         point = schemas.Check(schemas.PASS, (
-            f"the weakest protected cell is at {figure_value}, at or above the campaign's "
-            f"advisory reference of {policy.reference_point_gain}",))
+            f"the weakest orderable protected cell is at {figure_value}, at or above "
+            f"the campaign's advisory reference of {policy.reference_point_gain}",))
     else:
         point = schemas.Check(schemas.FAIL, (
-            f"the weakest protected cell is at {figure_value}, below the campaign's "
-            f"advisory reference of {policy.reference_point_gain}",))
+            f"the weakest orderable protected cell is at {figure_value}, below the "
+            f"campaign's advisory reference of {policy.reference_point_gain}",))
 
     if lcb is None:
         lcb_check = schemas.Check(schemas.COULD_NOT_CHECK, (
@@ -1872,7 +2434,18 @@ def _compare_reference(figure_value: Optional[float], lcb: Optional[float], *,
 
 @dataclass(frozen=True)
 class PhaseStanding:
-    """§1.6 for one phase of one backend, under that phase's own protocol."""
+    """§1.6 for one phase of one backend, under that phase's own protocol.
+
+    `figure` carries the phase's THREE-STATE answer, and the three states are
+    three different things rather than one representation doing triple duty:
+
+      * `None`            — NOTHING MEASURED. No admissible cell produced an
+                            effect at all.
+      * `ParityFigure`    — ALL AT PARITY. Cells were measured and none is
+                            orderable. A result, with a count and a sensitivity.
+      * `ReadinessFigure` — an ORDERABLE figure, selected over the orderable
+                            cells only and disclosing which cells it excluded.
+    """
 
     backend: str
     phase: str
@@ -1880,8 +2453,16 @@ class PhaseStanding:
     cells: tuple
     non_inferior: schemas.Check
     improved: schemas.Check
-    figure: Optional[ReadinessFigure]
+    figure: Optional[Any]
     blockers: tuple
+
+    def __post_init__(self) -> None:
+        if self.figure is not None and not isinstance(self.figure, PHASE_FIGURE_TYPES):
+            raise CellInadmissible(
+                f"standing.figure: {type(self.figure).__name__} is not one of "
+                f"{[klass.__name__ for klass in PHASE_FIGURE_TYPES]} and is not None; "
+                "the phase figure has exactly three states and a fourth would be one "
+                "nothing downstream knows how to read")
 
     def to_dict(self) -> dict:
         return {
@@ -1989,35 +2570,76 @@ def phase_standing(*, backend: str, phase: str, objective: ObjectiveSpec,
 def _phase_figure(*, backend: str, phase: str, protocol_id: str,
                   protected: Sequence[T2Cell],
                   reference: Optional[ReferencePolicy],
-                  effect_scale: str) -> Optional[ReadinessFigure]:
-    """Select the weakest protected cell. Selection, not reduction.
+                  effect_scale: str) -> Optional[Any]:
+    """The phase's figure, in one of THREE structurally distinct states.
 
-    Correctness precedence applies to the FIGURE, not only to the per-cell Check.
-    *"A candidate failing any of them receives no speed rank at all — not a
-    penalised one."* Selecting a cell as "the weakest" or "the best" IS a rank, and
-    a rank is exactly what an INVALID, prior-gate-failed or INCONCLUSIVE cell may
-    not receive — so those cells are not candidates for selection at all. The
-    predicate is `_verdict_gate`, reused rather than restated, because a second
-    copy of "what disqualifies a speed reading" is a second copy that drifts.
+    TWO INDEPENDENT REASONS A CELL MAY NOT BE SELECTED, and they are two because
+    conflating them is what put this defect here:
 
-    When every protected cell of the phase is disqualified there is no figure, and
-    `None` is the honest answer: `phase_standing` already carries the blockers
-    saying why, `_compare_reference` answers COULD_NOT_CHECK, and
-    `render_readiness_line` prints "no protected-cell figure".
+      * **its VERDICT denies it a speed reading** — INVALID, a failed
+        lexicographically prior gate, INCONCLUSIVE, no rate comparison, no
+        anchor. The predicate is `_verdict_gate` via `_rank_admissible`, reused
+        rather than restated. *"A candidate failing any of them receives no speed
+        rank at all — not a penalised one."*
+      * **its EFFECT RESOLUTION carries no ordering** — the estimate never
+        cleared the campaign's own noise floor or MDE. The predicate is
+        `api.is_sub_floor_resolution`, which is the evaluator's, not a second
+        copy: `_RANKABLE_RESOLUTIONS` already says *"below the noise floor is not
+        a small win; it is not a win"*, and the evaluator WITHHOLDS a speed rank
+        from such a cell. Selecting one as "the weakest" or "the best" IS a rank,
+        so this function may not do what the evaluator refused to do.
+
+    `EFFECT_EVIDENCE_BELOW_THRESHOLD` is deliberately NOT excluded. Its estimate
+    cleared both the floor and the MDE: it is a DETECTABLE magnitude whose
+    e-process fell short, and it is exactly the number an operator needs to see.
+    Dropping it would make a measured degradation invisible, which is the failure
+    in the other direction and the one `_non_inferiority_check` already reports as
+    *"a detectable degradation with no non-inferiority evidence"*. Sub-floor and
+    below-threshold are unrankable for different reasons, and only one of them is
+    parity.
+
+    THE THREE STATES, and why none of them is expressible as another:
+
+      1. **NOTHING MEASURED** — `None`. No admissible cell produced an effect at
+         all. `phase_standing` carries the blockers saying why.
+      2. **ALL AT PARITY** — a `ParityFigure`. Cells were measured and none is
+         orderable. Under a NON-INFERIORITY objective this is the most common
+         HEALTHY outcome, and reporting it as `None` would render success as an
+         absence. Absences read as coverage gaps, and a coverage gap is what a
+         later session closes by loosening the gate — which would make the cure
+         worse than the disease.
+      3. **ORDERABLE** — a `ReadinessFigure` selected over the orderable cells
+         ONLY, disclosing how many protected cells it left out and why. In the
+         MIXED case the figure is "the weakest ORDERABLE protected cell", not
+         "the weakest protected cell", and an operator told the second while
+         handed the first is reading a number as covering cells it does not
+         cover.
     """
     admissible = [cell for cell in protected if _rank_admissible(cell)]
     measured = [cell for cell in admissible if cell.oriented_effect() is not None]
     if not measured:
         return None
-    weakest = min(measured, key=lambda cell: cell.oriented_effect())
-    strongest = max(measured, key=lambda cell: cell.oriented_effect())
+
+    census = _resolution_census(measured)
+    parity = [cell for cell in measured
+              if api.is_sub_floor_resolution(_resolution_of(cell))]
+    orderable = [cell for cell in measured
+                 if not api.is_sub_floor_resolution(_resolution_of(cell))]
+    if not orderable:
+        return _parity_figure(
+            backend=backend, phase=phase, protocol_id=protocol_id,
+            protected_count=len(protected), measured=measured, parity=parity,
+            census=census, reference=reference, effect_scale=effect_scale)
+
+    weakest = min(orderable, key=lambda cell: cell.oriented_effect())
+    strongest = max(orderable, key=lambda cell: cell.oriented_effect())
     effect = weakest.estimate
     comparison = _compare_reference(
         weakest.oriented_effect(), effect.lcb_descriptive,
         policy=reference, effect_scale=effect_scale)
     return ReadinessFigure(
         backend=backend, phase=phase, protocol_id=protocol_id,
-        kind=ReadinessFigure.KIND_WEAKEST_PROTECTED_CELL,
+        kind=ReadinessFigure.KIND_WEAKEST_ORDERABLE_PROTECTED_CELL,
         cell_id=weakest.cell_id, event_id=weakest.event_id,
         value=weakest.oriented_effect(), metric=effect.metric,
         metric_direction=effect.metric_direction, e_value=effect.e_value,
@@ -2025,7 +2647,77 @@ def _phase_figure(*, backend: str, phase: str, protocol_id: str,
         paired_blocks=effect.paired_blocks, stratum=effect.stratum,
         lcb_descriptive=effect.lcb_descriptive,
         best_cell_id=strongest.cell_id, best_value=strongest.oriented_effect(),
+        protected_cell_count=len(protected),
+        orderable_cell_count=len(orderable),
+        parity_cell_ids=tuple(cell.cell_id for cell in parity),
+        resolution_census=census,
+        # Which resolution the HEADLINE number was read off, and the evaluator's
+        # own answer for that cell. `evidence_below_threshold` is admitted here
+        # (see above) and `api` withholds its speed rank, so the figure must say
+        # so rather than let the word "orderable" in `kind` stand for it.
+        selected_effect_resolution=_resolution_of(weakest),
+        selected_speed_rank_admissible=(
+            weakest.non_inferiority.verdict.speed_rank_admissible),
         reference=comparison)
+
+
+def _parity_figure(*, backend: str, phase: str, protocol_id: str,
+                   protected_count: int, measured: Sequence[T2Cell],
+                   parity: Sequence[T2Cell], census: tuple,
+                   reference: Optional[ReferencePolicy],
+                   effect_scale: str) -> ParityFigure:
+    """Report "measured, and nothing is orderable" as the result it is.
+
+    The sensitivity reported is the COARSEST one, and coarsest is measured by the
+    BINDING BOUND rather than by the MDE alone. A phase is only as sensitive as
+    its blindest cell, and which number blinds a cell depends on why it is
+    sub-floor: `below_noise_floor` bounds the magnitude by the calibrated phi,
+    `no_detectable_difference` bounds it by the MDE. Ranking the cells by MDE and
+    then reporting that cell's floor beside it answers two different questions
+    with two different cells' numbers — and it under-reports the claim whenever
+    some other cell's floor is the coarsest thing in the phase. That is the
+    failure this selection exists to avoid: a co-resident cell with a large
+    calibrated phi can measure a five-percent swing, resolve `below_noise_floor`,
+    and be published under another cell's two-percent MDE as though nothing above
+    two percent had happened anywhere in the phase. A parity claim quoted tighter
+    than its evidence is exactly the unfalsifiable claim the sensitivity is
+    carried to prevent.
+
+    `mde` and `noise_floor` are therefore ONE cell's own published pair, from ONE
+    named event, and `sensitivity_bound` is the larger of the two. It is a
+    SELECTION (`max` over cells, then `max` between one cell's two published
+    numbers), never a pooled or averaged sensitivity — this module contains no
+    arithmetic over measurements and `audit_no_weighting_or_averaging()` proves
+    it from the AST. The tie-break on `cell_id` is there so two runs over the same
+    matrix name the same cell whatever order the caller supplied it in.
+    """
+    coarsest = max(measured, key=lambda cell: (max(cell.estimate.mde,
+                                                   cell.estimate.noise_floor),
+                                               cell.cell_id))
+    effect = coarsest.estimate
+    bound = max(effect.mde, effect.noise_floor)
+    reason = (
+        f"every one of the {len(measured)} measured protected cell(s) resolved below "
+        f"the campaign's own sensitivity ({_census_text(census)}; nothing above "
+        f"+/-{bound} would have been distinguishable at {coarsest.cell_id!r}, whose MDE "
+        f"is {effect.mde} and calibrated floor {effect.noise_floor}). There is "
+        "no orderable effect to place against a percentage yardstick, and 'no "
+        "detectable difference' is a result, not a number below a threshold")
+    comparison = _compare_reference(
+        None, None, policy=reference, effect_scale=effect_scale,
+        no_value_reason=reason)
+    return ParityFigure(
+        backend=backend, phase=phase, protocol_id=protocol_id,
+        kind=ParityFigure.KIND_ALL_PROTECTED_CELLS_AT_PARITY,
+        protected_cell_count=protected_count,
+        measured_cell_ids=tuple(cell.cell_id for cell in measured),
+        parity_cell_ids=tuple(cell.cell_id for cell in parity),
+        resolution_census=census,
+        mde=effect.mde, noise_floor=effect.noise_floor,
+        sensitivity_cell_id=coarsest.cell_id,
+        sensitivity_event_id=coarsest.event_id,
+        metric=effect.metric, metric_direction=effect.metric_direction,
+        stratum=effect.stratum, reference=comparison)
 
 
 # =============================================================================
@@ -2599,11 +3291,16 @@ def _assess_phase_trade(objective: ObjectiveSpec,
             operator_decision_required=True)
 
     standing = regressing[0]
-    observed = None if standing.figure is None else standing.figure.value
+    # `_orderable_value`, never `.figure.value`: a phase trade asks whether a
+    # MAGNITUDE sits inside a pre-declared band, and "no orderable effect" is not
+    # a magnitude outside it. A parity figure answers `None` here and the band
+    # question is reported as unplaceable, which is what it is.
+    observed = _orderable_value(standing.figure)
     low, high = exception.band
-    gains = [other.figure.value for other in phases
+    gains = [_orderable_value(other.figure) for other in phases
              if other.phase != exception.regressing_phase and other.figure is not None
              and other.improved.outcome == schemas.PASS]
+    gains = [gain for gain in gains if gain is not None]
     observed_gain = max(gains) if gains else None
 
     reasons: list = []
@@ -2789,7 +3486,8 @@ class ReadinessSignal:
         return tuple(standing.figure for standing in self.phases
                      if standing.figure is not None)
 
-    def figure_for(self, phase: str) -> Optional[ReadinessFigure]:
+    def figure_for(self, phase: str) -> Optional[Any]:
+        """The phase's figure: `None`, a `ParityFigure`, or a `ReadinessFigure`."""
         for standing in self.phases:
             if standing.phase == phase:
                 return standing.figure
@@ -3166,9 +3864,20 @@ def cross_backend_analysis_view(report: ReadinessReport) -> CrossBackendAnalysis
                 "standing": signal.standing,
                 "non_inferior": standing.non_inferior.outcome,
                 "improved": standing.improved.outcome,
-                "figure_cell_id": None if figure is None else figure.cell_id,
-                "figure_value": None if figure is None else figure.value,
-                "figure_event_id": None if figure is None else figure.event_id,
+                # Three states, three sets of cells in the row. A parity figure has
+                # no selected cell and no value, so it reports its own kind and its
+                # own parity count rather than a `None` that reads like an
+                # unmeasured phase.
+                "figure_kind": None if figure is None else figure.kind,
+                "figure_cell_id": (figure.cell_id
+                                   if isinstance(figure, ReadinessFigure) else None),
+                "figure_value": _orderable_value(figure),
+                "figure_event_id": (
+                    None if figure is None
+                    else figure.event_id if isinstance(figure, ReadinessFigure)
+                    else figure.sensitivity_event_id),
+                "figure_parity_cell_count": (None if figure is None
+                                             else figure.parity_cell_count),
                 "blockers": list(standing.blockers),
                 "not_commensurable_with_other_rows": True,
             })
@@ -3217,6 +3926,41 @@ def freeze_eligibility(*_args: Any, **_kwargs: Any) -> None:
 # Rendering — the sentence an operator reads
 # =============================================================================
 
+def _parity_power_clause(figure: "ParityFigure") -> str:
+    """Say whether this parity result could have SEEN the effect being chased.
+
+    "Nothing moved" and "the run was too coarse to see it move" are different
+    facts with the same shape, and the parity line renders both as "at parity".
+    The campaign's own advisory reference gain is the size the search is looking
+    for, and it is already carried on the figure's `ReferenceComparison` — so the
+    comparison that separates the two facts needs no new input, only saying.
+
+    An operator handed "12/12 at parity" from a run that could not have resolved
+    the gain it is hunting is being shown an underpowered round as a clean
+    result, and the next session closes that "gap" by loosening something. The
+    clause is a LABEL on the sensitivity already published; it decides nothing,
+    and the reference comparison stays `COULD_NOT_CHECK` either way (`AK-D3`:
+    the reference figure is advisory and never a trigger).
+
+    The target comes from `figure.comparable_reference_gain`, which is also what
+    crosses the seam into the controller's plateau rule. The sentence an operator
+    reads and the rule that spends machine time are then answering the power
+    question about the SAME number: a phase rendered "underpowered for this
+    campaign" is exactly a phase the stop rule refuses to conclude anything from.
+    """
+    gain = figure.comparable_reference_gain
+    if gain is None:
+        return ""
+    if figure.could_have_detected(gain):
+        return (f". A gain of the campaign's advisory {gain} would have been visible at "
+                f"this sensitivity, so parity here is a result about the candidate")
+    return (f". UNDERPOWERED FOR THIS CAMPAIGN: a gain of the campaign's advisory "
+            f"{gain} would NOT have been distinguishable at +/-"
+            f"{figure.sensitivity_bound}, so this parity result cannot tell 'no effect' "
+            f"from the effect the campaign is looking for. It is a statement about the "
+            f"measurement, not about the candidate")
+
+
 def render_readiness_line(signal: ReadinessSignal, phase: str) -> str:
     """One line per (backend, phase), in the search record's own grammar shape.
 
@@ -3224,6 +3968,12 @@ def render_readiness_line(signal: ReadinessSignal, phase: str) -> str:
     abbreviation, same e/threshold/MDE/floor quartet, same controls marker — and
     deliberately labelled `SIGNAL_CLASS` rather than `SEARCH RECORD, NOT A CLAIM`,
     because this is a derived signal over records rather than a record.
+
+    THREE STATES, THREE VISIBLY DIFFERENT LINES. The parity line reads like the
+    RESULT it is — *"12/12 protected cells at parity, MDE +/-0.018"* — and not
+    like the gap it is not. An operator who cannot tell "we measured everything
+    and nothing moved" from "we have no figure" will eventually be asked to fix
+    the second and will fix the first by loosening something.
     """
     if not isinstance(signal, ReadinessSignal):
         raise CellInadmissible("render_readiness_line() takes a ReadinessSignal")
@@ -3243,14 +3993,44 @@ def render_readiness_line(signal: ReadinessSignal, phase: str) -> str:
     if figure is None:
         body = "no protected-cell figure"
         evidence = f"stratum={api.STRATUM_CONFIRMATION}"
+    elif isinstance(figure, ParityFigure):
+        body = (f"{figure.parity_cell_count}/{figure.protected_cell_count} protected "
+                f"cells at parity, nothing above +/-{figure.sensitivity_bound} "
+                f"distinguishable — measured, no detectable difference at any of "
+                f"them{_parity_power_clause(figure)}")
+        evidence = (f"cells={figure.measured_cell_count}/"
+                    f"{figure.protected_cell_count}, at_parity="
+                    f"{figure.parity_cell_count}, "
+                    f"sensitivity_bound={figure.sensitivity_bound}, "
+                    f"MDE={figure.mde}, "
+                    f"floor={figure.noise_floor}, "
+                    f"sensitivity_cell={figure.sensitivity_cell_id}, "
+                    f"resolutions={_census_text(figure.resolution_census)}, "
+                    f"stratum={figure.stratum}, "
+                    f"sensitivity_event={figure.sensitivity_event_id}")
     else:
-        body = (f"weakest protected cell {figure.cell_id} {figure.metric} "
+        # The SELECTED cell's own resolution rides in the body, not the trailer.
+        # `evidence_below_threshold` is admitted to the ordering and the evaluator
+        # withholds its speed rank; a census reading
+        # `{evidence_below_threshold:1, improvement:1}` in the trailer does not
+        # tell an operator which of the two supplied the headline number.
+        withheld = ("" if figure.selected_speed_rank_admissible
+                    else ", evaluator withheld its speed rank")
+        body = (f"weakest orderable protected cell {figure.cell_id} {figure.metric} "
                 f"{figure.value} {figure.metric_direction} "
-                f"(best {figure.best_cell_id} {figure.best_value})")
+                f"[{figure.selected_effect_resolution}{withheld}] "
+                f"(best {figure.best_cell_id} {figure.best_value}) over "
+                f"{figure.orderable_cell_count}/{figure.protected_cell_count} "
+                f"protected cells, {figure.parity_cell_count} at parity")
         evidence = (f"blocks={figure.paired_blocks}, e={figure.e_value}, "
                     f"thr={figure.threshold}, MDE={figure.mde}, "
                     f"floor={figure.noise_floor}, stratum={figure.stratum}, "
-                    f"event={figure.event_id}")
+                    f"event={figure.event_id}, "
+                    f"selected_resolution={figure.selected_effect_resolution}, "
+                    f"selected_speed_rank_admissible="
+                    f"{figure.selected_speed_rank_admissible}, "
+                    f"resolutions={_census_text(figure.resolution_census)}, "
+                    f"excluded_at_parity={list(figure.parity_cell_ids)}")
     trailer = (
         f"[{SIGNAL_CLASS}, reducer={MODULE_ID}, stats={signal.statistics_module_id}, "
         f"tier={TIER}, protocol={standing.protocol_id}, "

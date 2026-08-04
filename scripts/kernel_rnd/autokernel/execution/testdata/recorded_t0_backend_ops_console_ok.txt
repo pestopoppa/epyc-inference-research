@@ -1,0 +1,20 @@
+# RECORDED 2026-08-03T22:2xZ on epyc host, real invocation, verbatim stdout+stderr.
+# binary : /mnt/raid0/llm/llama.cpp-experimental/build-v8-sanitize/bin/test-backend-ops  (llama.cpp-experimental worktree, NOT production)
+# argv   : test -o ARANGE -b CPU
+# exit   : 0
+# ---8<--- verbatim below this line ---8<---
+register_backend: registered backend CPU (1 devices)
+register_device: registered device CPU (AMD EPYC 9655 96-Core Processor)
+load_backend: failed to find ggml_backend_init in /mnt/raid0/llm/llama.cpp-experimental/build-v8-sanitize/bin/libggml-cpu.so
+Testing 1 devices
+
+Backend 1/1: CPU
+  Device description: AMD EPYC 9655 96-Core Processor
+  Device memory: 1160617 MB (1160617 MB free)
+
+  ARANGE(type=f32,start=0.000000,stop=10.000000,step=1.000000): [1;32mOK[0m
+  ARANGE(type=f32,start=0.000000,stop=1048576.000000,step=1.000000): [1;32mOK[0m
+  2/2 tests passed
+  Backend CPU: [1;32mOK[0m
+1/1 backends passed
+[1;32mOK[0m

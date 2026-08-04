@@ -72,11 +72,13 @@ import hashlib
 import json
 import os
 import pathlib
+import shutil
 import tempfile
 import unittest
 
 from .. import journal as journal_mod
 from .. import schemas
+from .. import storage
 from ..adapters import qwentts_tts, serving_runtime, whisper_stt
 from ..controller import state_machine as sm
 from ..evaluator import api as evaluator_api
@@ -249,13 +251,60 @@ def waiver_document(cell_id: str, **overrides) -> dict:
     return document
 
 
-def waiver_binding(cell_id: str, document=None) -> t3.WaiverBinding:
+def quoted_waiver(cell_id: str, document=None, *, path=None) -> t3.WaiverBinding:
+    """A waiver as somebody QUOTED it: no file, three independent caller assertions."""
     document = document if document is not None else waiver_document(cell_id)
     pinned = schemas.content_hash(json.loads(json.dumps(document)))
     return t3.WaiverBinding(
         waiver_id=document["waiver_id"], pinned_sha256=pinned, observed_sha256=pinned,
-        document=document, document_path="artifacts/operator/waive-cpu-prefill-v9.json",
+        document=document,
+        document_path=path or "artifacts/operator/waive-cpu-prefill-v9.json",
         covers_cell_ids=(cell_id,))
+
+
+#: Where this module writes a waiver it intends to be READ. Same reasoning as
+#: `test_t3._TEST_ATTESTATION_ROOT`: it must be a real operator-SHAPED citation under
+#: a checkout root, `/tmp` is a scratch root the reader refuses twice, and
+#: `/workspace/artifacts/operator/` is the operator's own directory, which the tests
+#: read and never write.
+_TEST_ATTESTATION_ROOT = storage.REPO_ROOT / "artifacts" / "operator"
+_WAIVER_FILE_DIR = None
+
+
+def _waiver_file_dir() -> pathlib.Path:
+    global _WAIVER_FILE_DIR
+    if _WAIVER_FILE_DIR is None:
+        _TEST_ATTESTATION_ROOT.mkdir(parents=True, exist_ok=True)
+        _WAIVER_FILE_DIR = pathlib.Path(tempfile.mkdtemp(
+            prefix="_ak_chain_waiver_", dir=_TEST_ATTESTATION_ROOT))
+    return _WAIVER_FILE_DIR
+
+
+def tearDownModule():
+    global _WAIVER_FILE_DIR
+    if _WAIVER_FILE_DIR is not None:
+        shutil.rmtree(_WAIVER_FILE_DIR, ignore_errors=True)
+        _WAIVER_FILE_DIR = None
+
+
+def read_waiver(cell_id: str, document=None, *, path=None) -> t3.ReadWaiver:
+    """The same waiver, WRITTEN to an operator-shaped path and READ back.
+
+    Pinned with `schemas.raw_bytes_digest` over the bytes written — never
+    `content_hash`, which digests a canonical re-encoding and matches no operator
+    record's `evidence_sha256`.
+    """
+    document = document if document is not None else waiver_document(cell_id)
+    payload = json.dumps(document, indent=1, sort_keys=True).encode("utf-8")
+    sha = schemas.raw_bytes_digest(payload)
+    target = pathlib.Path(path) if path is not None else (
+        _waiver_file_dir() / f"waive-{sha[:16]}.json")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(payload)
+    return t3.waiver_binding_from_path(
+        str(target), pinned_sha256=sha, waiver_id=document["waiver_id"],
+        covers_cell_ids=(cell_id,),
+        attestation_roots=(str(_TEST_ATTESTATION_ROOT),))
 
 
 # =============================================================================
@@ -468,7 +517,7 @@ class TestVerdictSpectrum(unittest.TestCase):
         self.assertTrue(result.receipt.withheld_claims)
 
     def test_pass_with_waiver_suppresses_exactly_the_waived_claim(self):
-        binding = waiver_binding(self.failing)
+        binding = read_waiver(self.failing)
         result = self.chain.run(_failing_cell_id=self.failing, waivers=(binding,))
         self.assertEqual(result.verdict, "PASS_WITH_WAIVER",
                          " | ".join(result.verdict_computation.blocking_reasons))
@@ -482,7 +531,7 @@ class TestVerdictSpectrum(unittest.TestCase):
         other = self.chain.performance_cells("decode")[0].cell_id
         # The document's scope still names the prefill cell; the BINDING claims the
         # decode one. The scope that counts is the operator's.
-        binding = waiver_binding(other, document=waiver_document(self.failing))
+        binding = read_waiver(other, document=waiver_document(self.failing))
         result = self.chain.run(_failing_cell_id=self.failing, waivers=(binding,))
         self.assertEqual(result.verdict, "FAIL")
 
@@ -551,7 +600,7 @@ class TestSelfGrantedWaiverIsRefused(unittest.TestCase):
         self.failing = self.chain.performance_cells("prefill")[0].cell_id
 
     def _evaluation(self, document):
-        binding = waiver_binding(self.failing, document=document)
+        binding = read_waiver(self.failing, document=document)
         return binding, packager.run_release_evaluation(
             self.chain.request(_failing_cell_id=self.failing, waivers=(binding,)),
             evaluator=t3.T3Runner())
@@ -586,8 +635,14 @@ class TestSelfGrantedWaiverIsRefused(unittest.TestCase):
             sealed=self.chain.seal(),
             release_plan=self.chain.view.to_dict())
         self.assertNotIn("WAIVER_SELF_GRANTED", {f.code for f in package.findings})
+        # COMPLIANT-PATH CONTROL for the new finding too: a waiver that WAS read must
+        # not be reported as a quotation, or the guard forbids its own output.
+        self.assertNotIn("WAIVER_PINNED_UNREAD", {f.code for f in package.findings})
         self.assertEqual(package.state, packager.STATE_READY,
                          [f.to_dict() for f in package.blocking_findings])
+        pinned = package.to_dict()["active_waivers"][0]
+        self.assertTrue(pinned["read"])
+        self.assertEqual(pinned["observed_sha256"], binding.observed_sha256)
 
 
 class TestRerunOnAnUnchangedFingerprint(unittest.TestCase):
@@ -720,15 +775,24 @@ class TestWaiverAuthorityHoldsThroughTheChain(unittest.TestCase):
         self.chain = Chain()
         self.cell_id = self.chain.performance_cells("prefill")[0].cell_id
 
-    def _verdict(self, *, author=None, path=None) -> t3.T3Result:
+    def _verdict(self, *, author=None) -> t3.T3Result:
+        """A REAL waiver, written to a real operator-shaped path and read back."""
         overrides = {} if author is None else {"authorized_by": author}
         document = waiver_document(self.cell_id, **overrides)
-        binding = waiver_binding(self.cell_id, document)
-        if path is not None:
-            binding = t3.WaiverBinding(
-                waiver_id=binding.waiver_id, pinned_sha256=binding.pinned_sha256,
-                observed_sha256=binding.observed_sha256, document=binding.document,
-                document_path=path, covers_cell_ids=binding.covers_cell_ids)
+        binding = read_waiver(self.cell_id, document)
+        return self.chain.run(_failing_cell_id=self.cell_id, waivers=(binding,))
+
+    def _quoted_verdict(self, *, path) -> t3.T3Result:
+        """The same waiver QUOTED at `path`, with nothing behind it.
+
+        This helper used to be `_verdict(path=...)`, and it was the migration's
+        sharpest edge: it manufactured a binding at an arbitrary path by rebuilding
+        the dataclass field by field, with no file there — precisely the idiom the
+        reader exists to remove. It survives only as the way to construct the
+        FORBIDDEN shape, and every use of it below asserts a refusal.
+        """
+        document = waiver_document(self.cell_id)
+        binding = quoted_waiver(self.cell_id, document, path=path)
         return self.chain.run(_failing_cell_id=self.cell_id, waivers=(binding,))
 
     def test_a_human_attributed_waiver_still_suppresses_its_cell(self):
@@ -766,18 +830,40 @@ class TestWaiverAuthorityHoldsThroughTheChain(unittest.TestCase):
         is where `resource/device_claim.py` puts its lock files — a path the loop
         can write.
         """
-        result = self._verdict(path="/mnt/raid0/llm/tmp/artifacts/operator/w.json")
+        result = self._quoted_verdict(
+            path="/mnt/raid0/llm/tmp/artifacts/operator/w.json")
         self.assertNotEqual(result.verdict, "PASS_WITH_WAIVER")
+        # And the reader refuses to open it at all — before any I/O, so the loop's
+        # scratch root is never even stat'd.
+        with self.assertRaises(t3.WaiverNotReadable):
+            read_waiver(self.cell_id,
+                        path="/mnt/raid0/llm/tmp/artifacts/operator/w.json")
 
-    def test_a_real_operator_checkout_path_still_resolves(self):
-        """COMPLIANT-PATH CONTROL for containment: the reduction exists so that a
-        genuine absolute citation under a real checkout root still matches.
+    def test_a_citation_with_no_file_behind_it_suppresses_nothing(self):
+        """THE DEFECT, through the whole chain. Both of these citations are
+        operator-owned by SPELLING and neither has a file behind it — the second is
+        the very path the calibration used to emit. Before the reader they produced
+        PASS_WITH_WAIVER.
         """
         for path in ("artifacts/operator/waive-cpu-prefill-v9.json",
                      "/workspace/artifacts/operator/waive-cpu-prefill-v9.json"):
             with self.subTest(path=path):
-                self.assertEqual(self._verdict(path=path).verdict,
-                                 "PASS_WITH_WAIVER")
+                self.assertEqual(
+                    schemas.operator_owned_path_check(path).outcome, schemas.PASS,
+                    "the citation must still SPELL an operator-owned location, or "
+                    "this test proves the wrong refusal")
+                self.assertFalse(pathlib.Path(path).exists())
+                result = self._quoted_verdict(path=path)
+                self.assertNotEqual(result.verdict, "PASS_WITH_WAIVER")
+                self.assertIn("was never read from disk",
+                              " | ".join(result.verdict_computation.blocking_reasons))
+
+    def test_a_real_operator_checkout_path_still_resolves(self):
+        """COMPLIANT-PATH CONTROL for containment: the reduction exists so that a
+        genuine absolute citation under a real checkout root still matches — and now
+        that there is a real file behind it, it still suppresses its cell.
+        """
+        self.assertEqual(self._verdict().verdict, "PASS_WITH_WAIVER")
 
 
 class TestOnePerPhaseStandingThroughTheChain(unittest.TestCase):
@@ -1088,6 +1174,21 @@ _RULE_ONE_UNSCOPED_DIRS = (
     "controller",   # state_machine.py latches control state to disk
     "evaluator",    # evaluator/surface.py and friends persist evaluator state
     "resource",     # device_claim.py takes lock files
+    # `execution/` is the loop's HANDS: it creates worktrees, runs cmake, spawns
+    # llama-bench, and takes region claims. Rule 1 ("cannot write or spawn AT ALL")
+    # is not merely false for it — it is the negation of its purpose, and asserting
+    # rule 1 here would be the guard-forbids-its-own-idiom defect in its purest form.
+    #
+    # This is a CLASSIFICATION, not a silencing, and the distinction is the whole
+    # point of the bucket. Rule 2 — no call anywhere names a human-only target —
+    # still runs over `execution/` package-wide and is where its real containment
+    # lives. `execution/worktree.py` additionally carries its own frozen-tree
+    # refusals, which a red-team defeated by three independent routes on 2026-08-03
+    # (`git worktree add` into the frozen clone via a guard that was defined and
+    # never wired; `git config` reaching the shared `.git/config` a linked worktree
+    # points at; `GIT_DIR`/`GIT_WORK_TREE` ignoring `-C` entirely) — so its safety
+    # is enforced by tests that EXECUTE the attack, not by this bucket.
+    "execution",
 )
 
 #: RULE 1's ONE exemption, keyed by EXACT package-relative module path.
@@ -1540,6 +1641,40 @@ class TestNoProductionWritePathsAnywhere(unittest.TestCase):
                                        is_test=False)
         self.assertTrue(findings["write_or_process"])
 
+    def test_the_10_4_waiver_reader_needed_no_exemption(self):
+        """The §10.4 reader READS. Rule 1 forbids WRITING. Both still hold, together.
+
+        `waiver_binding_from_path` put the release plane's first deliberate
+        filesystem edge into `release/t3.py`, and the tempting shape for that is a
+        second rule-1 exemption "because the module now touches the filesystem".
+        That would be a category error with real consequences: rule 1 is *"no module
+        in a plane writes a production branch, moves a kernel symlink, writes an era
+        row or applies a baseline"*, and an exemption suspends all of it — buying
+        nothing for a reader, which trips none of it, while permanently widening the
+        cardinal rule for every future edit to the largest module in the plane.
+
+        So this asserts the negative directly: `t3.py` is NOT exempt, and it has
+        ZERO rule-1 findings anyway. If a future edit makes this fail, the answer is
+        to move the write out of the plane, never to add a key here.
+        """
+        rel = "release/t3.py"
+        self.assertNotIn(rel, _RULE_ONE_EXEMPT_MODULES)
+        path = self.root / "release" / "t3.py"
+        findings = audit_module_source(path.read_text(encoding="utf-8"),
+                                       label=rel, is_test=False)
+        self.assertEqual(findings["write_or_process"], [],
+                         "the §10.4 reader must not have made t3.py a writer")
+        self.assertEqual(findings["process_or_exec"], [])
+        # Rule 2 over the same module, unchanged: reading an operator artifact is
+        # not naming a human-only WRITE target.
+        self.assertEqual(findings["human_only_targets"], [])
+        # Anti-vacuity: the module really is the one carrying the reader, so this is
+        # not a clean bill of health for a file that no longer holds the mechanism.
+        source = path.read_text(encoding="utf-8")
+        for token in ("def waiver_binding_from_path", "def _read_operator_file",
+                      "_READER_TOKEN", "read_bytes"):
+            self.assertIn(token, source, token)
+
     def test_the_exemption_does_not_reach_a_sibling_in_the_same_directory(self):
         """THE fence: the exemption is keyed by exact path, so a second writer in
         `surface/` is still an offender. A directory- or prefix-shaped exemption
@@ -1828,8 +1963,16 @@ class TestPreservedV8Calibration(unittest.TestCase):
         cls.waiver = json.loads(cls.WAIVER.read_text(encoding="utf-8"))
 
     def setUp(self):
+        # THE PATHS, not just the documents. With them `calibration_request` builds
+        # its §10.4 authority document through `waiver_binding_from_path` — the
+        # waiver is READ from `/workspace/artifacts/operator/`, hashed over its raw
+        # bytes, and cross-checked against `evidence_sha256.waive_q8` in the
+        # ratification beside it. Before this the calibration pinned a caller-supplied
+        # mapping at `artifacts/operator/<label>/waiver.json`, a path that has never
+        # existed on this host.
         self.freeze = t3.preserved_freeze_from_v8_artifacts(
-            self.ratification, self.waiver)
+            self.ratification, self.waiver,
+            waiver_path=str(self.WAIVER), ratification_path=str(self.RATIFICATION))
 
     def test_the_calibration_reads_the_real_documents_not_a_fixture_of_them(self):
         """The inlined fixtures are REDUCTIONS of the real artifacts (`test_t3.py`
@@ -1839,7 +1982,8 @@ class TestPreservedV8Calibration(unittest.TestCase):
         consumes, the two freezes stop being equal and this fails.
         """
         from_fixture = t3.preserved_freeze_from_v8_artifacts(
-            FT3.V8_RATIFICATION, V8_WAIVER)
+            FT3.V8_RATIFICATION, V8_WAIVER,
+            waiver_path=str(self.WAIVER), ratification_path=str(self.RATIFICATION))
         self.assertEqual(self.freeze.to_dict(), from_fixture.to_dict())
         self.assertEqual(self.freeze.excluded_pairs,
                          ("qwen36_q8-tg128-iqk1", "qwen36_q8-pp2048-iqk1"))

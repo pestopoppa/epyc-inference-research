@@ -1,0 +1,12 @@
+# RECORDED 2026-08-03 on epyc host, real invocation of the NO-BACKEND-FILTER case.
+# argv   : test -o ARANGE          (no -b: test mode skips the CPU device outright)
+# ---8<--- verbatim below this line ---8<---
+register_backend: registered backend CPU (1 devices)
+register_device: registered device CPU (AMD EPYC 9655 96-Core Processor)
+load_backend: failed to find ggml_backend_init in /mnt/raid0/llm/llama.cpp-experimental/build-v8-sanitize/bin/libggml-cpu.so
+Testing 1 devices
+
+Backend 1/1: CPU
+  Skipping CPU backend
+1/1 backends passed
+[1;32mOK[0m

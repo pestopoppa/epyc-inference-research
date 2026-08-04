@@ -656,6 +656,9 @@ ACTOR_ATTRIBUTION_FIELDS = (
 )
 
 _IDENTITY_TOKEN_RE = re.compile(r"[a-z0-9]+")
+#: The same runs with digits treated as separators rather than as run content — see
+#: `identity_candidates`, where a digit between the two words was a walk-around.
+_IDENTITY_ALPHA_RE = re.compile(r"[a-z]+")
 _DIGITS = "0123456789"
 
 #: How many adjacent alphanumeric runs may be re-joined when looking for a token.
@@ -682,14 +685,23 @@ def identity_candidates(identity: Any) -> frozenset:
     """
     if not isinstance(identity, str):
         return frozenset()
-    runs = _IDENTITY_TOKEN_RE.findall(identity.lower())[:_MAX_IDENTITY_RUNS]
+    lowered = identity.lower()
     out: set = set()
-    for start in range(len(runs)):
-        joined = ""
-        for offset in range(min(_MAX_JOINED_RUNS, len(runs) - start)):
-            joined += runs[start + offset]
-            out.add(joined)
-            out.add(joined.strip(_DIGITS))
+    # TWO run vocabularies, and the second is not redundant. `[a-z0-9]+` treats a
+    # digit as part of a run, so a digit BETWEEN the two words defeated the rejoining
+    # entirely: `autokernel`, `auto-kernel`, `auto_kernel` and `auto kernel` were all
+    # refused while `auto2kernel` and `auto1kernel` sailed through — the same
+    # separator-shaped hole this function was written to close, with a digit as the
+    # separator. `strip(_DIGITS)` did not reach it because it only strips the ends.
+    # So the alphabetic-only runs are considered as well.
+    for pattern in (_IDENTITY_TOKEN_RE, _IDENTITY_ALPHA_RE):
+        runs = pattern.findall(lowered)[:_MAX_IDENTITY_RUNS]
+        for start in range(len(runs)):
+            joined = ""
+            for offset in range(min(_MAX_JOINED_RUNS, len(runs) - start)):
+                joined += runs[start + offset]
+                out.add(joined)
+                out.add(joined.strip(_DIGITS))
     out.discard("")
     return frozenset(out)
 
@@ -704,12 +716,49 @@ def machine_actor_tokens(identity: Any) -> tuple:
     return tuple(sorted(identity_candidates(identity) & MACHINE_ACTOR_TOKENS))
 
 
+#: Any key of the shape `…_by` is an attribution whether or not it is enumerated.
+#: `ACTOR_ATTRIBUTION_FIELDS`' own docstring says *"a guard that scans
+#: `authorized_by` and not `approved_by` is a guard with a rename-shaped hole"*, and
+#: the enumeration was still a closed list of five: a §10.4 waiver carrying
+#: `waived_by: "autokernel"` (or `signed_by`, `issued_by`, `created_by`,
+#: `requested_by`) named the loop as its own author, was seen by NOTHING, and then
+#: took the no-attribution branch of `t3.verify_waiver` — which reads a document that
+#: names no author as human-attested on the strength of where it lives, because the
+#: preserved v8 record has no author field. So an explicit machine attribution in an
+#: unenumerated key was strictly SAFER for a forger than no attribution at all.
+#:
+#: Enumerated-plus-shape rather than shape-only: `ACTOR_ATTRIBUTION_FIELDS` still
+#: decides what counts as a NAMED HUMAN actor (a `*_by` key is not automatically an
+#: authority), while this widens only the REFUSAL. Widening a refusal cannot admit
+#: anything that was refused before, and the compliant control is the genuine v8
+#: waiver, whose eleven keys contain no `*_by` at all.
+_ATTRIBUTION_KEY_SUFFIX_RE = re.compile(r"(?:^|_)by$")
+
+#: Attribution spellings that are not `*_by` shaped. Refusal-only, same as above.
+_EXTRA_ATTRIBUTION_KEYS = ("author", "actor")
+
+
+def attribution_keys(document: Any) -> tuple:
+    """Every key in `document` that attributes it to somebody, sorted.
+
+    The five enumerated fields, plus every key spelled `*_by`. A document is
+    attributed by the shape of its keys, not by whether this module happened to
+    enumerate the spelling its author chose.
+    """
+    if not isinstance(document, Mapping):
+        return ()
+    keys = set(ACTOR_ATTRIBUTION_FIELDS) | set(_EXTRA_ATTRIBUTION_KEYS)
+    keys.update(k for k in document
+                if isinstance(k, str) and _ATTRIBUTION_KEY_SUFFIX_RE.search(k))
+    return tuple(sorted(keys))
+
+
 def machine_attributions(document: Any) -> tuple:
     """`(field, identity, tokens)` for every attribution field naming a machine."""
     if not isinstance(document, Mapping):
         return ()
     found: list = []
-    for field_name in ACTOR_ATTRIBUTION_FIELDS:
+    for field_name in attribution_keys(document):
         identity = document.get(field_name)
         tokens = machine_actor_tokens(identity)
         if tokens:
@@ -833,8 +882,79 @@ def _normalised_path(path: str) -> str:
     cleaned = path.strip()
     if not cleaned:
         return ""
+    # POSIX leaves a LEADING DOUBLE slash implementation-defined, and `normpath`
+    # preserves it: `posixpath.normpath('//x')` is `'//x'`, while `'///x'` collapses
+    # to `'/x'`. Measured, not assumed. Left alone that made `//workspace/artifacts/
+    # operator/w.json` reduce to no repo-relative form at all (a fail-CLOSED false
+    # negative on a legitimately-spelled citation) while `///workspace/...` PASSed —
+    # two answers for one location, decided by a slash. Nothing in this package
+    # attaches meaning to `//`, so it is collapsed here, ONCE, before any matching:
+    # a consumer that checks one spelling and opens another has no guarantee at all.
+    if cleaned.startswith("//"):
+        cleaned = "/" + cleaned.lstrip("/")
     normalised = posixpath.normpath(cleaned)
     return normalised.rstrip("/") or "/"
+
+
+def canonical_citation(document_path: Any) -> str:
+    """The ONE canonical spelling of a citation: normalised, single leading slash.
+
+    Public because a reader must CHECK and OPEN the same string. `repo_relative_forms`
+    normalises internally, so a caller that checked `document_path` and then opened
+    the raw text was checking one path and reading another whenever the two differed
+    (`//x`, `a/./b`, a trailing slash). Returns `""` for a non-string or empty
+    citation — a location that cannot be spelled is not one this module can canonicalise.
+    """
+    if not isinstance(document_path, str):
+        return ""
+    return _normalised_path(document_path)
+
+
+def under_any_root(path: Any, roots: Any) -> bool:
+    """Is `path` equal to, or contained by, any root in `roots`?
+
+    Containment on RESOLVED path segments, never on a substring: `/a/bc` is not under
+    `/a/b`. Both sides are canonicalised first so the answer does not depend on how
+    either was spelled. An empty root set is False — a check against nothing must
+    never read as "allowed".
+    """
+    target = canonical_citation(path)
+    if not target:
+        return False
+    for root in (roots or ()):
+        canonical_root = canonical_citation(root)
+        if canonical_root and _under(target, canonical_root):
+            return True
+    return False
+
+
+#: Ceiling on an operator waiver document, in bytes. Calibrated, not guessed: the
+#: preserved v8 attestation `artifacts/operator/waive_q8_cpu_prefill_v8_20260725.json`
+#: is 1,267 bytes, three orders of magnitude below this. A reader without a ceiling
+#: is a reader that will happily hash a multi-gigabyte file somebody dropped at an
+#: operator-owned path.
+MAX_OPERATOR_WAIVER_BYTES = 1024 * 1024
+
+
+def raw_bytes_digest(raw: Any) -> str:
+    """SHA-256 (hex) over RAW FILE BYTES — deliberately NOT `content_hash`.
+
+    The two differ and the difference is load-bearing. `content_hash` digests the
+    CANONICAL re-encoding of a parsed object, so it is stable across whitespace and
+    key order; that is what a record's own identity wants. But an operator
+    attestation is pinned by the digest of the FILE: the v8 ratification's
+    `evidence_sha256.waive_q8` is
+    `fcd52b61610fcc2782e11f41ffac359343233924805f83d872eeceffbb7522d7`, which is
+    `sha256(waive_q8_cpu_prefill_v8_20260725.json)`; `content_hash` of the same
+    parsed document is `0fc095d3…`, and matches nothing anybody ratified.
+
+    A reader that used `content_hash` would therefore be unable to verify a single
+    real operator record, and — worse — would be verifying a re-encoding it produced
+    rather than the bytes that were signed.
+    """
+    if not isinstance(raw, (bytes, bytearray)):
+        raise TypeError("raw_bytes_digest: expects bytes read from a file")
+    return hashlib.sha256(bytes(raw)).hexdigest()
 
 
 def repo_relative_forms(document_path: Any) -> tuple:
@@ -2639,8 +2759,11 @@ __all__ = [
     "VOID_FLAG_PREFIX",
     "MACHINE_ACTOR_TOKENS", "ACTOR_ATTRIBUTION_FIELDS",
     "HUMAN_ONLY_PATHS_MANIFEST", "OPERATOR_ATTESTATION_ROOT", "REPO_CHECKOUT_ROOTS",
+    "REPO_CHECKOUT_NAMES", "MAX_OPERATOR_WAIVER_BYTES",
     "TrustBoundary", "parse_trust_boundary", "repo_relative_forms",
-    "machine_actor_tokens", "machine_attributions", "operator_owned_path_check",
+    "canonical_citation", "under_any_root", "raw_bytes_digest",
+    "machine_actor_tokens", "machine_attributions", "attribution_keys",
+    "operator_owned_path_check",
     "canonical_json", "canonical_bytes", "content_hash", "retrievable_view",
     "candidate_natural_key", "find_authority_flavoured_keys",
     "is_placeholder_digest", "declared_anchor_void_reasons",

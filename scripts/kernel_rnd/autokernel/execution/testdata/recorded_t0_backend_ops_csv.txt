@@ -1,0 +1,9 @@
+# RECORDED 2026-08-03 on epyc host, real invocation, verbatim stdout+stderr.
+# argv   : test -o ARANGE -b CPU --output csv
+# ---8<--- verbatim below this line ---8<---
+register_backend: registered backend CPU (1 devices)
+register_device: registered device CPU (AMD EPYC 9655 96-Core Processor)
+load_backend: failed to find ggml_backend_init in /mnt/raid0/llm/llama.cpp-experimental/build-v8-sanitize/bin/libggml-cpu.so
+"backend_name","op_name","op_params","test_mode","supported","error_message","backend_reg_name"
+"CPU","ARANGE","type=f32,start=0.000000,stop=10.000000,step=1.000000","test","1","",""
+"CPU","ARANGE","type=f32,start=0.000000,stop=1048576.000000,step=1.000000","test","1","",""

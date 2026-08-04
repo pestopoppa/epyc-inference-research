@@ -34,6 +34,8 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import json
+import random
 import unittest
 
 # RELATIVE, not `sys.path.insert` + `from autokernel import …`. Under
@@ -176,6 +178,77 @@ def cell(cell_id: str = "cell-decode-a", **over) -> R.T2Cell:
     if kwargs["non_inferiority"] is None:
         kwargs["non_inferiority"] = non_inferior_evidence()
     return R.T2Cell(**kwargs)
+
+
+def parity_evidence(*, value: float = 0.005, **over) -> R.PhaseEvidence:
+    """A non-inferiority statement that CROSSED at an estimate inside the campaign floor.
+
+    This is the HEALTHY non-inferiority outcome, and the reason the parity state
+    exists at all: with the default `floor=0.01` / `mde=0.02`, |0.005| is inside
+    the calibrated noise floor, so `_resolve_effect` returns
+    `below_noise_floor` — while the non-inferiority e-process against a -0.02
+    null crosses comfortably. Non-inferior AND unorderable, at the same time.
+    """
+    kwargs = dict(value=value, effect_per_block=value,
+                  hypothesis=st.HYPOTHESIS_NON_INFERIORITY, margin=NI_MARGIN)
+    kwargs.update(over)
+    return evidence(**kwargs)
+
+
+def readiness_figure(**over) -> R.ReadinessFigure:
+    kwargs = dict(
+        backend="llama_cpu", phase="decode", protocol_id=DECODE_PROTOCOL,
+        kind=R.ReadinessFigure.KIND_WEAKEST_ORDERABLE_PROTECTED_CELL,
+        cell_id="c", event_id="e", value=0.05, metric="m",
+        metric_direction="higher_better", e_value=200.0, threshold=100.0,
+        mde=0.02, noise_floor=0.01, paired_blocks=16,
+        stratum=api.STRATUM_CONFIRMATION, lcb_descriptive=None,
+        best_cell_id="c", best_value=0.05,
+        protected_cell_count=1, orderable_cell_count=1, parity_cell_ids=(),
+        resolution_census=((api.EFFECT_IMPROVEMENT, 1),),
+        selected_effect_resolution=api.EFFECT_IMPROVEMENT,
+        selected_speed_rank_admissible=True)
+    kwargs.update(over)
+    return R.ReadinessFigure(**kwargs)
+
+
+def parity_figure(**over) -> R.ParityFigure:
+    kwargs = dict(
+        backend="llama_cpu", phase="decode", protocol_id=DECODE_PROTOCOL,
+        kind=R.ParityFigure.KIND_ALL_PROTECTED_CELLS_AT_PARITY,
+        protected_cell_count=1, measured_cell_ids=("c",), parity_cell_ids=("c",),
+        resolution_census=((api.EFFECT_NO_DETECTABLE_DIFFERENCE, 1),),
+        mde=0.018, noise_floor=0.01, sensitivity_cell_id="c",
+        sensitivity_event_id="e", metric="decode_tokens_per_s",
+        metric_direction="higher_better", stratum=api.STRATUM_CONFIRMATION)
+    kwargs.update(over)
+    return R.ParityFigure(**kwargs)
+
+
+def parity_cells() -> tuple:
+    """The green matrix with every PROTECTED cell landing at parity.
+
+    Both sub-floor resolutions are represented on purpose — `below_noise_floor`
+    on the decode cells and `no_detectable_difference` on prefill — because a
+    predicate that only ever sees one of them is a predicate that has been tested
+    against half of what it claims to cover.
+    """
+    decode = cell("cell-decode-a", non_inferiority=parity_evidence(value=0.005),
+                  improvement=evidence(value=0.005, effect_per_block=0.005,
+                                       hypothesis=st.HYPOTHESIS_IMPROVEMENT,
+                                       margin=0.0))
+    decode_co = cell("cell-decode-co", co_residency="co_resident:big-quarters",
+                     event_id="ake-cell-decode-co",
+                     non_inferiority=parity_evidence(value=0.005))
+    prefill = cell("cell-prefill-a", phase="prefill", protocol_id=PREFILL_PROTOCOL,
+                   non_inferiority=parity_evidence(
+                       value=0.015, mde=0.018,
+                       metric="prefill_tokens_per_s",
+                       raw_ref="ak-raw://champion/prefill/blocks.jsonl"))
+    sent_t1 = cell("sent-t1", role=R.CELL_ROLE_NON_TARGET, production_share=0.0)
+    sent_t2 = cell("sent-t2", role=R.CELL_ROLE_DISPATCHER_BOUNDARY,
+                   production_share=0.0)
+    return (decode, decode_co, prefill, sent_t1, sent_t2)
 
 
 def champion(**over) -> R.ChampionLineage:
@@ -498,24 +571,11 @@ class ReadinessIsComputedNotNarratedTest(unittest.TestCase):
 
     def test_the_figure_only_admits_confirmation_stratum_evidence(self):
         with self.assertRaises(R.StratumViolation):
-            R.ReadinessFigure(
-                backend="llama_cpu", phase="decode", protocol_id=DECODE_PROTOCOL,
-                kind=R.ReadinessFigure.KIND_WEAKEST_PROTECTED_CELL,
-                cell_id="c", event_id="e", value=0.05, metric="m",
-                metric_direction="higher_better", e_value=200.0, threshold=100.0,
-                mde=0.02, noise_floor=0.01, paired_blocks=16,
-                stratum=api.STRATUM_SELECTION, lcb_descriptive=None,
-                best_cell_id="c", best_value=0.05)
+            readiness_figure(stratum=api.STRATUM_SELECTION)
 
     def test_a_figure_has_exactly_one_kind_and_it_is_a_selection(self):
         with self.assertRaises(R.CellInadmissible):
-            R.ReadinessFigure(
-                backend="llama_cpu", phase="decode", protocol_id=DECODE_PROTOCOL,
-                kind="pooled_mean", cell_id="c", event_id="e", value=0.05, metric="m",
-                metric_direction="higher_better", e_value=200.0, threshold=100.0,
-                mde=0.02, noise_floor=0.01, paired_blocks=16,
-                stratum=api.STRATUM_CONFIRMATION, lcb_descriptive=None,
-                best_cell_id="c", best_value=0.05)
+            readiness_figure(kind="pooled_mean")
 
     def test_the_figure_hands_the_controller_a_per_phase_series_not_one_number(self):
         signal = green_signal()
@@ -1468,8 +1528,917 @@ class FigureObeysCorrectnessPrecedenceTest(unittest.TestCase):
         """
         signal = green_signal(cells=regressing_prefill_cells())
         figure = signal.figure_for("prefill")
-        self.assertIsNotNone(figure)
+        self.assertIsInstance(figure, R.ReadinessFigure)
         self.assertLess(figure.value, 0.0)
+        # And it is not misfiled as parity: it cleared both the floor and the MDE.
+        self.assertEqual(figure.parity_cell_ids, ())
+
+
+# ===========================================================================
+# The phase figure has THREE states, and none is expressible as another
+#
+# `_RANKABLE_RESOLUTIONS` is `(improvement, regression)` and the evaluator
+# WITHHOLDS a speed rank from anything else — *"below the noise floor is not a
+# small win; it is not a win"*. `_phase_figure` filtered only on
+# `_rank_admissible`, which is about VERDICT VALIDITY, and then ran `min()` over
+# `oriented_effect()`. So it ranked precisely the cells the evaluator refused to
+# rank, and selecting a cell as "the weakest" or "the best" IS a rank.
+#
+# Simply excluding them is the wrong fix ON ITS OWN. Non-inferiority means a
+# HEALTHY result is parity, so the most common healthy outcome would render as
+# `None` — "no protected-cell figure" — an absence. Absences read as coverage
+# gaps, and a coverage gap is what a later session closes by loosening the gate.
+# ===========================================================================
+
+class PhaseFigureHasThreeStatesTest(unittest.TestCase):
+
+    def _parity_signal(self, **over):
+        return green_signal(cells=parity_cells(), **over)
+
+    # --- state 1: nothing measured -----------------------------------------
+
+    def test_nothing_measured_is_no_figure_and_says_so(self):
+        """The state that already existed, kept distinct from the two new ones."""
+        broken = cell("cell-decode-broken", non_inferiority=non_inferior_evidence(
+            value=0.99, effect_per_block=0.99, gates=gates_correctness_failed()))
+        cells = (broken,) + tuple(c for c in green_cells()
+                                  if c.phase != "decode" or c.role != R.CELL_ROLE_PROTECTED)
+        signal = green_signal(cells=cells)
+        self.assertIsNone(signal.figure_for("decode"))
+        self.assertIn("no protected-cell figure",
+                      R.render_readiness_line(signal, "decode"))
+
+    # --- state 2: all at parity --------------------------------------------
+
+    def test_a_phase_entirely_at_parity_is_a_result_not_an_absence(self):
+        figure = self._parity_signal().figure_for("decode")
+        self.assertIsInstance(figure, R.ParityFigure)
+        self.assertEqual(figure.kind, R.ParityFigure.KIND_ALL_PROTECTED_CELLS_AT_PARITY)
+        self.assertEqual(figure.parity_cell_count, 2)
+        self.assertEqual(figure.protected_cell_count, 2)
+        self.assertEqual(figure.resolution_census, ((api.EFFECT_BELOW_NOISE_FLOOR, 2),))
+        # The sensitivity is what makes "at parity" a claim an operator can size.
+        self.assertEqual(figure.mde, 0.02)
+        self.assertEqual(figure.noise_floor, 0.01)
+        self.assertEqual(figure.stratum, api.STRATUM_CONFIRMATION)
+
+    def test_a_parity_phase_is_not_reported_as_an_unmeasured_one(self):
+        """The whole reason state 2 is a type: `None` would read as a gap."""
+        standing = None
+        for candidate in self._parity_signal().phases:
+            if candidate.phase == "decode":
+                standing = candidate
+        self.assertIsNotNone(standing.figure)
+        self.assertEqual(standing.non_inferior.outcome, S.PASS)
+
+    def test_a_parity_figure_has_no_orderable_value_to_read(self):
+        figure = self._parity_signal().figure_for("decode")
+        with self.assertRaises(R.ParityHasNoOrderableValue):
+            figure.value
+        with self.assertRaises(R.ParityHasNoOrderableValue):
+            figure.best_value
+        # `getattr(..., default)` is how an absent attribute becomes a silent
+        # `None`; a raising property closes that door too.
+        with self.assertRaises(R.ParityHasNoOrderableValue):
+            getattr(figure, "value", None)
+        # And the SERIALIZED form carries no `value` key either — not a null one.
+        # `to_dict()` is what survives into a report where the type does not, and
+        # `row.get("value")` there is the same silent `None` one layer out. The
+        # reason travels in its place so the absence is never a mystery.
+        wire = figure.to_dict()
+        self.assertNotIn("value", wire)
+        self.assertFalse(wire["orderable"])
+        self.assertIn("sub-floor does not mean zero", wire["no_orderable_value_reason"])
+
+    def test_the_coarsest_sensitivity_is_the_one_reported_and_it_is_named(self):
+        """A phase is only as sensitive as its blindest cell."""
+        blunt = cell("cell-decode-blunt", event_id="ake-blunt",
+                     non_inferiority=parity_evidence(value=0.005, mde=0.09))
+        sharp = cell("cell-decode-sharp", event_id="ake-sharp",
+                     non_inferiority=parity_evidence(value=0.005, mde=0.02))
+        standing = R.phase_standing(backend="llama_cpu", phase="decode",
+                                    objective=objective(), cells=(sharp, blunt))
+        self.assertEqual(standing.figure.mde, 0.09)
+        self.assertEqual(standing.figure.sensitivity_cell_id, "cell-decode-blunt")
+        self.assertEqual(standing.figure.sensitivity_event_id, "ake-blunt")
+
+    def test_the_sensitivity_cell_does_not_depend_on_the_order_cells_arrive_in(self):
+        blunt = cell("cell-decode-blunt", event_id="ake-blunt",
+                     non_inferiority=parity_evidence(value=0.005, mde=0.09))
+        sharp = cell("cell-decode-sharp", event_id="ake-sharp",
+                     non_inferiority=parity_evidence(value=0.005, mde=0.02))
+        forward = R.phase_standing(backend="llama_cpu", phase="decode",
+                                   objective=objective(), cells=(sharp, blunt))
+        reverse = R.phase_standing(backend="llama_cpu", phase="decode",
+                                   objective=objective(), cells=(blunt, sharp))
+        self.assertEqual(forward.figure.sensitivity_cell_id,
+                         reverse.figure.sensitivity_cell_id)
+
+    # --- state 3: orderable, and the MIXED case -----------------------------
+
+    def test_a_sub_floor_cell_is_never_selected_as_the_weakest(self):
+        """The defect itself. The sub-floor cell's 0.005 is the lowest number here.
+
+        Before the fix `min()` ran over every admissible cell, so the estimate the
+        evaluator refused to rank became the figure, the `+25%` comparison, the
+        rendered line and the plateau series' number.
+        """
+        parity = cell("cell-parity", event_id="ake-parity",
+                      non_inferiority=parity_evidence(value=0.005))
+        orderable = cell("cell-orderable", event_id="ake-orderable",
+                         non_inferiority=non_inferior_evidence(value=0.06),
+                         improvement=improving_evidence(value=0.06))
+        standing = R.phase_standing(backend="llama_cpu", phase="decode",
+                                    objective=objective(), cells=(parity, orderable))
+        figure = standing.figure
+        self.assertIsInstance(figure, R.ReadinessFigure)
+        self.assertEqual(figure.cell_id, "cell-orderable")
+        self.assertEqual(figure.value, 0.06)
+        self.assertNotEqual(figure.value, 0.005)
+        self.assertEqual(figure.best_cell_id, "cell-orderable")
+
+    def test_a_sub_floor_cell_is_never_selected_as_the_best_either(self):
+        """`max()` leaked the same cells `min()` did, one direction over."""
+        parity = cell("cell-parity", event_id="ake-parity",
+                      non_inferiority=parity_evidence(value=0.009))
+        orderable = cell("cell-orderable", event_id="ake-orderable",
+                         non_inferiority=non_inferior_evidence(value=0.03),
+                         improvement=improving_evidence(value=0.03))
+        standing = R.phase_standing(backend="llama_cpu", phase="decode",
+                                    objective=objective(), cells=(orderable, parity))
+        self.assertEqual(standing.figure.best_cell_id, "cell-orderable")
+        self.assertEqual(standing.figure.best_value, 0.03)
+
+    def test_the_mixed_case_discloses_the_cells_the_figure_does_not_cover(self):
+        """An undisclosed exclusion is how a figure becomes a lie."""
+        parity = cell("cell-parity", event_id="ake-parity",
+                      non_inferiority=parity_evidence(value=0.005))
+        orderable = cell("cell-orderable", event_id="ake-orderable",
+                         non_inferiority=non_inferior_evidence(value=0.06),
+                         improvement=improving_evidence(value=0.06))
+        standing = R.phase_standing(backend="llama_cpu", phase="decode",
+                                    objective=objective(), cells=(parity, orderable))
+        figure = standing.figure
+        self.assertEqual(figure.protected_cell_count, 2)
+        self.assertEqual(figure.orderable_cell_count, 1)
+        self.assertEqual(figure.parity_cell_ids, ("cell-parity",))
+        self.assertEqual(figure.parity_cell_count, 1)
+        self.assertIn((api.EFFECT_BELOW_NOISE_FLOOR, 1), figure.resolution_census)
+        self.assertIn((api.EFFECT_IMPROVEMENT, 1), figure.resolution_census)
+
+    def test_the_figure_cannot_be_built_without_disclosing_its_scope(self):
+        """A default on the disclosure is a disclosure that will be omitted."""
+        with self.assertRaises(TypeError):
+            R.ReadinessFigure(
+                backend="llama_cpu", phase="decode", protocol_id=DECODE_PROTOCOL,
+                kind=R.ReadinessFigure.KIND_WEAKEST_ORDERABLE_PROTECTED_CELL,
+                cell_id="c", event_id="e", value=0.05, metric="m",
+                metric_direction="higher_better", e_value=200.0, threshold=100.0,
+                mde=0.02, noise_floor=0.01, paired_blocks=16,
+                stratum=api.STRATUM_CONFIRMATION, lcb_descriptive=None,
+                best_cell_id="c", best_value=0.05)
+
+    def test_the_disclosure_cannot_describe_more_cells_than_the_phase_has(self):
+        with self.assertRaises(R.CellInadmissible):
+            readiness_figure(protected_cell_count=1, orderable_cell_count=1,
+                             parity_cell_ids=("p1", "p2"))
+
+    def test_the_figure_kind_names_the_selection_it_actually_ran(self):
+        """"Weakest protected cell" and "weakest ORDERABLE protected cell" differ."""
+        figure = green_signal().figure_for("decode")
+        self.assertEqual(figure.kind, "weakest_orderable_protected_cell")
+
+    # --- the three states render three different lines ----------------------
+
+    def test_the_three_states_render_three_visibly_different_lines(self):
+        broken = cell("cell-decode-broken", non_inferiority=non_inferior_evidence(
+            value=0.99, effect_per_block=0.99, gates=gates_correctness_failed()))
+        nothing = green_signal(
+            cells=(broken,) + tuple(c for c in green_cells()
+                                    if c.phase != "decode"
+                                    or c.role != R.CELL_ROLE_PROTECTED))
+        parity = self._parity_signal()
+        orderable = green_signal()
+        lines = [R.render_readiness_line(nothing, "decode"),
+                 R.render_readiness_line(parity, "decode"),
+                 R.render_readiness_line(orderable, "decode")]
+        self.assertEqual(len(set(lines)), 3)
+        self.assertIn("no protected-cell figure", lines[0])
+        # A parity line reads like a RESULT, not like a gap.
+        self.assertIn("2/2 protected cells at parity", lines[1])
+        self.assertIn("nothing above +/-0.02 distinguishable", lines[1])
+        self.assertNotIn("no protected-cell figure", lines[1])
+        self.assertIn("weakest orderable protected cell", lines[2])
+
+    def test_the_rendered_orderable_line_discloses_the_parity_exclusion(self):
+        parity = cell("cell-parity", event_id="ake-parity",
+                      non_inferiority=parity_evidence(value=0.005))
+        signal = green_signal(cells=(parity,) + green_cells())
+        line = R.render_readiness_line(signal, "decode")
+        self.assertIn("1 at parity", line)
+        self.assertIn("excluded_at_parity=['cell-parity']", line)
+
+    # --- the analysis view and the trade read the same three states ---------
+
+    def test_the_analysis_view_reports_a_parity_row_as_parity_not_as_nothing(self):
+        report = R.compute_readiness_report(
+            signals=(self._parity_signal(),), campaign_id=CAMPAIGN, computed_at=LATER)
+        rows = {row["phase"]: row for row in R.cross_backend_analysis_view(report).rows}
+        self.assertIsNone(rows["decode"]["figure_value"])
+        self.assertEqual(rows["decode"]["figure_kind"],
+                         R.ParityFigure.KIND_ALL_PROTECTED_CELLS_AT_PARITY)
+        self.assertEqual(rows["decode"]["figure_parity_cell_count"], 2)
+
+    def test_the_magnitude_accessor_answers_for_all_three_states(self):
+        self.assertIsNone(R._orderable_value(None))
+        self.assertIsNone(R._orderable_value(parity_figure()))
+        self.assertEqual(R._orderable_value(readiness_figure()), 0.05)
+
+    def test_a_phase_standing_refuses_a_figure_of_an_unknown_shape(self):
+        with self.assertRaises(R.CellInadmissible):
+            R.PhaseStanding(
+                backend="llama_cpu", phase="decode", protocol_id=DECODE_PROTOCOL,
+                cells=(), non_inferior=S.Check(S.PASS), improved=S.Check(S.PASS),
+                figure=0.05, blockers=())
+
+
+class TheParityClaimIsQuotedAtItsBindingSensitivityTest(unittest.TestCase):
+    """"12/12 at parity" is unfalsifiable unless the number beside it is the RIGHT one.
+
+    A cell is sub-floor for one of two reasons and they bind at different
+    numbers: `below_noise_floor` bounds the magnitude by the calibrated phi,
+    `no_detectable_difference` bounds it by the MDE. Ranking the phase's cells by
+    MDE and then publishing that cell's floor beside it answers two questions
+    with two different cells' numbers, and it quotes the parity claim TIGHTER
+    than the evidence whenever some other cell's floor is the coarsest thing in
+    the phase.
+    """
+
+    def _two_cells(self):
+        """A phase whose blindest cell is blind on the FLOOR, not on the MDE.
+
+        `cell-decode-co` is the co-resident cell: a large calibrated phi is
+        exactly what a noisy co-residency regime produces, and it measured a
+        five-percent swing that its own calibration cannot separate from noise.
+        `cell-decode-a` has the coarser MDE and a tiny floor.
+        """
+        sharp_floor = cell("cell-decode-a", event_id="ake-sharp-floor",
+                           non_inferiority=parity_evidence(value=0.005, mde=0.02,
+                                                           floor=0.006))
+        blunt_floor = cell("cell-decode-co", event_id="ake-blunt-floor",
+                           co_residency="co_resident:big-quarters",
+                           non_inferiority=parity_evidence(value=0.05, mde=0.018,
+                                                           floor=0.30))
+        return sharp_floor, blunt_floor
+
+    def _figure(self):
+        sharp_floor, blunt_floor = self._two_cells()
+        standing = R.phase_standing(backend="llama_cpu", phase="decode",
+                                    objective=objective(),
+                                    cells=(sharp_floor, blunt_floor))
+        return standing.figure
+
+    def test_the_cell_that_binds_the_claim_is_the_one_published(self):
+        figure = self._figure()
+        self.assertIsInstance(figure, R.ParityFigure)
+        # The blindest cell is blind at 0.30, not at the 0.02 the coarsest MDE
+        # would have reported — and its floor and its MDE come from ITS event.
+        self.assertEqual(figure.sensitivity_cell_id, "cell-decode-co")
+        self.assertEqual(figure.sensitivity_event_id, "ake-blunt-floor")
+        self.assertEqual(figure.noise_floor, 0.30)
+        self.assertEqual(figure.mde, 0.018)
+        self.assertEqual(figure.sensitivity_bound, 0.30)
+
+    def test_the_two_published_numbers_come_from_one_cell(self):
+        """Never an MDE from one cell beside a floor from another."""
+        figure = self._figure()
+        by_id = {c.cell_id: c for c in self._two_cells()}
+        source = by_id[figure.sensitivity_cell_id]
+        self.assertEqual(figure.mde, source.estimate.mde)
+        self.assertEqual(figure.noise_floor, source.estimate.noise_floor)
+
+    def test_the_operator_line_quotes_the_binding_bound_not_the_coarsest_mde(self):
+        signal = green_signal(cells=self._two_cells() + tuple(
+            c for c in parity_cells() if c.phase != "decode"))
+        line = R.render_readiness_line(signal, "decode")
+        self.assertIn("nothing above +/-0.3 distinguishable", line)
+        self.assertNotIn("nothing above +/-0.02", line)
+        self.assertIn("sensitivity_cell=cell-decode-co", line)
+
+    def test_a_sub_floor_cell_can_hold_a_magnitude_the_mde_alone_would_hide(self):
+        """The fixture's own honesty: without this the test above proves nothing."""
+        _sharp, blunt = self._two_cells()
+        self.assertEqual(abs(blunt.oriented_effect()), 0.05)
+        self.assertEqual(blunt.non_inferiority.verdict.effect_resolution,
+                         api.EFFECT_BELOW_NOISE_FLOOR)
+        # 0.05 is well ABOVE the 0.02 MDE the old selection would have published.
+        self.assertGreater(abs(blunt.oriented_effect()), 0.02)
+
+    def test_the_bound_is_the_larger_of_the_pair_whichever_one_that_is(self):
+        self.assertEqual(parity_figure(mde=0.018, noise_floor=0.01).sensitivity_bound,
+                         0.018)
+        self.assertEqual(parity_figure(mde=0.018, noise_floor=0.30).sensitivity_bound,
+                         0.30)
+
+    def test_the_bound_rides_the_wire_beside_the_pair_it_was_selected_from(self):
+        payload = parity_figure(mde=0.018, noise_floor=0.30).to_dict()
+        self.assertEqual(payload["sensitivity_bound"], 0.30)
+        self.assertEqual(payload["mde"], 0.018)
+        self.assertEqual(payload["noise_floor"], 0.30)
+
+
+class AParityResultDistinguishesUnchangedFromUnmeasurableTest(unittest.TestCase):
+    """"Nothing moved" and "we could not have seen it move" have the same shape.
+
+    They are different facts, and a parity line that renders both as "at parity"
+    hands the operator an underpowered round as a clean result. The campaign's
+    own advisory reference gain is the size the search is looking for and it is
+    already carried on the figure, so saying which of the two facts this is needs
+    no new input.
+    """
+
+    def _policy(self, gain: float = 0.25) -> R.ReferencePolicy:
+        return R.ReferencePolicy(reference_point_gain=gain, reference_lcb_gain=0.20)
+
+    def _line(self, *, floor: float, gain: float = 0.25) -> str:
+        coarse = cell("cell-decode-a", non_inferiority=parity_evidence(
+            value=0.005, mde=0.018, floor=floor))
+        signal = green_signal(cells=(coarse,) + tuple(
+            c for c in parity_cells() if c.cell_id != "cell-decode-a"),
+            reference=self._policy(gain))
+        return R.render_readiness_line(signal, "decode")
+
+    def test_a_run_too_coarse_to_see_the_target_says_so_on_the_line(self):
+        line = self._line(floor=0.40)
+        self.assertIn("UNDERPOWERED FOR THIS CAMPAIGN", line)
+        self.assertIn("cannot tell 'no effect' from the effect the campaign is looking "
+                      "for", line)
+        self.assertIn("statement about the measurement, not about the candidate", line)
+
+    def test_a_run_sensitive_enough_says_the_opposite_and_is_not_flagged(self):
+        """The compliant control: a powered parity round must not read as a defect."""
+        line = self._line(floor=0.01)
+        self.assertNotIn("UNDERPOWERED", line)
+        self.assertIn("would have been visible at this sensitivity", line)
+        self.assertIn("a result about the candidate", line)
+
+    def test_the_question_is_answerable_on_the_figure_not_only_in_prose(self):
+        figure = parity_figure(mde=0.018, noise_floor=0.40)
+        self.assertFalse(figure.could_have_detected(0.25))
+        self.assertTrue(figure.could_have_detected(0.50))
+        # Exactly at the bound is NOT detectable: the bound is the magnitude the
+        # cell could not tell from nothing.
+        self.assertFalse(figure.could_have_detected(0.40))
+
+    def test_the_power_clause_decides_nothing(self):
+        """AK-D3: the reference figure is advisory. Labelling it cannot make it a gate."""
+        coarse = cell("cell-decode-a", non_inferiority=parity_evidence(
+            value=0.005, mde=0.018, floor=0.40))
+        signal = green_signal(cells=(coarse,) + tuple(
+            c for c in parity_cells() if c.cell_id != "cell-decode-a"),
+            reference=self._policy())
+        figure = signal.figure_for("decode")
+        self.assertEqual(figure.reference.point_at_or_above.outcome, S.COULD_NOT_CHECK)
+        self.assertIs(figure.reference.advisory, True)
+
+    def test_a_campaign_with_no_reference_policy_gets_no_clause_rather_than_a_guess(self):
+        line = R.render_readiness_line(green_signal(cells=parity_cells()), "decode")
+        self.assertNotIn("UNDERPOWERED", line)
+        self.assertNotIn("would have been visible", line)
+
+
+class TheFigureNamesTheResolutionItsNumberCameFromTest(unittest.TestCase):
+    """`kind` says "weakest ORDERABLE protected cell". Which cell, on what basis?
+
+    `evidence_below_threshold` IS admitted to the ordering here — deliberately,
+    because dropping it would make a measured degradation invisible — and `api`
+    sets `speed_rank_admissible=False` on exactly that resolution. So the figure
+    can be selected from a cell the evaluator denied a speed rank, and until this
+    disclosure existed the only trace was a `resolution_census` in the trailer:
+    faced with `{evidence_below_threshold:1, improvement:1}` an operator could
+    not tell which of the two supplied the headline number. The word "orderable"
+    in `kind` was the figure vouching for itself.
+    """
+
+    def _cells(self):
+        low = cell("cell-decode-a", non_inferiority=non_inferior_evidence(
+            value=-0.03, effect_per_block=-0.03))
+        high = cell("cell-decode-co", co_residency="co_resident:big-quarters",
+                    event_id="ake-cell-decode-co",
+                    non_inferiority=non_inferior_evidence(value=0.06,
+                                                          effect_per_block=0.06),
+                    improvement=improving_evidence())
+        return low, high
+
+    def _mixed(self):
+        return green_signal(cells=self._cells() + green_cells()[2:])
+
+    def test_the_selected_cells_resolution_is_carried_and_it_is_the_right_one(self):
+        figure = self._mixed().figure_for("decode")
+        self.assertEqual(figure.cell_id, "cell-decode-a")
+        self.assertEqual(figure.selected_effect_resolution,
+                         api.EFFECT_EVIDENCE_BELOW_THRESHOLD)
+        # The census alone could not answer this: BOTH resolutions are in it.
+        self.assertEqual(dict(figure.resolution_census),
+                         {api.EFFECT_EVIDENCE_BELOW_THRESHOLD: 1,
+                          api.EFFECT_IMPROVEMENT: 1})
+
+    def test_the_evaluators_own_speed_rank_answer_rides_with_it(self):
+        """Read off the verdict, not re-derived: `api` is the one that decides."""
+        low, _high = self._cells()
+        verdict = low.non_inferiority.verdict
+        figure = self._mixed().figure_for("decode")
+        self.assertEqual(figure.cell_id, low.cell_id)
+        self.assertFalse(verdict.speed_rank_admissible)
+        self.assertIs(figure.selected_speed_rank_admissible, False)
+        with self.assertRaises(api.SpeedRankUnavailable):
+            verdict.rank_key()
+
+    def test_the_rendered_line_says_so_where_the_number_is(self):
+        rendered = R.render_readiness_line(self._mixed(), "decode")
+        self.assertIn(api.EFFECT_EVIDENCE_BELOW_THRESHOLD, rendered)
+        self.assertIn("evaluator withheld its speed rank", rendered)
+        self.assertIn("selected_speed_rank_admissible=False", rendered)
+
+    def test_the_serialised_figure_carries_both_facts(self):
+        wire = self._mixed().figure_for("decode").to_dict()
+        self.assertEqual(wire["selected_effect_resolution"],
+                         api.EFFECT_EVIDENCE_BELOW_THRESHOLD)
+        self.assertIs(wire["selected_speed_rank_admissible"], False)
+
+    def test_a_real_win_reports_itself_as_one(self):
+        """The control. The disclosure must not label every figure as suspect."""
+        figure = green_signal().figure_for("decode")
+        self.assertEqual(figure.selected_effect_resolution, api.EFFECT_IMPROVEMENT)
+        self.assertIs(figure.selected_speed_rank_admissible, True)
+        rendered = R.render_readiness_line(green_signal(), "decode")
+        self.assertNotIn("evaluator withheld its speed rank", rendered)
+
+    def test_a_figure_cannot_claim_a_sub_floor_cell_supplied_its_number(self):
+        """The exclusion rule and the disclosure cannot disagree."""
+        for resolution in api.SUB_FLOOR_RESOLUTIONS:
+            with self.assertRaises(R.CellInadmissible, msg=resolution) as ctx:
+                readiness_figure(selected_effect_resolution=resolution,
+                                 resolution_census=((resolution, 1),))
+            self.assertIn("sub-floor", str(ctx.exception))
+
+    def test_the_disclosure_must_appear_in_the_figures_own_census(self):
+        with self.assertRaises(R.CellInadmissible):
+            readiness_figure(selected_effect_resolution=api.EFFECT_REGRESSION)
+
+    def test_an_unknown_resolution_is_refused_by_the_evaluators_vocabulary(self):
+        with self.assertRaises(ValueError):
+            readiness_figure(selected_effect_resolution="nearly_a_win")
+
+
+class TheThreeStatesSurviveSerialisationTest(unittest.TestCase):
+    """A distinction that holds in Python and collapses in JSON is not a distinction.
+
+    `orderable` is the discriminator a wire reader branches on, and it is carried
+    on BOTH figures. A key present only on the negative side turns
+    `payload.get("orderable", False)` into "no figure is ever orderable", which
+    empties the orderable set silently instead of failing.
+    """
+
+    def test_the_orderable_discriminator_is_present_on_both_figures(self):
+        self.assertIs(readiness_figure().to_dict()["orderable"], True)
+        self.assertIs(parity_figure().to_dict()["orderable"], False)
+
+    def test_a_defaulting_wire_reader_cannot_misread_an_orderable_figure(self):
+        for payload, expected in ((readiness_figure().to_dict(), True),
+                                  (parity_figure().to_dict(), False)):
+            self.assertIs(payload.get("orderable", False), expected)
+
+    def test_the_three_states_serialise_to_three_distinguishable_payloads(self):
+        broken = cell("cell-decode-broken", non_inferiority=non_inferior_evidence(
+            value=0.99, effect_per_block=0.99, gates=gates_correctness_failed()))
+        nothing = green_signal(
+            cells=(broken,) + tuple(c for c in green_cells()
+                                    if c.phase != "decode"
+                                    or c.role != R.CELL_ROLE_PROTECTED))
+        states = []
+        for signal in (nothing, green_signal(cells=parity_cells()), green_signal()):
+            for standing in signal.to_dict()["phases"]:
+                if standing["phase"] == "decode":
+                    states.append(standing["figure"])
+        self.assertIsNone(states[0])
+        self.assertIs(states[1]["orderable"], False)
+        self.assertIs(states[2]["orderable"], True)
+        # Round-trippable as JSON, which is the form the operator surface reads.
+        self.assertEqual(len({json.dumps(s, sort_keys=True) for s in states}), 3)
+
+
+class ParityIsNotAnImprovementTest(unittest.TestCase):
+    """§1.6 is non-inferiority PLUS improvement. Parity is the first, never the second.
+
+    A phase entirely at parity is non-inferior and NOT improved, and the two
+    halves must not be able to be satisfied by the same evidence — otherwise a
+    backend that changed nothing at all would meet the objective.
+    """
+
+    def test_a_parity_cell_cannot_pass_the_improvement_check(self):
+        at_parity = cell(
+            "cell-parity",
+            non_inferiority=parity_evidence(value=0.005),
+            improvement=evidence(value=0.005, effect_per_block=0.005,
+                                 hypothesis=st.HYPOTHESIS_IMPROVEMENT, margin=0.0))
+        standing = R.cell_standing(at_parity)
+        self.assertEqual(standing.non_inferiority.outcome, S.PASS)
+        self.assertNotEqual(standing.improvement.outcome, S.PASS)
+
+    def test_a_phase_entirely_at_parity_does_not_improve(self):
+        signal = green_signal(cells=parity_cells())
+        for standing in signal.phases:
+            self.assertEqual(standing.non_inferior.outcome, S.PASS, standing.phase)
+            self.assertNotEqual(standing.improved.outcome, S.PASS, standing.phase)
+
+    def test_a_backend_entirely_at_parity_does_not_meet_the_objective(self):
+        signal = green_signal(cells=parity_cells())
+        self.assertNotEqual(signal.standing, R.STANDING_MET)
+        self.assertNotEqual(signal.improvement_backend_wide.outcome, S.PASS)
+
+    def test_the_compliant_path_still_reaches_the_objective(self):
+        """The control. A real improvement must still pass, or the guard is a wall."""
+        signal = green_signal()
+        self.assertEqual(signal.standing, R.STANDING_MET, signal.blockers)
+        self.assertEqual(signal.improvement_backend_wide.outcome, S.PASS)
+
+    def test_the_improvement_half_never_reads_a_parity_figure_as_a_gain(self):
+        """A parity phase contributes no gain to a phase trade either."""
+        regressing = cell(
+            "cell-prefill-a", phase="prefill", protocol_id=PREFILL_PROTOCOL,
+            non_inferiority=non_inferior_evidence(
+                value=-0.05, effect_per_block=-0.05, metric="prefill_tokens_per_s",
+                raw_ref="ak-raw://champion/prefill/blocks.jsonl"))
+        cells = (cell("cell-decode-a", non_inferiority=parity_evidence(value=0.005)),
+                 cell("cell-decode-co", co_residency="co_resident:big-quarters",
+                      event_id="ake-cell-decode-co",
+                      non_inferiority=parity_evidence(value=0.005)),
+                 regressing) + green_cells()[3:]
+        exception = R.PhaseTradeException(
+            regressing_phase="prefill", band=(-0.08, -0.01), expected_gain=0.05,
+            roles=("worker",), declared_at=BEFORE)
+        signal = green_signal(cells=cells,
+                              objective=objective(phase_trade_exception=exception))
+        self.assertIsNone(signal.phase_trade.observed_gain)
+        self.assertEqual(signal.phase_trade.status,
+                         R.PhaseTradeAssessment.STATUS_OUTSIDE_BAND)
+
+    def test_a_trade_gain_is_not_read_off_a_phase_whose_figure_is_parity(self):
+        """The phase-trade arithmetic must go through `_orderable_value`, always.
+
+        The reachable route to this combination was closed one layer down (see
+        `InvertedSensitivityIsNotOneWindowTest`), so the standings are built
+        DIRECTLY here rather than through a cell fixture. That is deliberate: the
+        guard is defence in depth for a shape the cell door now refuses, and a
+        guard whose only test was the fixture that stopped being constructible is
+        a guard that quietly stops being tested. `.figure.value` on either side
+        raises `ParityHasNoOrderableValue`; `_orderable_value` answers `None`.
+        """
+        exception = R.PhaseTradeException(
+            regressing_phase="prefill", band=(-0.08, -0.01), expected_gain=0.05,
+            roles=("worker",), declared_at=BEFORE)
+        regressing = R.PhaseStanding(
+            backend="llama_cpu", phase="prefill", protocol_id=PREFILL_PROTOCOL,
+            cells=(), non_inferior=S.Check(S.FAIL, ("a detectable degradation",)),
+            improved=S.Check(S.COULD_NOT_CHECK, ("no improvement evidence",)),
+            figure=parity_figure(phase="prefill", protocol_id=PREFILL_PROTOCOL),
+            blockers=())
+        gaining = R.PhaseStanding(
+            backend="llama_cpu", phase="decode", protocol_id=DECODE_PROTOCOL,
+            cells=(), non_inferior=S.Check(S.PASS, ("crossed",)),
+            improved=S.Check(S.PASS, ("crossed",)),
+            figure=parity_figure(), blockers=())
+        assessment = R._assess_phase_trade(
+            objective(phase_trade_exception=exception), (regressing, gaining))
+        self.assertIsNone(assessment.observed)
+        self.assertIsNone(assessment.observed_gain)
+        self.assertEqual(assessment.status,
+                         R.PhaseTradeAssessment.STATUS_OUTSIDE_BAND)
+
+
+class InvertedSensitivityIsNotOneWindowTest(unittest.TestCase):
+    """The two halves of a cell may differ in MDE, but they may not INVERT.
+
+    `_require_same_window` bound the estimate, the blocks, the stratum and the
+    raw samples — but not the metric, not the campaign noise floor, and not the
+    direction the two MDEs may sit in. `statistics.BlockReduction` reads metric
+    and direction off ONE `EvaluationRequest` and takes
+    `noise_floor=cal.noise_floor_phi`, a campaign A/A calibration that knows
+    nothing about which null was tested, so halves that disagree about either are
+    reductions of two windows. And `solve_mde` evaluates both halves on the SAME
+    resampled windows, differing only in `null_boundary_for()`: non-inferiority
+    aims at `-margin`, improvement at `0`, so the non-inferiority MDE comes back
+    at or below the improvement MDE — measured here, the gap is the margin.
+
+    The consequence of leaving the inversion open was not abstract: it is the one
+    shape that produced `standing=objective_met` on a backend whose every phase
+    line read *"protected cells at parity — measured, no detectable difference at
+    any of them"*. One release line asserting both that a detectable improvement
+    was resolved and that nothing was detectable.
+    """
+
+    def _inverted(self, **over):
+        kwargs = dict(
+            non_inferiority=evidence(
+                value=0.06, effect_per_block=0.06, mde=0.09,
+                hypothesis=st.HYPOTHESIS_NON_INFERIORITY, margin=NI_MARGIN),
+            improvement=evidence(
+                value=0.06, effect_per_block=0.06, mde=0.02,
+                hypothesis=st.HYPOTHESIS_IMPROVEMENT, margin=0.0))
+        kwargs.update(over)
+        return kwargs
+
+    def test_the_producer_never_emits_an_inverted_pair(self):
+        """The invariant is READ OFF `statistics.solve_mde`, not asserted here."""
+        rule = st.StoppingRule(
+            rule_id="ak-stop-1", final_table="t1a_paired_block_table",
+            decisions=(("evidence_threshold_crossed", "compose_into_champion_lineage"),
+                       ("extension_exhausted", "abandon"),
+                       ("block_ceiling_reached", "abandon")),
+            extension=st.BoundedExtension(max_rounds=1, blocks_per_round=5),
+            max_blocks_per_candidate=20, futility=None)
+        rng = random.Random(7)
+        for trial in range(3):
+            aa = tuple(rng.gauss(0.0, 0.03) for _ in range(64))
+            shared = dict(block_count=16, rule=rule, construction=CONSTRUCTION,
+                          threshold=THRESHOLD, campaign_seed="seed-redteam")
+            ni = st.solve_mde(aa, hypothesis=st.HYPOTHESIS_NON_INFERIORITY,
+                              margin=NI_MARGIN, **shared)
+            imp = st.solve_mde(aa, hypothesis=st.HYPOTHESIS_IMPROVEMENT,
+                               margin=0.0, **shared)
+            self.assertTrue(ni.found and imp.found)
+            self.assertLessEqual(ni.value, imp.value, f"trial {trial}")
+
+    def test_a_coarser_non_inferiority_mde_is_refused_as_two_windows(self):
+        with self.assertRaises(R.CellInadmissible) as ctx:
+            cell("cell-inverted", **self._inverted())
+        self.assertIn("COARSER", str(ctx.exception))
+
+    def test_the_inverted_pair_was_how_an_all_parity_backend_met_the_objective(self):
+        """The end-to-end consequence, asserted at the door that now refuses it."""
+        with self.assertRaises(R.CellInadmissible):
+            green_signal(cells=(
+                cell("cell-decode-a", **self._inverted()),
+                cell("cell-decode-co", co_residency="co_resident:big-quarters",
+                     event_id="ake-cell-decode-co",
+                     non_inferiority=parity_evidence(value=0.005)),
+                cell("cell-prefill-a", phase="prefill",
+                     protocol_id=PREFILL_PROTOCOL,
+                     non_inferiority=parity_evidence(
+                         value=0.015, mde=0.018, metric="prefill_tokens_per_s",
+                         raw_ref="ak-raw://champion/prefill/blocks.jsonl")),
+            ) + green_cells()[3:])
+
+    def test_a_sharper_improvement_mde_in_the_other_direction_is_admissible(self):
+        """The control. The MDEs are NOT bound equal — only stopped from inverting."""
+        admissible = cell("cell-ok", **self._inverted(
+            non_inferiority=evidence(
+                value=0.06, effect_per_block=0.06, mde=0.02,
+                hypothesis=st.HYPOTHESIS_NON_INFERIORITY, margin=NI_MARGIN),
+            improvement=evidence(
+                value=0.06, effect_per_block=0.06, mde=0.04,
+                hypothesis=st.HYPOTHESIS_IMPROVEMENT, margin=0.0)))
+        self.assertEqual(R.cell_standing(admissible).improvement.outcome, S.PASS)
+
+    def test_two_halves_cannot_disagree_about_the_campaign_noise_floor(self):
+        """The floor is the boundary between "no win" and a magnitude.
+
+        Halves that disagree about it let one estimate be INSIDE the campaign
+        floor for the non-inferiority statement — sub-floor, off the ordering,
+        rendered as parity — and orderable for the improvement statement, which
+        is ranking noise through whichever door was left open.
+        """
+        with self.assertRaises(R.CellInadmissible) as ctx:
+            cell("cell-two-floors",
+                 non_inferiority=parity_evidence(value=0.005),
+                 improvement=evidence(value=0.005, effect_per_block=0.06,
+                                      floor=0.001, mde=0.002,
+                                      hypothesis=st.HYPOTHESIS_IMPROVEMENT,
+                                      margin=0.0))
+        self.assertIn("noise floor", str(ctx.exception))
+
+    def test_two_halves_cannot_describe_two_different_metrics(self):
+        with self.assertRaises(R.CellInadmissible) as ctx:
+            cell("cell-two-metrics",
+                 non_inferiority=non_inferior_evidence(),
+                 improvement=improving_evidence(metric="prefill_tokens_per_s"))
+        self.assertIn("metric", str(ctx.exception))
+
+    def test_two_halves_cannot_orient_one_estimate_two_ways(self):
+        with self.assertRaises(R.CellInadmissible) as ctx:
+            cell("cell-two-directions",
+                 non_inferiority=non_inferior_evidence(),
+                 improvement=improving_evidence(direction="lower_better"))
+        self.assertIn("direction", str(ctx.exception))
+
+    def test_the_compliant_cell_is_still_admissible(self):
+        """The control for all four bindings at once."""
+        self.assertEqual(
+            R.cell_standing(cell("cell-ok", improvement=improving_evidence())
+                            ).improvement.outcome, S.PASS)
+
+
+class TheAdvisoryReferenceRefusesToJudgeParityTest(unittest.TestCase):
+    """Comparing "no orderable effect" to +25% is a category error.
+
+    A FAIL there would read as a regression against the reference, and no
+    regression was measured — the campaign measured nothing that can be placed on
+    that axis at all.
+    """
+
+    POLICY = R.ReferencePolicy(reference_point_gain=0.25, reference_lcb_gain=0.20)
+
+    def test_a_parity_figure_answers_could_not_check_and_nothing_else(self):
+        figure = green_signal(cells=parity_cells(),
+                              reference=self.POLICY).figure_for("decode")
+        self.assertEqual(figure.reference.point_at_or_above.outcome, S.COULD_NOT_CHECK)
+        self.assertEqual(figure.reference.lcb_at_or_above.outcome, S.COULD_NOT_CHECK)
+        self.assertNotEqual(figure.reference.point_at_or_above.outcome, S.FAIL)
+        self.assertIsNone(figure.reference.observed_point)
+
+    def test_a_descriptive_lcb_from_a_sub_floor_estimate_is_not_compared(self):
+        """An LCB beside a threshold is a number something will eventually compare."""
+        cells = (cell("cell-decode-a",
+                      non_inferiority=parity_evidence(value=0.005, lcb=0.9)),
+                 cell("cell-decode-co", co_residency="co_resident:big-quarters",
+                      event_id="ake-cell-decode-co",
+                      non_inferiority=parity_evidence(value=0.005, lcb=0.9))
+                 ) + parity_cells()[2:]
+        figure = green_signal(cells=cells, reference=self.POLICY).figure_for("decode")
+        self.assertEqual(figure.reference.lcb_at_or_above.outcome, S.COULD_NOT_CHECK)
+        self.assertIsNone(figure.reference.observed_lcb_descriptive)
+
+    def test_an_orderable_figure_is_still_compared(self):
+        """The control: the advisory comparison must not go silent everywhere."""
+        figure = green_signal(reference=self.POLICY).figure_for("decode")
+        self.assertIn(figure.reference.point_at_or_above.outcome, (S.PASS, S.FAIL))
+
+    def test_a_value_and_a_reason_there_is_none_cannot_both_be_supplied(self):
+        with self.assertRaises(R.CellInadmissible):
+            R._compare_reference(0.05, None, policy=self.POLICY,
+                                 effect_scale=st.EFFECT_SCALE_RELATIVE,
+                                 no_value_reason="there is no orderable effect")
+
+
+class TheStopRuleCannotReadParityAsAMagnitudeTest(unittest.TestCase):
+    """`observation_fields()` IS the series the plateau/stop rule runs over.
+
+    A boolean flag beside a number would leave the consumer free not to check it.
+    The parity mapping carries no number at all, so the wrong reading is not
+    discouraged — it is unavailable.
+    """
+
+    def test_a_parity_phase_emits_no_readiness_number(self):
+        fields = green_signal(cells=parity_cells()).figure_for(
+            "decode").observation_fields()
+        self.assertNotIn("readiness", fields)
+        self.assertEqual(set(fields), {"protected_cells", "cells_at_parity", "mde",
+                                       "noise_floor", "sensitivity_bound",
+                                       "reference_gain", "source_event_id", "stratum"})
+        self.assertEqual(fields["cells_at_parity"], 2)
+
+    def test_no_value_in_the_parity_mapping_can_be_mistaken_for_readiness(self):
+        """Every number in it is a COUNT or a SENSITIVITY, never an effect."""
+        figure = green_signal(cells=parity_cells()).figure_for("decode")
+        fields = figure.observation_fields()
+        self.assertEqual(fields["mde"], figure.mde)
+        self.assertEqual(fields["noise_floor"], figure.noise_floor)
+        self.assertEqual(fields["protected_cells"], figure.protected_cell_count)
+
+    def test_an_orderable_phase_still_emits_the_series_the_controller_expects(self):
+        """The control."""
+        fields = green_signal().figure_for("decode").observation_fields()
+        self.assertEqual(set(fields), {"readiness", "source_event_id", "stratum"})
+
+    def test_the_parity_mapping_carries_what_makes_the_round_USABLE(self):
+        """A round with no magnitude is still evidence — against a bound and a target.
+
+        Publishing the counts alone leaves the consumer with a round it can only
+        refuse to read, and under a non-inferiority objective that is the most
+        common HEALTHY outcome. A stop rule that can never conclude anything from
+        it stalls on exactly the campaign that has finished.
+        """
+        figure = green_signal(cells=parity_cells(),
+                              reference=R.ReferencePolicy(reference_point_gain=0.25,
+                                                          reference_lcb_gain=0.20)
+                              ).figure_for("decode")
+        fields = figure.observation_fields()
+        self.assertEqual(fields["sensitivity_bound"], figure.sensitivity_bound)
+        self.assertEqual(fields["reference_gain"], 0.25)
+        # Published, not re-derivable-by-convention: the bound is the BINDING one,
+        # which is not always the MDE.
+        self.assertEqual(figure.sensitivity_bound,
+                         max(figure.mde, figure.noise_floor))
+
+    def test_an_undeclared_target_is_published_as_None_and_never_omitted(self):
+        """Absent and `None` mean different things and must not render the same.
+
+        A campaign that declared no reference policy has declared no target. A
+        producer that DROPPED the key has a bug. Under `.get()` those are the same
+        mapping, and the first reading disables the branch that can conclude
+        anything from a converged campaign — so a producer bug would present as a
+        campaign that never stops.
+        """
+        figure = green_signal(cells=parity_cells()).figure_for("decode")
+        fields = figure.observation_fields()
+        self.assertIn("reference_gain", fields)
+        self.assertIsNone(fields["reference_gain"])
+        self.assertIsNone(figure.comparable_reference_gain)
+
+    def test_an_absolute_scale_campaign_publishes_no_percentage_target(self):
+        """The same category error `_compare_reference` refuses one layer up.
+
+        Asserted on BOTH consumers of the gate — the mapping the stop rule reads
+        and the sentence the operator reads. A gate written once but checked in
+        only one of them is a gate the other is free to stop honouring.
+        """
+        signal = green_signal(
+            cells=parity_cells(),
+            spec=matrix_spec(effect_scale=st.EFFECT_SCALE_ABSOLUTE),
+            reference=R.ReferencePolicy(reference_point_gain=0.25,
+                                        reference_lcb_gain=0.20))
+        figure = signal.figure_for("decode")
+        self.assertIsNone(figure.comparable_reference_gain)
+        self.assertIsNone(figure.observation_fields()["reference_gain"])
+        line = R.render_readiness_line(signal, "decode")
+        self.assertNotIn("UNDERPOWERED", line)
+        self.assertNotIn("would have been visible", line)
+
+    def test_the_rendered_power_clause_reads_the_same_target_the_seam_publishes(self):
+        """One gate, two consumers: the operator's sentence and the stop rule.
+
+        A phase an operator is told is "UNDERPOWERED FOR THIS CAMPAIGN" must be
+        exactly a phase the stop rule refuses to conclude from, or the report and
+        the spending decision are answering about different numbers.
+        """
+        policy = R.ReferencePolicy(reference_point_gain=0.25, reference_lcb_gain=0.20)
+        others = tuple(c for c in parity_cells() if c.cell_id != "cell-decode-a")
+        for floor, powered in ((0.01, True), (0.40, False)):
+            decode = cell("cell-decode-a", non_inferiority=parity_evidence(
+                value=0.005, mde=0.018, floor=floor))
+            signal = green_signal(cells=(decode,) + others, reference=policy)
+            figure = signal.figure_for("decode")
+            gain = figure.observation_fields()["reference_gain"]
+            self.assertEqual(figure.could_have_detected(gain), powered)
+            line = R.render_readiness_line(signal, "decode")
+            self.assertEqual("UNDERPOWERED FOR THIS CAMPAIGN" in line, not powered)
+
+
+class TheRankabilityPredicateIsTheEvaluatorsTest(unittest.TestCase):
+    """A second copy of "what disqualifies a speed reading" is a copy that drifts.
+
+    `_phase_figure`'s own docstring says that about `_verdict_gate`; it applies to
+    the resolution half too.
+    """
+
+    def test_readiness_carries_no_second_copy_of_the_sub_floor_vocabulary(self):
+        wanted = set(api.SUB_FLOOR_RESOLUTIONS)
+        for name, value in vars(R).items():
+            if isinstance(value, (tuple, list, set, frozenset)):
+                try:
+                    if set(value) == wanted:
+                        self.fail(f"readiness.{name} restates "
+                                  f"api.SUB_FLOOR_RESOLUTIONS")
+                except TypeError:  # pragma: no cover - unhashable members
+                    continue
+
+    def test_the_cells_resolution_is_read_from_the_verdict_not_recomputed(self):
+        at_parity = cell("cell-parity", non_inferiority=parity_evidence(value=0.005))
+        self.assertEqual(R._resolution_of(at_parity),
+                         at_parity.non_inferiority.verdict.effect_resolution)
+        self.assertTrue(api.is_sub_floor_resolution(R._resolution_of(at_parity)))
+
+    def test_the_sub_floor_and_rankable_sets_are_disjoint_and_declared(self):
+        self.assertEqual(set(api.SUB_FLOOR_RESOLUTIONS) & {
+            resolution for resolution in api.EFFECT_RESOLUTIONS
+            if api.is_rankable_resolution(resolution)}, set())
+        for resolution in api.SUB_FLOOR_RESOLUTIONS:
+            self.assertIn(resolution, api.EFFECT_RESOLUTIONS)
+
+    def test_a_below_threshold_resolution_is_not_parity(self):
+        """The two are unrankable for different reasons and only one is parity."""
+        self.assertFalse(
+            api.is_sub_floor_resolution(api.EFFECT_EVIDENCE_BELOW_THRESHOLD))
+        self.assertFalse(
+            api.is_rankable_resolution(api.EFFECT_EVIDENCE_BELOW_THRESHOLD))
+
+    def test_an_unknown_resolution_is_a_refusal_not_a_silent_false(self):
+        for predicate in (api.is_sub_floor_resolution, api.is_rankable_resolution):
+            with self.assertRaises(ValueError):
+                predicate("no_detectable_diference")
+
+    def test_a_parity_figure_cannot_be_built_over_a_cell_that_is_not_at_parity(self):
+        with self.assertRaises(R.CellInadmissible):
+            parity_figure(protected_cell_count=2,
+                          measured_cell_ids=("c", "d"), parity_cell_ids=("c",),
+                          resolution_census=(
+                              (api.EFFECT_NO_DETECTABLE_DIFFERENCE, 1),
+                              (api.EFFECT_EVIDENCE_BELOW_THRESHOLD, 1)))
+
+    def test_a_parity_figure_cannot_stand_in_for_an_unmeasured_phase(self):
+        with self.assertRaises(R.CellInadmissible):
+            parity_figure(measured_cell_ids=(), parity_cell_ids=())
 
 
 class CapacityDeltasAreNotDeduplicatedTest(unittest.TestCase):

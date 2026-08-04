@@ -1,0 +1,63 @@
+CMAKE_BUILD_TYPE=Release
+-- ccache found, compilation results will be cached. Disable with GGML_CCACHE=OFF.
+-- CMAKE_SYSTEM_PROCESSOR: x86_64
+-- GGML_SYSTEM_ARCH: x86
+-- Including CPU backend
+-- x86 detected
+-- Adding CPU backend variant ggml-cpu: -march=native 
+-- ggml version: 0.15.2
+-- ggml commit:  814e81782-dirty
+-- OpenSSL found: 3.5.3
+-- Generating embedded license file for target: llama-app
+-- Configuring done (0.2s)
+-- Generating done (0.1s)
+-- Build files have been written to: /mnt/raid0/llm/llama.cpp-v6/build
+[  0%] Building CXX object common/CMakeFiles/llama-common-base.dir/build-info.cpp.o
+[  1%] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml-backend.cpp.o
+[  1%] Building C object ggml/src/CMakeFiles/ggml-base.dir/ggml-alloc.c.o
+[  1%] Building C object ggml/src/CMakeFiles/ggml-base.dir/ggml.c.o
+[  1%] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml.cpp.o
+[  1%] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml-backend-meta.cpp.o
+[  1%] Built target llama-ui-embed
+[  1%] Built target cpp-httplib
+[  1%] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/gguf.cpp.o
+[  1%] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml-threading.cpp.o
+[  1%] Building C object ggml/src/CMakeFiles/ggml-base.dir/ggml-quants.c.o
+[  1%] Building CXX object ggml/src/CMakeFiles/ggml-base.dir/ggml-opt.cpp.o
+[  3%] Provisioning UI assets
+-- UI: npm output up-to-date, skipping build
+[  3%] Linking CXX static library libllama-common-base.a
+[  3%] Built target llama-common-base
+-- UI: gzip compression applied (/mnt/raid0/llm/llama.cpp-v6/build/tools/ui/dist/_gzip)
+[  3%] Built target llama-ui-assets
+[  3%] Built target llama-ui
+[  5%] Linking CXX shared library ../../bin/libggml-base.so
+[  5%] Built target ggml-base
+[  5%] Building C object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu.c.o
+/mnt/raid0/llm/llama.cpp-v6/ggml/src/ggml-cpu/ggml-cpu.c:611:6: warning: no previous prototype for ‘ggml_barrier_local’ [-Wmissing-prototypes]
+  611 | void ggml_barrier_local(struct ggml_threadpool * tp) {
+      |      ^~~~~~~~~~~~~~~~~~
+/mnt/raid0/llm/llama.cpp-v6/ggml/src/ggml-cpu/ggml-cpu.c: In function ‘ggml_compute_forward’:
+/mnt/raid0/llm/llama.cpp-v6/ggml/src/ggml-cpu/ggml-cpu.c:2196:14: error: ‘GGML_OP_FLASH_ATTN_EXT_PAGED’ undeclared (first use in this function); did you mean ‘GGML_OP_FLASH_ATTN_EXT’?
+ 2196 |         case GGML_OP_FLASH_ATTN_EXT_PAGED:
+      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |              GGML_OP_FLASH_ATTN_EXT
+/mnt/raid0/llm/llama.cpp-v6/ggml/src/ggml-cpu/ggml-cpu.c:2196:14: note: each undeclared identifier is reported only once for each function it appears in
+/mnt/raid0/llm/llama.cpp-v6/ggml/src/ggml-cpu/ggml-cpu.c:2198:17: error: implicit declaration of function ‘ggml_compute_forward_flash_attn_ext_paged’; did you mean ‘ggml_compute_forward_flash_attn_ext’? [-Wimplicit-function-declaration]
+ 2198 |                 ggml_compute_forward_flash_attn_ext_paged(params, tensor);
+      |                 ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |                 ggml_compute_forward_flash_attn_ext
+/mnt/raid0/llm/llama.cpp-v6/ggml/src/ggml-cpu/ggml-cpu.c: In function ‘ggml_get_n_tasks’:
+/mnt/raid0/llm/llama.cpp-v6/ggml/src/ggml-cpu/ggml-cpu.c:2576:14: error: ‘GGML_OP_FLASH_ATTN_EXT_PAGED’ undeclared (first use in this function); did you mean ‘GGML_OP_FLASH_ATTN_EXT’?
+ 2576 |         case GGML_OP_FLASH_ATTN_EXT_PAGED:
+      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |              GGML_OP_FLASH_ATTN_EXT
+/mnt/raid0/llm/llama.cpp-v6/ggml/src/ggml-cpu/ggml-cpu.c: In function ‘ggml_graph_plan’:
+/mnt/raid0/llm/llama.cpp-v6/ggml/src/ggml-cpu/ggml-cpu.c:3117:22: error: ‘GGML_OP_FLASH_ATTN_EXT_PAGED’ undeclared (first use in this function); did you mean ‘GGML_OP_FLASH_ATTN_EXT’?
+ 3117 |                 case GGML_OP_FLASH_ATTN_EXT_PAGED:
+      |                      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |                      GGML_OP_FLASH_ATTN_EXT
+gmake[3]: *** [ggml/src/CMakeFiles/ggml-cpu.dir/build.make:79: ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu.c.o] Error 1
+gmake[2]: *** [CMakeFiles/Makefile2:2421: ggml/src/CMakeFiles/ggml-cpu.dir/all] Error 2
+gmake[1]: *** [CMakeFiles/Makefile2:5996: tools/server/CMakeFiles/llama-server.dir/rule] Error 2
+gmake: *** [Makefile:1830: llama-server] Error 2

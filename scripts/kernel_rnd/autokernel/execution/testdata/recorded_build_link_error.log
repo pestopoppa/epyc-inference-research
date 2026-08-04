@@ -1,0 +1,81 @@
+[  0%] Built target llama-common-base
+[  0%] Built target llama-ui-embed
+[  0%] Built target cpp-httplib
+[  3%] Built target ggml-base
+[  3%] Provisioning UI assets
+[  3%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/iqk/iqk_mul_mat.cpp.o
+[  3%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/iqk/iqk_stubs.cpp.o
+[  3%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/iqk/iqk_gemm_legacy_quants.cpp.o
+-- UI: npm output up-to-date, skipping build
+[  3%] Building CXX object ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/iqk/iqk_gemm_kquants.cpp.o
+-- UI: gzip compression applied (/mnt/raid0/llm/llama.cpp-v6-iqk/build/tools/ui/dist/_gzip)
+[  3%] Built target llama-ui-assets
+[  3%] Built target llama-ui
+In file included from /mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/ggml-cpu/iqk/iqk_common.h:31,
+                 from /mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/ggml-cpu/iqk/iqk_stubs.cpp:18:
+/mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/ggml-cpu/iqk/iqk_quantize.h:23:9: warning: ‘GGML_RESTRICT’ redefined
+   23 | #define GGML_RESTRICT
+      |         ^~~~~~~~~~~~~
+In file included from /mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/./ggml-impl.h:5,
+                 from /mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/ggml-cpu/iqk/iqk_common.h:28:
+/mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/../include/ggml.h:2799:17: note: this is the location of the previous definition
+ 2799 | #        define GGML_RESTRICT __restrict__
+      |                 ^~~~~~~~~~~~~
+In file included from /mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:22:
+/mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/ggml-cpu/iqk/iqk_quantize.h:23:9: warning: ‘GGML_RESTRICT’ redefined
+   23 | #define GGML_RESTRICT
+      |         ^~~~~~~~~~~~~
+In file included from /mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/./ggml-impl.h:5,
+                 from /mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:19:
+/mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/../include/ggml.h:2799:17: note: this is the location of the previous definition
+ 2799 | #        define GGML_RESTRICT __restrict__
+      |                 ^~~~~~~~~~~~~
+/mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp: In static member function ‘static ggml_type {anonymous}::MulMat::is_dequant_better(ggml_type, int)’:
+/mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:274:13: warning: case value ‘133’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  274 |             case GGML_TYPE_Q6_0   : return nrc_y >= 32 ? GGML_TYPE_Q8_0_R8 : type;
+      |             ^~~~
+/mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:260:13: warning: case value ‘137’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  260 |             case GGML_TYPE_IQ2_K  : return nrc_y >= 32 ? q8_k_type : type;
+      |             ^~~~
+/mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:263:13: warning: case value ‘138’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  263 |             case GGML_TYPE_IQ3_K  : return nrc_y >= 32 ? q8_k_type : type;
+      |             ^~~~
+/mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:266:13: warning: case value ‘139’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  266 |             case GGML_TYPE_IQ4_K  : return nrc_y >= 32 ? q8_k_type : type;
+      |             ^~~~
+/mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:268:13: warning: case value ‘140’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  268 |             case GGML_TYPE_IQ5_K  : return nrc_y >= 32 ? q8_k_type : type;
+      |             ^~~~
+/mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:269:13: warning: case value ‘141’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  269 |             case GGML_TYPE_IQ6_K  : return nrc_y >= 32 ? q8_k_type : type;
+      |             ^~~~
+/mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:264:13: warning: case value ‘144’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  264 |             case GGML_TYPE_IQ4_KS : return nrc_y >= 32 ? q8_k_type : type;
+      |             ^~~~
+/mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:259:13: warning: case value ‘145’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  259 |             case GGML_TYPE_IQ2_KS : return nrc_y >= 32 ? q8_k_type : type;
+      |             ^~~~
+/mnt/raid0/llm/llama.cpp-v6-iqk/ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp:265:13: warning: case value ‘146’ not in enumerated type ‘ggml_type’ [-Wswitch]
+  265 |             case GGML_TYPE_IQ4_KSS: return nrc_y >= 32 ? q8_k_type : type;
+      |             ^~~~
+[... 380 lines of warnings elided; excerpt of the recorded log ...]
+[ 94%] Building CXX object tools/server/CMakeFiles/server-context.dir/server-context.cpp.o
+[ 96%] Building CXX object tools/server/CMakeFiles/server-context.dir/server-queue.cpp.o
+[ 96%] Building CXX object tools/server/CMakeFiles/server-context.dir/server-common.cpp.o
+[ 96%] Building CXX object tools/server/CMakeFiles/server-context.dir/server-tools.cpp.o
+[ 96%] Building CXX object tools/server/CMakeFiles/server-context.dir/server-schema.cpp.o
+[ 98%] Linking CXX static library libserver-context.a
+[ 98%] Built target server-context
+[ 98%] Building CXX object tools/server/CMakeFiles/llama-server-impl.dir/server.cpp.o
+[100%] Building CXX object tools/server/CMakeFiles/llama-server-impl.dir/server-http.cpp.o
+[100%] Building CXX object tools/server/CMakeFiles/llama-server-impl.dir/server-models.cpp.o
+[100%] Linking CXX shared library ../../bin/libllama-server-impl.so
+[100%] Built target llama-server-impl
+[100%] Building CXX object tools/server/CMakeFiles/llama-server.dir/main.cpp.o
+[100%] Linking CXX executable ../../bin/llama-server
+/usr/bin/ld: ../../bin/libggml-cpu.so.0.15.2: undefined reference to `iqk_dequantize_ktquants(int, int, void const*, unsigned long, void*, unsigned long, int)'
+collect2: error: ld returned 1 exit status
+gmake[3]: *** [tools/server/CMakeFiles/llama-server.dir/build.make:114: bin/llama-server] Error 1
+gmake[2]: *** [CMakeFiles/Makefile2:5989: tools/server/CMakeFiles/llama-server.dir/all] Error 2
+gmake[1]: *** [CMakeFiles/Makefile2:5996: tools/server/CMakeFiles/llama-server.dir/rule] Error 2
+gmake: *** [Makefile:1830: llama-server] Error 2

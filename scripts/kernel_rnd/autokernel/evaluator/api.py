@@ -106,7 +106,9 @@ __all__ = [
     "GATE_CLASSES", "LEXICOGRAPHICALLY_PRIOR_GATE_CLASSES", "SPEED_BLOCKING_GATE_CLASSES",
     "STATUS_PASS", "STATUS_FAIL", "STATUS_INCONCLUSIVE", "STATUS_INVALID", "VERDICT_STATUSES",
     "VOID_REASONS", "VOID_REASON_PHRASES", "PRECONDITION_IDS", "SEARCH_GRADE_CONJUNCTS",
-    "CALIBRATION_SOLVE_ORDER", "EFFECT_RESOLUTIONS", "E_PROCESS_CONSTRUCTION_IDS",
+    "CALIBRATION_SOLVE_ORDER", "EFFECT_RESOLUTIONS", "SUB_FLOOR_RESOLUTIONS",
+    "is_rankable_resolution", "is_sub_floor_resolution",
+    "E_PROCESS_CONSTRUCTION_IDS",
     "STRATA", "STRATUM_SELECTION", "STRATUM_CONFIRMATION",
     # typed inputs
     "AnchorIdentity", "ArtifactIdentity", "EvaluatorIdentity", "ScopeDenominator",
@@ -1070,6 +1072,53 @@ EFFECT_RESOLUTIONS = (
 #: detectable difference, which is a result and a decision, not a failed
 #: experiment"* — and a result you cannot order.
 _RANKABLE_RESOLUTIONS = (EFFECT_IMPROVEMENT, EFFECT_REGRESSION)
+
+#: The two resolutions where the estimate never cleared the campaign's OWN
+#: sensitivity: the magnitude is inside the calibrated noise floor, or inside the
+#: MDE at the realized block count. They are the sub-floor half of what
+#: `_RANKABLE_RESOLUTIONS` excludes, and they are PUBLIC because a downstream
+#: reader that must not order such a cell needs this module's answer to *"which
+#: resolutions carry no orderable magnitude"*, not a second copy of it — a second
+#: copy is a second copy that drifts, and the half that drifts is whichever one
+#: has fewer tests.
+#:
+#: `EFFECT_EVIDENCE_BELOW_THRESHOLD` is deliberately NOT here. That estimate
+#: cleared both the floor and the MDE: it is a DETECTABLE magnitude with
+#: insufficient evidence, which is a different thing to report and a different
+#: thing to hide. It is unrankable for a reason that is not parity, and a reader
+#: that folded the two together would either call a measured degradation "at
+#: parity" or make it invisible.
+SUB_FLOOR_RESOLUTIONS = (EFFECT_BELOW_NOISE_FLOOR, EFFECT_NO_DETECTABLE_DIFFERENCE)
+
+
+def _require_known_resolution(resolution: str) -> str:
+    if resolution not in EFFECT_RESOLUTIONS:
+        raise ValueError(
+            f"{resolution!r} is not one of {list(EFFECT_RESOLUTIONS)}; an unknown "
+            "resolution must be a refusal, never a silent False — a mistyped one "
+            "would read as 'rankable' or 'not sub-floor' by falling off the end of "
+            "the vocabulary"
+        )
+    return resolution
+
+
+def is_rankable_resolution(resolution: str) -> bool:
+    """Does this resolution place a candidate on the ordering at all?
+
+    The exported form of `_RANKABLE_RESOLUTIONS`. Selecting a cell as "the
+    weakest" or "the best" IS a rank, so anything downstream that selects must
+    ask this rather than re-deriving it.
+    """
+    return _require_known_resolution(resolution) in _RANKABLE_RESOLUTIONS
+
+
+def is_sub_floor_resolution(resolution: str) -> bool:
+    """Did the estimate fail to clear the campaign's own floor or MDE?
+
+    True means parity — *"a result and a decision, not a failed experiment"* —
+    and a result that carries no orderable magnitude at all.
+    """
+    return _require_known_resolution(resolution) in SUB_FLOOR_RESOLUTIONS
 
 
 @dataclass(frozen=True)

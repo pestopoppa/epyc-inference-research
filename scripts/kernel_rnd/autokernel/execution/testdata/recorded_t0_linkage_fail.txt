@@ -1,0 +1,29 @@
+# RECORDED 2026-08-03 on the epyc host, verbatim stdout+stderr, exit 1.
+# THE SAME BINARY, run under the container's AMBIENT LD_LIBRARY_PATH, which still
+# carries /mnt/raid0/llm/llama.cpp/build/bin (the FROZEN PRODUCTION TREE) at position 2.
+# Five libraries -- all of ggml -- resolve out of production. This is INC-20260731 live.
+# ---8<--- verbatim below this line ---8<---
+binary : /mnt/raid0/llm/llama.cpp-experimental/build-v8-sanitize/bin/test-backend-ops
+expect : libraries under /mnt/raid0/llm/llama.cpp-experimental/build-v8-sanitize/bin
+
+  BAD  libllama-common.so.0         -> /mnt/raid0/llm/llama.cpp/build/bin/libllama-common.so.0
+  BAD  libllama.so.0                -> /mnt/raid0/llm/llama.cpp/build/bin/libllama.so.0
+  BAD  libggml.so.0                 -> /mnt/raid0/llm/llama.cpp/build/bin/libggml.so.0
+  BAD  libggml-cpu.so.0             -> /mnt/raid0/llm/llama.cpp/build/bin/libggml-cpu.so.0
+  BAD  libggml-base.so.0            -> /mnt/raid0/llm/llama.cpp/build/bin/libggml-base.so.0
+
+LD_LIBRARY_PATH order as the loader sees it:
+         1	/opt/AMD/aocc-compiler-5.0.0/lib
+         2	/mnt/raid0/llm/llama.cpp/build/bin
+         3	/mnt/raid0/llm/llama.cpp-dflash/build/bin
+         4	/opt/rocm/lib
+
+FAIL: 5 library/libraries resolve OUTSIDE /mnt/raid0/llm/llama.cpp-experimental/build-v8-sanitize/bin.
+
+This binary is running another tree's ggml. Any performance number produced now
+is attributable to the WRONG BUILD, and a GPU build may silently execute on CPU
+while still reporting a GPU device.
+
+Fix:
+    export LD_LIBRARY_PATH="/mnt/raid0/llm/llama.cpp-experimental/build-v8-sanitize/bin/bin:$LD_LIBRARY_PATH"
+then re-run this check before measuring.
