@@ -1201,28 +1201,33 @@ class ProducedByDiscipline(unittest.TestCase):
                 stamped += 1
         self.assertGreaterEqual(stamped, 5)
 
-    def test_schema_followups_name_the_two_types_that_cannot_be_stamped(self):
-        """`BuildProvenance` and `DiffPolicyEvidence` have no `produced_by` field.
+    def test_schema_followups_hold_only_what_is_still_open(self):
+        """The follow-up list is pinned to the code, in BOTH directions.
 
-        Reported rather than patched: `schemas.py` and the evidence dataclasses
-        belong to other agents this hour, and denial 6 says a coverage gap is
-        RECORDED, not fixed by the module that found it. This test pins the
-        report to the code — if either type gains the field, it fails and the
-        follow-up gets deleted.
+        It used to pin three gaps and assert `BuildProvenance` and
+        `DiffPolicyEvidence` had NO `produced_by` — reported rather than patched,
+        because those dataclasses belonged to another agent that hour. Both were
+        closed on 2026-08-04, so the assertions invert: the field must now be
+        present, and the entries must be GONE from the list. A follow-up list that
+        keeps closed items stops being read.
+
+        The third is still open, and is pinned exactly as before.
         """
-        self.assertEqual(len(t0.SCHEMA_FOLLOWUPS), 3)
-        self.assertFalse(hasattr(correctness.BuildProvenance, "produced_by"))
-        # The third: `delivered_units_candidate` is `int`, so "not read" and
+        self.assertEqual(len(t0.SCHEMA_FOLLOWUPS), 1)
+        self.assertNotIn(
+            "BuildProvenance", " ".join(t0.SCHEMA_FOLLOWUPS),
+            "BuildProvenance.produced_by exists; its follow-up must be deleted")
+        self.assertNotIn(
+            "DiffPolicyEvidence", " ".join(t0.SCHEMA_FOLLOWUPS),
+            "DiffPolicyEvidence.produced_by exists; its follow-up must be deleted")
+        # Still open: `delivered_units_candidate` is `int`, so "not read" and
         # "delivered nothing" are the same value. Pinned the same way.
         self.assertEqual(
             correctness.AntiRewardHackingEvidence
             .__dataclass_fields__["delivered_units_candidate"].type, "int",
-            "the third SCHEMA_FOLLOWUP is closed; delete it")
-        self.assertNotIn("produced_by",
-                         correctness.BuildProvenance.__dataclass_fields__)
-        self.assertNotIn("produced_by",
-                         correctness.DiffPolicyEvidence.__dataclass_fields__)
-        for evidence_type in (correctness.OpSuiteEvidence, correctness.CoherenceEvidence,
+            "the remaining SCHEMA_FOLLOWUP is closed; delete it")
+        for evidence_type in (correctness.BuildProvenance, correctness.DiffPolicyEvidence,
+                              correctness.OpSuiteEvidence, correctness.CoherenceEvidence,
                               correctness.DeterminismEvidence, correctness.LinkageEvidence,
                               correctness.StateSafetyEvidence,
                               correctness.BoundaryShapeEvidence,
@@ -2113,7 +2118,8 @@ class ThePlanCarriesTheDerivationAndTypeChecksIt(unittest.TestCase):
             build_dir_was_fresh=True, incremental_objects_present=False,
             compiler_id="CXX GNU", compiler_version="15.2.0",
             build_log_ref=f"file://{BUILD_DIR}/build.log#sha256={SHA_B}",
-            production_tree_paths_touched=(), output_binary_sha256=SHA_D)
+            production_tree_paths_touched=(), output_binary_sha256=SHA_D,
+            produced_by="evaluator")
         plan = execution_plan(build=right, change_surface=self._surface())
         self.assertIs(plan.build, right)
 
@@ -2139,7 +2145,7 @@ class TheStaticAnalysisSurfaceNamesTheCandidatesOwnToolchain(unittest.TestCase):
             build_dir_was_fresh=True, incremental_objects_present=False,
             compiler_id="CXX GNU", compiler_version="15.2.0",
             build_log_ref=f"file://{self.log}", production_tree_paths_touched=(),
-            output_binary_sha256=SHA_D)
+            output_binary_sha256=SHA_D, produced_by="evaluator")
 
     def _evidence(self, anchor):
         plan = execution_plan(build=self.build)

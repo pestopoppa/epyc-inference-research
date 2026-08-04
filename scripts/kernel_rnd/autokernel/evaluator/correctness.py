@@ -298,7 +298,12 @@ CONTROL_ROLES = ("positive", "neutral", "degraded_negative", "aa", "historical_r
 #: Who produced a piece of evidence. Only the evaluator may produce a correctness
 #: verdict: *"Correctness verdicts are produced by the evaluator against declared
 #: oracles and are NEVER self-reported by the candidate."*
-EVIDENCE_PRODUCERS = ("evaluator", "candidate", "actor", "unknown")
+#:
+#: The tuple itself now lives in `schemas.py`, because `schemas.require.producer`
+#: is the type of every `produced_by` field and the type and its domain may not
+#: be two objects that can disagree. Re-exported under this name because it is
+#: what `t0_provider` and the conformance suite already read.
+EVIDENCE_PRODUCERS = schemas.EVIDENCE_PRODUCERS
 
 COHERENCE_BYTE_IDENTICAL = "byte_identical"
 COHERENCE_WITHIN_TOLERANCE = "equivalent_within_declared_tolerance"
@@ -349,47 +354,32 @@ PRODUCTION_TREE_ROOTS = (
 
 
 # =============================================================================
-# Small validators — local on purpose, so this module does not depend on another
-# module's private helpers
+# Small validators — the scalar ones are `schemas.require`, the shaped ones are
+# local because their domain is this module's and nobody else's
 # =============================================================================
+#
+# These eight names used to be eight bodies. They are kept as names, and only as
+# names, because ~40 call sites read `_req_sha256(...)` and renaming them would
+# bury the one change that matters in a rename diff. The BODY is now the field
+# type in `schemas.require`, which is the only place the placeholder-digest
+# predicate lives — see the `require` header in `schemas.py` for why a ninth copy
+# of `re.compile(r"^[0-9a-f]{64}$")` is now a test failure rather than a habit.
 
-_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-#: Mirrors `schemas._COMMIT_RE` and `api._COMMIT_RE`. A short commit is not a
-#: commit here: an abbreviation is ambiguous across a growing object store, and
-#: precondition 4 names the anchor so it can be resolved to ONE tree forever.
-_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
-
-
-def _req_str(value: Any, label: str) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{label}: expected a non-empty string, got {value!r}")
-    return value
-
-
-def _req_sha256(value: Any, label: str) -> str:
-    if not isinstance(value, str) or not _SHA256_RE.match(value):
-        raise ValueError(f"{label}: expected a lowercase sha256 hex digest, got {value!r}")
-    return value
+_req_str = schemas.require.str
+_req_sha256 = schemas.require.sha256
+_req_commit = schemas.require.commit
+_req_bool = schemas.require.bool
+_req_int = schemas.require.int
+_req_tuple = schemas.require.tuple
+_req_producer = schemas.require.producer
 
 
 def _opt_sha256(value: Any, label: str) -> Optional[str]:
     return None if value is None else _req_sha256(value, label)
 
 
-def _req_commit(value: Any, label: str) -> str:
-    if not isinstance(value, str) or not _COMMIT_RE.match(value):
-        raise ValueError(f"{label}: expected a full 40-hex git commit, got {value!r}")
-    return value
-
-
 def _opt_commit(value: Any, label: str) -> Optional[str]:
     return None if value is None else _req_commit(value, label)
-
-
-def _req_bool(value: Any, label: str) -> bool:
-    if not isinstance(value, bool):
-        raise TypeError(f"{label}: expected a bool, got {type(value).__name__}")
-    return value
 
 
 def _opt_bool(value: Any, label: str) -> Optional[bool]:
@@ -399,22 +389,8 @@ def _opt_bool(value: Any, label: str) -> Optional[bool]:
     return _req_bool(value, label)
 
 
-def _req_int(value: Any, label: str, *, minimum: int = 0) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"{label}: expected an int, got {value!r}")
-    if value < minimum:
-        raise ValueError(f"{label}: must be >= {minimum}, got {value!r}")
-    return value
-
-
 def _opt_int(value: Any, label: str, *, minimum: int = 0) -> Optional[int]:
     return None if value is None else _req_int(value, label, minimum=minimum)
-
-
-def _req_tuple(value: Any, label: str) -> tuple:
-    if not isinstance(value, tuple):
-        raise TypeError(f"{label}: expected a tuple, got {type(value).__name__}")
-    return value
 
 
 def _req_ratio(value: Any, label: str) -> float:
@@ -442,12 +418,6 @@ def _req_observed_ratio(value: Any, label: str) -> float:
     if not math.isfinite(value) or not (0.0 <= value <= 1.0):
         raise ValueError(f"{label}: expected a finite ratio in [0, 1], got {value!r}")
     return float(value)
-
-
-def _req_producer(value: Any, label: str) -> str:
-    if value not in EVIDENCE_PRODUCERS:
-        raise ValueError(f"{label}: {value!r} is not one of {list(EVIDENCE_PRODUCERS)}")
-    return value
 
 
 def _validate_anchor_triple(*, source_commit: Any, binary_sha256: Any, linkage_sha256: Any,
@@ -861,6 +831,14 @@ class BuildProvenance:
     build_log_ref: str
     production_tree_paths_touched: tuple
     output_binary_sha256: str
+    #: WHO produced this record. Added 2026-08-04: eleven of this file's evidence
+    #: types have carried `produced_by` since they were written and this one did
+    #: not, so §8.5.1 item 2 — the clean-build claim, and the binary identity that
+    #: rides on it — was the one piece of T0 evidence an ACTOR could hand in
+    #: unattributed. `SymbolTableDiff` twenty lines above validates it the same
+    #: way; `check_symbol_and_registration_preservation` reads it and FAILs a
+    #: self-report. This field is what makes that reading possible here.
+    produced_by: str
 
     def __post_init__(self) -> None:
         _req_sha256(self.built_from_snapshot_sha256, "build.built_from_snapshot_sha256")
@@ -874,6 +852,7 @@ class BuildProvenance:
                                "build.production_tree_paths_touched"):
             _req_str(item, "build.production_tree_paths_touched[]")
         _req_sha256(self.output_binary_sha256, "build.output_binary_sha256")
+        _req_producer(self.produced_by, "build.produced_by")
 
 
 @dataclass(frozen=True)
@@ -891,6 +870,12 @@ class DiffPolicyEvidence:
     production_tree_paths: tuple
     record_schema_violations: tuple
     diff_ref: str
+    #: WHO produced this record. Added 2026-08-04, for the same reason as
+    #: `BuildProvenance.produced_by`: §8.5.1 item 3 is a claim about what the diff
+    #: touched, and `files_touched` / `unrelated_deletions` / `production_tree_paths`
+    #: are exactly the fields an actor benefits from getting wrong. Without this
+    #: field the gate cannot tell a derived diff from a declared one.
+    produced_by: str
 
     def __post_init__(self) -> None:
         for name in ("files_touched", "declared_surface_files", "unrelated_deletions",
@@ -911,6 +896,7 @@ class DiffPolicyEvidence:
         _req_str(self.branch_name, "diff.branch_name")
         _req_bool(self.commit_was_pathspec_limited, "diff.commit_was_pathspec_limited")
         _req_str(self.diff_ref, "diff.diff_ref")
+        _req_producer(self.produced_by, "diff.produced_by")
 
 
 @dataclass(frozen=True)
@@ -2221,6 +2207,13 @@ def check_clean_build_from_snapshot(
     """§8.5.1 item 2. The snapshot, a fresh build directory, and no production path."""
     if evidence is None:
         return _gate(GID_CLEAN_BUILD, _no_evidence("build provenance"))
+    if evidence.produced_by != "evaluator":
+        # `build_dir_was_fresh`, `incremental_objects_present` and
+        # `built_from_snapshot_sha256` are otherwise taken on the producer's word,
+        # which makes an actor-supplied record indistinguishable from a measured
+        # one. `t0_provider.SCHEMA_FOLLOWUPS` named this branch as the remedy.
+        return _gate(GID_CLEAN_BUILD, _fail(_self_reported("clean-build", evidence.produced_by)),
+                     evidence_ref=evidence.build_log_ref)
     reasons = []
     if evidence.built_from_snapshot_sha256 != request.artifact.source_sha256:
         reasons.append(
@@ -2254,6 +2247,10 @@ def check_semantic_diff_conformance(evidence: Optional[DiffPolicyEvidence]) -> a
     """§8.5.1 item 3. One conceptual mutation, inside its class envelope."""
     if evidence is None:
         return _gate(GID_SEMANTIC_DIFF, _no_evidence("diff"))
+    if evidence.produced_by != "evaluator":
+        return _gate(GID_SEMANTIC_DIFF,
+                     _fail(_self_reported("semantic-diff", evidence.produced_by)),
+                     evidence_ref=evidence.diff_ref)
     reasons = []
     declared = set(evidence.declared_surface_files)
     outside = tuple(sorted(set(evidence.files_touched) - declared))
@@ -2290,6 +2287,13 @@ def check_schema_and_diff_policy(evidence: Optional[DiffPolicyEvidence],
     """
     if evidence is None:
         return _gate(GID_SCHEMA_DIFF_POLICY, _no_evidence("diff/schema")), ()
+    if evidence.produced_by != "evaluator":
+        # `commit_was_pathspec_limited` is the field that matters most here: in a
+        # shared clone an unrestricted commit sweeps another session's staged files
+        # into the artifact, and the candidate was previously believed about it.
+        return _gate(GID_SCHEMA_DIFF_POLICY,
+                     _fail(_self_reported("schema/diff-policy", evidence.produced_by)),
+                     evidence_ref=evidence.diff_ref), ()
 
     reasons = []
     if evidence.record_schema_violations:

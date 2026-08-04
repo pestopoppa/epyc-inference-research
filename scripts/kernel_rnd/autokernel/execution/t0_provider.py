@@ -240,22 +240,14 @@ STATE_SAFETY_CANNOT_PASS = (
 #: Schema follow-ups this module CANNOT close from here, reported rather than
 #: patched. `schemas.py` and the evidence dataclasses in `correctness.py` are
 #: owned by other agents this hour; denial 6 says a coverage gap is RECORDED.
+#:
+#: CLOSED 2026-08-04, two of three: `correctness.BuildProvenance` and
+#: `correctness.DiffPolicyEvidence` now carry `produced_by`, validated by
+#: `_req_producer`, and `check_clean_build_from_snapshot`,
+#: `check_semantic_diff_conformance` and `check_schema_and_diff_policy` each FAIL
+#: a record the evaluator did not produce. The entries are DELETED rather than
+#: annotated, because a follow-up list that keeps closed items stops being read.
 SCHEMA_FOLLOWUPS = (
-    ("correctness.BuildProvenance has no `produced_by` field. Every other evidence type "
-     "carries one and `check_clean_build_from_snapshot` is the only §8.5.1 gate that cannot "
-     "refuse a self-report: `build_dir_was_fresh`, `incremental_objects_present` and "
-     "`built_from_snapshot_sha256` are taken on the producer's word. This provider measures "
-     "all three (see `CandidateBuild`) but has no field to attest that it did, so an actor-"
-     "supplied BuildProvenance is indistinguishable from an evaluator-measured one. "
-     "REQUIRED FOLLOW-UP: add `produced_by: str` validated by `_req_producer`, and a "
-     "`produced_by != 'evaluator'` FAIL branch in `check_clean_build_from_snapshot`."),
-    ("correctness.DiffPolicyEvidence has no `produced_by` field, and it feeds TWO gates — "
-     "`check_semantic_diff_conformance` and `check_schema_and_diff_policy`. "
-     "`commit_was_pathspec_limited` is the one that matters most: in a shared clone an "
-     "unrestricted commit sweeps another session's staged files into the artifact "
-     "(`feedback_parallel_agent_staged_files_ride_along`), and the candidate is currently "
-     "believed about it. REQUIRED FOLLOW-UP: same shape as above, plus the self-report FAIL "
-     "in both gates."),
     ("correctness.AntiRewardHackingEvidence.delivered_units_candidate is `int`, not "
      "`Optional[int]`, so a count that was NOT READ has no representation and must be written "
      "as 0 — the same value that means 'the candidate delivered nothing', which is a control-3 "
@@ -339,47 +331,17 @@ SEAMS = (
 # Small validators
 # =============================================================================
 
-_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
-
-def _req_str(value: Any, label: str) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{label}: expected a non-empty string, got {value!r}")
-    return value
-
-
-def _req_abs(value: Any, label: str) -> str:
-    _req_str(value, label)
-    if not value.startswith("/"):
-        raise ValueError(f"{label}: expected an absolute path, got {value!r}")
-    return value
-
-
-def _req_sha256(value: Any, label: str) -> str:
-    if not isinstance(value, str) or not _SHA256_RE.match(value):
-        raise ValueError(f"{label}: expected a lowercase sha256 hex digest, got {value!r}")
-    if schemas.is_placeholder_digest(value):
-        raise ValueError(
-            f"{label}: {value!r} is a placeholder digest, not a measured identity. A "
-            "fabricated identity reads as a resolved one to every downstream reader, which "
-            "is strictly worse than an absent one (correctness._validate_anchor_triple).")
-    return value
-
-
-def _req_commit(value: Any, label: str) -> str:
-    if not isinstance(value, str) or not _COMMIT_RE.match(value):
-        raise ValueError(f"{label}: expected a full 40-hex git commit, got {value!r}")
-    return value
-
-
-def _req_int(value: Any, label: str, *, minimum: int = 0) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ValueError(f"{label}: expected an int, got {value!r}")
-    if value < minimum:
-        raise ValueError(f"{label}: must be >= {minimum}, got {value!r}")
-    return value
+#: Names, not bodies. This module wrote the strict `_req_sha256` — the one that
+#: rejects a placeholder digest — and two other modules wrote it without that
+#: rejection. The body is now `schemas.require`, so the strict form is the only
+#: form there is.
+_req_str = schemas.require.str
+_req_abs = schemas.require.abs_path
+_req_sha256 = schemas.require.sha256
+_req_commit = schemas.require.commit
+_req_int = schemas.require.int
 
 
 def _strip_ansi(text: str) -> str:

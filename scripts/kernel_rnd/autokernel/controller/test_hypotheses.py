@@ -54,7 +54,8 @@ if _KERNEL_RND not in sys.path:
 from autokernel import journal as J  # noqa: E402
 from autokernel import schemas as S  # noqa: E402
 from autokernel.controller import hypotheses as H  # noqa: E402
-from autokernel.controller import state_machine as SM  # noqa: E402
+from autokernel.controller import shared as SM  # noqa: E402  (was state_machine;
+# only ControllerError was ever used and it now lives in shared.py)
 from autokernel.resource import device_claim as _dc  # noqa: E402
 
 CAMPAIGN = "ak-llama_gpu-decode-20260803"

@@ -2213,5 +2213,36 @@ class TestMaterialRefusalsStayJournalable(unittest.TestCase):
                          S.FAIL)
 
 
+class CombineChecksIsTheOneLatticeTest(unittest.TestCase):
+    """`statistics._combine_checks` delegates to `schemas.Check.worst_of`.
+
+    Its result gates whether an `EffectEstimate` is built at all, so "no
+    admissibility check ran" must not read as "admissible".
+    """
+
+    def test_an_empty_admissibility_vector_is_could_not_check_and_never_pass(self):
+        combined = st._combine_checks([])
+        self.assertEqual(combined.outcome, S.COULD_NOT_CHECK)
+        self.assertFalse(combined.passed)
+
+    def test_reasons_are_prefixed_with_the_outcome_that_raised_them(self):
+        combined = st._combine_checks([S.Check(S.COULD_NOT_CHECK, ("no raw samples",)),
+                                       S.Check(S.FAIL, ("mde window exceeded",))])
+        self.assertEqual(combined.outcome, S.FAIL)
+        self.assertEqual(combined.reasons, ("[COULD_NOT_CHECK] no raw samples",
+                                            "[FAIL] mde window exceeded"))
+
+    def test_a_non_check_element_raises(self):
+        with self.assertRaises(TypeError):
+            st._combine_checks([S.Check(S.PASS), None])
+
+    def test_the_delegation_is_real_and_not_a_reimplementation(self):
+        for vector in ([], [S.Check(S.PASS)],
+                       [S.Check(S.PASS), S.Check(S.COULD_NOT_CHECK, ("x",))],
+                       [S.Check(S.FAIL, ("y",))]):
+            with self.subTest(vector=[c.outcome for c in vector]):
+                self.assertEqual(st._combine_checks(vector), S.Check.worst_of(vector))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

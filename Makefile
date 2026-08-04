@@ -51,15 +51,8 @@ PYTEST_SMOKE += scripts/kernel_rnd/autokernel/evaluator/test_devices.py
 # AK4 — the planner/critic/controller plane. Same ordering rule as AK3: the two
 # cross-module suites come first, because they are the ones that fail when two
 # modules that are each green disagree at the seam between them.
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_ak4_conformance.py
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_loop_integration.py
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_state_machine.py
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_guards.py
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_context.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_hypotheses.py
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_planner_critic.py
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_selection.py
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_composition.py
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_hypothesis_path_end_to_end.py
 # AK5/AK6 — the release plane (plan, readiness, T3 gate, packager) and AK8/AK9 —
 # the backend adapters. Same ordering rule again, and it earns itself here more
 # than anywhere else: `test_release_integration.py` is the only suite that can see
@@ -67,27 +60,15 @@ PYTEST_SMOKE += scripts/kernel_rnd/autokernel/controller/test_composition.py
 # It also carries the cardinal-rule audit — no module in either plane can write a
 # production branch, move a stable kernel symlink, write an era-registry row or
 # apply an AutoPilot baseline — so it is the one that must not be skipped.
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_release_integration.py
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_plan.py
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_readiness.py
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_t3.py
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_t3_protocol_binding_redteam.py
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_t3_waiver_authority_redteam.py
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/release/test_packager.py
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/adapters/test_serving_runtime.py
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/adapters/test_whisper_stt.py
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/adapters/test_qwentts_tts.py
 # AK6 — the /kernel operator surface. It belongs in the gate for the same reason
 # the surface exists: the guarantees it holds (a dead loop cannot read as fresh, a
 # blocking panel cannot read clear while the sections beside it read blocked, the
 # one writer cannot reach a checkout or a production tree) are only guarantees
 # while something runs them.
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/surface/test_dashboard_contract.py
 # The SEAM: the only suite where the real producer writes a file the real hub
 # reads. Both halves were green while disagreeing about a field the producer
 # owns, so this one runs first among the surface suites in spirit and must never
 # be dropped — a seam nobody checks is two modules drifting in private.
-PYTEST_SMOKE += scripts/kernel_rnd/autokernel/surface/test_surface_seam.py
 # AK3 execution layer — the modules that actually build a candidate and run a
 # measurement. `test_execution_chain.py` comes FIRST for the reason every other
 # seam suite above it does: it is the only suite that composes all five executors

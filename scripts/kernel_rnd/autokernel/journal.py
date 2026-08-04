@@ -281,7 +281,11 @@ def tombstone_view_key(payload: Mapping[str, Any]) -> str:
 # Prose keys stripped from every retrieval result, at every depth (§5.5 item 6).
 NARRATIVE_KEYS = frozenset({"narrative"})
 
-_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+#: Bound, not re-compiled. The digest SHAPE has one owner (`schemas`), because a
+#: local `re.compile(r"^[0-9a-f]{64}$")` is the first line every re-derived digest
+#: validator in this package started with, and two of those forgot to also refuse
+#: a placeholder. See the `require` header in `schemas.py`.
+_SHA256_RE = schemas.SHA256_RE
 
 
 def _iso_now() -> str:

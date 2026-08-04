@@ -1972,7 +1972,12 @@ class TestRedTeamReceiptCannotAttestAForeignArtifact(_TmpMixin):
                     "[100%] Built target ak_probe\n")
         self.result = W.BuildResult(
             plan=self.plan, configure=None, build=None, log_path=log,
-            log_sha256="0" * 64, facts=W.parse_build_log(_read_text(log)),
+            # The REAL digest of the log this fixture just wrote. It used to be
+            # `"0" * 64`, which `_req_sha256` now refuses: a fabricated digest in
+            # a fixture is the same fabricated digest a red-team suite exists to
+            # catch, and the receipt under test attests this log.
+            log_sha256=integrity.sha256_file(log),
+            facts=W.parse_build_log(_read_text(log)),
             build_dir_pre_build_digest=integrity.EMPTY_TREE_SHA256,
             build_dir_created_for_this_build=True)
         self.root = os.path.join(self.tmp, "clone")
@@ -2109,6 +2114,51 @@ class TestRedTeamBranchFlagWithAnEqualsSign(_TmpMixin):
         repo = W.GitRepo(root)
         self.assertIn("production-consolidated-v8",
                       repo._git("branch", "--list", "--format=%(refname:short)"))
+
+
+class TestRedTeamAPlaceholderDigestIsNotAnIdentity(unittest.TestCase):
+    """`_req_sha256` matched `^[0-9a-f]{64}$` and stopped there.
+
+    PROBE: every digest field on `BuildIdentity` — the build log, the output
+    binary, the snapshot — accepted `"0" * 64`. A receipt whose artifact identity
+    is a hand-typed filler reads to every downstream consumer exactly like one
+    that was measured, which is strictly worse than an absent one.
+
+    `t0_provider._req_sha256` was byte-identical but for the five lines that
+    reject it. Break this by deleting the `schemas.is_placeholder_digest` branch
+    from `worktree._req_sha256`.
+
+    The one EXEMPTION is `build_dir_pre_build_digest`, and it is not a loophole:
+    a fresh build directory is empty, so `integrity.EMPTY_TREE_SHA256` is the
+    reading `run_build(require_fresh_build_dir=True)` demands.
+    """
+
+    FILLERS = ("0" * 64, "f" * 64, "a" * 64, integrity.EMPTY_TREE_SHA256)
+
+    def test_a_filler_digest_is_refused(self):
+        for value in self.FILLERS:
+            with self.subTest(digest=value[:8]):
+                with self.assertRaises(ValueError) as ctx:
+                    W._req_sha256(value, "probe")
+                self.assertIn("placeholder digest", str(ctx.exception))
+
+    def test_COMPLIANT_a_measured_digest_is_still_accepted(self):
+        measured = schemas.content_hash({"a": "real value"})
+        self.assertEqual(W._req_sha256(measured, "probe"), measured)
+
+    def test_the_tree_digest_admits_the_empty_tree_and_nothing_else(self):
+        self.assertEqual(
+            W._req_tree_digest(integrity.EMPTY_TREE_SHA256, "build_dir_pre_build_digest"),
+            integrity.EMPTY_TREE_SHA256)
+        for value in ("0" * 64, "f" * 64, "a" * 64):
+            with self.subTest(digest=value[:8]):
+                with self.assertRaises(ValueError):
+                    W._req_tree_digest(value, "build_dir_pre_build_digest")
+
+    def test_a_malformed_digest_still_fails_for_its_own_reason(self):
+        with self.assertRaises(ValueError) as ctx:
+            W._req_sha256("deadbeef", "probe")
+        self.assertIn("lowercase sha256 hex digest", str(ctx.exception))
 
 
 if __name__ == "__main__":  # pragma: no cover

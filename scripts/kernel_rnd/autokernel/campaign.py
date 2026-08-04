@@ -226,24 +226,29 @@ MODULES_THE_DRIVER_USES: Mapping[str, str] = {
 #: The rest of the package, and why a campaign does not need it. NOT a deletion
 #: list — deletion is the operator's call and stays a separate one-line decision.
 #: This is the boundary that makes that decision easy to make.
+#:
+#: 2026-08-04: the operator MADE that decision. `release`, `adapters` and
+#: `surface` — and the AK4 strategy plane under `controller` — were removed
+#: (~79,600 lines, recoverable from the tag `autokernel-preserve-20260804`).
+#: Their rows are gone from this table rather than kept as epitaphs, because
+#: `test_campaign.TestTheBoundaryIsStructural.test_every_declared_module_is_real`
+#: is right: a boundary that names modules which do not exist is a boundary
+#: nobody can check. The argument each row carried is preserved where it is
+#: still checkable — `FOOTPRINT.md` for the reachability record and
+#: `test_campaign_footprint.DELETED_BY_OPERATOR` for the prefixes that may
+#: never come back onto this path.
 MODULES_DELIBERATELY_NOT_USED: Mapping[str, str] = {
-    "controller": "20,123 lines of research strategy in Python, replacing 114 lines of "
-                  "prose. selection.py encodes 22 rejection codes and zero domain "
-                  "knowledge about what makes an EPYC or MI210 kernel fast. The loop "
-                  "below is the state walk; a second one would give it two spellings",
-    "release": "17,782 lines needed to SHIP a champion, never to FIND one. Committed the "
-               "day before the code that can compile a candidate",
-    "release.readiness": "4,312 lines producing a number the design forbids branching on: "
-                         "is_trigger=False, composite_readiness() and freeze_eligibility() "
-                         "raise",
-    "adapters": "backends a kernel search is not searching",
+    "controller": "the AK4 strategy plane it used to hold is gone; what survives is "
+                  "MEMORY — hypotheses (the operator's drop-in), do_not_repeat (the "
+                  "§19.2 ledger) and the six lines they shared. The campaign path "
+                  "reaches none of it: the loop below is the state walk, and a "
+                  "hypothesis store is read by the agent proposing, not by the driver "
+                  "measuring",
     "evaluator.integrity": "one of two coexisting derivations of the same §8.5.1 gates; "
                            "reached transitively through chain.py, which is the single "
                            "derivation this driver consumes",
     "evaluator.surface": "the other one, and `derived superset-of traced` is unsatisfiable "
                          "against a full-suite trace",
-    "surface": "dashboard_contract.py is a freshness contract so a dead loop cannot read "
-               "as fresh. The loop has never been alive. Make it alive first",
     "evaluator.statistics": "IMPORT-FOR-CONSTANTS was permitted and is not needed. Its "
                             "e-process made the gate UNPASSABLE (threshold 10, ceiling "
                             "5.5687 for every effect size) and the fix's authorization was "

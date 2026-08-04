@@ -30,18 +30,36 @@ a module it never looked at.
 
 | | non-test lines |
 |---|---:|
-| **ON THE CAMPAIGN PATH** | **49,877** |
-| **DEFERRED** (provably unreachable) | **51,142** |
-| **TOTAL** | **101,019** |
+| **ON THE CAMPAIGN PATH** | **50,141** |
+| **DEFERRED** (provably unreachable) | **6,913** |
+| **TOTAL** | **57,054** |
 
-**Roughly half of this package is not on the path from "an idea for a
-kernel" to "a measured number."** The three figures above are regenerated from
-the tree and asserted row by row; no percentage or line count is repeated
-anywhere else in this file, because a number stated twice is a number that can
-drift in one of the two places. It is not wrong; it is not reached. That is what the
-boundary test makes provable, and it is what makes deleting it a one-line
-decision (`DELETED_BY_OPERATOR` in `test_campaign_footprint.py`) rather than a
-leap of faith.
+**There is no longer a deferred HALF.** What is deferred is one plane, an order
+of magnitude smaller than the campaign path, and the reason is on the next line.
+The three figures above are regenerated from the tree and asserted row by row; no
+percentage or line count is repeated anywhere else in this file, because a number
+stated twice is a number that can drift in one of the two places.
+
+### What the operator deleted, 2026-08-04
+
+Until 2026-08-04 this table read *roughly half of this package is not on the path
+from "an idea for a kernel" to "a measured number"*, over a total near 101k. The
+operator acted on it: `release/`, `adapters/`, `surface/` and the AK4 strategy
+plane under `controller/` were removed — about 79,600 lines including their
+tests, recoverable from the tag `autokernel-preserve-20260804`. The rationale is
+`epyc-root/artifacts/operator/autokernel-simplification-review.md`; the
+prediction this document made — that removing them could not change what campaign
+#1 does, because the walked graph reached none of them — held, and no reachability
+assertion in `test_campaign_footprint.py` changed.
+
+What is still deferred is `controller/`, and only its MEMORY half:
+`hypotheses.py` (the operator's hypothesis drop-in), `do_not_repeat.py` (the
+§19.2 ledger) and `shared.py` (the six lines the two of them needed from the
+plane that was removed). Nothing on the campaign path reaches any of it, and
+`controller/__init__.py` binds both modules, so reaching one reaches both. That
+is what the DEFERRED figure above now counts, and it is what keeps the boundary
+checkable rather than decorative: a prefix that has been deleted can no longer be
+used to prove the guard bites.
 
 ### One correction to the earlier estimate
 
@@ -75,54 +93,35 @@ incident or a measured fact; "reduced rigour" is not a reason.
 
 | module | lines | campaign #1 | reason |
 |---|---:|:---:|---|
-| `campaign.py` | 2,195 | yes | THE ENTRYPOINT. Before it landed, `grep -rl "__main__|argparse|def main("` over every non-test module returned nothing: 94k lines, 5,695 passing tests, and no way to start it — which is the whole reason this package has produced no result |
+| `campaign.py` | 2,200 | yes | THE ENTRYPOINT. Before it landed, `grep -rl "__main__|argparse|def main("` over every non-test module returned nothing: 94k lines, 5,695 passing tests, and no way to start it — which is the whole reason this package has produced no result |
 | `__init__.py` | 14 | yes | package docstring; `schemas` is declared here as the single source of record shape |
-| `schemas.py` | 2,790 | yes | one record shape — every module is written against it and none invents its own |
+| `schemas.py` | 2,984 | yes | one record shape — every module is written against it and none invents its own |
 | `journal.py` | 2,127 | yes | AutoPilot lost 232 trials and ~16 days when a restart came up empty and nothing objected |
 | `storage.py` | 1,858 | yes | the 2026-07-04 async-prefetch win was written to `/mnt/raid0/llm/tmp/` and that directory no longer exists |
 | `evaluator/__init__.py` | 41 | yes | docstring only — it binds no submodule, so importing `evaluator.api` does not drag the plane in |
-| `evaluator/api.py` | 3,024 | yes | a `Verdict` is constructible only via `compute_verdict()`; `kernel_eval.sh` stamped `"status":"OK"` unconditionally |
-| `evaluator/correctness.py` | 3,514 | yes | throughput is reward-hackable: deleting the computation is the fastest kernel there is |
-| `evaluator/recipes.py` | 2,368 | yes | argv from a hashed constructor — production drifted off NUMA interleave 2026-05-24 and the front door ended up at 46% of canonical |
+| `evaluator/api.py` | 3,116 | yes | a `Verdict` is constructible only via `compute_verdict()`; `kernel_eval.sh` stamped `"status":"OK"` unconditionally |
+| `evaluator/correctness.py` | 3,518 | yes | throughput is reward-hackable: deleting the computation is the fastest kernel there is |
+| `evaluator/recipes.py` | 2,369 | yes | argv from a hashed constructor — production drifted off NUMA interleave 2026-05-24 and the front door ended up at 46% of canonical |
 | `evaluator/devices.py` | 577 | yes | a GPU cell must not be satisfied by `Device 0: CPU` |
 | `evaluator/controls.py` | 2,405 | yes | the A/A control plane — 2026-08-04 measured 1.62% / 1.88% between-run CV over four identical runs |
-| `evaluator/statistics.py` | 3,628 | yes | **calibration constants and `median` only.** Its e-process made the gate unpassable: threshold 10 against a sign-martingale that tops out at 5.5687, at every effect size. Fenced by `TestNoOptionalStopping` |
+| `evaluator/statistics.py` | 3,623 | yes | **calibration constants and `median` only.** Its e-process made the gate unpassable: threshold 10 against a sign-martingale that tops out at 5.5687, at every effect size. Fenced by `TestNoOptionalStopping` |
 | `evaluator/integrity.py` | 3,581 | yes | **provenance primitives only** — `sha256_file`, `hash_source_tree`, `EMPTY_TREE_SHA256`, the clean-build snapshot check. Its §8.5.1 gate runner is fenced off |
 | `evaluator/surface.py` | 3,195 | yes | **change-class constants only** — `AffectedSurface`, the core/shared-header fanout classes. `SurfaceGateRunner` is fenced off |
 | `execution/__init__.py` | 24 | yes | docstring only; states the deny-8 limits every executor inherits |
-| `execution/worktree.py` | 2,645 | yes | no candidate exists without it: production-tip anchoring, campaign worktree, build, build-identity receipt |
+| `execution/worktree.py` | 2,649 | yes | no candidate exists without it: production-tip anchoring, campaign worktree, build, build-identity receipt |
 | `execution/microbench.py` | 3,193 | yes | paired ALTERNATING blocks — 2026-08-04 A/A decode declined monotonically over four runs, so candidate-then-anchor charges the second arm ~4% systematically and repetitions do not remove it |
-| `execution/t0_provider.py` | 3,052 | yes | the predecessor harness tested MUL_MAT only, so a kernel that broke MUL_MAT_ID — MoE dispatch, every token in production — passed it cleanly |
+| `execution/t0_provider.py` | 3,014 | yes | the predecessor harness tested MUL_MAT only, so a kernel that broke MUL_MAT_ID — MoE dispatch, every token in production — passed it cleanly |
 | `execution/control_runner.py` | 1,546 | yes | runs the neutral / A-A controls that the measured drift makes mandatory rather than optional |
 | `execution/cpu_region_claim.py` | 2,408 | yes | 2026-08-04: two A/A runs were destroyed by a legitimate co-tenant because the loop held no claim. Before this module a claim could be READ but never acquired |
-| `execution/chain.py` | 1,725 | yes | holds the seams — four mismatches between executors and evaluator, one of them a field whose meaning INVERTS across the seam |
+| `execution/chain.py` | 1,732 | yes | holds the seams — four mismatches between executors and evaluator, one of them a field whose meaning INVERTS across the seam |
 | `resource/__init__.py` | 28 | yes | docstring only; names the `resource`-shadows-stdlib hazard the loop must not trip |
 | `resource/device_claim.py` | 1,826 | yes | §2.6's first row of substrate that exists nowhere in the project: a cross-process GPU device claim someone actually holds |
 | `resource/preflight.py` | 1,788 | yes | INC-20260731: a name-pattern kill took out another agent's `llama-server` twice, and `earlyoom`, whose argv names what it guards |
 | `resource/claim_witness.py` | 325 | yes | invariant 9 — idle sensing is never a claim, and the witness is what tells the two apart |
-| `controller/__init__.py` | 71 | no | binds every controller module, so any import of this package pulls the whole plane |
-| `controller/selection.py` | 2,953 | no | 22 rejection codes and zero domain knowledge about what makes an EPYC or an MI210 kernel fast |
-| `controller/guards.py` | 3,670 | no | deterministic stop conditions for a loop that has never taken a step |
-| `controller/context.py` | 3,167 | no | compiles context for an LLM planner; campaign #1's proposals come from the session, not from a compiled context |
-| `controller/hypotheses.py` | 4,481 | no | an operator hypothesis channel with no campaign to feed it |
-| `controller/critic.py` | 2,077 | no | pre/post-run critics gating proposals that no producer emits yet |
-| `controller/state_machine.py` | 1,972 | no | states for a loop with no entrypoint; campaign #1 is one candidate, run once, by hand |
-| `controller/composition.py` | 2,165 | no | champion-lineage maintenance before a single champion exists |
-| `controller/planner.py` | 1,397 | no | research strategy in Python, replacing 114 lines of prose in autoresearch's `program.md` |
-| `controller/oracles.py` | 405 | no | a §6.5 oracle registry whose two consumers are both in this deferred plane |
-| `controller/do_not_repeat.py` | 2,196 | no | the §19.2 memory-update plane `hypotheses.py` says it does not own; it feeds `check_do_not_repeat()` and `selection.match_ledger()`, both of which are in this same deferred plane |
-| `controller/fingerprint.py` | 144 | no | proposal identity for proposals nothing produces |
-| `release/__init__.py` | 31 | no | binds `plan`; the release plane ships a champion and campaign #1 has none |
-| `release/t3.py` | 6,660 | no | the T3 freeze gate — explicitly outside P-AK-SEARCH-1, and `api.admit_tier()` refuses T3/T4 by name on the search path |
-| `release/readiness.py` | 4,312 | no | 4,312 lines producing a number the design forbids branching on: `is_trigger=False`, and `composite_readiness()` / `freeze_eligibility()` raise |
-| `release/packager.py` | 4,276 | no | seals a package a human executes; needed to SHIP a champion, never to FIND one |
-| `release/plan.py` | 2,503 | no | the release-plan compiler was committed the day BEFORE the code that can compile a candidate |
-| `adapters/serving_runtime.py` | 3,646 | no | the three-gate stack-change path — a backend this kernel search is not searching |
-| `adapters/whisper_stt.py` | 1,806 | no | STT backend; the speech kernels are frozen at `production-speech-v1` and campaign #1 is a llama.cpp CPU-decode cell |
-| `adapters/qwentts_tts.py` | 1,935 | no | TTS backend, same freeze, same reason |
-| `adapters/__init__.py` | 21 | no | docstring only, but the package it heads is backends nothing is searching |
-| `surface/__init__.py` | 40 | no | imports `dashboard_contract`, so reaching ANY module under `surface/` executes the producer |
-| `surface/dashboard_contract.py` | 1,214 | no | a freshness contract so that a dead loop cannot read as fresh. The loop has never been alive; make it live first |
+| `controller/__init__.py` | 49 | no | binds every surviving controller module, so any import of this package pulls the whole plane — which is why `test_importing_one_controller_module_pulls_the_whole_surviving_plane` can plant its violation through `shared.py` and catch `hypotheses.py` |
+| `controller/hypotheses.py` | 4,493 | no | an operator hypothesis channel with no campaign to feed it. KEPT through the 2026-08-04 deletion because the operator asked for a hypothesis drop-in; it is read by whoever PROPOSES a candidate, never by the driver that measures one |
+| `controller/do_not_repeat.py` | 2,205 | no | the §19.2 memory-update plane `hypotheses.py` says it does not own. KEPT because a loop that cannot tell "tried and failed" from "never tried" re-runs dead ideas forever; its `selection.match_ledger()` consumer was deleted with the AK4 plane and `check_do_not_repeat()` is the surviving one |
+| `controller/shared.py` | 166 | no | the six lines `hypotheses` and `do_not_repeat` reached into the removed plane for — `ControllerError`, `selection_block()`, `LEDGER_DIMENSIONS` and the fingerprint pair. Twenty thousand lines were pinned by six, because a concern shared by two modules had nowhere to live; this is where it lives now |
 
 ---
 
@@ -132,14 +131,20 @@ incident or a measured fact; "reduced rigour" is not a reason.
 
 1. **`TestCampaignFootprint.test_campaign_path_does_not_reach_the_deferred_half`**
    — the walked graph reaches nothing under `controller/`, `release/`,
-   `adapters/` or `surface/`. This is the DEFERRED figure in the table above.
+   `adapters/` or `surface/`. The last three are deleted, so for them it is a ban
+   on their ever coming back onto the path; `controller/` is the live prefix, and
+   it is the DEFERRED figure in the table above.
 2. **`test_the_deferred_half_is_still_on_disk`**,
    **`test_the_deferred_half_is_a_real_share_of_the_tree`** and
    **`test_the_entrypoint_exists`** — anti-vacuity. The boundary must not start
-   passing because its targets were renamed, because 20,000 lines migrated onto
-   the campaign path, or because the entrypoint it is drawn around was deleted.
-   The last of those was a `skipUnless`, which meant `rm campaign.py` turned this
-   whole file into a green no-op.
+   passing because its targets were renamed, because the deferred modules migrated
+   onto the campaign path, or because the entrypoint it is drawn around was
+   deleted. The last of those was a `skipUnless`, which meant `rm campaign.py`
+   turned this whole file into a green no-op. The line floor in the second was
+   RE-PINNED on 2026-08-04: 40,000 was calibrated against a 46k deferred half that
+   the operator then deleted, and a floor no surviving file can clear is not a
+   check, it is a permanent red. The derivation of the replacement is in the
+   constant's own comment.
 2b. **`test_no_dynamic_import_on_the_campaign_path_is_unresolvable`** — every
    check here is a statement about a graph that was WALKED, and an
    `import_module(f"{__package__}.…")` is a hole in that graph. It is REPORTED,
@@ -181,9 +186,20 @@ incident or a measured fact; "reduced rigour" is not a reason.
    against a **copy of this package with a violation planted in it**: every
    mutation caught, and compliant-path controls beside each, all silent. Toy
    fixtures verify that the walker resolves each import *form*; this verifies
-   the checks fire on the real 95k-line closure. The copy is why: the shared
+   the checks fire on the real closure. The copy is why: the shared
    clone (`/workspace/repos/…` and `/mnt/raid0/llm/…` are one checkout) is never
    written to.
+   **Re-pointed 2026-08-04.** Five of these plants named modules under the deleted
+   planes. A probe that imports a module which does not exist plants NOTHING — the
+   walk drops a name with no file, the check reports clean, and the test fails
+   claiming the walker did not bite when what was missing was the target. They now
+   plant against `controller/`, the one deferred prefix still on disk, which keeps
+   each mechanism (direct import, function-level import, parent-`__init__` side
+   effect, dynamic import by absolute and by relative string) exercised against the
+   real tree. The deleted prefixes keep the one assertion still meaningful about
+   them — `test_re_adding_a_deleted_plane_and_importing_it_is_caught`, which writes
+   an empty stub plane into the temp COPY and proves the ban fires the moment
+   something depends on it again.
 
 ## Three findings this exercise produced
 
@@ -223,5 +239,22 @@ and it is a refactor, not a deletion.
 To delete a deferred plane: move its prefix into `DELETED_BY_OPERATOR` in
 `test_campaign_footprint.py`, remove the directory, and delete its rows here.
 The reachability assertion still holds — an absent module is unreachable — and
-nothing else changes. That edit is the entire cost, and it is the reason this
-was written as a test rather than as a recommendation.
+that edit is why this was written as a test rather than as a recommendation.
+
+**What that edit does NOT cover, measured on 2026-08-04 by doing it.** "Nothing
+else changes" was too strong, and the correction generalises past this package:
+
+* Every OTHER test that named a module in the plane is now a test with no
+  subject. Three kinds turned up — a boundary bite-test whose planted violation
+  can no longer be planted, a composition test importing the plane's driver, and
+  an anti-vacuity control that proved a rule was not so narrow it rejected its own
+  real consumers. The first is re-pointed at a surviving plane, the second is
+  excised, and the third has no replacement and was removed with a note saying
+  what was lost. Fixing the first two by asserting less would have been the exact
+  failure this document exists to catch.
+* Any calibrated constant measured against the deleted lines — here the deferred
+  line floor — must be re-derived from the tree that is left, not lowered until
+  the suite goes quiet.
+* A plane rarely leaves cleanly. `controller/` could not: two modules the operator
+  kept reached into the removed plane for six lines, which now live in
+  `controller/shared.py`. Budget for a survivors' module before starting.

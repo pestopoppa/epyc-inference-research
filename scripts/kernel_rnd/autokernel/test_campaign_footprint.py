@@ -2,13 +2,13 @@
 
 WHY THIS FILE EXISTS
 --------------------
-AutoKernel is 94,083 non-test lines and 5,695 passing tests, and it has produced
-NO RESULT. The reason is not that any of it is wrong; it is that most of it is
+AutoKernel was 94,083 non-test lines and 5,695 passing tests, and it had produced
+NO RESULT. The reason was not that any of it was wrong; it was that most of it was
 not on the path from "an idea for a kernel" to "a measured number", and nobody
 could tell which half was which. `release/` was committed the day BEFORE the code
-that can compile a candidate. `controller/selection.py` encodes 22 rejection
+that can compile a candidate. `controller/selection.py` encoded 22 rejection
 codes and zero facts about what makes an EPYC or an MI210 kernel fast.
-`surface/dashboard_contract.py` is a freshness contract for a loop that has never
+`surface/dashboard_contract.py` was a freshness contract for a loop that has never
 been alive.
 
 This module draws the line and makes it MECHANICAL. It parses the AST of every
@@ -17,14 +17,32 @@ function-level imports, parent-package `__init__` side effects and dynamic
 `import_module("autokernel.…")` strings — and asserts the campaign path does not
 reach the deferred half.
 
-WHY A BOUNDARY TEST AND NOT A DELETION
---------------------------------------
+WHY A BOUNDARY TEST AND NOT A DELETION — AND WHAT THE DELETION THEN COST
+------------------------------------------------------------------------
 Deleting the deferred half is the operator's call, and this test is what makes that
 call a ONE-LINE decision instead of a leap of faith: the deferred half is
 PROVABLY INERT on the campaign path, so removing it cannot change what campaign
 #1 does. `test_the_deferred_half_is_still_on_disk` is that one line — when the
-operator deletes a plane, its prefix moves to `DELETED_BY_OPERATOR` and nothing
-else here changes.
+operator deletes a plane, its prefix moves to `DELETED_BY_OPERATOR`.
+
+On 2026-08-04 the operator made that call: `release/`, `adapters/`, `surface/`
+and the AK4 strategy plane under `controller/` were removed, ~79,600 lines,
+recoverable from the tag `autokernel-preserve-20260804`. The prediction held —
+no reachability assertion changed — but "nothing else here changes" did not,
+and the correction is worth stating because it is a general fact about
+guards, not a detail of this one:
+
+    A guard whose only targets have been deleted is not a guard that passes.
+    It is a guard that can no longer be exercised.
+
+`TestTheBoundaryCatchesRealTreeViolations` plants a violation in a copy of the
+real tree and asserts it is caught. Five of those plants named modules under the
+removed planes, and a probe that imports a module which does not exist plants
+nothing at all — the walk drops the name and the check reports clean. So they are
+re-pointed at `controller/`, which is still on disk, still a `DEFERRED` prefix and
+still unreachable from the campaign path, and the DELETED prefixes get the one
+assertion that is still meaningful about them:
+`test_re_adding_a_deleted_plane_and_importing_it_is_caught`.
 
 It also fails LOUDLY the first time someone reintroduces a dependency on the
 deferred half, which is the failure mode that produced the 94k lines in the first
@@ -139,9 +157,10 @@ CAMPAIGN_ROOTS = {
 #: "autokernel.release_notes".
 DEFERRED = {
     f"{ROOT_PKG}.controller":
-        "research strategy in Python, replacing 114 lines of prose in autoresearch's "
-        "program.md; selection.py encodes 22 rejection codes and zero domain knowledge "
-        "about what makes an EPYC or MI210 kernel fast",
+        "MEMORY, not the campaign path: `hypotheses` is the operator's drop-in and "
+        "`do_not_repeat` is the §19.2 ledger, both read by whoever PROPOSES a candidate "
+        "and by nothing that measures one. `controller/__init__.py` binds both, so "
+        "reaching any module under this prefix executes the whole surviving plane",
     f"{ROOT_PKG}.release":
         "needed to SHIP a champion, never to FIND one; committed the day before the code "
         "that can compile a candidate",
@@ -156,7 +175,35 @@ DEFERRED = {
 #: cost of acting on this boundary: the reachability assertion still holds (an
 #: absent module is unreachable), and `test_the_deferred_half_is_still_on_disk`
 #: stops requiring the files. Nothing else in this file changes.
-DELETED_BY_OPERATOR: tuple = ()
+DELETED_BY_OPERATOR: tuple = (
+    f"{ROOT_PKG}.release",
+    f"{ROOT_PKG}.adapters",
+    f"{ROOT_PKG}.surface",
+)
+
+#: Removed 2026-08-04 on the operator's approval; recoverable from the tag
+#: `autokernel-preserve-20260804`. ~79,600 lines including tests.
+#:
+#: The edit above is the entire cost of acting on this boundary, exactly as this
+#: file promised — but the removal was NOT free, and the bill is worth recording
+#: because it is the refactoring lesson in miniature. `controller` could not go
+#: wholesale: `hypotheses.py` and `do_not_repeat.py` are the operator's hypothesis
+#: drop-in and the do-not-repeat memory, and they reached into the removed plane
+#: for exactly SIX LINES — `state_machine.ControllerError` (a two-line base
+#: exception), `fingerprint.selection_block()` (four lines) — plus
+#: `selection.LEDGER_DIMENSIONS`, a constant describing what the LEDGER keys on
+#: that had no business living in `selection.py`. Twenty thousand lines were
+#: pinned by six. They now live in `controller/shared.py`, which is where a
+#: concern shared by two modules belongs and where this package has never had a
+#: place to put one.
+#:
+#: `controller` therefore does NOT appear above: three modules under it are still
+#: on disk, so it stays in `DEFERRED` as a live prefix — which is also what keeps
+#: this boundary from becoming decorative. `DEFERRED` and `DELETED_BY_OPERATOR`
+#: are now disjoint sets with different jobs: the first names a plane the campaign
+#: path must not reach and CAN still be reached (so the checks below have
+#: something to bite on in the real tree), the second names prefixes that may
+#: never come back onto the path at all.
 
 
 # =============================================================================
@@ -992,10 +1039,28 @@ class TestCampaignFootprint(unittest.TestCase):
                 f"{prefix} is neither on disk nor listed in DELETED_BY_OPERATOR; if it was "
                 "deleted, say so there — if it was RENAMED, this boundary is now a no-op")
 
+    #: RE-PINNED 2026-08-04, against the tree the operator's deletion left behind.
+    #:
+    #: The bound is not a taste and it is not a round number carried over from the
+    #: 46k era — 40,000 was calibrated against a deferred half that no longer
+    #: exists, and after the deletion it could only be satisfied by files that are
+    #: gone. What is left under a live `DEFERRED` prefix is `controller/`:
+    #: `hypotheses.py` (~4,500 non-test lines) and `do_not_repeat.py` (~2,200),
+    #: plus `__init__.py` and `shared.py`, measured at 6,913 lines on this date.
+    #:
+    #: The derivation, so the number can be re-derived rather than trusted: the
+    #: property being defended is "no deferred MODULE migrated onto the campaign
+    #: path". The cheapest way to break it is to move the SMALLER of the two,
+    #: which would leave 6,913 - 2,205 = 4,708. So the bound sits above that and
+    #: below the tree, at 5,000: either module moving fails this check, and ~1,900
+    #: lines of ordinary editing churn — by any of the sessions that share this
+    #: clone — does not.
+    DEFERRED_FLOOR = 5_000
+
     def test_the_deferred_half_is_a_real_share_of_the_tree(self):
         """Second anti-vacuity check: the deferred half must be substantial.
 
-        If a refactor moved 20,000 lines out of `controller/` into a module the
+        If a refactor moved `hypotheses.py` out of `controller/` into a module the
         campaign path imports, every reachability assertion above would still
         pass and the boundary would mean nothing.
         """
@@ -1007,9 +1072,10 @@ class TestCampaignFootprint(unittest.TestCase):
             for path in sub.rglob("*.py"):
                 if not path.name.startswith("test_"):
                     deferred_lines += len(path.read_text(encoding="utf-8").splitlines())
-        self.assertGreater(deferred_lines, 40_000,
-                           "the deferred half is no longer 46k lines; either it was deleted "
-                           "(say so in DELETED_BY_OPERATOR) or it moved onto the campaign path")
+        self.assertGreater(deferred_lines, self.DEFERRED_FLOOR,
+                           f"the deferred half is under {self.DEFERRED_FLOOR:,} lines; "
+                           "either it was deleted (say so in DELETED_BY_OPERATOR) or a "
+                           "module moved onto the campaign path")
 
     def test_the_entrypoint_exists(self):
         """The boundary is drawn AROUND an entrypoint; without one it guards nothing.
@@ -1263,34 +1329,81 @@ class TestTheBoundaryCatchesRealTreeViolations(unittest.TestCase):
                         f"caught something else than {needle!r}: {findings}")
 
     # -- the deferred half --------------------------------------------------
+    #
+    # RE-POINTED 2026-08-04. Every planted violation below used to name a module
+    # under `release/`, `adapters/` or `surface/`. Those are gone, and a probe
+    # that imports a module which does not exist plants NOTHING: `closure()`
+    # drops a name with no file, so `deferred_findings` returned [] and all five
+    # of these tests failed with "planted violation was NOT caught" — the walker's
+    # bite reported as absent when what was absent was the target.
+    #
+    # They are re-pointed at `controller/`, which is the choice that keeps the
+    # MECHANISM under test intact: it is a live `DEFERRED` prefix, it is really on
+    # disk, its `__init__` really binds its submodules, and it is really absent
+    # from the campaign closure — so each of these still runs against the real
+    # 95k-line tree with a real edge planted in it, which is the entire reason
+    # this class exists beside `TestTheWalkerItself`.
+    #
+    # The other reading — "assert that re-adding a DELETED module is caught" — is
+    # not dropped; it is `test_re_adding_a_deleted_plane_and_importing_it_is_caught`
+    # below, which is the one thing the deleted prefixes can still be tested for.
 
     def test_a_direct_import_of_controller_is_caught(self):
-        self.assert_caught("from .controller import selection\n",
-                           deferred_findings, f"{ROOT_PKG}.controller.selection")
+        self.assert_caught("from .controller import do_not_repeat\n",
+                           deferred_findings, f"{ROOT_PKG}.controller.do_not_repeat")
 
-    def test_a_direct_import_of_release_is_caught(self):
-        self.assert_caught("from .release import readiness\n",
-                           deferred_findings, f"{ROOT_PKG}.release.readiness")
+    def test_re_adding_a_deleted_plane_and_importing_it_is_caught(self):
+        """The DELETED prefixes, and the only honest assertion left about them.
 
-    def test_importing_the_surface_package_pulls_the_dashboard_producer(self):
-        """`surface/__init__.py` imports `dashboard_contract`; the edge is invisible here."""
-        self.assert_caught("from . import surface\n",
-                           deferred_findings, f"{ROOT_PKG}.surface.dashboard_contract")
+        `release`, `adapters` and `surface` are in `DEFERRED` *and* in
+        `DELETED_BY_OPERATOR`, which is a pair of claims that would otherwise go
+        unchecked forever: an absent module is trivially unreachable, so nothing
+        distinguishes "the ban holds" from "the ban is dead text". What CAN be
+        checked is the case the ban is for — someone puts the plane back and
+        depends on it — and that is what is planted here, in the temp COPY.
 
-    def test_a_function_level_import_of_adapters_is_caught(self):
+        Writing the module into the copy is not restoring it: the real tree is
+        never written to (`test_the_probe_leaves_nothing_behind`), and the file is
+        an empty stub, not the 17,782 lines that were removed.
+        """
+        for prefix in DELETED_BY_OPERATOR:
+            plane = prefix.split(".")[-1]
+            sub = self.copy_dir / plane
+            sub.mkdir(exist_ok=True)
+            (sub / "__init__.py").write_text("", encoding="utf-8")
+            (sub / "revenant.py").write_text("VALUE = 1\n", encoding="utf-8")
+            try:
+                with self.subTest(plane=plane):
+                    self.assert_caught(f"from .{plane} import revenant\n",
+                                       deferred_findings, f"{prefix}.revenant")
+            finally:
+                shutil.rmtree(sub)
+
+    def test_importing_one_controller_module_pulls_the_whole_surviving_plane(self):
+        """`controller/__init__.py` binds `hypotheses`; the edge is invisible here.
+
+        `shared.py` imports nothing under `controller`, so the ONLY route from
+        this probe to `hypotheses` is the parent package's `__init__` running as
+        a side effect of the import — which is the form `surface/__init__.py`
+        used to demonstrate and which no reading of the probe's own source shows.
+        """
+        self.assert_caught("from .controller import shared\n",
+                           deferred_findings, f"{ROOT_PKG}.controller.hypotheses")
+
+    def test_a_function_level_import_of_controller_is_caught(self):
         self.assert_caught("""
             def later():
-                from .adapters import serving_runtime
-                return serving_runtime
-        """, deferred_findings, f"{ROOT_PKG}.adapters.serving_runtime")
+                from .controller import hypotheses
+                return hypotheses
+        """, deferred_findings, f"{ROOT_PKG}.controller.hypotheses")
 
     def test_a_dynamic_import_string_into_controller_is_caught(self):
         self.assert_caught("""
             import importlib
 
             def later():
-                return importlib.import_module("autokernel.controller.guards")
-        """, deferred_findings, f"{ROOT_PKG}.controller.guards")
+                return importlib.import_module("autokernel.controller.hypotheses")
+        """, deferred_findings, f"{ROOT_PKG}.controller.hypotheses")
 
     def test_a_compliant_module_produces_no_deferred_finding(self):
         """CONTROL."""
@@ -1403,17 +1516,26 @@ class TestTheBoundaryCatchesRealTreeViolations(unittest.TestCase):
             import importlib
 
             def later():
-                return importlib.import_module(".controller.guards", __package__)
-        """, deferred_findings, f"{ROOT_PKG}.controller.guards")
+                return importlib.import_module(".controller.do_not_repeat", __package__)
+        """, deferred_findings, f"{ROOT_PKG}.controller.do_not_repeat")
 
     def test_an_fstring_dynamic_import_is_reported_unresolved(self):
-        """FAIL-CLOSED: what the walk cannot follow must not read as a clean pass."""
+        """FAIL-CLOSED: what the walk cannot follow must not read as a clean pass.
+
+        The named module has to EXIST for the first half to say anything: against
+        `controller.guards`, which was deleted, "no deferred finding" is what a
+        walk that resolved the f-string perfectly would also report, so the
+        assertion held for the wrong reason. Against `controller.hypotheses` —
+        which `test_a_dynamic_import_string_into_controller_is_caught` proves IS
+        caught when the same string is a literal — silence here is a statement
+        about the f-string and nothing else.
+        """
         self.assertEqual(
             self._findings("""
                 import importlib
 
                 def later():
-                    return importlib.import_module(f"{__package__}.controller.guards")
+                    return importlib.import_module(f"{__package__}.controller.hypotheses")
             """, deferred_findings), [],
             "an f-string names no module statically; it must surface as unresolved, "
             "not as a deferred finding")
@@ -1421,7 +1543,7 @@ class TestTheBoundaryCatchesRealTreeViolations(unittest.TestCase):
             import importlib
 
             def later():
-                return importlib.import_module(f"{__package__}.controller.guards")
+                return importlib.import_module(f"{__package__}.controller.hypotheses")
         """, unresolved_import_findings, "import_module")
 
     def test_the_real_campaign_path_has_no_unresolved_dynamic_import(self):

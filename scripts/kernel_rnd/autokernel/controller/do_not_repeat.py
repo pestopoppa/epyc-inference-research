@@ -135,8 +135,8 @@ from typing import Any, Mapping, Optional, Sequence
 
 from .. import journal, schemas
 from ..evaluator import api as evaluator_api
-from . import fingerprint, hypotheses
-from .state_machine import ControllerError
+from . import hypotheses, shared as fingerprint
+from .shared import ControllerError
 
 __all__ = [
     # errors

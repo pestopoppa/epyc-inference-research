@@ -515,8 +515,13 @@ def _shell_quote(token: str) -> str:
 
 
 def _require_str(value: Any, field: str) -> str:
-    if not isinstance(value, str) or not value:
-        raise RecipeParameterError(f"{field}: expected a non-empty string, got {value!r}")
+    """`schemas.require.str`, PLUS the rule that is this module's alone.
+
+    Composition, not a copy: the shared predicate ("a non-empty string") comes
+    from the field type and raises this module's error; the control-character
+    rule stays here because it is about argv and nowhere else.
+    """
+    schemas.require.str(value, field, error=RecipeParameterError)
     if _CONTROL_CHARS_RE.search(value):
         raise RecipeParameterError(
             f"{field}: contains a control character; an argv token carrying one cannot "
@@ -871,18 +876,19 @@ class DisciplineFinding:
                 "reasons": list(self.check.reasons), "clause": self.clause}
 
 
-_OUTCOME_SEVERITY = {schemas.PASS: 0, schemas.COULD_NOT_CHECK: 1, schemas.FAIL: 2}
-
-
 def worst_outcome(findings: Sequence[DisciplineFinding]) -> str:
     """`FAIL` > `COULD_NOT_CHECK` > `PASS`. An empty vector is `COULD_NOT_CHECK`.
 
     An empty discipline vector is NOT a pass: nothing was checked, which is the
-    third outcome and never the first.
+    third outcome and never the first. This module already answered the empty
+    case correctly; delegating to `schemas.Check.worst_of` keeps it correct by
+    construction rather than by a local `if`, and makes the answer the same one
+    every other reducer gives.
+
+    Returns the outcome STRING, not a `Check` — this is the `RecipeReceipt`
+    summary field and its callers compare it to `schemas.PASS`.
     """
-    if not findings:
-        return schemas.COULD_NOT_CHECK
-    return max((f.check.outcome for f in findings), key=lambda o: _OUTCOME_SEVERITY[o])
+    return schemas.Check.worst_of(f.check for f in findings).outcome
 
 
 _DELEGATED_LINKAGE = DisciplineFinding(

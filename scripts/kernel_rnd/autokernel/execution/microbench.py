@@ -242,7 +242,8 @@ TESTDATA_DIR = Path(__file__).resolve().parent / "testdata"
 ARM_ANCHOR = "anchor"
 ARM_CANDIDATE = "candidate"
 
-_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+#: Bound, not re-compiled — the digest shape has one owner. See `schemas.require`.
+_SHA256_RE = schemas.SHA256_RE
 
 
 # =============================================================================

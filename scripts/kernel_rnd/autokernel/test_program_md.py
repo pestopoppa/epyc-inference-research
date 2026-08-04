@@ -47,9 +47,21 @@ from autokernel.evaluator import api  # noqa: E402
 
 PROGRAM_MD = Path(__file__).resolve().parent / "program.md"
 
-#: Subpackages the operator has not adopted. `program.md` may not send a reader
-#: into any of them by module path.
-DEFERRED_PACKAGES = ("controller", "release", "adapters")
+#: Subpackages the operator has not adopted and which are STILL ON DISK.
+#: `program.md` may not send a reader into any of them by module path.
+DEFERRED_PACKAGES = ("controller",)
+
+#: Deleted on the operator's approval, 2026-08-04 (tag
+#: `autokernel-preserve-20260804`). `program.md` may not name these either, and
+#: the reason is a different one worth keeping separate: not that a reader would
+#: be routed into the unadopted half, but that a runbook citing a module which no
+#: longer exists is the same staleness arriving by another route.
+#:
+#: They are a separate tuple because the CONTROL below is inverted for them —
+#: "still on disk" is exactly what must NOT hold. Left in the deferred list, they
+#: made that control pass over an empty directory containing nothing but a
+#: `__pycache__`, which is the vacuity it was written to prevent.
+DELETED_PACKAGES = ("release", "adapters", "surface")
 
 #: Modules of the adopted half, by the leaf name `program.md` cites them under.
 ESSENTIAL_MODULES = {
@@ -94,7 +106,7 @@ class TestTheProseStaysInsideTheAdoptedHalf(unittest.TestCase):
     def test_no_deferred_package_is_named(self):
         body = text()
         hits = []
-        for name in DEFERRED_PACKAGES:
+        for name in DEFERRED_PACKAGES + DELETED_PACKAGES:
             # `release/` or `release.symbol` — not the English word "release."
             for match in re.finditer(rf"\b{name}(?:/|\.[A-Za-z_])", body):
                 hits.append(f"{name!r} at line {body.count(chr(10), 0, match.start()) + 1}")
@@ -103,14 +115,25 @@ class TestTheProseStaysInsideTheAdoptedHalf(unittest.TestCase):
     def test_the_deferred_packages_are_still_on_disk(self):
         """The control: this guard means nothing if the deferred half is gone.
 
-        Deleting it is the operator's call and stays a separate one; if it is
-        ever made, this test says so instead of passing silently.
+        Deleting it is the operator's call and stays a separate one; when it is
+        made, this test says so instead of passing silently — which is what it did
+        on 2026-08-04. `release/` and `adapters/` had been deleted, but the
+        directories survived holding a stale `__pycache__`, so `is_dir()` was
+        still true and the control reported a boundary over files that no longer
+        existed. Both directions are now asserted, so neither a deletion nor a
+        leftover shell can pass.
         """
         package = Path(__file__).resolve().parent
         for name in DEFERRED_PACKAGES:
             self.assertTrue((package / name).is_dir(),
                             f"{name}/ is gone — the boundary this file guards no longer "
                             "describes the tree, and this test list is stale")
+        for name in DELETED_PACKAGES:
+            self.assertFalse((package / name).exists(),
+                             f"{name}/ is listed as deleted but is back on disk; it is "
+                             "either a real restoration — in which case it belongs in "
+                             "DEFERRED_PACKAGES — or a leftover shell that makes the "
+                             "check above pass over nothing")
 
     def test_the_adopted_half_is_still_named(self):
         """The compliant-path control: the guard above must not be passable by

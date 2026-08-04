@@ -174,7 +174,8 @@ def build(**overrides) -> C.BuildProvenance:
         compiler_id="hipcc", compiler_version="6.2.0",
         build_log_ref="data/ak/akc-0001/build.log",
         production_tree_paths_touched=(),
-        output_binary_sha256=sha("cand-binary"))
+        output_binary_sha256=sha("cand-binary"),
+        produced_by="evaluator")
     kwargs.update(overrides)
     return C.BuildProvenance(**kwargs)
 
@@ -192,7 +193,7 @@ def diff(**overrides) -> C.DiffPolicyEvidence:
         changed_lines=118, change_class="dispatcher", envelope=envelope(),
         branch_name="llama.cpp-experimental/ak-mmq-id-tile", commit_was_pathspec_limited=True,
         production_tree_paths=(), record_schema_violations=(),
-        diff_ref="data/ak/akc-0001/diff.patch")
+        diff_ref="data/ak/akc-0001/diff.patch", produced_by="evaluator")
     kwargs.update(overrides)
     return C.DiffPolicyEvidence(**kwargs)
 
@@ -2549,6 +2550,126 @@ class TestAReportCannotMisfileAGate(unittest.TestCase):
 
     def test_the_honest_report_still_builds(self):
         self.assertEqual(len(self._report_with(C.GID_NO_FALLBACK).gates), 17)
+
+
+# ---------------------------------------------------------------------------
+# The build and diff records name their producer
+# ---------------------------------------------------------------------------
+
+class TestBuildAndDiffEvidenceCannotBeSelfReported(unittest.TestCase):
+    """RED TEAM: `BuildProvenance` and `DiffPolicyEvidence` had no `produced_by`.
+
+    Eleven of this file's other evidence types have carried it since they were
+    written, and every one of their gates FAILs a record the evaluator did not
+    produce. These two did not, so three §8.5.1 gates believed whoever handed
+    them a record:
+
+      * `build_dir_was_fresh` / `incremental_objects_present` — the clean-build
+        claim, taken on the producer's word.
+      * `commit_was_pathspec_limited` — in a shared clone an unrestricted commit
+        sweeps another session's staged files into the artifact, and the
+        CANDIDATE was believed about whether it had done that.
+
+    `t0_provider.SCHEMA_FOLLOWUPS` recorded both gaps and named this exact
+    remedy. Break it by deleting either field, or either `produced_by !=
+    "evaluator"` branch.
+    """
+
+    PRODUCERS = ("candidate", "actor", "unknown")
+
+    def test_the_records_carry_the_field_and_validate_it(self):
+        for factory, label in ((build, "build"), (diff, "diff")):
+            with self.subTest(record=label):
+                self.assertIn("produced_by", dataclasses.asdict(factory()))
+                with self.assertRaises(ValueError) as ctx:
+                    factory(produced_by="the actor, honest")
+                self.assertIn(f"{label}.produced_by", str(ctx.exception))
+
+    def test_the_clean_build_gate_fails_a_self_report(self):
+        for producer in self.PRODUCERS:
+            with self.subTest(produced_by=producer):
+                gate = C.check_clean_build_from_snapshot(
+                    request(), build(produced_by=producer))
+                self.assertEqual(gate.check.outcome, S.FAIL)
+                self.assertIn("NEVER self-reported", gate.check.reasons[0])
+
+    def test_the_semantic_diff_gate_fails_a_self_report(self):
+        for producer in self.PRODUCERS:
+            with self.subTest(produced_by=producer):
+                gate = C.check_semantic_diff_conformance(diff(produced_by=producer))
+                self.assertEqual(gate.check.outcome, S.FAIL)
+                self.assertIn("NEVER self-reported", gate.check.reasons[0])
+
+    def test_the_schema_and_diff_policy_gate_fails_a_self_report(self):
+        for producer in self.PRODUCERS:
+            with self.subTest(produced_by=producer):
+                gate, review = C.check_schema_and_diff_policy(
+                    diff(produced_by=producer), surface(), policy())
+                self.assertEqual(gate.check.outcome, S.FAIL)
+                self.assertIn("NEVER self-reported", gate.check.reasons[0])
+                self.assertEqual(review, ())
+
+    def test_a_self_report_is_not_rescued_by_being_otherwise_clean(self):
+        """The evaluator-produced twin of each record PASSes, so the FAIL above is
+        attributable to the producer and to nothing else."""
+        self.assertEqual(
+            C.check_clean_build_from_snapshot(request(), build()).check.outcome, S.PASS)
+        self.assertEqual(
+            C.check_semantic_diff_conformance(diff()).check.outcome, S.PASS)
+        gate, _ = C.check_schema_and_diff_policy(diff(), surface(), policy())
+        self.assertEqual(gate.check.outcome, S.PASS)
+
+
+# ---------------------------------------------------------------------------
+# A fabricated digest is not a measured identity
+# ---------------------------------------------------------------------------
+
+class TestAPlaceholderDigestIsNotAnIdentity(unittest.TestCase):
+    """RED TEAM: `_req_sha256` matched `^[0-9a-f]{64}$` and stopped there.
+
+    PROBE: `BuildProvenance(output_binary_sha256="0" * 64)` constructed cleanly,
+    so the IDENTITY OF THE BUILT CANDIDATE could be a hand-typed filler. Every
+    downstream reader — the champion view, the release package, a human reading
+    the journal — takes a well-formed digest for a measured one, and an ABSENT
+    identity is loud where a fabricated one is silent and wrong.
+
+    `execution/t0_provider._req_sha256` was byte-identical to this one but for the
+    five lines that reject it; this file did not have them.
+
+    Break it by deleting the `schemas.is_placeholder_digest` branch from
+    `correctness._req_sha256`.
+    """
+
+    FILLERS = ("0" * 64, "f" * 64, "a" * 64,
+               hashlib.sha256(b"").hexdigest())
+
+    def test_the_build_output_binary_digest_refuses_a_filler(self):
+        for value in self.FILLERS:
+            with self.subTest(digest=value[:8]):
+                with self.assertRaises(ValueError) as ctx:
+                    build(output_binary_sha256=value)
+                self.assertIn("placeholder digest", str(ctx.exception))
+                self.assertIn("build.output_binary_sha256", str(ctx.exception))
+
+    def test_the_snapshot_digest_refuses_a_filler_too(self):
+        with self.assertRaises(ValueError) as ctx:
+            build(built_from_snapshot_sha256="0" * 64)
+        self.assertIn("placeholder digest", str(ctx.exception))
+
+    def test_the_optional_form_refuses_it_as_well(self):
+        with self.assertRaises(ValueError):
+            C._opt_sha256("0" * 64, "probe")
+        self.assertIsNone(C._opt_sha256(None, "probe"))
+
+    def test_COMPLIANT_a_measured_digest_is_still_accepted(self):
+        measured = hashlib.sha256(b"a real build artifact").hexdigest()
+        self.assertEqual(build(output_binary_sha256=measured).output_binary_sha256,
+                         measured)
+
+    def test_a_malformed_digest_still_fails_for_its_own_reason(self):
+        with self.assertRaises(ValueError) as ctx:
+            build(output_binary_sha256="not-a-digest")
+        self.assertIn("lowercase sha256 hex digest", str(ctx.exception))
 
 
 if __name__ == "__main__":

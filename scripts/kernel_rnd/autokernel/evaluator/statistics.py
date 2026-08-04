@@ -3530,18 +3530,13 @@ def _with_checks(error: StatisticsError, checks: Sequence) -> StatisticsError:
 
 
 def _combine_checks(checks: Sequence[schemas.Check]) -> schemas.Check:
-    """FAIL dominates COULD_NOT_CHECK dominates PASS. Fail closed, but stay distinct."""
-    reasons: list = []
-    outcome = schemas.PASS
-    for chk in checks:
-        if chk.outcome == schemas.PASS:
-            continue
-        reasons.extend(chk.reasons)
-        if chk.outcome == schemas.FAIL:
-            outcome = schemas.FAIL
-        elif outcome != schemas.FAIL:
-            outcome = schemas.COULD_NOT_CHECK
-    return schemas.Check(outcome, tuple(reasons))
+    """FAIL dominates COULD_NOT_CHECK dominates PASS. Fail closed, but stay distinct.
+
+    Delegates to `schemas.Check.worst_of`. An empty vector was PASS here and is
+    now COULD_NOT_CHECK: `admissible` gates whether an `EffectEstimate` gets
+    built at all, so "no admissibility check ran" must not read as "admissible".
+    """
+    return schemas.Check.worst_of(checks)
 
 
 def verify_reduction_reproducible(estimate: api.EffectEstimate,

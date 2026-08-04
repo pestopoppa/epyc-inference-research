@@ -52,7 +52,7 @@ if _KERNEL_RND not in sys.path:
 from autokernel import journal as J  # noqa: E402
 from autokernel import schemas as S  # noqa: E402
 from autokernel.controller import do_not_repeat as D  # noqa: E402
-from autokernel.controller import fingerprint as FP  # noqa: E402
+from autokernel.controller import shared as FP  # was fingerprint  # noqa: E402
 from autokernel.controller import hypotheses as H  # noqa: E402
 from autokernel.evaluator import api as EV  # noqa: E402
 

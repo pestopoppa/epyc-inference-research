@@ -23,15 +23,19 @@ and that, not a missing gate and not a missing statistic, is why 100k lines and
 6,000 passing tests have produced no results. What still stands between here and
 a first number is [§ *The honest list*](execution/README.md#6-before-a-first-campaign-can-start--the-honest-list).
 
-**Essential vs deferred.** Of 101,019 non-test lines, **49,877 are on the path**
-from "an idea for a kernel" to "a measured number" and **51,142 are provably
-unreachable from it** — the controller's research strategy, the release plane,
-the adapters, the second copy of the gate derivation. That split is computed by
-walking the import graph, not asserted: [`FOOTPRINT.md`](FOOTPRINT.md) carries it
-row by row and `test_campaign_footprint.py` turns the suite red if the document
-and the tree disagree. **Nothing is deleted by it.** Deletion stays a separate
-one-line decision for the operator; the boundary exists to make that decision
-cheap, not to pre-empt it.
+**Essential vs deferred.** Until 2026-08-04 roughly half of this package — the
+controller's research strategy, the release plane, the adapters, the dashboard
+surface — was provably unreachable from the path between "an idea for a kernel"
+and "a measured number". That split was computed by walking the import graph, not
+asserted, and the operator acted on it: those planes were removed, about 79,600
+lines including their tests, recoverable from the tag
+`autokernel-preserve-20260804`. What is still deferred is `controller/`'s memory
+half — the hypothesis store and the do-not-repeat ledger, read by whoever
+proposes a candidate and by nothing that measures one.
+[`FOOTPRINT.md`](FOOTPRINT.md) carries the current totals and every module's
+reachability row by row, and `test_campaign_footprint.py` turns the suite red if
+the document and the tree disagree. **The figures live there and only there** — a
+number stated in two documents drifts in exactly one of them.
 
 ### The two things the harness is built around
 

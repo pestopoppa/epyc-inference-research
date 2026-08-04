@@ -33,11 +33,20 @@ from autokernel import schemas as S  # noqa: E402
 from autokernel.evaluator import api  # noqa: E402
 from autokernel.evaluator import devices as D  # noqa: E402
 
-_ADAPTERS = Path(__file__).resolve().parents[1] / "adapters"
+#: THE TWO REAL CONSUMERS ARE GONE — `adapters/whisper_stt.py` and
+#: `adapters/qwentts_tts.py` were deleted on 2026-08-04 with the rest of the
+#: adapter plane, and `_ADAPTERS`, which pointed at their directory, went with
+#: them. Three tests in this file read those files; what happened to each is
+#: recorded at the test, and the anti-vacuity coverage that is simply LOST is
+#: recorded on `HiddenVocabularyAuditTest`. `campaign.py` still calls
+#: `check_device_names()`, but it is not a consumer of THIS audit: the audit is a
+#: statement about a module shaped like an adapter — a `BACKEND` constant, the
+#: three identity functions, a `check_device_evidence` that delegates — and no
+#: surviving module in this package has that shape.
 
 #: A conforming consumer, minimal but complete: it declares an identity and its
-#: device checker delegates. Used as the audit's COMPLIANT control alongside the two
-#: real adapters.
+#: device checker delegates. Since 2026-08-04 it is the audit's ONLY compliant
+#: control; until then it stood beside the two real adapters.
 _CONFORMING_CONSUMER = (
     'BACKEND = "whisper_stt"\n'
     'EXPECTED = frozenset({"libggml-cpu.so", "libggml.so"})\n'
@@ -235,10 +244,22 @@ class DelegationAuditTest(unittest.TestCase):
             self.assertNotEqual(check.outcome, S.PASS, repr(source))
 
     def test_foreign_source_is_could_not_check(self):
-        foreign = (_ADAPTERS / "qwentts_tts.py").read_text(encoding="utf-8")
-        check = self._audit(foreign, backend="whisper_stt")
+        """Text bound to a DIFFERENT consumer grades neither of them.
+
+        RE-POINTED 2026-08-04. This read `adapters/qwentts_tts.py` and audited it
+        as `whisper_stt`; that file is deleted. The mechanism it tests is entirely
+        `_module_identity`'s — the source's own `BACKEND` is not the one the
+        caller named — and a source that declares a different backend exercises it
+        exactly, so the substitute is a real re-point and not a weakening. What it
+        no longer proves is that a source which passes every OTHER rule (a real,
+        vocabulary-free, delegating adapter) is still refused on identity alone;
+        `_CONFORMING_CONSUMER` is that source, which is why the audit is pointed at
+        it rather than at an arbitrary string.
+        """
+        check = self._audit(_CONFORMING_CONSUMER, backend="qwentts_tts")
         self.assertEqual(check.outcome, S.COULD_NOT_CHECK)
-        self.assertIn("qwentts_tts", " ".join(check.reasons))
+        self.assertNotEqual(check.outcome, S.PASS)
+        self.assertIn("whisper_stt", " ".join(check.reasons))
 
     def test_source_without_the_identity_functions_is_could_not_check(self):
         check = self._audit('BACKEND = "whisper_stt"\n'
@@ -296,19 +317,25 @@ class DelegationAuditTest(unittest.TestCase):
 
     # --- COMPLIANT-PATH CONTROL ---------------------------------------------
 
-    def test_the_audit_passes_every_real_consumer_and_the_minimal_conforming_one(self):
+    def test_the_audit_passes_the_minimal_conforming_consumer(self):
         """A guard that forbade its consumers' own idioms would be routed around.
 
-        Both real adapters name `libggml-cpu.so` in a frozenset and one keys a dict
-        by lane (`cpu`/`gpu`/`stt`) — strings that carry the vocabulary's `cpu` and
-        `gpu` tokens on word boundaries. All three sources must PASS.
+        The fixture carries the two idioms that made the rule hard to write:
+        `libggml-cpu.so` in a frozenset and a dict keyed by lane (`cpu`/`gpu`),
+        both of which put the vocabulary's own tokens on word boundaries in text
+        that is not a device table. It must PASS.
+
+        NARROWED 2026-08-04, and this is a real loss, not a rename. Until then
+        this test also audited `adapters/whisper_stt.py` and
+        `adapters/qwentts_tts.py` — the two REAL consumers, which carried those
+        idioms because they needed them, not because a test author put them in a
+        fixture. Both are deleted. `_CONFORMING_CONSUMER` is text written to pass
+        this audit, so what remains is the weaker statement: the rule does not
+        forbid the idioms we THINK a consumer needs. The stronger one — the rule
+        does not forbid what a consumer actually wrote — has no subject left in
+        this package and is not replaced.
         """
         self.assertEqual(self._audit(_CONFORMING_CONSUMER).outcome, S.PASS)
-        for backend, filename in (("whisper_stt", "whisper_stt.py"),
-                                  ("qwentts_tts", "qwentts_tts.py")):
-            source = (_ADAPTERS / filename).read_text(encoding="utf-8")
-            self.assertEqual(self._audit(source, backend=backend).outcome, S.PASS,
-                             filename)
 
     def test_lane_keys_and_sonames_are_not_device_names(self):
         self.assertFalse(D._is_device_name_literal("cpu"))
@@ -401,6 +428,30 @@ class HiddenVocabularyAuditTest(unittest.TestCase):
     A table one indent deeper is the same table. Moving it inside
     `check_device_evidence` — and delegating only on the fall-through, which
     satisfies rule 1 — passed the audit outright.
+
+    COVERAGE REMOVED 2026-08-04, and not replaced.
+    ---------------------------------------------
+    `test_both_real_adapters_still_pass_the_widened_rule` stood at the end of this
+    class. It read `adapters/whisper_stt.py` and `adapters/qwentts_tts.py` and
+    asserted both still PASS, and its whole value was anti-vacuity in the one
+    direction the FAIL tests above cannot cover: widening rule 2 from "collections
+    at module level" to "collections at ANY depth, plus membership comparators" is
+    a rule that gets STRICTER, and the way a stricter rule fails is by rejecting
+    its own consumers. Only real consumer text can show that it does not, because
+    a fixture written by the same hand as the rule contains only the idioms that
+    hand thought of.
+
+    Both consumers were deleted with the adapter plane, and no surviving module in
+    this package has the shape this audit grades (`campaign.py` calls
+    `check_device_names()` but declares no `BACKEND` and defines no
+    `check_device_evidence`). There is nothing to re-point at, so the test was
+    removed rather than re-pointed at a fixture — a fixture would have kept the
+    test name and thrown away the property, which is worse than the gap.
+
+    What survives is `test_a_checker_may_still_name_the_device_it_rejected_in_its
+    _own_reason`: the SINGLE idiom, of the several the real adapters carried, that
+    was known to have nearly been forbidden. When a real consumer of this audit
+    exists again, restore the loop.
     """
 
     def _audit(self, source, backend="whisper_stt"):
@@ -440,12 +491,17 @@ class HiddenVocabularyAuditTest(unittest.TestCase):
     def test_a_checker_may_still_name_the_device_it_rejected_in_its_own_reason(self):
         """The idiom the widened rule must not forbid.
 
-        Both real adapters build a FAIL reason containing the sentence *"a CPU cell's
-        log carries `use gpu = 1`"*. That string names a device in PROSE, as an
-        argument to `schemas.Check` — it is a finding, not a vocabulary. A rule that
-        walked every collection literal in the module would FAIL both adapters on it,
-        and a guard that forbids its consumer from naming what it rejected is worked
-        around rather than obeyed.
+        Both real adapters built a FAIL reason containing the sentence *"a CPU
+        cell's log carries `use gpu = 1`"* — verbatim, which is why it is spelled
+        out below rather than paraphrased. That string names a device in PROSE, as
+        an argument to `schemas.Check` — it is a finding, not a vocabulary. A rule
+        that walked every collection literal in the module would FAIL both
+        adapters on it, and a guard that forbids its consumer from naming what it
+        rejected is worked around rather than obeyed.
+
+        Since the adapters were deleted this is the only trace of their real text
+        left in the suite, which makes it the last check on that failure mode
+        rather than one of two.
         """
         source = _CONFORMING_CONSUMER.replace(
             "    return devices.check_device_names([log], expected_lane=expected_lane)\n",
@@ -455,13 +511,6 @@ class HiddenVocabularyAuditTest(unittest.TestCase):
             '            "contradicts the declared lane",))\n'
             "    return devices.check_device_names([log], expected_lane=expected_lane)\n")
         self.assertEqual(self._audit(source).outcome, S.PASS)
-
-    def test_both_real_adapters_still_pass_the_widened_rule(self):
-        for backend, filename in (("whisper_stt", "whisper_stt.py"),
-                                  ("qwentts_tts", "qwentts_tts.py")):
-            source = (_ADAPTERS / filename).read_text(encoding="utf-8")
-            self.assertEqual(self._audit(source, backend=backend).outcome, S.PASS,
-                             filename)
 
 
 class NoWriteNoProcessTest(unittest.TestCase):

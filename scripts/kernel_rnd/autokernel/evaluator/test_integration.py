@@ -572,7 +572,8 @@ class EndToEndScenario(unittest.TestCase):
                 incremental_objects_present=False, compiler_id="hipcc",
                 compiler_version="6.2.0", build_log_ref="data/ak/akc-0001/build.log",
                 production_tree_paths_touched=(),
-                output_binary_sha256=cls.cand_syms.file_sha256),
+                output_binary_sha256=cls.cand_syms.file_sha256,
+                produced_by="evaluator"),
             diff=CO.DiffPolicyEvidence(
                 files_touched=(f"{WORKTREE}/ggml/src/ggml-cuda/mmq.cuh",),
                 declared_surface_files=(f"{WORKTREE}/ggml/src/ggml-cuda/mmq.cuh",),
@@ -582,7 +583,8 @@ class EndToEndScenario(unittest.TestCase):
                                                 max_files_touched=4),
                 branch_name="llama.cpp-experimental/ak-mmq-id-tile",
                 commit_was_pathspec_limited=True, production_tree_paths=(),
-                record_schema_violations=(), diff_ref="data/ak/akc-0001/diff.patch"),
+                record_schema_violations=(), diff_ref="data/ak/akc-0001/diff.patch",
+                produced_by="evaluator"),
             static_analysis=CO.StaticAnalysisEvidence(
                 compiler_id="hipcc", compiler_version="6.2.0",
                 anchor_compiler_id="hipcc", anchor_compiler_version="6.2.0",

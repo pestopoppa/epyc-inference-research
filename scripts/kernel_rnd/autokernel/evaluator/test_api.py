@@ -37,6 +37,7 @@ import hashlib
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 # Import through the PACKAGE so `api.schemas` is the same module object the
 # journal validates with (README, "Import convention").
@@ -1148,6 +1149,57 @@ class NoWritePathTest(unittest.TestCase):
         chk = api.audit_no_write_or_process_paths("def (:\n")
         self.assertEqual(chk.outcome, S.COULD_NOT_CHECK)
 
+    # -- the audit is bound to something, in both of its two readings ---------
+
+    def test_source_with_nothing_in_it_is_not_a_clean_bill_of_health(self):
+        """RED TEAM: `audit_no_write_or_process_paths("")` returned PASS.
+
+        The audit is a SEARCH for forbidden constructs, so over source containing
+        no constructs it found none and certified it. That is the guarantee
+        obtained by deleting the thing under inspection, and `controls.py`,
+        `readiness.py` and both speech adapters each hand this engine a string —
+        any of them could have recorded a PASS about nothing.
+
+        Break it by deleting the `_is_an_audited_module` branch.
+        """
+        for label, src in (("empty", ""), ("whitespace", "   \n\n"),
+                           ("comment only", "# nothing here\n"),
+                           ("docstring only", '"""a module that was deleted"""\n'),
+                           ("assignment only", "MODULE_ID = 'whatever'\n")):
+            with self.subTest(source=label):
+                chk = api.audit_no_write_or_process_paths(src)
+                self.assertEqual(chk.outcome, S.COULD_NOT_CHECK, label)
+                self.assertIn("nothing to audit", chk.reasons[0])
+
+    def test_COMPLIANT_a_real_module_is_still_audited_and_passes(self):
+        """The engine must not forbid its own idiom: reuse over supplied source
+        is why `controls.py` and `correctness.py` do not copy the denylists."""
+        from autokernel.evaluator import devices as D
+        text = Path(D.__file__).read_text(encoding="utf-8")
+        self.assertEqual(api.audit_no_write_or_process_paths(text).outcome, S.PASS)
+
+    def test_a_finding_is_still_returned_over_a_one_line_snippet(self):
+        """A FAIL is a finding about the TEXT and is returned unbound, so the
+        module-shape test must sit after it, not before."""
+        chk = api.audit_no_write_or_process_paths("import subprocess\n")
+        self.assertEqual(chk.outcome, S.FAIL)
+
+    def test_the_self_audit_proves_it_read_this_module(self):
+        """RED TEAM: the no-argument call trusted `Path(__file__).read_text()`.
+
+        `_defines_this_module` checks it instead. Break it by deleting the
+        `own and not _defines_this_module(tree)` branch, then point `__file__` at
+        another file: the audit would report PASS about a module it never read.
+        """
+        from autokernel.evaluator import devices as D
+        self.assertEqual(api.audit_no_write_or_process_paths().outcome, S.PASS)
+        # `devices.py` is clean, so before the binding this reported PASS — about
+        # a module the audit had not read.
+        with mock.patch.object(api, "__file__", D.__file__):
+            chk = api.audit_no_write_or_process_paths()
+            self.assertEqual(chk.outcome, S.COULD_NOT_CHECK)
+            self.assertIn(api.MODULE_ID, chk.reasons[0])
+
     def test_dispatch_leaves_the_inputs_untouched(self):
         req, win = request(), window()
         before = (S.canonical_json(req.artifact.to_dict()),
@@ -1351,6 +1403,40 @@ class AnchorNamesOneToolTest(unittest.TestCase):
         self.assertTrue(api.check_preconditions(
             request(anchor=bench), window(anchor_at_open=bench, anchor_at_close=bench)
         ).satisfied)
+
+
+class CombineIsTheOneLatticeTest(unittest.TestCase):
+    """`api._combine` delegates to `schemas.Check.worst_of` — including the empty case.
+
+    This module's own `check_gate_derivation_is_locked` names the defect in
+    prose — "an empty gate list derives to PASS and that is a fail-open verdict"
+    — while `_combine()` did exactly that.
+    """
+
+    def test_combining_nothing_is_could_not_check_and_never_pass(self):
+        combined = api._combine()
+        self.assertEqual(combined.outcome, S.COULD_NOT_CHECK)
+        self.assertFalse(combined.passed)
+
+    def test_every_non_pass_reason_is_prefixed_with_the_outcome_that_raised_it(self):
+        combined = api._combine(S.Check(S.COULD_NOT_CHECK, ("claim file unreadable",)),
+                                S.Check(S.FAIL, ("holder changed mid-window",)))
+        self.assertEqual(combined.outcome, S.FAIL)
+        self.assertEqual(combined.reasons,
+                         ("[COULD_NOT_CHECK] claim file unreadable",
+                          "[FAIL] holder changed mid-window"))
+
+    def test_a_non_check_argument_raises_rather_than_being_reduced_around(self):
+        with self.assertRaises(TypeError):
+            api._combine(S.Check(S.PASS), "PASS")
+
+    def test_the_delegation_is_real_and_not_a_reimplementation(self):
+        """Same inputs, same answer as the classmethod, for all three outcomes."""
+        for vector in ([], [S.Check(S.PASS)],
+                       [S.Check(S.PASS), S.Check(S.COULD_NOT_CHECK, ("x",))],
+                       [S.Check(S.FAIL, ("y",)), S.Check(S.COULD_NOT_CHECK, ("x",))]):
+            with self.subTest(vector=[c.outcome for c in vector]):
+                self.assertEqual(api._combine(*vector), S.Check.worst_of(vector))
 
 
 if __name__ == "__main__":

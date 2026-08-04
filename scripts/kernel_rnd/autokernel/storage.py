@@ -198,7 +198,8 @@ DEFAULT_LARGEST_SINGLE_ALLOCATION_GB = 15.0
 # be closed).
 DEFAULT_MIN_PROFILER_TRACE_AGE_DAYS = 30
 
-_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+#: Bound, not re-compiled — the digest shape has one owner. See `schemas.require`.
+_SHA256_RE = schemas.SHA256_RE
 # A campaign directory name. Deliberately narrow: this string becomes a path
 # under the repo, so `..`, absolute paths, and separators are excluded by the
 # pattern rather than by a later check that could be reordered away.

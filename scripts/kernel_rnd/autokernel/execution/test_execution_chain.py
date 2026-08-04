@@ -20,9 +20,15 @@ The walk is the real one, in order:
       -> T1 paired blocks from RECORDED llama-bench JSON -> the reducer
       -> controls scored -> api.ControlPanel
       -> TierDispatcher -> a Verdict
-      -> the controller walks BUILD -> T0_GATE -> T1_SEARCH_EVAL -> ... -> BANK_EVENT
       -> claim released, worktree torn down
       -> THE PRODUCTION TREES ARE BYTE-IDENTICAL TO BEFORE
+
+The walk used to have one more step between the verdict and the teardown — the
+controller walking `BUILD -> T0_GATE -> T1_SEARCH_EVAL -> ... -> BANK_EVENT` over
+the verdict this chain produced. `controller/state_machine.py` was deleted on
+2026-08-04 with the rest of AK4, and that step is excised rather than stubbed.
+What it covered, and therefore what is no longer covered, is written out at
+`ChainLeg` stage 10.
 
 WHAT IT DOES **NOT** PROVE — read this before trusting a green run
 ------------------------------------------------------------------
@@ -80,8 +86,6 @@ from autokernel.evaluator import controls as controls_module            # noqa: 
 # `ElfFormatError` rather than returning an empty table for anything else — and a
 # second copy here would be a second thing to keep in step with the reader.
 from autokernel.evaluator.test_integrity import build_elf64, fn as elf_fn        # noqa: E402
-from autokernel import journal                                          # noqa: E402
-from autokernel.controller import state_machine as SM                   # noqa: E402
 from autokernel.execution import control_runner as CR                   # noqa: E402
 from autokernel.execution import chain                                  # noqa: E402
 from autokernel.execution import cpu_region_claim as CRC                # noqa: E402
@@ -520,10 +524,12 @@ CANONICAL_CPU_LIST = list(recipes.CANONICAL_PREFIX)[
 class ChainLeg:
     """One campaign leg, composed. Every stage stores its output for assertion.
 
-    This is deliberately NOT a reusable campaign driver. `controller/state_machine.py`
-    owns the loop and a second walk here would give the loop two spellings. It is
+    This is deliberately NOT a reusable campaign driver — `campaign.py` is the
+    entrypoint and a second driver here would give the loop two spellings. It is
     the shortest composition that touches every seam, written so a test can reach
-    into the middle of it.
+    into the middle of it. (Until 2026-08-04 the sentence above named
+    `controller/state_machine.py` as the owner of the loop; that module is
+    deleted, and the reason not to grow a second driver here is unchanged.)
     """
 
     def __init__(self, world: ChainWorld, *, anchor_source_commit=None,
@@ -979,60 +985,38 @@ class ChainLeg:
                                            effect=self.reduction.estimate)
         return self.outcome
 
-    # -- 10. the controller banks or abandons -------------------------------
-    def bank(self, root: str):
-        """Walk `BUILD -> T0_GATE -> T1_SEARCH_EVAL -> POST_RUN_CRITIC -> BANK_EVENT`.
-
-        The controller owns the walk; this only proves that the verdict the
-        execution layer produced is something the machine will accept at
-        `BANK_EVENT`, and that a T0 failure takes the OTHER documented edge
-        (`T0_GATE -> POST_RUN_CRITIC`) — *"compilation failures are valuable
-        outcomes"*, so a candidate that fails T0 is still banked, as a failure.
-        """
-        journal_ = journal.Journal(os.path.join(root, "journal"))
-        journal_.initialize()
-        machine = SM.ControllerStateMachine(
-            journal_=journal_, root=os.path.join(root, "controller"),
-            campaign_id=CAMPAIGN)
-        # A FOURTH anchor shape. `controller.state_machine.AnchorIdentity` keys
-        # its digests BY BACKEND — which is the per-key table `api.AnchorIdentity`
-        # does not have and whose absence is `chain.SEAM_NOTES` item 2. Building
-        # it from the same capture is the only thing that keeps the controller's
-        # anchor and the record's anchor one anchor.
-        machine.bootstrap(anchor=SM.AnchorIdentity(
-            source_tree="llama.cpp", branch="production-consolidated-v8",
-            commit=self.t1_anchor.capture.source_commit,
-            binary_sha256={"llama_cpu": self.t1_anchor.capture.binary_sha256},
-            linkage_sha256={"llama_cpu": self.t1_anchor.capture.linkage_sha256}),
-            views=journal.rebuild_views(journal_.read_all()))
-        for state, trigger, reason in (
-                (SM.SELECT_TARGET, "discover_complete", "decode_b1 selected"),
-                (SM.PROPOSE, "target_selected", "one mechanism proposed"),
-                (SM.PRE_RUN_CRITIC, "proposal_drafted", "critic admitted the proposal"),
-                (SM.MUTATE, "critic_admitted", "the mutation was applied in the worktree"),
-                (SM.BUILD, "mutation_applied",
-                 f"built {self.identity.output_binary_sha256[:12]} from "
-                 f"{self.identity.snapshot_sha256[:12]}")):
-            machine.transition(state, trigger=trigger, reason=reason)
-        t0_failed = bool(self.t0_report.failed)
-        machine.transition(SM.T0_GATE, trigger="build_complete",
-                           reason=f"{len(self.t0_report.gates)} T0 gates evaluated")
-        if t0_failed:
-            machine.transition(
-                SM.POST_RUN_CRITIC, trigger="t0_failed",
-                reason=f"T0 failed on {sorted(self.t0_report.failed)}; a compilation or "
-                       "correctness failure is a valuable outcome and is banked as one")
-        else:
-            machine.transition(SM.T1_SEARCH_EVAL, trigger="t0_passed",
-                               reason="no T0 gate failed; the candidate is admitted to T1")
-            machine.transition(
-                SM.POST_RUN_CRITIC, trigger="t1_complete",
-                reason=f"verdict {self.outcome.verdict.status} "
-                       f"({self.outcome.verdict.effect_resolution})")
-        machine.transition(SM.BANK_EVENT, trigger="critic_complete",
-                           reason="the evaluation event is durable")
-        self.machine = machine
-        return machine
+    # -- 10. the controller banked or abandoned — REMOVED 2026-08-04 ---------
+    #
+    # `ChainLeg.bank()` walked `controller/state_machine.py`'s
+    # `SELECT_TARGET -> PROPOSE -> PRE_RUN_CRITIC -> MUTATE -> BUILD -> T0_GATE ->
+    # T1_SEARCH_EVAL -> POST_RUN_CRITIC -> BANK_EVENT` over the leg's own verdict,
+    # and three tests asserted the machine ended at `BANK_EVENT`. That plane was
+    # deleted with the rest of AK4 on the operator's approval, so the stage is gone
+    # rather than stubbed: a stage that walks nothing would leave three green
+    # assertions about a machine that does not exist.
+    #
+    # WHAT THAT COST, stated rather than quietly absorbed — it is coverage this
+    # file no longer has and nothing else in the package replaces:
+    #
+    #   * that a verdict produced by this chain is ACCEPTED by a controller at
+    #     `BANK_EVENT` — the seam between the execution layer's output and whatever
+    #     durably records it. There is no controller now; when campaign #1 grows
+    #     one, this is the seam to re-assert.
+    #   * that a T0 FAILURE takes the other documented edge (`T0_GATE ->
+    #     POST_RUN_CRITIC`) and is still banked, as a failure — *"compilation
+    #     failures are valuable outcomes"*. Nothing here asserts that any more. The
+    #     T0-failure path itself is still covered (`TestACcacheBuildIsNotACleanBuild`,
+    #     `TestAnArtifactThatIsNotTheBuiltOne`, `TestTheWiredProducersRefuse...`);
+    #     what is lost is that a failed candidate is RECORDED rather than dropped.
+    #   * the FOURTH anchor shape. `state_machine.AnchorIdentity` keyed its digests
+    #     BY BACKEND, which is the per-key table `api.AnchorIdentity` does not
+    #     have; building it from the same capture was what kept the controller's
+    #     anchor and the record's anchor one anchor. That is `chain.SEAM_NOTES`
+    #     item 2, and it is now an unexercised note.
+    #
+    # Everything else in the walk — claim, worktree, build, T0, blocks, controls,
+    # verdict, teardown, production-unchanged — is untouched: none of it went
+    # through the machine.
 
     # -- 11. teardown -------------------------------------------------------
     def teardown(self):
@@ -1755,9 +1739,10 @@ class TestTheChainFits(_ChainCase):
                          self.leg.outcome.grammar_complete.reasons)
         self.assertIn("SEARCH RECORD, NOT A CLAIM", self.leg.outcome.grammar_line)
 
-    def test_the_controller_banks_the_event(self):
-        machine = self.leg.bank(os.path.join(self._tmp.name, "controller-root"))
-        self.assertEqual(machine.state, SM.BANK_EVENT)
+    # `test_the_controller_banks_the_event` stood here until 2026-08-04. It walked
+    # the deleted `controller/state_machine.py` and asserted the machine reached
+    # `BANK_EVENT` over this leg's verdict. See the note at ChainLeg stage 10 for
+    # what its removal costs.
 
     def test_the_claim_was_released_and_the_worktree_torn_down(self):
         self.assertIsNone(self.world.claim)
@@ -2329,10 +2314,9 @@ class TestAWinIsReachableAndANullIsRefused(_ChainCase):
     `evidence_below_threshold`.
 
     That failure mode is expensive precisely because it looks like a result:
-    every gate PASSes, all five controls score, the record grammar completes,
-    the controller reaches BANK_EVENT — and what is banked says "no candidate
-    was good enough" when the truth is "the instrument cannot resolve a win at
-    all".
+    every gate PASSes, all five controls score, the record grammar completes —
+    and the verdict says "no candidate was good enough" when the truth is "the
+    instrument cannot resolve a win at all".
 
     The two halves here are both required. A change that makes wins reachable
     and also makes nulls reachable has not improved the instrument, it has
@@ -2425,10 +2409,10 @@ class TestAWinIsReachableAndANullIsRefused(_ChainCase):
         self.assertEqual(decision.decision, "compose_into_champion_lineage")
         self.assertTrue(decision.crossed)
         self.assertEqual(decision.extension_rounds_used, 1)
-
-        # BANKED: the controller accepts the verdict at BANK_EVENT.
-        machine = leg.bank(os.path.join(self._tmp.name, "controller-root"))
-        self.assertEqual(machine.state, SM.BANK_EVENT)
+        # The BANKED half of this test — `leg.bank(...)` reaching `BANK_EVENT` —
+        # went with `controller/state_machine.py` on 2026-08-04. What the win
+        # produces is still asserted above, in full; what is no longer asserted is
+        # that anything durably accepts it. See ChainLeg stage 10.
 
     # -- the null ---------------------------------------------------------
     def test_a_null_candidate_does_not_cross_and_is_not_ranked(self):
@@ -2468,11 +2452,9 @@ class TestAWinIsReachableAndANullIsRefused(_ChainCase):
         self.assertEqual(decision.outcome, "extension_exhausted")
         self.assertEqual(decision.decision, "abandon")
         self.assertFalse(decision.crossed)
-
-        # A null is BANKED too — as an abandon. "A voided run is journaled with
-        # its reason"; so is a candidate that did not earn a rank.
-        machine = leg.bank(os.path.join(self._tmp.name, "controller-root"))
-        self.assertEqual(machine.state, SM.BANK_EVENT)
+        # "A null is BANKED too — as an abandon" was asserted here through the
+        # controller and is gone with it. The abandon DECISION is still asserted
+        # (three lines up); that it is recorded is not. See ChainLeg stage 10.
 
     def test_the_hardest_null_reaches_the_BASE_CEILING_and_still_does_not_cross(self):
         """A null whose first five blocks are all same-sign. It maxes the base.
@@ -3253,3 +3235,62 @@ class TestARegistrationArityChangeReachesTheGate(_ChainCase):
         evidence = self._evidence()
         self.assertEqual(evidence.diff.arity_changed_op_registrations, ())
         self.assertEqual(self._gate(evidence).check.outcome, schemas.PASS)
+
+
+class EvidenceWithNoChecksDoesNotDerivePassTest(unittest.TestCase):
+    """`chain._worst` delegates to `schemas.Check.worst_of`, empty case included.
+
+    All four evidence records expose `worst` as a reduction over a plain `checks`
+    tuple that nothing requires to be non-empty. It derived PASS from zero
+    sub-checks, and `campaign.py` reads `build_ev.worst.outcome != schemas.PASS`
+    to decide whether to abort the leg — so an evidence record carrying no checks
+    LICENSED the run. That is the fail-open, and it is now COULD_NOT_CHECK.
+
+    The records are built field-by-field rather than through their producers on
+    purpose: the producers always append at least one check, so the hole is only
+    reachable by construction, which is exactly the surface a projection seam
+    exposes to its callers.
+    """
+
+    def _records(self, checks):
+        return {
+            "BuildEvidence": chain.BuildEvidence(
+                provenance=None, checks=checks),
+            "SymbolEvidence": chain.SymbolEvidence(
+                diff=None, anchor_table=None, candidate_table=None,
+                symbol_diff=None, op_registration_diff=None,
+                dispatch_predicate_diff=None, checks=checks),
+            "DiffEvidence": chain.DiffEvidence(
+                policy=None, source_diff=None, checks=checks),
+            "ChangeSurfaceEvidence": chain.ChangeSurfaceEvidence(
+                surface=None, affected=None, checks=checks),
+        }
+
+    def test_no_evidence_record_derives_pass_from_zero_checks(self):
+        for name, record in self._records(()).items():
+            with self.subTest(record=name):
+                self.assertEqual(record.worst.outcome, schemas.COULD_NOT_CHECK)
+                self.assertFalse(record.worst.passed)
+                self.assertEqual(record.worst.reasons,
+                                 (schemas.EMPTY_CHECK_VECTOR_REASON,))
+
+    def test_an_all_pass_vector_still_passes(self):
+        """The fix must close the empty case without demoting a real clean result."""
+        checks = (("a", schemas.Check(schemas.PASS)),
+                  ("b", schemas.Check(schemas.PASS)))
+        for name, record in self._records(checks).items():
+            with self.subTest(record=name):
+                self.assertEqual(record.worst.outcome, schemas.PASS)
+
+    def test_reasons_carry_the_outcome_that_raised_them(self):
+        checks = (("a", schemas.Check(schemas.COULD_NOT_CHECK, ("log unreadable",))),
+                  ("b", schemas.Check(schemas.FAIL, ("production tree touched",))))
+        worst = chain.BuildEvidence(provenance=None, checks=checks).worst
+        self.assertEqual(worst.outcome, schemas.FAIL)
+        self.assertEqual(worst.reasons, ("[COULD_NOT_CHECK] log unreadable",
+                                         "[FAIL] production tree touched"))
+
+    def test_a_non_check_in_the_checks_tuple_raises(self):
+        with self.assertRaises(TypeError):
+            chain.BuildEvidence(provenance=None,
+                                checks=(("a", "PASS"),)).worst

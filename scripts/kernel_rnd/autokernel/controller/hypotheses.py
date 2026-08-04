@@ -223,7 +223,12 @@ from typing import Any, Mapping, Optional, Protocol, Sequence
 
 from .. import journal, schemas
 from ..resource import device_claim as _device_claim
-from .state_machine import ControllerError
+from .shared import ControllerError
+# `state_machine.py` was removed with the rest of the AK4 strategy plane. It
+# owned exactly one thing this module needs: the base refusal class. Restoring
+# ~2,000 lines for a two-line exception would be the tail wagging the dog, so
+# the class moved UP into the package where both survivors can reach it — which
+# is the one place a shared concern in this package has ever had.
 
 __all__ = [
     # errors

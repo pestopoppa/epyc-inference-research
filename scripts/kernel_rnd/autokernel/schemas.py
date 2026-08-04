@@ -72,7 +72,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from fnmatch import fnmatchcase
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Iterable, Mapping, Optional
 
 # =============================================================================
 # Schema identity — the version is part of the name, never metadata beside it
@@ -313,6 +313,143 @@ def is_placeholder_digest(value: Any) -> bool:
 
 
 # =============================================================================
+# `require` — validation is a FIELD TYPE, not a per-module helper
+# =============================================================================
+#
+# WHY THIS IS HERE AND NOT COPIED INTO EACH MODULE
+# ------------------------------------------------
+# `_req_sha256` existed in three modules. Two of them matched `^[0-9a-f]{64}$`
+# and stopped there, so `BuildProvenance.output_binary_sha256` — the identity of
+# the built candidate — accepted sixty-four zeros; the third rejected it. The
+# three bodies were otherwise byte-identical. That is not a coding-style problem:
+# a fabricated identity reads as a resolved one to every downstream reader, and
+# the copy that knew this could not tell the copies that did not.
+#
+# The fix is not "fix the two copies" — that was done, and the next module would
+# have made a fourth. The fix is that a digest field has ONE type, it lives in
+# the module every other module already imports, and the two ingredients a
+# re-derivation needs are BOTH here:
+#
+#   * the predicate (`is_placeholder_digest`), and
+#   * the shape (`SHA256_RE` / `COMMIT_RE`, public for exactly this reason).
+#
+# A module that wants its own digest validator must therefore either import them
+# — an import a reviewer sees on the diff — or compile `^[0-9a-f]{64}$` locally,
+# which `test_schemas_require.TestNoKeepSetModuleReDerivesAScalarValidator`
+# refuses by name. There is no third route, and neither of the two is quiet.
+#
+# CONVENTIONS
+# -----------
+# * `error=` is the exception TYPE to raise. Modules that speak their own seam
+#   language (`RecipeParameterError`, `ChainSeamError`) keep raising it; only the
+#   predicate is shared, never the module's vocabulary.
+# * `label` is the caller's field path and is always the first thing in the
+#   message, because these fire inside `__post_init__` where the traceback names
+#   the dataclass and not the field.
+# * Every validator RETURNS the value, so a `__post_init__` can validate and
+#   normalise in one expression.
+
+#: Who produced a piece of evidence. `evaluator` is the only trusted producer;
+#: `candidate` is a self-report and §8.5.1 refuses it as a gate result. Lives
+#: here rather than in `evaluator/correctness.py` because `require.producer` is
+#: the type of that field and this module may not import the evaluator.
+EVIDENCE_PRODUCERS = ("evaluator", "candidate", "actor", "unknown")
+
+#: PUBLIC on purpose. Every keep-set module used to compile its own copy of
+#: these; that local `re.compile` is the first line of a re-derived validator and
+#: it costs nothing to write, which is why nine modules wrote it. Naming them
+#: here makes the copy a lint failure and the reuse an import.
+SHA256_RE = _SHA256_RE
+COMMIT_RE = _COMMIT_RE
+
+
+def _require_str(value: Any, label: str, *, error=ValueError) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise error(f"{label}: expected a non-empty string, got {value!r}")
+    return value
+
+
+def _require_sha256(value: Any, label: str, *, error=ValueError) -> str:
+    """A MEASURED sha256 digest. Well-formed hex is necessary and not sufficient."""
+    if not isinstance(value, str) or not SHA256_RE.match(value):
+        raise error(f"{label}: expected a lowercase sha256 hex digest, got {value!r}")
+    if is_placeholder_digest(value):
+        raise error(
+            f"{label}: {value!r} is a placeholder digest, not a measured identity. A "
+            "fabricated identity reads as a resolved one to every downstream reader, which "
+            "is strictly worse than an absent one (correctness._validate_anchor_triple).")
+    return value
+
+
+def _require_commit(value: Any, label: str, *, error=ValueError) -> str:
+    if not isinstance(value, str) or not COMMIT_RE.match(value):
+        raise error(
+            f"{label}: expected a full 40-hex git commit, got {value!r}. A short commit is "
+            "ambiguous across a growing object store; the anchor must resolve to one tree")
+    return value
+
+
+def _require_abs_path(value: Any, label: str, *, error=ValueError) -> str:
+    _require_str(value, label, error=error)
+    if not value.startswith("/"):
+        raise error(f"{label}: expected an absolute path, got {value!r}")
+    return value
+
+
+def _require_int(value: Any, label: str, *, minimum: int = 0, error=ValueError) -> int:
+    """`bool` is not an int here: `True` as a token count is a type confusion."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise error(f"{label}: expected an int, got {value!r}")
+    if value < minimum:
+        raise error(f"{label}: must be >= {minimum}, got {value!r}")
+    return value
+
+
+def _require_bool(value: Any, label: str, *, error=TypeError) -> bool:
+    if not isinstance(value, bool):
+        raise error(f"{label}: expected a bool, got {type(value).__name__}")
+    return value
+
+
+def _require_tuple(value: Any, label: str, *, error=TypeError) -> tuple:
+    """A list is refused, not converted: a mutable field on a frozen record is a lie."""
+    if not isinstance(value, tuple):
+        raise error(f"{label}: expected a tuple, got {type(value).__name__}")
+    return value
+
+
+def _require_producer(value: Any, label: str, *, error=ValueError) -> str:
+    if value not in EVIDENCE_PRODUCERS:
+        raise error(f"{label}: {value!r} is not one of {list(EVIDENCE_PRODUCERS)}")
+    return value
+
+
+class require:
+    """The field types. `require.sha256(v, "artifact.binary_sha256")`.
+
+    A namespace, not a class — there is nothing to instantiate and nothing to
+    subclass. It is spelled as a class so that `require.sha256` is one dotted
+    name an AST audit can look for, and so the eight names cannot be imported
+    individually into a module's own namespace where the origin stops showing.
+    """
+
+    __slots__ = ()
+
+    def __new__(cls, *args, **kwargs):
+        raise TypeError(
+            "`require` is a namespace of field types, not a class to instantiate")
+
+    sha256 = staticmethod(_require_sha256)
+    commit = staticmethod(_require_commit)
+    str = staticmethod(_require_str)
+    int = staticmethod(_require_int)
+    abs_path = staticmethod(_require_abs_path)
+    producer = staticmethod(_require_producer)
+    bool = staticmethod(_require_bool)
+    tuple = staticmethod(_require_tuple)
+
+
+# =============================================================================
 # Canonical serialisation — other modules content-hash these records
 # =============================================================================
 
@@ -399,6 +536,18 @@ PASS = "PASS"
 FAIL = "FAIL"
 COULD_NOT_CHECK = "COULD_NOT_CHECK"
 
+#: The lattice, as data. Higher dominates. This is an ORDER, not an enum: the
+#: reducer picks a maximum over it, which is why `COULD_NOT_CHECK` sitting
+#: strictly between `PASS` and `FAIL` is the whole design and not an accident.
+OUTCOME_SEVERITY = {PASS: 0, COULD_NOT_CHECK: 1, FAIL: 2}
+
+#: Emitted by `Check.worst_of` when it is handed nothing. Stated as a reason, not
+#: as a bare outcome, because a record that says COULD_NOT_CHECK has to say why.
+EMPTY_CHECK_VECTOR_REASON = (
+    "no checks were supplied: an empty check vector is COULD_NOT_CHECK, never PASS "
+    "— a verdict derived from zero evidence is a fail-open, not a clean result"
+)
+
 
 @dataclass(frozen=True)
 class Check:
@@ -415,6 +564,49 @@ class Check:
     def passed(self) -> bool:
         """True only for PASS. COULD_NOT_CHECK is deliberately falsy here."""
         return self.outcome == PASS
+
+    @classmethod
+    def worst_of(cls, checks: Iterable["Check"]) -> "Check":
+        """FAIL > COULD_NOT_CHECK > PASS. An EMPTY vector is COULD_NOT_CHECK, never PASS.
+
+        The empty case is the reason this exists. Nine of the eleven hand-written
+        reducers in this package returned PASS from zero sub-checks, and
+        `evaluator/api.py` names that failure in its own prose — *"an empty gate
+        list derives to PASS and that is a fail-open verdict"* — in a module whose
+        own reducer did exactly that. Zero evidence is not agreement; it is the
+        third outcome.
+
+        FAIL dominating COULD_NOT_CHECK is deliberate and is NOT a conflation:
+        every non-PASS sub-reason is carried through PREFIXED WITH ITS OWN
+        OUTCOME, so the combined record still says which sub-check failed and
+        which merely could not be evaluated. Reasons attached to a PASS sub-check
+        are dropped — a PASS carries no finding, and letting its prose ride along
+        would make the reason list unattributable.
+
+        A non-`Check` element RAISES rather than being coerced or skipped: a
+        reducer that silently ignored a foreign object would report PASS for a
+        vector it never actually reduced.
+
+        `checks` is consumed exactly once, so a generator is fine — emptiness is
+        detected by iteration, never by `len()` or truthiness.
+        """
+        outcome = PASS
+        reasons: list = []
+        saw_one = False
+        for chk in checks:
+            if not isinstance(chk, Check):
+                raise TypeError(
+                    f"worst_of takes schemas.Check values, got {type(chk).__name__}"
+                )
+            saw_one = True
+            if chk.outcome == PASS:
+                continue
+            if OUTCOME_SEVERITY[chk.outcome] > OUTCOME_SEVERITY[outcome]:
+                outcome = chk.outcome
+            reasons.extend(f"[{chk.outcome}] {r}" for r in chk.reasons)
+        if not saw_one:
+            return cls(COULD_NOT_CHECK, (EMPTY_CHECK_VECTOR_REASON,))
+        return cls(outcome, tuple(reasons))
 
 
 def check_scope_denominator_admits_gate(
@@ -2767,6 +2959,7 @@ __all__ = [
     "canonical_json", "canonical_bytes", "content_hash", "retrievable_view",
     "candidate_natural_key", "find_authority_flavoured_keys",
     "is_placeholder_digest", "declared_anchor_void_reasons",
+    "require", "EVIDENCE_PRODUCERS", "SHA256_RE", "COMMIT_RE",
     "validate_campaign", "validate_proposal", "validate_candidate",
     "validate_evaluation_event", "validate_evaluation_event_v2",
     "validate_evaluation_event_v3",
@@ -2785,6 +2978,7 @@ __all__ = [
     "validate_kernel_dashboard", "validate_kernel_dashboard_v1",
     "validate_kernel_dashboard_v2",
     "Check", "PASS", "FAIL", "COULD_NOT_CHECK",
+    "OUTCOME_SEVERITY", "EMPTY_CHECK_VECTOR_REASON",
     "check_scope_denominator_admits_gate", "check_anchor_binding",
     "check_metric_commensurability",
 ]

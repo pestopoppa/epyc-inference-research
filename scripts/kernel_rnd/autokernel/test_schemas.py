@@ -1480,5 +1480,78 @@ class MetricCommensurabilityCheckerTest(unittest.TestCase):
             S.COULD_NOT_CHECK)
 
 
+class CheckWorstOfTest(unittest.TestCase):
+    """`Check.worst_of` — the one reducer, and the empty case it exists for."""
+
+    def test_an_empty_vector_is_could_not_check_and_never_pass(self):
+        """The defect this classmethod exists to make unwritable.
+
+        Zero evidence is not agreement. Nine of the package's eleven hand-written
+        reducers answered PASS here, which is a fail-open verdict that reads as a
+        clean one.
+        """
+        for empty in ([], (), iter([]), (c for c in ())):
+            with self.subTest(kind=type(empty).__name__):
+                combined = S.Check.worst_of(empty)
+                self.assertEqual(combined.outcome, S.COULD_NOT_CHECK)
+                self.assertFalse(combined.passed)
+                self.assertEqual(combined.reasons, (S.EMPTY_CHECK_VECTOR_REASON,))
+
+    def test_all_pass_is_pass_with_no_reasons(self):
+        combined = S.Check.worst_of([S.Check(S.PASS), S.Check(S.PASS)])
+        self.assertEqual(combined.outcome, S.PASS)
+        self.assertEqual(combined.reasons, ())
+
+    def test_a_pass_check_does_not_donate_its_prose_to_the_combined_record(self):
+        """A PASS carries no finding, so its reasons must not ride along.
+
+        Otherwise the combined reason list contains unattributable text and a
+        reader cannot tell a finding from a note.
+        """
+        combined = S.Check.worst_of([S.Check(S.PASS, ("all tools agree",)),
+                                     S.Check(S.FAIL, ("digest mismatch",))])
+        self.assertEqual(combined.reasons, ("[FAIL] digest mismatch",))
+
+    def test_could_not_check_dominates_pass(self):
+        combined = S.Check.worst_of([S.Check(S.PASS), S.Check(S.COULD_NOT_CHECK, ("no fd",))])
+        self.assertEqual(combined.outcome, S.COULD_NOT_CHECK)
+
+    def test_fail_dominates_could_not_check_in_either_order(self):
+        for vector in ([S.Check(S.COULD_NOT_CHECK, ("a",)), S.Check(S.FAIL, ("b",))],
+                       [S.Check(S.FAIL, ("b",)), S.Check(S.COULD_NOT_CHECK, ("a",))]):
+            with self.subTest(order=[c.outcome for c in vector]):
+                self.assertEqual(S.Check.worst_of(vector).outcome, S.FAIL)
+
+    def test_every_non_pass_reason_is_carried_prefixed_with_its_own_outcome(self):
+        """FAIL dominating COULD_NOT_CHECK must not erase which was which."""
+        combined = S.Check.worst_of([
+            S.Check(S.COULD_NOT_CHECK, ("the attestation file was unreadable",)),
+            S.Check(S.FAIL, ("the anchor digest does not match", "and neither does argv")),
+        ])
+        self.assertEqual(combined.outcome, S.FAIL)
+        self.assertEqual(combined.reasons, (
+            "[COULD_NOT_CHECK] the attestation file was unreadable",
+            "[FAIL] the anchor digest does not match",
+            "[FAIL] and neither does argv",
+        ))
+
+    def test_a_non_check_element_raises_rather_than_being_skipped(self):
+        """A silently ignored foreign object yields PASS for a vector never reduced."""
+        for bad in ("PASS", {"outcome": "PASS"}, None, 0):
+            with self.subTest(bad=repr(bad)):
+                with self.assertRaises(TypeError):
+                    S.Check.worst_of([S.Check(S.PASS), bad])
+
+    def test_a_generator_is_consumed_exactly_once(self):
+        """Emptiness is detected by iteration, not by len() or truthiness.
+
+        A generator is always truthy and has no length, so a reducer that tested
+        `if not checks` would return PASS for an exhausted one.
+        """
+        exhausted = (c for c in [S.Check(S.PASS)])
+        list(exhausted)
+        self.assertEqual(S.Check.worst_of(exhausted).outcome, S.COULD_NOT_CHECK)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

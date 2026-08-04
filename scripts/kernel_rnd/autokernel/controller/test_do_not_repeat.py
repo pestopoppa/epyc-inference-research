@@ -51,9 +51,11 @@ if _KERNEL_RND not in sys.path:
 from autokernel import journal as J  # noqa: E402
 from autokernel import schemas as S  # noqa: E402
 from autokernel.controller import do_not_repeat as D  # noqa: E402
-from autokernel.controller import fingerprint as FP  # noqa: E402
+from autokernel.controller import shared as FP  # noqa: E402  (was fingerprint;
+# only selection_block was ever used and it now lives in shared.py)
 from autokernel.controller import hypotheses as H  # noqa: E402
-from autokernel.controller import selection as SEL  # noqa: E402
+from autokernel.controller import shared as SEL  # noqa: E402  (was selection;
+# LEDGER_DIMENSIONS describes what the LEDGER keys on and now lives with it)
 from autokernel.evaluator import api as EV  # noqa: E402
 
 CAMPAIGN = "ak-llama_gpu-decode-20260803"
@@ -1388,7 +1390,7 @@ class TestTheFoldRefusesRatherThanDegrades(unittest.TestCase):
 
     def test_every_refusal_is_catchable_as_the_controller_plane(self):
         """A driver catches the plane, not a module of it."""
-        from autokernel.controller import state_machine as SM
+        from autokernel.controller import shared as SM
         self.assertTrue(issubclass(D.DoNotRepeatError, SM.ControllerError))
         self.assertTrue(issubclass(D.LedgerFoldError, D.DoNotRepeatError))
 

@@ -124,6 +124,7 @@ __all__ = [
     "compute_verdict", "TierDispatcher", "build_evaluation_event",
     "render_search_record_grammar", "check_record_grammar_complete",
     "compose_attestation_ref", "rank_candidates", "audit_no_write_or_process_paths",
+    "MODULE_ID",
 ]
 
 # =============================================================================
@@ -134,12 +135,21 @@ PROTOCOL_ID = "P-AK-SEARCH-1"
 PROTOCOL_VERSIONED_ID = "P-AK-SEARCH-1/v1"
 PROTOCOL_RATIFIED_UTC = "20260803T083005Z"
 
+#: This module's own identity, in the source, so `audit_no_write_or_process_paths()`
+#: can PROVE the text it parsed is this file rather than assume it. Same spelling and
+#: same purpose as `release/packager.MODULE_ID`.
+MODULE_ID = "autokernel.evaluator.api/v1"
+
 #: Annex K requires every protocol to state the class of record it emits.
 #: P-AK-SEARCH-1 emits a verdict that is NOT a claim, and the grammar says so.
 RECORD_CLASS = "SEARCH RECORD, NOT A CLAIM"
 
-_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")      # mirrors schemas._SHA256_RE
-_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")      # mirrors schemas._COMMIT_RE
+#: Not mirrored any more — BOUND. A local `re.compile(r"^[0-9a-f]{64}$")` is the
+#: first line of a re-derived digest validator and it is free to write, which is
+#: why nine modules wrote one and two of them then forgot the placeholder check.
+#: The shape is `schemas`' to define.
+_SHA256_RE = schemas.SHA256_RE
+_COMMIT_RE = schemas.COMMIT_RE
 _CO_RESIDENCY_RE = re.compile(r"^(single|co_resident:[A-Za-z0-9._:-]+)$")
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}")
 
@@ -520,15 +530,35 @@ E_PROCESS_CONSTRUCTION_IDS = (
 # Typed inputs
 # =============================================================================
 
+#: `schemas.require.str` under this module's name. Body hoisted; ~30 call sites
+#: keep reading `_require_nonempty_str(...)`, which is what they should read.
+_require_nonempty_str = schemas.require.str
+
+
 def _require_sha256(value: Any, label: str) -> str:
-    if not isinstance(value, str) or not _SHA256_RE.match(value):
+    """SHAPE ONLY, and this is the one digest validator in the keep set that is.
+
+    **This is a KNOWN WEAKER GATE, enumerated as such.** Every other digest field
+    in the package is `schemas.require.sha256`, which also refuses
+    `schemas.is_placeholder_digest` — sixty-four zeros are well-formed hex and
+    name an artifact nobody hashed. `AnchorIdentity.binary_sha256` and
+    `linkage_sha256`, the very fields precondition 4 exists to bind, accept one.
+
+    It is not delegated yet because delegating it is a BEHAVIOUR change, not a
+    hoist: 152 tests construct an `AnchorIdentity` or an `ArtifactIdentity` from
+    filler, and eight of them are in `evaluator/test_surface.py` — a test module
+    for code the simplification review condemned to deletion, which this refactor
+    may not touch. Fixing the fixtures there is work that gets deleted; fixing
+    only the others leaves the suite red. So the tightening waits for the
+    deletion to land, and until then it is a NAMED debt with a test on it rather
+    than a difference between two bodies that nobody notices.
+
+    `test_schemas_require.TestNoKeepSetModuleReDerivesAScalarValidator` carries
+    this module in `_KNOWN_WEAKER_DIGEST_VALIDATORS` and fails if a SECOND module
+    joins it, or if this one is fixed and the entry is left behind.
+    """
+    if not isinstance(value, str) or not schemas.SHA256_RE.match(value):
         raise ValueError(f"{label}: expected a lowercase sha256 hex digest, got {value!r}")
-    return value
-
-
-def _require_nonempty_str(value: Any, label: str) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{label}: expected a non-empty string, got {value!r}")
     return value
 
 
@@ -1639,18 +1669,15 @@ class SearchGradeResult:
 # =============================================================================
 
 def _combine(*checks: schemas.Check) -> schemas.Check:
-    """Worst-of over Checks: FAIL beats COULD_NOT_CHECK beats PASS."""
-    outcome = schemas.PASS
-    reasons: list = []
-    for chk in checks:
-        if chk.outcome == schemas.PASS:
-            continue
-        reasons.extend(chk.reasons)
-        if chk.outcome == schemas.FAIL:
-            outcome = schemas.FAIL
-        elif outcome != schemas.FAIL:
-            outcome = schemas.COULD_NOT_CHECK
-    return schemas.Check(outcome, tuple(reasons))
+    """Worst-of over Checks: FAIL beats COULD_NOT_CHECK beats PASS.
+
+    Delegates to `schemas.Check.worst_of`, which is the package's one lattice.
+    `_combine()` with no arguments used to answer PASS — the fail-open this
+    module's own prose names at `check_gate_derivation_is_locked` ("an empty gate
+    list derives to PASS and that is a fail-open verdict") — and now answers
+    COULD_NOT_CHECK.
+    """
+    return schemas.Check.worst_of(checks)
 
 
 def _anchor_precondition(request: EvaluationRequest,
@@ -2976,8 +3003,46 @@ _FORBIDDEN_IMPORTS = frozenset({
 })
 
 
+def _defines_this_module(tree: ast.AST) -> bool:
+    """True when the parsed source assigns `MODULE_ID = "autokernel.evaluator.api/v1"`.
+
+    Copied from `release/packager._defines_this_module`, for the same reason it
+    exists there: a self-audit that does not prove it read its OWN module is a
+    clean bill of health for whatever text it was handed.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "MODULE_ID" and \
+                        isinstance(node.value, ast.Constant) and \
+                        node.value.value == MODULE_ID:
+                    return True
+    return False
+
+
+def _is_an_audited_module(tree: ast.AST) -> bool:
+    """True when the parsed source has a module BODY — something to audit.
+
+    `""`, whitespace, a comment, a lone docstring and `x = 1` all contain no
+    forbidden construct, so a search for forbidden constructs certified every one
+    of them. That is the guarantee obtained by DELETING the thing under
+    inspection, and it is the one shape of this call that is always wrong.
+    """
+    return any(isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+               for node in getattr(tree, "body", ()))
+
+
+#: A clean result over source the caller chose is not evidence about this module.
+_NOT_A_MODULE = (
+    "the audited source defines no function or class, so there was nothing to audit. A "
+    "PASS here would be the guarantee obtained by deleting the thing it inspects")
+_NOT_THIS_MODULE = (
+    "the audited source does not define MODULE_ID = {module_id!r}, so the AST parsed is "
+    "not this module's. Call with no argument to audit this module")
+
+
 def audit_no_write_or_process_paths(source: Optional[str] = None) -> schemas.Check:
-    """Prove from this module's own AST that it cannot write or signal.
+    """Prove from an AST that it cannot write or signal. No argument = THIS module.
 
     Design §5.4: the trusted runner *"has no authority to modify candidate source
     or production state."* Prose cannot enforce that, and neither can a code
@@ -2986,10 +3051,30 @@ def audit_no_write_or_process_paths(source: Optional[str] = None) -> schemas.Che
     either. `test_api.py` asserts the result is PASS, so the property becomes a
     regression barrier rather than an intention.
 
+    TWO CALLS, and the difference is what the PASS means:
+
+      * **No argument.** The self-audit. The text is read from `__file__` and then
+        BOUND with `_defines_this_module` — the assumption "we read our own file"
+        is checked rather than trusted. This is the call `test_conformance.py` and
+        `evaluator/__init__.py` mean by "the evaluator proves it cannot write".
+      * **A supplied `source`.** The shared ENGINE. Several modules reuse this
+        rather than copy the denylists — one definition of "cannot write, cannot
+        signal" for the package, which is why `controls.py` and `correctness.py`
+        delegate here instead of re-typing the tables. A result over supplied text
+        is a finding about THAT TEXT, and the caller is the one that binds it to a
+        module (`readiness._audits_this_module`, `whisper_stt._source_is_this_module`).
+
+    `audit_no_write_or_process_paths("")` used to return PASS in both readings.
+    It no longer does: source with no function or class in it is COULD_NOT_CHECK,
+    because a search for forbidden constructs over no constructs certifies
+    nothing. A FAIL is still returned unbound — a forbidden construct is a finding
+    about the text whoever wrote it.
+
     COULD_NOT_CHECK when the source cannot be read or parsed — an unreadable
     module is not an audited one.
     """
-    if source is None:
+    own = source is None
+    if own:
         try:
             source = Path(__file__).read_text(encoding="utf-8")
         except OSError as exc:
@@ -2999,6 +3084,9 @@ def audit_no_write_or_process_paths(source: Optional[str] = None) -> schemas.Che
         tree = ast.parse(source)
     except SyntaxError as exc:
         return schemas.Check(schemas.COULD_NOT_CHECK, (f"could not parse module: {exc}",))
+    if own and not _defines_this_module(tree):
+        return schemas.Check(schemas.COULD_NOT_CHECK,
+                             (_NOT_THIS_MODULE.format(module_id=MODULE_ID),))
 
     findings: list = []
     for node in ast.walk(tree):
@@ -3019,6 +3107,10 @@ def audit_no_write_or_process_paths(source: Optional[str] = None) -> schemas.Che
                 findings.append(f"line {node.lineno}: calls .{func.attr}()")
 
     if findings:
+        # Returned UNBOUND and before the module-shape test: a forbidden construct
+        # is a finding about the text, whoever wrote it and however small it is.
         return schemas.Check(schemas.FAIL, tuple(findings))
+    if not _is_an_audited_module(tree):
+        return schemas.Check(schemas.COULD_NOT_CHECK, (_NOT_A_MODULE,))
     return schemas.Check(schemas.PASS)
 

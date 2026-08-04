@@ -292,11 +292,6 @@ _CONFIG_READ_ONLY_FLAGS = frozenset({
     "--system", "--worktree", "--file", "-f", "--blob",
 })
 
-_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-#: Mirrors `schemas._COMMIT_RE`. A short commit is not a commit here: an
-#: abbreviation is ambiguous across a growing object store, and the anchor exists
-#: to resolve to ONE tree forever.
-_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 #: `ak-` is not decoration. Because the worktree directory name is
 #: `<source_tree>-<campaign_id>`, requiring the id to start with `ak-` is what
 #: structurally produces the `llama.cpp-ak-…` namespace design §5.3 asks for.
@@ -399,28 +394,37 @@ class ProcessEscalationFailed(WorktreeError):
 
 
 # =============================================================================
-# Small validators — local on purpose, so this module does not depend on another
-# module's privates (the same choice `evaluator/correctness.py` documents)
+# Small validators — the scalar ones are `schemas.require`; `_req_tree_digest`
+# below is this module's own, and the comment on it says why it has to be
 # =============================================================================
+#
+# These used to be local "on purpose, so this module does not depend on another
+# module's privates". The purpose was real and the outcome was that this copy
+# silently lacked the placeholder-digest rejection the `t0_provider` copy had.
+# `schemas.require` is not another module's privates — it is the bottom layer
+# every module here already imports, and the field type is public.
 
-def _req_str(value: Any, label: str) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{label}: expected a non-empty string, got {value!r}")
-    return value
+_req_str = schemas.require.str
+_req_sha256 = schemas.require.sha256
+_req_commit = schemas.require.commit
 
 
-def _req_sha256(value: Any, label: str) -> str:
-    if not isinstance(value, str) or not _SHA256_RE.match(value):
-        raise ValueError(f"{label}: expected a lowercase sha256 hex digest, got {value!r}")
-    return value
+def _req_tree_digest(value: Any, label: str) -> str:
+    """A tree digest, where `integrity.EMPTY_TREE_SHA256` is a MEASURED observation.
 
+    `_req_sha256` refuses `schemas.is_placeholder_digest`, and that set contains the
+    sha256 of the empty input. For a *tree* digest that is not filler: a fresh build
+    directory is empty, `integrity.hash_source_tree` of an empty tree hashes an empty
+    manifest, and `run_build(require_fresh_build_dir=True)` REQUIRES the digest to be
+    exactly that value (`:2180`). Refusing it here would refuse the one reading that
+    proves the build directory was clean.
 
-def _req_commit(value: Any, label: str) -> str:
-    if not isinstance(value, str) or not _COMMIT_RE.match(value):
-        raise ValueError(
-            f"{label}: expected a full 40-hex commit, got {value!r}. A short commit is "
-            "ambiguous across a growing object store; the anchor must resolve to one tree")
-    return value
+    Every other filler is still refused, because a repeated hex character is never
+    what a manifest hashes to.
+    """
+    if isinstance(value, str) and value == integrity.EMPTY_TREE_SHA256:
+        return value
+    return _req_sha256(value, label)
 
 
 def _utc_now_iso() -> str:
@@ -2276,7 +2280,7 @@ class BuildIdentity:
             raise ValueError("BuildIdentity.candidate_id must start with 'akc-'")
         validate_campaign_id(self.campaign_id)
         _req_sha256(self.snapshot_sha256, "snapshot_sha256")
-        _req_sha256(self.build_dir_pre_build_digest, "build_dir_pre_build_digest")
+        _req_tree_digest(self.build_dir_pre_build_digest, "build_dir_pre_build_digest")
         _req_sha256(self.build_log_sha256, "build_log_sha256")
         _req_sha256(self.output_binary_sha256, "output_binary_sha256")
         if self.incremental_output_binary_sha256 is not None:

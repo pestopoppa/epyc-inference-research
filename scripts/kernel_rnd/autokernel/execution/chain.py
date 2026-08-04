@@ -229,10 +229,6 @@ SEAM_NOTES = (
      "reason. The precise reason is in BuildEvidence.checks and is lost at the dataclass "
      "boundary. REQUIRED FOLLOW-UP (correctness.py, another agent's file this hour): add "
      "`objects_from_external_cache: bool` and a FAIL branch naming it."),
-    ("correctness.BuildProvenance has no `produced_by`, so a projection made here by the "
-     "evaluator's own collection half is indistinguishable from one an actor supplied. "
-     "t0_provider.SCHEMA_FOLLOWUPS[0] records the same gap and the same remedy; this is a "
-     "second consumer of it, not a second finding."),
     ("api.AnchorIdentity.binary_sha256 is SINGLE-VALUED, and one anchor build ships several "
      "binaries. T0 hashes the anchor `llama-cli`; `microbench` compares the plan's anchor "
      "digest against the anchor `llama-bench` it is about to spawn. One triple cannot name "
@@ -419,15 +415,18 @@ class BuildEvidence:
 
 
 def _worst(checks) -> schemas.Check:
-    reasons: list = []
-    outcome = schemas.PASS
-    for check in checks:
-        reasons.extend(check.reasons)
-        if check.outcome == schemas.FAIL:
-            outcome = schemas.FAIL
-        elif check.outcome == schemas.COULD_NOT_CHECK and outcome != schemas.FAIL:
-            outcome = schemas.COULD_NOT_CHECK
-    return schemas.Check(outcome, tuple(reasons))
+    """Delegates to `schemas.Check.worst_of`. Two behaviours change, both closing holes.
+
+    An evidence record built with `checks=()` derived PASS — and `campaign.py`
+    reads `build_ev.worst.outcome != schemas.PASS` to decide whether to abort the
+    leg, so an evidence record that carried no checks licensed the run. It is now
+    COULD_NOT_CHECK.
+
+    Reasons attached to a PASS sub-check are no longer carried; every producer in
+    this module emits bare `Check(schemas.PASS)`, so nothing is lost, and the
+    reasons that remain are now prefixed with the outcome that raised them.
+    """
+    return schemas.Check.worst_of(checks)
 
 
 def build_evidence(identity: worktree.BuildIdentity, *,
@@ -533,6 +532,10 @@ def build_evidence(identity: worktree.BuildIdentity, *,
         build_log_ref=build_log_ref(identity),
         production_tree_paths_touched=touched,
         output_binary_sha256=identity.output_binary_sha256,
+        # Projected from a `worktree.BuildIdentity` this module read, not from
+        # anything the candidate declared — the same attribution `symbol_evidence`
+        # records above.
+        produced_by="evaluator",
     )
     return BuildEvidence(provenance=provenance, checks=tuple(checks), notes=tuple(notes))
 
@@ -1226,9 +1229,11 @@ def commit_was_pathspec_limited(commit_argv: Sequence[str]) -> tuple:
     is the field whose gate reason is *"in a shared clone an unrestricted commit
     sweeps another session's staged files into the artifact"*
     (`feedback_parallel_agent_staged_files_ride_along`), and it is the one field
-    of that record the candidate is currently believed about
-    (`t0_provider.SCHEMA_FOLLOWUPS[1]`). A boolean parameter would keep it a
-    belief. The commit ARGV is a fact the driver has, so this reads it.
+    of that record whose truth the evaluator has to establish for itself
+    (`check_schema_and_diff_policy` now FAILs a `produced_by != "evaluator"`
+    record outright, which stops a CANDIDATE asserting it — it does not supply the
+    value). A boolean parameter would leave it a belief held by whoever called
+    this function. The commit ARGV is a fact the driver has, so this reads it.
 
     True requires BOTH: a `--` separator with at least one pathspec after it, and
     no flag that widens the commit past that pathspec (`_COMMIT_ALL_FLAGS` — read
@@ -1375,15 +1380,21 @@ def diff_policy_evidence(*, diff_text: str,
         production_tree_paths=tuple(production_paths),
         record_schema_violations=tuple(str(v) for v in record_schema_violations),
         diff_ref=ref,
+        # Derived here by parsing the diff text, not copied from a declaration.
+        produced_by="evaluator",
     )
     return DiffEvidence(policy=policy, source_diff=parsed, checks=tuple(checks),
                         notes=tuple(notes))
 
 
 def _req_str_arg(value: Any, label: str) -> str:
-    if not isinstance(value, str) or not value.strip():
-        raise ChainSeamError(f"{label}: expected a non-empty string, got {value!r}")
-    return value
+    """`schemas.require.str`, raising this seam's own error.
+
+    The `error=` kwarg exists for exactly this: the PREDICATE is shared, the
+    module's vocabulary is not. A caller of this seam catches `ChainSeamError`
+    and must keep catching it.
+    """
+    return schemas.require.str(value, label, error=ChainSeamError)
 
 
 # =============================================================================

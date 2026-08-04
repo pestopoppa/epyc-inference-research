@@ -1592,5 +1592,32 @@ def _request(command: R.ConstructedCommand, **overrides) -> api.EvaluationReques
     return api.EvaluationRequest(**kwargs)
 
 
+class WorstOutcomeIsTheOneLatticeTest(unittest.TestCase):
+    """`recipes.worst_outcome` delegates to `schemas.Check.worst_of`.
+
+    This reducer already answered the empty case correctly. The delegation keeps
+    it correct by construction rather than by a local `if`, and makes it give the
+    same answer as every other reducer.
+    """
+
+    @staticmethod
+    def _finding(outcome, reasons=()):
+        return R.DisciplineFinding(finding_id="f", check=S.Check(outcome, reasons),
+                                   clause="c")
+
+    def test_an_empty_discipline_vector_is_could_not_check_and_never_pass(self):
+        self.assertEqual(R.worst_outcome([]), S.COULD_NOT_CHECK)
+        self.assertEqual(R.worst_outcome(iter([])), S.COULD_NOT_CHECK)
+
+    def test_the_delegation_is_real_and_not_a_reimplementation(self):
+        for outcomes in ([], [S.PASS], [S.PASS, S.COULD_NOT_CHECK],
+                         [S.COULD_NOT_CHECK, S.FAIL], [S.FAIL, S.PASS]):
+            with self.subTest(outcomes=outcomes):
+                findings = [self._finding(o, ("r",)) for o in outcomes]
+                self.assertEqual(
+                    R.worst_outcome(findings),
+                    S.Check.worst_of(f.check for f in findings).outcome)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
