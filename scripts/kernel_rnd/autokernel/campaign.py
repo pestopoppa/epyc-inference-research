@@ -1197,7 +1197,16 @@ class DryRunOps:
             blocks=spec.blocks, pairs_per_block=1,
             anchor_argv=rendered["anchor"]["argv"],
             candidate_argv=rendered["candidate"]["argv"],
-            env=rendered["anchor"]["env"],
+            # BOTH envs, not one labelled `env`. They differ in exactly one key
+            # and it is the load-bearing one: each arm's LD_LIBRARY_PATH points at
+            # its OWN build's libs. Rendering only the anchor's invited the reader
+            # to conclude the candidate runs against production's ggml — which is
+            # the single worst thing that could silently be true here, because a
+            # candidate linked to the anchor's libggml measures the anchor no
+            # matter what it changed, and reports a clean null. The three source
+            # trees run three ggml generations for the same reason.
+            anchor_env=rendered["anchor"]["env"],
+            candidate_env=rendered["candidate"]["env"],
             drift_bound=f"{spec.drift_bound:.4%} ({AA_EVIDENCE_REF})")
         return None
 

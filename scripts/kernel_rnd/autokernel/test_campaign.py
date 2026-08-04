@@ -29,6 +29,7 @@ import argparse
 import ast
 import contextlib
 import io
+import os
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -1799,3 +1800,49 @@ class TestTheEntrypointExists(unittest.TestCase):
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
+
+
+class TestTheDryRunShowsPerArmLinkage(unittest.TestCase):
+    """The dry run must show that each arm loads its OWN build's libraries.
+
+    Found 2026-08-04 by reading a real dry run rather than a test: step 7 rendered
+    a single `env` key, taken from the anchor. The mechanism was already correct —
+    `_render_arms` binds `library_path` per arm — but the OUTPUT could not
+    distinguish that from both arms sharing production's libs.
+
+    That distinction is the whole review. A candidate linked against the anchor's
+    `libggml` measures the anchor whatever it changed, and reports a clean,
+    well-formed null: min(delta) 0, median 0, no crossing, REVERT. Every gate
+    above it passes, because nothing is wrong except that the wrong binary ran.
+    The three source trees run three different ggml generations for this reason,
+    and `verify_ggml_linkage.sh` exists because a binary that inherits another
+    tree's ggml runs silently wrong.
+    """
+
+    def _blocks_step(self):
+        out = io.StringIO()
+        ops = campaign.DryRunOps(out=out)
+        campaign.run_campaign(spec(), ops)
+        for step in ops.steps:
+            if step.name == "paired_blocks":
+                return step.detail
+        self.fail("no paired_blocks step in the dry run")
+
+    def test_both_arm_envs_are_rendered(self):
+        step = self._blocks_step()
+        self.assertIn("anchor_env", step)
+        self.assertIn("candidate_env", step)
+        self.assertNotIn("env", step,
+                         "a single `env` key cannot say which arm it belongs to")
+
+    def test_the_two_arms_do_not_share_a_library_path(self):
+        step = self._blocks_step()
+        anchor = step["anchor_env"]["LD_LIBRARY_PATH"]
+        candidate = step["candidate_env"]["LD_LIBRARY_PATH"]
+        self.assertNotEqual(
+            anchor, candidate,
+            "both arms would load the same libggml; the candidate would measure "
+            "the anchor and report a well-formed null")
+        self.assertNotIn(campaign.PRODUCTION_REPO,
+                         candidate.split(os.pathsep)[0],
+                         "the candidate's FIRST library path is production's")
