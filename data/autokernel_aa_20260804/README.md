@@ -75,8 +75,13 @@ stack, not our kernel.
 This is worth recording as a result in itself, because it is the strongest available argument for
 one specific piece of machinery: **we held no resource claim.** The other session did nothing
 wrong — nothing told it the host was in use. `resource/device_claim.py` and
-`execution/cpu_region_claim.py` exist precisely for this, and the CPU-region acquisition path is
-currently *unsatisfiable*, so there was no way to hold one. An A/A whose tail is destroyed by a
+`execution/cpu_region_claim.py` exist precisely for this, and **we simply did not call them** —
+runs A–F were driven by `run_anchor.sh`, which holds no claim. *(Corrected 2026-08-04: an
+earlier revision of this paragraph said the CPU-region acquisition path was "unsatisfiable".
+That was wrong. `cpu_region_claim.acquire_cpu_region_claim()` exists, is callable, and is step 1
+of the execution-layer runbook's cold start. The finding stands — the claim was NOT held — only
+the reason was wrong, and the wrong reason is the more dangerous of the two, because it tells
+the next reader not to bother trying.)* An A/A whose tail is destroyed by a
 legitimate co-tenant is what the claim invariant buys, and it cost us two runs within an hour of
 first use.
 

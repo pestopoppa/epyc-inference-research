@@ -29,6 +29,12 @@ PYTEST_SMOKE += scripts/benchmark/test_agentic_swe_harness.py
 PYTEST_SMOKE += scripts/kernel_rnd/test_kernel_store.py
 PYTEST_SMOKE += scripts/kernel_rnd/test_c6_reward_integrity.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_schemas.py
+# The conformance guard for `schemas.require`. It is in the smoke set because it
+# is the ONLY thing that makes the validator hoist durable: the hoist itself
+# removed 57 lines and would be re-derived by the next module for the cost of a
+# `re.compile`. A guard that is not in the set the Makefile runs is a guard that
+# fails silently on the day it matters.
+PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_schemas_require.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_journal.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_storage.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_integration.py
