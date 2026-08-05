@@ -38,6 +38,7 @@ from unittest import mock
 
 from . import campaign, schemas
 from .resource import claim_witness
+from .test_schemas import _proposal as _proposal_fixture
 
 MODEL = "/mnt/raid0/llm/models/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf"
 
@@ -47,6 +48,13 @@ def spec(**overrides) -> campaign.CampaignSpec:
                   candidate_ref="candidate.patch", model=MODEL)
     kwargs.update(overrides)
     return campaign.CampaignSpec(**kwargs)
+
+
+def proposal_manifest(campaign_id: str = "ak-test") -> dict:
+    proposal = _proposal_fixture()
+    proposal["campaign_id"] = campaign_id
+    proposal["proposal_id"] = "akp-test-0001"
+    return proposal
 
 
 # =============================================================================
@@ -132,6 +140,9 @@ class SpyOps:
         if self._fail_at == name:
             raise RuntimeError(f"induced failure at {name}")
 
+    def record_proposal(self, spec_):
+        self._record("record_proposal")
+
     def preflight(self, spec_):
         self._record("preflight")
         return schemas.Check(self._preflight_outcome, ("spy",))
@@ -209,6 +220,11 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
         self.assertIsNone(result.decision)
         self.assertIsNone(result.to_dict()["decision"])
         self.assertNotIn("tokens per second", text)
+
+    def test_a_supplied_proposal_is_recorded_before_preflight(self):
+        result, ops, _text = self.compose(proposal=proposal_manifest())
+        self.assertEqual(ops.calls[0:2], ["record_proposal", "preflight"])
+        self.assertEqual(result.to_dict()["spec"]["proposal"]["proposal_id"], "akp-test-0001")
 
     def test_the_composed_argv_is_the_canonical_recipe(self):
         """The argv is what drifted to 46% of canonical when nobody reviewed it."""
@@ -793,6 +809,24 @@ class TestTheSpecIsAPreCommitment(unittest.TestCase):
         with self.assertRaises(Exception):
             spec().blocks = 9
 
+    def test_proposal_v3_is_validated_and_frozen_by_value(self):
+        proposal = proposal_manifest()
+        built = spec(proposal=proposal)
+        proposal["hypothesis"] = "mutated after validation"
+        self.assertNotEqual(built.proposal["hypothesis"], proposal["hypothesis"])
+        self.assertEqual(built.proposal_id, "akp-test-0001")
+
+    def test_historical_proposal_v2_cannot_drive_a_new_execution(self):
+        proposal = proposal_manifest()
+        proposal["schema"] = schemas.SCHEMA_PROPOSAL_V2
+        del proposal["representation_contract"]
+        with self.assertRaisesRegex(ValueError, "proposal manifest is invalid"):
+            spec(proposal=proposal)
+
+    def test_proposal_cannot_cross_campaigns(self):
+        with self.assertRaisesRegex(ValueError, "does not match campaign"):
+            spec(proposal=proposal_manifest("ak-other"))
+
     def test_a_claim_id_namespace_cannot_be_used_for_a_candidate(self):
         with self.assertRaises(ValueError):
             spec(candidate_id="akclaim-0001")
@@ -982,6 +1016,39 @@ class TestAResultThatCouldNotBeWrittenDownIsNotASuccess(unittest.TestCase):
         self.assertTrue(result.ok)
 
 
+class TestProposalIsDurableBeforeHostWork(unittest.TestCase):
+    def setUp(self):
+        data_root = Path(__file__).resolve().parents[3] / "data"
+        self.tempdir = tempfile.TemporaryDirectory(prefix="ak-proposal-test-", dir=data_root)
+        self.addCleanup(self.tempdir.cleanup)
+
+    def test_identical_resume_reuses_one_fsynced_proposal_event(self):
+        built = spec(journal_root=self.tempdir.name, proposal=proposal_manifest())
+        ops = campaign.HostOps()
+        first = ops.record_proposal(built)
+        second = ops.record_proposal(built)
+        self.assertEqual(first, second)
+        book = campaign.journal_module.Journal(
+            self.tempdir.name, campaign_id=built.campaign_id
+        )
+        proposals = [
+            entry
+            for entry in book.read_all()
+            if entry.kind == campaign.journal_module.KIND_PROPOSAL_RECORDED
+        ]
+        self.assertEqual(len(proposals), 1)
+
+    def test_same_proposal_id_with_different_bytes_is_refused(self):
+        first = spec(journal_root=self.tempdir.name, proposal=proposal_manifest())
+        ops = campaign.HostOps()
+        ops.record_proposal(first)
+        changed = proposal_manifest()
+        changed["hypothesis"] = "different hypothesis under the same id"
+        second = spec(journal_root=self.tempdir.name, proposal=changed)
+        with self.assertRaisesRegex(RuntimeError, "different bytes"):
+            ops.record_proposal(second)
+
+
 class TestASecondInterruptDoesNotStrandTheRest(unittest.TestCase):
     """`run_campaign` catches `BaseException` because Ctrl-C is the realistic
     early exit. The releases themselves caught only `Exception`, so the SECOND
@@ -1028,13 +1095,22 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
     discovering it was the claim window. It is knowable at argv time.
     """
 
-    ARGV = ["--model", MODEL, "--execute", "--i-hold-the-host"]
+    def setUp(self):
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tempdir.cleanup)
+        manifest = Path(self.tempdir.name) / "proposal.json"
+        manifest.write_text(json.dumps(proposal_manifest()), encoding="utf-8")
+        self.argv = [
+            "--model", MODEL, "--campaign-id", "ak-test", "--candidate-id", "akc-test",
+            "--execute", "--i-hold-the-host",
+            "--proposal-manifest", str(manifest),
+        ]
 
     def test_the_stock_host_ops_is_refused_before_anything_is_acquired(self):
         """THE BITE."""
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
-            code = campaign.main(self.ARGV, out=io.StringIO(),
+            code = campaign.main(self.argv, out=io.StringIO(),
                                  ops=campaign.HostOps())
         self.assertEqual(code, 2)
         for seam in ("apply_candidate", "_anchor_identity_for_bench", "t0_evidence",
@@ -1058,7 +1134,7 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
         """CONTROL: the guard must not forbid its own compliant path."""
         ops = SpyOps(pairs=pairs_from_positions(TG128_OVER_TEN_POSITIONS,
                                                 candidate_factor=1.08, orders=BALANCED))
-        code = campaign.main(self.ARGV, out=io.StringIO(), ops=ops)
+        code = campaign.main(self.argv, out=io.StringIO(), ops=ops)
         self.assertEqual(code, 0)
         self.assertIn("run_paired_blocks", ops.calls)
 
@@ -1067,6 +1143,16 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
         out = io.StringIO()
         self.assertEqual(campaign.main(["--model", MODEL], out=out,
                                        ops=campaign.DryRunOps(out=out)), 0)
+
+    def test_execute_without_a_proposal_is_refused_before_ops(self):
+        ops = SpyOps()
+        code = campaign.main(
+            ["--model", MODEL, "--execute", "--i-hold-the-host"],
+            out=io.StringIO(),
+            ops=ops,
+        )
+        self.assertEqual(code, 2)
+        self.assertEqual(ops.calls, [])
 
 
 # =============================================================================
@@ -1297,7 +1383,8 @@ class TestThePreflightIsWiredToSomethingThatExists(unittest.TestCase):
         for patch in self._patched(verdict, **kw):
             patch.start()
             self.addCleanup(patch.stop)
-        return campaign.HostOps().preflight(spec())
+        return campaign.HostOps().preflight(spec(
+            journal_root="/mnt/raid0/llm/epyc-inference-research/data/ak-preflight-test"))
 
     def test_the_preflight_runs_at_all_on_both_cells(self):
         """THE BITE: `HostOps.preflight` raised TypeError on its own third line.
@@ -1310,13 +1397,21 @@ class TestThePreflightIsWiredToSomethingThatExists(unittest.TestCase):
         for patch in self._patched(schemas.PASS, boosting=16, load1=3.3):
             patch.start()
             self.addCleanup(patch.stop)
-        for built in (spec(), spec(backend="llama_gpu", devices=("ROCm0",),
-                                   device_names=("AMD Instinct MI210",))):
+        journal_root = "/mnt/raid0/llm/epyc-inference-research/data/ak-preflight-test"
+        for built in (spec(journal_root=journal_root),
+                      spec(backend="llama_gpu", devices=("ROCm0",),
+                           device_names=("AMD Instinct MI210",),
+                           journal_root=journal_root)):
             with self.subTest(backend=built.backend):
                 check = campaign.HostOps().preflight(built)
                 self.assertIn(check.outcome,
                               (schemas.PASS, schemas.COULD_NOT_CHECK, schemas.FAIL))
         self.assertTrue(callable(claim_witness.gpu_claim_sources(()).gpu_claim_reader))
+
+    def test_an_executing_host_path_refuses_without_a_run_ledger_root(self):
+        check = campaign.HostOps().preflight(spec())
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("--journal-root", " ".join(check.reasons))
 
     def test_an_unevaluable_concurrency_check_refuses_the_run(self):
         """FAIL-OPEN, closed: 'I could not tell' must not start a benchmark.

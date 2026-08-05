@@ -11,9 +11,10 @@ blocks, and keeps or reverts it. Production is never touched.
 python3 -m scripts.kernel_rnd.autokernel.campaign --model /path/to/model.gguf
 ```
 
-**Dry run is the default.** It composes and prints all twelve steps, including
+**Dry run is the default.** It composes and prints every applicable step, including
 the exact argv and env both arms would be spawned with, and executes nothing.
-`--execute` additionally requires `--i-hold-the-host`.
+`--execute` additionally requires `--i-hold-the-host` and a validated
+`--proposal-manifest`; proposal-v3 is fsynced before any host work.
 
 **Status: no candidate has ever been built, and no benchmark has ever been run
 by this package.** Not one. The loop above has been composed end to end and
@@ -85,6 +86,20 @@ acquired the claim directly. Writing your own question:
 | The research programme | [`program.md`](program.md) |
 | What is on the path and what is not | [`FOOTPRINT.md`](FOOTPRINT.md) |
 
+### Representation-bound proposal comparisons (AK-WM-1)
+
+New proposal records use `epyc.autokernel.proposal.v3`. They bind the vocabulary,
+source receipts, alternatives, empirical-demand weights, abstraction cost,
+canonical encoding, and semantics-preserving recoding fixtures into one derived
+`frame_sha256`. Proposal v2 remains readable, but new candidate orderings are
+comparable only when `check_representation_comparable()` returns `PASS`.
+
+`offline_least_commitment.py` implements the AP-WM-1 shadow protocol over matched,
+completed proposal archives. It reports direction, conditional predictive value,
+robust sign error, effective pairs/noise exclusions, and recoding stability. Its
+only authority label is `observe_only`; it is intentionally outside the campaign
+import path and exposes no selector, champion, T2, or T3 mutation API.
+
 ---
 
 ## Scope and authority
@@ -127,6 +142,7 @@ reached, after the claim and after the build.
 | `evaluator/statistics.py` | **AK3.** The calibration block in its normative solve order — `φ`, `B_min`, the α budgets and their thresholds, the anchor-gate band — the anytime-valid e-process (two bundle-fixed constructions), the pre-committed stopping rule with bounded extension, the MDE, order control, the selection/confirmation split, and the reducer that produces a conforming `api.EffectEstimate`. |
 | `evaluator/controls.py` | **AK3.** The five controls as hashed data (definitions AND predicates), the A/A cadence scheduler, the historical-win-replay declared contract with its normative unavailable branch and operator escalation, and the projection into `api.WindowAttestations`. |
 | `evaluator/recipes.py` | **AK3.** The codified recipe constructors — every measurement argv is emitted by one, carrying its constructor id and content hash — for `test-backend-ops`, `test-quantize-perf` and `llama-bench`, CPU and GPU. |
+| `execution/live_controls.py` | **AK3 live calibration.** Dry-run-default CPU producer that predeclares a campaign, copies the frozen anchor binary and its build-local DSOs byte-for-byte into the evidence bundle, acquires q0–q3, measures fresh A/A/neutral/control legs, solves calibration, and sends all five controls through the candidate dispatcher. First live result: 5/5 and `may_rank=true` in `data/autokernel_controls_3pct_20260805/`. |
 | `controller/state_machine.py` | **AK4.** §8.1's explicit machine: 17 live states, 13 stop states, the declared edge table, journal-then-act transitions, the operator-control latch (invariant 19), §8.2 BOOTSTRAP with its consistency assertion and deliberate-rebase escape, §8.9 anchor re-verification, and §8.10's stop-evidence table. **Owns disposition — no model output decides a transition.** |
 | `controller/guards.py` | **AK4.** The fifteen §8.10 guards and their precedence, the directive vocabulary, the operator decision package (§18 item 7), the accept-side control's three statuses, and `dispose()` — the reduction that turns a round's guard verdicts into one disposition. A STOP is validated against `check_stop_evidence` AT CONSTRUCTION. |
 | `controller/context.py` | **AK4.** §6.1's planner and critic briefs: fifteen sections, every item CITED to a journal event, a bounded render, §8.3.1 roofline utilisation with both denominators, the §19.2 do-not-repeat surface, the §6.5 oracle registry, and the quarantine block imported content is rendered inside. Refuses to leak the confirmation stratum or planner narrative. |
@@ -144,23 +160,23 @@ reached, after the claim and after the build.
 | `adapters/serving_runtime.py` | **AK8.** §13.5 — the backend that does **not** travel the kernel-freeze path. Owns the §11.6 three-gate stack-change package (registry guard → linkage/identity → live-vs-intended config), `task_rate` as the only admissible objective, and `refuse_kernel_freeze()`, which raises rather than degrading to a freeze-shaped package with empty kernel fields. |
 | `adapters/whisper_stt.py` | **AK9.** §13.3 — the STT backend: its frozen tree and binary inventory, the ggml-linkage verifier contract, the WER/RTF corpus and exclusion accounting, op-shape coverage, `assess_complexity` traced from the DIFF rather than a declared label, and `release_gate_readiness()`, which returns COULD_NOT_CHECK — never PASS — while `P-STT-*` remains a draft. |
 | `adapters/qwentts_tts.py` | **AK9.** §13.4 — the TTS backend: pipeline stages, stage attribution, numerical-safety and roundtrip-WER checks (measured THROUGH the frozen production STT binary, never through the champion), corpus identity, and the same draft-protocol release refusal. |
-| `surface/dashboard_contract.py` | **AK6.** The `/kernel` contract **v2 producer** — the only module here that writes a file outside the journal/storage/claim/controller planes, and it writes exactly one. Seven sections (campaign, champion, backend standing, headroom, blocking conditions, resource claims, release package), every figure DERIVED from the module that owns it and none recomputed; absence carried as `Unreported(reason=…)` rather than an omission; `produced_at` derived from the LOOP's journaled record timestamps via `schemas.dashboard_liveness_timestamp` (live host readings and the derived blocking section are excluded, so an exporter that is merely alive cannot date a dead controller); the blocking panel recomputed and refused if it omits a block the same document reports; and one atomic, size-verified write to a durable path that is refused if it is scratch, a production tree, a human-only target, or inside any git checkout. |
+| `dashboard.py` | **AK6.** The compact `/kernel` contract-v2 producer retained by the campaign path after the old `surface/` plane was deleted. It projects only the already-fsynced terminal `STOP_STATE`: campaign and backend standing are observed; champion, headroom and release package are explicitly `not_reported`; journal time drives freshness; and the atomic export is refused under scratch, a production tree, or any checkout. |
 
 ### AK6 — the operator surface
 
-`surface/dashboard_contract.py` is the PRODUCER half. Its consumer is the handoff
+`dashboard.py` is the PRODUCER half. `HostOps.journal()` calls it only after the
+terminal record is durable; an export failure warns but cannot relabel that record as lost. Its consumer is the handoff
 hub in **epyc-root** (`dashboard/panels.py`, `dashboard/server.py`,
 `dashboard/static/kernel.html`), which owns the panel→producer registry, the
 per-panel freshness envelope, the transport watchdog and the `/api/health` fold.
-The hub never imports this package — a consumer that needs its producer's code
-installed goes dark when the producer's repo moves — so the two halves are bound
-by three suites:
+The hub never imports this package. It also reports committed implementation
+history and durable A/A/work bundles under `_activity`, but that context never
+enters `_freshness` or health. The halves are bound by two suites:
 
 | Suite | What only it can fail on |
 |---|---|
-| `surface/test_dashboard_contract.py` | the producer alone: a dead loop cannot be made to look alive, the one writer cannot reach a checkout or a production tree |
-| `epyc-root/tests/test_dashboard_panels*.py` | the consumer alone: absent ≠ empty on the wire, the registry is total, the fold is never green over a dead producer |
-| `surface/test_surface_seam.py` | **the two together** — the real producer writes the file the real hub reads, plus the restart chaos test |
+| `test_dashboard.py` | the producer: old evidence cannot be re-dated, unowned planes are explicit, and the writer cannot reach scratch, a checkout, or production |
+| `epyc-root/tests/test_dashboard_panels.py` | the consumer and seam: absent ≠ empty, activity cannot resurrect runtime health, the registry is total, and restart chaos never goes green over a dead producer |
 
 The seam suite exists because both halves were green while disagreeing: the hub
 overwrote `contract_version` (a producer-owned key, integer `2`) with the string
@@ -170,7 +186,7 @@ run log, so a **fully reported** v2 contract rendered as an empty page under the
 sentence *"the kernel-R&D loop has not exported any results"*. Both are fixed in
 epyc-root (hub-derived fields are now `_contract_version` / `_freshness` /
 `_render`, and the empty-state sentence is derived on the wire from the document
-that was read). `test_surface_seam.py` fails if either returns.
+that was read). The two suites fail if either behavior returns.
 
 `RestartChaosTest` reproduces the incident this surface exists for: a producer
 alive and reporting → the producer dies → time passes → the board goes from green

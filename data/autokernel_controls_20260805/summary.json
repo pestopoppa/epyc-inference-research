@@ -1,0 +1,16 @@
+{
+  "calibration": {
+    "accepted": false,
+    "contribution_floor": 0.02,
+    "max_blocks_per_candidate": 20,
+    "mde_at_ceiling": 0.0258673,
+    "noise_floor_phi": 0.043456172687833285,
+    "ref": "calibration.json"
+  },
+  "campaign_id": "ak-controls-20260805",
+  "controls": null,
+  "controls_started": false,
+  "may_rank": false,
+  "schema": "epyc.autokernel.live_control_campaign_summary.v1",
+  "state": "calibration_rejected"
+}

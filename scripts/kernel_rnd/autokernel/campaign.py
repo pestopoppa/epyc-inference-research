@@ -152,6 +152,7 @@ import traceback
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from math import ceil
+from pathlib import Path
 # The STDLIB median, deliberately. `evaluator.statistics` is NOT imported: its
 # e-process solved a harder problem than the measured 1.6–1.9% CV poses, and it
 # made the gate unpassable at B_min (threshold 10, ceiling 5.5687 at every
@@ -159,7 +160,7 @@ from math import ceil
 from statistics import median
 from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 
-from . import journal as journal_module
+from . import dashboard, journal as journal_module
 from . import schemas, storage
 from .controller import do_not_repeat, hypotheses
 from .evaluator import api, correctness, devices, recipes
@@ -212,6 +213,8 @@ __all__ = [
 #: Every module this driver may import, and the single reason each is essential.
 #: Each reason is a real incident or a fact measured on this host, not a taste.
 MODULES_THE_DRIVER_USES: Mapping[str, str] = {
+    "dashboard": "the fsynced terminal campaign result must reach the operator surface; "
+                 "the exporter is derived and cannot make an old journal entry fresh",
     "schemas": "one record shape; PASS/FAIL/COULD_NOT_CHECK",
     "storage": "the 2026-07-04 async-prefetch win was written to /mnt/raid0/llm/tmp/ "
                "and that directory no longer exists; assert_not_scratch refuses it",
@@ -937,6 +940,9 @@ class CampaignSpec:
     build_root: str = "/mnt/raid0/llm/ak-build"
     claim_journal_path: str = "/mnt/raid0/llm/ak-claims/region.jsonl"
     max_hold_s: int = 6 * 3600
+    #: Validated proposal.v3 record. Optional for composition-only legacy dry
+    #: runs; mandatory on the executing CLI before any claim or mutation.
+    proposal: Optional[Mapping[str, Any]] = None
     #: The `hypotheses.ClaimAuthorization` this campaign's claim will be spent
     #: through, or `None` for an EXPLORATORY campaign. It is on the SPEC and not
     #: on the ops object for the same reason `blocks` is: it must be fixed before
@@ -973,6 +979,17 @@ class CampaignSpec:
                     f"{self.authorization.campaign_id!r}, not {self.campaign_id!r}. A "
                     "token that travelled between campaigns would charge this run's "
                     "claim to another run's question")
+        if self.proposal is not None:
+            proposal = json.loads(schemas.canonical_json(self.proposal))
+            violations = schemas.validate_proposal_v3(proposal)
+            if violations:
+                raise ValueError("proposal manifest is invalid: " + "; ".join(violations))
+            if proposal["campaign_id"] != self.campaign_id:
+                raise ValueError(
+                    f"proposal campaign_id {proposal['campaign_id']!r} does not match "
+                    f"campaign {self.campaign_id!r}"
+                )
+            object.__setattr__(self, "proposal", proposal)
         object.__setattr__(self, "t0_ops", require_op_suite_covers_moe_dispatch(self.t0_ops))
         if self.recipe_id is None:
             object.__setattr__(self, "recipe_id", DEFAULT_RECIPE_BY_BACKEND[self.backend])
@@ -1034,6 +1051,10 @@ class CampaignSpec:
         string rather than the capability.
         """
         return None if self.authorization is None else self.authorization.hypothesis_id
+
+    @property
+    def proposal_id(self) -> Optional[str]:
+        return None if self.proposal is None else self.proposal["proposal_id"]
 
     @property
     def claim_purpose(self) -> str:
@@ -1139,6 +1160,13 @@ class CampaignSpec:
             "cpu_list": self.cpu_list, "worktree": self.worktree_path,
             "build_dir": self.build_dir, "journal_root": self.journal_root,
             "created_at": self.created_at,
+            "proposal": None if self.proposal is None else {
+                "proposal_id": self.proposal_id,
+                "schema": self.proposal["schema"],
+                "representation_frame_sha256": self.proposal[
+                    "representation_contract"
+                ]["frame_sha256"],
+            },
             "hypothesis": self.hypothesis_record,
             "claim_purpose": self.claim_purpose,
             "anchor": {"repo": PRODUCTION_REPO, "branch": PRODUCTION_BRANCH,
@@ -1272,6 +1300,7 @@ class CampaignOps(Protocol):
     the claim" without a host, a claim or a build.
     """
 
+    def record_proposal(self, spec: CampaignSpec) -> Any: ...
     def preflight(self, spec: CampaignSpec) -> schemas.Check: ...
     def acquire_claim(self, spec: CampaignSpec) -> Any: ...
     def release_claim(self, claim: Any) -> Any: ...
@@ -1336,6 +1365,17 @@ class DryRunOps:
         return step
 
     # -- the seam ----------------------------------------------------------
+
+    def record_proposal(self, spec: CampaignSpec) -> Any:
+        self._step(
+            "record_proposal",
+            "would validate and fsync proposal.v3 before preflight, claim, mutation, or build.",
+            proposal_id=spec.proposal_id,
+            representation_frame_sha256=spec.proposal["representation_contract"][
+                "frame_sha256"
+            ],
+        )
+        return None
 
     def preflight(self, spec: CampaignSpec) -> schemas.Check:
         self._step(
@@ -1608,6 +1648,27 @@ class HostOps:
 
     # -- 0. preflight ------------------------------------------------------
 
+    def record_proposal(self, spec: CampaignSpec) -> Any:
+        """Fsync proposal.v3 before any host work; identical resume is idempotent."""
+        if spec.proposal is None or not spec.journal_root:
+            raise RuntimeError("an executing campaign requires proposal.v3 and --journal-root")
+        root = storage.assert_not_scratch(spec.journal_root, what="campaign journal root")
+        book = journal_module.Journal(root, campaign_id=spec.campaign_id)
+        book.initialize()
+        for entry in book.read_all():
+            if (
+                entry.kind == journal_module.KIND_PROPOSAL_RECORDED
+                and entry.record_id == spec.proposal_id
+            ):
+                if schemas.content_hash(entry.payload) != schemas.content_hash(spec.proposal):
+                    raise RuntimeError(
+                        f"proposal id {spec.proposal_id!r} already names different bytes"
+                    )
+                return entry.event_id
+        return book.append(
+            journal_module.KIND_PROPOSAL_RECORDED, dict(spec.proposal)
+        ).event_id
+
     def preflight(self, spec: CampaignSpec) -> schemas.Check:
         """Host canonical, and nobody else on the cores. Reads; acquires nothing.
 
@@ -1616,6 +1677,11 @@ class HostOps:
         `acquire_claim`. The sequence is preflight -> acquire -> run, and the
         claim is the thing that makes the run defensible.
         """
+        if not spec.journal_root:
+            return schemas.Check(schemas.FAIL, (
+                "an executing campaign requires --journal-root before any claim or T0 "
+                "inference; completed benchmark attempts cannot be machine-enforced in "
+                "volatile memory",))
         reasons: list = []
         outcome = schemas.PASS
 
@@ -1992,9 +2058,21 @@ class HostOps:
         runner = microbench.MicrobenchRunner(
             claim=self._claim_binding.microbench_claim,
             policy=microbench.HostStatePolicy(nominal_khz=self._nominal_khz),
-            spawner=self._spawner or microbench.SubprocessSpawner())
+            spawner=self._spawner or microbench.SubprocessSpawner(),
+            run_ledger=self._completed_run_ledger(spec))
         run = runner.run(plan)
         return pairs_from_run(run)
+
+    def _completed_run_ledger(self, spec: CampaignSpec) -> microbench.CompletedRunLedger:
+        """The executing path cannot spend a benchmark leg without durability."""
+        if not spec.journal_root:
+            raise RuntimeError(
+                "an executing campaign requires --journal-root before paired blocks; the "
+                "completed-run key cannot be machine-enforced in volatile memory")
+        root = storage.assert_not_scratch(spec.journal_root, what="campaign journal root")
+        return microbench.CompletedRunLedger(
+            journal_module.Journal(root, campaign_id=spec.campaign_id),
+            campaign_id=spec.campaign_id)
 
     def _anchor_identity_for_bench(self, spec: CampaignSpec) -> api.AnchorIdentity:
         raise NotImplementedError(
@@ -2054,6 +2132,15 @@ class HostOps:
         book = journal_module.Journal(root, campaign_id=spec.campaign_id)
         book.initialize()
         entry = book.append(journal_module.KIND_STOP_STATE, dict(payload))
+        # The event above is the primary record and is already fsynced.  The
+        # dashboard is a derived view: failure to refresh it is loud, but must
+        # not turn a successfully journaled campaign into `journal_error`.
+        try:
+            dashboard.export_terminal_entry(entry)
+        except Exception as exc:  # derived presentation failure, never record loss
+            print(f"WARNING: terminal result journaled as {entry.event_id}, but the "
+                  f"dashboard export failed: {type(exc).__name__}: {exc}",
+                  file=sys.stderr)
         return entry.event_id
 
 
@@ -2205,6 +2292,8 @@ def run_campaign(spec: CampaignSpec, ops: Any) -> CampaignResult:
     tree = None
 
     try:
+        if spec.proposal is not None:
+            ops.record_proposal(spec)
         pre = ops.preflight(spec)
         if pre.outcome == schemas.FAIL:
             state = STATE_PREFLIGHT_REFUSED
@@ -2339,6 +2428,12 @@ def build_parser() -> argparse.ArgumentParser:
                         help="candidate id; must start with 'akc-' (default: akc-0001)")
     parser.add_argument("--candidate", dest="candidate_ref", default="(none declared)",
                         help="the patch file or branch under test")
+    parser.add_argument(
+        "--proposal-manifest",
+        default=None,
+        metavar="PATH",
+        help="validated proposal.v3 JSON. Required by --execute and fsynced before host work",
+    )
     parser.add_argument("--backend", choices=BACKENDS, default=BACKEND_CPU)
     parser.add_argument("--blocks", type=int, default=DEFAULT_BLOCKS,
                         help=f"the PRE-COMMITTED number of paired blocks "
@@ -2410,13 +2505,28 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
               "legitimate co-tenant, and the co-tenant did nothing wrong.", file=sys.stderr)
         return 2
 
+    proposal = None
+    if args.proposal_manifest is not None:
+        try:
+            proposal = json.loads(Path(args.proposal_manifest).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"refusing to start: --proposal-manifest: {exc}", file=sys.stderr)
+            return 2
+    if not args.dry_run and proposal is None:
+        print(
+            "refusing to --execute: --proposal-manifest is required before any claim, "
+            "mutation, or build",
+            file=sys.stderr,
+        )
+        return 2
+
     try:
         spec = CampaignSpec(
             campaign_id=args.campaign_id, candidate_id=args.candidate_id,
             candidate_ref=args.candidate_ref, backend=args.backend, blocks=args.blocks,
             recipe_id=args.recipe_id, model=args.model, reps=args.reps,
             devices=tuple(args.device), device_names=tuple(args.device_name),
-            journal_root=args.journal_root)
+            journal_root=args.journal_root, proposal=proposal)
     except (ValueError, TypeError, storage.StorageError, recipes.RecipeError) as exc:
         print(f"refusing to start: {exc}", file=sys.stderr)
         return 2

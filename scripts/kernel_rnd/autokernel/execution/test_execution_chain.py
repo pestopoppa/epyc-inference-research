@@ -74,6 +74,7 @@ _HERE = Path(__file__).resolve()
 if str(_HERE.parents[2]) not in sys.path:
     sys.path.insert(0, str(_HERE.parents[2]))
 
+from autokernel import journal as J                                     # noqa: E402
 from autokernel import schemas                                          # noqa: E402
 from autokernel.evaluator import (api, correctness, integrity,          # noqa: E402
                                   recipes, statistics)
@@ -332,6 +333,9 @@ class ChainWorld:
 
         self.lock_root = os.path.join(root, "locks")
         self.journal = CRC.RegionClaimJournal(os.path.join(root, "claims.jsonl"))
+        self.run_ledger = MB.CompletedRunLedger(
+            J.Journal(os.path.join(root, "events"), campaign_id=CAMPAIGN),
+            campaign_id=CAMPAIGN)
         self.claim = None
         self.worktree = None
         self.worktree_proof = None
@@ -804,7 +808,7 @@ class ChainLeg:
         return api.EvaluationRequest(**kwargs)
 
     # -- 7. T1 — the SAME claim, through the other Protocol -----------------
-    def run_t1(self, *, factor=None, blocks: int = 5):
+    def run_t1(self, *, factor=None, blocks: int = 5, attempt: int = 0):
         """Paired blocks from recorded `llama-bench` JSON, under the bound claim.
 
         SEAM 4 in anger: `MicrobenchRunner` calls `claim.attest()` before every
@@ -849,7 +853,8 @@ class ChainLeg:
             anchor=self.t1_anchor_identity,
             params={"model": FIXTURE_MODEL, "n_gen": 128, "reps": 10,
                     "output_format": "json"},
-            base_blocks=blocks, pairs_per_block=1, unit_ids=("chain-unit-0",))
+            base_blocks=blocks, pairs_per_block=1, unit_ids=("chain-unit-0",),
+            attempt=attempt)
         self.t1_base_plan = plan
         self.t1_run = self._spawn_t1(plan, factor=factor)
         return self.t1_run
@@ -870,7 +875,8 @@ class ChainLeg:
         self.microbench_spawner = spawner
         runner = MB.MicrobenchRunner(
             claim=self.claim_binding.microbench_claim, policy=HEALTHY_POLICY,
-            spawner=spawner, host_state=HostStateStub(healthy_host_state()))
+            spawner=spawner, host_state=HostStateStub(healthy_host_state()),
+            run_ledger=self.world.run_ledger)
         return runner.run(plan)
 
     # -- 7b. the DECLARED extension round, same claim, same schedule ---------
@@ -921,7 +927,8 @@ class ChainLeg:
         for round_index in range(1, stats.stopping_rule.extension.max_rounds + 1):
             runs.append(self.run_t1_extension(round_index=round_index, factor=factor))
         self.t1_extension_runs = tuple(runs)
-        self.pooled_blocks = MB.assemble_run_blocks(self.t1_run, runs, campaign=stats)
+        self.pooled_blocks = MB.assemble_run_blocks(
+            self.t1_run, runs, campaign=stats, run_ledger=self.world.run_ledger)
         return self.pooled_blocks
 
     # -- 8. reduce ----------------------------------------------------------
@@ -2075,7 +2082,13 @@ class TestTheExtensionRoundHasAProducer(_ChainCase):
         leg = ChainLeg(self.world)
         leg.up_to("t0")
         values = []
-        for factor in (1.08, 1.3, 3.0):
+        for index, factor in enumerate((1.08, 1.3, 3.0)):
+            # These are three independent mathematical fixtures, not three
+            # attempts in one campaign. Keep the same schedule so magnitude is
+            # the only changing variable, but give each fixture its own journal.
+            self.world.run_ledger = MB.CompletedRunLedger(
+                J.Journal(os.path.join(self.world.root, f"effect-fixture-{index}"),
+                          campaign_id=CAMPAIGN), campaign_id=CAMPAIGN)
             leg.run_t1(factor=factor)
             values.append(leg.reduce().estimate.e_value)
         for value in values:
@@ -2132,7 +2145,8 @@ class TestTheExtensionRoundHasAProducer(_ChainCase):
 
         leg.run_t1_extension()
         pooled = MB.assemble_run_blocks(leg.t1_run, [leg.t1_extension_run],
-                                       campaign=self.stats)
+                                       campaign=self.stats,
+                                       run_ledger=leg.world.run_ledger)
         self.assertEqual(len(pooled), 10)
         reduction = leg.reduce(blocks=pooled)
         self.assertEqual(reduction.admissible.outcome, schemas.PASS,
@@ -2148,7 +2162,8 @@ class TestTheExtensionRoundHasAProducer(_ChainCase):
         leg.up_to("t1")
         leg.run_t1_extension()
         pooled = MB.assemble_run_blocks(leg.t1_run, [leg.t1_extension_run],
-                                       campaign=self.stats)
+                                       campaign=self.stats,
+                                       run_ledger=leg.world.run_ledger)
         checks = dict(leg.reduce(blocks=pooled).checks)
         for name in ("order_control", "extension_structure", "block_identity",
                      "block_count"):
@@ -2165,7 +2180,8 @@ class TestTheExtensionRoundHasAProducer(_ChainCase):
         leg.up_to("t1")
         leg.run_t1_extension()
         pooled = MB.assemble_run_blocks(leg.t1_run, [leg.t1_extension_run],
-                                       campaign=self.stats)
+                                       campaign=self.stats,
+                                       run_ledger=leg.world.run_ledger)
         evaluation = self.stats.sequential_evaluation(
             candidate_id=CANDIDATE, stratum=api.STRATUM_SELECTION,
             metric_direction="higher_better")
@@ -2239,7 +2255,8 @@ class TestTheExtensionRoundHasAProducer(_ChainCase):
             factor=1.08)
         self.assertTrue(run.complete, run.refusals)
         with self.assertRaises(MB.ExtensionNotDeclared) as caught:
-            MB.assemble_run_blocks(leg.t1_run, [run], campaign=self.stats)
+            MB.assemble_run_blocks(leg.t1_run, [run], campaign=self.stats,
+                                   run_ledger=leg.world.run_ledger)
         self.assertIn("not-even-this-campaign", str(caught.exception))
 
     def test_a_re_derived_schedule_is_refused_not_relabelled(self):

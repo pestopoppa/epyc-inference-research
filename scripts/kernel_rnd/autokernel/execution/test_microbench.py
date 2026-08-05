@@ -27,6 +27,7 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
+from .. import journal as J
 from .. import schemas
 from ..evaluator import api, recipes, statistics
 from . import microbench as M
@@ -106,6 +107,14 @@ class BindingFixture:
 def default_params(model: str = FIXTURE_MODEL) -> dict:
     return {"model": model, "n_gen": FIXTURE_N_GEN, "reps": FIXTURE_REPS,
             "output_format": "json"}
+
+
+def completed_run_ledger(case: unittest.TestCase, *,
+                         campaign_id: str = "ak-test-0001") -> M.CompletedRunLedger:
+    root = tempfile.TemporaryDirectory(prefix="ak-run-ledger-")
+    case.addCleanup(root.cleanup)
+    return M.CompletedRunLedger(J.Journal(root.name, campaign_id=campaign_id),
+                                campaign_id=campaign_id)
 
 
 def build_command(binding: recipes.ToolBinding, *, arm: str = M.ARM_CANDIDATE,
@@ -771,15 +780,15 @@ class TestHostStateGuards(unittest.TestCase):
         self.assertEqual(state.min_khz, 3500000)
         self.assertEqual(state.load1, 1.5)
 
-    def test_a_single_throttled_core_is_visible_in_the_minimum(self):
-        """A throttle on one CCD is invisible in a mean and obvious in a minimum."""
+    def test_one_parked_core_is_visible_but_does_not_defeat_the_boost_quorum(self):
+        """Post-exit parking is recorded without making 80-of-96 mean 96-of-96."""
         sysfs = fake_sysfs(self.root, cpus=range(8), khz=3500000, throttled={5: 1400000})
         proc = fake_proc(self.root, load1=1.0)
         state = M.read_host_state(cpu_list="0-7", sysfs_root=sysfs, proc_root=proc)
         self.assertEqual(state.min_khz, 1400000)
         check = M.HostStatePolicy(nominal_khz=3500000).check_frequency(state)
-        self.assertEqual(check.outcome, schemas.FAIL)
-        self.assertTrue(any("throttled host" in r for r in check.reasons))
+        self.assertEqual(check.outcome, schemas.PASS)
+        self.assertTrue(any("required 7" in r for r in check.reasons))
 
     def test_the_multi_day_sixty_percent_throttle_is_caught(self):
         """The actual scar: this host sat at ~40% of clock for days."""
@@ -980,6 +989,28 @@ class TestRunnerEndToEnd(unittest.TestCase):
         for block in blocks:
             self.assertEqual(len(block.anchor_samples), FIXTURE_REPS)
             self.assertEqual(len(block.candidate_samples), FIXTURE_REPS)
+
+    def test_the_registered_iqk_variant_can_differ_by_arm(self):
+        """The recipe promises one GGML_IQK value per arm; the runner must carry it."""
+        spawner = arm_aware_spawner(candidate_stdout=self.candidate_out,
+                                    anchor_stdout=self.anchor_out)
+        plan = make_plan(
+            self.binding, blocks=2,
+            candidate_param_overrides={"ggml_iqk": "1"},
+            anchor_param_overrides={"ggml_iqk": "0"})
+        run = self._runner(spawner=spawner).run(plan)
+        self.assertTrue(run.complete, run.refusals)
+        by_arm = {M.ARM_CANDIDATE: set(), M.ARM_ANCHOR: set()}
+        for call in spawner.calls:
+            by_arm[call["arm"]].add(call["env"]["GGML_IQK"])
+        self.assertEqual(by_arm[M.ARM_CANDIDATE], {"1"})
+        self.assertEqual(by_arm[M.ARM_ANCHOR], {"0"})
+        self.assertEqual(plan.params_for(M.ARM_CANDIDATE)["ggml_iqk"], "1")
+        self.assertEqual(plan.params_for(M.ARM_ANCHOR)["ggml_iqk"], "0")
+
+    def test_arm_overrides_cannot_change_the_measured_cell(self):
+        with self.assertRaisesRegex(ValueError, "only the recipe-declared"):
+            make_plan(self.binding, candidate_param_overrides={"n_gen": 1})
 
     def test_the_emitted_blocks_satisfy_the_reducers_order_control(self):
         plan = make_plan(self.binding, blocks=6)
@@ -2797,13 +2828,15 @@ class TestTheRunnerProducesTheExtensionRound(unittest.TestCase):
         self.candidate_out = scaled_fixture(CANONICAL, factor=1.08,
                                             build_commit="cafe12345")
         self.base_plan = make_plan(self.binding, blocks=5)
+        self.run_ledger = completed_run_ledger(self)
 
     def _run(self, plan) -> M.MicrobenchRun:
         return M.MicrobenchRunner(
             claim=StubClaim(), policy=HEALTHY_POLICY,
             spawner=arm_aware_spawner(candidate_stdout=self.candidate_out,
                                       anchor_stdout=self.out),
-            host_state=HostStateStub([healthy_state()])).run(plan)
+            host_state=HostStateStub([healthy_state()]),
+            run_ledger=self.run_ledger).run(plan)
 
     def test_the_run_emits_whole_declared_rounds_at_the_right_indices(self):
         run = self._run(self.base_plan.extend(authorization()))
@@ -2889,6 +2922,43 @@ class TestTheRunnerProducesTheExtensionRound(unittest.TestCase):
         self.assertEqual(vector["order_schedule"]["first_block_index"], 0)
         self.assertEqual(len(vector["order_schedule"]["orders"]), 5)
 
+    def test_an_extension_round_without_a_durable_ledger_spawns_nothing(self):
+        spawner = arm_aware_spawner(candidate_stdout=self.candidate_out,
+                                    anchor_stdout=self.out)
+        runner = M.MicrobenchRunner(
+            claim=StubClaim(), policy=HEALTHY_POLICY, spawner=spawner,
+            host_state=HostStateStub([healthy_state()]))
+        with self.assertRaises(M.RunLedgerRequired):
+            runner.run(self.base_plan.extend(authorization()))
+        self.assertEqual(spawner.calls, [])
+
+    def test_the_same_declared_round_cannot_run_twice(self):
+        plan = self.base_plan.extend(authorization())
+        first = self._run(plan)
+        self.assertTrue(first.complete, first.refusals)
+        spawner = arm_aware_spawner(candidate_stdout=self.candidate_out,
+                                    anchor_stdout=self.out)
+        runner = M.MicrobenchRunner(
+            claim=StubClaim(), policy=HEALTHY_POLICY, spawner=spawner,
+            host_state=HostStateStub([healthy_state()]),
+            run_ledger=self.run_ledger)
+        with self.assertRaises(M.RunAlreadyCompleted):
+            runner.run(plan)
+        self.assertEqual(spawner.calls, [], "the refusal must happen before inference")
+
+    def test_a_retry_is_a_new_attempt_and_is_recorded(self):
+        first_plan = self.base_plan.extend(authorization())
+        self._run(first_plan)
+        retry_plan = replace(self.base_plan, attempt=1).extend(authorization())
+        retry = self._run(retry_plan)
+        self.assertTrue(retry.complete, retry.refusals)
+        entries = [entry for entry in self.run_ledger.journal.read_all()
+                   if entry.kind == J.KIND_MICROBENCH_RUN_COMPLETED]
+        self.assertEqual([entry.payload["attempt"] for entry in entries], [0, 1])
+        self.assertEqual(entries[0].payload["run_id"], entries[0].record_id)
+        self.assertEqual(first_plan.attempt, 0)
+        self.assertEqual(retry.raw_vector()["attempt"], 1)
+
 
 class TestPoolingBaseAndExtensionIsChecked(unittest.TestCase):
     """`assemble_run_blocks` — the only sanctioned way to build the pooled set."""
@@ -2898,6 +2968,7 @@ class TestPoolingBaseAndExtensionIsChecked(unittest.TestCase):
         self.out = read_fixture(CANONICAL)
         self.candidate_out = scaled_fixture(CANONICAL, factor=1.08,
                                             build_commit="cafe12345")
+        self.run_ledger = completed_run_ledger(self)
         self.base_plan = make_plan(self.binding, blocks=5)
         self.base_run = self._run(self.base_plan)
         self.campaign = campaign_for()
@@ -2907,7 +2978,8 @@ class TestPoolingBaseAndExtensionIsChecked(unittest.TestCase):
             claim=StubClaim(), policy=HEALTHY_POLICY,
             spawner=arm_aware_spawner(candidate_stdout=self.candidate_out,
                                       anchor_stdout=self.out),
-            host_state=HostStateStub([healthy_state()])).run(plan)
+            host_state=HostStateStub([healthy_state()]),
+            run_ledger=self.run_ledger).run(plan)
 
     def _extension(self, *, round_index=1, plan=None, campaign=None):
         base = plan if plan is not None else self.base_plan
@@ -2916,7 +2988,8 @@ class TestPoolingBaseAndExtensionIsChecked(unittest.TestCase):
 
     def _pool(self, runs, *, base=None, campaign=None):
         return M.assemble_run_blocks(base if base is not None else self.base_run, runs,
-                                     campaign=campaign or self.campaign)
+                                     campaign=campaign or self.campaign,
+                                     run_ledger=self.run_ledger)
 
     def test_the_pooled_set_is_one_contiguous_index_line(self):
         pooled = self._pool([self._extension()])
@@ -2924,6 +2997,11 @@ class TestPoolingBaseAndExtensionIsChecked(unittest.TestCase):
         self.assertEqual([b.segment for b in pooled],
                          [statistics.SEGMENT_BASE] * 5
                          + [statistics.SEGMENT_EXTENSION] * 5)
+
+    def test_pooling_an_extension_without_the_ledger_is_refused(self):
+        run = self._extension()
+        with self.assertRaises(M.RunLedgerRequired):
+            M.assemble_run_blocks(self.base_run, [run], campaign=self.campaign)
 
     def test_the_base_run_alone_pools_to_itself(self):
         """Compliant control: no extension is not an error."""
@@ -2974,7 +3052,7 @@ class TestPoolingBaseAndExtensionIsChecked(unittest.TestCase):
     def test_an_incomplete_round_refuses_rather_than_pooling_what_it_got(self):
         run = self._extension()
         truncated = replace(run, refusals=("the host throttled mid-round",))
-        with self.assertRaises(M.RunRefused):
+        with self.assertRaises(M.RunIdentityMismatch):
             self._pool([truncated])
 
     def test_the_pooled_set_satisfies_the_reducers_structural_checks(self):
@@ -3013,6 +3091,8 @@ class TestALicenceIsThisCampaignsOrItIsNothing(unittest.TestCase):
         self.candidate_out = scaled_fixture(CANONICAL, factor=1.08,
                                             build_commit="cafe12345")
         self.campaign = campaign_for()
+        self.run_ledger = completed_run_ledger(
+            self, campaign_id=self.campaign.campaign_id)
         self.base_plan = make_plan(self.binding, blocks=5)
         self.base_run = self._run(self.base_plan)
         #: Same shape as the campaign's rule, so nothing structural distinguishes
@@ -3026,7 +3106,8 @@ class TestALicenceIsThisCampaignsOrItIsNothing(unittest.TestCase):
             claim=StubClaim(), policy=HEALTHY_POLICY,
             spawner=arm_aware_spawner(candidate_stdout=self.candidate_out,
                                       anchor_stdout=self.out),
-            host_state=HostStateStub([healthy_state()])).run(plan)
+            host_state=HostStateStub([healthy_state()]),
+            run_ledger=self.run_ledger).run(plan)
 
     def _round(self, campaign, *, round_index=1, plan=None):
         base = plan if plan is not None else self.base_plan
@@ -3039,7 +3120,8 @@ class TestALicenceIsThisCampaignsOrItIsNothing(unittest.TestCase):
         run = self._round(self.campaign)
         self.assertEqual(run.plan.extension.licence_for(self.campaign).outcome,
                          schemas.PASS)
-        pooled = M.assemble_run_blocks(self.base_run, [run], campaign=self.campaign)
+        pooled = M.assemble_run_blocks(self.base_run, [run], campaign=self.campaign,
+                                       run_ledger=self.run_ledger)
         self.assertEqual([b.block_index for b in pooled], list(range(10)))
 
     # -- the refusals -----------------------------------------------------
@@ -3048,7 +3130,8 @@ class TestALicenceIsThisCampaignsOrItIsNothing(unittest.TestCase):
         run = self._round(self.other)
         self.assertTrue(run.complete, run.refusals)
         with self.assertRaises(M.ExtensionNotDeclared) as caught:
-            M.assemble_run_blocks(self.base_run, [run], campaign=self.campaign)
+            M.assemble_run_blocks(self.base_run, [run], campaign=self.campaign,
+                                  run_ledger=self.run_ledger)
         message = str(caught.exception)
         self.assertIn("ak-stop-attacker/v1", message)
         self.assertIn("some-other-campaign", message)
@@ -3066,7 +3149,8 @@ class TestALicenceIsThisCampaignsOrItIsNothing(unittest.TestCase):
                          self.campaign.stopping_rule.content_hash())
         with self.assertRaises(M.ExtensionNotDeclared):
             M.assemble_run_blocks(self.base_run, [self._round(twin)],
-                                  campaign=self.campaign)
+                                  campaign=self.campaign,
+                                  run_ledger=self.run_ledger)
 
     def test_the_pooling_seam_has_no_campaign_default(self):
         """A default would skip the check exactly for the caller who omits it."""
@@ -3077,13 +3161,14 @@ class TestALicenceIsThisCampaignsOrItIsNothing(unittest.TestCase):
 
     def test_a_base_segment_that_is_not_b_min_long_cannot_be_pooled(self):
         """The base segment is exactly B_min blocks; pooling is where that is asked."""
-        longer = self._run(make_plan(self.binding, blocks=8))
+        longer = self._run(replace(make_plan(self.binding, blocks=8), attempt=1))
         with self.assertRaises(M.ScheduleMismatch) as caught:
             M.assemble_run_blocks(longer, [], campaign=self.campaign)
         self.assertIn("calibrated B_min", str(caught.exception))
 
     def test_a_base_segment_under_another_committed_seed_cannot_be_pooled(self):
-        other_seed = self._run(replace(self.base_plan, campaign_seed="another-seed"))
+        other_seed = self._run(replace(self.base_plan, campaign_seed="another-seed",
+                                       attempt=1))
         with self.assertRaises(M.ScheduleMismatch):
             M.assemble_run_blocks(other_seed, [], campaign=self.campaign)
 

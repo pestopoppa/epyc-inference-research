@@ -198,6 +198,10 @@ ACCEPTED_SCHEMAS_BY_KIND = {
         schemas.SCHEMA_EVALUATION_EVENT_V2,
         schemas.SCHEMA_EVALUATION_EVENT_V3,
     }),
+    KIND_PROPOSAL_RECORDED: frozenset({
+        schemas.SCHEMA_PROPOSAL_V2,
+        schemas.SCHEMA_PROPOSAL_V3,
+    }),
 }
 
 # Journal-native kinds: the record shape belongs to the journal itself, so it is
@@ -210,6 +214,7 @@ KIND_OPERATOR_CONTROL_ACK = "OPERATOR_CONTROL_ACK"
 KIND_VIEW_REBASED = "VIEW_REBASED"
 KIND_PROPOSAL_SKIPPED = "PROPOSAL_SKIPPED"
 KIND_STOP_STATE = "STOP_STATE"
+KIND_MICROBENCH_RUN_COMPLETED = "MICROBENCH_RUN_COMPLETED"
 # §3.5 preflight attestation. `resource/preflight.py` builds the verdict and its
 # own docstring instructs the caller to journal `exc.result.to_dict()` verbatim
 # on FAIL and COULD_NOT_CHECK — "a precondition that was checked but not recorded
@@ -234,6 +239,7 @@ NATIVE_KINDS = frozenset({
     KIND_SUPERSEDED, KIND_RETRIEVAL_SUPERSEDED, KIND_TOMBSTONE,
     KIND_TORN_APPEND_DISCARDED, KIND_OPERATOR_CONTROL_ACK, KIND_VIEW_REBASED,
     KIND_PROPOSAL_SKIPPED, KIND_STOP_STATE, KIND_PREFLIGHT_ATTESTATION,
+    KIND_MICROBENCH_RUN_COMPLETED,
 }) | BOOTSTRAP_KNOWLEDGE_KINDS
 
 KINDS = frozenset(SCHEMA_BOUND_KINDS) | NATIVE_KINDS
@@ -1034,6 +1040,47 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
         state = payload.get("state")
         if not isinstance(state, str) or not state.strip():
             out.append("state: required and non-empty")
+    elif kind == KIND_MICROBENCH_RUN_COMPLETED:
+        for key in ("campaign_id", "candidate_id", "run_id", "completed_at"):
+            value = payload.get(key)
+            if not isinstance(value, str) or not value.strip():
+                out.append(f"{key}: required and non-empty")
+        run_id = payload.get("run_id")
+        if isinstance(run_id, str) and not _SHA256_RE.match(run_id):
+            out.append("run_id: must be a lowercase hex sha256")
+        attempt = payload.get("attempt")
+        if not isinstance(attempt, int) or isinstance(attempt, bool) or attempt < 0:
+            out.append("attempt: required, a non-negative integer")
+        segment = payload.get("segment")
+        if segment not in ("base", "extension"):
+            out.append("segment: required, one of ['base', 'extension']")
+        extension_round = payload.get("extension_round")
+        if segment == "base" and extension_round is not None:
+            out.append("extension_round: must be null on a base run")
+        if segment == "extension" and (
+                not isinstance(extension_round, int)
+                or isinstance(extension_round, bool)
+                or extension_round < 1):
+            out.append("extension_round: must be a positive integer on an extension run")
+        if not isinstance(payload.get("complete"), bool):
+            out.append("complete: required, a boolean")
+        raw_vector = payload.get("raw_vector")
+        if not isinstance(raw_vector, Mapping):
+            out.append("raw_vector: required, the completed MicrobenchRun record")
+        else:
+            for key in ("candidate_id", "attempt", "segment", "extension_round",
+                        "complete"):
+                if raw_vector.get(key) != payload.get(key):
+                    out.append(f"raw_vector.{key}: must equal the ledger envelope")
+            if raw_vector.get("ended_at") != payload.get("completed_at"):
+                out.append("raw_vector.ended_at: must equal completed_at")
+            try:
+                raw_id = schemas.content_hash(raw_vector)
+            except (TypeError, ValueError) as exc:
+                out.append(f"raw_vector: cannot be content-hashed: {exc}")
+            else:
+                if run_id != raw_id:
+                    out.append("run_id: must be the content hash of raw_vector")
     elif kind == KIND_PROPOSAL_SKIPPED:
         for key in ("proposal_ref", "reason"):
             value = payload.get(key)
@@ -2121,6 +2168,7 @@ __all__ = [
     "KIND_SUPERSEDED", "KIND_RETRIEVAL_SUPERSEDED", "KIND_TOMBSTONE",
     "KIND_TORN_APPEND_DISCARDED", "KIND_OPERATOR_CONTROL_ACK", "KIND_VIEW_REBASED",
     "KIND_PROPOSAL_SKIPPED", "KIND_STOP_STATE", "KIND_PREFLIGHT_ATTESTATION",
+    "KIND_MICROBENCH_RUN_COMPLETED",
     "tombstone_view_key",
     "Journal", "JournalEntry", "JournalDefect", "ShardRef", "TornTail",
     "ReadReport", "Cursor", "Views",

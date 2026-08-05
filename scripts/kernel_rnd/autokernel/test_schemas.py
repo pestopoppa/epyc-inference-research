@@ -43,6 +43,42 @@ def _sha(tag: str) -> str:
     return hashlib.sha256(tag.encode("utf-8")).hexdigest()
 
 
+def _representation_contract(tag: str = "decode-kernels") -> dict:
+    contract = {
+        "vocabulary": {
+            "regimes": ["decode", "prefill"],
+            "surfaces": ["mul_mat"],
+            "outcomes": ["throughput_gain", "non_inferiority"],
+            "contradictions": ["counter_did_not_move", "heldout_regression"],
+        },
+        "vocabulary_source_receipts": [f"rcpt-vocabulary-{tag}"],
+        "considered_alternatives": ["wide_tile", "dispatcher_only", "rewrite_backend"],
+        "excluded_alternatives": [{
+            "alternative_id": "rewrite_backend",
+            "reason": "not a one-factor intervention",
+            "source_receipt_id": f"rcpt-alternative-{tag}",
+        }],
+        "empirical_demand": {
+            "receipt_id": f"rcpt-demand-{tag}",
+            "weights_sha256": _sha(f"demand-{tag}"),
+        },
+        "abstraction_construction_cost": {
+            "value": 3.0,
+            "unit": "typed_facts",
+            "receipt_id": f"rcpt-cost-{tag}",
+        },
+        "canonical_encoding": {
+            "encoding_id": "ak-representation-json/v1",
+            "schema_sha256": _sha("representation-schema-v1"),
+        },
+        "semantics_preserving_recoding_fixture_ids": [
+            f"ak-recode-{tag}-renamed", f"ak-recode-{tag}-permuted",
+        ],
+    }
+    contract["frame_sha256"] = S.representation_frame_sha256(contract)
+    return contract
+
+
 # =============================================================================
 # Minimal VALID fixtures — one per schema, containing exactly the required keys
 # so the omission sweep below can delete each in turn.
@@ -136,6 +172,7 @@ def _proposal() -> dict:
             "do_not_repeat_matches": [],
         },
         "expected_information_gain": 0.4,
+        "representation_contract": _representation_contract(),
         "target": {"regimes": ["decode"], "ops": ["mul_mat"], "shapes": [], "models": []},
         "non_target": {"regimes": ["prefill"], "shapes": []},
         "mechanism_prediction": {
@@ -176,6 +213,13 @@ def _proposal() -> dict:
         "stop_condition": "reject if the discriminator shows no path change",
         "critic_verdict": {"status": "pending", "reasons": []},
     }
+
+
+def _proposal_v2() -> dict:
+    record = _proposal()
+    record["schema"] = S.SCHEMA_PROPOSAL_V2
+    del record["representation_contract"]
+    return record
 
 
 def _candidate() -> dict:
@@ -443,6 +487,7 @@ def _waiver() -> dict:
 
 FIXTURES = {
     S.SCHEMA_CAMPAIGN: _campaign,
+    S.SCHEMA_PROPOSAL_V2: _proposal_v2,
     S.SCHEMA_PROPOSAL: _proposal,
     S.SCHEMA_CANDIDATE: _candidate,
     S.SCHEMA_EVALUATION_EVENT_V2: _event,
@@ -523,6 +568,10 @@ class RequiredFieldOmissionTest(unittest.TestCase):
     def test_realized_cost_omissions_are_rejected(self):
         self._assert_nested_omissions_rejected(
             _proposal, S.validate_proposal, "realized_cost")
+
+    def test_representation_contract_omissions_are_rejected(self):
+        self._assert_nested_omissions_rejected(
+            _proposal, S.validate_proposal, "representation_contract")
 
     def test_budget_omissions_are_rejected(self):
         self._assert_nested_omissions_rejected(
@@ -1330,6 +1379,50 @@ class OperatorWaiverRuleTest(unittest.TestCase):
         self.assertTrue(S.validate_operator_waiver(record))
 
 
+class RepresentationContractTest(unittest.TestCase):
+    def test_frame_hash_is_stable_under_key_reordering(self):
+        contract = _representation_contract()
+        reordered = dict(reversed(list(contract.items())))
+        self.assertEqual(
+            S.representation_frame_sha256(contract),
+            S.representation_frame_sha256(reordered),
+        )
+
+    def test_same_frame_is_comparable(self):
+        self.assertEqual(
+            S.check_representation_comparable(
+                _representation_contract(), _representation_contract()
+            ).outcome,
+            S.PASS,
+        )
+
+    def test_changed_demand_is_not_comparable(self):
+        left = _representation_contract()
+        right = _representation_contract()
+        right["empirical_demand"]["receipt_id"] = "rcpt-demand-other"
+        right["frame_sha256"] = S.representation_frame_sha256(right)
+        check = S.check_representation_comparable(left, right)
+        self.assertEqual(check.outcome, S.FAIL)
+        self.assertIn("not comparable", check.reasons[0])
+
+    def test_actor_cannot_forge_frame_digest(self):
+        record = _proposal()
+        record["representation_contract"]["considered_alternatives"].append("new")
+        violations = S.validate_proposal(record)
+        self.assertTrue(any("frame_sha256" in violation for violation in violations))
+
+    def test_excluded_alternative_must_have_been_considered(self):
+        record = _proposal()
+        record["representation_contract"]["considered_alternatives"].remove(
+            "rewrite_backend"
+        )
+        record["representation_contract"]["frame_sha256"] = (
+            S.representation_frame_sha256(record["representation_contract"])
+        )
+        violations = S.validate_proposal(record)
+        self.assertTrue(any("was not considered" in violation for violation in violations))
+
+
 # =============================================================================
 # Registry dispatch
 # =============================================================================
@@ -1338,7 +1431,8 @@ class RegistryDispatchTest(unittest.TestCase):
     def test_registry_maps_each_schema_string_to_its_validator(self):
         expected = {
             S.SCHEMA_CAMPAIGN: S.validate_campaign,
-            S.SCHEMA_PROPOSAL: S.validate_proposal,
+            S.SCHEMA_PROPOSAL_V2: S.validate_proposal_v2,
+            S.SCHEMA_PROPOSAL_V3: S.validate_proposal_v3,
             S.SCHEMA_CANDIDATE: S.validate_candidate,
             S.SCHEMA_EVALUATION_EVENT_V2: S.validate_evaluation_event_v2,
             S.SCHEMA_EVALUATION_EVENT_V3: S.validate_evaluation_event_v3,

@@ -190,12 +190,14 @@ import os
 import re
 import subprocess
 import tempfile
+import threading
 import time
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 
+from .. import journal as journal_module
 from .. import schemas, storage
 from ..evaluator import api, integrity, recipes, statistics
 
@@ -205,7 +207,8 @@ __all__ = [
     # errors
     "MicrobenchError", "ClaimNotHeld", "PairingViolation", "BenchOutputError",
     "RecipeOutputMismatch", "RunRefused", "SpawnFailure", "HostStateUnreadable",
-    "ExtensionNotDeclared", "ScheduleMismatch",
+    "ExtensionNotDeclared", "ScheduleMismatch", "RunLedgerRequired",
+    "RunAlreadyCompleted", "RunNotJournaled", "RunIdentityMismatch",
     # claim seam
     "HeldClaim", "ClaimAttestation", "CpuRegionClaimAdapter",
     # host state
@@ -227,7 +230,8 @@ __all__ = [
     "ARM_ANCHOR", "ARM_CANDIDATE", "BlockPlan", "plan_blocks", "assemble_block",
     "Invocation", "BlockRecord",
     # the run
-    "ExtensionAuthorization", "MicrobenchPlan", "MicrobenchRun", "MicrobenchRunner",
+    "ExtensionAuthorization", "MicrobenchPlan", "MicrobenchRun", "CompletedRunLedger",
+    "MicrobenchRunner",
     "assemble_run_blocks",
     # self-audit
     "audit_no_name_pattern_process_paths",
@@ -322,6 +326,22 @@ class ScheduleMismatch(MicrobenchError):
     candidate's blocks, and pooling them to a pre-declared threshold would pool
     two experiments. A hard error, never a relabel.
     """
+
+
+class RunLedgerRequired(MicrobenchError):
+    """A durable run ledger is required for a path that can spend a round."""
+
+
+class RunAlreadyCompleted(MicrobenchError):
+    """This campaign/candidate/attempt/segment key already has a completed run."""
+
+
+class RunNotJournaled(MicrobenchError):
+    """Pooling was asked to consume a run the durable ledger does not contain."""
+
+
+class RunIdentityMismatch(MicrobenchError):
+    """The run supplied for pooling is not the run journaled under its key."""
 
 
 # =============================================================================
@@ -635,6 +655,12 @@ FREQUENCY_DEFERRED_IDLE = "deferred_idle"
 FREQUENCY_CLASSIFICATIONS = (FREQUENCY_JUDGED, FREQUENCY_UNEVALUABLE,
                              FREQUENCY_DEFERRED_IDLE)
 
+# The ratified canonical boost gate is 80 of 96 cores at or above 2.5 GHz.
+# Expressed as a ratio so a narrower declared footprint has a reachable gate.
+BOOST_THRESHOLD_KHZ = 2_500_000
+BOOST_MIN_CORES = 80
+BOOST_MIN_CORES_OF = 96
+
 
 @dataclass(frozen=True)
 class HostStatePolicy:
@@ -772,13 +798,17 @@ class HostStatePolicy:
                     f"cpuinfo_min_freq. DEFERRED, not passed — the run must still judge "
                     f"the frequency under its own load before it may emit a number.",))
 
-        # The one throttle shape that needs no operator-supplied reference, so
-        # it is tested before `nominal_khz` is required.
-        if state.driver_min_khz is not None and min_khz is not None \
-                and min_khz <= state.driver_min_khz:
+        # The one throttle shape that needs no operator-supplied reference: the
+        # WHOLE footprint is pinned at the driver's minimum.  Testing `min_khz`
+        # here rejected a healthy 96-core run as soon as one core parked in the
+        # few microseconds between process exit and the sysfs read.
+        values = [khz for _, khz in state.khz_by_cpu]
+        if state.driver_min_khz is not None and values \
+                and max(values) <= state.driver_min_khz:
             return FREQUENCY_JUDGED, schemas.Check(schemas.FAIL, tuple(reasons) + (
-                f"cpu frequency is pinned at the driver's own minimum "
-                f"({min_khz} kHz <= cpuinfo_min_freq {state.driver_min_khz} kHz) while "
+                f"the whole claimed footprint is pinned at the driver's own minimum "
+                f"(max {max(values)} kHz <= cpuinfo_min_freq "
+                f"{state.driver_min_khz} kHz) while "
                 f"the claimed footprint is under load; "
                 f"this is a throttled host, not a quiet one",))
         if self.nominal_khz is None:
@@ -790,18 +820,27 @@ class HostStatePolicy:
                     "NOT a valid all-core reference; record a healthy observation "
                     "instead.",))
         floor = self.nominal_khz * self.min_frequency_ratio
-        if min_khz is not None and min_khz < floor:
+        median_khz = state.median_khz
+        if median_khz is not None and median_khz < floor:
             return FREQUENCY_JUDGED, schemas.Check(schemas.FAIL, tuple(reasons) + (
-                f"slowest claimed cpu is at {min_khz} kHz, below "
+                f"median claimed cpu is at {median_khz:.0f} kHz, below "
                 f"{self.min_frequency_ratio:.2f} x nominal {self.nominal_khz} kHz "
                 f"({floor:.0f} kHz); refusing to emit a number from a throttled host",))
+        required = (len(values) * BOOST_MIN_CORES + BOOST_MIN_CORES_OF - 1) \
+            // BOOST_MIN_CORES_OF
+        boosting = sum(khz >= BOOST_THRESHOLD_KHZ for khz in values)
+        if boosting < required:
+            return FREQUENCY_JUDGED, schemas.Check(schemas.FAIL, tuple(reasons) + (
+                f"only {boosting}/{len(values)} claimed cpus are at or above "
+                f"{BOOST_THRESHOLD_KHZ} kHz under load; the ratified quorum for this "
+                f"footprint is {required}/{len(values)} (80/96 scaled)",))
         if reasons:
             return FREQUENCY_UNEVALUABLE, schemas.Check(schemas.COULD_NOT_CHECK,
                                                         tuple(reasons))
         return FREQUENCY_JUDGED, schemas.Check(schemas.PASS, (
-            f"min {min_khz} kHz >= {floor:.0f} kHz "
-            f"({self.min_frequency_ratio:.2f} x nominal {self.nominal_khz} kHz), "
-            f"judged under load",))
+            f"median {median_khz:.0f} kHz >= {floor:.0f} kHz and {boosting}/"
+            f"{len(values)} cpus >= {BOOST_THRESHOLD_KHZ} kHz (required {required}), "
+            "judged under load",))
 
     def check_frequency(self, state: HostState) -> schemas.Check:
         """The Check alone. `frequency_verdict` is the one that computes it."""
@@ -1215,10 +1254,15 @@ def check_recipe_discipline(command: recipes.ConstructedCommand,
                 f"NUMA policy drifted off interleave once on a 1.7% warm A/B and the "
                 f"front door ended up at 46% of canonical")
         for key, value in recipes.CANONICAL_OMP_ENV.items():
-            if env.get(key) != value:
+            # The registry licenses GGML_IQK as the one arm-local env variant.
+            # Its declared value is already covered by the constructor's
+            # canonical-env finding; rechecking against literal canonical `1`
+            # here made the registered `0` arm impossible to execute.
+            expected = command.env.get(key) if key == "GGML_IQK" else value
+            if env.get(key) != expected:
                 reasons.append(
-                    f"OMP stack incomplete: {key}={env.get(key)!r}, canonical recipe "
-                    f"requires {value!r}. The OMP stack is MANDATORY, not optional.")
+                    f"OMP stack incomplete: {key}={env.get(key)!r}, constructed recipe "
+                    f"requires {expected!r}. The OMP stack is MANDATORY, not optional.")
 
     if command.tool == "llama-bench":
         if "-fa" not in argv:
@@ -1558,6 +1602,7 @@ class SpawnResult:
     duration_s: float
     timed_out: bool = False
     terminated_by_runner: bool = False
+    khz_peak_by_cpu: tuple = ()
 
     def to_dict(self) -> dict:
         return {"argv": list(self.argv), "returncode": self.returncode,
@@ -1565,7 +1610,8 @@ class SpawnResult:
                 "stdout_bytes": len(self.stdout.encode("utf-8")),
                 "stderr_tail": self.stderr_tail, "pid": self.pid,
                 "duration_s": self.duration_s, "timed_out": self.timed_out,
-                "terminated_by_runner": self.terminated_by_runner}
+                "terminated_by_runner": self.terminated_by_runner,
+                "khz_peak_by_cpu": [[cpu, khz] for cpu, khz in self.khz_peak_by_cpu]}
 
 
 class ProductionTreeWrite(MicrobenchError):
@@ -1664,6 +1710,9 @@ class SubprocessSpawner:
         started = time.monotonic()
         timed_out = False
         terminated = False
+        peaks: dict[int, int] = {}
+        stop_sampling = threading.Event()
+        sampler = None
         with tempfile.TemporaryDirectory(prefix="autokernel-microbench-",
                                          dir=self._workdir_root) as workdir:
             out_path = Path(workdir, "stdout")
@@ -1676,11 +1725,35 @@ class SubprocessSpawner:
                     raise SpawnFailure(f"could not start {argv[0]!r}: {exc}") from exc
                 pid = proc.pid
                 try:
+                    cpu_list = argv[argv.index("-c") + 1]
+                    cpus = _parse_cpu_list(cpu_list)
+                except (ValueError, IndexError):
+                    cpus = ()
+                if cpus:
+                    def sample_while_alive() -> None:
+                        while not stop_sampling.is_set():
+                            for cpu in cpus:
+                                khz = _read_int_file(Path(
+                                    f"/sys/devices/system/cpu/cpu{cpu}/cpufreq/"
+                                    "scaling_cur_freq"))
+                                if khz is not None:
+                                    peaks[cpu] = max(peaks.get(cpu, 0), khz)
+                            stop_sampling.wait(0.005)
+
+                    sampler = threading.Thread(
+                        target=sample_while_alive,
+                        name=f"autokernel-cpufreq-{pid}", daemon=True)
+                    sampler.start()
+                try:
                     returncode = proc.wait(timeout=timeout_s)
                 except subprocess.TimeoutExpired:
                     timed_out = True
                     terminated = True
                     returncode = self._terminate(proc)
+                finally:
+                    stop_sampling.set()
+                    if sampler is not None:
+                        sampler.join(timeout=1.0)
             stdout = out_path.read_text(encoding="utf-8", errors="replace")
             stderr = err_path.read_bytes()[-self._stderr_tail_bytes:].decode(
                 "utf-8", errors="replace")
@@ -1688,7 +1761,8 @@ class SubprocessSpawner:
         return SpawnResult(argv=tuple(argv), returncode=returncode, stdout=stdout,
                            stderr_tail=stderr, pid=pid,
                            duration_s=time.monotonic() - started, timed_out=timed_out,
-                           terminated_by_runner=terminated)
+                           terminated_by_runner=terminated,
+                           khz_peak_by_cpu=tuple(sorted(peaks.items())))
 
     def _terminate(self, proc: "subprocess.Popen") -> int:
         """SIGTERM, then SIGKILL, then confirm reaped. Only this handle, ever."""
@@ -2188,6 +2262,8 @@ class MicrobenchPlan:
     base_blocks: int
     pairs_per_block: int
     unit_ids: tuple
+    candidate_param_overrides: Mapping = field(default_factory=dict)
+    anchor_param_overrides: Mapping = field(default_factory=dict)
     stratum: str = api.STRATUM_SELECTION
     timeout_s: float = 1800.0
     attempt: int = 0
@@ -2205,6 +2281,18 @@ class MicrobenchPlan:
         if not isinstance(self.anchor, api.AnchorIdentity):
             raise TypeError("plan.anchor must be an api.AnchorIdentity — a named immutable "
                             "anchor, not a path")
+        for name in ("params", "candidate_param_overrides", "anchor_param_overrides"):
+            if not isinstance(getattr(self, name), Mapping):
+                raise TypeError(f"plan.{name} must be a mapping")
+        # The recipe registry currently declares one arm-local variant: GGML_IQK.
+        # Keeping the allowlist here prevents this seam from becoming a general
+        # way to benchmark the candidate and anchor under different cells.
+        for name in ("candidate_param_overrides", "anchor_param_overrides"):
+            unknown = sorted(set(getattr(self, name)) - {"ggml_iqk"})
+            if unknown:
+                raise ValueError(
+                    f"plan.{name} contains {unknown}; only the recipe-declared "
+                    "GGML_IQK env-flag variant may differ by arm")
         if self.stratum not in api.STRATA:
             raise ValueError(f"plan.stratum {self.stratum!r} is not one of {list(api.STRATA)}")
         for name in ("base_blocks", "pairs_per_block"):
@@ -2269,6 +2357,22 @@ class MicrobenchPlan:
             campaign_seed=self.campaign_seed, candidate_id=self.candidate_id,
             base_blocks=self.base_blocks, attempt=self.attempt)
 
+    def params_for(self, arm: str) -> dict:
+        """Return the committed recipe parameters for one arm.
+
+        `recipes._P_GGML_IQK` explicitly licenses an env-flag variant "one flag
+        per arm".  Until this projection existed the execution layer constructed
+        both arms from the same mapping, making that registered control
+        unexecutable.  Every non-IQK parameter remains byte-for-byte shared.
+        """
+        if arm not in (ARM_CANDIDATE, ARM_ANCHOR):
+            raise ValueError(f"arm must be candidate or anchor, got {arm!r}")
+        override = (self.candidate_param_overrides if arm == ARM_CANDIDATE
+                    else self.anchor_param_overrides)
+        merged = dict(self.params)
+        merged.update(override)
+        return merged
+
     def extend(self, authorization: ExtensionAuthorization) -> "MicrobenchPlan":
         """The plan for one DECLARED extension round of this base plan.
 
@@ -2296,6 +2400,8 @@ class MicrobenchPlan:
                 "candidate_binding": self.candidate_binding.to_dict(),
                 "anchor_binding": self.anchor_binding.to_dict(),
                 "anchor": self.anchor.short(), "params": dict(self.params),
+                "candidate_param_overrides": dict(self.candidate_param_overrides),
+                "anchor_param_overrides": dict(self.anchor_param_overrides),
                 "base_blocks": self.base_blocks, "pairs_per_block": self.pairs_per_block,
                 "unit_ids": list(self.unit_ids), "stratum": self.stratum,
                 "timeout_s": self.timeout_s, "attempt": self.attempt,
@@ -2376,6 +2482,10 @@ class MicrobenchRun:
             "runner_id": self.runner_id,
             "recipe_id": self.plan.recipe_id,
             "candidate_id": self.plan.candidate_id,
+            # Attempt is part of the evidence identity, not just the schedule.
+            # Attempts n and n+2 have the same parity-derived order; omitting it
+            # would let a completed run be restapled onto a later retry key.
+            "attempt": self.plan.attempt,
             # NOT a `campaign_seed_committed: True` boolean. That field asserted
             # pre-registration on the say-so of the module emitting it, while the
             # material needed to check it — the seed, and the schedule derived
@@ -2429,6 +2539,108 @@ class MicrobenchRun:
     def to_dict(self) -> dict:
         return self.raw_vector()
 
+    @property
+    def run_id(self) -> str:
+        """Content identity of this runner return, including its raw samples."""
+        return schemas.content_hash(self.raw_vector())
+
+
+class CompletedRunLedger:
+    """Durable one-run-per-declared-key ledger backed by the primary journal.
+
+    The key is the pre-committed statistical identity that may be spent once:
+    ``(campaign_id, candidate_id, attempt, segment, extension_round)``. A
+    refused or partial runner return spends the attempt too; repeating it is a
+    new ``attempt`` with the retry schedule, never a re-roll under the same key.
+    """
+
+    def __init__(self, journal: journal_module.Journal, *, campaign_id: str) -> None:
+        if not isinstance(journal, journal_module.Journal):
+            raise TypeError("CompletedRunLedger needs the campaign Journal")
+        if not isinstance(campaign_id, str) or not campaign_id.strip():
+            raise ValueError("campaign_id must be a non-empty string")
+        if journal.campaign_id not in (None, campaign_id):
+            raise ValueError(
+                f"journal is bound to campaign {journal.campaign_id!r}, not {campaign_id!r}")
+        self.journal = journal
+        self.campaign_id = campaign_id
+        self.journal.initialize()
+
+    def _key(self, plan: MicrobenchPlan) -> tuple:
+        return (self.campaign_id, plan.candidate_id, plan.attempt,
+                plan.segment, plan.extension_round)
+
+    @staticmethod
+    def _payload_key(payload: Mapping[str, Any]) -> tuple:
+        return (payload.get("campaign_id"), payload.get("candidate_id"),
+                payload.get("attempt"), payload.get("segment"),
+                payload.get("extension_round"))
+
+    def _entries(self, plan: MicrobenchPlan) -> tuple:
+        key = self._key(plan)
+        return tuple(
+            entry for entry in self.journal.read_all()
+            if entry.kind == journal_module.KIND_MICROBENCH_RUN_COMPLETED
+            and self._payload_key(entry.payload) == key)
+
+    def assert_fresh(self, plan: MicrobenchPlan) -> None:
+        entries = self._entries(plan)
+        if entries:
+            ids = sorted({entry.payload.get("run_id") for entry in entries})
+            raise RunAlreadyCompleted(
+                f"declared run key {self._key(plan)!r} already completed as {ids}; "
+                "repeat the measurement as attempt + 1, never as a re-roll of the "
+                "observed attempt")
+
+    def record(self, run: MicrobenchRun):
+        if not isinstance(run, MicrobenchRun):
+            raise TypeError("record() takes the completed MicrobenchRun")
+        existing = self._entries(run.plan)
+        same = [entry for entry in existing
+                if entry.payload.get("run_id") == run.run_id]
+        if same:
+            return same[0]
+
+        payload = {
+            "campaign_id": self.campaign_id,
+            "candidate_id": run.plan.candidate_id,
+            "attempt": run.plan.attempt,
+            "segment": run.plan.segment,
+            "extension_round": run.plan.extension_round,
+            "run_id": run.run_id,
+            "completed_at": run.ended_at,
+            "complete": run.complete,
+            "raw_vector": run.raw_vector(),
+        }
+        entry = self.journal.append(
+            journal_module.KIND_MICROBENCH_RUN_COMPLETED, payload,
+            record_id=run.run_id)
+        if existing:
+            ids = sorted({old.payload.get("run_id") for old in existing} | {run.run_id})
+            raise RunAlreadyCompleted(
+                f"declared run key {self._key(run.plan)!r} completed more than once: "
+                f"{ids}. The conflicting run was journaled, but neither run may be pooled.")
+        return entry
+
+    def assert_poolable(self, runs: Sequence[MicrobenchRun]) -> None:
+        for run in runs:
+            if not isinstance(run, MicrobenchRun):
+                raise TypeError("assert_poolable takes MicrobenchRun values")
+            entries = self._entries(run.plan)
+            if not entries:
+                raise RunNotJournaled(
+                    f"run {run.run_id} under declared key {self._key(run.plan)!r} is not "
+                    "in the durable completed-run ledger")
+            ids = {entry.payload.get("run_id") for entry in entries}
+            if len(ids) > 1:
+                raise RunAlreadyCompleted(
+                    f"declared run key {self._key(run.plan)!r} has conflicting completed "
+                    f"runs {sorted(ids)}; selecting one after observing both is alpha spend")
+            if run.run_id not in ids:
+                raise RunIdentityMismatch(
+                    f"pooling supplied run {run.run_id}, but declared key "
+                    f"{self._key(run.plan)!r} is journaled as {sorted(ids)}")
+
 
 class MicrobenchRunner:
     """Runs paired blocks. The only thing in this package that executes a benchmark.
@@ -2441,7 +2653,8 @@ class MicrobenchRunner:
     def __init__(self, *, claim: HeldClaim, spawner: Spawner,
                  policy: Optional[HostStatePolicy] = None,
                  host_state: Callable[..., HostState] = read_host_state,
-                 now: Callable[[], str] = _utc_now) -> None:
+                 now: Callable[[], str] = _utc_now,
+                 run_ledger: Optional[CompletedRunLedger] = None) -> None:
         if claim is None:
             raise ClaimNotHeld(
                 "MicrobenchRunner requires a held resource claim. P-AK-SEARCH-1 denial 8: "
@@ -2453,6 +2666,9 @@ class MicrobenchRunner:
         self._policy = policy if policy is not None else HostStatePolicy()
         self._read_host_state = host_state
         self._now = now
+        if run_ledger is not None and not isinstance(run_ledger, CompletedRunLedger):
+            raise TypeError("run_ledger must be a CompletedRunLedger or None")
+        self._run_ledger = run_ledger
 
     # -- claim -------------------------------------------------------------
 
@@ -2620,6 +2836,12 @@ class MicrobenchRunner:
     def run(self, plan: MicrobenchPlan) -> MicrobenchRun:
         if not isinstance(plan, MicrobenchPlan):
             raise TypeError("run() takes a MicrobenchPlan")
+        if plan.segment == statistics.SEGMENT_EXTENSION and self._run_ledger is None:
+            raise RunLedgerRequired(
+                "an extension round requires a durable CompletedRunLedger; otherwise the "
+                "same declared round can be re-run after its result is observed")
+        if self._run_ledger is not None:
+            self._run_ledger.assert_fresh(plan)
         started_at = self._now()
         checks: list = []
         refusals: list = []
@@ -2634,10 +2856,11 @@ class MicrobenchRunner:
 
         commands = {
             ARM_CANDIDATE: recipes.construct(plan.recipe_id, binding=plan.candidate_binding,
-                                             params=plan.params, arm=ARM_CANDIDATE,
+                                             params=plan.params_for(ARM_CANDIDATE),
+                                             arm=ARM_CANDIDATE,
                                              verify_inputs=False),
             ARM_ANCHOR: recipes.construct(plan.recipe_id, binding=plan.anchor_binding,
-                                          params=plan.params, arm=ARM_ANCHOR,
+                                          params=plan.params_for(ARM_ANCHOR), arm=ARM_ANCHOR,
                                           verify_inputs=False),
         }
         scope = commands[ARM_CANDIDATE].scope_denominator
@@ -2854,6 +3077,19 @@ class MicrobenchRunner:
         # would let an empty block manufacture the JUDGED reading that the
         # run-level control in `_finish` is looking for.
         close_state = self._read_host_state(cpu_list=footprint.cpu_list)
+        # A short benchmark can park every core between `wait()` returning and
+        # this sysfs read.  The real spawner therefore samples while its exact
+        # captured PID is alive and returns the per-cpu peaks.  Prefer those
+        # in-process readings; the close read remains the fallback for recorded
+        # spawners and the provenance still carries both sampling points.
+        peak: dict[int, int] = {}
+        for invocation in invocations:
+            for cpu, khz in invocation.spawn.khz_peak_by_cpu:
+                peak[cpu] = max(peak.get(cpu, 0), khz)
+        if peak:
+            close_state = replace(
+                close_state, khz_by_cpu=tuple(sorted(peak.items())),
+                source=f"{close_state.source}+subprocess_lifetime_peak")
         close_class, close_freq = self._policy.frequency_verdict(
             close_state, under_load=bool(invocations))
         freq_classifications.append(close_class)
@@ -2926,7 +3162,9 @@ class MicrobenchRunner:
                 f"the emitted blocks do not satisfy the order schedule derived from "
                 f"the committed campaign seed: {run.order_control.outcome} — "
                 f"{'; '.join(run.order_control.reasons)}")
-            return replace(run, refusals=tuple(refusals))
+            run = replace(run, refusals=tuple(refusals))
+        if self._run_ledger is not None:
+            self._run_ledger.record(run)
         return run
 
 
@@ -2936,7 +3174,8 @@ class MicrobenchRunner:
 
 def assemble_run_blocks(base_run: MicrobenchRun,
                         extension_runs: Sequence[MicrobenchRun] = (), *,
-                        campaign: statistics.CampaignStatistics) -> tuple:
+                        campaign: statistics.CampaignStatistics,
+                        run_ledger: Optional[CompletedRunLedger] = None) -> tuple:
     """The one block sequence the reducer reads: base segment, then whole rounds.
 
     Something has to concatenate a base run with the extension rounds that
@@ -2982,6 +3221,14 @@ def assemble_run_blocks(base_run: MicrobenchRun,
     for run in runs:
         if not isinstance(run, MicrobenchRun):
             raise TypeError("every extension run must be a MicrobenchRun")
+    if runs and run_ledger is None:
+        raise RunLedgerRequired(
+            "pooling extension evidence requires the durable CompletedRunLedger that "
+            "recorded every completed run under its declared key")
+    if run_ledger is not None:
+        if not isinstance(run_ledger, CompletedRunLedger):
+            raise TypeError("run_ledger must be a CompletedRunLedger")
+        run_ledger.assert_poolable((base_run,) + runs)
     if base_run.plan.segment != statistics.SEGMENT_BASE:
         raise ScheduleMismatch(
             f"the base run's plan is segment {base_run.plan.segment!r}; the base segment "

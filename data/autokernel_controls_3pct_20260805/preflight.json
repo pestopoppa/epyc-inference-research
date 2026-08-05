@@ -1,0 +1,36 @@
+{
+  "checks": {
+    "binary_copy": {
+      "outcome": "PASS",
+      "reasons": [
+        "production and evidence-copy SHA-256 are 68e1d37c200ffc9d9a0bcfa4bc6985475486600a20331e6524323d393ba5edd1"
+      ]
+    },
+    "model_present": {
+      "outcome": "PASS",
+      "reasons": [
+        "model path is /mnt/raid0/llm/models/lmstudio-community/Qwen2.5-Coder-0.5B-GGUF/Qwen2.5-Coder-0.5B-Q4_K_M.gguf"
+      ]
+    },
+    "production_commit": {
+      "outcome": "PASS",
+      "reasons": [
+        "production HEAD is 67a433bf45a8a091d83b4ea0b32ff0735fd51800; required 67a433bf45a8a091d83b4ea0b32ff0735fd51800"
+      ]
+    },
+    "storage": {
+      "outcome": "PASS",
+      "reasons": [
+        "269009571840 bytes free at campaign open"
+      ]
+    },
+    "topology": {
+      "outcome": "PASS",
+      "reasons": [
+        "every cpu in 0-95 is its own sibling anchor and all 96 higher cpus fold into that range, matching epyc-orchestrator/src/runtime/instance_topology.py:REGION_CORE_RANGE"
+      ]
+    }
+  },
+  "measured_at": "2026-08-05T09:25:12.194368+00:00",
+  "schema": "epyc.autokernel.live_control_preflight.v1"
+}

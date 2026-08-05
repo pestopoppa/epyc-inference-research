@@ -67,6 +67,33 @@ def _sha(seed: str) -> str:
     return S.content_hash({"seed": seed})
 
 
+def _representation_contract() -> dict:
+    contract = {
+        "vocabulary": {
+            "regimes": ["decode", "prefill"],
+            "surfaces": ["rms_norm"],
+            "outcomes": ["throughput_gain", "non_inferiority"],
+            "contradictions": ["counter_did_not_move"],
+        },
+        "vocabulary_source_receipts": ["rcpt-vocabulary-g15"],
+        "considered_alternatives": ["fuse_norm", "dispatcher_only"],
+        "excluded_alternatives": [],
+        "empirical_demand": {
+            "receipt_id": "rcpt-demand-g15", "weights_sha256": _sha("demand-g15"),
+        },
+        "abstraction_construction_cost": {
+            "value": 2, "unit": "typed_facts", "receipt_id": "rcpt-cost-g15",
+        },
+        "canonical_encoding": {
+            "encoding_id": "ak-representation-json/v1",
+            "schema_sha256": _sha("representation-schema-v1"),
+        },
+        "semantics_preserving_recoding_fixture_ids": ["ak-recode-g15-renamed"],
+    }
+    contract["frame_sha256"] = S.representation_frame_sha256(contract)
+    return contract
+
+
 ANCHOR_V8 = EV.AnchorIdentity(
     source_commit=V8_COMMIT,
     binary_sha256=_sha("anchor-binary-v8"),
@@ -139,6 +166,7 @@ def _proposal_payload(
         },
         "change_class": change_class,
         "hypothesis": "prose the matcher must never read",
+        "representation_contract": _representation_contract(),
         "narrative": "more prose the matcher must never read",
         "target": {"regimes": ["decode"], "ops": list(ops), "shapes": [], "models": []},
         "change": {
@@ -245,6 +273,7 @@ def _full_proposal() -> dict:
             "prior_event_ids": [], "source_receipts": [], "do_not_repeat_matches": [],
         },
         "expected_information_gain": 0.4,
+        "representation_contract": _representation_contract(),
         "target": {"regimes": ["decode"], "ops": ["ggml_cuda_op_rms_norm"],
                    "shapes": [], "models": []},
         "non_target": {"regimes": ["prefill"], "shapes": []},

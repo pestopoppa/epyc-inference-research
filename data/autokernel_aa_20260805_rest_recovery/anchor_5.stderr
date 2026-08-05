@@ -1,0 +1,13 @@
+=== Validating canonical recipe ===
+WARNING: CANONICAL_SKIP_REGION_LOCK=1 — running WITHOUT CPU-region exclusion.
+         A concurrent orchestrator placement can poison this measurement.
+=== Canonical bench command ===
+Binary:    /mnt/raid0/llm/llama.cpp/build/bin/llama-bench
+Env:       LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp/build/bin:/usr/lib/llvm-20/lib:/opt/AMD/aocc-compiler-5.0.0/lib:/mnt/raid0/llm/llama.cpp-dflash/build/bin:/opt/rocm/lib OMP_PROC_BIND=spread OMP_PLACES=cores OMP_WAIT_POLICY=active OMP_DYNAMIC=false GGML_IQK=1
+Cmd:       taskset -c 0-95 numactl --interleave=all /mnt/raid0/llm/llama.cpp/build/bin/llama-bench -t 96 -fa 1 -mmp 0 -m /mnt/raid0/llm/models/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf -p 512 -n 128 -r 5 -o md -o json
+Regions:   UNLOCKED (CANONICAL_SKIP_REGION_LOCK=1)
+=================================
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=12 activation=99 ne00=2048)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 activation=99 ne00=2048)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 activation=99 n_as=128)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=14 activation=99 n_as=128)

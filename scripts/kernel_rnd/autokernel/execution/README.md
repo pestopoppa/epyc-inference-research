@@ -1,11 +1,13 @@
 # AutoKernel execution layer — runbook for the first real campaign
 
-**Status: this code has never been run against a kernel.** No candidate has been
-built by it, no benchmark has been taken by it, no number in this package came
-off a machine. Every test in it runs on recorded tool output. What follows is
-how the session that owns compute takes it from a cold start to a first
-candidate — and, just as importantly, the three things that will stop it and
-should be dealt with first.
+**Status: the measurement and five-control path has run live; the mutation/build
+campaign has not.** On 2026-08-05 `execution/live_controls.py` acquired q0–q3,
+calibrated from 200 fresh A/A plus 60 neutral blocks, and produced a 5/5 control
+panel with `may_rank=true`. Evidence:
+[`data/autokernel_controls_3pct_20260805/`](../../../../data/autokernel_controls_3pct_20260805/README.md).
+No candidate worktree has yet been built by the campaign entrypoint. What follows
+is how the session that owns compute goes from that calibrated instrument to a
+first candidate.
 
 Read §0 and §6 before you touch anything. §6 is short and it is the part that
 decides whether today is a campaign or a plumbing session.
@@ -19,8 +21,9 @@ decides whether today is a campaign or a plumbing session.
 | `cpu_region_claim.py` | Acquires the CPU region claim (real `flock`s, per-region, with a journal) | flocks yes, in tests; never around a benchmark |
 | `worktree.py` | Resolves the production tip, adds a campaign worktree, configures + builds, emits a build receipt | never built anything |
 | `t0_provider.py` | Runs `test-backend-ops`, `verify_ggml_linkage.sh`, generations, sanitizers; returns `correctness.T0Evidence` | never launched a tool |
-| `microbench.py` | Runs the T1 paired-block `llama-bench` design under the claim | never spawned a bench |
-| `control_runner.py` | Scores the five controls through the same dispatcher a candidate uses | fixtures only |
+| `microbench.py` | Runs the T1 paired-block `llama-bench` design under the claim | live controls, 2026-08-05 |
+| `control_runner.py` | Scores the five controls through the same dispatcher a candidate uses | live 5/5 panel, 2026-08-05 |
+| `live_controls.py` | Predeclares, measures, calibrates and scores the live CPU controls | live; dry-run by default |
 | `chain.py` | The **seams** between the above and the evaluator that reads them, plus the four T0 evidence projections (build, symbols, diff, change surface) | projection only; reads ELF/diff/log text it is handed, spawns nothing |
 | `../campaign.py` | **The entrypoint.** Composes everything above into one loop and gives it a `main()` | dry-run composition yes; no candidate built, no bench spawned |
 
@@ -39,14 +42,17 @@ python3 -m scripts.kernel_rnd.autokernel.campaign --model /path/to/model.gguf
 
 Dry run is the **default**; `--execute` additionally requires `--i-hold-the-host`
 AND an ops object with no unimplemented seams (refused at argv time, before the
-claim — see `HostOps.unimplemented_seams`).
+claim — see `HostOps.unimplemented_seams`). An executing run also requires a
+validated `--proposal-manifest` using proposal-v3. The proposal is fsynced before
+preflight or any host work, and an identical resume reuses that event; the same
+proposal id with different bytes is refused.
 
 The driver's accept rule is `min(delta) > 0` over N pre-committed paired blocks
 AND `median(relative) >` the drift bound measured in
 [`data/autokernel_aa_20260804/`](../../../../data/autokernel_aa_20260804/README.md)
-— not an e-process; §6.8's arithmetic and the A/A's 1.6–1.9 % CV are why. Because
-N is pre-committed and there is no extension round, **§6.5's re-run-until-it-crosses
-hole has nothing to re-run under this driver.**
+— not an e-process; §6.8's arithmetic and the A/A's 1.6–1.9 % CV are why. The
+stock driver pre-commits N and has no extension round; the reusable extension
+path is also protected by the durable completed-run ledger described in §6.5.
 
 `OrderSchedule` is a per-block coin flip on the campaign seed, **not** an
 alternation: five blocks land all one way once in sixteen runs, and such a run
@@ -399,14 +405,19 @@ coverage gap.
 ### Step 6 — T1
 
 ```python
+from autokernel import journal as J
 from autokernel.execution import microbench as MB
 
 t1_anchor = chain.bind_anchor(anchor_bench_capture, tool="llama-bench")
 assert chain.check_anchor_build_is_one_build([t0_anchor, t1_anchor]).outcome == "PASS"
 
+book = J.Journal(<durable-journal-root>, campaign_id=campaign.campaign_id)
+run_ledger = MB.CompletedRunLedger(book, campaign_id=campaign.campaign_id)
+
 runner = MB.MicrobenchRunner(claim=binding.microbench_claim,
                              policy=MB.HostStatePolicy(nominal_khz=<measured>),
-                             spawner=MB.SubprocessSpawner())
+                             spawner=MB.SubprocessSpawner(),
+                             run_ledger=run_ledger)
 base_run = runner.run(t1_plan)        # t1_plan.base_blocks == campaign.b_min
 ```
 
@@ -429,7 +440,8 @@ for round_index in range(1, campaign.stopping_rule.extension.max_rounds + 1):
     # WHEN to extend is the rule's, not yours: drive it from
     # `campaign.sequential_evaluation(...)`, which terminates itself.
 
-blocks = MB.assemble_run_blocks(base_run, rounds, campaign=campaign)
+blocks = MB.assemble_run_blocks(base_run, rounds, campaign=campaign,
+                                run_ledger=run_ledger)
 # RAISES on a refused run, a round licensed by another campaign, a base segment
 # that is not B_min blocks, or two runs that are not the same plan.
 ```
@@ -571,8 +583,8 @@ four seconds. Run it after any edit to a plan.
 These are ordered. §6.3 — the one that blocked a *win* outright — is **closed as
 of 2026-08-04**, and is kept here because the fact underneath it still governs
 how a campaign must be planned: nothing crosses on the base segment. §6.5 is
-**open** and is the one way left to manufacture a crossing from a null effect;
-read it before you run a second round of anything. §6.7 is **new on 2026-08-04**
+**closed as of 2026-08-05** by the durable completed-run ledger; read it before
+you run a second round of anything. §6.7 is **new on 2026-08-04**
 and is closed: the pooled reduction that §6.3 made possible published an MDE for
 a window the stopping rule cannot license. The rest shape what a green run means.
 
@@ -586,7 +598,7 @@ a window the stopping rule cannot license. The rest shape what a green run means
 | 6.2 | One anchor triple cannot name two tools | **CLOSED** — `AnchorIdentity.tool`, enforced three ways |
 | 6.3 | The extension round had no producer | **CLOSED** — producer, *and* a reference composition that runs it |
 | 6.4 | Claim ids and candidate ids share a prefix | **CLOSED** — refused at import |
-| 6.5 | A declared round can be re-run until it crosses | **OPEN** — re-reproduced 2026-08-04; needs a durable run ledger |
+| 6.5 | A declared round can be re-run until it crosses | **CLOSED 2026-08-05** — every runner return is fsynced by declared key; reruns refuse before inference; pooling requires the same ledger identity |
 | 6.6 | Smaller, recorded rather than fixed | mixed, each noted |
 | 6.7 | The published MDE described an unlicensable window | **CLOSED** — `b_min`, plus a new `mde_window` check |
 | 6.8 | How much block noise the declared budget tolerates | **OPEN as a PLANNING decision** — read it before you declare a rule |
@@ -919,9 +931,9 @@ minted id against the real `api.EvaluationRequest` rather than against the
 module's own copy of the prefix, with a real candidate id as the compliant-path
 control.
 
-### 6.5 OPEN — a declared round can be re-run until it crosses
+### 6.5 CLOSED 2026-08-05 — a declared round cannot be re-run until it crosses
 
-Found by the 2026-08-04 red team, **not fixed**, and it is the one remaining way
+Found by the 2026-08-04 red team. It was the one remaining way
 to manufacture a crossing from a null effect. **Re-reproduced against the
 current code on 2026-08-04**, after `ExtensionAuthorization` was moved onto the
 campaign and after the reference composition started pooling: run round 1, keep
@@ -951,20 +963,23 @@ Measured on the calibrated construction (`sign_martingale_predictable_lambda/v1`
 
 The declared budget is α = 0.1 (threshold = 1/α = 10). Twenty-five re-runs
 exhaust the whole campaign's error budget on one candidate; fifty exceed it.
-Nothing in the package can see it, because detecting a **discarded** completed
-round needs a durable per-candidate run ledger, and the runner writes none:
+Nothing in the old package could see it, because detecting a **discarded** completed
+round needs a durable per-candidate run ledger, and the runner wrote none:
 `MicrobenchRun` is a value, `assemble_run_blocks` sees only the runs it is
 handed, and `PairedBlock` carries a segment and a round number but no run
 identity at all.
 
-What closes it: journal every *completed* `MicrobenchRun` at the moment it
-completes (`autokernel/journal.py`), keyed on
-`(campaign_id, candidate_id, attempt, segment, extension_round)`, and have the
-pooling seam refuse when the journal holds a completed run for that key which is
-not the one being pooled. Until then, **the operator's own discipline is the
-control**: a round that completed is the round that counts, and a run that has to
-be repeated is a retry — `attempt + 1`, reversed schedule — not a re-roll of the
-same one.
+`CompletedRunLedger` now closes it in three places. `MicrobenchRunner.run()`
+refuses an extension without the durable ledger, checks the declared key before
+the first spawn, and appends the complete raw vector as
+`MICROBENCH_RUN_COMPLETED` before returning. The key is exactly
+`(campaign_id, candidate_id, attempt, segment, extension_round)` and `run_id` is
+the content hash of the raw vector. `assemble_run_blocks()` requires the same
+ledger whenever an extension is present and refuses an unjournaled, substituted,
+or multiply-completed run. A run that must be repeated is therefore `attempt + 1`
+with the retry schedule, not a re-roll of the observed attempt. The stock
+executing campaign path also refuses a missing `--journal-root` during preflight,
+before it acquires a claim or launches T0 inference.
 
 ### 6.6 Smaller, recorded rather than fixed
 

@@ -1,0 +1,18 @@
+{
+  "calibration_blocks": 200,
+  "campaign_id": "ak-controls-3pct-20260805",
+  "campaign_seed_sha256": "79a43c0aa30a188d6e1bc22b5479ee5f61eef5518e94f1b769d08cee318ccd69",
+  "contribution_floor": 0.03,
+  "cpu_list": "0-95",
+  "declared_at": "2026-08-05T09:25:12.188192+00:00",
+  "max_blocks_per_candidate": 20,
+  "max_candidates": 10,
+  "model": "/mnt/raid0/llm/models/lmstudio-community/Qwen2.5-Coder-0.5B-GGUF/Qwen2.5-Coder-0.5B-Q4_K_M.gguf",
+  "neutral_blocks": 60,
+  "prompt_tokens": 512,
+  "recipe_id": "t1b.llama_cpu.llama_bench_prefill.v1",
+  "schema": "epyc.autokernel.live_control_campaign_declaration.v1",
+  "source_sha256": "6413f4ee553847f80446d3f65b3598b02cf6a71ae08b94e060e4ce49094cb5be",
+  "window_id": "akw-controls-3pct-20260805-0001",
+  "wrong_prompt_tokens": 2048
+}

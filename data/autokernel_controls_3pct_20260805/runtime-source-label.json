@@ -1,0 +1,10 @@
+{
+  "binary_copy_exact": true,
+  "copied_binary_sha256": "68e1d37c200ffc9d9a0bcfa4bc6985475486600a20331e6524323d393ba5edd1",
+  "copied_linkage_sha256": "5dadca8d66ff7ee3ec89503b1071b6e004507699965273dfd300ffda663509d4",
+  "production_binary_sha256": "68e1d37c200ffc9d9a0bcfa4bc6985475486600a20331e6524323d393ba5edd1",
+  "production_linkage_sha256": "2826c39481663cc71d22a56d9b8944f434f4dbe2634080168f0304eafadaa1b5",
+  "production_source_commit": "67a433bf45a8a091d83b4ea0b32ff0735fd51800",
+  "schema": "epyc.autokernel.runtime_source_label.v1",
+  "source_sha256": "6413f4ee553847f80446d3f65b3598b02cf6a71ae08b94e060e4ce49094cb5be"
+}

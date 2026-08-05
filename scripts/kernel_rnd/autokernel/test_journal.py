@@ -30,6 +30,7 @@ Run standalone (no pytest needed):
 """
 from __future__ import annotations
 
+import copy
 import dataclasses
 import hashlib
 import json
@@ -552,6 +553,31 @@ class TestAppendRefusals(_JournalTest):
             self.j.append(J.KIND_STOP_STATE,
                           {"state": "PLATEAU_STOP", "narrative": "prose"})
         self.assertIn("narrative", str(ctx.exception))
+
+    def test_completed_microbench_run_binds_its_key_and_content_identity(self):
+        raw = {
+            "candidate_id": "akc-20260803-0001", "attempt": 0,
+            "segment": "base", "extension_round": None, "complete": True,
+            "ended_at": "2026-08-05T08:00:00+00:00", "blocks": [],
+        }
+        payload = {
+            "campaign_id": CAMPAIGN, "candidate_id": raw["candidate_id"],
+            "attempt": 0, "segment": "base", "extension_round": None,
+            "run_id": S.content_hash(raw), "completed_at": raw["ended_at"],
+            "complete": True, "raw_vector": raw,
+        }
+        self.j.append(J.KIND_MICROBENCH_RUN_COMPLETED, payload,
+                      record_id=payload["run_id"])
+        broken = copy.deepcopy(payload)
+        broken["attempt"] = 2
+        with self.assertRaisesRegex(ValueError, "raw_vector.attempt"):
+            self.j.append(J.KIND_MICROBENCH_RUN_COMPLETED, broken,
+                          record_id=broken["run_id"])
+        broken = copy.deepcopy(payload)
+        broken["run_id"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "content hash"):
+            self.j.append(J.KIND_MICROBENCH_RUN_COMPLETED, broken,
+                          record_id=broken["run_id"])
 
     def test_supersession_target_must_exist(self):
         with self.assertRaises(J.SupersessionError):

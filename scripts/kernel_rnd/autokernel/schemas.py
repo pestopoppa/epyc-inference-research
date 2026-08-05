@@ -79,7 +79,10 @@ from typing import Any, Callable, Iterable, Mapping, Optional
 # =============================================================================
 
 SCHEMA_CAMPAIGN = "epyc.autokernel.campaign.v2"
-SCHEMA_PROPOSAL = "epyc.autokernel.proposal.v2"
+SCHEMA_PROPOSAL_V2 = "epyc.autokernel.proposal.v2"
+SCHEMA_PROPOSAL_V3 = "epyc.autokernel.proposal.v3"
+#: The CURRENT proposal contract. v2 remains readable under its original rules.
+SCHEMA_PROPOSAL = SCHEMA_PROPOSAL_V3
 SCHEMA_CANDIDATE = "epyc.autokernel.candidate.v1"
 
 # The evaluation event exists in two versions AT THE SAME TIME, and both names
@@ -257,7 +260,8 @@ T3_VERDICTS = frozenset({"PASS", "FAIL", "PASS_WITH_WAIVER"})
 # retrieval layer's job, not this module's.
 NON_RETRIEVABLE_FIELDS = {
     SCHEMA_CAMPAIGN: frozenset(),
-    SCHEMA_PROPOSAL: frozenset({"narrative"}),
+    SCHEMA_PROPOSAL_V2: frozenset({"narrative"}),
+    SCHEMA_PROPOSAL_V3: frozenset({"narrative"}),
     SCHEMA_CANDIDATE: frozenset({"narrative"}),
     SCHEMA_EVALUATION_EVENT_V2: frozenset({"narrative"}),
     SCHEMA_EVALUATION_EVENT_V3: frozenset({"narrative"}),
@@ -1578,13 +1582,131 @@ def validate_campaign(obj: Any) -> list:
 
 
 # =============================================================================
-# epyc.autokernel.proposal.v2 (§7.2)
+# epyc.autokernel.proposal.v2/v3 (§7.2, AK-WM-1)
 # =============================================================================
 
-def validate_proposal(obj: Any) -> list:
-    """Validate a proposal manifest. Returns violations; empty list means valid."""
+REPRESENTATION_VOCABULARIES = (
+    "regimes", "surfaces", "outcomes", "contradictions",
+)
+
+
+def representation_frame_sha256(contract: Mapping[str, Any]) -> str:
+    """Derive the comparison-frame identity from the contract's substantive fields.
+
+    ``frame_sha256`` is excluded to avoid self-reference. Everything else is
+    included deliberately: two proposals are not comparable when they silently
+    differ in vocabulary, demand weights, alternatives, construction cost,
+    canonical encoding, or the recoding controls used to test that encoding.
+    """
+    if not isinstance(contract, Mapping):
+        raise TypeError("representation contract must be a mapping")
+    return content_hash({
+        key: value for key, value in contract.items() if key != "frame_sha256"
+    })
+
+
+def validate_representation_contract(contract: Any, prefix: str = "representation_contract.") -> list:
+    """Validate the representation-and-demand frame required by AK-WM-1."""
     out: list = []
-    if not _check_schema_header(obj, SCHEMA_PROPOSAL, out):
+    if not isinstance(contract, Mapping):
+        return [f"{prefix.rstrip('.')}: expected a mapping, got {type(contract).__name__}"]
+
+    vocabulary = _need_dict(contract, "vocabulary", out, prefix)
+    if vocabulary is not _MISSING:
+        for name in REPRESENTATION_VOCABULARIES:
+            terms = _need_list(
+                vocabulary, name, out, f"{prefix}vocabulary.", non_empty=True,
+                item_type=str, item_desc="a vocabulary term",
+            )
+            if isinstance(terms, list) and len(terms) != len(set(terms)):
+                out.append(f"{prefix}vocabulary.{name}: duplicate terms are ambiguous")
+
+    receipts = _need_list(
+        contract, "vocabulary_source_receipts", out, prefix, non_empty=True,
+        item_type=str, item_desc="a source receipt id",
+    )
+    if isinstance(receipts, list) and len(receipts) != len(set(receipts)):
+        out.append(f"{prefix}vocabulary_source_receipts: duplicate receipt ids")
+    considered = _need_list(
+        contract, "considered_alternatives", out, prefix, non_empty=True,
+        item_type=str, item_desc="an alternative id",
+    )
+    if isinstance(considered, list) and len(considered) != len(set(considered)):
+        out.append(f"{prefix}considered_alternatives: duplicate alternative ids")
+    excluded = _need_list(contract, "excluded_alternatives", out, prefix)
+    if isinstance(excluded, list):
+        excluded_ids = []
+        for index, item in enumerate(excluded):
+            item_prefix = f"{prefix}excluded_alternatives[{index}]."
+            if not isinstance(item, Mapping):
+                out.append(f"{item_prefix.rstrip('.')}: expected a mapping")
+                continue
+            for key in ("alternative_id", "reason", "source_receipt_id"):
+                _need_str(item, key, out, item_prefix)
+            alternative_id = item.get("alternative_id")
+            if isinstance(alternative_id, str):
+                excluded_ids.append(alternative_id)
+                if isinstance(considered, list) and alternative_id not in considered:
+                    out.append(
+                        f"{item_prefix}alternative_id: excluded alternative was not considered"
+                    )
+        if len(excluded_ids) != len(set(excluded_ids)):
+            out.append(f"{prefix}excluded_alternatives: duplicate alternative ids")
+
+    demand = _need_dict(contract, "empirical_demand", out, prefix)
+    if demand is not _MISSING:
+        _need_str(demand, "receipt_id", out, f"{prefix}empirical_demand.")
+        _need_sha256(demand, "weights_sha256", out, f"{prefix}empirical_demand.")
+
+    cost = _need_dict(contract, "abstraction_construction_cost", out, prefix)
+    if cost is not _MISSING:
+        _need_number(cost, "value", out, f"{prefix}abstraction_construction_cost.", minimum=0)
+        _need_str(cost, "unit", out, f"{prefix}abstraction_construction_cost.")
+        _need_str(cost, "receipt_id", out, f"{prefix}abstraction_construction_cost.")
+
+    encoding = _need_dict(contract, "canonical_encoding", out, prefix)
+    if encoding is not _MISSING:
+        _need_str(encoding, "encoding_id", out, f"{prefix}canonical_encoding.")
+        _need_sha256(encoding, "schema_sha256", out, f"{prefix}canonical_encoding.")
+
+    _need_list(
+        contract, "semantics_preserving_recoding_fixture_ids", out, prefix,
+        non_empty=True, item_type=str, item_desc="a recoding fixture id",
+    )
+    frame = _need_sha256(contract, "frame_sha256", out, prefix)
+    if frame is not _MISSING:
+        try:
+            derived = representation_frame_sha256(contract)
+        except (TypeError, ValueError) as exc:
+            out.append(f"{prefix}frame_sha256: could not derive canonical frame: {exc}")
+        else:
+            if frame != derived:
+                out.append(
+                    f"{prefix}frame_sha256: {frame!r} does not match the canonical "
+                    f"representation-and-demand frame {derived!r}"
+                )
+    return out
+
+
+def check_representation_comparable(left: Any, right: Any) -> Check:
+    """PASS only when both proposals bind the exact same representation frame."""
+    if not isinstance(left, Mapping) or not isinstance(right, Mapping):
+        return Check(COULD_NOT_CHECK, ("both representation contracts must be mappings",))
+    left_errors = validate_representation_contract(left, "left.")
+    right_errors = validate_representation_contract(right, "right.")
+    if left_errors or right_errors:
+        return Check(COULD_NOT_CHECK, tuple(left_errors + right_errors))
+    if left["frame_sha256"] != right["frame_sha256"]:
+        return Check(FAIL, (
+            "representation/demand frames differ; candidate ordering is not comparable",
+        ))
+    return Check(PASS)
+
+
+def _validate_proposal(obj: Any, schema: str) -> list:
+    """Shared proposal validation; ``schema`` fixes the versioned contract."""
+    out: list = []
+    if not _check_schema_header(obj, schema, out):
         return out
     _reject_authority_keys(obj, out)
 
@@ -1647,6 +1769,16 @@ def validate_proposal(obj: Any) -> list:
 
     # §8.4 ranks expected information gain FIRST, so it is not optional.
     _need_number(obj, "expected_information_gain", out, "", minimum=0)
+
+    if schema == SCHEMA_PROPOSAL_V3:
+        representation = _need_dict(obj, "representation_contract", out, "")
+        if representation is not _MISSING:
+            out.extend(validate_representation_contract(representation))
+    elif "representation_contract" in obj:
+        out.append(
+            "representation_contract: belongs to proposal.v3; a v3 record may not "
+            "be relabelled as historical proposal.v2"
+        )
 
     for key in ("target", "non_target"):
         block = _need_dict(obj, key, out, "")
@@ -1723,6 +1855,19 @@ def validate_proposal(obj: Any) -> list:
     if "created_at" in obj:
         _need_timestamp(obj, "created_at", out, "")
     return out
+
+
+def validate_proposal_v2(obj: Any) -> list:
+    """Validate historical proposal v2 records without rewriting history."""
+    return _validate_proposal(obj, SCHEMA_PROPOSAL_V2)
+
+
+def validate_proposal_v3(obj: Any) -> list:
+    """Validate current proposals, including the AK-WM-1 representation contract."""
+    return _validate_proposal(obj, SCHEMA_PROPOSAL_V3)
+
+
+validate_proposal = validate_proposal_v3
 
 
 # =============================================================================
@@ -2885,7 +3030,8 @@ KERNEL_DASHBOARD_VALIDATORS = {
 
 SCHEMA_REGISTRY = {
     SCHEMA_CAMPAIGN: validate_campaign,
-    SCHEMA_PROPOSAL: validate_proposal,
+    SCHEMA_PROPOSAL_V2: validate_proposal_v2,
+    SCHEMA_PROPOSAL_V3: validate_proposal_v3,
     SCHEMA_CANDIDATE: validate_candidate,
     # Both evaluation-event versions are registered. v2 is not retired and is not
     # rewritten: a journal shard written last week still validates, under its own
@@ -2939,6 +3085,7 @@ __all__ = [
     "SCHEMA_CAMPAIGN", "SCHEMA_PROPOSAL", "SCHEMA_CANDIDATE",
     "SCHEMA_EVALUATION_EVENT", "SCHEMA_EVALUATION_EVENT_V2",
     "SCHEMA_EVALUATION_EVENT_V3", "EVALUATION_EVENT_VALIDATORS",
+    "SCHEMA_PROPOSAL_V2", "SCHEMA_PROPOSAL_V3",
     "SCHEMA_CHAMPION", "SCHEMA_RELEASE_PACKAGE",
     "SCHEMA_OPERATOR_WAIVER", "SCHEMA_REGISTRY", "KNOWN_SCHEMAS",
     "BACKENDS", "SOURCE_TREES", "SOURCE_TREE_BY_BACKEND", "OBJECTIVE_RULES",
@@ -2957,10 +3104,13 @@ __all__ = [
     "machine_actor_tokens", "machine_attributions", "attribution_keys",
     "operator_owned_path_check",
     "canonical_json", "canonical_bytes", "content_hash", "retrievable_view",
+    "REPRESENTATION_VOCABULARIES", "representation_frame_sha256",
+    "validate_representation_contract", "check_representation_comparable",
     "candidate_natural_key", "find_authority_flavoured_keys",
     "is_placeholder_digest", "declared_anchor_void_reasons",
     "require", "EVIDENCE_PRODUCERS", "SHA256_RE", "COMMIT_RE",
-    "validate_campaign", "validate_proposal", "validate_candidate",
+    "validate_campaign", "validate_proposal", "validate_proposal_v2",
+    "validate_proposal_v3", "validate_candidate",
     "validate_evaluation_event", "validate_evaluation_event_v2",
     "validate_evaluation_event_v3",
     "validate_champion", "CHAMPION_BLOCKED_UNNAMED", "validate_release_package",

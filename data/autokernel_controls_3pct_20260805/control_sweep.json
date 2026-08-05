@@ -1,0 +1,268 @@
+{
+  "blocked_reason": null,
+  "may_rank": true,
+  "observation_count": 5,
+  "panel_result": {
+    "aa_cadence": {
+      "outcome": "PASS",
+      "reasons": [
+        "this sweep contains its declared A/A control"
+      ]
+    },
+    "blocked_reason": null,
+    "definitions_check": {
+      "outcome": "PASS",
+      "reasons": []
+    },
+    "escalation": null,
+    "gate_defects": [],
+    "halts_campaign": false,
+    "historical": {
+      "available": true,
+      "backend": "llama_cpu",
+      "declaration": {
+        "backend": "llama_cpu",
+        "durability_class": "carried_in_git",
+        "evidence_locator": "data/kernel-v8-candidate/cpu-prefill-regression/run-20260725T155655Z-v4-waive-q8-kfd-procrace-swapoff/summary.json",
+        "evidence_provenance": null,
+        "evidence_sha256": null,
+        "phase": "prefill",
+        "reference_band": {
+          "high": 0.6,
+          "low": 0.03
+        },
+        "reference_direction": "higher_better",
+        "win_id": "iqk-prefill-port"
+      },
+      "durability_outcome": "PASS",
+      "marker": null,
+      "outcome": "PASS",
+      "reasons": [
+        "historical fixture resolves in git"
+      ]
+    },
+    "marker": "5/5",
+    "may_rank": true,
+    "observations": [
+      {
+        "abs_effect_count": 12,
+        "control_id": "positive",
+        "could_not_run_reason": null,
+        "effect_resolution": "improvement",
+        "evidence_ref": "sha256:53a17bb1cfd17343652f160159176df1ecddbbe902f1349e9d339e86498c5948",
+        "notes": [
+          "runner=ak3-executed-control-runner/v1",
+          "fixture=ak3-control-positive/v1",
+          "order_seed=8735136f115f36be",
+          "blocks=12"
+        ],
+        "observed_direction": null,
+        "observed_magnitude": null,
+        "promoted": null,
+        "ran": true,
+        "speed_rank_admissible": true,
+        "verdict_status": "pass",
+        "verdict_tier": "T1"
+      },
+      {
+        "abs_effect_count": 12,
+        "control_id": "neutral",
+        "could_not_run_reason": null,
+        "effect_resolution": "below_noise_floor",
+        "evidence_ref": "sha256:f681e71b452b2cabd96083eb022758d1851b7c3f2202ec02e5ba275e54de8b17",
+        "notes": [
+          "runner=ak3-executed-control-runner/v1",
+          "fixture=ak3-control-neutral/v1",
+          "order_seed=fd1035e508d41f08",
+          "blocks=12"
+        ],
+        "observed_direction": null,
+        "observed_magnitude": null,
+        "promoted": null,
+        "ran": true,
+        "speed_rank_admissible": false,
+        "verdict_status": "pass",
+        "verdict_tier": "T1"
+      },
+      {
+        "abs_effect_count": 12,
+        "control_id": "degraded_negative",
+        "could_not_run_reason": null,
+        "effect_resolution": "evidence_below_threshold",
+        "evidence_ref": "sha256:1b3808c85104b491ef33a9d7e98cf9c9e60ada029ed2f966bf4245ae5b7af892",
+        "notes": [
+          "runner=ak3-executed-control-runner/v1",
+          "fixture=ak3-control-degraded-negative/v1",
+          "order_seed=2292172e4e5a91a4",
+          "blocks=12"
+        ],
+        "observed_direction": null,
+        "observed_magnitude": null,
+        "promoted": null,
+        "ran": true,
+        "speed_rank_admissible": false,
+        "verdict_status": "fail",
+        "verdict_tier": "T1"
+      },
+      {
+        "abs_effect_count": 12,
+        "control_id": "aa",
+        "could_not_run_reason": null,
+        "effect_resolution": "below_noise_floor",
+        "evidence_ref": "sha256:5f1e2e3580fb90cca0f7eb1b82cffe3316417602c69e24fe0f30cbf4d89971ca",
+        "notes": [
+          "runner=ak3-executed-control-runner/v1",
+          "fixture=ak3-control-aa/v1",
+          "order_seed=c7d3ee9575c93e56",
+          "blocks=12"
+        ],
+        "observed_direction": null,
+        "observed_magnitude": null,
+        "promoted": null,
+        "ran": true,
+        "speed_rank_admissible": false,
+        "verdict_status": "pass",
+        "verdict_tier": "T1"
+      },
+      {
+        "abs_effect_count": 12,
+        "control_id": "historical_win_replay",
+        "could_not_run_reason": null,
+        "effect_resolution": "improvement",
+        "evidence_ref": "sha256:21bafe02d02a2fd3527db61a70f75bd72ef9fb9817305835b184df3d06e014dc",
+        "notes": [
+          "runner=ak3-executed-control-runner/v1",
+          "fixture=ak3-control-historical-win-replay/v1",
+          "order_seed=8a09fbfe65571979",
+          "blocks=12"
+        ],
+        "observed_direction": "higher_better",
+        "observed_magnitude": 0.2733629272196838,
+        "promoted": true,
+        "ran": true,
+        "speed_rank_admissible": true,
+        "verdict_status": "pass",
+        "verdict_tier": "T2"
+      }
+    ],
+    "outcomes": [
+      {
+        "control_id": "positive",
+        "detail": [
+          "runner=ak3-executed-control-runner/v1",
+          "fixture=ak3-control-positive/v1",
+          "order_seed=8735136f115f36be",
+          "blocks=12"
+        ],
+        "disposition": "satisfied",
+        "ordinal": 1,
+        "outcome": "PASS",
+        "reasons": [],
+        "requirement": "MUST rank above the anchor. Failure is a gate defect.",
+        "tests_gate_ability_to": "reject"
+      },
+      {
+        "control_id": "neutral",
+        "detail": [
+          "runner=ak3-executed-control-runner/v1",
+          "fixture=ak3-control-neutral/v1",
+          "order_seed=fd1035e508d41f08",
+          "blocks=12"
+        ],
+        "disposition": "satisfied",
+        "ordinal": 2,
+        "outcome": "PASS",
+        "reasons": [],
+        "requirement": "MUST NOT advance, and its dispersion is checked against the calibrated floor.",
+        "tests_gate_ability_to": "reject"
+      },
+      {
+        "control_id": "degraded_negative",
+        "detail": [
+          "runner=ak3-executed-control-runner/v1",
+          "fixture=ak3-control-degraded-negative/v1",
+          "order_seed=2292172e4e5a91a4",
+          "blocks=12"
+        ],
+        "disposition": "satisfied",
+        "ordinal": 3,
+        "outcome": "PASS",
+        "reasons": [],
+        "requirement": "MUST receive no speed rank at all.",
+        "tests_gate_ability_to": "reject"
+      },
+      {
+        "control_id": "aa",
+        "detail": [
+          "runner=ak3-executed-control-runner/v1",
+          "fixture=ak3-control-aa/v1",
+          "order_seed=c7d3ee9575c93e56",
+          "blocks=12"
+        ],
+        "disposition": "satisfied",
+        "ordinal": 4,
+        "outcome": "PASS",
+        "reasons": [],
+        "requirement": "Runs periodically on its declared cadence, not once per campaign: it calibrates the false-positive rate and it is what detects host drift mid-campaign. A failing A/A VOIDS the enclosing measurement window.",
+        "tests_gate_ability_to": "reject"
+      },
+      {
+        "control_id": "historical_win_replay",
+        "detail": [
+          "runner=ak3-executed-control-runner/v1",
+          "fixture=ak3-control-historical-win-replay/v1",
+          "order_seed=8a09fbfe65571979",
+          "blocks=12"
+        ],
+        "disposition": "satisfied",
+        "ordinal": 5,
+        "outcome": "PASS",
+        "reasons": [],
+        "requirement": "it MUST promote. A failure to promote is a gate defect, not a research finding: it halts the campaign and is escalated to the operator.",
+        "tests_gate_ability_to": "accept"
+      }
+    ],
+    "panel": {
+      "aa": "PASS",
+      "degraded_negative": "PASS",
+      "historical_replay": "PASS",
+      "historical_replay_unavailable_reason": null,
+      "marker": "5/5",
+      "neutral": "PASS",
+      "operator_escalation_ref": null,
+      "positive": "PASS"
+    },
+    "voids_window": false
+  },
+  "rotation_check": {
+    "outcome": "PASS",
+    "reasons": []
+  },
+  "seeds": [
+    {
+      "control_id": "positive",
+      "epoch": 0,
+      "seed": "8735136f115f36be09f2852b306e6ccccbf6d45703df1cca765bc419a2a00b6f"
+    },
+    {
+      "control_id": "neutral",
+      "epoch": 0,
+      "seed": "fd1035e508d41f0857b5e53f144049a78622e1a826a7f5bd7fc37dfa44034980"
+    },
+    {
+      "control_id": "degraded_negative",
+      "epoch": 0,
+      "seed": "2292172e4e5a91a4bf3f3470482ca5844d70c292bc98f060eb338fc08f040028"
+    },
+    {
+      "control_id": "aa",
+      "epoch": 0,
+      "seed": "c7d3ee9575c93e569314c16c63827e7bcaf54b0a18b0177614fc88bde1caefac"
+    },
+    {
+      "control_id": "historical_win_replay",
+      "epoch": 0,
+      "seed": "8a09fbfe6557197978ab77c37849c076e99e545eee444f847af49bb69564be8c"
+    }
+  ]
+}

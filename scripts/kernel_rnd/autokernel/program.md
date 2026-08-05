@@ -20,8 +20,10 @@ Work with the operator to:
 2. **Read the in-scope material.** All of it, before the first round:
    - `execution/README.md` §0 (what exists), §1 (preflight), §6 (the honest list of what is
      still open). §6 decides whether today is a campaign or a plumbing session.
-   - `data/autokernel_aa_20260804/README.md` — the only real A/A this package has. It is the
-     evidence behind the accept rule; do not re-derive it.
+   - `data/autokernel_aa_20260804/README.md` — the A/A evidence behind the current accept rule;
+     do not re-derive it.
+   - `data/autokernel_aa_20260805_rest_recovery/README.md` — the claimed six-run follow-up that
+     tested the earlier decode drift across a 180-second idle boundary.
    - The hardware section of this file.
 3. **Verify the frozen trees**, exactly as `execution/README.md` §1.1 prints them. If
    `/mnt/raid0/llm/llama.cpp` is not at `67a433bf4` on `production-consolidated-v8`, stop:
@@ -37,19 +39,25 @@ The entrypoint:
 cd /mnt/raid0/llm/epyc-inference-research
 python3 -m scripts.kernel_rnd.autokernel.campaign --help
 python3 -m scripts.kernel_rnd.autokernel.campaign --campaign-id ak-aug05 --candidate-id akc-0001 --model /mnt/raid0/llm/models/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
-python3 -m scripts.kernel_rnd.autokernel.campaign --campaign-id ak-aug05 --candidate-id akc-0001 --model /mnt/raid0/llm/models/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf --execute --i-hold-the-host
+python3 -m scripts.kernel_rnd.autokernel.campaign --campaign-id ak-aug05 --candidate-id akc-0001 --candidate /path/to/candidate.patch --proposal-manifest /path/to/proposal-v3.json --model /mnt/raid0/llm/models/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf --journal-root /mnt/raid0/llm/autokernel/campaigns/ak-aug05 --execute --i-hold-the-host
 ```
 
 `--model` is required and has no default — the cell must dispatch the path you changed, and a
 default would let a candidate be measured on a model that never touches it. The path above is
 the A/A's own model (`Qwen3-Coder-30B-A3B-Instruct-Q4_K_M`, MoE, so it exercises
 `MUL_MAT_ID`), which is what makes the drift bound comparable.
+`--journal-root` is also mandatory on the executing path: every completed benchmark attempt is
+fsynced there before it may be pooled, so a declared extension round cannot be re-run after its
+result is observed. Use a new durable campaign directory; never put it under `/tmp` or a checkout.
+`--proposal-manifest` is mandatory too. It must be a valid proposal-v3 record for the same campaign;
+the driver fsyncs it before preflight, claim acquisition, candidate mutation, or build. A v2 record
+remains readable history but cannot drive a new run because it has no representation/demand frame.
 
 **The entrypoint is inert unless you ask for a run.** `--dry-run` is the parser's default, not a
 flag you remember: without `--execute` it acquires nothing, spawns nothing and builds nothing —
 it composes every step, prints the exact argv and env that WOULD be spawned, and emits no speed
-number. `--execute` additionally requires `--i-hold-the-host`, spelled out, and refuses with
-exit 2 without it. That is the default because this is a shared host and the failure it prevents
+number. `--execute` additionally requires `--i-hold-the-host` and `--proposal-manifest`, spelled out,
+and refuses with exit 2 without either. That is the default because this is a shared host and the failure it prevents
 is real: on 2026-08-04 two of six A/A runs were destroyed by a legitimate co-tenant. A flagless
 invocation must never be the thing that starts a benchmark.
 
@@ -125,9 +133,12 @@ Three consequences of the measured A/A, so you understand why the rule is shaped
 
 - Between-run spread is **3.70% on pp512 and 4.32% on tg128** (CV 1.62% / 1.88%). A single-run
   strict-`<` is a coin flip with a decimal point on this host.
-- Decode declined **monotonically** across four consecutive runs — drift, not scatter. An A/B
-  that runs candidate-then-anchor charges the second arm a systematic ~4% penalty, and more
-  repetitions do not remove it. **Interleaved paired blocks are mandatory**, not preferred, and
+- Decode declined **monotonically** across the original four consecutive runs. The claimed
+  six-run follow-up did not reproduce that trajectory: decode rose before the 180-second rest,
+  the first post-rest run was 3.29% colder, and the second recovered to 0.50% below the pre-rest
+  run. That rules out adding an inter-arm rest, but it does not make sequential A/B safe:
+  day-to-day absolute throughput also shifted sharply. **Interleaved paired blocks are
+  mandatory**, not preferred, and
   `Pair.order` carries which arm ran first so the pairing is checkable after the fact. The
   `median(relative) > drift_bound` conjunct exists for the same reason: `min(delta) > 0` alone
   is satisfied by a systematic drift, which is precisely what the A/A found.

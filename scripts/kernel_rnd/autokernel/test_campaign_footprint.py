@@ -128,6 +128,9 @@ ENTRYPOINT_MODULE = f"{ROOT_PKG}.campaign"
 # decoration.
 
 CAMPAIGN_ROOTS = {
+    f"{ROOT_PKG}.dashboard":
+        "the terminal result was fsynced but the only dashboard exporter had been deleted, "
+        "so active AutoKernel work remained permanently absent from the operator surface",
     f"{ROOT_PKG}.schemas":
         "one record shape; every other module is written against it",
     f"{ROOT_PKG}.journal":

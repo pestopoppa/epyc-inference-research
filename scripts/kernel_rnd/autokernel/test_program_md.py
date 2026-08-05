@@ -32,8 +32,10 @@ from __future__ import annotations
 
 import importlib
 import io
+import json
 import re
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -44,6 +46,7 @@ if _KERNEL_RND not in sys.path:
 from autokernel import campaign  # noqa: E402
 from autokernel import schemas as S  # noqa: E402
 from autokernel.evaluator import api  # noqa: E402
+from autokernel.test_schemas import _proposal as _proposal_fixture  # noqa: E402
 
 PROGRAM_MD = Path(__file__).resolve().parent / "program.md"
 
@@ -212,6 +215,16 @@ class TestTheDocumentedCommandsAreTheRealCommands(unittest.TestCase):
             if "--help" in argv:
                 continue
             argv = [a for a in argv if a not in ("--execute", "--i-hold-the-host")]
+            tempdir = tempfile.TemporaryDirectory()
+            self.addCleanup(tempdir.cleanup)
+            if "--proposal-manifest" in argv:
+                proposal = _proposal_fixture()
+                campaign_id = argv[argv.index("--campaign-id") + 1]
+                proposal["campaign_id"] = campaign_id
+                proposal["proposal_id"] = "akp-documented-command"
+                manifest = Path(tempdir.name) / "proposal.json"
+                manifest.write_text(json.dumps(proposal), encoding="utf-8")
+                argv[argv.index("--proposal-manifest") + 1] = str(manifest)
             out, err = io.StringIO(), io.StringIO()
             stderr, sys.stderr = sys.stderr, err
             try:
