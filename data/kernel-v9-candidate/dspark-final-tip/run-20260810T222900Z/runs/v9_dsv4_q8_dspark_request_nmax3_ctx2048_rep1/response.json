@@ -1,0 +1,39 @@
+{
+  "choices": [
+    {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+        "content": "",
+        "reasoning_content": "We need to output exactly 16 lowercase words, each \"benchmark\", separated",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1786400942,
+  "id": "chatcmpl-EX7JvijBPk4Wz3Vg2oMvAbc3o5L2qURq",
+  "model": "/mnt/raid0/llm/models/deepseek-v4-flash-0731/UD-Q8_K_XL/DeepSeek-V4-Flash-0731-UD-Q8_K_XL-00001-of-00005.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10125-0db32c06e",
+  "timings": {
+    "cache_n": 0,
+    "draft_n": 15,
+    "draft_n_accepted": 9,
+    "predicted_ms": 5882.36,
+    "predicted_n": 16,
+    "predicted_per_second": 2.719996736003917,
+    "predicted_per_token_ms": 367.6475,
+    "prompt_ms": 21178.474,
+    "prompt_n": 1065,
+    "prompt_per_second": 50.28690924568031,
+    "prompt_per_token_ms": 19.885891079812204
+  },
+  "usage": {
+    "completion_tokens": 16,
+    "prompt_tokens": 1065,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1081
+  }
+}

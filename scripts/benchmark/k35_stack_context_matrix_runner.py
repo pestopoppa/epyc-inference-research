@@ -1085,6 +1085,8 @@ def build_runner_invocation(
             args.cpu_interference_policy,
         ]
     )
+    if args.uptime_waiver:
+        argv.extend(["--uptime-waiver", args.uptime_waiver])
     if args.allow_dirty_host:
         argv.append("--allow-dirty-host")
     return argv
@@ -1176,6 +1178,9 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "certification_note": PGPU1_CERTIFICATION_NOTE,
         },
         "operator_invocation": build_runner_invocation(args, execute=True, output_dir="${K35_EXEC_OUTPUT_DIR}"),
+        "operator_waivers": {
+            "uptime": args.uptime_waiver or None,
+        },
         "cells": cells,
     }
 
@@ -1370,6 +1375,7 @@ def execute_plan(plan: dict[str, Any], args: argparse.Namespace, output_dir: Pat
             "blockers": blockers,
             "results": [],
             "pgpu1_protocol_fields": plan.get("pgpu1_protocol_fields"),
+            "operator_waivers": plan.get("operator_waivers"),
         }
         write_json(output_dir / "summary.json", summary)
         return summary
@@ -1400,6 +1406,7 @@ def execute_plan(plan: dict[str, Any], args: argparse.Namespace, output_dir: Pat
         "cleanup_process_blockers": cleanup_guard,
         "cleanup_failures": cleanup_failures,
         "pgpu1_protocol_fields": plan.get("pgpu1_protocol_fields"),
+        "operator_waivers": plan.get("operator_waivers"),
     }
     write_json(output_dir / "summary.json", summary)
     return summary
@@ -1447,6 +1454,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--cpu-interference-policy",
         default=DEFAULT_CPU_INTERFERENCE_POLICY,
         help="Explicit P-GPU-1 CPU-stack interference policy string to record in plan and summary",
+    )
+    parser.add_argument(
+        "--uptime-waiver",
+        default="",
+        help="Exact operator waiver reference recorded with the run; it does not hide host telemetry",
     )
     args = parser.parse_args(argv)
     if args.reps <= 0:
