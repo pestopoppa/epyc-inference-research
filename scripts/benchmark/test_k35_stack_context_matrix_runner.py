@@ -229,6 +229,129 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
         self.assertEqual(body["seed"], 35)
         self.assertEqual(body["chat_template_kwargs"], {"enable_thinking": False})
 
+    def test_v9_frontdoor_matches_current_native_mtp_shape(self):
+        scenario = k35.scenario_by_name("v9_frontdoor_cpu_native_mtp")
+        argv = k35.build_server_argv(
+            scenario,
+            binary=Path("/tmp/v9-cpu/bin/llama-server"),
+            port=19130,
+            nominal_context=2048,
+            max_tokens=256,
+        )
+        joined = " ".join(argv)
+        self.assertIn("-np 4", joined)
+        self.assertIn("-ub 8192", joined)
+        self.assertIn("--device none", joined)
+        self.assertIn("--spec-type draft-mtp", joined)
+        self.assertIn("--spec-draft-n-max 4", joined)
+        self.assertIn("--slot-save-path /mnt/raid0/llm/cache/kv_slots/frontdoor", joined)
+
+    def test_v9_coder_alias_disables_speculation_per_request(self):
+        scenario = k35.scenario_by_name("v9_coder_escalation_gpu_request_no_spec")
+        argv = k35.build_server_argv(
+            scenario,
+            binary=Path("/tmp/v9-hip/bin/llama-server"),
+            port=19131,
+            nominal_context=2048,
+            max_tokens=256,
+        )
+        body = k35.build_chat_request_body(scenario, "Return OK", max_tokens=32)
+        joined = " ".join(argv)
+        self.assertIn("--spec-type draft-mtp", joined)
+        self.assertIn("--spec-draft-n-max 4", joined)
+        self.assertEqual(body["speculative.n_max"], 0)
+
+    def test_v9_vision_omits_undeclared_ubatch_and_adds_projector(self):
+        scenario = k35.scenario_by_name("v9_worker_vision_gpu_no_spec")
+        argv = k35.build_server_argv(
+            scenario,
+            binary=Path("/tmp/v9-hip/bin/llama-server"),
+            port=19132,
+            nominal_context=2048,
+            max_tokens=256,
+        )
+        joined = " ".join(argv)
+        self.assertNotIn("-ub", argv)
+        self.assertIn("--mmproj", argv)
+        self.assertIn("mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf", joined)
+        self.assertIn("--image-min-tokens 1024", joined)
+
+    def test_v9_dspark_pair_differs_only_at_request_cap(self):
+        disabled = k35.scenario_by_name("v9_dsv4_q8_dspark_request_nmax0")
+        enabled = k35.scenario_by_name("v9_dsv4_q8_dspark_request_nmax3")
+        disabled_argv = k35.build_server_argv(
+            disabled,
+            binary=Path("/tmp/v9-cpu/bin/llama-server"),
+            port=19133,
+            nominal_context=2048,
+            max_tokens=16,
+        )
+        enabled_argv = k35.build_server_argv(
+            enabled,
+            binary=Path("/tmp/v9-cpu/bin/llama-server"),
+            port=19133,
+            nominal_context=2048,
+            max_tokens=16,
+        )
+        self.assertEqual(disabled_argv, enabled_argv)
+        self.assertIn("--spec-type", disabled_argv)
+        self.assertIn("draft-dspark", disabled_argv)
+        self.assertEqual(
+            k35.build_chat_request_body(disabled, "prompt", max_tokens=16)["speculative.n_max"],
+            0,
+        )
+        self.assertEqual(
+            k35.build_chat_request_body(enabled, "prompt", max_tokens=16)["speculative.n_max"],
+            3,
+        )
+        self.assertEqual(
+            k35.build_chat_request_body(disabled, "prompt", max_tokens=16)["prompt"],
+            "prompt",
+        )
+        self.assertTrue(
+            k35.build_chat_request_body(disabled, "prompt", max_tokens=16)["return_tokens"]
+        )
+
+    def test_dspark_summary_captures_tokens_and_effective_cap(self):
+        scenario = k35.scenario_by_name("v9_dsv4_q8_dspark_request_nmax0")
+        result = k35.summarize_response(
+            scenario,
+            2048,
+            16,
+            {
+                "tokens": [1, 2, 3],
+                "generation_settings": {"speculative.n_max": 0},
+                "timings": {"predicted_n": 3, "draft_n": 0, "draft_n_accepted": 0},
+            },
+            1.0,
+            3,
+        )
+        self.assertEqual(result["token_ids"], [1, 2, 3])
+        self.assertEqual(result["effective_speculative_n_max"], 0)
+
+    def test_dspark_parity_requires_caps_activity_and_exact_tokens(self):
+        base = {"nominal_context": 2048, "rep": 1, "status": "ok"}
+        result = k35.evaluate_dspark_parity(
+            [
+                {
+                    **base,
+                    "scenario": "v9_dsv4_q8_dspark_request_nmax0",
+                    "effective_speculative_n_max": 0,
+                    "draft_n": None,
+                    "token_ids": [1, 2, 3],
+                },
+                {
+                    **base,
+                    "scenario": "v9_dsv4_q8_dspark_request_nmax3",
+                    "effective_speculative_n_max": 3,
+                    "draft_n": 4,
+                    "token_ids": [1, 2, 3],
+                },
+            ]
+        )
+        self.assertEqual(result["status"], "pass")
+        self.assertTrue(all(result["comparisons"][0]["checks"].values()))
+
     def test_main_dry_run_writes_plan_and_commands(self):
         with tempfile.TemporaryDirectory() as tmp:
             rc = k35.main(
@@ -252,7 +375,7 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
             self.assertIn("--execute", operator_text)
             self.assertIn("--output-dir", operator_text)
             self.assertIn("K35_RUN_ID:=k35_stack_context_matrix_$(date -u +%Y%m%dT%H%M%SZ)", operator_text)
-            self.assertIn("/mnt/raid0/llm/epyc-inference-research/data/k35_stack_context_matrix", operator_text)
+            self.assertIn(str(k35.RESEARCH_ROOT / "data/k35_stack_context_matrix"), operator_text)
             self.assertIn("P-GPU-1 caveat", operator_text)
             self.assertIn("production-named-kernel only", operator_text)
             self.assertNotIn(f"--output-dir {tmp}", operator_text)

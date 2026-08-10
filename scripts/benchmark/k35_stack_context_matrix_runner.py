@@ -116,7 +116,7 @@ class Scenario:
     model: Path
     max_context: int
     threads: int
-    ubatch: int
+    ubatch: int | None
     device: str
     n_gpu_layers: int
     kv_k: str
@@ -127,6 +127,8 @@ class Scenario:
     jinja: bool = True
     mlock: bool = False
     enable_thinking: bool | None = None
+    request_spec_n_max: int | None = None
+    request_endpoint: str = "chat"
     draft_model: Path | None = None
     spec_type: str = "none"
     spec_draft_n_max: int | None = None
@@ -297,6 +299,238 @@ SCENARIOS: tuple[Scenario, ...] = (
             "registry policy is stale for K35; measure default-expert ingest with spec disabled."
         ),
     ),
+    # Current production-v8 role shapes used by the v9 promotion gate.  These
+    # live alongside the historical K35 cells so old evidence remains
+    # reproducible while a new kernel freeze derives its scope from today's
+    # stack rather than silently reusing the July lineup.
+    Scenario(
+        name="v9_frontdoor_cpu_native_mtp",
+        role="frontdoor",
+        description="Current frontdoor: Qwen3.6-35B Q8, CPU, native MTP, four slots.",
+        model=Path("/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf"),
+        max_context=262144,
+        threads=96,
+        ubatch=8192,
+        device="none",
+        n_gpu_layers=0,
+        kv_k="q8_0",
+        kv_v="q8_0",
+        reasoning="off",
+        parallel=4,
+        mlock=True,
+        enable_thinking=False,
+        spec_type="draft-mtp",
+        spec_draft_n_max=4,
+        no_mmap=True,
+        slot_save_path=Path("/mnt/raid0/llm/cache/kv_slots/frontdoor"),
+        prior_evidence="Derived from stack_priors.yaml for the v9 promotion window.",
+    ),
+    Scenario(
+        name="v9_worker_general_cpu_native_mtp",
+        role="worker_general",
+        description="Current worker: Gemma4 Q4 plus assistant-v6 Q8 draft, CPU, four slots.",
+        model=Path("/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf"),
+        draft_model=Path("/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf"),
+        max_context=262144,
+        threads=96,
+        ubatch=512,
+        device="none",
+        n_gpu_layers=0,
+        kv_k="q8_0",
+        kv_v="q8_0",
+        reasoning="off",
+        parallel=4,
+        spec_type="draft-mtp",
+        spec_draft_n_max=2,
+        spec_draft_threads=16,
+        spec_draft_device="none",
+        spec_draft_ngl=0,
+        no_mmap=True,
+        extra_args=("--no-op-offload", "--no-kv-offload"),
+        prior_evidence="Derived from stack_priors.yaml for the v9 promotion window.",
+    ),
+    Scenario(
+        name="v9_architect_critic_cpu_native_mtp",
+        role="architect_critic",
+        description="Current critic: Qwen3.5-122B Q4, CPU, native MTP, one slot.",
+        model=Path(
+            "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/"
+            "Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf"
+        ),
+        max_context=262144,
+        threads=96,
+        ubatch=8192,
+        device="none",
+        n_gpu_layers=0,
+        kv_k="q4_0",
+        kv_v="f16",
+        reasoning="off",
+        mlock=True,
+        enable_thinking=False,
+        spec_type="draft-mtp",
+        spec_draft_n_max=4,
+        no_mmap=True,
+        slot_save_path=Path("/mnt/raid0/llm/cache/kv_slots/architect_critic"),
+        prior_evidence="Derived from stack_priors.yaml for the v9 promotion window.",
+    ),
+    Scenario(
+        name="v9_ingest_long_context_cpu_no_spec",
+        role="ingest_long_context",
+        description="Current ingest: Qwen3-Next Q4, CPU, default experts, no speculation.",
+        model=Path(
+            "/mnt/raid0/llm/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/"
+            "Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf"
+        ),
+        max_context=262144,
+        threads=96,
+        ubatch=8192,
+        device="none",
+        n_gpu_layers=0,
+        kv_k="q4_0",
+        kv_v="q4_0",
+        reasoning="auto",
+        mlock=True,
+        spec_type="none",
+        no_mmap=True,
+        slot_save_path=Path("/mnt/raid0/llm/cache/kv_slots/ingest_long_context"),
+        prior_evidence="Derived from stack_priors.yaml for the v9 promotion window.",
+    ),
+    Scenario(
+        name="v9_architect_general_gpu_native_mtp",
+        role="architect_general",
+        description="Current GPU architect: Qwen3.6-27B Q8, native MTP, two slots.",
+        model=Path("/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf"),
+        max_context=65536,
+        threads=24,
+        ubatch=8192,
+        device="ROCm0",
+        n_gpu_layers=999,
+        kv_k="q8_0",
+        kv_v="q8_0",
+        reasoning="off",
+        parallel=2,
+        enable_thinking=False,
+        spec_type="draft-mtp",
+        spec_draft_n_max=4,
+        no_mmap=True,
+        slot_save_path=Path("/mnt/raid0/llm/cache/kv_slots/architect_general"),
+        prior_evidence="Derived from stack_priors.yaml for the v9 promotion window.",
+    ),
+    Scenario(
+        name="v9_coder_escalation_gpu_request_no_spec",
+        role="coder_escalation",
+        description=(
+            "Current coder alias on the shared Qwen3.6-27B GPU server; launch MTP "
+            "but disable it request-locally with speculative.n_max=0."
+        ),
+        model=Path("/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf"),
+        max_context=65536,
+        threads=24,
+        ubatch=8192,
+        device="ROCm0",
+        n_gpu_layers=999,
+        kv_k="q8_0",
+        kv_v="q8_0",
+        reasoning="off",
+        parallel=2,
+        enable_thinking=False,
+        request_spec_n_max=0,
+        spec_type="draft-mtp",
+        spec_draft_n_max=4,
+        no_mmap=True,
+        slot_save_path=Path("/mnt/raid0/llm/cache/kv_slots/architect_general"),
+        prior_evidence="Derived from stack_priors.yaml and the v9 request-local contract.",
+    ),
+    Scenario(
+        name="v9_worker_vision_gpu_no_spec",
+        role="worker_vision",
+        description="Current shared vision lane: Qwen3-VL-30B Q4 on MI210, one slot.",
+        model=Path(
+            "/mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/"
+            "Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf"
+        ),
+        max_context=65536,
+        threads=24,
+        ubatch=None,
+        device="ROCm0",
+        n_gpu_layers=999,
+        kv_k="q8_0",
+        kv_v="q8_0",
+        reasoning="auto",
+        parallel=1,
+        jinja=False,
+        spec_type="none",
+        extra_args=(
+            "--mmproj",
+            "/mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/"
+            "mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf",
+            "--image-min-tokens",
+            "1024",
+            "--cache-ram",
+            "0",
+        ),
+        prior_evidence="Derived from stack_priors.yaml for the v9 promotion window.",
+    ),
+    Scenario(
+        name="v9_dsv4_q8_dspark_request_nmax0",
+        role="dsv4_dspark_smoke",
+        description="DeepSeek V4 Flash Q8 plus DSpark sidecar, disabled per request.",
+        model=Path(
+            "/mnt/raid0/llm/models/deepseek-v4-flash-0731/UD-Q8_K_XL/"
+            "DeepSeek-V4-Flash-0731-UD-Q8_K_XL-00001-of-00005.gguf"
+        ),
+        draft_model=Path(
+            "/mnt/raid0/llm/models/deepseek-v4-flash-0731/"
+            "dspark-DeepSeek-V4-Flash-0731-Q8_0.gguf"
+        ),
+        max_context=4096,
+        threads=24,
+        ubatch=512,
+        device="none",
+        n_gpu_layers=0,
+        kv_k="f16",
+        kv_v="f16",
+        reasoning="auto",
+        parallel=1,
+        request_spec_n_max=0,
+        request_endpoint="completion",
+        spec_type="draft-dspark",
+        spec_draft_n_max=3,
+        spec_draft_device="none",
+        spec_draft_ngl=0,
+        extra_args=("-b", "512", "--no-repack", "--no-warmup"),
+        prior_evidence="Final-tip replay of the bounded v9 DSpark Q8 parity smoke.",
+    ),
+    Scenario(
+        name="v9_dsv4_q8_dspark_request_nmax3",
+        role="dsv4_dspark_smoke",
+        description="DeepSeek V4 Flash Q8 plus DSpark sidecar, depth three per request.",
+        model=Path(
+            "/mnt/raid0/llm/models/deepseek-v4-flash-0731/UD-Q8_K_XL/"
+            "DeepSeek-V4-Flash-0731-UD-Q8_K_XL-00001-of-00005.gguf"
+        ),
+        draft_model=Path(
+            "/mnt/raid0/llm/models/deepseek-v4-flash-0731/"
+            "dspark-DeepSeek-V4-Flash-0731-Q8_0.gguf"
+        ),
+        max_context=4096,
+        threads=24,
+        ubatch=512,
+        device="none",
+        n_gpu_layers=0,
+        kv_k="f16",
+        kv_v="f16",
+        reasoning="auto",
+        parallel=1,
+        request_spec_n_max=3,
+        request_endpoint="completion",
+        spec_type="draft-dspark",
+        spec_draft_n_max=3,
+        spec_draft_device="none",
+        spec_draft_ngl=0,
+        extra_args=("-b", "512", "--no-repack", "--no-warmup"),
+        prior_evidence="Final-tip replay of the bounded v9 DSpark Q8 parity smoke.",
+    ),
 )
 
 
@@ -398,11 +632,11 @@ def build_server_argv(
         str(ctx),
         "-t",
         str(scenario.threads),
-        "-ub",
-        str(scenario.ubatch),
         "--metrics",
         "--slots",
     ]
+    if scenario.ubatch is not None:
+        argv.extend(["-ub", str(scenario.ubatch)])
     if scenario.jinja:
         argv.append("--jinja")
     argv.extend(
@@ -678,17 +912,30 @@ def build_chat_request_body(
     *,
     max_tokens: int,
 ) -> dict[str, Any]:
-    body = {
-        "model": "k35-local",
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": max_tokens,
-        "temperature": 0,
-        "seed": 35,
-        "stream": False,
-        "cache_prompt": False,
-    }
-    if scenario.enable_thinking is not None:
-        body["chat_template_kwargs"] = {"enable_thinking": scenario.enable_thinking}
+    if scenario.request_endpoint == "completion":
+        body = {
+            "prompt": prompt,
+            "n_predict": max_tokens,
+            "temperature": 0,
+            "seed": 35,
+            "stream": False,
+            "cache_prompt": False,
+            "return_tokens": True,
+        }
+    else:
+        body = {
+            "model": "k35-local",
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": max_tokens,
+            "temperature": 0,
+            "seed": 35,
+            "stream": False,
+            "cache_prompt": False,
+        }
+        if scenario.enable_thinking is not None:
+            body["chat_template_kwargs"] = {"enable_thinking": scenario.enable_thinking}
+    if scenario.request_spec_n_max is not None:
+        body["speculative.n_max"] = scenario.request_spec_n_max
     return body
 
 
@@ -697,9 +944,11 @@ def query_chat(
     body: dict[str, Any],
     *,
     timeout_s: int,
+    endpoint: str = "chat",
 ) -> dict[str, Any]:
+    path = "/completion" if endpoint == "completion" else "/v1/chat/completions"
     request = urllib.request.Request(
-        f"http://127.0.0.1:{port}/v1/chat/completions",
+        f"http://127.0.0.1:{port}{path}",
         data=json.dumps(body).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
@@ -766,6 +1015,7 @@ def summarize_response(
     completion_tokens = int(usage.get("completion_tokens") or timings.get("predicted_n") or 0)
     prompt_tokens = int(usage.get("prompt_tokens") or timings.get("prompt_n") or 0)
     content = content_from_response(response)
+    generation_settings = response.get("generation_settings") or {}
     return {
         "scenario": scenario.name,
         "role": scenario.role,
@@ -780,6 +1030,8 @@ def summarize_response(
         "min_completion_tokens": min_completion_tokens,
         "draft_n": timings.get("draft_n"),
         "draft_n_accepted": timings.get("draft_n_accepted"),
+        "token_ids": response.get("tokens"),
+        "effective_speculative_n_max": generation_settings.get("speculative.n_max"),
         "max_tokens": max_tokens,
     }
 
@@ -971,6 +1223,7 @@ def run_cell(cell: dict[str, Any], args: argparse.Namespace, output_dir: Path) -
             cell["port"],
             request_body,
             timeout_s=args.request_timeout,
+            endpoint=scenario.request_endpoint,
         )
         elapsed_s = time.monotonic() - request_started
         memory_samples.append(collect_resident_memory_sample(proc.pid, "after_request"))
@@ -1063,6 +1316,47 @@ def summarize_results_by_scenario(results: list[dict[str, Any]]) -> dict[str, An
     return summaries
 
 
+def evaluate_dspark_parity(results: list[dict[str, Any]]) -> dict[str, Any] | None:
+    names = {
+        "v9_dsv4_q8_dspark_request_nmax0": 0,
+        "v9_dsv4_q8_dspark_request_nmax3": 3,
+    }
+    selected = [row for row in results if row.get("scenario") in names]
+    if not selected:
+        return None
+    grouped: dict[tuple[int, int], dict[int, dict[str, Any]]] = {}
+    for row in selected:
+        key = (int(row.get("nominal_context") or 0), int(row.get("rep") or 0))
+        cap = names[str(row["scenario"])]
+        grouped.setdefault(key, {})[cap] = row
+    comparisons: list[dict[str, Any]] = []
+    for (context, rep), arms in sorted(grouped.items()):
+        disabled, enabled = arms.get(0), arms.get(3)
+        tokens_disabled = disabled.get("token_ids") if disabled else None
+        tokens_enabled = enabled.get("token_ids") if enabled else None
+        checks = {
+            "both_arms_present": disabled is not None and enabled is not None,
+            "disabled_effective_cap": bool(disabled and disabled.get("effective_speculative_n_max") == 0),
+            "enabled_effective_cap": bool(enabled and enabled.get("effective_speculative_n_max") == 3),
+            "disabled_drafted_zero": bool(disabled and int(disabled.get("draft_n") or 0) == 0),
+            "enabled_drafted_positive": bool(enabled and int(enabled.get("draft_n") or 0) > 0),
+            "token_ids_nonempty": bool(tokens_disabled and tokens_enabled),
+            "token_parity": bool(tokens_disabled and tokens_disabled == tokens_enabled),
+        }
+        comparisons.append(
+            {
+                "nominal_context": context,
+                "rep": rep,
+                "checks": checks,
+                "status": "pass" if all(checks.values()) else "fail",
+            }
+        )
+    return {
+        "status": "pass" if comparisons and all(row["status"] == "pass" for row in comparisons) else "fail",
+        "comparisons": comparisons,
+    }
+
+
 def execute_plan(plan: dict[str, Any], args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
     guard = collect_guard_state(args.binary)
     write_json(output_dir / "guard_state.json", guard)
@@ -1080,6 +1374,7 @@ def execute_plan(plan: dict[str, Any], args: argparse.Namespace, output_dir: Pat
         write_json(output_dir / "summary.json", summary)
         return summary
     results = [run_cell(cell, args, output_dir) for cell in plan["cells"]]
+    dspark_parity = evaluate_dspark_parity(results)
     cleanup_guard = collect_process_blockers()
     cleanup_failures = [
         {
@@ -1097,10 +1392,11 @@ def execute_plan(plan: dict[str, Any], args: argparse.Namespace, output_dir: Pat
         "schema": "epyc.k35_stack_context_matrix.summary.v1",
         "created_at": utc_now(),
         "status": "failed"
-        if cleanup_failures
+        if cleanup_failures or (dspark_parity and dspark_parity["status"] != "pass")
         else ("ok" if all(result.get("status") == "ok" for result in results) else "partial"),
         "results": results,
         "scenario_summaries": summarize_results_by_scenario(results),
+        "dspark_parity": dspark_parity,
         "cleanup_process_blockers": cleanup_guard,
         "cleanup_failures": cleanup_failures,
         "pgpu1_protocol_fields": plan.get("pgpu1_protocol_fields"),
