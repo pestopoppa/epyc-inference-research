@@ -359,6 +359,29 @@ Implementation notes (orchestrator repo): the canonical exact paired-McNemar liv
 
 **Measurement note.** A McNemar p-value is a *decision-gating* statistic: it may gate a quant keep/revert only via a codified recipe with operator approval -- never ad hoc, and never through `canonical_recipe.py` (which is speed-only). The integration target is the eval-scoring path tracked in `handoffs/active/eval-benchmark-cost-reduction.md`.
 
+## Methodology Rules Adopted 2026-08-10 (research-intake)
+
+Seven rules and two runnable pilots, derived from a 2026-08-10 `/research-intake` batch whose sources converged independently on the same class of evaluation defect. Each rule is stated as something a suite or a comparison must *carry*, not as advice, because the failure mode in every case is that the missing thing is invisible in the readout.
+
+**CH-1 -- Contamination gate on the base model's training cutoff, not on a calendar year.** Every question carries a `source_released` date, and every comparison names the **training cutoff** of the base model under test (not its release date -- they differ by months). Questions predating the cutoff are flagged. Gating on a calendar year is not equivalent and quietly passes contaminated items: the paper that motivated this rule fails its own test, with 3 of its 5 datasets predating its base model.
+
+**CH-2 -- An untrained-capability panel accompanies any post-training or adaptation claim.** At least 8 benchmarks the model was never trained on, reported as a delta against the base model with an explicit floor. Three independent papers in the batch converged on this, and it generalizes beyond the setting each of them studied -- it is a rule about *any* claim of improvement from a training-like intervention, not an artifact of one experimental design.
+
+**CH-3 -- An iterated process is evaluated at intermediate points, or says it did not.** Comparing only the first and last state of an iterative procedure cannot distinguish "improved monotonically" from "improved then degraded" from "was best at step 2". Where a sweep is not run, the readout states plainly that endpoints were compared and the interior was not measured.
+
+**CH-4 -- A reported correlation ships with its within-stratum values.** A pooled correlation across strata that differ by orders of magnitude in the independent variable measures the stratification, not the relationship. This was demonstrated inside this batch: a pooled r = 0.52 (n = 18) that looked like a refutation resolved into within-dataset values of 0.75 / 0.90 / 0.90 once stratified -- bracketing the originally recorded figure rather than contradicting it. Reporting the pooled number alone would have propagated a false deflation.
+
+**CH-5 -- Quant A/B carries a divergence axis alongside the McNemar p-value.** This chapter's paired-significance machinery is accuracy-based and therefore blind to a quant that answers the same questions correctly while shifting its output distribution. Add **token-level KL divergence**, and **stratify it by pass rate** -- report `KL(p)` across reachability strata rather than one pooled mean, since a distribution shift concentrated on the items the model barely gets right is a different finding from one spread uniformly. No paper in the batch's cluster has measured that curve; it is measurable here on CPU with frozen GGUFs.
+
+**CH-6 -- `exact_match` over a multi-token sequence has a measure-zero success set.** Any cross-arm retention comparison scored that way will be dominated by the metric rather than by the arms. Where sequence-level output is compared, use a graded or normalized measure and say which; where `exact_match` is genuinely wanted, restrict it to short canonical answers.
+
+**CH-7 -- Factorial completeness for any "neither X nor Y" conclusion.** Concluding that neither of two factors matters requires all four cells. Two one-factor ablations against a shared control cannot rule out an interaction, and the conclusion must be narrowed to what was actually run.
+
+### Runnable pilots (owned by this chapter)
+
+- [ ] **CH-P1 -- KL-divergence pilot.** `llama-perplexity --kl-divergence` already exists in the frozen v8 tree (`common/arg.cpp:2313-2320`, `tools/perplexity/perplexity.cpp:1695`) and computes true full-vocab token-level KL against saved base logits. This chapter currently contains **zero** divergence terms. Run it on a small pair -- Qwen3-1.7B Q4_K_M vs Q8_0 -- and report `Mean KLD ± unc` plus the percentile ladder, to establish what the axis looks like before CH-5 is wired into the eval-scoring path. CPU-only, roughly 1--2 h, no new dependency.
+- [ ] **CH-P2 -- Trivial-agent baselines.** Score a do-nothing agent, a list-all-function-names agent, a constant-"B" answerer, and an empty-string responder against the existing suites. **Zero inference -- this is scorer-side only.** A suite whose floor is not measured cannot report a model result as capability: the batch's most decisive evaluation findings all came from exactly this check, and it costs a scorer run.
+
 ## Permanent Results
 
 Benchmark results persist in `benchmarks/results/` even after models are deleted from disk. This matters because storage is finite, new models arrive constantly, and you need historical comparisons to spot trends. Each result includes the full configuration (MoE settings, K values, quantization) so any run can be reproduced later.

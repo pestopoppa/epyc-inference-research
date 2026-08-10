@@ -640,6 +640,26 @@ When adding questions to any suite, follow these six checks. They are quick but 
 
 </details>
 
+**Two additions from the 2026-08-10 `/research-intake` methodology pass** (full statement and rationale in [Chapter 06 § Methodology Rules Adopted 2026-08-10](06-benchmarking-framework.md#methodology-rules-adopted-2026-08-10-research-intake)):
+
+7. **Record `source_released` per question**, so a contamination check against a base model's *training cutoff* is possible later (CH-1). A question without a provenance date cannot be screened, and the screen cannot be reconstructed after the fact.
+8. **State the suite's trivial-agent floor** (CH-P2). A suite that a constant answerer or an empty-string responder scores non-trivially on is measuring format, not capability -- and the floor is a scorer-side measurement costing no inference. This is the quantitative form of the design principle this chapter already states qualitatively: a question is only worth including if getting it right requires doing the task.
+
+### Contamination-robust by construction (preferred over date bookkeeping)
+
+Where a question's out-of-distribution variant can be defined as a **controlled perturbation of its in-distribution form** -- a rule change you own, applied to a question you own -- prefer that phrasing. Contamination cannot explain a gap between two forms of a question when you defined the difference yourself, so this defeats the problem without any release-date bookkeeping. It is the same shape of argument the *Verifier Robustness* section below makes for verifiers: derive the check from structure you control rather than from an external artifact you do not.
+
+This is strictly better than CH-1's date gate **where it applies**, and complementary where it does not. Use CH-1 for questions sourced from public datasets; use controlled perturbation for questions authored here.
+
+### Four scorer defects to close (surfaced 2026-08-10)
+
+Each is small, local, and independently verifiable; they are listed here rather than in a handoff because the fix lives in this chapter's scoring contract.
+
+- [ ] **Add the paired negative check to the `agentic` substring scorer** -- assert the *competing* function names are absent, not merely that the expected one is present. The principle is already argued in *Verifier Robustness* below; the instance is missing, and a scorer that only tests for presence passes an answer that names everything.
+- [ ] **Close the `llm_judge` fail-open.** When the judge falls back, stamp the fallback into the result record and refuse to aggregate mixed-method runs. An unrecorded fallback silently changes what a score means mid-suite.
+- [ ] **Classify `code_execution` timeouts separately from wrong answers.** On a shared 192-thread box a timeout is a resource event, not a capability signal, and merging the two makes contention read as a model regression.
+- [ ] **Add a staleness cadence for the Web Research suite.** Live-data questions with no re-validation schedule reproduce the known failure where environment drift breaks a fraction of tasks and reads as a model regression -- one published case measured 28% *under*estimation from exactly this.
+
 ## Verifier Robustness: Structure-Derived Assertions and Negative Checks
 
 Not all deterministic scoring is equally brittle. The failure modes we have actually hit are
