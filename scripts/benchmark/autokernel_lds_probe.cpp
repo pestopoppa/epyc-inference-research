@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
                      std::strcmp(argv[1], "phase") != 0)) {
         std::fprintf(stderr,
             "usage: %s bank <max-bank> <repetitions> <thread-a> <thread-b> | "
-            "phase <repetitions>\n",
+            "phase <bank-count> <repetitions>\n",
             argv[0]);
         return 64;
     }
@@ -94,14 +94,16 @@ int main(int argc, char **argv) {
             }
         }
     } else {
-        if (argc != 3) return 64;
-        const int repetitions = parse_positive(argv[2], "repetitions");
+        if (argc != 4) return 64;
+        const int bank_count = parse_positive(argv[2], "bank-count");
+        const int repetitions = parse_positive(argv[3], "repetitions");
         for (int a = 0; a < 64; ++a) {
             for (int b = a + 1; b < 64; ++b) {
                 for (int repetition = 0; repetition < repetitions; ++repetition) {
                     int status = launch(
                         static_cast<uint32_t>(a), static_cast<uint32_t>(b),
-                        0, 0);
+                        static_cast<uint32_t>(a * bank_count * 4),
+                        static_cast<uint32_t>(b * bank_count * 4));
                     if (status != 0) return status;
                 }
             }

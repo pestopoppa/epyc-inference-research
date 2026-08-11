@@ -182,16 +182,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             device_index=0, interval_s=0.250).start()
         binary, build_command, build_duration = build_probe(
             output_dir, timeout_s=args.build_timeout_s)
-        phase_csv, phase_samples, phase_command, phase_duration = profile(
-            binary, kind="phase", probe_args=(str(args.phase_repetitions),),
-            output_dir=output_dir,
-            timeout_s=args.profile_timeout_s)
-        phase_plan = lds.phase_cases(repetitions=args.phase_repetitions)
-        phase_solution = lds.solve_phases(phase_plan, phase_samples)
-        same_phase = next((row for row in phase_solution.groups if len(row) >= 2), None)
-        if same_phase is None:
-            raise RuntimeError("phase topology has no same-phase lane pair")
-        bank_lanes = same_phase[:2]
+        bank_lanes = (0, 1)
         bank_csv, bank_samples, bank_command, bank_duration = profile(
             binary, kind="bank", probe_args=(
                 str(args.max_bank), str(args.bank_repetitions),
@@ -200,6 +191,15 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         bank_plan = lds.bank_cases(
             max_bank=args.max_bank, repetitions=args.bank_repetitions)
         bank_solution = lds.solve_bank_count(bank_plan, bank_samples)
+        phase_csv, phase_samples, phase_command, phase_duration = profile(
+            binary, kind="phase", probe_args=(
+                str(bank_solution.bank_count), str(args.phase_repetitions)),
+            output_dir=output_dir, timeout_s=args.profile_timeout_s)
+        phase_plan = lds.phase_cases(repetitions=args.phase_repetitions)
+        phase_solution = lds.solve_phases(phase_plan, phase_samples)
+        if not any(set(bank_lanes).issubset(row) for row in phase_solution.groups):
+            raise RuntimeError(
+                "bank-solver lanes did not validate as same-phase in all-pairs capture")
         matches_cdna3 = (
             bank_solution.bank_count == 64
             and len(phase_solution.groups) == 2
