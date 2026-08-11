@@ -49,7 +49,7 @@ class FakeRunner:
                 }
                 stdout = json.dumps({"result": json.dumps(proposal)})
             return A.ProcessCapture(tuple(argv), 0, stdout, "")
-        if executable == "codex":
+        if A.codex_container_actor.EXECUTABLE_MODULE in argv:
             if self.timeout_role == "actor":
                 return A.ProcessCapture(tuple(argv), -15, "", "", True)
             (self.workspace / "kernel.py").write_text(
@@ -79,6 +79,12 @@ class ActorCriticControllerTest(unittest.TestCase):
         for name in A.REQUIRED_CLIS:
             path = self.bin / name
             path.write_text("#!/bin/sh\nexit 99\n", encoding="utf-8")
+            path.chmod(path.stat().st_mode | stat.S_IXUSR)
+        native = self.root / A.codex_container_actor.CODEX_NATIVE_RELATIVE
+        native.parent.mkdir(parents=True)
+        for path in (native, native.with_name(
+                A.codex_container_actor.CODE_MODE_HOST_NAME)):
+            path.write_text("fake static executable\n", encoding="utf-8")
             path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
     def workspace(self, name: str = "workspace") -> Path:
@@ -144,8 +150,10 @@ class ActorCriticControllerTest(unittest.TestCase):
             config=self.config(), environment=self.environment(), runner=runner)
         self.assertEqual(receipt["stop_reason"], "critic_accept")
         self.assertEqual(len(runner.calls), 3)
-        self.assertEqual([Path(call[0][0]).name for call in runner.calls],
-                         ["claude", "codex", "claude"])
+        self.assertEqual(Path(runner.calls[0][0][0]).name, "claude")
+        self.assertEqual(Path(runner.calls[2][0][0]).name, "claude")
+        self.assertIn(A.codex_container_actor.EXECUTABLE_MODULE,
+                      runner.calls[1][0])
         planner_argv, actor_argv, critic_argv = (
             call[0] for call in runner.calls)
         for argv in (planner_argv, critic_argv):
@@ -153,10 +161,16 @@ class ActorCriticControllerTest(unittest.TestCase):
             self.assertIn(A.CLAUDE_EFFORT, argv)
             self.assertIn("plan", argv)
         self.assertIn(A.CODEX_MODEL, actor_argv)
-        self.assertIn(f'model_reasoning_effort="{A.CODEX_EFFORT}"', actor_argv)
-        self.assertIn("workspace-write", actor_argv)
+        self.assertIn(A.CODEX_EFFORT, actor_argv)
         self.assertNotIn("dangerously-bypass-approvals-and-sandbox", actor_argv)
+        self.assertIn("exactly these four fields and no others", runner.calls[2][3])
         self.assertEqual(receipt["candidate_artifacts"][0]["path"], "kernel.py")
+        self.assertEqual(
+            receipt["constraints"]["actor_sandbox"],
+            "docker_workspace_bind_only")
+        self.assertEqual(
+            receipt["constraints"]["actor_runtime"]["image_id"],
+            A.codex_container_actor.CONTAINER_IMAGE_ID)
         artifacts = workspace / A.ARTIFACT_DIRNAME
         for relative, digest in receipt["artifact_sha256"].items():
             self.assertEqual(
@@ -181,6 +195,57 @@ class ActorCriticControllerTest(unittest.TestCase):
                 prompt="task", workspace=escape_workspace, config=self.config(),
                 environment=self.environment(),
                 runner=FakeRunner(escape_workspace, planner_path="../outside.py"))
+
+    def test_contained_absolute_candidate_is_normalized_but_escape_refuses(self):
+        workspace = self.workspace("absolute")
+        proposal = {
+            "schema": A.PROPOSAL_SCHEMA,
+            "proposal_id": "proposal-absolute",
+            "candidate_path": str(workspace / "kernel.py"),
+            "actor_instruction": "Implement the bounded candidate.",
+        }
+        parsed = A.parse_proposal(json.dumps(proposal), workspace)
+        self.assertEqual(parsed["candidate_path"], "kernel.py")
+        self.assertEqual(parsed["candidate_abspath"], str(workspace / "kernel.py"))
+
+        proposal["candidate_path"] = str(self.root / "outside.py")
+        (self.root / "outside.py").write_text("outside\n", encoding="utf-8")
+        with self.assertRaisesRegex(A.ActorCriticError, "escapes"):
+            A.parse_proposal(json.dumps(proposal), workspace)
+
+    def test_candidate_symlink_is_rejected_even_when_target_is_contained(self):
+        workspace = self.workspace("symlink")
+        (workspace / "kernel-link.py").symlink_to("kernel.py")
+        proposal = {
+            "schema": A.PROPOSAL_SCHEMA,
+            "proposal_id": "proposal-symlink",
+            "candidate_path": "kernel-link.py",
+            "actor_instruction": "Implement the bounded candidate.",
+        }
+        with self.assertRaisesRegex(A.ActorCriticError, "non-symlink"):
+            A.parse_proposal(json.dumps(proposal), workspace)
+
+    def test_claude_result_accepts_only_an_exact_single_json_fence(self):
+        workspace = self.workspace("fenced")
+        proposal = {
+            "schema": A.PROPOSAL_SCHEMA,
+            "proposal_id": "proposal-fenced",
+            "candidate_path": "kernel.py",
+            "actor_instruction": "Implement the bounded candidate.",
+        }
+        fenced = json.dumps({
+            "result": f"```json\n{json.dumps(proposal)}\n```",
+        })
+        parsed = A.parse_proposal(fenced, workspace)
+        self.assertEqual(parsed["proposal_id"], "proposal-fenced")
+        with self.assertRaisesRegex(A.ActorCriticError, "malformed JSON"):
+            A.parse_proposal(json.dumps({
+                "result": f"preface\n```json\n{json.dumps(proposal)}\n```",
+            }), workspace)
+        with self.assertRaisesRegex(A.ActorCriticError, "malformed JSON"):
+            A.parse_proposal(json.dumps({
+                "result": "```json\n{}\n```\n```json\n{}\n```",
+            }), workspace)
 
     def test_actor_cannot_change_a_second_workspace_path(self):
         workspace = self.workspace()

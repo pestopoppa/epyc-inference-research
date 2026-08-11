@@ -24,7 +24,7 @@ import sys
 import time
 from typing import Any, Callable, Mapping, Sequence
 
-from . import arena_adapter
+from . import arena_adapter, codex_container_actor
 
 
 CONTROLLER_ID = "claude_codex_actor_critic"
@@ -47,6 +47,8 @@ ENTRYPOINT_RELATIVE = (
 EXECUTABLE_MODULE = (
     "scripts.kernel_rnd.autokernel.controller.claude_codex_actor_critic")
 _ID_RE = re.compile(r"[a-z][a-z0-9_.-]{2,95}")
+_JSON_FENCE_RE = re.compile(
+    r"\A\s*```(?:json)?\s*\n(?P<body>.*?)\n```\s*\Z", re.DOTALL)
 
 
 class ActorCriticError(ValueError):
@@ -221,15 +223,23 @@ def _workspace_root(workspace: str | Path) -> Path:
 def _relative_candidate(workspace: Path, value: object) -> tuple[str, Path]:
     if not isinstance(value, str) or not value.strip():
         raise ActorCriticError("proposal.candidate_path must be a non-empty string")
-    relative = PurePosixPath(value.strip())
-    if relative.is_absolute() or ".." in relative.parts or "." in relative.parts:
-        raise ActorCriticError("proposal candidate escapes the Arena workspace")
-    candidate = (workspace / Path(*relative.parts)).resolve()
+    workspace = workspace.resolve()
+    supplied = PurePosixPath(value.strip())
+    if supplied.is_absolute():
+        lexical_candidate = Path(supplied)
+    else:
+        if ".." in supplied.parts or "." in supplied.parts:
+            raise ActorCriticError("proposal candidate escapes the Arena workspace")
+        lexical_candidate = workspace / Path(*supplied.parts)
+    if lexical_candidate.is_symlink():
+        raise ActorCriticError(
+            "proposal candidate must name an existing non-symlink workspace file")
+    candidate = lexical_candidate.resolve()
     try:
-        candidate.relative_to(workspace)
+        relative = candidate.relative_to(workspace)
     except ValueError as exc:
         raise ActorCriticError("proposal candidate escapes the Arena workspace") from exc
-    if not candidate.is_file() or candidate.is_symlink():
+    if not candidate.is_file():
         raise ActorCriticError(
             "proposal candidate must name an existing non-symlink workspace file")
     return relative.as_posix(), candidate
@@ -273,10 +283,19 @@ def _parse_json_object(raw: str, label: str) -> dict[str, Any]:
     # Claude's --output-format json wraps the text result.  Tests and alternate
     # compatible launchers may provide the inner object directly.
     if set(payload) >= {"result"} and isinstance(payload["result"], str):
+        inner = payload["result"]
         try:
-            payload = json.loads(payload["result"])
-        except json.JSONDecodeError as exc:
-            raise ActorCriticError(f"{label}.result emitted malformed JSON") from exc
+            payload = json.loads(inner)
+        except json.JSONDecodeError as direct_error:
+            fenced = _JSON_FENCE_RE.fullmatch(inner)
+            if fenced is None:
+                raise ActorCriticError(
+                    f"{label}.result emitted malformed JSON") from direct_error
+            try:
+                payload = json.loads(fenced.group("body"))
+            except json.JSONDecodeError as fenced_error:
+                raise ActorCriticError(
+                    f"{label}.result emitted malformed JSON") from fenced_error
         if not isinstance(payload, dict):
             raise ActorCriticError(f"{label}.result must be one JSON object")
     return payload
@@ -375,10 +394,9 @@ def _claude_argv(identity: Mapping[str, str], config: ControllerConfig) -> tuple
 def _codex_argv(identity: Mapping[str, str], config: ControllerConfig,
                 workspace: Path) -> tuple[str, ...]:
     return (
-        identity["path"], "exec", "--json", "--model", config.codex_model,
-        "--config", f'model_reasoning_effort="{config.codex_effort}"',
-        "--config", 'approval_policy="never"', "--sandbox", "workspace-write",
-        "--skip-git-repo-check", "--cd", str(workspace), "-",
+        sys.executable, "-m", codex_container_actor.EXECUTABLE_MODULE,
+        "--codex-wrapper", identity["path"], "--workspace", str(workspace),
+        "--model", config.codex_model, "--effort", config.codex_effort,
     )
 
 
@@ -428,8 +446,10 @@ def run_controller(
         planner_prompt = (
             f"{prompt}\n\nYou are the planner for iteration {iteration}. Return only JSON "
             f"with schema {PROPOSAL_SCHEMA}, proposal_id, candidate_path, and "
-            "actor_instruction. candidate_path must name one existing file under "
-            "the supplied Arena workspace. Do not edit files."
+            "actor_instruction. candidate_path must name one existing non-symlink "
+            "file under the supplied Arena workspace; use a workspace-relative "
+            "path when possible, although an exact contained absolute path is "
+            "accepted. Do not edit files."
         )
         before_planner = _workspace_manifest(root)
         capture = runner(
@@ -483,8 +503,9 @@ def run_controller(
             f"{prompt}\n\nYou are the critic. Review proposal "
             f"{proposal['proposal_id']} for {proposal['candidate_path']}. The candidate "
             f"changed from SHA-256 {before_sha} to {after_sha}. Return only JSON with "
-            f"schema {CRITIQUE_SCHEMA}, the same proposal_id, decision accept/revise/stop, "
-            "and a non-empty reason. Do not edit files."
+            f"schema {CRITIQUE_SCHEMA}. The object must contain exactly these four "
+            "fields and no others: schema, proposal_id (the same value), decision "
+            "(accept, revise, or stop), and a non-empty reason. Do not edit files."
         )
         remaining = deadline - monotonic()
         if remaining <= 0:
@@ -530,7 +551,9 @@ def run_controller(
         "constraints": {
             "workspace_only": True,
             "planner_critic_write_access": False,
-            "actor_sandbox": "workspace-write",
+            "actor_sandbox": "docker_workspace_bind_only",
+            "actor_runtime": codex_container_actor.runtime_identity(
+                Path(cli["codex"]["path"])),
             "promotion_authority": False,
             "model_or_kernel_invoked_by_preflight": False,
         },

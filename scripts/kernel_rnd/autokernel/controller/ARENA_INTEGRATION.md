@@ -193,6 +193,115 @@ Triton patterns, and enabled QD tracking; zero transitions is expected with only
 one iteration. The 164.54-second sampler captured 659 samples. This smoke is
 explicitly diagnostic, non-rankable, and does not imply the matched campaign.
 
+Three more available-source controller smokes completed under the same
+one-iteration diagnostic contract, each with compilation and correctness
+passing, all four baseline and four optimized timing cases admitted, and the
+exclusive MI210 claim released:
+
+- K-Search: receipt
+  `/mnt/raid0/llm/autokernel/probes/inf03-k-search-real-smoke-20260811-tQf7zZ/smoke-receipt.json`
+  (receipt SHA-256
+  `6eea9028399635083a6aed7a4d0101aa106cc4393e4225dd768c6f27c23e7704`;
+  file SHA-256
+  `74f49b472dcb6b2eed1cef66e706e9471ea67f71c94de7a8ba046e3bcd7520b7`).
+  One upstream round produced three model-output artifacts; 666 samples over
+  166.30 seconds accompanied diagnostic average speedup
+  `1.0033678996172277`.
+- Xe-Forge: receipt
+  `/mnt/raid0/llm/autokernel/probes/inf03-xe-forge-real-smoke-20260811-NIffwN/smoke-receipt.json`
+  (receipt SHA-256
+  `a53ef172b42d3fbb6008902a865eac9c884d181a6cc0fc0cc981f9e8aad1ccae`;
+  file SHA-256
+  `e82917d9f1f751520317700520f33b7bf62dd372749ef18ce3d822ba5b2806ea`).
+  One upstream iteration produced three model artifacts; 565 samples over
+  141.08 seconds accompanied diagnostic average speedup
+  `0.999612223103817`.
+- GEAK-v1: its first two attempts correctly released their claims after a
+  cached top-level `agents` namespace shadowed the clean Arena checkout. The
+  namespace-isolation repairs are research `4e01cf48` and `743f59df`. The
+  terminal receipt is
+  `/mnt/raid0/llm/autokernel/probes/inf03-geak-v1-real-smoke-v3-20260811-RJ4UYN/smoke-receipt.json`
+  (receipt SHA-256
+  `0deef125d026625055e77a63270c444101fd96ce5f6f9b2fce433e47b509a229`;
+  file SHA-256
+  `a4c30029a38011cfc7ca0b59be1eb826463cc336322db57e7d6b2cdea19d7487`).
+  Its 739 samples over 184.62 seconds accompanied diagnostic average speedup
+  `0.9955954625720872`.
+
+These near-1.0 observations are smoke telemetry, not comparative performance
+claims. They are neither rankable across controllers nor a substitute for the
+governed 6/6 available-source campaign at its declared checkpoints.
+
+The Claude/Codex actor-critic smoke then exercised the final available
+controller boundary across five diagnostic attempts. V1 exposed a strict
+single-fenced-JSON response that the raw parser rejected; v2 exposed a
+workspace-contained absolute candidate path; v3 reached planner, actor, and
+critic but the actor's nested workspace sandbox could not configure loopback;
+and v4 validated the replacement container confinement but found that Docker
+stdin was not attached. Research `84e2f948`, `dd0daedd`, `da677443`, and
+`22e60940` repair those boundaries. The final actor runs in a digest-pinned
+container with a read-only root, one writable workspace bind, dropped
+capabilities, no-new-privileges, exact-name teardown, and ephemeral auth
+staging; the receipt discloses that confinement rather than claiming the
+failed nested sandbox remained active.
+
+V5 completed the full planner/actor/critic authoring path and reached the
+centralized evaluator.
+Receipt
+`/mnt/raid0/llm/autokernel/probes/inf03-actor-critic-real-smoke-v5-20260811-2Oo2cJ/smoke-receipt.json`
+carries receipt SHA-256
+`dcb2da77bf691c670b705149bfaec0bf6e8062594cd4297ac3247037da5937fb`
+and file SHA-256
+`e890240fa4e3e5134c2975f77930bf5a611e3db285dea2f01a9560d5b699d0d3`.
+The actor changed the candidate and the controller ended `critic_accept`, but
+the evaluator worker inherited `/usr/bin/python3`, where pytest was absent.
+Consequently its apparent correctness failure and zero timing cases are an
+evaluator-runtime defect, not evidence against the candidate. The 457.02-second
+sampling window captured 1,829 samples and the MI210 claim released cleanly.
+V5 establishes authoring-path integration only; a fresh run with the exact ROCm
+evaluator Python/package identity is required before any candidate or
+performance conclusion.
+
+Research `a57feba0` then pins the evaluator interpreter and refuses identity
+mismatch. The bound runtime has binary SHA-256
+`9544d2a29138833e6177d45dbc57468d37710b5080c901fbb579d53f251cdd6f`
+with pytest `9.1.1`, torch `2.5.1+rocm6.2`, and Triton `3.1.0`. V6 completed
+under that identity: compilation and correctness passed, all four baseline and
+four optimized timing cases were valid, and the diagnostic average speedup was
+`0.9936027407797491`. Receipt
+`/mnt/raid0/llm/autokernel/probes/inf03-actor-critic-real-smoke-v6-20260811-3hAJir/smoke-receipt.json`
+carries receipt SHA-256
+`5961eef441e487e787310d3bea9d4e57693a8f7a621dff1cc39190d48d952ef9`
+and file SHA-256
+`816ecc2d60ee48e8b0be3c6fb05ff1d562d7283697f1def9499ce6d0a98a916c`.
+The nested controller receipt carries SHA-256
+`fa11ee8162fb6da877358a0c26c67d58d84c75b6c284fe9ee53540bb3673e315`.
+The 158.72-second window retained 635 samples and released its MI210 claim.
+Like the other smokes, this proves executable integration, not comparative
+controller quality or a matched-campaign result.
+
+The campaign pin was then refreshed to the validated actor and GEAK entrypoint
+identities and re-audited from clean detached research `6233cd42`. The current
+full-panel receipt is
+`/mnt/raid0/llm/autokernel/probes/inf03-final-audits-v2-20260811-v6/full-eight-arm-refusal.json`
+(receipt SHA-256
+`4a13f7d0ba91c2610efae4e51bcf7e0be8661d07657f74fecf9a5ee0a4dab3af`;
+file SHA-256
+`199e4e129daf561f42d59750a1c2e157da340f433c0fec3abf19cf7c1bd91195`)
+and still refuses at 6/8 solely for EvoEngineer and ARGUS. The current
+available-source receipt is
+`/mnt/raid0/llm/autokernel/probes/inf03-final-audits-v2-20260811-v6/available-source-six-arm.json`
+(receipt SHA-256
+`cf8b03df355a8124a1dd668293c1d7d6e839c9f176aebdcd082f073f92ba0581`;
+file SHA-256
+`625280fb92b678b8a2a24f15f9a87484a2409c0dcb94e32a777e613639f327ed`)
+and remains ready at 6/6 with availability-conditioned diagnostic authority.
+Both bind config SHA-256
+`6d72b61a3f1f8ebff12344e038bae16c57e8a2e7ae74cadd0f3ee63e4c8a6d7c`
+and driver SHA-256
+`b839a35cb79627bb27c7f1be6902e91365a1ce8beb0fc26edff58bae5d003866`;
+neither audit executed a controller or GPU command.
+
 An arena-side launcher should:
 
 1. import `register_agentkernelarena_adapter()` in a tiny

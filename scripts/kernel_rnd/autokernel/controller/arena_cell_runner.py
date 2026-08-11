@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+from functools import lru_cache
 import hashlib
 import json
 import logging
@@ -42,6 +43,15 @@ REPOSITORY_ROOT = IMPLEMENTATION_MODULE.parents[4]
 DEFAULT_CLAIM_JOURNAL = "/mnt/raid0/llm/ak-claims/device.jsonl"
 DEFAULT_DEVICE_ID = "mi210_0"
 EVALUATION_RESERVE_SECONDS = 7200
+EVALUATOR_PYTHON = Path(
+    "/mnt/raid0/llm/tools/geak-v1-rocm62-py312/bin/python")
+EVALUATOR_PYTHON_SHA256 = (
+    "9544d2a29138833e6177d45dbc57468d37710b5080c901fbb579d53f251cdd6f")
+EVALUATOR_PACKAGE_VERSIONS = {
+    "pytest": "9.1.1",
+    "torch": "2.5.1+rocm6.2",
+    "triton": "3.1.0",
+}
 _ID_RE = re.compile(r"[a-z][a-z0-9_.-]{2,95}")
 _SHA256_RE = re.compile(r"[0-9a-f]{64}")
 
@@ -87,6 +97,54 @@ def _self_hash(payload: Mapping[str, Any]) -> dict[str, Any]:
     result = dict(payload)
     result["receipt_sha256"] = _canonical_sha256(result)
     return result
+
+
+@lru_cache(maxsize=1)
+def _evaluator_python_identity() -> dict[str, Any]:
+    """Verify the exact ROCm evaluator interpreter without launching a GPU kernel."""
+    if not EVALUATOR_PYTHON.is_file() or not os.access(EVALUATOR_PYTHON, os.X_OK):
+        raise ArenaCellRunnerError("pinned Arena evaluator Python is unavailable")
+    observed_sha256 = _sha256_file(EVALUATOR_PYTHON)
+    if observed_sha256 != EVALUATOR_PYTHON_SHA256:
+        raise ArenaCellRunnerError(
+            "pinned Arena evaluator Python binary identity drifted")
+    probe = (
+        "import json,pytest,torch,triton; "
+        "print(json.dumps({'pytest':pytest.__version__,"
+        "'torch':torch.__version__,'triton':triton.__version__},sort_keys=True))"
+    )
+    environment = dict(os.environ)
+    environment.update({
+        "HIP_VISIBLE_DEVICES": "", "ROCR_VISIBLE_DEVICES": "",
+        "CUDA_VISIBLE_DEVICES": "",
+    })
+    result = subprocess.run(
+        (str(EVALUATOR_PYTHON), "-c", probe), capture_output=True, text=True,
+        check=False, timeout=30, env=environment)
+    try:
+        packages = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise ArenaCellRunnerError(
+            "Arena evaluator Python package probe emitted invalid JSON") from exc
+    if result.returncode != 0 or packages != EVALUATOR_PACKAGE_VERSIONS:
+        raise ArenaCellRunnerError(
+            f"Arena evaluator package identity drifted: {packages!r}")
+    return {
+        "path": str(EVALUATOR_PYTHON),
+        "resolved_path": str(EVALUATOR_PYTHON.resolve()),
+        "sha256": observed_sha256,
+        "packages": packages,
+    }
+
+
+def _assert_worker_evaluator_identity(request: Mapping[str, Any]) -> dict[str, Any]:
+    expected = _evaluator_python_identity()
+    if request.get("evaluator_python") != expected:
+        raise ArenaCellRunnerError("worker request evaluator Python identity drifted")
+    if Path(sys.executable).resolve() != EVALUATOR_PYTHON.resolve():
+        raise ArenaCellRunnerError(
+            "Arena worker must run under the pinned ROCm evaluator Python")
+    return expected
 
 
 def _safe_id(value: str, label: str) -> str:
@@ -219,6 +277,7 @@ class GovernedArenaCellRunner:
         self.output_root = Path(config.output_root).resolve()
         self.preflight, self.preflight_file_sha256 = _load_preflight(
             config.preflight_path)
+        self.evaluator_python = _evaluator_python_identity()
         self._worker = worker or self._run_worker_subprocess
         self._claim_acquirer = claim_acquirer
         self._sampler_factory = sampler_factory
@@ -378,6 +437,7 @@ class GovernedArenaCellRunner:
             "baseline": request.is_starting_state_baseline,
             "checkpoint_hours": checkpoint_hours,
             "visible_device": self.config.visible_device,
+            "evaluator_python": self.evaluator_python,
         }
 
     @staticmethod
@@ -386,12 +446,7 @@ class GovernedArenaCellRunner:
     ) -> Mapping[str, Any]:
         cell_root = Path(str(request["cell_root"]))
         output = cell_root / "worker-result.json"
-        command = (
-            sys.executable, "-m",
-            "scripts.kernel_rnd.autokernel.controller.arena_cell_runner",
-            "--worker-request", str(cell_root / "worker-request.json"),
-            "--worker-output", str(output),
-        )
+        command = _worker_command(cell_root, output)
         env = arena_adapter.architecture_environment(os.environ)
         env.update({
             "HIP_VISIBLE_DEVICES": str(request["visible_device"]),
@@ -464,6 +519,15 @@ def _controller_argv(arm: Mapping[str, Any], checkpoint_hours: float) -> tuple[s
     return tuple(argv)
 
 
+def _worker_command(cell_root: Path, output: Path) -> tuple[str, ...]:
+    return (
+        str(EVALUATOR_PYTHON), "-m",
+        "scripts.kernel_rnd.autokernel.controller.arena_cell_runner",
+        "--worker-request", str(cell_root / "worker-request.json"),
+        "--worker-output", str(output),
+    )
+
+
 def _copy_task(source: Path, destination: Path) -> None:
     if not source.is_dir() or source.is_symlink():
         raise ArenaCellRunnerError("Arena task root must be a non-symlink directory")
@@ -488,6 +552,7 @@ def run_worker(request: Mapping[str, Any]) -> dict[str, Any]:
     """Execute one already-claimed baseline or controller checkpoint."""
     if request.get("schema") != CHECKPOINT_SCHEMA:
         raise ArenaCellRunnerError("worker request has the wrong schema")
+    evaluator_python = _assert_worker_evaluator_identity(request)
     campaign_id = _safe_id(str(request.get("campaign_id")), "campaign_id")
     arena_root = Path(str(request.get("arena_root"))).resolve()
     repository_root = Path(str(request.get("repository_root"))).resolve()
@@ -596,6 +661,7 @@ def run_worker(request: Mapping[str, Any]) -> dict[str, Any]:
         "constraints": {
             "starting_state_copied_fresh": True,
             "centralized_vendor_evaluator": True,
+            "evaluator_python": evaluator_python,
             "agent_reported_performance_admitted": False,
             "promotion_authority": False,
         },
