@@ -1,0 +1,31 @@
+{
+  "schema": "epyc.autokernel.substrate_facts.v1",
+  "hardware": "AMD Instinct MI210 (gfx90a)",
+  "numa_node": 1,
+  "facts": {
+    "compute_tflops": {
+      "measured": 172.2,
+      "datasheet": 181.0,
+      "measured_receipt": "handoffs/active/mi210-mfma-compute-bound-paths.md"
+    },
+    "memory_bandwidth_gbps": {
+      "measured": 1433.3,
+      "datasheet": 1638.0,
+      "measured_receipt": "data/mi210-achievable-bandwidth/20260803T124401Z/receipt.json"
+    },
+    "pcie_gbps": {
+      "h2d_measured": 28.89,
+      "d2h_measured": 28.20,
+      "measured_receipt": "data/mi210-h2d-d2h/20260803T131500Z/receipt.json"
+    }
+  },
+  "derived": {
+    "ridge_flop_per_byte_measured_basis": 120.14,
+    "ridge_flop_per_byte_datasheet_basis": 110.50,
+    "batch_crossover_measured_basis": {
+      "q4_k": 34,
+      "q8_0": 64,
+      "bf16": 120
+    }
+  }
+}

@@ -70,6 +70,8 @@ runs nothing. The pipeline it is handed is what must hold one.
 """
 from __future__ import annotations
 
+MODULE_ID = "autokernel.execution.control_runner/v1"
+
 import ast
 from dataclasses import dataclass, fields as dataclass_fields, replace
 from pathlib import Path
@@ -376,6 +378,7 @@ class CampaignBinding:
     metric: str
     metric_direction: str
     reps: int
+    change_class: str
     anchor: Optional[api.AnchorIdentity]
     campaign_controls: Optional[api.CampaignControls]
     calibration: Optional[api.CalibrationOutputs]
@@ -401,6 +404,7 @@ class CampaignBinding:
             scope_manifest_sha256=self.scope_manifest_sha256,
             co_residency=self.co_residency, determinism=determinism,
             metric=self.metric, metric_direction=self.metric_direction, reps=self.reps,
+            change_class=self.change_class, anchor_tier=tier, transfer_ratio_to=(),
             created_at=created_at, campaign_controls=self.campaign_controls,
             calibration=self.calibration)
 

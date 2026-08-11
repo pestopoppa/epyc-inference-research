@@ -1,0 +1,38 @@
+{
+  "schema": "epyc.autokernel.prior_art_catalogue.v1",
+  "scanned_at": "2026-08-10T20:00:00Z",
+  "scan_commands": [
+    "git -C /mnt/raid0/llm/llama.cpp rev-parse HEAD",
+    "git -C /mnt/raid0/llm/llama.cpp-experimental rev-parse HEAD",
+    "rg -n 'shared.expert|sampling|quant.*copy|rms.*rope|argmax' src ggml tools"
+  ],
+  "searched_trees": [
+    "model:src/models",
+    "kernel:ggml/src",
+    "kernel:src/llama-graph.cpp"
+  ],
+  "expected_absence": [
+    {"flag": "GGML_CCD_POOLS", "state": "off", "trace_effect": "one shared CPU pool is expected; per-CCD pool kernels must not be inferred missing"},
+    {"flag": "GGML_CCD_WORK_DIST", "state": "off", "trace_effect": "global expert work distribution is expected"},
+    {"flag": "GGML_BARRIER_LOCAL_BETWEEN_OPS", "state": "off", "trace_effect": "global barriers between ops are expected"},
+    {"flag": "GGML_NUMA_WEIGHTS", "state": "off", "trace_effect": "no experimental weight-placement path is expected"},
+    {"flag": "GGML_BARRIER_STRICT", "state": "off", "trace_effect": "strict diagnostic serialization is expected absent"},
+    {"flag": "GGML_NUMA_WARMUP_CCD", "state": "off", "trace_effect": "CCD warmup passes are expected absent"},
+    {"flag": "GGML_RMS_NORM_PARALLEL", "state": "off", "trace_effect": "parallel RMSNorm is intentionally disabled after a negative result"},
+    {"flag": "GGML_GDN_K_PER_HEAD", "state": "off", "trace_effect": "per-head GDN specialization is expected absent"},
+    {"flag": "GGML_EXPERT_CCD_SHARDING", "state": "off", "trace_effect": "superseded expert sharding is expected absent"},
+    {"flag": "GGML_Q8_0_8X8", "state": "off", "trace_effect": "Q8 8x8 repack kernels are opt-in and expected absent"},
+    {"flag": "GGML_Q8_0_8X8_AVX", "state": "off", "trace_effect": "AVX Q8 8x8 repack kernels are opt-in and expected absent"},
+    {"flag": "GGML_Q6_K_8X8_AVX", "state": "off", "trace_effect": "AVX Q6_K 8x8 repack kernels are opt-in and expected absent"},
+    {"flag": "GGML_NUMA_REPACK_INTERLEAVE", "state": "0", "trace_effect": "repack mbind/interleave calls are intentionally absent"},
+    {"flag": "GGML_EP_N_INSTANCES", "state": "off", "trace_effect": "expert-parallel worker/dispatcher activity is expected absent"},
+    {"flag": "GGML_EP_WORKER_DRONE", "state": "off", "trace_effect": "EP drone waits and transport kernels are expected absent"}
+  ],
+  "rows": [
+    {"pattern": "transpose-free shared-expert GEMV", "trace_keywords": ["rocblas_gemv", "shared expert gate"], "primary_code": ["ggml_backend_rocblas_mul_mat"], "existing_path": "llama.cpp PR #26171", "reader_should_conclude": "forward-port audit; this is upstream prior art, not a novel kernel proposal", "upstream_state": "mainline", "local_state": "absent", "source_project": "llama.cpp", "source_commit": "67a433bf45a8a091d83b4ea0b32ff0735fd51800"},
+    {"pattern": "backend sampling multi-output", "trace_keywords": ["sampling", "top_k", "top_p"], "primary_code": ["ggml_backend_sched_graph_compute_async"], "existing_path": "llama.cpp PR #25532", "reader_should_conclude": "forward-port only after token and acceptance parity", "upstream_state": "mainline", "local_state": "absent", "source_project": "llama.cpp", "source_commit": "67a433bf45a8a091d83b4ea0b32ff0735fd51800"},
+    {"pattern": "quantized copy launch reduction", "trace_keywords": ["cpy", "copy"], "primary_code": ["ggml_cuda_cpy"], "existing_path": "llama.cpp PR #26731", "reader_should_conclude": "context-shift port only when profiling shows material copy wall share", "upstream_state": "mainline", "local_state": "absent", "source_project": "llama.cpp", "source_commit": "67a433bf45a8a091d83b4ea0b32ff0735fd51800"},
+    {"pattern": "RMSNorm MUL RoPE fusion", "trace_keywords": ["rms_norm", "rope", "mul"], "primary_code": ["ggml_rope", "ggml_rms_norm"], "existing_path": "llama.cpp PR #26767", "reader_should_conclude": "HIP portability/dispatch audit, not greenfield fusion research", "upstream_state": "mainline", "local_state": "absent", "source_project": "llama.cpp", "source_commit": "67a433bf45a8a091d83b4ea0b32ff0735fd51800"},
+    {"pattern": "split-block argmax", "trace_keywords": ["argmax"], "primary_code": ["ggml_argmax"], "existing_path": "llama.cpp PR #26812", "reader_should_conclude": "monitor upstream; do not spend a campaign until merged and wall share clears the floor", "upstream_state": "in_flight", "local_state": "absent", "source_project": "llama.cpp", "source_commit": "67a433bf45a8a091d83b4ea0b32ff0735fd51800"}
+  ]
+}

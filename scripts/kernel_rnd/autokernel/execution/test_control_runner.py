@@ -330,6 +330,7 @@ def binding() -> CR.CampaignBinding:
             machine_subset="full", numa_nodes=(), devices=(), cores=96),
         scope_manifest_sha256=sha("scope-manifest"), co_residency="single",
         metric="prefill_tokens_per_s", metric_direction="higher_better", reps=10,
+        change_class="parameter",
         anchor=anchor_identity(), campaign_controls=controls_decl,
         calibration=outputs)
 
@@ -1492,7 +1493,7 @@ class TestNoProcessOrWritePaths(unittest.TestCase):
 
     def test_the_module_has_no_write_or_process_paths(self):
         source = Path(CR.__file__).read_text(encoding="utf-8")
-        check = api.audit_no_write_or_process_paths(source)
+        check = api.audit_no_write_or_process_paths(source, module_id=CR.MODULE_ID)
         self.assertEqual(check.outcome, S.PASS, check.reasons)
 
     def test_the_auditor_would_notice_a_process_call(self):
@@ -1500,7 +1501,8 @@ class TestNoProcessOrWritePaths(unittest.TestCase):
         tampered = source.replace("import ast", "import ast\nimport subprocess")
         self.assertNotEqual(tampered, source)
         self.assertEqual(
-            api.audit_no_write_or_process_paths(tampered).outcome, S.FAIL)
+            api.audit_no_write_or_process_paths(
+                tampered, module_id=CR.MODULE_ID).outcome, S.FAIL)
 
 
 if __name__ == "__main__":  # pragma: no cover

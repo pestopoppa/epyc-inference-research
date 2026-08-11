@@ -1572,6 +1572,7 @@ def make_request(candidate_id="akc-001", tier="T0", backend="llama_cpu", anchor=
         determinism=api.DeterminismReport(determinism_class="bitwise_stable",
                                           same_seed_repeat_runs=3),
         metric="decode_tokens_per_s", metric_direction="higher_better", reps=5,
+        change_class="parameter", anchor_tier=tier, transfer_ratio_to=(),
         created_at=NOW,
         campaign_controls=api.CampaignControls(
             calibration_block_count=30, contribution_floor=0.02, max_candidates=100,

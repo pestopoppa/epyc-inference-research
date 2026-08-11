@@ -526,7 +526,8 @@ class NoWriteNoProcessTest(unittest.TestCase):
         source = Path(D.__file__).read_text(encoding="utf-8")
         self.assertIn("def classify_device_name", source)
         self.assertIn("HOST_DEVICE_VOCABULARY", source)
-        self.assertEqual(api.audit_no_write_or_process_paths(source).outcome, S.PASS)
+        self.assertEqual(api.audit_no_write_or_process_paths(
+            source, module_id=D.MODULE_ID).outcome, S.PASS)
 
     def test_it_imports_nothing_that_could_touch_a_file_a_process_or_a_device(self):
         tree = ast.parse(Path(D.__file__).read_text(encoding="utf-8"))
@@ -539,6 +540,49 @@ class NoWriteNoProcessTest(unittest.TestCase):
         forbidden = {"os", "subprocess", "shutil", "socket", "signal", "pathlib",
                      "multiprocessing", "ctypes", "urllib", "http", "tempfile"}
         self.assertEqual(imported & forbidden, set(), sorted(imported))
+
+
+class ParsedDeviceStateTest(unittest.TestCase):
+    CLOCKS = """GPU[0] : mclk clock level: 3: (1600Mhz)
+GPU[0] : sclk clock level: 2: (1700Mhz)"""
+    POWER = "GPU[0] : Average Graphics Package Power (W): 180.0"
+    TEMP = "GPU[0] : Temperature (Sensor junction) (C): 61.0"
+
+    def test_rocm_text_becomes_numeric_fields(self):
+        sample = D.parse_rocm_smi_snapshot(
+            clocks_text=self.CLOCKS, power_text=self.POWER,
+            temperature_text=self.TEMP, under_measurement_load=True)
+        self.assertEqual(sample.sclk_mhz, 1700.0)
+        self.assertEqual(sample.mclk_mhz, 1600.0)
+        self.assertEqual(sample.power_w, 180.0)
+        self.assertEqual(sample.temperature_c, 61.0)
+
+    def test_loaded_clock_drop_is_a_derived_throttle_failure(self):
+        sample = D.parse_rocm_smi_snapshot(
+            clocks_text=self.CLOCKS.replace("1700", "800"), power_text=self.POWER,
+            temperature_text=self.TEMP, under_measurement_load=True)
+        state = D.DeviceState(
+            device_id="ROCm0", source="rocm-smi/v6.2", nominal_sclk_mhz=1700,
+            min_sclk_ratio=0.9, samples=(sample,), receipt_ref="akraw://state/1")
+        self.assertTrue(state.throttle_observed)
+        self.assertEqual(state.check().outcome, S.FAIL)
+        self.assertTrue(state.to_dict()["throttle_observed"])
+
+    def test_idle_clock_cannot_prove_absence_of_throttle(self):
+        sample = D.parse_rocm_smi_snapshot(
+            clocks_text=self.CLOCKS.replace("1700", "800"), power_text=self.POWER,
+            temperature_text=self.TEMP, under_measurement_load=False)
+        state = D.DeviceState(
+            device_id="ROCm0", source="rocm-smi/v6.2", nominal_sclk_mhz=1700,
+            min_sclk_ratio=0.9, samples=(sample,), receipt_ref="akraw://state/1")
+        self.assertFalse(state.throttle_observed)
+        self.assertEqual(state.check().outcome, S.COULD_NOT_CHECK)
+
+    def test_missing_numeric_field_is_a_refusal(self):
+        with self.assertRaises(D.DeviceStateParseError):
+            D.parse_rocm_smi_snapshot(
+                clocks_text=self.CLOCKS, power_text="Power Consumption",
+                temperature_text=self.TEMP, under_measurement_load=True)
 
 
 if __name__ == "__main__":

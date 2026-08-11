@@ -348,8 +348,13 @@ CANONICAL_OMP_ENV: dict = dict(canonical_recipe.CANONICAL_OMP_ENV)
 LLVM20_LIBDIR: str = canonical_recipe.LLVM20_LIBDIR
 
 #: Parsed out of `architect_bench_gpu_lib.sh`, whose own provenance note records
-#: that `88-95` is the SUPERSEDED pinning and `184-191` (the MI210's node-3 SMT
-#: siblings) is correct. Sourcing it means a correction there reaches here.
+#: that `88-95` is the SUPERSEDED pinning and `184-191` (node-3 SMT siblings)
+#: is correct. The MI210 itself is attached to NUMA node 1; the host-thread
+#: placement is therefore deliberately cross-node and must not be described as
+#: device-local. Sourcing the CPU list means a correction there reaches here.
+MI210_NUMA_NODE = 1
+GPU_HOST_THREADS_NUMA_NODE = 3
+GPU_HOST_THREADS_ARE_NUMA_LOCAL = MI210_NUMA_NODE == GPU_HOST_THREADS_NUMA_NODE
 _GPU_CORES_RE = re.compile(
     r'^CORES="\$\{GPU_BENCH_CORES:-(?P<value>[0-9,\-]+)\}"', re.MULTILINE)
 
@@ -1021,6 +1026,11 @@ _P_BACKEND_OPS_OUTPUT = ParamSpec(
         "format that is BOTH machine-parseable and metric-bearing: the csv printer "
         "drops time_us/flops/bandwidth_gb_s/n_runs, and `console` keeps them only in "
         "prose. Choosing a non-metric-bearing format is a FAIL discipline finding.")
+_P_CACHE_STATE = ParamSpec(
+    name="cache_state", kind="enum", default="cold", choices=("warm", "cold"),
+    doc="Declared T1a cache state. It is recorded in the recipe parameters and receipt; "
+        "candidate and anchor arms must use the same value. The default is explicitly cold, "
+        "never unknown.")
 _P_MODEL = ParamSpec(
     name="model", kind="path", required=True, suffix=".gguf",
     doc="Absolute path to the production-representative GGUF (§9.4: one model/quant/"
@@ -1731,7 +1741,7 @@ _SPECS = (
         cell_class=CELL_CLASS_OPERATOR, tool="test-backend-ops",
         metric="op_throughput_gflops", metric_direction="higher_better",
         params=(_phase_param(("prefill", "decode")), _P_OPS, _P_PARAMS_FILTER,
-                _P_BACKEND_OPS_OUTPUT, _P_GGML_IQK),
+                _P_BACKEND_OPS_OUTPUT, _P_CACHE_STATE, _P_GGML_IQK),
         builder="_builder_backend_ops_cpu",
         summary="CPU target-operator discriminator: test-backend-ops perf under the "
                 "canonical taskset/NUMA/OMP baseline."),
@@ -1741,7 +1751,8 @@ _SPECS = (
         cell_class=CELL_CLASS_OPERATOR, tool="test-backend-ops",
         metric="op_throughput_gflops", metric_direction="higher_better",
         params=(_phase_param(("prefill", "decode")), _P_OPS, _P_PARAMS_FILTER,
-                _P_BACKEND_OPS_OUTPUT, _P_GGML_IQK, _P_DEVICE_INDEX, _P_DEVICE_ID),
+                _P_BACKEND_OPS_OUTPUT, _P_CACHE_STATE, _P_GGML_IQK,
+                _P_DEVICE_INDEX, _P_DEVICE_ID),
         builder="_builder_backend_ops_gpu",
         summary="MI210 target-operator discriminator: test-backend-ops perf on ROCm<n>, "
                 "host threads pinned to the device's node-local SMT siblings."),
@@ -1766,7 +1777,7 @@ _SPECS = (
             ParamSpec(name="alignment_offset", kind="int", required=False, default=None,
                       minimum=0, maximum=64,
                       doc="test-quantize-perf `--alignment-offset` (MAX_ALIGNMENT=64)."),
-            _P_GGML_IQK),
+            _P_CACHE_STATE, _P_GGML_IQK),
         builder="_builder_quantize_perf",
         summary="CPU quantization-kernel discriminator for arithmetic/layout change "
                 "classes: test-quantize-perf under the canonical baseline."),
@@ -2103,12 +2114,13 @@ def construct(recipe_id: str, *, binding: ToolBinding, params: Optional[Mapping]
         constructor_id=spec.recipe_id,
         constructor_sha256=_constructor_sha256(spec, sourced),
         argv_sha256=schemas.content_hash({
-            "recipe_id": spec.recipe_id,
-            "registry_id": REGISTRY_ID,
-            "arm": arm,
-            "argv": list(argv),
-            "env": dict(env),
-        }),
+        "recipe_id": spec.recipe_id,
+        "registry_id": REGISTRY_ID,
+        "arm": arm,
+        "argv": list(argv),
+        "env": dict(env),
+        "params": _jsonable(resolved),
+    }),
     )
     phase = resolved.get("phase") or spec.phase
     return ConstructedCommand(
@@ -2355,7 +2367,8 @@ def audit_no_execution_paths(source: Optional[str] = None) -> schemas.Check:
 
 __all__ = [
     "REGISTRY_ID", "CONSTRUCTOR_MODULE_ID", "REPO_ROOT", "CANONICAL_RECIPE_PATH",
-    "GPU_BENCH_LIB_PATH",
+    "GPU_BENCH_LIB_PATH", "MI210_NUMA_NODE", "GPU_HOST_THREADS_NUMA_NODE",
+    "GPU_HOST_THREADS_ARE_NUMA_LOCAL",
     "RECIPE_FAMILY_T1A", "RECIPE_FAMILY_T1B", "RECIPE_FAMILIES", "ARMS",
     "CELL_CLASS_OPERATOR", "CELL_CLASS_TINY_GRAPH",
     "CANONICAL_PREFIX", "CANONICAL_BENCH_FLAGS", "CANONICAL_OMP_ENV", "LLVM20_LIBDIR",

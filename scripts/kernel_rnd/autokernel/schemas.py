@@ -112,8 +112,10 @@ SCHEMA_CANDIDATE = "epyc.autokernel.candidate.v1"
 #     downstream reader, which is strictly worse than an absent block.
 SCHEMA_EVALUATION_EVENT_V2 = "epyc.autokernel.evaluation_event.v2"
 SCHEMA_EVALUATION_EVENT_V3 = "epyc.autokernel.evaluation_event.v3"
+SCHEMA_EVALUATION_EVENT_V4 = "epyc.autokernel.evaluation_event.v4"
+SCHEMA_EVALUATION_EVENT_V5 = "epyc.autokernel.evaluation_event.v5"
 #: The CURRENT evaluation-event contract. New records are emitted under this one.
-SCHEMA_EVALUATION_EVENT = SCHEMA_EVALUATION_EVENT_V3
+SCHEMA_EVALUATION_EVENT = SCHEMA_EVALUATION_EVENT_V5
 
 SCHEMA_CHAMPION = "epyc.autokernel.champion.v1"
 SCHEMA_RELEASE_PACKAGE = "epyc.autokernel.release_package.v1"
@@ -265,6 +267,8 @@ NON_RETRIEVABLE_FIELDS = {
     SCHEMA_CANDIDATE: frozenset({"narrative"}),
     SCHEMA_EVALUATION_EVENT_V2: frozenset({"narrative"}),
     SCHEMA_EVALUATION_EVENT_V3: frozenset({"narrative"}),
+    SCHEMA_EVALUATION_EVENT_V4: frozenset({"narrative"}),
+    SCHEMA_EVALUATION_EVENT_V5: frozenset({"narrative"}),
     SCHEMA_CHAMPION: frozenset(),
     SCHEMA_RELEASE_PACKAGE: frozenset(),
     SCHEMA_OPERATOR_WAIVER: frozenset(),
@@ -2163,7 +2167,108 @@ def _check_anchor_block_v3(obj, out, tier) -> None:
     _check_anchor_measurement_ids(anchor, out, tier)
 
 
-def _validate_evaluation_event(obj: Any, *, schema: str, check_anchor) -> list:
+def _validate_transfer_surface(obj: Any, out: list) -> None:
+    """Validate v4's write-time transfer relation.
+
+    A transfer ratio is evidence about one *declared* correspondence, not a
+    statistic readers may synthesize later.  The source event is ``obj``; each
+    row names the already-completed target event and carries both signed effects
+    so the ratio is reproducible rather than trusted as a scalar.
+    """
+    change_class = _need_str(obj, "change_class", out, "", choices=CHANGE_CLASSES)
+    anchor_tier = _need_str(obj, "anchor_tier", out, "", choices=TIERS)
+    rows = _need_list(obj, "transfer_ratio_to", out, "")
+    if rows is _MISSING:
+        return
+    seen: set[str] = set()
+    for i, row in enumerate(rows):
+        prefix = f"transfer_ratio_to[{i}]."
+        if not isinstance(row, Mapping):
+            out.append(f"transfer_ratio_to[{i}]: expected a mapping")
+            continue
+        target_event = _need_id(row, "event_id", out, prefix, "ake-")
+        target_tier = _need_str(row, "tier", out, prefix, choices=TIERS)
+        source_effect = _need_number(row, "source_effect", out, prefix)
+        target_effect = _need_number(row, "target_effect", out, prefix)
+        ratio = _need_number(row, "ratio", out, prefix)
+        if target_event is not _MISSING:
+            if target_event == obj.get("event_id"):
+                out.append(f"{prefix}event_id: a transfer target cannot be the source event")
+            if target_event in seen:
+                out.append(f"{prefix}event_id: duplicate target {target_event!r}")
+            seen.add(target_event)
+        if target_tier is not _MISSING and anchor_tier is not _MISSING \
+                and target_tier != anchor_tier:
+            out.append(f"{prefix}tier: {target_tier!r} does not match anchor_tier "
+                       f"{anchor_tier!r}")
+        if target_effect is not _MISSING and target_effect == 0:
+            out.append(f"{prefix}target_effect: zero has no defined transfer ratio")
+        if all(value is not _MISSING for value in (source_effect, target_effect, ratio)) \
+                and target_effect != 0:
+            derived = source_effect / target_effect
+            if not math.isclose(ratio, derived, rel_tol=1e-12, abs_tol=1e-15):
+                out.append(f"{prefix}ratio: {ratio!r} does not equal source_effect / "
+                           f"target_effect ({derived!r})")
+    if change_class is _MISSING:
+        return
+
+
+def _validate_device_state(obj: Mapping[str, Any], out: list) -> None:
+    """Validate v5's parsed ROCm block and re-derive its throttle boolean."""
+    backend = _need_str(obj, "backend", out, "", choices=BACKENDS)
+    state = obj.get("device_state", _MISSING)
+    if state is _MISSING:
+        out.append("device_state: required field is missing (null is explicit for non-GPU cells)")
+        return
+    if backend != "llama_gpu":
+        if state is not None:
+            out.append("device_state: must be null for a non-GPU evaluation event")
+        return
+    if not isinstance(state, Mapping):
+        out.append("device_state: a llama_gpu event requires a parsed mapping, not text/null")
+        return
+    for key in ("device_id", "source", "receipt_ref"):
+        _need_str(state, key, out, "device_state.")
+    nominal = _need_number(state, "nominal_sclk_mhz", out, "device_state.", minimum=0)
+    ratio = _need_number(state, "min_sclk_ratio", out, "device_state.",
+                         minimum=0, maximum=1)
+    if nominal is not _MISSING and nominal == 0:
+        out.append("device_state.nominal_sclk_mhz: must be greater than zero")
+    if ratio is not _MISSING and ratio == 0:
+        out.append("device_state.min_sclk_ratio: must be greater than zero")
+    throttle = state.get("throttle_observed", _MISSING)
+    if not isinstance(throttle, bool):
+        out.append("device_state.throttle_observed: required boolean")
+    samples = _need_list(state, "samples", out, "device_state.", non_empty=True)
+    derived = False
+    loaded = 0
+    if isinstance(samples, list):
+        for index, sample in enumerate(samples):
+            prefix = f"device_state.samples[{index}]."
+            if not isinstance(sample, Mapping):
+                out.append(f"{prefix[:-1]}: must be a mapping")
+                continue
+            values = {}
+            for key in ("sclk_mhz", "mclk_mhz", "power_w", "temperature_c"):
+                values[key] = _need_number(sample, key, out, prefix, minimum=0)
+            under_load = sample.get("under_measurement_load", _MISSING)
+            if not isinstance(under_load, bool):
+                out.append(f"{prefix}under_measurement_load: required boolean")
+            elif under_load:
+                loaded += 1
+                if nominal is not _MISSING and ratio is not _MISSING \
+                        and values["sclk_mhz"] is not _MISSING:
+                    derived = derived or values["sclk_mhz"] < nominal * ratio
+    if loaded == 0:
+        out.append("device_state.samples: at least one sample must be under measurement load")
+    if isinstance(throttle, bool) and throttle != derived:
+        out.append(f"device_state.throttle_observed: {throttle!r} does not equal the "
+                   f"value derived from loaded sclk samples ({derived!r})")
+
+
+def _validate_evaluation_event(obj: Any, *, schema: str, check_anchor,
+                               transfer_surface: bool = False,
+                               device_surface: bool = False) -> list:
     """The body shared by every evaluation-event version.
 
     Only the schema string and the anchor rule differ between v2 and v3, so only
@@ -2275,6 +2380,20 @@ def _validate_evaluation_event(obj: Any, *, schema: str, check_anchor) -> list:
     _need_list(obj, "supersedes", out, "", item_type=str, item_desc="an event id")
     _check_narrative(obj, out, required=False)
     _need_timestamp(obj, "created_at", out, "")
+    if transfer_surface:
+        _validate_transfer_surface(obj, out)
+    else:
+        for key in ("change_class", "anchor_tier", "transfer_ratio_to"):
+            if key in obj:
+                out.append(f"{key}: belongs to evaluation_event.v4; older records "
+                           "must remain under their original shape")
+    if device_surface:
+        _validate_device_state(obj, out)
+    else:
+        for key in ("backend", "device_state"):
+            if key in obj:
+                out.append(f"{key}: belongs to evaluation_event.v5; older records must "
+                           "remain under their original shape")
     return out
 
 
@@ -2290,10 +2409,27 @@ def validate_evaluation_event_v3(obj: Any) -> list:
                                       check_anchor=_check_anchor_block_v3)
 
 
+def validate_evaluation_event_v4(obj: Any) -> list:
+    """Validate the current event, including declared tier-transfer evidence."""
+    return _validate_evaluation_event(
+        obj, schema=SCHEMA_EVALUATION_EVENT_V4,
+        check_anchor=_check_anchor_block_v3, transfer_surface=True)
+
+
+def validate_evaluation_event_v5(obj: Any) -> list:
+    """Validate v5: transfer bindings plus parsed, verdict-bearing device state."""
+    return _validate_evaluation_event(
+        obj, schema=SCHEMA_EVALUATION_EVENT_V5,
+        check_anchor=_check_anchor_block_v3, transfer_surface=True,
+        device_surface=True)
+
+
 #: Every evaluation-event version that can still be read, by its schema string.
 EVALUATION_EVENT_VALIDATORS = {
     SCHEMA_EVALUATION_EVENT_V2: validate_evaluation_event_v2,
     SCHEMA_EVALUATION_EVENT_V3: validate_evaluation_event_v3,
+    SCHEMA_EVALUATION_EVENT_V4: validate_evaluation_event_v4,
+    SCHEMA_EVALUATION_EVENT_V5: validate_evaluation_event_v5,
 }
 
 
@@ -2304,7 +2440,7 @@ def validate_evaluation_event(obj: Any) -> list:
     record is checked by v2's rules and a v3 record by v3's, and a record naming
     neither is a violation rather than a best-effort read. Callers that mean one
     specific version (a migration, a test asserting v2 still reads) name it —
-    `validate_evaluation_event_v2` / `_v3`.
+    `validate_evaluation_event_v2` / `_v3` / `_v4`.
     """
     if not isinstance(obj, Mapping):
         return [f"record: expected a mapping, got {type(obj).__name__}"]
@@ -3033,11 +3169,13 @@ SCHEMA_REGISTRY = {
     SCHEMA_PROPOSAL_V2: validate_proposal_v2,
     SCHEMA_PROPOSAL_V3: validate_proposal_v3,
     SCHEMA_CANDIDATE: validate_candidate,
-    # Both evaluation-event versions are registered. v2 is not retired and is not
+    # All evaluation-event versions are registered. Older versions are not retired or
     # rewritten: a journal shard written last week still validates, under its own
     # rules, forever.
     SCHEMA_EVALUATION_EVENT_V2: validate_evaluation_event_v2,
     SCHEMA_EVALUATION_EVENT_V3: validate_evaluation_event_v3,
+    SCHEMA_EVALUATION_EVENT_V4: validate_evaluation_event_v4,
+    SCHEMA_EVALUATION_EVENT_V5: validate_evaluation_event_v5,
     SCHEMA_CHAMPION: validate_champion,
     SCHEMA_RELEASE_PACKAGE: validate_release_package,
     SCHEMA_OPERATOR_WAIVER: validate_operator_waiver,
@@ -3084,7 +3222,9 @@ def is_valid(obj: Any) -> bool:
 __all__ = [
     "SCHEMA_CAMPAIGN", "SCHEMA_PROPOSAL", "SCHEMA_CANDIDATE",
     "SCHEMA_EVALUATION_EVENT", "SCHEMA_EVALUATION_EVENT_V2",
-    "SCHEMA_EVALUATION_EVENT_V3", "EVALUATION_EVENT_VALIDATORS",
+    "SCHEMA_EVALUATION_EVENT_V3", "SCHEMA_EVALUATION_EVENT_V4",
+    "SCHEMA_EVALUATION_EVENT_V5",
+    "EVALUATION_EVENT_VALIDATORS",
     "SCHEMA_PROPOSAL_V2", "SCHEMA_PROPOSAL_V3",
     "SCHEMA_CHAMPION", "SCHEMA_RELEASE_PACKAGE",
     "SCHEMA_OPERATOR_WAIVER", "SCHEMA_REGISTRY", "KNOWN_SCHEMAS",
@@ -3112,7 +3252,8 @@ __all__ = [
     "validate_campaign", "validate_proposal", "validate_proposal_v2",
     "validate_proposal_v3", "validate_candidate",
     "validate_evaluation_event", "validate_evaluation_event_v2",
-    "validate_evaluation_event_v3",
+    "validate_evaluation_event_v3", "validate_evaluation_event_v4",
+    "validate_evaluation_event_v5",
     "validate_champion", "CHAMPION_BLOCKED_UNNAMED", "validate_release_package",
     "validate_operator_waiver", "validate_record", "is_valid",
     "SCHEMA_KERNEL_DASHBOARD", "SCHEMA_KERNEL_DASHBOARD_V1",

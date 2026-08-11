@@ -55,6 +55,7 @@ if _KERNEL_RND not in sys.path:
 from autokernel import schemas as S  # noqa: E402
 from autokernel.evaluator import api  # noqa: E402
 from autokernel.evaluator import integrity as I  # noqa: E402
+from autokernel.evaluator import devices as D  # noqa: E402
 
 PASS = S.Check(S.PASS)
 NOW = "2026-08-03T12:00:00+00:00"
@@ -1826,6 +1827,7 @@ def request(**overrides) -> api.EvaluationRequest:
         metric="decode_tokens_per_s",
         metric_direction="higher_better",
         reps=10,
+        change_class="parameter", anchor_tier="T1", transfer_ratio_to=(),
         created_at=NOW,
         campaign_controls=api.CampaignControls(
             calibration_block_count=30, contribution_floor=0.02, max_candidates=100,
@@ -1838,6 +1840,11 @@ def request(**overrides) -> api.EvaluationRequest:
             solve_order_recorded=api.CALIBRATION_SOLVE_ORDER,
             samples_ref="data/ak-gpu-1/calibration/aa-blocks.jsonl",
             e_process_construction_id="sign_martingale_predictable_lambda/v1"),
+        device_state=D.DeviceState(
+            device_id="mi210_0", source="fixture/rocm-smi",
+            nominal_sclk_mhz=1700, min_sclk_ratio=0.9,
+            samples=(D.DeviceStateSample(1700, 1600, 180, 55, True),),
+            receipt_ref="fixture://device-state/integrity"),
     )
     kwargs.update(overrides)
     return api.EvaluationRequest(**kwargs)

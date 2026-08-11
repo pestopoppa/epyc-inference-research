@@ -151,7 +151,7 @@ import sys
 import traceback
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
-from math import ceil
+from math import ceil, isfinite
 from pathlib import Path
 # The STDLIB median, deliberately. `evaluator.statistics` is NOT imported: its
 # e-process solved a harder problem than the measured 1.6–1.9% CV poses, and it
@@ -160,7 +160,7 @@ from pathlib import Path
 from statistics import median
 from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 
-from . import dashboard, journal as journal_module
+from . import artifact_diff, dashboard, journal as journal_module
 from . import schemas, storage
 from .controller import do_not_repeat, hypotheses
 from .evaluator import api, correctness, devices, recipes
@@ -213,6 +213,8 @@ __all__ = [
 #: Every module this driver may import, and the single reason each is essential.
 #: Each reason is a real incident or a fact measured on this host, not a taste.
 MODULES_THE_DRIVER_USES: Mapping[str, str] = {
+    "artifact_diff": "AK-TR-6 compile-only register/scratch/instruction movement vetoes "
+                     "a GPU claim before the behavioural T0 provider can launch",
     "dashboard": "the fsynced terminal campaign result must reach the operator surface; "
                  "the exporter is derived and cannot make an old journal entry fresh",
     "schemas": "one record shape; PASS/FAIL/COULD_NOT_CHECK",
@@ -393,6 +395,27 @@ def required_boosting_cores(cpu_count: int) -> int:
 #: (0.034/core), 117 under our own bench. The gate is written for the second
 #: reading and aborts on the first, which is a healthy machine.
 LOADED_ENOUGH_TO_JUDGE_BOOST: float = microbench.HostStatePolicy().max_load_per_core
+
+#: §10.7's maximum admissible uptime. Crossing it never reboots the shared
+#: host; it returns a refusal that belongs in an operator decision package.
+MAX_HOST_UPTIME_S = 7 * 24 * 60 * 60
+
+
+def check_host_uptime(uptime_s: Optional[float]) -> schemas.Check:
+    """Refuse a measurement window after one week without mutating the host."""
+    if isinstance(uptime_s, bool) or not isinstance(uptime_s, (int, float)):
+        return schemas.Check(schemas.COULD_NOT_CHECK, (
+            "/proc/uptime was unreadable, so the one-week host-health ceiling could not "
+            "be evaluated",))
+    if not isfinite(float(uptime_s)) or uptime_s < 0:
+        return schemas.Check(schemas.COULD_NOT_CHECK, (
+            f"/proc/uptime returned an invalid value {uptime_s!r}",))
+    if uptime_s > MAX_HOST_UPTIME_S:
+        return schemas.Check(schemas.FAIL, (
+            f"host uptime {uptime_s / 86400:.2f} days exceeds the one-week ceiling; "
+            "refuse measurement and route a reboot decision package to the operator",))
+    return schemas.Check(schemas.PASS, (
+        f"host uptime {uptime_s / 86400:.2f} days is within the one-week ceiling",))
 
 
 def check_boost_under_load(*, boosting_cores: int, load1: Optional[float],
@@ -1731,6 +1754,7 @@ class HostOps:
              hard=True)
 
         state = microbench.read_host_state(cpu_list=spec.cpu_list)
+        fold(check_host_uptime(getattr(state, "uptime_s", None)), "host_uptime")
         boosting = sum(1 for _cpu, khz in state.khz_by_cpu if khz >= BOOST_THRESHOLD_KHZ)
         boost = check_boost_under_load(boosting_cores=boosting, load1=state.load1,
                                        cpu_count=len(state.khz_by_cpu) or 1)
@@ -1926,6 +1950,17 @@ class HostOps:
         extra = dict(self._t0_evidence(spec=spec, identity=identity,
                                        build_evidence=build_ev)) if self._t0_evidence \
             else {}
+        # AK-TR-6: keep this before ExecutedT0EvidenceProvider construction.
+        # That provider launches op/generation processes while collecting the
+        # behavioural evidence, so discovering a compile-only veto later would
+        # already have spent the GPU wall-time this check exists to save.
+        artifact_evidence = extra.pop("artifact_diff", None)
+        device_state = extra.pop("device_state", None)
+        artifact_check = artifact_diff.require_confirmed_for_t1(artifact_evidence)
+        if spec.backend == BACKEND_GPU and artifact_check.outcome != schemas.PASS:
+            return T0Outcome(all_pass=False, gates=((
+                "t0.compile_artifact_diff", artifact_check.outcome,
+                tuple(artifact_check.reasons)),))
         anchor_capture = extra.pop("anchor_capture", None)
         if anchor_capture is None:
             raise NotImplementedError(
@@ -1960,7 +1995,8 @@ class HostOps:
             plan=t0_plan, runner=t0_provider.SubprocessRunner(),
             claim=self._claim_binding.t0_claim,
             anchor_capture=t0_anchor.capture)
-        request = self._evaluation_request(spec, identity=identity, anchor=t0_anchor)
+        request = self._evaluation_request(
+            spec, identity=identity, anchor=t0_anchor, device_state=device_state)
         report = correctness.T0CorrectnessRunner(
             provider=provider, policy=correctness.T0Policy()).evaluate(request)
         gates = tuple((g.gate_id, g.check.outcome, tuple(g.check.reasons))
@@ -1970,7 +2006,7 @@ class HostOps:
             gates=gates, report_ref=report.policy_ref)
 
     def _evaluation_request(self, spec: CampaignSpec, *, identity: Any,
-                            anchor: Any) -> api.EvaluationRequest:
+                            anchor: Any, device_state: Any = None) -> api.EvaluationRequest:
         """The request T0 is evaluated against. Digests MEASURED, not copied.
 
         `chain.measure_artifact_identity` re-walks the source tree and re-hashes
@@ -1999,8 +2035,11 @@ class HostOps:
             co_residency="single",
             determinism=api.DeterminismReport(determinism_class="bitwise_stable"),
             metric=command.metric, metric_direction=command.metric_direction,
-            reps=spec.reps, created_at=spec.created_at,
-            campaign_controls=None, calibration=None)
+            reps=spec.reps,
+            change_class=("parameter" if spec.proposal is None
+                          else spec.proposal["change_class"]),
+            anchor_tier="T0", transfer_ratio_to=(), created_at=spec.created_at,
+            campaign_controls=None, calibration=None, device_state=device_state)
 
     def _construct(self, spec: CampaignSpec, *, arm: str) -> Any:
         plan = self._build_state["plan"]

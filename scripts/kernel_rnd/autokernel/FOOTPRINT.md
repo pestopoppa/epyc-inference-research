@@ -30,16 +30,17 @@ a module it never looked at.
 
 | | non-test lines |
 |---|---:|
-| **ON THE CAMPAIGN PATH** | **58,181** |
-| **DEFERRED** (provably unreachable) | **1,031** |
-| **TOTAL** | **59,212** |
+| **ON THE CAMPAIGN PATH** | **59,022** |
+| **DEFERRED** (provably unreachable) | **1,672** |
+| **TOTAL** | **60,694** |
 
-**There is no deferred half, and as of 2026-08-04 there is no deferred module
-either.** Every non-test module in this package is now reachable from the
-campaign path. That is not a boundary that stopped being enforced — it is a
-boundary whose last live prefix was opened *module by module*, with a named
-reason per module, and which still refuses anything not on that list. See
-*The last four modules to cross* below.
+**There is no deferred half.** Three compact pure modules are deliberately off
+the mutation/build path: the observe-only proposal diagnostic, the prior-art
+compiler used before a proposal exists, and the lane/calibration registry used
+to plan future fan-out. The running campaign does import the compile-artifact
+veto because that check must fire before behavioral T0. Reachability remains
+enforced module by module; a new strategy or release plane is still forbidden
+by default.
 
 The three figures above are regenerated from the tree and asserted row by row; no
 percentage or line count is repeated anywhere else in this file, because a number
@@ -120,30 +121,34 @@ incident or a measured fact; "reduced rigour" is not a reason.
 
 | module | lines | campaign #1 | reason |
 |---|---:|:---:|---|
-| `campaign.py` | 2,610 | yes | THE ENTRYPOINT. Before it landed, `grep -rl "__main__|argparse|def main("` over every non-test module returned nothing: 94k lines, 5,695 passing tests, and no way to start it — which is the whole reason this package has produced no result |
+| `campaign.py` | 2,649 | yes | THE ENTRYPOINT. Before it landed, `grep -rl "__main__|argparse|def main("` over every non-test module returned nothing: 94k lines, 5,695 passing tests, and no way to start it — which is the whole reason this package has produced no result |
 | `dashboard.py` | 201 | yes | the terminal result was fsynced but the only dashboard exporter had been deleted, so active AutoKernel work remained permanently absent from the operator surface; this compact projection dates itself from the journal entry and cannot make an old campaign fresh |
 | `__init__.py` | 14 | yes | package docstring; `schemas` is declared here as the single source of record shape |
-| `schemas.py` | 3,134 | yes | one record shape — every module is written against it and none invents its own |
-| `journal.py` | 2,179 | yes | AutoPilot lost 232 trials and ~16 days when a restart came up empty and nothing objected |
+| `schemas.py` | 3,275 | yes | one record shape — every module is written against it and none invents its own |
+| `journal.py` | 2,181 | yes | AutoPilot lost 232 trials and ~16 days when a restart came up empty and nothing objected |
 | `offline_least_commitment.py` | 345 | no | AP-WM-1 observe-only archive analysis; importing an offline hypothesis diagnostic into the mutation/build path would give it accidental live authority |
+| `prior_art.py` | 249 | no | deterministic proposal-input compiler; it classifies findings before a proposal exists and has no place in the mutation/build process |
+| `substrate.py` | 78 | no | validated planning facts; it reads checked-in measured/datasheet receipts before proposal construction and never joins the mutation/build path |
+| `lanes.py` | 314 | no | screening declarations and rank-transfer calibration; without measured calibration campaign #1 stays on the full verified path |
+| `artifact_diff.py` | 200 | yes | AK-TR-6 must veto an unconfirmed GPU claim before the behavioral T0 provider can launch |
 | `storage.py` | 1,859 | yes | the 2026-07-04 async-prefetch win was written to `/mnt/raid0/llm/tmp/` and that directory no longer exists |
 | `evaluator/__init__.py` | 41 | yes | docstring only — it binds no submodule, so importing `evaluator.api` does not drag the plane in |
-| `evaluator/api.py` | 3,116 | yes | a `Verdict` is constructible only via `compute_verdict()`; `kernel_eval.sh` stamped `"status":"OK"` unconditionally |
-| `evaluator/correctness.py` | 3,518 | yes | throughput is reward-hackable: deleting the computation is the fastest kernel there is |
-| `evaluator/recipes.py` | 2,374 | yes | argv from a hashed constructor — production drifted off NUMA interleave 2026-05-24 and the front door ended up at 46% of canonical |
-| `evaluator/devices.py` | 577 | yes | a GPU cell must not be satisfied by `Device 0: CPU` |
-| `evaluator/controls.py` | 2,405 | yes | the A/A control plane — 2026-08-04 measured 1.62% / 1.88% between-run CV over four identical runs |
-| `evaluator/statistics.py` | 3,623 | yes | **calibration constants and `median` only.** Its e-process made the gate unpassable: threshold 10 against a sign-martingale that tops out at 5.5687, at every effect size. Fenced by `TestNoOptionalStopping` |
+| `evaluator/api.py` | 3,224 | yes | a `Verdict` is constructible only via `compute_verdict()`; `kernel_eval.sh` stamped `"status":"OK"` unconditionally |
+| `evaluator/correctness.py` | 3,574 | yes | throughput is reward-hackable: deleting the computation is the fastest kernel there is |
+| `evaluator/recipes.py` | 2,387 | yes | argv from a hashed constructor — production drifted off NUMA interleave 2026-05-24 and the front door ended up at 46% of canonical |
+| `evaluator/devices.py` | 701 | yes | a GPU cell must not be satisfied by `Device 0: CPU` |
+| `evaluator/controls.py` | 2,406 | yes | the A/A control plane — 2026-08-04 measured 1.62% / 1.88% between-run CV over four identical runs |
+| `evaluator/statistics.py` | 3,624 | yes | **calibration constants and `median` only.** Its e-process made the gate unpassable: threshold 10 against a sign-martingale that tops out at 5.5687, at every effect size. Fenced by `TestNoOptionalStopping` |
 | `evaluator/integrity.py` | 3,622 | yes | **provenance primitives only** — `sha256_file`, `hash_source_tree`, `EMPTY_TREE_SHA256`, the clean-build snapshot check. Its §8.5.1 gate runner is fenced off |
 | `evaluator/surface.py` | 3,195 | yes | **change-class constants only** — `AffectedSurface`, the core/shared-header fanout classes. `SurfaceGateRunner` is fenced off |
 | `execution/__init__.py` | 24 | yes | docstring only; states the deny-8 limits every executor inherits |
 | `execution/worktree.py` | 2,649 | yes | no candidate exists without it: production-tip anchoring, campaign worktree, build, build-identity receipt |
-| `execution/microbench.py` | 3,441 | yes | paired ALTERNATING blocks — 2026-08-04 A/A decode declined monotonically over four runs, so candidate-then-anchor charges the second arm ~4% systematically and repetitions do not remove it |
-| `execution/t0_provider.py` | 3,014 | yes | the predecessor harness tested MUL_MAT only, so a kernel that broke MUL_MAT_ID — MoE dispatch, every token in production — passed it cleanly |
-| `execution/control_runner.py` | 1,546 | yes | runs the neutral / A-A controls that the measured drift makes mandatory rather than optional |
+| `execution/microbench.py` | 3,461 | yes | paired ALTERNATING blocks — 2026-08-04 A/A decode declined monotonically over four runs, so candidate-then-anchor charges the second arm ~4% systematically and repetitions do not remove it |
+| `execution/t0_provider.py` | 3,036 | yes | the predecessor harness tested MUL_MAT only, so a kernel that broke MUL_MAT_ID — MoE dispatch, every token in production — passed it cleanly |
+| `execution/control_runner.py` | 1,550 | yes | runs the neutral / A-A controls that the measured drift makes mandatory rather than optional |
 | `execution/live_controls.py` | 686 | no | standalone, operator-invoked calibration producer for the fixed five controls; it prepares the instrument before campaign #1 and is deliberately not imported by the mutation/build entrypoint |
 | `execution/cpu_region_claim.py` | 2,408 | yes | 2026-08-04: two A/A runs were destroyed by a legitimate co-tenant because the loop held no claim. Before this module a claim could be READ but never acquired |
-| `execution/chain.py` | 1,736 | yes | holds the seams — four mismatches between executors and evaluator, one of them a field whose meaning INVERTS across the seam |
+| `execution/chain.py` | 1,846 | yes | holds the seams — four mismatches between executors and evaluator, one of them a field whose meaning INVERTS across the seam |
 | `resource/__init__.py` | 28 | yes | docstring only; names the `resource`-shadows-stdlib hazard the loop must not trip |
 | `resource/device_claim.py` | 1,826 | yes | §2.6's first row of substrate that exists nowhere in the project: a cross-process GPU device claim someone actually holds |
 | `resource/preflight.py` | 1,788 | yes | INC-20260731: a name-pattern kill took out another agent's `llama-server` twice, and `earlyoom`, whose argv names what it guards |

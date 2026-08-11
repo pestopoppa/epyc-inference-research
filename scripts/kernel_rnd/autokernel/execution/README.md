@@ -392,15 +392,18 @@ surface_evidence = chain.change_surface_from(
                                     registrations=…),
     diff_text=subprocess_output_of_git_diff)
 
-t0_plan = T0.T0ExecutionPlan(…, build=build_evidence.provenance,
-                             symbols=symbols.diff, diff=diff.policy,
-                             change_surface=surface_evidence.surface)
+t0_plan = T0.T0ExecutionPlan(
+    …,
+    build=build_evidence.provenance,
+    **chain.t0_plan_evidence(
+        symbols=symbols, diff=diff, change_surface=surface_evidence))
 ```
 
-Read `symbols.checks`, `diff.checks` and `surface_evidence.checks` as well as the
-gate results: each carries facts the far-side dataclass has no field for — a
-registration arity change, a binary file with no line count, an ELF extractor
-coverage gap.
+`t0_plan_evidence()` deliberately returns the three records and their routed
+checks together. Do not copy only `.diff`, `.policy`, and `.surface`: each wrapper
+can carry facts the far-side dataclass has no field for — an incomparable
+registration arity, a binary file with no line count, an ELF extractor coverage
+gap, or an underdetermined behavioural touch.
 
 ### Step 6 — T1
 
@@ -508,7 +511,9 @@ you have a finding that outranks everything else you did today.
 * `verify_ggml_linkage.sh` says `PASS: all linked ggml libraries resolve inside
   <your build>/bin`.
 * `t0_report` has **17** gates. Since 2026-08-04 a good candidate looks like
-  *13 PASS and 4 COULD_NOT_CHECK, zero FAIL* — see §6.1, and note that the four
+  *11 PASS and 6 COULD_NOT_CHECK, zero FAIL* — see §6.1. Two of the six are
+  projection limitations that were previously silent; their appearance is the
+  §6.1b fail-open closing, not a regression. Note that the six
   remaining COULD_NOT_CHECKs each have a NAMED reason. A `FAIL` on
   `t0.source_integrity.clean_build_from_snapshot` or
   `t0.affected_surface_reconciliation` is a real finding about your candidate.
@@ -592,9 +597,9 @@ a window the stopping rule cannot license. The rest shape what a green run means
 
 | § | What | State |
 |---|---|---|
-| 6.1 | T0's unwired producers | **CLOSED** — 13 PASS / 4 COULD_NOT_CHECK, re-verified 2026-08-04 after §6.7 |
+| 6.1 | T0's unwired producers | **CLOSED** — 11 PASS / 6 COULD_NOT_CHECK after §6.1b made projection limitations verdict-bearing |
 | 6.1a | Four defects in what 6.1 produced | **CLOSED** — bite-tested |
-| 6.1b | The projections' refusal channel reaches nothing | **OPEN** — MEDIUM-HIGH, needs a plan-side channel |
+| 6.1b | The projections' refusal channel reaches nothing | **CLOSED 2026-08-10** — projection checks merge into their existing integrity gates |
 | 6.2 | One anchor triple cannot name two tools | **CLOSED** — `AnchorIdentity.tool`, enforced three ways |
 | 6.3 | The extension round had no producer | **CLOSED** — producer, *and* a reference composition that runs it |
 | 6.4 | Claim ids and candidate ids share a prefix | **CLOSED** — refused at import |
@@ -611,10 +616,11 @@ output across to `correctness.py`'s shape. Those lines are now
 `chain.symbol_evidence`, `chain.diff_policy_evidence`,
 `chain.anchor_toolchain_from_build_log` and `chain.change_surface_from`; the
 wiring is in Step 5 above and in `test_execution_chain.ChainLeg`. **A candidate
-now gets 13 PASS and 4 COULD_NOT_CHECK.**
+now gets 11 PASS and 6 COULD_NOT_CHECK.** The additional two are the explicit
+ELF-version and derived-surface limitations §6.1b had previously dropped.
 
 **Census re-verified 2026-08-04, after the extension round and the §6.7 MDE fix
-landed: still 17 gates, 13 PASS, 4 COULD_NOT_CHECK, 0 FAIL.** Neither change
+landed: still 17 gates, 11 PASS, 6 COULD_NOT_CHECK, 0 FAIL.** Neither change
 touches a T0 surface — the extension is T1 and the MDE is the reducer's — and
 the count is pinned by
 `TestTheChainFits.test_exactly_four_t0_surfaces_still_have_no_producer`, which
@@ -731,14 +737,13 @@ where this section said they did, and all four are now bite-tested in
    now exists and `check_symbol_and_registration_preservation` FAILs on any entry
    not declared. (`TestARegistrationArityChangeReachesTheGate`)
 
-#### 6.1b OPEN — the projections' refusal channel reaches nothing (MEDIUM-HIGH)
+#### 6.1b CLOSED 2026-08-10 — projection refusals reach T0 integrity gates
 
-**Still open on 2026-08-04, and the reason it is the next thing to close:**
-nothing reads `SymbolEvidence.checks`, `DiffEvidence.checks` or
-`ChangeSurfaceEvidence.checks`, and nothing reads their `worst` property — the T0
-plan takes the projected RECORD and drops the wrapper. Every finding those
-projections make that `correctness.py` has no field for therefore evaporates
-before the report, and all of them are COULD_NOT_CHECKs turning into silence:
+`chain.t0_projection_checks()` now routes `SymbolEvidence.checks`,
+`DiffEvidence.checks`, and `ChangeSurfaceEvidence.checks` through
+`T0ExecutionPlan.projection_checks`. `evaluate_t0()` merges each finding into the
+existing constitutional gate that owns it, preserving the 17-gate coverage
+contract while making every non-PASS verdict-bearing:
 
 * registration `arity_not_comparable` — exactly one side's declared pattern
   captured an arity, which is not "unchanged";
@@ -750,19 +755,9 @@ before the report, and all of them are COULD_NOT_CHECKs turning into silence:
   the §10.6 change-class envelope does not bound it;
 * the three `derived_touches_*` UNDETERMINEDs.
 
-All four turn a COULD_NOT_CHECK into silence, which is the direction that
-overstates. Recorded in `chain.SEAM_NOTES`. **The close is a plan-side channel:**
-`t0_provider._Collected.notes` already reaches the record, so the projections'
-checks need routing into it, or `T0ExecutionPlan` needs to take the wrappers
-rather than the bare records. Not attempted here because it changes what a T0
-report contains, and that is a schema-visible change that wants its own pass.
-
-*What to do tomorrow, meanwhile:* after `evaluate_t0`, read
-`symbols.checks`, `diff.checks` and `surface_evidence.checks` yourself — they are
-right there on the objects Step 5 built — and treat any non-PASS as a finding the
-report did not carry. `ChainLeg` keeps all three on the leg
-(`leg.symbol_evidence`, `leg.diff_evidence`, `leg.change_surface_evidence`) for
-exactly that.
+The merged gate notes retain the projection check name and outcome. A malformed
+triple or an attempt to target any other gate is refused when the plan/evidence
+record is constructed.
 
 ### 6.2 The anchor triple cannot name two tools — bind two — CLOSED 2026-08-04
 

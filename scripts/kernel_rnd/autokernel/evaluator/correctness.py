@@ -1699,6 +1699,12 @@ class T0Evidence:
     determinism: Optional[DeterminismEvidence]
     linkage: Optional[LinkageEvidence]
     anti_reward_hacking: Optional[AntiRewardHackingEvidence]
+    #: Non-PASS findings made while projecting parsed artifact evidence into
+    #: the records above. Entries are ``(gate_id, check_name, Check)`` and are
+    #: folded into existing integrity gates by ``evaluate_t0``. Empty is honest
+    #: for replay fixtures that supply the final records directly and therefore
+    #: perform no projection.
+    projection_checks: tuple = ()
 
     def __post_init__(self) -> None:
         if self.control_role is not None and self.control_role not in CONTROL_ROLES:
@@ -1725,6 +1731,21 @@ class T0Evidence:
             if value is not None and not isinstance(value, (klass, NotApplicable)):
                 raise TypeError(
                     f"evidence.{name} must be a {klass.__name__}, a NotApplicable, or None")
+        allowed_projection_gates = {
+            GID_SYMBOLS, GID_SEMANTIC_DIFF, GID_SURFACE_RECONCILIATION,
+        }
+        for item in self.projection_checks:
+            if not isinstance(item, tuple) or len(item) != 3:
+                raise TypeError(
+                    "evidence.projection_checks entries must be "
+                    "(gate_id, check_name, schemas.Check) triples")
+            gate_id, check_name, check = item
+            if gate_id not in allowed_projection_gates:
+                raise ValueError(
+                    f"evidence.projection_checks gate {gate_id!r} is not projection-owned")
+            _req_str(check_name, "evidence.projection_checks[].check_name")
+            if not isinstance(check, schemas.Check):
+                raise TypeError("evidence.projection_checks[].check must be a schemas.Check")
 
 
 # =============================================================================
@@ -3343,6 +3364,40 @@ def evaluate_t0(request: api.EvaluationRequest,
     gates.append(check_anti_reward_hacking(evidence.anti_reward_hacking, evidence.control_role,
                                            request.anchor))
 
+    # A projection can discover a refusal that its projected record has no
+    # field for (for example an incomplete ELF extraction or a binary diff).
+    # Merge it into the existing constitutional gate instead of minting an
+    # eighteenth gate or demoting it to an advisory note. This preserves report
+    # coverage while ensuring FAIL/COULD_NOT_CHECK cannot disappear at a seam.
+    if evidence.projection_checks:
+        grouped = {}
+        for gate_id, check_name, check in evidence.projection_checks:
+            grouped.setdefault(gate_id, []).append((check_name, check))
+        merged = []
+        for gate in gates:
+            extras = grouped.get(gate.gate_id, ())
+            if not extras:
+                merged.append(gate)
+                continue
+            labelled = [gate.check]
+            for check_name, check in extras:
+                reasons = check.reasons or (
+                    f"projection check {check_name!r} returned {check.outcome}",)
+                labelled.append(schemas.Check(
+                    check.outcome,
+                    tuple(f"projection {check_name}: {reason}" for reason in reasons)))
+            merged.append(api.GateResult(
+                gate_id=gate.gate_id,
+                gate_class=gate.gate_class,
+                check=schemas.Check.worst_of(labelled),
+                requires_anchor=gate.requires_anchor,
+                evidence_ref=gate.evidence_ref,
+                notes=gate.notes + tuple(
+                    f"projection_check={name}:{check.outcome}"
+                    for name, check in extras),
+            ))
+        gates = merged
+
     gates, demoted = demote_anchor_requiring_passes(
         tuple(gates), anchor_bound=request.anchor is not None)
 
@@ -3465,7 +3520,7 @@ def audit_no_write_or_process_paths() -> schemas.Check:
         source = Path(__file__).read_text(encoding="utf-8")
     except OSError as exc:
         return _cnc(f"could not read {__file__}: {exc}")
-    return api.audit_no_write_or_process_paths(source)
+    return api.audit_no_write_or_process_paths(source, module_id=MODULE_ID)
 
 
 #: Seams that need a real artifact, implemented here against fakes, recorded so
@@ -3516,3 +3571,4 @@ SEAMS = (
      "already carried in removed_symbols, so the data is present if a future policy wants a "
      "stricter rule."),
 )
+MODULE_ID = "autokernel.evaluator.correctness/v1"

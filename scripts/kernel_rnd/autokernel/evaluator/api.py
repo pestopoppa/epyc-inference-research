@@ -94,6 +94,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional, Protocol, Sequence
 
 from .. import schemas
+from . import devices
 
 __all__ = [
     # identity
@@ -1349,7 +1350,18 @@ class EffectEstimate:
             # Labelled, and labelled in the record itself, not just in prose.
             "lcb_descriptive": self.lcb_descriptive,
             "lcb_label": "descriptive",
+            # AK-TR-2: the delta is never serialised without its own instrument
+            # floor adjacent to it.  Consumers may style this string, but do not
+            # have to rediscover whether the row is inside the noise.
+            "delta_display": self.delta_display(),
+            "inside_noise_floor": abs(self.value) <= self.noise_floor,
         }
+
+    def delta_display(self) -> str:
+        relation = ("INSIDE_NOISE_FLOOR" if abs(self.value) <= self.noise_floor
+                    else "ABOVE_NOISE_FLOOR")
+        return (f"delta={self.value:+.9g}; noise_floor={self.noise_floor:.9g}; "
+                f"{relation}")
 
 
 def _resolve_effect(effect: Optional[EffectEstimate]) -> str:
@@ -1450,6 +1462,49 @@ class WindowAttestations:
 
 
 @dataclass(frozen=True)
+class TransferRatio:
+    """One write-time correspondence from this event to a completed anchor tier.
+
+    Both signed effects travel with the ratio.  A reader may verify the division,
+    but may not invent a correspondence between two old events that did not name
+    each other when the later event was written.
+    """
+
+    event_id: str
+    tier: str
+    source_effect: float
+    target_effect: float
+
+    def __post_init__(self) -> None:
+        _require_nonempty_str(self.event_id, "transfer.event_id")
+        if not self.event_id.startswith("ake-"):
+            raise ValueError("transfer.event_id must start with 'ake-'")
+        if self.tier not in schemas.TIERS:
+            raise ValueError(f"transfer.tier {self.tier!r} is not one of "
+                             f"{sorted(schemas.TIERS)}")
+        for name in ("source_effect", "target_effect"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) \
+                    or not math.isfinite(value):
+                raise ValueError(f"transfer.{name} must be finite")
+        if self.target_effect == 0:
+            raise ValueError("transfer.target_effect must be non-zero")
+
+    @property
+    def ratio(self) -> float:
+        return self.source_effect / self.target_effect
+
+    def to_dict(self) -> dict:
+        return {
+            "event_id": self.event_id,
+            "tier": self.tier,
+            "source_effect": self.source_effect,
+            "target_effect": self.target_effect,
+            "ratio": self.ratio,
+        }
+
+
+@dataclass(frozen=True)
 class EvaluationRequest:
     """The identity of one evaluation. Carries no results and no verdict."""
 
@@ -1471,9 +1526,13 @@ class EvaluationRequest:
     metric: str
     metric_direction: str
     reps: int
+    change_class: str
+    anchor_tier: str
+    transfer_ratio_to: tuple
     created_at: str
     campaign_controls: Optional[CampaignControls]
     calibration: Optional[CalibrationOutputs]
+    device_state: Optional[devices.DeviceState] = None
 
     def __post_init__(self) -> None:
         for name, prefix in (("event_id", "ake-"), ("campaign_id", "ak-"),
@@ -1497,6 +1556,22 @@ class EvaluationRequest:
                              f"{sorted(schemas.METRIC_DIRECTIONS)}")
         if isinstance(self.reps, bool) or not isinstance(self.reps, int) or self.reps < 1:
             raise ValueError("reps: zero reps is not a measurement (MEASUREMENT.md:13)")
+        if self.change_class not in schemas.CHANGE_CLASSES:
+            raise ValueError(f"change_class: {self.change_class!r} is not one of "
+                             f"{sorted(schemas.CHANGE_CLASSES)}")
+        if self.anchor_tier not in schemas.TIERS:
+            raise ValueError(f"anchor_tier: {self.anchor_tier!r} is not one of "
+                             f"{sorted(schemas.TIERS)}")
+        if not isinstance(self.transfer_ratio_to, tuple):
+            raise TypeError("transfer_ratio_to must be a tuple of TransferRatio")
+        for row in self.transfer_ratio_to:
+            if not isinstance(row, TransferRatio):
+                raise TypeError("transfer_ratio_to must contain only TransferRatio")
+            if row.event_id == self.event_id:
+                raise ValueError("a transfer target cannot be the source event")
+            if row.tier != self.anchor_tier:
+                raise ValueError(f"transfer target tier {row.tier!r} does not match "
+                                 f"anchor_tier {self.anchor_tier!r}")
         _require_sha256(self.scope_manifest_sha256, "scope_manifest_sha256")
         if not _CO_RESIDENCY_RE.match(self.co_residency or ""):
             raise ValueError(f"co_residency: {self.co_residency!r} must be 'single' or "
@@ -1510,6 +1585,9 @@ class EvaluationRequest:
                 raise TypeError(f"{name} must be a {klass.__name__}")
         if self.anchor is not None and not isinstance(self.anchor, AnchorIdentity):
             raise TypeError("anchor must be an AnchorIdentity or None")
+        if self.device_state is not None and not isinstance(
+                self.device_state, devices.DeviceState):
+            raise TypeError("device_state must be a devices.DeviceState or None")
 
 
 # =============================================================================
@@ -1725,10 +1803,11 @@ def check_preconditions(request: EvaluationRequest,
     else:
         controls = schemas.Check(schemas.PASS)
 
+    host_health = _combine(window.host_health, _device_state_check(request))
     return PreconditionScan(checks=(
         ("resource_claim_held_whole_window", claim),
         ("no_concurrent_inference", window.no_concurrent_inference),
-        ("host_health_tier", window.host_health),
+        ("host_health_tier", host_health),
         ("explicit_immutable_anchor", _anchor_precondition(request, window)),
         ("evaluator_identity", _combine(window.evaluator_bundle, window.runtime_source_label)),
         ("codified_recipe", recipe),
@@ -1763,7 +1842,8 @@ def check_void_conditions(request: EvaluationRequest,
         (VOID_CLAIM_NOT_HELD,
          _combine(window.resource_claim_open, window.resource_claim_close,
                   window.resource_claim_same_holder)),
-        (VOID_HOST_HEALTH_TIER_VIOLATION, window.host_health),
+        (VOID_HOST_HEALTH_TIER_VIOLATION,
+         _combine(window.host_health, _device_state_check(request))),
         (VOID_ANCHOR_GATE_FAILED, window.anchor_gate),
         (VOID_AA_CONTROL_FAILED, window.controls.aa),
         (VOID_EVALUATOR_BUNDLE_UNVERIFIED,
@@ -1800,6 +1880,18 @@ def check_void_conditions(request: EvaluationRequest,
             ))
     return VoidScan(findings=tuple(findings), evaluated=tuple(evaluated),
                     not_applicable=tuple(skipped))
+
+
+def _device_state_check(request: EvaluationRequest) -> schemas.Check:
+    """GPU state is verdict-bearing; CPU health remains in the host receipt."""
+    if request.backend != "llama_gpu":
+        return schemas.Check(schemas.PASS)
+    if request.device_state is None:
+        return schemas.Check(
+            schemas.COULD_NOT_CHECK,
+            ("no parsed GPU device_state was attached; a rocm-smi text blob cannot "
+             "establish that the device stayed unthrottled",))
+    return request.device_state.check()
 
 
 def _calibration_void_check(request: EvaluationRequest,
@@ -2586,7 +2678,7 @@ def build_evaluation_event(*,
                            verdict: Verdict,
                            effect: Optional[EffectEstimate],
                            preconditions: PreconditionScan) -> dict:
-    """Project this run into `schemas.SCHEMA_EVALUATION_EVENT` (v3).
+    """Project this run into the current evaluation-event schema (v5).
 
     **An anchor-less voided run emits a record.** `evaluation_event.v3` permits
     the `anchor` block to be structurally ABSENT when the record's status is
@@ -2671,6 +2763,7 @@ def build_evaluation_event(*,
         "raw_samples_ref": effect.raw_samples_ref if effect is not None else window.raw_evidence_ref,
         "paired_blocks": effect.paired_blocks if effect is not None else 0,
         "estimate": effect.value if effect is not None else None,
+        "delta_display": None if effect is None else effect.delta_display(),
         "uncertainty": uncertainty,
         "search_discipline": discipline,
     }
@@ -2683,6 +2776,12 @@ def build_evaluation_event(*,
         "campaign_id": request.campaign_id,
         "candidate_id": request.candidate_id,
         "tier": request.tier,
+        "backend": request.backend,
+        "device_state": (None if request.device_state is None
+                         else request.device_state.to_dict()),
+        "change_class": request.change_class,
+        "anchor_tier": request.anchor_tier,
+        "transfer_ratio_to": [row.to_dict() for row in request.transfer_ratio_to],
         "claim_grammar": {
             "category": "CANDIDATE",
             "protocol_id": request.protocol_id,
@@ -3003,8 +3102,8 @@ _FORBIDDEN_IMPORTS = frozenset({
 })
 
 
-def _defines_this_module(tree: ast.AST) -> bool:
-    """True when the parsed source assigns `MODULE_ID = "autokernel.evaluator.api/v1"`.
+def _defines_module(tree: ast.AST, module_id: str) -> bool:
+    """True when parsed source binds ``MODULE_ID`` to the expected identity.
 
     Copied from `release/packager._defines_this_module`, for the same reason it
     exists there: a self-audit that does not prove it read its OWN module is a
@@ -3015,7 +3114,7 @@ def _defines_this_module(tree: ast.AST) -> bool:
             for target in node.targets:
                 if isinstance(target, ast.Name) and target.id == "MODULE_ID" and \
                         isinstance(node.value, ast.Constant) and \
-                        node.value.value == MODULE_ID:
+                        node.value.value == module_id:
                     return True
     return False
 
@@ -3041,7 +3140,8 @@ _NOT_THIS_MODULE = (
     "not this module's. Call with no argument to audit this module")
 
 
-def audit_no_write_or_process_paths(source: Optional[str] = None) -> schemas.Check:
+def audit_no_write_or_process_paths(source: Optional[str] = None, *,
+                                    module_id: Optional[str] = None) -> schemas.Check:
     """Prove from an AST that it cannot write or signal. No argument = THIS module.
 
     Design §5.4: the trusted runner *"has no authority to modify candidate source
@@ -3062,7 +3162,8 @@ def audit_no_write_or_process_paths(source: Optional[str] = None) -> schemas.Che
         signal" for the package, which is why `controls.py` and `correctness.py`
         delegate here instead of re-typing the tables. A result over supplied text
         is a finding about THAT TEXT, and the caller is the one that binds it to a
-        module (`readiness._audits_this_module`, `whisper_stt._source_is_this_module`).
+        module by passing its expected ``module_id``. Supplied source without
+        that binding can find a violation, but can never receive PASS.
 
     `audit_no_write_or_process_paths("")` used to return PASS in both readings.
     It no longer does: source with no function or class in it is COULD_NOT_CHECK,
@@ -3075,6 +3176,10 @@ def audit_no_write_or_process_paths(source: Optional[str] = None) -> schemas.Che
     """
     own = source is None
     if own:
+        if module_id is not None:
+            return schemas.Check(schemas.COULD_NOT_CHECK, (
+                "module_id is only accepted with supplied source; the no-argument audit "
+                "binds itself to api.MODULE_ID",))
         try:
             source = Path(__file__).read_text(encoding="utf-8")
         except OSError as exc:
@@ -3084,10 +3189,6 @@ def audit_no_write_or_process_paths(source: Optional[str] = None) -> schemas.Che
         tree = ast.parse(source)
     except SyntaxError as exc:
         return schemas.Check(schemas.COULD_NOT_CHECK, (f"could not parse module: {exc}",))
-    if own and not _defines_this_module(tree):
-        return schemas.Check(schemas.COULD_NOT_CHECK,
-                             (_NOT_THIS_MODULE.format(module_id=MODULE_ID),))
-
     findings: list = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -3112,5 +3213,12 @@ def audit_no_write_or_process_paths(source: Optional[str] = None) -> schemas.Che
         return schemas.Check(schemas.FAIL, tuple(findings))
     if not _is_an_audited_module(tree):
         return schemas.Check(schemas.COULD_NOT_CHECK, (_NOT_A_MODULE,))
+    expected_id = MODULE_ID if own else module_id
+    if not isinstance(expected_id, str) or not expected_id.strip():
+        return schemas.Check(schemas.COULD_NOT_CHECK, (
+            "supplied source has no expected module_id binding; a clean AST alone cannot "
+            "prove which module was audited",))
+    if not _defines_module(tree, expected_id):
+        return schemas.Check(schemas.COULD_NOT_CHECK,
+                             (_NOT_THIS_MODULE.format(module_id=expected_id),))
     return schemas.Check(schemas.PASS)
-

@@ -1314,6 +1314,7 @@ def _request(*, anchor, calibration, campaign_controls, tier="T1"):
         determinism=api.DeterminismReport(determinism_class="bitwise_stable",
                                           same_seed_repeat_runs=3),
         metric="decode_tps", metric_direction="higher_better", reps=10,
+        change_class="parameter", anchor_tier=tier, transfer_ratio_to=(),
         created_at="2026-08-03T12:00:00Z", campaign_controls=campaign_controls,
         calibration=calibration)
 

@@ -325,8 +325,11 @@ class SourcedConstantsTest(FakeTreeMixin, unittest.TestCase):
         self.assertNotEqual(
             value, "88-95",
             "88-95 is the SUPERSEDED MI210 host pinning per the launcher's own "
-            "provenance note; the MI210 is numa_node=1 and the host threads belong on "
-            "its SMT siblings")
+            "provenance note")
+        self.assertEqual(R.MI210_NUMA_NODE, 1)
+        self.assertEqual(R.GPU_HOST_THREADS_NUMA_NODE, 3)
+        self.assertFalse(R.GPU_HOST_THREADS_ARE_NUMA_LOCAL,
+                         "184-191 are node-3 SMT siblings, not MI210-local threads")
 
     def test_gpu_host_cores_really_come_from_the_file(self):
         # Patching `_MODULE_HASHES` with a copy keeps the fake file's hash from
@@ -1057,6 +1060,19 @@ class DisciplineTest(FakeTreeMixin, unittest.TestCase):
         self.assertEqual(argv[argv.index("--output") + 1], default)
         self.assertNotEqual(command.finding("raw_samples_retained").check.outcome, S.FAIL)
 
+    def test_t1a_cache_state_is_declared_recorded_and_receipt_bound(self):
+        binding = self.binding("test-backend-ops")
+        cold = R.construct("t1a.llama_cpu.backend_ops_perf.v1", binding=binding,
+                           params=self.ops_params())
+        warm = R.construct("t1a.llama_cpu.backend_ops_perf.v1", binding=binding,
+                           params=self.ops_params(cache_state="warm"))
+        self.assertEqual(cold.params["cache_state"], "cold")
+        self.assertEqual(warm.params["cache_state"], "warm")
+        self.assertNotEqual(cold.receipt.argv_sha256, warm.receipt.argv_sha256)
+        with self.assertRaisesRegex(R.RecipeParameterError, "cache_state"):
+            R.construct("t1a.llama_cpu.backend_ops_perf.v1", binding=binding,
+                        params=self.ops_params(cache_state="unknown"))
+
     def test_linkage_host_and_cli_checks_are_delegated_not_assumed(self):
         command = R.construct("t1b.llama_cpu.llama_bench_decode.v1",
                               binding=self.binding(), params=self.decode_params())
@@ -1587,7 +1603,8 @@ def _request(command: R.ConstructedCommand, **overrides) -> api.EvaluationReques
         determinism=api.DeterminismReport(determinism_class="not_measured",
                                           same_seed_repeat_runs=0),
         metric=command.metric, metric_direction=command.metric_direction,
-        reps=10, created_at=NOW, campaign_controls=None, calibration=None)
+        reps=10, change_class="parameter", anchor_tier=command.tier,
+        transfer_ratio_to=(), created_at=NOW, campaign_controls=None, calibration=None)
     kwargs.update(overrides)
     return api.EvaluationRequest(**kwargs)
 

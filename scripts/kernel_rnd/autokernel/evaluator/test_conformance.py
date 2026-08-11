@@ -63,6 +63,7 @@ from autokernel import schemas as S                      # noqa: E402
 from autokernel.evaluator import api                     # noqa: E402
 from autokernel.evaluator import controls as CT          # noqa: E402
 from autokernel.evaluator import correctness as CO       # noqa: E402
+from autokernel.evaluator import devices as DV           # noqa: E402
 from autokernel.evaluator import integrity as IG         # noqa: E402
 from autokernel.evaluator import recipes as RC           # noqa: E402
 from autokernel.evaluator import statistics as ST        # noqa: E402
@@ -470,8 +471,14 @@ def request(**overrides) -> api.EvaluationRequest:
         determinism=api.DeterminismReport(determinism_class="bitwise_stable",
                                           same_seed_repeat_runs=3),
         metric="decode_tokens_per_s", metric_direction="higher_better", reps=10,
+        change_class="parameter", anchor_tier="T1", transfer_ratio_to=(),
         created_at=NOW, campaign_controls=campaign_controls(),
-        calibration=calibration())
+        calibration=calibration(),
+        device_state=DV.DeviceState(
+            device_id="mi210_0", source="fixture/rocm-smi",
+            nominal_sclk_mhz=1700, min_sclk_ratio=0.9,
+            samples=(DV.DeviceStateSample(1700, 1600, 180, 55, True),),
+            receipt_ref="fixture://device-state/conformance"))
     kwargs.update(overrides)
     return api.EvaluationRequest(**kwargs)
 

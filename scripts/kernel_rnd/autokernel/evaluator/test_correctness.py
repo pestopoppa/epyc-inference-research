@@ -42,6 +42,7 @@ if _KERNEL_RND not in sys.path:
 from autokernel import schemas as S  # noqa: E402
 from autokernel.evaluator import api  # noqa: E402
 from autokernel.evaluator import correctness as C  # noqa: E402
+from autokernel.evaluator import devices as D  # noqa: E402
 
 PASS = S.Check(S.PASS)
 NOW = "2026-08-03T12:00:00+00:00"
@@ -106,6 +107,7 @@ def request(**overrides) -> api.EvaluationRequest:
         metric="decode_tokens_per_s",
         metric_direction="higher_better",
         reps=10,
+        change_class="parameter", anchor_tier="T0", transfer_ratio_to=(),
         created_at=NOW,
         # Precondition 8 is required of EVERY run, not only rate comparisons.
         campaign_controls=api.CampaignControls(
@@ -116,6 +118,11 @@ def request(**overrides) -> api.EvaluationRequest:
         # carries no calibration block: `VOID_INCOMPLETE_CALIBRATION` and the
         # statistical conjuncts are rate-only.
         calibration=None,
+        device_state=D.DeviceState(
+            device_id="mi210_0", source="fixture/rocm-smi",
+            nominal_sclk_mhz=1700, min_sclk_ratio=0.9,
+            samples=(D.DeviceStateSample(1700, 1600, 180, 55, True),),
+            receipt_ref="fixture://device-state/correctness"),
     )
     kwargs.update(overrides)
     return api.EvaluationRequest(**kwargs)

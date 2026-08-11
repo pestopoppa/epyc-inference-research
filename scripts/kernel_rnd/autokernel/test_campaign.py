@@ -768,6 +768,15 @@ class TestTheBoostCheckIsOnlyEvaluatedUnderLoad(unittest.TestCase):
         self.assertEqual(at_threshold.outcome, schemas.PASS)
         self.assertEqual(below.outcome, schemas.FAIL)
 
+    def test_the_one_week_uptime_ceiling_refuses_without_rebooting(self):
+        self.assertEqual(campaign.check_host_uptime(6.99 * 86400).outcome,
+                         schemas.PASS)
+        over = campaign.check_host_uptime(7.01 * 86400)
+        self.assertEqual(over.outcome, schemas.FAIL)
+        self.assertIn("reboot decision package", " ".join(over.reasons))
+        self.assertEqual(campaign.check_host_uptime(None).outcome,
+                         schemas.COULD_NOT_CHECK)
+
 
 # =============================================================================
 # 7. The MoE-dispatch hole

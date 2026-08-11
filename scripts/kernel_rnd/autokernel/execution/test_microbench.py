@@ -503,7 +503,8 @@ class TestReceiptVerification(unittest.TestCase):
         rehashed = replace(
             self.receipt, argv_sha256=M._argv_hash(
                 recipe_id=self.receipt.recipe_id, registry_id=self.receipt.registry_id,
-                arm=self.receipt.arm, argv=tampered, env=self.receipt.recipe_env))
+                arm=self.receipt.arm, argv=tampered, env=self.receipt.recipe_env,
+                params=self.receipt.params))
         check = M.verify_receipt(rehashed, argv=tampered, env=self.env)
         self.assertEqual(check.outcome, schemas.FAIL)
         self.assertTrue(any("argv does not match" in r for r in check.reasons))
@@ -545,7 +546,8 @@ class TestReceiptVerification(unittest.TestCase):
             self.receipt, argv=tuple(hand_typed),
             argv_sha256=M._argv_hash(
                 recipe_id=self.receipt.recipe_id, registry_id=self.receipt.registry_id,
-                arm=self.receipt.arm, argv=hand_typed, env=self.receipt.recipe_env))
+                arm=self.receipt.arm, argv=hand_typed, env=self.receipt.recipe_env,
+                params=self.receipt.params))
         check = M.verify_receipt(rehashed, argv=hand_typed, env=self.env, reconstruct=True)
         self.assertEqual(check.outcome, schemas.FAIL)
         self.assertTrue(any("independent reconstruction" in r for r in check.reasons))
@@ -576,7 +578,8 @@ class TestReceiptVerification(unittest.TestCase):
         self.assertEqual(
             M._argv_hash(recipe_id=self.command.recipe_id,
                          registry_id=self.command.registry_id, arm=self.command.arm,
-                         argv=self.command.argv, env=self.command.env),
+                         argv=self.command.argv, env=self.command.env,
+                         params=self.command.params),
             self.command.receipt.argv_sha256)
 
     def test_the_receipt_is_canonical_json_able(self):

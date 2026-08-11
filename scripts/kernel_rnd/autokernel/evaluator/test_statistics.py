@@ -158,6 +158,7 @@ def make_request(*, calibration, controls, candidate_id="akc-0001", direction=HI
         determinism=api.DeterminismReport(determinism_class="bitwise_stable",
                                           same_seed_repeat_runs=3),
         metric="decode_tokens_per_second", metric_direction=direction, reps=3,
+        change_class="parameter", anchor_tier=tier, transfer_ratio_to=(),
         created_at=NOW, campaign_controls=controls, calibration=calibration)
 
 
@@ -1592,7 +1593,7 @@ class TestNoWriteOrProcessPaths(unittest.TestCase):
 
     def test_statistics_module_cannot_write_or_signal(self):
         source = Path(st.__file__).read_text(encoding="utf-8")
-        chk = api.audit_no_write_or_process_paths(source)
+        chk = api.audit_no_write_or_process_paths(source, module_id=st.MODULE_ID)
         self.assertEqual(chk.outcome, S.PASS, f"audit findings: {list(chk.reasons)}")
 
     def test_the_audit_would_notice_a_write_path(self):

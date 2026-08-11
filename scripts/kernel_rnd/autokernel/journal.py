@@ -197,6 +197,8 @@ ACCEPTED_SCHEMAS_BY_KIND = {
     KIND_EVALUATION_EVENT: frozenset({
         schemas.SCHEMA_EVALUATION_EVENT_V2,
         schemas.SCHEMA_EVALUATION_EVENT_V3,
+        schemas.SCHEMA_EVALUATION_EVENT_V4,
+        schemas.SCHEMA_EVALUATION_EVENT_V5,
     }),
     KIND_PROPOSAL_RECORDED: frozenset({
         schemas.SCHEMA_PROPOSAL_V2,

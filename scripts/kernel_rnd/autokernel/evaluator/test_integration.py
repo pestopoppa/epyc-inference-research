@@ -76,6 +76,7 @@ from autokernel import storage as STG                  # noqa: E402
 from autokernel.evaluator import api                   # noqa: E402
 from autokernel.evaluator import controls as CT        # noqa: E402
 from autokernel.evaluator import correctness as CO     # noqa: E402
+from autokernel.evaluator import devices as DV         # noqa: E402
 from autokernel.evaluator import integrity as IG       # noqa: E402
 from autokernel.evaluator import statistics as ST      # noqa: E402
 from autokernel.evaluator import surface as SU         # noqa: E402
@@ -708,9 +709,18 @@ class EndToEndScenario(unittest.TestCase):
             determinism=api.DeterminismReport(determinism_class="bitwise_stable",
                                               same_seed_repeat_runs=3),
             metric="decode_tokens_per_s", metric_direction="higher_better", reps=10,
+            change_class="parameter", anchor_tier="T1",
+            transfer_ratio_to=(),
             created_at=NOW, campaign_controls=cls.campaign_controls,
-            calibration=cls.calibration)
+            calibration=cls.calibration,
+            device_state=DV.DeviceState(
+                device_id="mi210_0", source="fixture/rocm-smi",
+                nominal_sclk_mhz=1700, min_sclk_ratio=0.9,
+                samples=(DV.DeviceStateSample(1700, 1600, 180, 55, True),),
+                receipt_ref="fixture://device-state/integration"))
         kwargs.update(overrides)
+        if "anchor_tier" not in overrides:
+            kwargs["anchor_tier"] = kwargs["tier"]
         if kwargs["tier"] == "T0":
             kwargs.setdefault("event_id", "ake-t0-0001")
         return api.EvaluationRequest(**kwargs)

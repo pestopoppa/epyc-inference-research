@@ -188,12 +188,60 @@ __all__ = [
     "ChangeSurfaceEvidence",
     "change_surface_from",
     "classify_behavioural_surface",
+    "classify_realized_edit",
+    "EDIT_TYPES",
+    "EDIT_NO_OP",
+    "EDIT_MASK_FIX",
+    "EDIT_DELEGATED_OP",
+    "EDIT_DTYPE_CAST",
+    "EDIT_OPTIMIZATION_REWRITE",
+    "t0_projection_checks",
+    "t0_plan_evidence",
     "SEAM_NOTES",
 ]
 
 
 class ChainSeamError(Exception):
     """A composition between two executors that cannot be made without inventing a fact."""
+
+
+def t0_projection_checks(*, symbols: "SymbolEvidence", diff: "DiffEvidence",
+                         change_surface: "ChangeSurfaceEvidence") -> tuple:
+    """Route projection findings into the existing T0 gates that own them.
+
+    The wrappers carry checks that their projected correctness records cannot
+    represent. Returning labelled triples keeps those checks verdict-bearing
+    through ``T0ExecutionPlan`` without inventing new gate ids.
+    """
+    expected = ((symbols, SymbolEvidence, correctness.GID_SYMBOLS, "symbols"),
+                (diff, DiffEvidence, correctness.GID_SEMANTIC_DIFF, "diff"),
+                (change_surface, ChangeSurfaceEvidence,
+                 correctness.GID_SURFACE_RECONCILIATION, "change_surface"))
+    routed = []
+    for evidence, klass, gate_id, prefix in expected:
+        if not isinstance(evidence, klass):
+            raise TypeError(f"{prefix} must be a {klass.__name__}")
+        for name, check in evidence.checks:
+            routed.append((gate_id, f"{prefix}.{name}", check))
+    return tuple(routed)
+
+
+def t0_plan_evidence(*, symbols: "SymbolEvidence", diff: "DiffEvidence",
+                     change_surface: "ChangeSurfaceEvidence") -> dict:
+    """Return the complete plan kwargs for the three projected T0 surfaces.
+
+    Keeping the records and their refusal channel in one helper prevents a live
+    adapter from copying ``.diff/.policy/.surface`` while accidentally dropping
+    the checks that qualify those records.
+    """
+    checks = t0_projection_checks(
+        symbols=symbols, diff=diff, change_surface=change_surface)
+    return {
+        "symbols": symbols.diff,
+        "diff": diff.policy,
+        "change_surface": change_surface.surface,
+        "projection_checks": checks,
+    }
 
 
 class BuildProvenanceUnprojectable(ChainSeamError):
@@ -272,19 +320,17 @@ SEAM_NOTES = (
      "is a COULD_NOT_CHECK, not a FAIL — the declared extraction pattern captured an arity "
      "on one side only — and this record has no field that can carry a COULD_NOT_CHECK at "
      "all, so it lands in `SymbolEvidence.checks` and stops there."),
-    ("NOTHING READS `SymbolEvidence.checks`, `DiffEvidence.checks` or "
-     "`ChangeSurfaceEvidence.checks`, and nothing reads their `worst` property. The T0 plan "
-     "takes the projected RECORD (`.diff`, `.policy`, `.surface`) and the wrapper is "
-     "dropped, so every finding these projections make that `correctness.py` has no field "
-     "for evaporates between here and the report. Today that is: registration "
+    ("CLOSED 2026-08-10: `t0_projection_checks` routes `SymbolEvidence.checks`, "
+     "`DiffEvidence.checks` and `ChangeSurfaceEvidence.checks` through the T0 plan and "
+     "`evaluate_t0` merges them into their existing constitutional integrity gates. The "
+     "findings that previously evaporated were: registration "
      "`arity_not_comparable`; `elf_extraction_complete` (the ELF extractor reported a "
      "coverage gap, so the symbol diff is over an incompletely-read table, and the gate "
      "still says PASS); `diff_is_textual` (a binary blob in the diff contributes no changed "
      "lines, so the §10.6 change-class envelope does not bound it); and the three "
      "`derived_touches_*` UNDETERMINEDs. All four are COULD_NOT_CHECKs turning into "
-     "silence, which is the direction that overstates. REQUIRED FOLLOW-UP: give the T0 plan "
-     "a channel for projection-side checks — `_Collected.notes` is the existing one and it "
-     "reaches the record — or make the plan take the wrappers."),
+     "silence, which is the direction that overstates. The reference composition carries "
+     "the routed triples and its report now exposes those limitations as COULD_NOT_CHECK."),
 )
 
 
@@ -1568,6 +1614,29 @@ BEHAVIOURAL_TOKENS = {
 
 _DIFF_BODY_RE = re.compile(r"^[+-](?![+-])")
 
+EDIT_NO_OP = "no_op"
+EDIT_MASK_FIX = "mask_fix"
+EDIT_DELEGATED_OP = "delegated_op"
+EDIT_DTYPE_CAST = "dtype_cast"
+EDIT_OPTIMIZATION_REWRITE = "optimization_rewrite"
+EDIT_TYPES = (
+    EDIT_NO_OP, EDIT_MASK_FIX, EDIT_DELEGATED_OP, EDIT_DTYPE_CAST,
+    EDIT_OPTIMIZATION_REWRITE,
+)
+
+_EDIT_PATTERNS = {
+    EDIT_MASK_FIX: re.compile(
+        r"\b(mask|masked|bounds?|out[_ -]?of[_ -]?range|clamp|guard|valid[_ -]?index)\b",
+        re.IGNORECASE),
+    EDIT_DELEGATED_OP: re.compile(
+        r"\b(rocblas\w*|hipblas\w*|hipblaslt\w*|ck::|composable_kernel|cublas\w*|torch::|at::|"
+        r"ggml_backend_[a-z0-9_]*_compute)\b", re.IGNORECASE),
+    EDIT_DTYPE_CAST: re.compile(
+        r"\b(static_cast|reinterpret_cast|const_cast|dynamic_cast|float16|bfloat16|"
+        r"half|__half|int8_t|uint8_t|int16_t|uint16_t|fp16|bf16|dtype)\b",
+        re.IGNORECASE),
+}
+
 
 def _changed_lines(diff_text: str) -> tuple:
     """The added and removed BODY lines of a unified diff, without the file headers.
@@ -1577,6 +1646,41 @@ def _changed_lines(diff_text: str) -> tuple:
     that the change touches persistent state.
     """
     return tuple(line for line in diff_text.splitlines() if _DIFF_BODY_RE.match(line))
+
+
+def classify_realized_edit(diff_text: str) -> dict:
+    """Classify an adjacent candidate diff using the repair-vs-rewrite taxonomy.
+
+    The result is telemetry, never a correctness or speed verdict. Each
+    substantive changed line votes for one specific repair class or for the
+    catch-all optimization rewrite; the dominant class wins under a fixed tie
+    order and the complete counts remain attached for audit.
+    """
+    if not isinstance(diff_text, str):
+        raise TypeError("classify_realized_edit takes unified diff text")
+    bodies = []
+    for line in _changed_lines(diff_text):
+        body = line[1:].strip()
+        if not body or body.startswith(("//", "/*", "*", "#")):
+            continue
+        bodies.append(body)
+    counts = {name: 0 for name in EDIT_TYPES}
+    if not bodies:
+        counts[EDIT_NO_OP] = 1
+        return {"edit_type": EDIT_NO_OP, "counts": counts,
+                "substantive_lines": 0}
+    for body in bodies:
+        for name in (EDIT_MASK_FIX, EDIT_DELEGATED_OP, EDIT_DTYPE_CAST):
+            if _EDIT_PATTERNS[name].search(body):
+                counts[name] += 1
+                break
+        else:
+            counts[EDIT_OPTIMIZATION_REWRITE] += 1
+    order = (EDIT_MASK_FIX, EDIT_DELEGATED_OP, EDIT_DTYPE_CAST,
+             EDIT_OPTIMIZATION_REWRITE)
+    winner = max(order, key=lambda name: (counts[name], -order.index(name)))
+    return {"edit_type": winner, "counts": counts,
+            "substantive_lines": len(bodies)}
 
 
 def classify_behavioural_surface(diff_text: str) -> dict:
@@ -1608,6 +1712,7 @@ class ChangeSurfaceEvidence:
     affected: Any
     checks: tuple
     notes: tuple = ()
+    realized_edit: Optional[dict] = None
 
     @property
     def worst(self) -> schemas.Check:
@@ -1668,6 +1773,7 @@ def change_surface_from(affected: Any, *, diff_text: str,
         raise TypeError("change_surface_from(diff_text=…) takes the diff TEXT")
 
     classified = classify_behavioural_surface(diff_text)
+    realized_edit = classify_realized_edit(diff_text)
     checks: list = []
     notes: list = []
     for name, (flag, matched) in sorted(classified.items()):
@@ -1732,5 +1838,9 @@ def change_surface_from(affected: Any, *, diff_text: str,
         touches_shared_core_header=bool(core_header),
         derivation_ref=derivation_ref,
     )
+    notes.append(
+        f"realized edit type {realized_edit['edit_type']} over "
+        f"{realized_edit['substantive_lines']} substantive changed line(s); "
+        f"counts={realized_edit['counts']}")
     return ChangeSurfaceEvidence(surface=record, affected=affected, checks=tuple(checks),
-                                 notes=tuple(notes))
+                                 notes=tuple(notes), realized_edit=realized_edit)

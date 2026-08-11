@@ -395,6 +395,31 @@ def _event_v3_voided_without_an_anchor() -> dict:
     return record
 
 
+def _event_v4(**overrides) -> dict:
+    record = _event_v3()
+    record["schema"] = S.SCHEMA_EVALUATION_EVENT_V4
+    record["change_class"] = "dispatcher"
+    record["anchor_tier"] = "T2"
+    record["transfer_ratio_to"] = [{
+        "event_id": "ake-20260801-0099",
+        "tier": "T2",
+        "source_effect": 0.02,
+        "target_effect": 0.025,
+        "ratio": 0.8,
+    }]
+    record.update(overrides)
+    return record
+
+
+def _event_v5(**overrides) -> dict:
+    record = _event_v4()
+    record["schema"] = S.SCHEMA_EVALUATION_EVENT_V5
+    record["backend"] = "llama_cpu"
+    record["device_state"] = None
+    record.update(overrides)
+    return record
+
+
 def _champion() -> dict:
     return {
         "schema": S.SCHEMA_CHAMPION,
@@ -492,6 +517,8 @@ FIXTURES = {
     S.SCHEMA_CANDIDATE: _candidate,
     S.SCHEMA_EVALUATION_EVENT_V2: _event,
     S.SCHEMA_EVALUATION_EVENT_V3: _event_v3_voided_without_an_anchor,
+    S.SCHEMA_EVALUATION_EVENT_V4: _event_v4,
+    S.SCHEMA_EVALUATION_EVENT_V5: _event_v5,
     S.SCHEMA_CHAMPION: _champion,
     S.SCHEMA_RELEASE_PACKAGE: _release_package,
     S.SCHEMA_OPERATOR_WAIVER: _waiver,
@@ -1054,18 +1081,51 @@ class EvaluationEventV3AnchorTest(unittest.TestCase):
 
     def test_the_dispatcher_refuses_an_unknown_evaluation_event_version(self):
         record = _event_v3()
-        record["schema"] = "epyc.autokernel.evaluation_event.v4"
+        record["schema"] = "epyc.autokernel.evaluation_event.v6"
         violations = S.validate_evaluation_event(record)
         self.assertTrue(any("not an AutoKernel evaluation_event schema" in v
                             for v in violations), violations)
         self.assertTrue(S.validate_evaluation_event(None))
 
-    def test_the_current_schema_string_is_v3(self):
-        self.assertEqual(S.SCHEMA_EVALUATION_EVENT, S.SCHEMA_EVALUATION_EVENT_V3)
+    def test_the_current_schema_string_is_v5(self):
+        self.assertEqual(S.SCHEMA_EVALUATION_EVENT, S.SCHEMA_EVALUATION_EVENT_V5)
         self.assertIn(S.SCHEMA_EVALUATION_EVENT_V2, S.KNOWN_SCHEMAS)
         self.assertIn(S.SCHEMA_EVALUATION_EVENT_V3, S.KNOWN_SCHEMAS)
-        for schema in (S.SCHEMA_EVALUATION_EVENT_V2, S.SCHEMA_EVALUATION_EVENT_V3):
+        for schema in (S.SCHEMA_EVALUATION_EVENT_V2, S.SCHEMA_EVALUATION_EVENT_V3,
+                       S.SCHEMA_EVALUATION_EVENT_V4,
+                       S.SCHEMA_EVALUATION_EVENT_V5):
             self.assertEqual(S.NON_RETRIEVABLE_FIELDS[schema], frozenset({"narrative"}))
+
+    def test_v4_transfer_ratio_is_recomputed_not_trusted(self):
+        record = _event_v4()
+        record["transfer_ratio_to"][0]["ratio"] = 0.7
+        violations = S.validate_evaluation_event(record)
+        self.assertTrue(any("source_effect / target_effect" in v for v in violations),
+                        violations)
+
+    def test_v4_transfer_target_must_match_the_declared_anchor_tier(self):
+        record = _event_v4()
+        record["transfer_ratio_to"][0]["tier"] = "T1"
+        violations = S.validate_evaluation_event(record)
+        self.assertTrue(any("does not match anchor_tier" in v for v in violations),
+                        violations)
+
+    def test_v5_gpu_device_state_rederives_throttle_observed(self):
+        record = _event_v5(backend="llama_gpu", device_state={
+            "device_id": "ROCm0", "source": "rocm-smi/v6.2",
+            "nominal_sclk_mhz": 1700.0, "min_sclk_ratio": 0.9,
+            "samples": [{"sclk_mhz": 800.0, "mclk_mhz": 1600.0,
+                         "power_w": 180.0, "temperature_c": 61.0,
+                         "under_measurement_load": True}],
+            "throttle_observed": False, "receipt_ref": "akraw://state/1",
+        })
+        violations = S.validate_evaluation_event(record)
+        self.assertTrue(any("does not equal" in v for v in violations), violations)
+
+    def test_v5_gpu_device_state_is_parsed_not_a_text_blob(self):
+        record = _event_v5(backend="llama_gpu", device_state="sclk 1700 power 180")
+        violations = S.validate_evaluation_event(record)
+        self.assertTrue(any("parsed mapping" in v for v in violations), violations)
 
     def test_the_narrative_is_stripped_from_a_v3_record_too(self):
         record = _event_v3(narrative="the planner's story", narrative_retrievable=False)
@@ -1436,6 +1496,8 @@ class RegistryDispatchTest(unittest.TestCase):
             S.SCHEMA_CANDIDATE: S.validate_candidate,
             S.SCHEMA_EVALUATION_EVENT_V2: S.validate_evaluation_event_v2,
             S.SCHEMA_EVALUATION_EVENT_V3: S.validate_evaluation_event_v3,
+            S.SCHEMA_EVALUATION_EVENT_V4: S.validate_evaluation_event_v4,
+            S.SCHEMA_EVALUATION_EVENT_V5: S.validate_evaluation_event_v5,
             S.SCHEMA_CHAMPION: S.validate_champion,
             S.SCHEMA_RELEASE_PACKAGE: S.validate_release_package,
             S.SCHEMA_OPERATOR_WAIVER: S.validate_operator_waiver,

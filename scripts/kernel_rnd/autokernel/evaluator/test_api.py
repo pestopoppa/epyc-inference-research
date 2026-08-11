@@ -46,7 +46,7 @@ if _KERNEL_RND not in sys.path:
     sys.path.insert(0, _KERNEL_RND)
 
 from autokernel import schemas as S  # noqa: E402
-from autokernel.evaluator import api  # noqa: E402
+from autokernel.evaluator import api, devices  # noqa: E402
 from autokernel.resource import claim_witness as CW  # noqa: E402
 from autokernel.resource import device_claim as DC  # noqa: E402
 
@@ -185,9 +185,17 @@ def request(**overrides) -> api.EvaluationRequest:
         metric="decode_tokens_per_s",
         metric_direction="higher_better",
         reps=10,
+        change_class="parameter", anchor_tier="T1", transfer_ratio_to=(),
         created_at=NOW,
         campaign_controls=campaign_controls(),
         calibration=calibration(),
+        device_state=devices.DeviceState(
+            device_id="ROCm0", source="rocm-smi/v6.2",
+            nominal_sclk_mhz=1700, min_sclk_ratio=0.9,
+            samples=(devices.DeviceStateSample(
+                sclk_mhz=1700, mclk_mhz=1600, power_w=180,
+                temperature_c=61, under_measurement_load=True),),
+            receipt_ref="akraw://state/healthy"),
     )
     kwargs.update(overrides)
     return api.EvaluationRequest(**kwargs)
@@ -210,6 +218,47 @@ def effect(**overrides) -> api.EffectEstimate:
     )
     kwargs.update(overrides)
     return api.EffectEstimate(**kwargs)
+
+
+class TransferAndNoisePresentationTest(unittest.TestCase):
+    def test_effect_prints_its_noise_floor_adjacent_to_the_delta(self):
+        row = effect(value=0.004, noise_floor=0.009)
+        self.assertEqual(row.to_dict()["inside_noise_floor"], True)
+        self.assertIn("delta=", row.to_dict()["delta_display"])
+        self.assertIn("noise_floor=", row.to_dict()["delta_display"])
+        self.assertIn("INSIDE_NOISE_FLOOR", row.to_dict()["delta_display"])
+
+
+class DeviceStateGateTest(unittest.TestCase):
+    def test_loaded_gpu_clock_drop_voids_the_window_and_is_serialized(self):
+        throttled = devices.DeviceState(
+            device_id="ROCm0", source="rocm-smi/v6.2",
+            nominal_sclk_mhz=1700, min_sclk_ratio=0.9,
+            samples=(devices.DeviceStateSample(
+                sclk_mhz=800, mclk_mhz=1600, power_w=180,
+                temperature_c=61, under_measurement_load=True),),
+            receipt_ref="akraw://state/throttled")
+        outcome = run(req=request(device_state=throttled), eff=effect())
+        self.assertEqual(outcome.verdict.status, api.STATUS_INVALID)
+        self.assertIn(api.VOID_HOST_HEALTH_TIER_VIOLATION,
+                      outcome.void_scan.reasons())
+        self.assertTrue(outcome.event["device_state"]["throttle_observed"])
+
+    def test_gpu_text_blob_or_absence_cannot_read_as_healthy(self):
+        scan = api.check_preconditions(request(device_state=None), window())
+        self.assertEqual(dict(scan.checks)["host_health_tier"].outcome,
+                         S.COULD_NOT_CHECK)
+
+    def test_event_carries_a_recomputable_change_class_keyed_transfer(self):
+        transfer = api.TransferRatio(
+            event_id="ake-ground-truth-0001", tier="T2",
+            source_effect=0.02, target_effect=0.025)
+        outcome = run(req=request(change_class="layout", anchor_tier="T2",
+                                  transfer_ratio_to=(transfer,)), eff=effect())
+        self.assertEqual(outcome.event["change_class"], "layout")
+        self.assertEqual(outcome.event["anchor_tier"], "T2")
+        self.assertAlmostEqual(outcome.event["transfer_ratio_to"][0]["ratio"], 0.8)
+        self.assertEqual(S.validate_evaluation_event(outcome.event), [])
 
 
 def gates_ok() -> tuple:
@@ -377,7 +426,7 @@ class AnchorRequiredTest(unittest.TestCase):
         self.assertIsNone(outcome.event_blocked_reason)
         self.assertEqual(outcome.event_violations, ())
         self.assertEqual(S.validate_evaluation_event(outcome.event), [])
-        self.assertEqual(outcome.event["schema"], S.SCHEMA_EVALUATION_EVENT_V3)
+        self.assertEqual(outcome.event["schema"], S.SCHEMA_EVALUATION_EVENT_V5)
         self.assertEqual(outcome.event["status"], api.STATUS_INVALID)
         # Structurally absent: not null, not a placeholder, not any key at all.
         self.assertNotIn("anchor", outcome.event)
@@ -1176,7 +1225,16 @@ class NoWritePathTest(unittest.TestCase):
         is why `controls.py` and `correctness.py` do not copy the denylists."""
         from autokernel.evaluator import devices as D
         text = Path(D.__file__).read_text(encoding="utf-8")
-        self.assertEqual(api.audit_no_write_or_process_paths(text).outcome, S.PASS)
+        self.assertEqual(api.audit_no_write_or_process_paths(
+            text, module_id=D.MODULE_ID).outcome, S.PASS)
+
+    def test_supplied_clean_source_requires_and_checks_foreign_module_identity(self):
+        from autokernel.evaluator import devices as D
+        text = Path(D.__file__).read_text(encoding="utf-8")
+        self.assertEqual(api.audit_no_write_or_process_paths(text).outcome,
+                         S.COULD_NOT_CHECK)
+        self.assertEqual(api.audit_no_write_or_process_paths(
+            text, module_id=api.MODULE_ID).outcome, S.COULD_NOT_CHECK)
 
     def test_a_finding_is_still_returned_over_a_one_line_snippet(self):
         """A FAIL is a finding about the TEXT and is returned unbound, so the

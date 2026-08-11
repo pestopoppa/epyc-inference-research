@@ -174,6 +174,7 @@ def evaluation_request(*, anchor=None, source_sha256=SHA_A, binary_sha256=SHA_D,
         determinism=api.DeterminismReport(determinism_class=determinism_class,
                                           same_seed_repeat_runs=repeats),
         metric="op_throughput_gflops", metric_direction="higher_better", reps=1,
+        change_class="parameter", anchor_tier="T0", transfer_ratio_to=(),
         created_at="2026-08-03T22:00:00Z", campaign_controls=None, calibration=None)
 
 

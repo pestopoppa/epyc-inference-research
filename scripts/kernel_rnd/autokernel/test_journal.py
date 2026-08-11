@@ -178,6 +178,19 @@ def _event(suffix: str = "0001") -> dict:
         "campaign_id": CAMPAIGN,
         "candidate_id": "akc-20260803-0001",
         "tier": "T1",
+        "change_class": "parameter",
+        "anchor_tier": "T1",
+        "transfer_ratio_to": [],
+        "backend": "llama_gpu",
+        "device_state": {
+            "device_id": "mi210_0", "source": "fixture/rocm-smi",
+            "nominal_sclk_mhz": 1700.0, "min_sclk_ratio": 0.9,
+            "samples": [{"sclk_mhz": 1700.0, "mclk_mhz": 1600.0,
+                         "power_w": 180.0, "temperature_c": 55.0,
+                         "under_measurement_load": True}],
+            "throttle_observed": False,
+            "receipt_ref": "fixture://device-state/journal",
+        },
         "claim_grammar": {
             "category": "CANDIDATE",
             "protocol_id": "P-AK-SEARCH-1/v1",
@@ -622,7 +635,7 @@ class TestVoidedRunsAreJournalable(_JournalTest):
 
     def _voided_anchorless_event(self, suffix: str = "0001") -> dict:
         record = _event(suffix)
-        record["schema"] = S.SCHEMA_EVALUATION_EVENT_V3
+        record["schema"] = S.SCHEMA_EVALUATION_EVENT
         del record["anchor"]
         record["status"] = "invalid"
         record["integrity_flags"] = ["VOID:ANCHOR_MISSING_OR_MUTATED:FAIL"]
@@ -665,21 +678,35 @@ class TestVoidedRunsAreJournalable(_JournalTest):
         self.assertIn("placeholder digest", str(ctx.exception))
         self.assertEqual(self.j.read_all(), [])
 
-    def test_the_kind_accepts_both_live_evaluation_event_versions(self):
+    def test_the_kind_accepts_every_live_evaluation_event_version(self):
         self.assertEqual(
             J.ACCEPTED_SCHEMAS_BY_KIND[J.KIND_EVALUATION_EVENT],
-            frozenset({S.SCHEMA_EVALUATION_EVENT_V2, S.SCHEMA_EVALUATION_EVENT_V3}))
-        legacy = _event("0002")
-        legacy["schema"] = S.SCHEMA_EVALUATION_EVENT_V2
-        del legacy["anchor"]["source_commit"]
-        self.j.append(J.KIND_EVALUATION_EVENT, legacy)
-        self.j.append(J.KIND_EVALUATION_EVENT, _event("0003"))
+            frozenset({S.SCHEMA_EVALUATION_EVENT_V2, S.SCHEMA_EVALUATION_EVENT_V3,
+                       S.SCHEMA_EVALUATION_EVENT_V4, S.SCHEMA_EVALUATION_EVENT_V5}))
+        records = []
+        for index, schema in enumerate((S.SCHEMA_EVALUATION_EVENT_V2,
+                                        S.SCHEMA_EVALUATION_EVENT_V3,
+                                        S.SCHEMA_EVALUATION_EVENT_V4,
+                                        S.SCHEMA_EVALUATION_EVENT_V5), start=2):
+            record = _event(f"000{index}")
+            record["schema"] = schema
+            if schema == S.SCHEMA_EVALUATION_EVENT_V2:
+                del record["anchor"]["source_commit"]
+            if schema in (S.SCHEMA_EVALUATION_EVENT_V2,
+                          S.SCHEMA_EVALUATION_EVENT_V3):
+                for key in ("change_class", "anchor_tier", "transfer_ratio_to"):
+                    record.pop(key)
+            if schema != S.SCHEMA_EVALUATION_EVENT_V5:
+                record.pop("backend")
+                record.pop("device_state")
+            self.j.append(J.KIND_EVALUATION_EVENT, record)
+            records.append(schema)
         report = self._new_journal().scan(validate_payloads=True)
         self.assertEqual(report.defects, ())
         self.assertEqual(
             [e.payload["schema"] for e in report.entries
              if e.kind == J.KIND_EVALUATION_EVENT],
-            [S.SCHEMA_EVALUATION_EVENT_V2, S.SCHEMA_EVALUATION_EVENT_V3])
+            records)
 
     def test_a_kind_still_refuses_a_schema_from_another_record_family(self):
         record = _event("0004")

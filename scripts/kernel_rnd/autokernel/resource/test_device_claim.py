@@ -1271,6 +1271,17 @@ def _minimal_event(receipt_id: str) -> dict:
         "campaign_id": "ak-test-20260803",
         "candidate_id": "akc-20260803-0001",
         "tier": "T1",
+        "change_class": "parameter", "anchor_tier": "T1",
+        "transfer_ratio_to": [], "backend": "llama_gpu",
+        "device_state": {
+            "device_id": "mi210_0", "source": "fixture/rocm-smi",
+            "nominal_sclk_mhz": 1700.0, "min_sclk_ratio": 0.9,
+            "samples": [{"sclk_mhz": 1700.0, "mclk_mhz": 1600.0,
+                         "power_w": 180.0, "temperature_c": 55.0,
+                         "under_measurement_load": True}],
+            "throttle_observed": False,
+            "receipt_ref": "fixture://device-state/device-claim",
+        },
         "claim_grammar": {
             "category": "CANDIDATE",
             "protocol_id": "P-AK-SEARCH-1/v1",

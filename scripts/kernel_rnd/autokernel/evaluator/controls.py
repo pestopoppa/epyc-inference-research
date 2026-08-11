@@ -2402,4 +2402,5 @@ def audit_no_write_or_process_paths(source: Optional[str] = None) -> schemas.Che
         except OSError as exc:
             return schemas.Check(schemas.COULD_NOT_CHECK,
                                  (f"could not read {__file__}: {exc}",))
-    return api.audit_no_write_or_process_paths(source)
+    return api.audit_no_write_or_process_paths(source, module_id=MODULE_ID)
+MODULE_ID = "autokernel.evaluator.controls/v1"

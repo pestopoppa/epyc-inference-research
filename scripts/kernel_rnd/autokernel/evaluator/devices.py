@@ -48,7 +48,10 @@ Design context: §13.3/§13.4 (the speech adapters), §10.2 phase 2 (build+linka
 """
 from __future__ import annotations
 
+MODULE_ID = "autokernel.evaluator.devices/v1"
+
 import ast
+import math
 import re
 from dataclasses import dataclass
 from typing import Any, Iterable, Optional, Sequence
@@ -62,6 +65,127 @@ from .. import schemas
 
 class DeviceVocabularyError(Exception):
     """A refusal. Never a degraded answer."""
+
+
+class DeviceStateParseError(DeviceVocabularyError):
+    """A required numeric ROCm state field could not be parsed."""
+
+
+@dataclass(frozen=True)
+class DeviceStateSample:
+    """One parsed ROCm device-state snapshot; no raw text masquerades as data."""
+
+    sclk_mhz: float
+    mclk_mhz: float
+    power_w: float
+    temperature_c: float
+    under_measurement_load: bool
+
+    def __post_init__(self) -> None:
+        for name in ("sclk_mhz", "mclk_mhz", "power_w", "temperature_c"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) \
+                    or not math.isfinite(float(value)) or float(value) < 0:
+                raise ValueError(f"device sample {name} must be a finite non-negative number")
+        if not isinstance(self.under_measurement_load, bool):
+            raise TypeError("under_measurement_load must be bool")
+
+    def to_dict(self) -> dict:
+        return {
+            "sclk_mhz": float(self.sclk_mhz),
+            "mclk_mhz": float(self.mclk_mhz),
+            "power_w": float(self.power_w),
+            "temperature_c": float(self.temperature_c),
+            "under_measurement_load": self.under_measurement_load,
+        }
+
+
+@dataclass(frozen=True)
+class DeviceState:
+    """Parsed state across a window with a mechanically derived throttle verdict."""
+
+    device_id: str
+    source: str
+    nominal_sclk_mhz: float
+    min_sclk_ratio: float
+    samples: tuple
+    receipt_ref: str
+
+    def __post_init__(self) -> None:
+        for name in ("device_id", "source", "receipt_ref"):
+            if not isinstance(getattr(self, name), str) or not getattr(self, name).strip():
+                raise ValueError(f"device state {name} must be a non-empty string")
+        if isinstance(self.nominal_sclk_mhz, bool) or not isinstance(
+                self.nominal_sclk_mhz, (int, float)) or self.nominal_sclk_mhz <= 0:
+            raise ValueError("nominal_sclk_mhz must be positive")
+        if isinstance(self.min_sclk_ratio, bool) or not isinstance(
+                self.min_sclk_ratio, (int, float)) or not 0 < self.min_sclk_ratio <= 1:
+            raise ValueError("min_sclk_ratio must be in (0, 1]")
+        if not isinstance(self.samples, tuple) or not self.samples:
+            raise ValueError("device state samples must be a non-empty tuple")
+        if not all(isinstance(row, DeviceStateSample) for row in self.samples):
+            raise TypeError("device state samples must contain DeviceStateSample")
+
+    @property
+    def throttle_observed(self) -> bool:
+        floor = self.nominal_sclk_mhz * self.min_sclk_ratio
+        return any(row.under_measurement_load and row.sclk_mhz < floor
+                   for row in self.samples)
+
+    def check(self) -> schemas.Check:
+        loaded = tuple(row for row in self.samples if row.under_measurement_load)
+        if not loaded:
+            return schemas.Check(
+                schemas.COULD_NOT_CHECK,
+                ("no device-state sample was captured under measurement load; an idle "
+                 "clock cannot establish absence of throttling",))
+        if self.throttle_observed:
+            floor = self.nominal_sclk_mhz * self.min_sclk_ratio
+            observed = min(row.sclk_mhz for row in loaded)
+            return schemas.Check(
+                schemas.FAIL,
+                (f"GPU throttle observed: loaded sclk fell to {observed:g} MHz below "
+                 f"the declared floor {floor:g} MHz",))
+        return schemas.Check(schemas.PASS)
+
+    def to_dict(self) -> dict:
+        return {
+            "device_id": self.device_id,
+            "source": self.source,
+            "nominal_sclk_mhz": float(self.nominal_sclk_mhz),
+            "min_sclk_ratio": float(self.min_sclk_ratio),
+            "samples": [row.to_dict() for row in self.samples],
+            "throttle_observed": self.throttle_observed,
+            "receipt_ref": self.receipt_ref,
+        }
+
+
+_SCLK_RE = re.compile(r"\bsclk clock level:\s*\d+:\s*\(([0-9.]+)\s*Mhz\)", re.I)
+_MCLK_RE = re.compile(r"\bmclk clock level:\s*\d+:\s*\(([0-9.]+)\s*Mhz\)", re.I)
+_POWER_RE = re.compile(r"Average Graphics Package Power\s*\(W\):\s*([0-9.]+)", re.I)
+_JUNCTION_TEMP_RE = re.compile(
+    r"Temperature \(Sensor junction\) \(C\):\s*([0-9.]+)", re.I)
+
+
+def parse_rocm_smi_snapshot(*, clocks_text: str, power_text: str,
+                            temperature_text: str,
+                            under_measurement_load: bool) -> DeviceStateSample:
+    """Parse the four numeric fields RVP-C3-3 requires from captured text."""
+    values = {}
+    for name, pattern, text in (
+            ("sclk_mhz", _SCLK_RE, clocks_text),
+            ("mclk_mhz", _MCLK_RE, clocks_text),
+            ("power_w", _POWER_RE, power_text),
+            ("temperature_c", _JUNCTION_TEMP_RE, temperature_text)):
+        if not isinstance(text, str):
+            raise TypeError(f"{name} capture must be text")
+        match = pattern.search(text)
+        if match is None:
+            raise DeviceStateParseError(
+                f"{name} was not present as a numeric field in the rocm-smi capture")
+        values[name] = float(match.group(1))
+    return DeviceStateSample(
+        **values, under_measurement_load=under_measurement_load)
 
 
 # =============================================================================

@@ -128,6 +128,8 @@ ENTRYPOINT_MODULE = f"{ROOT_PKG}.campaign"
 # decoration.
 
 CAMPAIGN_ROOTS = {
+    f"{ROOT_PKG}.artifact_diff":
+        "AK-TR-6 must veto an unconfirmed GPU claim before behavioral T0 can launch",
     f"{ROOT_PKG}.dashboard":
         "the terminal result was fsynced but the only dashboard exporter had been deleted, "
         "so active AutoKernel work remained permanently absent from the operator surface",
@@ -181,6 +183,23 @@ CAMPAIGN_ROOTS = {
         "`authorize_claim(ledger=…)` has no default and a token with no do-not-repeat "
         "verdict is refused at the door, so the driver cannot mint a spendable one "
         "without the §19.2 ledger this module compiles",
+}
+
+#: The five callerless guards discovered before the lean-loop cut. This is a
+#: source-level contract, not a prose checklist: if a caller disappears or is
+#: renamed, the suite fails. The call fragment is intentionally specific enough
+#: to distinguish using the guarded API from merely mentioning its symbol.
+GUARD_CALLER_CONTRACT = {
+    "worktree-mutating-subcommand refusal": (
+        "execution/worktree.py", "if sub in self._WORKTREE_MUTATING_SUBCOMMANDS:"),
+    "retry order reversal": (
+        "execution/microbench.py", "statistics.OrderSchedule.derive("),
+    "do-not-repeat ledger": (
+        "controller/hypotheses.py", "verdict = check_do_not_repeat("),
+    "per-control seed rotation": (
+        "execution/control_runner.py", "plan = self.harness.seed_plan("),
+    "falsifier before resource claim": (
+        "campaign.py", "hypotheses.claim_for_hypothesis(spec.authorization, acquire)"),
 }
 
 
@@ -2118,6 +2137,25 @@ def refresh_footprint() -> str:
             f"{deferred:,} deferred, {imported + deferred:,} total"
             + (f"\nMODULES WITH NO ROW (write the reason yourself): {missing}"
                if missing else ""))
+
+
+class DeclaredGuardCallerAuditTest(unittest.TestCase):
+    """A declared guard without a real non-test caller is a failing build."""
+
+    def test_every_previously_callerless_guard_has_its_required_live_caller(self):
+        for guard, (relative_path, call_fragment) in GUARD_CALLER_CONTRACT.items():
+            with self.subTest(guard=guard):
+                source = (PKG_DIR / relative_path).read_text(encoding="utf-8")
+                code = "\n".join(
+                    line for line in source.splitlines()
+                    if not line.lstrip().startswith("#"))
+                self.assertIn(
+                    call_fragment, code,
+                    f"{guard} is declared but its required non-test caller disappeared")
+
+    def test_guard_contract_names_exactly_the_five_discovered_instances(self):
+        self.assertEqual(len(GUARD_CALLER_CONTRACT), 5)
+        self.assertEqual(len(set(GUARD_CALLER_CONTRACT.values())), 5)
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -1154,6 +1154,10 @@ class T0ExecutionPlan:
     #: against a dataclass that had no such field, so the pass-through it
     #: documents was unreachable and no caller could have noticed.
     change_surface: Any = None
+    #: Projection-side checks that do not fit in the projected correctness
+    #: records. Each entry is ``(existing_gate_id, check_name, Check)``. The
+    #: evaluator folds these into the named gate; they are not advisory notes.
+    projection_checks: tuple = ()
     state_safety_probe: bool = False
 
     def __post_init__(self) -> None:
@@ -1212,6 +1216,24 @@ class T0ExecutionPlan:
                     "from evaluator/integrity.py or evaluator/surface.py is a DIFFERENT "
                     "class with overlapping names, and passing one here fails silently "
                     "rather than loudly.")
+        allowed_projection_gates = {
+            correctness.GID_SYMBOLS,
+            correctness.GID_SEMANTIC_DIFF,
+            correctness.GID_SURFACE_RECONCILIATION,
+        }
+        for item in self.projection_checks:
+            if not isinstance(item, tuple) or len(item) != 3:
+                raise TypeError(
+                    "plan.projection_checks entries must be "
+                    "(gate_id, check_name, schemas.Check) triples")
+            gate_id, check_name, check = item
+            if gate_id not in allowed_projection_gates:
+                raise ValueError(
+                    f"plan.projection_checks gate {gate_id!r} is not a projection-owned "
+                    f"T0 gate; allowed={sorted(allowed_projection_gates)}")
+            _req_str(check_name, "plan.projection_checks[].check_name")
+            if not isinstance(check, schemas.Check):
+                raise TypeError("plan.projection_checks[].check must be a schemas.Check")
 
 
 # =============================================================================
@@ -2777,6 +2799,7 @@ class ExecutedT0EvidenceProvider:
             determinism=determinism,
             linkage=linkage,
             anti_reward_hacking=anti_reward,
+            projection_checks=self._plan.projection_checks,
         )
 
     @property
@@ -3010,5 +3033,4 @@ def audit_process_discipline(source: Optional[str] = None) -> schemas.Check:
         "no name-pattern process call, no shell=True, no pty/commands import",
         f"signal call sites (each must target a pid this module captured): {signal_sites}",
     ))
-
 

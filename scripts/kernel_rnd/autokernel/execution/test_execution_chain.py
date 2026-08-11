@@ -725,9 +725,8 @@ class ChainLeg:
             determinism_runs=2, cache_state="cold", state_safety_probe=False,
             oracle_ids=("oracle://anchor-v8",),
             build=self.build_evidence.provenance,
-            symbols=symbols.diff,
-            diff=diff.policy,
-            change_surface=surface_evidence.surface,
+            **chain.t0_plan_evidence(
+                symbols=symbols, diff=diff, change_surface=surface_evidence),
         )
 
     def _t0_runner(self, plan, *, op_suite_text):
@@ -801,6 +800,7 @@ class ChainLeg:
             determinism=api.DeterminismReport(determinism_class="bitwise_stable",
                                               same_seed_repeat_runs=2),
             metric="tokens_per_second", metric_direction="higher_better", reps=10,
+            change_class="parameter", anchor_tier="T0", transfer_ratio_to=(),
             created_at="2026-08-03T23:00:00Z",
             campaign_controls=ChainCampaign.get()[0],
             calibration=ChainCampaign.get()[4])
@@ -1417,6 +1417,7 @@ class ControlStack:
             scope_manifest_sha256=hashlib.sha256(b"ak-chain-scope").hexdigest(),
             co_residency="single", metric="tokens_per_second",
             metric_direction="higher_better", reps=10, anchor=self.anchor,
+            change_class="parameter",
             campaign_controls=controls_decl, calibration=outputs)
         self.declaration = CT.HistoricalWinReplayDeclaration(
             reference_band=CT.ReferenceBand(low=0.30, high=0.45), **REPLAY_DECLARATION_KW)
@@ -1594,7 +1595,7 @@ class TestTheChainFits(_ChainCase):
         self.assertEqual(len(report.gates), len(correctness.T0_GATE_IDS))
         self.assertEqual(sorted(report.failed), [])
 
-    def test_exactly_four_t0_surfaces_still_have_no_producer(self):
+    def test_exactly_six_t0_surfaces_are_explicitly_unevaluated(self):
         """The number `execution/README.md` tells tomorrow's session to expect.
 
         Not a vanity assertion: the runbook tells the session what a healthy
@@ -1606,8 +1607,9 @@ class TestTheChainFits(_ChainCase):
         It was 8 PASS / 9 COULD_NOT_CHECK until 2026-08-04. Five surfaces moved
         when `chain.symbol_evidence`, `chain.diff_policy_evidence`,
         `chain.anchor_toolchain_from_build_log` and `chain.change_surface_from`
-        were wired into the leg above. The four that remain are the four with a
-        NAMED reason, not four nobody got to:
+        were wired into the leg above. On 2026-08-10 the projection-side refusal
+        channel stopped evaporating, revealing two more honestly unevaluated
+        gates. The six are all named findings, not surfaces nobody got to:
 
           * `exact_reference_comparison` — `test-backend-ops` prints its error
             metric only on FAILURE, so a passing case yields no observed ULP.
@@ -1620,35 +1622,58 @@ class TestTheChainFits(_ChainCase):
           * `state_rollback_teardown_race` — no rollback probe exists, so no
             state-safety measurement can pass at all
             (`t0_provider.STATE_SAFETY_CANNOT_PASS`).
+          * `symbol_and_registration_preservation` — the fixture's ELF extractor
+            cannot decode symbol-version nodes, so a clean name diff is not a
+            complete ABI proof.
+          * `affected_surface_reconciliation` — the pure source classifier can
+            widen memory/thread/state touches but cannot prove their absence.
         """
         report = self.leg.t0_report
         unproduced = sorted(g.gate_id for g in report.gates
                             if g.check.outcome == schemas.COULD_NOT_CHECK)
         self.assertEqual(unproduced, sorted([
+            correctness.GID_SURFACE_RECONCILIATION,
             correctness.GID_ASAN,
             correctness.GID_EXACT_REFERENCE,
             correctness.GID_STATE_SAFETY,
+            correctness.GID_SYMBOLS,
             correctness.GID_UBSAN,
         ]), "the set of T0 surfaces with no producer has changed — update "
            "execution/README.md §3 and §6.1, which tell tomorrow's session what "
            "a healthy report looks like")
         passed = [g.gate_id for g in report.gates if g.check.outcome == schemas.PASS]
-        self.assertEqual(len(passed), 13, sorted(passed))
+        self.assertEqual(len(passed), 11, sorted(passed))
 
-    def test_the_five_newly_wired_surfaces_are_gates_and_not_assertions(self):
-        """Each PASS below is a comparison that could have failed, not a default.
+    def test_the_wired_surfaces_are_gates_and_not_assertions(self):
+        """Each outcome below is a comparison, including projection refusals.
 
         The negative side of every one of them is in
         `TestTheWiredProducersRefuseCleanShapedNothing` and
         `TestTheBehaviouralClassifierOnlyWidens`.
         """
         report = self.leg.t0_report
-        for gate_id in (correctness.GID_SYMBOLS, correctness.GID_SEMANTIC_DIFF,
-                        correctness.GID_SCHEMA_DIFF_POLICY,
+        for gate_id in (correctness.GID_SEMANTIC_DIFF, correctness.GID_SCHEMA_DIFF_POLICY,
                         correctness.GID_STATIC_COMPILE,
                         correctness.GID_BOUNDARY_SHAPES):
             self.assertEqual(report.outcome(gate_id), schemas.PASS,
                              report.gate(gate_id).check.reasons)
+        for gate_id, finding in (
+                (correctness.GID_SYMBOLS, "SYMBOL_VERSIONS_NOT_EXTRACTED"),
+                (correctness.GID_SURFACE_RECONCILIATION, "projection change_surface.")):
+            self.assertEqual(report.outcome(gate_id), schemas.COULD_NOT_CHECK)
+            self.assertTrue(any(finding in reason
+                                for reason in report.gate(gate_id).check.reasons),
+                            report.gate(gate_id).check.reasons)
+
+    def test_plan_evidence_helper_keeps_records_and_refusals_together(self):
+        fields = chain.t0_plan_evidence(
+            symbols=self.leg.symbol_evidence,
+            diff=self.leg.diff_evidence,
+            change_surface=self.leg.change_surface_evidence)
+        self.assertEqual(set(fields), {
+            "symbols", "diff", "change_surface", "projection_checks"})
+        self.assertIs(fields["symbols"], self.leg.symbol_evidence.diff)
+        self.assertTrue(fields["projection_checks"])
 
     def test_the_two_anchor_bindings_are_one_anchor_build(self):
         """SEAM 3. Different binaries, one commit, one linkage."""
@@ -3025,6 +3050,35 @@ class TestTheBehaviouralClassifierOnlyWidens(unittest.TestCase):
         self.assertIn("classify_behavioural_surface/v1@", ref)
 
 
+class TestRealizedEditClassification(unittest.TestCase):
+    """AK-X-7: realized repair work cannot masquerade as a declared rewrite."""
+
+    def test_empty_and_comment_only_diffs_are_no_op(self):
+        for text in ("", "diff --git a/x b/x\n@@ -1 +1 @@\n-// old\n+// new\n"):
+            result = chain.classify_realized_edit(text)
+            self.assertEqual(result["edit_type"], chain.EDIT_NO_OP)
+            self.assertEqual(result["substantive_lines"], 0)
+
+    def test_each_specific_repair_class_is_recognized(self):
+        cases = {
+            chain.EDIT_MASK_FIX: "-if (i < n)\n+if (i < n && valid_index(mask))\n",
+            chain.EDIT_DELEGATED_OP: "-local_mm(x)\n+rocblas_gemm_ex(x)\n",
+            chain.EDIT_DTYPE_CAST: "-x = y\n+x = static_cast<bf16>(y)\n",
+            chain.EDIT_OPTIMIZATION_REWRITE: "-for (int i=0;i<n;i++) f(i);\n+fused_tile(n);\n",
+        }
+        for expected, text in cases.items():
+            with self.subTest(expected=expected):
+                self.assertEqual(chain.classify_realized_edit(text)["edit_type"], expected)
+
+    def test_change_surface_capture_retains_the_counts(self):
+        evidence = chain.change_surface_from(
+            chain_affected_surface(),
+            diff_text="-x = y;\n+x = static_cast<bf16>(y);\n")
+        self.assertEqual(evidence.realized_edit["edit_type"], chain.EDIT_DTYPE_CAST)
+        self.assertTrue(any("realized edit type dtype_cast" in note
+                            for note in evidence.notes))
+
+
 def _request_for_surface() -> api.EvaluationRequest:
     """The minimum request the sanitizer gates read: an artifact and an anchor."""
     sha = "c" * 64
@@ -3044,6 +3098,7 @@ def _request_for_surface() -> api.EvaluationRequest:
         determinism=api.DeterminismReport(determinism_class="bitwise_stable",
                                           same_seed_repeat_runs=2),
         metric="tokens_per_second", metric_direction="higher_better", reps=10,
+        change_class="parameter", anchor_tier="T0", transfer_ratio_to=(),
         created_at="2026-08-04T00:00:00Z", campaign_controls=None, calibration=None)
 
 

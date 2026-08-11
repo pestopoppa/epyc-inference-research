@@ -524,6 +524,7 @@ class HostState:
     load1: Optional[float]
     source: str
     unreadable: tuple = ()
+    uptime_s: Optional[float] = None
 
     @property
     def min_khz(self) -> Optional[int]:
@@ -553,6 +554,7 @@ class HostState:
             "load1": self.load1,
             "source": self.source,
             "unreadable": list(self.unreadable),
+            "uptime_s": self.uptime_s,
         }
 
 
@@ -631,10 +633,18 @@ def read_host_state(*, cpu_list: str, sysfs_root: Any = "/sys/devices/system/cpu
     except (OSError, ValueError, IndexError):
         unreadable.append("loadavg unreadable")
 
+    uptime_s: Optional[float] = None
+    try:
+        uptime_s = float(Path(proc_root, "uptime").read_text(encoding="utf-8").split()[0])
+        if not math.isfinite(uptime_s) or uptime_s < 0:
+            raise ValueError("invalid uptime")
+    except (OSError, ValueError, IndexError):
+        uptime_s = None
+
     return HostState(
         observed_at=now(), cpu_list=cpu_list, khz_by_cpu=tuple(readings),
         driver_min_khz=driver_min, driver_max_khz=driver_max, load1=load1,
-        source=str(sysfs), unreadable=tuple(unreadable))
+        source=str(sysfs), unreadable=tuple(unreadable), uptime_s=uptime_s)
 
 
 #: How `check_frequency` arrived at its outcome. Three CLASSIFICATIONS, which are
@@ -998,6 +1008,7 @@ class ExecutionReceipt:
     argv_sha256: str
     argv: tuple
     recipe_env: dict
+    params: dict
     env: dict
     env_sha256: str
     binary_path: str
@@ -1021,7 +1032,7 @@ class ExecutionReceipt:
                 raise ValueError(f"receipt.{name} must be a 64-hex SHA-256, got {value!r}")
         if not isinstance(self.argv, tuple) or not self.argv:
             raise ValueError("receipt.argv must be a non-empty tuple")
-        for name in ("env", "recipe_env"):
+        for name in ("env", "recipe_env", "params"):
             if not isinstance(getattr(self, name), dict):
                 raise TypeError(f"receipt.{name} must be a dict")
         if isinstance(self.binary_size, bool) or not isinstance(self.binary_size, int) \
@@ -1046,6 +1057,7 @@ class ExecutionReceipt:
             "constructor_sha256": self.constructor_sha256,
             "argv_sha256": self.argv_sha256, "argv": list(self.argv),
             "recipe_env": dict(self.recipe_env),
+            "params": dict(self.params),
             "env": dict(self.env), "env_sha256": self.env_sha256,
             "binary_path": self.binary_path, "binary_sha256": self.binary_sha256,
             "binary_size": self.binary_size, "source_root": self.source_root,
@@ -1058,11 +1070,11 @@ def _env_hash(env: Mapping) -> str:
 
 
 def _argv_hash(*, recipe_id: str, registry_id: str, arm: str, argv: Sequence[str],
-               env: Mapping) -> str:
+               env: Mapping, params: Mapping) -> str:
     """Exactly `recipes.construct`'s own argv_sha256 preimage, so the two agree."""
     return schemas.content_hash({
         "recipe_id": recipe_id, "registry_id": registry_id, "arm": arm,
-        "argv": list(argv), "env": dict(env),
+        "argv": list(argv), "env": dict(env), "params": dict(params),
     })
 
 
@@ -1093,6 +1105,7 @@ def build_receipt(command: recipes.ConstructedCommand, *, env: Mapping,
         argv_sha256=command.receipt.argv_sha256,
         argv=tuple(command.argv),
         recipe_env=dict(command.env),
+        params=dict(command.params),
         env=dict(env),
         env_sha256=_env_hash(env),
         binary_path=command.binding.binary,
@@ -1146,7 +1159,8 @@ def verify_receipt(receipt: ExecutionReceipt, *, argv: Sequence[str], env: Mappi
     # `argv_sha256` is the CONSTRUCTOR's identity, taken over the recipe env, so
     # it is recomputed over that env and not over the assembled one.
     recomputed_argv = _argv_hash(recipe_id=receipt.recipe_id, registry_id=receipt.registry_id,
-                                 arm=receipt.arm, argv=argv, env=receipt.recipe_env)
+                                 arm=receipt.arm, argv=argv, env=receipt.recipe_env,
+                                 params=receipt.params)
     if recomputed_argv != receipt.argv_sha256:
         reasons.append(f"argv_sha256 {receipt.argv_sha256[:12]} does not hash the "
                        f"(recipe, registry, arm, argv, recipe_env) tuple "
@@ -1171,7 +1185,13 @@ def verify_receipt(receipt: ExecutionReceipt, *, argv: Sequence[str], env: Mappi
                                           source_root=receipt.source_root,
                                           library_path=receipt.library_path)
             rebuilt = recipes.construct(receipt.recipe_id, binding=binding,
-                                        params=_params_from_argv(receipt),
+                                        # Resolved optional params are stored as null so the
+                                        # receipt hash binds the complete frame. Feeding those
+                                        # nulls back as caller overrides is different: the
+                                        # constructor correctly rejects `n_depth=None`. Omit
+                                        # only nulls here and let the registry re-resolve them.
+                                        params={k: v for k, v in receipt.params.items()
+                                                if v is not None},
                                         arm=receipt.arm, verify_inputs=False)
         except Exception as exc:                       # noqa: BLE001 - reported, not raised
             return schemas.Check(schemas.COULD_NOT_CHECK, tuple(reasons) + (

@@ -122,7 +122,8 @@ __all__ = [
 
 #: Identity of this reducer implementation. It is part of what the runtime
 #: source-label attestation (precondition 5) resolves, so it is versioned.
-STATISTICS_MODULE_ID = "autokernel.evaluator.statistics/v1"
+MODULE_ID = "autokernel.evaluator.statistics/v1"
+STATISTICS_MODULE_ID = MODULE_ID
 
 
 # =============================================================================

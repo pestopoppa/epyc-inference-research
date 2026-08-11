@@ -30,11 +30,13 @@ surface — was provably unreachable from the path between "an idea for a kernel
 and "a measured number". That split was computed by walking the import graph, not
 asserted, and the operator acted on it: those planes were removed, about 79,600
 lines including their tests, recoverable from the tag
-`autokernel-preserve-20260804`. Later the same day the last deferred prefix,
-`controller/`, was opened *module by module* — see **A question, or an
-exploration** below — so no module in this package is unreachable now, and the
-boundary that used to say "half of this is inert" now guards the *next* module
-instead. [`FOOTPRINT.md`](FOOTPRINT.md) carries the current totals and every
+`autokernel-preserve-20260804`. Later the same day the surviving controller
+memory was opened *module by module* — see **A question, or an exploration**
+below. Three small pure analysis modules are deliberately off the campaign import
+path: prior-art classification, screening-lane planning, and offline
+least-commitment evaluation. They cannot launch or mutate anything, and become
+reachable only when their owning workflow supplies evidence. The campaign-path
+boundary still guards every new import. [`FOOTPRINT.md`](FOOTPRINT.md) carries the current totals and every
 module's reachability row by row, and `test_campaign_footprint.py` turns the
 suite red if the document and the tree disagree. **The figures live there and
 only there** — a number stated in two documents drifts in exactly one of them.
@@ -125,11 +127,11 @@ reached, after the claim and after the build.
 
 ---
 
-## What is implemented (AK1 + AK2 + AK3 partial + AK4 + AK5/AK6 + AK8/AK9)
+## What is implemented on the lean campaign path
 
 | Module | What it owns |
 |---|---|
-| `schemas.py` | The seven §7 record contracts (the evaluation event in **two live versions** — `v2` readable forever, `v3` current), canonical JSON/content hashing, the `PASS`/`FAIL`/`COULD_NOT_CHECK` `Check` type, and the record-level checkers (`check_anchor_binding`, `check_scope_denominator_admits_gate`, `check_metric_commensurability`). **Single source of truth: every other module is written against these and must not invent a record shape.** |
+| `schemas.py` | The §7 record contracts (`v2`–`v4` remain readable; evaluation-event `v5` adds parsed device state to v4's transfer surface), canonical JSON/content hashing, the `PASS`/`FAIL`/`COULD_NOT_CHECK` `Check` type, and record-level checkers. **Single source of truth: every other module is written against these and must not invent a record shape.** |
 | `journal.py` | The append-only, fsynced, **sharded** primary record. Shard ordering, torn-tail repair, cursors, archiving, supersession (record-scope and retrieval-scope), tombstones, preflight attestations, derived views, and `check_view_consistency`. |
 | `storage.py` | §3.7 durability classes, §5.8 retention classes and rule-bound tombstoned expiry, per-campaign quota and `DISK_PRESSURE`, the `data/<campaign>/` evidence root with `SHA256SUMS` + README, and `verify_durability`. |
 | `resource/device_claim.py` | The cross-process **exclusive GPU device claim** (§2.6) — `flock(LOCK_EX)` on a never-unlinked lock file, PID+start-time+boot-id liveness, journaled crash reclamation, quiesce-and-drain revocation, and the claim receipt id that lands in every evaluation event. |
@@ -143,23 +145,14 @@ reached, after the claim and after the build.
 | `evaluator/controls.py` | **AK3.** The five controls as hashed data (definitions AND predicates), the A/A cadence scheduler, the historical-win-replay declared contract with its normative unavailable branch and operator escalation, and the projection into `api.WindowAttestations`. |
 | `evaluator/recipes.py` | **AK3.** The codified recipe constructors — every measurement argv is emitted by one, carrying its constructor id and content hash — for `test-backend-ops`, `test-quantize-perf` and `llama-bench`, CPU and GPU. |
 | `execution/live_controls.py` | **AK3 live calibration.** Dry-run-default CPU producer that predeclares a campaign, copies the frozen anchor binary and its build-local DSOs byte-for-byte into the evidence bundle, acquires q0–q3, measures fresh A/A/neutral/control legs, solves calibration, and sends all five controls through the candidate dispatcher. First live result: 5/5 and `may_rank=true` in `data/autokernel_controls_3pct_20260805/`. |
-| `controller/state_machine.py` | **AK4.** §8.1's explicit machine: 17 live states, 13 stop states, the declared edge table, journal-then-act transitions, the operator-control latch (invariant 19), §8.2 BOOTSTRAP with its consistency assertion and deliberate-rebase escape, §8.9 anchor re-verification, and §8.10's stop-evidence table. **Owns disposition — no model output decides a transition.** |
-| `controller/guards.py` | **AK4.** The fifteen §8.10 guards and their precedence, the directive vocabulary, the operator decision package (§18 item 7), the accept-side control's three statuses, and `dispose()` — the reduction that turns a round's guard verdicts into one disposition. A STOP is validated against `check_stop_evidence` AT CONSTRUCTION. |
-| `controller/context.py` | **AK4.** §6.1's planner and critic briefs: fifteen sections, every item CITED to a journal event, a bounded render, §8.3.1 roofline utilisation with both denominators, the §19.2 do-not-repeat surface, the §6.5 oracle registry, and the quarantine block imported content is rendered inside. Refuses to leak the confirmation stratum or planner narrative. |
-| `controller/hypotheses.py` | **AK4.** §8.4.0 operator hypotheses: the operator-facing store, the append-only hypothesis ledger, still-open tracking, the resolution record, and `check_do_not_repeat`. Every origin enters at `design_prior` and **the gate cannot see who stated the hypothesis** (AK-D38). |
-| `controller/planner.py` | **AK4.** The provider-agnostic planner adapter: prompt bundles, the quarantine fence, the response contract, `assemble_proposal` (the controller-owned fields a model may not write), `ReplayProvider` for invariant 11, and cost attribution. |
-| `controller/critic.py` | **AK4.** §6.3's pre-run critic (ten questions, deterministic gates, revisions the critic owns and gates it cannot waive) and §8.8's post-run critic (classification reconciled against the raw gates, the durable lesson, the next experiment). Severity only ever goes UP. |
-| `controller/selection.py` | **AK4.** §8.3's cost hierarchy and its receipted skips, §8.4's twenty-two rejection codes and the journaled skip, the §19.2 ledger match, the fingerprint blacklist, §8.4.1's HARVEST/EXPLORE phase decision with a derived yield calibration, and the arm-budget partition. |
-| `controller/composition.py` | **AK4.** §8.9 champion maintenance: the frontier and its mechanism-diversity floor, lineage proposal, `compose_champion` (which re-measures the COMBINED candidate and cites no member evidence), the re-anchor plan, and the ANCHOR_MOVED supersession sweep that kills comparisons while preserving source and correctness. |
-| `controller/oracles.py` | **AK4.** The §6.5 oracle registry, ONCE, at both granularities — the design's table row and the individual tree a port names — so the compiler renders ids the critic can gate on. |
-| `controller/fingerprint.py` | **AK4.** The one identity a filtered proposal is journaled under (§8.4). Prose-free by construction, because a blacklist a reworder can walk around is not a blacklist. |
-| `release/plan.py` | **AK5.** §10.1's release-plan compiler: the join from source tree → backends → stable production paths → live roles → distinct models/quants/contexts/KV/speculation/concurrency/placement/co-residency at the production-optimal recipe, plus the §3.2 per-backend unchanged test consumed as a RECORD (never re-implemented), §10.5 incumbent evidence, §10.6 diff-complexity ceilings, and the linkage requirement per tree. Every narrowing leaves a receipt; a role it cannot plan becomes an `UnplannableRole` rather than disappearing. |
-| `release/readiness.py` | **AK5.** The §9.7 T2 readiness ESTIMATOR — an advisory signal, `is_trigger = False` by class. Per-backend, per-phase, each phase under its own protocol; matrix coverage, capacity deltas, mechanism confirmation, the §1.6 phase-trade exception, and the `+25%/+20%` reference comparison **reported and never branched on**. `composite_readiness()` and `freeze_eligibility()` RAISE: a scalar folding two protocols cannot gate, and readiness is not eligibility. |
-| `release/t3.py` | **AK5.** The §10.2 release gate — nine phases in order (identity preflight incl. §3.2, build+linkage, backend correctness, the performance matrix, quality, stability, capacity/utility incl. the §1.6 objective, the transaction **dry run**, the seal), the §10.4 waiver verifier (hash-pinned, predicate-checked, scope resolved from the operator's own document), §9.1 rerun idempotence and cooldown, the seven-component sealed bundle, and PASS / FAIL / PASS_WITH_WAIVER. `T3Runner` implements AK4's `ReleaseGateRunner` seam. `calibration_request()` replays the preserved v8 and speech freezes as dry runs. |
-| `release/packager.py` | **AK6.** The §11.2 release PACKAGE a human executes: AK7's operator freeze request, `seal_champion`'s six refusals, the trusted-evaluator seam, the next version/branch/tag, the §10.5 archive + rollback plan, the drafted era rows and AutoPilot rebaseline note, the statically pre-validated operator command sequence, the §11.3 cutover ASK as a `session_bus` message, the §11.5 watch window, and the operator decision package. Twelve §11.2 "may not" doors that raise. |
-| `adapters/serving_runtime.py` | **AK8.** §13.5 — the backend that does **not** travel the kernel-freeze path. Owns the §11.6 three-gate stack-change package (registry guard → linkage/identity → live-vs-intended config), `task_rate` as the only admissible objective, and `refuse_kernel_freeze()`, which raises rather than degrading to a freeze-shaped package with empty kernel fields. |
-| `adapters/whisper_stt.py` | **AK9.** §13.3 — the STT backend: its frozen tree and binary inventory, the ggml-linkage verifier contract, the WER/RTF corpus and exclusion accounting, op-shape coverage, `assess_complexity` traced from the DIFF rather than a declared label, and `release_gate_readiness()`, which returns COULD_NOT_CHECK — never PASS — while `P-STT-*` remains a draft. |
-| `adapters/qwentts_tts.py` | **AK9.** §13.4 — the TTS backend: pipeline stages, stage attribution, numerical-safety and roundtrip-WER checks (measured THROUGH the frozen production STT binary, never through the champion), corpus identity, and the same draft-protocol release refusal. |
+| `controller/hypotheses.py` | The operator hypothesis store and falsifier-before-claim gate used by `campaign.py --hypothesis`. |
+| `controller/do_not_repeat.py` | The receipt-bearing negative/constraint ledger required before a hypothesis can spend a claim. |
+| `controller/shared.py` | The small shared vocabulary needed by the two surviving controller-memory modules. |
+| `prior_art.py` | The deterministic four-way prior-art gate, expected-absence override, pinned source catalogue, and cumulative wall-share pruning. |
+| `substrate.py` | Validates the checked-in MI210 compute/bandwidth/PCIe/NUMA facts, preserves measured and datasheet bases separately, and re-derives both roofline ridges. |
+| `lanes.py` | The lane registry, historical 4/8/16/32/48-way CPU shapes, isolation checks, change-class-specific rank calibration, and full-instance verification rule. |
+| `artifact_diff.py` | The compile-only VGPR/SGPR/scratch/instruction-mix comparison that vetoes an unconfirmed GPU claim before behavioral T0 can launch. |
+| `offline_least_commitment.py` | The observe-only AK-WM-2/AP-WM-1 diagnostic over matched completed-proposal archives; it has no live selection authority. |
 | `dashboard.py` | **AK6.** The compact `/kernel` contract-v2 producer retained by the campaign path after the old `surface/` plane was deleted. It projects only the already-fsynced terminal `STOP_STATE`: campaign and backend standing are observed; champion, headroom and release package are explicitly `not_reported`; journal time drives freshness; and the atomic export is refused under scratch, a production tree, or any checkout. |
 
 ### AK6 — the operator surface
