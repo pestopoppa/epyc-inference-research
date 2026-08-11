@@ -26,6 +26,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import time
 from typing import Any, Callable, Mapping, Sequence
 
 from . import arena_adapter, arena_campaign, arena_roundtrip
@@ -122,6 +123,51 @@ def _load_preflight(path: str | Path) -> tuple[dict[str, Any], str]:
     if not isinstance(hardware, Mapping) or hardware.get("target_gfx_arch") != "gfx90a":
         raise ArenaCellRunnerError("preflight does not bind the physical gfx90a target")
     return payload, _sha256_file(source)
+
+
+def _live_process_group_members(process_group_id: int) -> tuple[int, ...]:
+    """Return live Linux processes in one exact, already-captured group."""
+    members: list[int] = []
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            stat = (entry / "stat").read_text(encoding="utf-8")
+            fields = stat[stat.rfind(")") + 2:].split()
+            state = fields[0]
+            group = int(fields[2])
+        except (FileNotFoundError, IndexError, PermissionError, ValueError):
+            continue
+        if group == process_group_id and state != "Z":
+            members.append(int(entry.name))
+    return tuple(sorted(members))
+
+
+def _terminate_captured_process_group(
+    process_group_id: int, *, grace_seconds: float = 5.0,
+) -> None:
+    """Terminate and verify one process group captured from ``Popen.pid``."""
+    if process_group_id <= 1 or process_group_id == os.getpgrp():
+        raise ArenaCellRunnerError("refusing an unsafe process-group target")
+    members = _live_process_group_members(process_group_id)
+    if not members:
+        return
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.killpg(process_group_id, sig)
+        except ProcessLookupError:
+            return
+        deadline = time.monotonic() + grace_seconds
+        while time.monotonic() < deadline:
+            members = _live_process_group_members(process_group_id)
+            if not members:
+                return
+            time.sleep(0.05)
+    members = _live_process_group_members(process_group_id)
+    if members:
+        raise ArenaCellRunnerError(
+            f"Arena worker process group {process_group_id} survived teardown: "
+            f"{list(members)}")
 
 
 @dataclass(frozen=True)
@@ -295,6 +341,7 @@ class GovernedArenaCellRunner:
                 artifacts={str(key): str(value)
                            for key, value in artifact_map.items()},
             )
+            _atomic_json(cell_root / "belief-receipt.json", belief_receipt)
         receipt = _self_hash({
             **dict(worker_result),
             "started_at": started_at,
@@ -357,25 +404,34 @@ class GovernedArenaCellRunner:
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
             start_new_session=True,
         )
+        timed_out = False
+        stdout = ""
+        stderr = ""
         try:
             stdout, stderr = process.communicate(timeout=timeout_seconds)
         except subprocess.TimeoutExpired:
+            timed_out = True
+        finally:
+            cleanup_error: Exception | None = None
             try:
-                os.killpg(process.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
+                _terminate_captured_process_group(process.pid)
+            except Exception as exc:  # preserve the teardown finding after reaping
+                cleanup_error = exc
+            if process.poll() is None:
+                process.kill()
             try:
                 stdout, stderr = process.communicate(timeout=5)
-            except subprocess.TimeoutExpired:
-                try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                stdout, stderr = process.communicate(timeout=5)
-            raise ArenaCellRunnerError(
-                f"Arena worker exceeded its {timeout_seconds:g}s ceiling")
+            except subprocess.TimeoutExpired as exc:
+                cleanup_error = ArenaCellRunnerError(
+                    "Arena worker remained unreapable after group teardown")
+                cleanup_error.__cause__ = exc
+            if cleanup_error is not None:
+                raise cleanup_error
         (cell_root / "worker.stdout").write_text(stdout, encoding="utf-8")
         (cell_root / "worker.stderr").write_text(stderr, encoding="utf-8")
+        if timed_out:
+            raise ArenaCellRunnerError(
+                f"Arena worker exceeded its {timeout_seconds:g}s ceiling")
         if process.returncode != 0:
             raise ArenaCellRunnerError(
                 f"Arena worker exited {process.returncode}: {stderr[-1000:]}")

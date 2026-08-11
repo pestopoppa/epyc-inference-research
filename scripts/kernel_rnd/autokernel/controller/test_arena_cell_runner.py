@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import types
@@ -185,6 +187,16 @@ class ArenaCellRunnerTest(unittest.TestCase):
             self.assertEqual(
                 belief["belief_measurements"][0]["extra"]["controller_id"],
                 "k_search")
+        belief_files = sorted(self.output.glob("cells/*/belief-receipt.json"))
+        self.assertEqual(len(belief_files), 3)
+        for belief_file in belief_files:
+            persisted = json.loads(belief_file.read_text(encoding="utf-8"))
+            self.assertEqual(
+                persisted["schema"], "epyc.autokernel.geak_arena_roundtrip.v1")
+            self.assertEqual(
+                persisted["receipt_sha256"],
+                canonical_sha({key: value for key, value in persisted.items()
+                               if key != "receipt_sha256"}))
 
     def test_identity_drift_refuses_before_claim_or_worker(self):
         acquire = mock.Mock()
@@ -305,6 +317,30 @@ class ArenaCellRunnerTest(unittest.TestCase):
         self.assertTrue((cell_root / "workspace" / "task_result.yaml").is_file())
         self.assertTrue((cell_root / "controller.stdout").is_file())
         evaluator.evaluate_kernel.assert_called_once()
+
+    def test_exact_group_teardown_kills_a_planted_descendant(self):
+        child_pid_path = self.root / "descendant.pid"
+        script = (
+            "import pathlib, subprocess, sys; "
+            "child=subprocess.Popen([sys.executable, '-c', "
+            "'import time; time.sleep(30)'], stdout=subprocess.DEVNULL, "
+            "stderr=subprocess.DEVNULL); "
+            f"pathlib.Path({str(child_pid_path)!r}).write_text(str(child.pid))"
+        )
+        process = subprocess.Popen(
+            [sys.executable, "-c", script], start_new_session=True,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            process.wait(timeout=5)
+            child_pid = int(child_pid_path.read_text(encoding="utf-8"))
+            self.assertIn(child_pid, R._live_process_group_members(process.pid))
+            R._terminate_captured_process_group(process.pid, grace_seconds=1.0)
+            self.assertNotIn(child_pid, R._live_process_group_members(process.pid))
+        finally:
+            try:
+                os.killpg(process.pid, 9)
+            except ProcessLookupError:
+                pass
 
 
 if __name__ == "__main__":
