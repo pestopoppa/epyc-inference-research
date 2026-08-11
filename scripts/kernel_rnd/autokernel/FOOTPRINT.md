@@ -31,8 +31,8 @@ a module it never looked at.
 | | non-test lines |
 |---|---:|
 | **ON THE CAMPAIGN PATH** | **63,782** |
-| **DEFERRED** (provably unreachable) | **13,781** |
-| **TOTAL** | **77,563** |
+| **DEFERRED** (provably unreachable) | **13,937** |
+| **TOTAL** | **77,719** |
 
 **There is no deferred half.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -176,8 +176,8 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `controller/__init__.py` | 81 | yes | binds every surviving controller module, so importing one reaches both — which is why `controller.do_not_repeat` is on the path whether or not the driver names it, and why `CONTROLLER_ALLOWED` lists this file rather than leaving the edge unexplained |
 | `controller/arena_adapter.py` | 507 | no | INF-03 paper-pin GEAK/AgentKernelArena integration: validates clean vendor sources and physical gfx90a identity, binds C4 into a hygienic priced prompt, and launches registered whole-agent task adapters without entering campaign mutation or scoring |
 | `controller/claude_codex_actor_critic.py` | 601 | no | INF-03 bounded Claude-planner/critic + Codex-actor controller: exact three-argument Arena launcher, explicit model/effort pins, checkpoint process-group termination, single-candidate workspace confinement, and transcript/artifact hashing; its preflight invokes neither CLI |
-| `controller/arena_campaign.py` | 882 | no | INF-03 matched-panel audit and injected-runner seam: binds the baseline plus seven controller arms to equal tasks and checkpoints, admits each governed arm only with exact adapter/upstream/CLI/model pins, refuses incomplete panels before execution, and remains outside live campaign mutation and scoring |
-| `controller/arena_cell_runner.py` | 697 | no | INF-03 concrete governed runner: re-audits every task/controller identity, runs independent fresh 2h/8h/32h cells under one sampled MI210 claim at a time, delegates compile/correctness/timing to the pinned Arena evaluator, safely tears down captured worker groups, and emits hash-bound non-promotional belief receipts |
+| `controller/arena_campaign.py` | 1,024 | no | INF-03 matched-panel audit and injected-runner seam: binds the baseline plus seven controller arms to equal tasks and checkpoints, admits each governed arm only with exact adapter/upstream/CLI/model pins, refuses incomplete panels before execution, and remains outside live campaign mutation and scoring |
+| `controller/arena_cell_runner.py` | 711 | no | INF-03 concrete governed runner: re-audits every task/controller identity, runs independent fresh 2h/8h/32h cells under one sampled MI210 claim at a time, delegates compile/correctness/timing to the pinned Arena evaluator, safely tears down captured worker groups, and emits hash-bound non-promotional belief receipts |
 | `controller/arena_upstream_common.py` | 499 | no | INF-03 shared licensed-controller substrate: bounded read-only text-model calls and centralized Arena evaluation stay outside campaign mutation and carry no ranking or promotion authority |
 | `controller/k_search_arena.py` | 281 | no | INF-03 licensed K-Search world-model/tree port: injects the centralized Arena evaluator into the exact pinned upstream Task seam without entering campaign mutation or scoring |
 | `controller/geak_v1_arena.py` | 270 | no | INF-03 licensed GEAK-v1 OptimAgent port: maps its ROCm dataset and reflection loop onto centralized Arena evidence without entering campaign mutation or scoring |
