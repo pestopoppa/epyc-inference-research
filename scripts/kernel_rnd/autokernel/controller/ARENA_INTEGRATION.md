@@ -107,9 +107,11 @@ arm alike:
   executable arm. Its exact `WorldModelKernelGeneratorWithBaseline.generate`
   loop receives a Task whose benchmark method is the centralized Arena
   evaluator, with GPT-5.6 Sol/high fixed as the text-model dependency;
-- KernelFoundry `v0.3.0` (`1c053e02383d12937f144923bcc1faa82fa7788f`) and Xe-Forge
-  `v0.3.0` (`4dcb5080b0f56d0b655ec8c8c9509b8e3ba0382c`) are Apache-2.0
-  upstream implementations and can receive explicit gfx90a evaluator ports;
+- Xe-Forge `v0.3.0` (`4dcb5080b0f56d0b655ec8c8c9509b8e3ba0382c`) has an explicit
+  gfx90a port that retains `DSPyEngine.optimize` and linear CoVeR while routing
+  all compilation, correctness, and timing through Arena. KernelFoundry `v0.3.0`
+  (`1c053e02383d12937f144923bcc1faa82fa7788f`) is Apache-2.0 and remains the
+  one licensed upstream implementation still needing its evaluator port;
 - GEAK-v1 `v1.0.0` (`4ffba15a55f250816598b4e27eb56ca40a699cea`)
   is a governed executable arm using its real `OptimAgent_ROCm.run`, BM25
   corpus, and reflection memory. The adapter confines upstream cleanup to a
