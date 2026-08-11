@@ -14,6 +14,9 @@ from unittest import mock
 
 from . import arena_campaign as C
 from . import claude_codex_actor_critic as AC
+from . import geak_v1_arena as GEAK
+from . import k_search_arena as KS
+from . import xe_forge_arena as XF
 
 
 HERE = Path(__file__).resolve().parent
@@ -43,6 +46,18 @@ class ArenaCampaignTest(unittest.TestCase):
         self.entrypoint = self.source / AC.ENTRYPOINT_RELATIVE
         self.entrypoint.parent.mkdir(parents=True)
         self.entrypoint.write_text("raise SystemExit(0)\n", encoding="utf-8")
+        self.k_search_entrypoint = self.source / KS.ENTRYPOINT_RELATIVE
+        self.k_search_entrypoint.parent.mkdir(parents=True, exist_ok=True)
+        self.k_search_entrypoint.write_text(
+            "raise SystemExit(0)\n# k-search fixture\n", encoding="utf-8")
+        self.geak_entrypoint = self.source / GEAK.ENTRYPOINT_RELATIVE
+        self.geak_entrypoint.parent.mkdir(parents=True, exist_ok=True)
+        self.geak_entrypoint.write_text(
+            "raise SystemExit(0)\n# geak fixture\n", encoding="utf-8")
+        self.xe_forge_entrypoint = self.source / XF.ENTRYPOINT_RELATIVE
+        self.xe_forge_entrypoint.parent.mkdir(parents=True, exist_ok=True)
+        self.xe_forge_entrypoint.write_text(
+            "raise SystemExit(0)\n# xe-forge fixture\n", encoding="utf-8")
         for command in (
             ("git", "init", "-q"),
             ("git", "add", "."),
@@ -59,28 +74,84 @@ class ArenaCampaignTest(unittest.TestCase):
         arms = []
         for arm_id in C.PRIMARY_PANEL_IDS:
             is_actor_critic = arm_id == AC.CONTROLLER_ID
+            is_k_search = arm_id == KS.CONTROLLER_ID
+            is_geak = arm_id == GEAK.CONTROLLER_ID
+            is_xe_forge = arm_id == "xe_forge"
             argv = (() if arm_id == C.BASELINE_ARM_ID else
                     (AC.campaign_argv(sys.executable) if is_actor_critic else
-                     (sys.executable, "-c", "pass")))
+                     (KS.campaign_argv(sys.executable) if is_k_search else
+                      (GEAK.campaign_argv(sys.executable) if is_geak else
+                       (XF.campaign_argv(sys.executable) if is_xe_forge else
+                        (sys.executable, "-c", "pass"))))))
+            entrypoint = (self.k_search_entrypoint if is_k_search else
+                          (self.geak_entrypoint if is_geak else
+                           (self.xe_forge_entrypoint if is_xe_forge
+                            else self.entrypoint)))
             arms.append(C.ArmImplementation(
                 arm_id=arm_id,
                 availability="ready",
                 adapter_kind=("arena_measure_baseline" if arm_id == C.BASELINE_ARM_ID
                               else ("agentkernelarena_three_arg_v1"
-                                    if is_actor_critic else "stdin_workspace_v1")),
+                                    if is_actor_critic else
+                                    ("k_search_world_model_arena_v1"
+                                     if is_k_search else
+                                     ("geak_v1_optimagent_arena_v1"
+                                      if is_geak else
+                                      ("xe_forge_linear_cover_arena_v1"
+                                       if is_xe_forge else
+                                       "stdin_workspace_v1"))))),
                 missing_artifacts=(),
                 argv=argv,
                 source_root=(None if arm_id == C.BASELINE_ARM_ID else str(self.source)),
                 source_commit=(None if arm_id == C.BASELINE_ARM_ID
                                else self.source_commit),
                 entrypoint_path=(None if arm_id == C.BASELINE_ARM_ID
-                                 else AC.ENTRYPOINT_RELATIVE),
+                                 else (KS.ENTRYPOINT_RELATIVE if is_k_search
+                                       else (GEAK.ENTRYPOINT_RELATIVE if is_geak
+                                             else (XF.ENTRYPOINT_RELATIVE
+                                                   if is_xe_forge else
+                                                   AC.ENTRYPOINT_RELATIVE)))),
                 entrypoint_sha256=(None if arm_id == C.BASELINE_ARM_ID
-                                   else sha(self.entrypoint)),
+                                   else sha(entrypoint)),
                 model_ids=(() if arm_id == C.BASELINE_ARM_ID else
                            (AC.PINNED_MODEL_IDS if is_actor_critic else
-                            ("fixture-model",))),
-                required_clis=(AC.REQUIRED_CLIS if is_actor_critic else ()),
+                            (KS.PINNED_MODEL_IDS if is_k_search else
+                             (GEAK.PINNED_MODEL_IDS if is_geak else
+                              (XF.PINNED_MODEL_IDS if is_xe_forge else
+                               ("fixture-model",)))))),
+                required_clis=(AC.REQUIRED_CLIS if is_actor_critic else
+                               (KS.REQUIRED_CLIS if is_k_search else
+                                (GEAK.REQUIRED_CLIS if is_geak else
+                                 (XF.REQUIRED_CLIS if is_xe_forge else ())))),
+                upstream_source_root=("vendor://k-search" if is_k_search else
+                                      ("vendor://geak-v1" if is_geak else
+                                       ("vendor://xe-forge" if is_xe_forge
+                                        else None))),
+                upstream_source_commit=(KS.SOURCE_COMMIT if is_k_search else
+                                        (GEAK.SOURCE_COMMIT if is_geak else
+                                         (XF.SOURCE_COMMIT if is_xe_forge
+                                          else None))),
+                upstream_entrypoint_path=(
+                    KS.UPSTREAM_ENTRYPOINT if is_k_search else
+                    (GEAK.UPSTREAM_ENTRYPOINT if is_geak else
+                     (XF.UPSTREAM_ENTRYPOINT if is_xe_forge else None))),
+                upstream_entrypoint_sha256=(
+                    "022a9381cd31e8429e2d4fa0486fd94fc806ca5a331e710991f84e6d82b79723"
+                    if is_k_search else
+                    ("ff742e9ecb5195114c96600e1a1daeedaac1d1769484f60287716e5ea254d2c1"
+                     if is_geak else
+                     ("8ec39507d909fa3a442dad5b13fa9c4518ba440d3429f6205fdb746ff74b3631"
+                      if is_xe_forge else None))),
+                upstream_license_path=("LICENSE" if is_k_search else
+                                       ("LICENSE.md" if is_geak else
+                                        ("LICENSE" if is_xe_forge else None))),
+                upstream_license_sha256=(
+                    "4eb338364aa80d8a3a0a226e78643960271f4181ad32e91403b686720d086b1e"
+                    if is_k_search else
+                    ("51f22193d2056db3ec1b578e0b94568b5641807b90c0f3e75e1878c435b03709"
+                     if is_geak else
+                     ("c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+                      if is_xe_forge else None))),
             ))
         return C.CampaignSpec(
             config_path=str(self.config_source.resolve()),
@@ -108,6 +179,10 @@ class ArenaCampaignTest(unittest.TestCase):
             mock.patch.object(
                 C.arena_adapter, "detect_gfx_arch",
                 return_value={"target_gpu_model": "MI210", "target_gfx_arch": "gfx90a"},
+            ),
+            mock.patch.object(
+                C, "_upstream_source_audit",
+                return_value=({"clean": True, "root": "fixture"}, []),
             ),
         ):
             return C.audit_campaign(spec, arena_root=self.arena, geak_root=self.geak)
@@ -143,13 +218,44 @@ class ArenaCampaignTest(unittest.TestCase):
         subprocess.run(
             ("git", "-C", str(C.REPOSITORY_ROOT), "merge-base", "--is-ancestor",
              actor.source_commit, "HEAD"), check=True)
+        k_search = next(arm for arm in spec.arms if arm.arm_id == KS.CONTROLLER_ID)
+        self.assertEqual(k_search.availability, "ready")
+        self.assertEqual(k_search.adapter_kind, "k_search_world_model_arena_v1")
+        self.assertEqual(k_search.argv, KS.campaign_argv("python3"))
+        self.assertEqual(k_search.source_root, C.IN_TREE_SOURCE_ROOT)
+        self.assertEqual(k_search.entrypoint_path, KS.ENTRYPOINT_RELATIVE)
+        self.assertEqual(k_search.model_ids, KS.PINNED_MODEL_IDS)
+        self.assertEqual(k_search.required_clis, KS.REQUIRED_CLIS)
+        self.assertEqual(k_search.upstream_source_commit, KS.SOURCE_COMMIT)
+        self.assertEqual(k_search.missing_artifacts, ())
+        geak = next(arm for arm in spec.arms if arm.arm_id == GEAK.CONTROLLER_ID)
+        self.assertEqual(geak.availability, "ready")
+        self.assertEqual(geak.adapter_kind, "geak_v1_optimagent_arena_v1")
+        self.assertEqual(geak.argv, GEAK.campaign_argv())
+        self.assertEqual(geak.source_root, C.IN_TREE_SOURCE_ROOT)
+        self.assertEqual(geak.entrypoint_path, GEAK.ENTRYPOINT_RELATIVE)
+        self.assertEqual(geak.model_ids, GEAK.PINNED_MODEL_IDS)
+        self.assertEqual(geak.required_clis, GEAK.REQUIRED_CLIS)
+        self.assertEqual(geak.upstream_source_commit, GEAK.SOURCE_COMMIT)
+        self.assertEqual(geak.missing_artifacts, ())
+        xe_forge = next(arm for arm in spec.arms if arm.arm_id == "xe_forge")
+        self.assertEqual(xe_forge.availability, "ready")
+        self.assertEqual(xe_forge.adapter_kind,
+                         "xe_forge_linear_cover_arena_v1")
+        self.assertEqual(xe_forge.argv, XF.campaign_argv())
+        self.assertEqual(xe_forge.source_root, C.IN_TREE_SOURCE_ROOT)
+        self.assertEqual(xe_forge.entrypoint_path, XF.ENTRYPOINT_RELATIVE)
+        self.assertEqual(xe_forge.model_ids, XF.PINNED_MODEL_IDS)
+        self.assertEqual(xe_forge.required_clis, XF.REQUIRED_CLIS)
+        self.assertEqual(xe_forge.upstream_source_commit, XF.SOURCE_COMMIT)
+        self.assertEqual(xe_forge.missing_artifacts, ())
         for arm in spec.arms[2:]:
+            if arm.arm_id in {
+                    KS.CONTROLLER_ID, GEAK.CONTROLLER_ID, "xe_forge"}:
+                continue
             self.assertEqual(arm.availability, "missing")
             self.assertFalse(arm.argv)
             self.assertGreaterEqual(len(arm.missing_artifacts), 3)
-        geak = next(arm for arm in spec.arms if arm.arm_id == "geak_v1")
-        self.assertIn("TB-eval-smol", " ".join(geak.missing_artifacts))
-        self.assertIn("dvue-aoai-001-gpt-4.1", " ".join(geak.missing_artifacts))
         argus = spec.arms[-1]
         self.assertIn("licensed", " ".join(argus.missing_artifacts))
         self.assertIn("gfx90a", " ".join(argus.missing_artifacts))
@@ -218,6 +324,18 @@ class ArenaCampaignTest(unittest.TestCase):
                 "evoengineer", "ready", "stdin_workspace_v1", (),
                 argv=(sys.executable, "-c", "pass"))
 
+    def test_vendor_source_locator_is_bounded_and_root_is_configurable(self):
+        vendor_root = self.root / "vendor"
+        with mock.patch.dict(
+            "os.environ", {"AUTOKERNEL_ARENA_CONTROLLER_ROOT": str(vendor_root)},
+        ):
+            resolved, in_tree = C._resolve_source_root("vendor://k-search")
+        self.assertEqual(resolved, (vendor_root / "k-search").resolve())
+        self.assertFalse(in_tree)
+        for locator in ("vendor://../escape", "vendor://nested/source", "vendor://"):
+            with self.assertRaisesRegex(C.ArenaCampaignError, "one checkout"):
+                C._resolve_source_root(locator)
+
     def test_complete_fixture_audits_ready_and_binds_executable_hashes(self):
         receipt = self.audit(self.ready_spec())
         self.assertEqual(receipt["status"], "ready")
@@ -233,9 +351,13 @@ class ArenaCampaignTest(unittest.TestCase):
         self.assertTrue(all(row["executable_sha256"] for row in controller_rows))
         self.assertTrue(all(row["source_identity"]["clean"] for row in controller_rows))
         self.assertEqual(controller_rows[0]["model_ids"], list(AC.PINNED_MODEL_IDS))
+        self.assertEqual(controller_rows[3]["model_ids"], list(KS.PINNED_MODEL_IDS))
+        self.assertEqual(controller_rows[4]["model_ids"], list(XF.PINNED_MODEL_IDS))
+        self.assertEqual(controller_rows[5]["model_ids"], list(GEAK.PINNED_MODEL_IDS))
         self.assertEqual(
-            [row["model_ids"] for row in controller_rows[1:]],
-            [["fixture-model"]] * 6,
+            [row["model_ids"] for index, row in enumerate(controller_rows[1:], 1)
+             if index not in {3, 4, 5}],
+            [["fixture-model"]] * 3,
         )
         self.assertEqual(
             [row["name"] for row in controller_rows[0]["required_cli_identities"]],

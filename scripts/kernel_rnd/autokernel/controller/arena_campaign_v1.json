@@ -88,33 +88,134 @@
     },
     {
       "arm_id": "k_search",
-      "availability": "missing",
-      "adapter_kind": "stdin_workspace_v1",
-      "missing_artifacts": [
-        "a licensed, commit-pinned K-Search source checkout",
-        "a callable world-model-tree controller using the shared gfx90a evaluator",
-        "a hash-bound three-argument AgentKernelArena launcher"
-      ]
+      "availability": "ready",
+      "adapter_kind": "k_search_world_model_arena_v1",
+      "missing_artifacts": [],
+      "argv": [
+        "python3",
+        "-m",
+        "scripts.kernel_rnd.autokernel.controller.k_search_arena",
+        "--model",
+        "gpt-5.6-sol",
+        "--effort",
+        "high",
+        "--checkpoint-hours",
+        "32",
+        "--timeout-seconds",
+        "115200",
+        "--max-rounds",
+        "64",
+        "--workspace",
+        ".",
+        "--arena-root",
+        "/mnt/raid0/llm/autokernel/vendor/agent-kernel-arena",
+        "--source-root",
+        "/mnt/raid0/llm/autokernel/vendor/arena-controllers/k-search"
+      ],
+      "source_root": "repository://.",
+      "source_commit": "832f6833c2d6e3ed0067e54375b633fa87c6bc36",
+      "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/k_search_arena.py",
+      "entrypoint_sha256": "ae4b88990e849dc45067bb848d3b6f833bae087ee8a625408211c0cfac9456cf",
+      "model_ids": [
+        "gpt-5.6-sol:high:upstream-controller"
+      ],
+      "required_clis": [
+        "codex"
+      ],
+      "upstream_source_root": "vendor://k-search",
+      "upstream_source_commit": "53c8fab9a5e8fab2c86610d24fbec5067f90e115",
+      "upstream_entrypoint_path": "k_search/kernel_generators/kernel_generator_world_model.py",
+      "upstream_entrypoint_sha256": "022a9381cd31e8429e2d4fa0486fd94fc806ca5a331e710991f84e6d82b79723",
+      "upstream_license_path": "LICENSE",
+      "upstream_license_sha256": "4eb338364aa80d8a3a0a226e78643960271f4181ad32e91403b686720d086b1e"
     },
     {
       "arm_id": "xe_forge",
-      "availability": "missing",
-      "adapter_kind": "stdin_workspace_v1",
-      "missing_artifacts": [
-        "a licensed, commit-pinned Xe-Forge source checkout",
-        "a callable linear-CoVeR controller using the shared gfx90a evaluator",
-        "a hash-bound three-argument AgentKernelArena launcher"
-      ]
+      "availability": "ready",
+      "adapter_kind": "xe_forge_linear_cover_arena_v1",
+      "missing_artifacts": [],
+      "argv": [
+        "/mnt/raid0/llm/tools/geak-v1-rocm62-py312/bin/python",
+        "-m",
+        "scripts.kernel_rnd.autokernel.controller.xe_forge_arena",
+        "--model",
+        "gpt-5.6-sol",
+        "--effort",
+        "high",
+        "--checkpoint-hours",
+        "32",
+        "--timeout-seconds",
+        "115200",
+        "--max-iterations",
+        "64",
+        "--workspace",
+        ".",
+        "--arena-root",
+        "/mnt/raid0/llm/autokernel/vendor/agent-kernel-arena",
+        "--source-root",
+        "/mnt/raid0/llm/autokernel/vendor/arena-controllers/xe-forge"
+      ],
+      "source_root": "repository://.",
+      "source_commit": "d76fe4b9e1d34c0a4eee8560160c01c1e893fae8",
+      "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/xe_forge_arena.py",
+      "entrypoint_sha256": "18bfcbab3c15d9ff249baa4ba4a7e5dc29ee7d7f1abcafc96a151f0e6a108228",
+      "model_ids": [
+        "gpt-5.6-sol:high:upstream-controller"
+      ],
+      "required_clis": [
+        "codex"
+      ],
+      "upstream_source_root": "vendor://xe-forge",
+      "upstream_source_commit": "4dcb5080b0f56d0b655ec8c8c9509b8e3ba0382c",
+      "upstream_entrypoint_path": "src/xe_forge/engines/dspy_engine.py",
+      "upstream_entrypoint_sha256": "8ec39507d909fa3a442dad5b13fa9c4518ba440d3429f6205fdb746ff74b3631",
+      "upstream_license_path": "LICENSE",
+      "upstream_license_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
     },
     {
       "arm_id": "geak_v1",
-      "availability": "missing",
-      "adapter_kind": "stdin_workspace_v1",
-      "missing_artifacts": [
-        "a licensed GEAK-eval task corpus matching GEAK-v1 (TB-eval-smol is absent from the pinned checkout)",
-        "a GEAK-v1 stdin/workspace launcher compatible with AgentKernelArena",
-        "a reachable model/provider pin replacing the checkout's empty api_key and private dvue-aoai-001-gpt-4.1 endpoint"
-      ]
+      "availability": "ready",
+      "adapter_kind": "geak_v1_optimagent_arena_v1",
+      "missing_artifacts": [],
+      "argv": [
+        "/mnt/raid0/llm/tools/geak-v1-rocm62-py312/bin/python",
+        "-m",
+        "scripts.kernel_rnd.autokernel.controller.geak_v1_arena",
+        "--model",
+        "gpt-5.6-sol",
+        "--effort",
+        "high",
+        "--checkpoint-hours",
+        "32",
+        "--timeout-seconds",
+        "115200",
+        "--max-iterations",
+        "64",
+        "--ancestor-num",
+        "2",
+        "--workspace",
+        ".",
+        "--arena-root",
+        "/mnt/raid0/llm/autokernel/vendor/agent-kernel-arena",
+        "--source-root",
+        "/mnt/raid0/llm/autokernel/vendor/arena-controllers/geak-v1"
+      ],
+      "source_root": "repository://.",
+      "source_commit": "38b8e07eb08874e98d83a7675bd78768bdc87b25",
+      "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/geak_v1_arena.py",
+      "entrypoint_sha256": "133fb03a1a25c839cf5db597becbb1f1da474471a3bc3cce32121904aafcc8e1",
+      "model_ids": [
+        "gpt-5.6-sol:high:upstream-controller"
+      ],
+      "required_clis": [
+        "codex"
+      ],
+      "upstream_source_root": "vendor://geak-v1",
+      "upstream_source_commit": "4ffba15a55f250816598b4e27eb56ca40a699cea",
+      "upstream_entrypoint_path": "src/agents/OptimAgent_ROCm.py",
+      "upstream_entrypoint_sha256": "ff742e9ecb5195114c96600e1a1daeedaac1d1769484f60287716e5ea254d2c1",
+      "upstream_license_path": "LICENSE.md",
+      "upstream_license_sha256": "51f22193d2056db3ec1b578e0b94568b5641807b90c0f3e75e1878c435b03709"
     },
     {
       "arm_id": "argus",
