@@ -86,6 +86,11 @@ class ScopeReductionTest(unittest.TestCase):
         )
 
     def test_rocprof_parser_hashes_and_aggregates_kernel_families(self):
+        dispatches = P.load_rocprof_dispatches(self.profile, self.receipt)
+        self.assertEqual([row.dispatch_id for row in dispatches], ["0", "1", "2"])
+        self.assertEqual([row.kernel_family for row in dispatches],
+                         ["quantize_q8_1", "mul_mat_vec_q", "quantize_q8_1"])
+        self.assertEqual([row.duration_ns for row in dispatches], [20, 60, 30])
         rows = P.load_rocprof_findings(self.profile, self.receipt)
         self.assertEqual([row.kernel_family for row in rows],
                          ["mul_mat_vec_q", "quantize_q8_1"])

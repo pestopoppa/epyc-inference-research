@@ -306,6 +306,21 @@ class ProfileFinding:
 
 
 @dataclass(frozen=True)
+class ProfileDispatch:
+    """One ordered dispatch from a hash-bound rocprofv2 capture."""
+
+    dispatch_id: str
+    kernel_name: str
+    kernel_family: str
+    start_ns: int
+    end_ns: int
+
+    @property
+    def duration_ns(self) -> int:
+        return self.end_ns - self.start_ns
+
+
+@dataclass(frozen=True)
 class ScopeReductionReport:
     """AK-DEL-1's durable four-bucket result over real profiler findings."""
 
@@ -372,16 +387,9 @@ def _kernel_family(kernel_name: str) -> str:
     return family
 
 
-def load_rocprof_findings(path: str | Path, receipt: ProfileReceipt, *,
-                          active_flags: Mapping[str, str] | None = None,
-                          symbol_aliases: Mapping[str, Sequence[str]] | None = None
-                          ) -> tuple[ProfileFinding, ...]:
-    """Parse and aggregate a rocprofv2 CSV after verifying its content hash.
-
-    This consumes a completed capture.  It launches nothing and deliberately
-    treats timestamps as the only timing authority; hardware counter values are
-    not substituted for dispatch duration.
-    """
+def load_rocprof_dispatches(path: str | Path,
+                            receipt: ProfileReceipt) -> tuple[ProfileDispatch, ...]:
+    """Parse ordered rocprofv2 dispatches after verifying the capture hash."""
     source = Path(path)
     if not source.is_file():
         raise ProfileError(f"profile does not exist: {source}")
@@ -389,13 +397,9 @@ def load_rocprof_findings(path: str | Path, receipt: ProfileReceipt, *,
     if observed_hash != receipt.profile_sha256:
         raise ProfileError(
             f"profile sha256 mismatch: expected {receipt.profile_sha256}, got {observed_hash}")
-    flags = dict(active_flags or {})
-    aliases = dict(symbol_aliases or {})
-    durations: dict[str, int] = defaultdict(int)
-    dispatches: dict[str, int] = defaultdict(int)
-    names: dict[str, set[str]] = defaultdict(set)
     seen_ids: set[str] = set()
     required = {"Dispatch_ID", "Kernel_Name", "Start_Timestamp", "End_Timestamp"}
+    dispatches = []
     with source.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(line for line in handle if line.strip())
         if reader.fieldnames is None or not required.issubset(reader.fieldnames):
@@ -419,12 +423,40 @@ def load_rocprof_findings(path: str | Path, receipt: ProfileReceipt, *,
                     f"row {row_number} has non-positive dispatch duration: {start}..{end}")
             kernel_name = _profile_text(
                 row.get("Kernel_Name"), f"row {row_number} Kernel_Name")
-            family = _kernel_family(kernel_name)
-            durations[family] += end - start
-            dispatches[family] += 1
-            names[family].add(kernel_name)
+            dispatches.append(ProfileDispatch(
+                dispatch_id=dispatch_id,
+                kernel_name=kernel_name,
+                kernel_family=_kernel_family(kernel_name),
+                start_ns=start,
+                end_ns=end,
+            ))
+    if not dispatches:
+        raise ProfileError("rocprof CSV contains no positive-duration dispatches")
+    return tuple(dispatches)
+
+
+def load_rocprof_findings(path: str | Path, receipt: ProfileReceipt, *,
+                          active_flags: Mapping[str, str] | None = None,
+                          symbol_aliases: Mapping[str, Sequence[str]] | None = None
+                          ) -> tuple[ProfileFinding, ...]:
+    """Parse and aggregate a rocprofv2 CSV after verifying its content hash.
+
+    This consumes a completed capture.  It launches nothing and deliberately
+    treats timestamps as the only timing authority; hardware counter values are
+    not substituted for dispatch duration.
+    """
+    flags = dict(active_flags or {})
+    aliases = dict(symbol_aliases or {})
+    durations: dict[str, int] = defaultdict(int)
+    dispatches: dict[str, int] = defaultdict(int)
+    names: dict[str, set[str]] = defaultdict(set)
+    ordered = load_rocprof_dispatches(path, receipt)
+    for row in ordered:
+        durations[row.kernel_family] += row.duration_ns
+        dispatches[row.kernel_family] += 1
+        names[row.kernel_family].add(row.kernel_name)
     total = sum(durations.values())
-    if not seen_ids or total <= 0:
+    if total <= 0:
         raise ProfileError("rocprof CSV contains no positive-duration dispatches")
     findings = []
     for family in sorted(durations):

@@ -185,6 +185,7 @@ calibration exists. Source-changing campaigns additionally require their own
 | `controller/authoring_contract.py` | **AK-PL-1 / AK-LE-4 / AK-LE-5 (off campaign path).** The only reviewed fully-rendered authoring-prompt seam; sealed-evaluator leak scan with compliant control, priced never-bulk-read context, reversible compaction headers with exact git recovery, and typed external numeric priors. It calls no model and selects no work. |
 | `controller/reward_monitor.py` | **C6 sabotage/sandbagging monitor contract (off campaign path).** Compiles the named threat model with monitor-awareness and reasoning visibility mandatory, binds every reasoning trace to its campaign/candidate plus the whole journal tree, reduces a declaration-bound complete model×sample panel as mean-of-mean@k, and reports sensitivity, specificity, and false-positive rate against a predeclared budget. It calls no model and cannot stamp correctness. |
 | `prior_art.py` | The deterministic four-way prior-art gate, explicit any/all trace-keyword matching, expected-absence override, v9-pinned source catalogue, cumulative wall-share pruning, and hash-bound offline `rocprofv2` reducer used by AK-DEL-1. |
+| `profile_report.py` | **RVP-1–7 offline C4.** Consumes paired hash-bound mapping/formal `rocprofv2` captures, enforces stage separation and the 10-warm-up/5-active window, renders kernel/overlap/fuse plus architecture-shape tables above the 1% family floor, records the complete profiler candidate registry including RPD/gfx90a reachability, and makes host-catalogue exclusions explicit. Source matching is exact and reviewed; the optional judgment pass can attach only `low`/`medium`/`high` similarity plus a catalogue note. It launches nothing. |
 | `substrate.py` | Validates the checked-in MI210 compute/bandwidth/PCIe/NUMA facts, preserves measured and datasheet bases separately, re-derives both roofline ridges, and builds exact-quant diagnostic surfaces. Cross-vendor cells are spec-basis; a missing exact CUDA anchor is `COULD_NOT_CHECK`, never a pooled or borrowed target. |
 | `lanes.py` | The lane registry, historical 4/8/16/32/48-way CPU shapes, isolation checks, change-class-specific rank calibration, and full-instance verification rule. |
 | `artifact_diff.py` | The compile-only VGPR/SGPR/scratch/instruction-mix comparison that vetoes an unconfirmed GPU claim before behavioral T0 can launch. |
@@ -200,6 +201,14 @@ duration bucket splits are emitted. The bounded K25 corpus resolves 3/3
 admitted families to existing paths and therefore recommends catalogue work
 before a novel-kernel proposal generator. That is a scope decision over this
 corpus, not a claim about unprofiled workloads.
+
+The C4 profiler report is a separate offline consumer of completed traces. Its
+mapping trace must use graphs-disabled or lower-fusion attribution; its formal
+trace must use production optimizations, and both must bind the same stage and
+source commit. The deterministic pass owns every measured value and source
+locator. A later model sees only emitted pattern ids and may add one bounded
+similarity label plus a catalogue comparison; it cannot rewrite timing,
+attribution, scope, or architecture-shape facts.
 
 ### AK6 — the operator surface
 
@@ -723,8 +732,8 @@ python3 -m unittest scripts.kernel_rnd.autokernel.release.test_release_integrati
 python3 scripts/kernel_rnd/autokernel/test_integration.py
 ```
 
-Expected: **3818 tests, OK (expected failures=1)** as of the 2026-08-11 AK-DEL-1
-scope-gate closure. The one `expectedFailure` is
+Expected: **3824 tests, OK (expected failures=1)** as of the 2026-08-11 offline
+C4 report closure. The one `expectedFailure` is
 `test_preflight.RealKernelLockEncodingTest.test_KNOWN_HOLE_unlinking_a_held_lock_
 file_hides_its_live_holder` — a real, documented hole (unlinking a held lock file
 hides its live holder from the `/proc/locks` witness), deliberately left visible
