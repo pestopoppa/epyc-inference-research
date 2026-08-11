@@ -438,6 +438,28 @@ class TestCleanCandidatePasses(unittest.TestCase):
 
 class TestBackendOpUnits(unittest.TestCase):
 
+    def test_layout_probe_passes_only_after_all_three_families_ran(self):
+        report = run(ev=evidence(op_suite=op_suite(
+            layout_probe=True,
+            layout_families=("offset", "stride_gap", "transpose"),
+            layout_case_count=17)))
+        self.assertEqual(report.outcome(C.GID_OP_UNITS), S.PASS)
+
+    def test_layout_probe_with_a_missing_family_fails(self):
+        report = run(ev=evidence(op_suite=op_suite(
+            layout_probe=True, layout_families=("offset", "stride_gap"),
+            layout_case_count=9)))
+        gate = report.gate(C.GID_OP_UNITS)
+        self.assertEqual(gate.check.outcome, S.FAIL)
+        self.assertIn("transpose", " ".join(gate.check.reasons))
+
+    def test_layout_probe_over_zero_cases_fails(self):
+        report = run(ev=evidence(op_suite=op_suite(
+            layout_probe=True, layout_families=(), layout_case_count=0)))
+        gate = report.gate(C.GID_OP_UNITS)
+        self.assertEqual(gate.check.outcome, S.FAIL)
+        self.assertIn("zero cases", " ".join(gate.check.reasons))
+
     def test_property_residuals_travel_as_structured_gate_measurements(self):
         measurement = C.PropertyMeasurement(
             shape_id="SOFT_MAX(type=f32,ne=[83,2,1,1])#0",

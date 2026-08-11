@@ -248,6 +248,32 @@ class BackendOpsConsoleParsing(unittest.TestCase):
         with self.assertRaises(t0.OutputParseError):
             t0.parse_backend_ops_console(text)
 
+    def test_layout_receipt_preserves_all_three_explicit_families(self):
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                "  MUL_MAT(type_a=f32): AK_LAYOUT_V1 "
+                "families=offset,transpose,stride_gap suite_seed=4711 OK\n"
+                "  1/1 tests passed\n  Backend CPU: OK\n"
+                "1/1 backends passed\nOK\n")
+        run = t0.parse_backend_ops_console(text)
+        self.assertEqual(
+            run.cases[0].layout.families,
+            ("offset", "transpose", "stride_gap"))
+        self.assertEqual(run.cases[0].layout.suite_seed, 4711)
+        self.assertEqual(run.layout_families(),
+                         ("offset", "stride_gap", "transpose"))
+
+    def test_unsupported_layout_is_a_failure_not_a_declined_case(self):
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                "  MUL_MAT(type_a=f32): AK_LAYOUT_V1 families=stride_gap "
+                "suite_seed=4711 | non-contiguous layout is not supported FAIL\n"
+                "  0/1 tests passed\n  Backend CPU: FAIL\n"
+                "0/1 backends passed\nFAIL\n")
+        run = t0.parse_backend_ops_console(text)
+        self.assertEqual(run.cases[0].status, "fail")
+        self.assertEqual(run.failed_ops(), ("MUL_MAT",))
+        self.assertEqual(run.unsupported_by_op(), ())
+        run.reconcile()
+
     def test_recorded_passing_run_parses_cases_and_ops(self):
         run = t0.parse_backend_ops_console(recorded("recorded_t0_backend_ops_console_ok.txt"))
         self.assertEqual(len(run.backends), 1)
@@ -448,6 +474,17 @@ class BackendOpsCsvParsing(unittest.TestCase):
         case = t0.parse_backend_ops_csv(text).cases[0]
         self.assertEqual(case.properties[0].suite_seed, 99)
         self.assertEqual(case.properties[0].residual, 0.0)
+
+    def test_csv_hard_layout_failure_is_not_downgraded_to_not_supported(self):
+        text = (
+            '"backend_name","op_name","op_params","test_mode","supported",'
+            '"hard_failure","error_message","layout_receipt"\n'
+            '"CPU","MUL_MAT","v=1","test","0","1",'
+            '"non-contiguous layout is not supported",'
+            '"AK_LAYOUT_V1 families=stride_gap suite_seed=4711"\n')
+        case = t0.parse_backend_ops_csv(text).cases[0]
+        self.assertEqual(case.status, "fail")
+        self.assertEqual(case.layout.families, ("stride_gap",))
 
     def test_csv_cannot_express_a_skipped_backend(self):
         """Why console is the T0 default, stated as a test rather than a comment.
@@ -705,6 +742,15 @@ class ProductionTreeRefusals(unittest.TestCase):
 
 class ArgvConstruction(unittest.TestCase):
 
+    def test_layout_probe_has_its_own_explicit_flag_and_receipt(self):
+        inv = t0.build_backend_ops_invocation(
+            binary=f"{BIN_DIR}/test-backend-ops", library_path=BIN_DIR,
+            backend_filter="CPU", ops=("MUL_MAT",), base_env=(),
+            suite_seed=4711, layout_probe=True)
+        self.assertIn("--autokernel-layouts", inv.argv)
+        self.assertIn("--autokernel-layouts", " ".join(inv.notes))
+        self.assertEqual(inv.constructor_id, "ak.t0.backend_ops_test/v3")
+
     def test_backend_ops_argv_uses_the_ratified_canonical_prefix(self):
         inv = t0.build_backend_ops_invocation(
             binary=f"{BIN_DIR}/test-backend-ops", library_path=BIN_DIR,
@@ -938,6 +984,7 @@ def _console_capture(provider_plan, text, *, ops=None, params_filter=None):
         ops=ops or provider_plan.op_suite.ops,
         base_env=provider_plan.base_env,
         suite_seed=provider_plan.op_suite.suite_seed,
+        layout_probe=provider_plan.op_suite.layout_probe,
         params_filter=params_filter)
     return capture(inv.argv, stdout=text, exit_code=0)
 
@@ -953,6 +1000,41 @@ def _linkage_capture(provider_plan, text, *, binary=None, library_path=None, exi
 
 
 class OpSuiteCollection(unittest.TestCase):
+
+    def test_layout_pass_requires_all_families_and_binds_the_suite_seed(self):
+        plan = execution_plan(op_suite=op_suite_plan(
+            ops=("MUL_MAT",), suite_seed=4711, layout_probe=True))
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                "  MUL_MAT(case=offset): AK_LAYOUT_V1 families=offset "
+                "suite_seed=4711 OK\n"
+                "  MUL_MAT(case=transpose): AK_LAYOUT_V1 families=transpose "
+                "suite_seed=4711 OK\n"
+                "  MUL_MAT(case=stride): AK_LAYOUT_V1 families=stride_gap "
+                "suite_seed=4711 OK\n"
+                "  3/3 tests passed\n  Backend CPU: OK\n"
+                "1/1 backends passed\nOK\n")
+        provider = t0.ExecutedT0EvidenceProvider(
+            plan=plan, runner=t0.RecordedProcessRunner([_console_capture(plan, text)]),
+            claim=FakeClaim())
+        evidence = provider.collect_op_suite(t0._Collected())
+        self.assertTrue(evidence.layout_probe)
+        self.assertEqual(evidence.layout_case_count, 3)
+        self.assertEqual(evidence.layout_families,
+                         ("offset", "stride_gap", "transpose"))
+
+    def test_layout_receipt_with_the_wrong_seed_refuses(self):
+        plan = execution_plan(op_suite=op_suite_plan(
+            ops=("MUL_MAT",), suite_seed=4711, layout_probe=True))
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                "  MUL_MAT(case=offset): AK_LAYOUT_V1 families=offset "
+                "suite_seed=99 OK\n"
+                "  1/1 tests passed\n  Backend CPU: OK\n"
+                "1/1 backends passed\nOK\n")
+        provider = t0.ExecutedT0EvidenceProvider(
+            plan=plan, runner=t0.RecordedProcessRunner([_console_capture(plan, text)]),
+            claim=FakeClaim())
+        with self.assertRaises(t0.OutputParseError):
+            provider.collect_op_suite(t0._Collected())
 
     def test_property_residuals_bind_backend_shape_and_suite_seed(self):
         plan = execution_plan(op_suite=op_suite_plan(

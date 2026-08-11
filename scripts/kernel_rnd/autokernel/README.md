@@ -789,6 +789,12 @@ What remains is not another hidden static plane:
   `epyc.autokernel.property_measurement.v1` row inside the evaluation event's
   `t0.backend_op_units` vector. Real rows still await a sealed experimental instrument
   and an authorized backend-op run.
+- The layout axis is a separate T0 pass rather than an implicit side effect of the value
+  suite. `OpSuitePlan.layout_probe` emits `--autokernel-layouts`; the tool selects only
+  cases with transpose, stride-gap, or offset inputs and emits a suite-seed-bound
+  `AK_LAYOUT_V1` receipt. The gate requires all three families and at least one case,
+  while an unsupported layout is a hard failure rather than `not_supported`. The
+  instrument compiles; no layout case has been executed in this session.
 - The release and speech-adapter planes were deliberately removed on 2026-08-04 and
   remain recoverable from `autokernel-preserve-20260804`. Restore the narrow release
   slice only for a real champion/freeze request, and restore the speech slice only

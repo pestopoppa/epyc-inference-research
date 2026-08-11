@@ -333,6 +333,7 @@ _req_abs = schemas.require.abs_path
 _req_sha256 = schemas.require.sha256
 _req_commit = schemas.require.commit
 _req_int = schemas.require.int
+_req_bool = schemas.require.bool
 
 
 def _strip_ansi(text: str) -> str:
@@ -1067,6 +1068,7 @@ class OpSuitePlan:
     suite_id: str
     suite_source_sha256: str
     suite_seed: int = 0
+    layout_probe: bool = False
     timeout_s: float = 1800.0
     parallel_workers: Optional[int] = None
 
@@ -1082,6 +1084,7 @@ class OpSuitePlan:
         _req_str(self.suite_id, "op_suite.suite_id")
         _req_sha256(self.suite_source_sha256, "op_suite.suite_source_sha256")
         _req_int(self.suite_seed, "op_suite.suite_seed")
+        _req_bool(self.layout_probe, "op_suite.layout_probe")
         if self.parallel_workers is not None:
             _req_int(self.parallel_workers, "op_suite.parallel_workers", minimum=1)
 
@@ -1333,6 +1336,9 @@ _PROPERTY_RECEIPT_RE = re.compile(
     r"residual=([0-9]+(?:\.[0-9]*)?(?:e[+-]?\d+)?) "
     r"tolerance=([0-9]+(?:\.[0-9]*)?(?:e[+-]?\d+)?) "
     r"passed=([01]) suite_seed=([0-9]+)$")
+_LAYOUT_RECEIPT_RE = re.compile(
+    r"^AK_LAYOUT_V1 families=((?:offset|transpose|stride_gap)"
+    r"(?:,(?:offset|transpose|stride_gap))*) suite_seed=([0-9]+)$")
 
 #: The two skip reasons the tool prints, verbatim
 #: (tests/test-backend-ops.cpp:10368 and :10375). Both increment `n_ok`, so both
@@ -1389,6 +1395,24 @@ class BackendOpsProperty:
 
 
 @dataclass(frozen=True)
+class BackendOpsLayout:
+    """The explicitly exercised layout families for one backend-op case."""
+
+    families: tuple
+    suite_seed: int
+
+    def __post_init__(self) -> None:
+        allowed = {"offset", "transpose", "stride_gap"}
+        if not self.families or len(set(self.families)) != len(self.families):
+            raise OutputParseError(
+                "backend-op layout families must be non-empty and unique")
+        if any(item not in allowed for item in self.families):
+            raise OutputParseError(
+                f"backend-op layout families must be drawn from {sorted(allowed)}")
+        _req_int(self.suite_seed, "backend_ops.layout.suite_seed")
+
+
+@dataclass(frozen=True)
 class BackendOpsCase:
     """One `test-backend-ops` case. `not supported` is NOT a pass."""
 
@@ -1398,6 +1422,7 @@ class BackendOpsCase:
     interleaved: str = ""
     reference: Optional[BackendOpsReference] = None
     properties: tuple = ()
+    layout: Optional[BackendOpsLayout] = None
 
     @property
     def passed(self) -> bool:
@@ -1409,6 +1434,7 @@ def _case_with_reference(*, op: str, params: str, status: str,
     diagnostics: list = []
     reference: Optional[BackendOpsReference] = None
     properties: list = []
+    layout: Optional[BackendOpsLayout] = None
     for part in (piece.strip() for piece in interleaved.split(" | ") if piece.strip()):
         if part.startswith("AK_REF_"):
             if reference is not None:
@@ -1431,6 +1457,16 @@ def _case_with_reference(*, op: str, params: str, status: str,
                 metric_id=match.group(1), residual=float(match.group(2)),
                 tolerance=float(match.group(3)), passed=match.group(4) == "1",
                 suite_seed=int(match.group(5))))
+        elif part.startswith("AK_LAYOUT_"):
+            if layout is not None:
+                raise OutputParseError(
+                    f"case {op}({params}) emitted more than one layout receipt")
+            match = _LAYOUT_RECEIPT_RE.fullmatch(part)
+            if match is None:
+                raise OutputParseError(
+                    f"case {op}({params}) emitted malformed layout receipt {part!r}")
+            layout = BackendOpsLayout(
+                families=tuple(match.group(1).split(",")), suite_seed=int(match.group(2)))
         else:
             diagnostics.append(part)
     if reference is not None and status != "ok":
@@ -1441,7 +1477,7 @@ def _case_with_reference(*, op: str, params: str, status: str,
             f"case {op}({params}) attached a failed property receipt to status {status}")
     return BackendOpsCase(op=op, params=params, status=status,
                           interleaved=" | ".join(diagnostics), reference=reference,
-                          properties=tuple(properties))
+                          properties=tuple(properties), layout=layout)
 
 
 @dataclass(frozen=True)
@@ -1518,6 +1554,10 @@ class BackendOpsRun:
             if case.status == "not_supported":
                 counts[case.op] = counts.get(case.op, 0) + 1
         return tuple(sorted(counts.items()))
+
+    def layout_families(self) -> tuple:
+        return tuple(sorted({family for case in self.cases if case.layout is not None
+                             for family in case.layout.families}))
 
     def cases_by_op(self) -> tuple:
         """`((op, total, passed), ...)` over the cases that were actually COMPARED.
@@ -1760,14 +1800,21 @@ def parse_backend_ops_csv(text: str) -> BackendOpsRun:
             continue
         backend = cells[index["backend_name"]]
         supported = cells[index["supported"]] == "1"
+        hard_failure = (cells[index["hard_failure"]] == "1"
+                        if "hard_failure" in index else False)
         error = cells[index["error_message"]]
+        layout_receipt = (cells[index["layout_receipt"]]
+                          if "layout_receipt" in index else "")
         property_receipt = (cells[index["property_receipt"]]
                             if "property_receipt" in index else "")
         reference_receipt = (cells[index["reference_receipt"]]
                              if "reference_receipt" in index else "")
-        state = "not_supported" if not supported else ("ok" if not error else "fail")
+        state = ("fail" if hard_failure else
+                 "not_supported" if not supported else
+                 "ok" if not error else "fail")
         interleaved = " | ".join(
-            value for value in (error, property_receipt, reference_receipt) if value)
+            value for value in (
+                layout_receipt, property_receipt, reference_receipt, error) if value)
         by_backend.setdefault(backend, []).append(_case_with_reference(
             op=cells[index["op_name"]], params=cells[index["op_params"]], status=state,
             interleaved=interleaved))
@@ -2182,6 +2229,7 @@ def _launch_env(library_path: str, base_env: Sequence[tuple],
 def build_backend_ops_invocation(*, binary: str, library_path: str, backend_filter: str,
                                  ops: Sequence[str], base_env: Sequence[tuple],
                                  suite_seed: int = 0,
+                                 layout_probe: bool = False,
                                  parameter_env: Sequence[tuple] = (),
                                  output_format: str = "console",
                                  params_filter: Optional[str] = None,
@@ -2206,9 +2254,12 @@ def build_backend_ops_invocation(*, binary: str, library_path: str, backend_filt
     if not ops:
         raise ValueError("backend_ops.ops must be non-empty")
     _req_int(suite_seed, "backend_ops.suite_seed")
+    _req_bool(layout_probe, "backend_ops.layout_probe")
     argv: list = list(recipes.CANONICAL_PREFIX) if cpu_prefix else []
     argv += [binary, "test", "-o", ",".join(ops), "-b", backend_filter]
     argv += ["--suite-seed", str(suite_seed), "--autokernel-properties"]
+    if layout_probe:
+        argv += ["--autokernel-layouts"]
     if params_filter is not None:
         argv += ["-p", params_filter]
     if parallel_workers is not None:
@@ -2216,7 +2267,7 @@ def build_backend_ops_invocation(*, binary: str, library_path: str, backend_filt
     argv += ["--output", output_format]
     extra = dict(recipes.CANONICAL_OMP_ENV) if cpu_prefix else {}
     env = _launch_env(library_path, base_env, extra, parameter_env)
-    constructor_id = "ak.t0.backend_ops_test/v2"
+    constructor_id = "ak.t0.backend_ops_test/v3"
     return ConstructedInvocation(
         constructor_id=constructor_id, argv=tuple(argv), env=env,
         receipt=_receipt(constructor_id, argv, env),
@@ -2227,6 +2278,9 @@ def build_backend_ops_invocation(*, binary: str, library_path: str, backend_filt
             "--suite-seed fixes every tensor input for deterministic replay",
             "--autokernel-properties runs independent raw-buffer host-double properties "
             "and their planted-defect self-test",
+            ("--autokernel-layouts selects only layout-variant cases and makes an "
+             "unsupported layout a hard failure" if layout_probe else
+             "the independent layout-variant pass is not requested"),
             "canonical prefix and OMP stack imported from evaluator.recipes, never retyped",
         ))
 
@@ -2406,6 +2460,7 @@ class ExecutedT0EvidenceProvider:
             backend_filter=plan.backend_filter, ops=plan.ops,
             base_env=self._plan.base_env,
             suite_seed=plan.suite_seed,
+            layout_probe=plan.layout_probe,
             parameter_env=self._plan.parameter_env,
             parallel_workers=plan.parallel_workers,
             cpu_prefix=self._plan.backend == "llama_cpu")
@@ -2473,6 +2528,12 @@ class ExecutedT0EvidenceProvider:
                         suite_seed=property_result.suite_seed,
                         passed=property_result.passed))
                 case_ordinal += 1
+        layout_cases = tuple(case for case in run.cases if case.layout is not None)
+        for case in layout_cases:
+            if case.layout.suite_seed != plan.suite_seed:
+                raise OutputParseError(
+                    f"layout receipt for {case.op}({case.params}) carries suite_seed "
+                    f"{case.layout.suite_seed}, expected {plan.suite_seed}")
         return correctness.OpSuiteEvidence(
             suite_id=plan.suite_id,
             suite_source_sha256=plan.suite_source_sha256,
@@ -2484,6 +2545,9 @@ class ExecutedT0EvidenceProvider:
             receipt_ref=ref,
             produced_by=PRODUCER,
             property_measurements=tuple(property_measurements),
+            layout_probe=plan.layout_probe,
+            layout_families=run.layout_families(),
+            layout_case_count=len(layout_cases),
         )
 
     # -- boundary shapes ---------------------------------------------------

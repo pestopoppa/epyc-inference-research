@@ -1300,6 +1300,9 @@ class OpSuiteEvidence:
     receipt_ref: str
     produced_by: str
     property_measurements: tuple = ()
+    layout_probe: bool = False
+    layout_families: tuple = ()
+    layout_case_count: int = 0
 
     def __post_init__(self) -> None:
         _req_str(self.suite_id, "op_suite.suite_id")
@@ -1326,6 +1329,19 @@ class OpSuiteEvidence:
                 raise ValueError(
                     f"property measurement {item.shape_id!r} carries suite_seed "
                     f"{item.suite_seed}, expected {self.suite_seed}")
+        _req_bool(self.layout_probe, "op_suite.layout_probe")
+        _req_int(self.layout_case_count, "op_suite.layout_case_count")
+        allowed_layouts = {"offset", "transpose", "stride_gap"}
+        for item in _req_tuple(self.layout_families, "op_suite.layout_families"):
+            if item not in allowed_layouts:
+                raise ValueError(
+                    f"op_suite.layout_families contains {item!r}, expected one of "
+                    f"{sorted(allowed_layouts)}")
+        if len(set(self.layout_families)) != len(self.layout_families):
+            raise ValueError("op_suite.layout_families must be unique")
+        if not self.layout_probe and (self.layout_families or self.layout_case_count):
+            raise ValueError(
+                "op_suite layout evidence cannot exist when layout_probe is false")
 
     def cases_for(self, op: str) -> Optional[tuple]:
         for row in self.cases_by_op:
@@ -2657,6 +2673,16 @@ def check_backend_op_units(request: api.EvaluationRequest,
             f"surface {list(surface.derived_ops)}")
     if evidence.ops_failed:
         reasons.append(f"op(s) failed: {list(evidence.ops_failed)}")
+    if evidence.layout_probe:
+        required_layouts = {"offset", "transpose", "stride_gap"}
+        missing_layouts = sorted(required_layouts - set(evidence.layout_families))
+        if evidence.layout_case_count == 0:
+            reasons.append(
+                "the layout pass selected zero cases; a flag over no layout is not a probe")
+        if missing_layouts:
+            reasons.append(
+                f"layout pass did not exercise required family/families {missing_layouts}; "
+                "required=['offset', 'stride_gap', 'transpose']")
     for op in required:
         if op not in exercised:
             continue
@@ -2673,7 +2699,10 @@ def check_backend_op_units(request: api.EvaluationRequest,
             reasons.append(f"op {op!r}: {passed}/{total} cases passed")
     return _gate(GID_OP_UNITS, _verdict(reasons), evidence_ref=evidence.receipt_ref,
                  notes=(f"suite={evidence.suite_id}", f"required={list(required)}",
-                        f"shapes={evidence.shapes_ref}"),
+                        f"shapes={evidence.shapes_ref}",
+                        f"layout_probe={evidence.layout_probe}",
+                        f"layout_families={list(evidence.layout_families)}",
+                        f"layout_cases={evidence.layout_case_count}"),
                  measurements=tuple(item.to_dict()
                                     for item in evidence.property_measurements))
 
