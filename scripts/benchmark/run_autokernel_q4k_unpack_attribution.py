@@ -21,6 +21,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import re
 import statistics
 import subprocess
@@ -45,6 +46,7 @@ from scripts.kernel_rnd.autokernel.resource import device_claim
 
 
 SCHEMA = "epyc.autokernel.q4k_unpack_attribution.v1"
+PRODUCER_ID = "scripts.benchmark.run_autokernel_q4k_unpack_attribution/v2"
 AUTHORITY = "diagnostic_only"
 FROZEN_V9_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 PRODUCTION_SHAPE = (17408, 1, 5120)  # m,n,k; 128 same-name Qwen3.6-27B FFN tensors per arm.
@@ -96,6 +98,35 @@ IDENTIFIABILITY = {
     ),
     "closest_control": "Q4_K minus Q4_0 at identical m,n,k",
 }
+_DEVICE_CLAIM_SCHEMA = "epyc.autokernel.device_claim_receipt.v1"
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_COMPARISONS = {
+    "q4_K_minus_q4_0": "q4_0",
+    "q4_K_minus_q8_0": "q8_0",
+}
+_BELIEF_METRICS = (
+    (
+        "valu_insts_per_wave_delta",
+        "q4k_minus_control_valu_instructions_per_wave_delta",
+        "instructions/wave",
+        "SQ_INSTS_VALU",
+        "counter",
+    ),
+    (
+        "int32_insts_per_wave_delta",
+        "q4k_minus_control_int32_instructions_per_wave_delta",
+        "instructions/wave",
+        "SQ_INSTS_VALU_INT32",
+        "counter",
+    ),
+    (
+        "device_duration_ns_delta",
+        "q4k_minus_control_dispatch_device_duration_ns_delta",
+        "ns",
+        "rocprofv2_dispatch_timestamps",
+        "device_duration",
+    ),
+)
 
 
 class CounterTransportError(RuntimeError):
@@ -104,6 +135,79 @@ class CounterTransportError(RuntimeError):
 
 class MissingProfilerArtifactError(RuntimeError):
     """A profiler exited successfully without producing its declared CSV artifact."""
+
+
+def canonical_sha256(value: Any) -> str:
+    """Hash a JSON value without depending on pretty-printing or key order."""
+    encoded = json.dumps(
+        value, sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def receipt_sha256(receipt: dict[str, Any]) -> str:
+    """Bind the logical receipt while excluding its self-identifying digest."""
+    payload = dict(receipt)
+    payload.pop("receipt_sha256", None)
+    return canonical_sha256(payload)
+
+
+def producer_identity() -> dict[str, str]:
+    path = Path(__file__).resolve()
+    return {
+        "producer_id": PRODUCER_ID,
+        "path": "scripts/benchmark/run_autokernel_q4k_unpack_attribution.py",
+        "sha256": sha256_file(path),
+    }
+
+
+def _required_sha(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not _SHA256_RE.fullmatch(value):
+        raise ValueError(f"{label} must be a lowercase SHA-256")
+    return value
+
+
+def _source_identity_sha256(identity: dict[str, Any]) -> str:
+    """Bind the exact source and binary surface used by the profiler run."""
+    if not isinstance(identity, dict):
+        raise ValueError("identity must be an object")
+    commit = identity.get("source_commit")
+    if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise ValueError("identity.source_commit must be a full lowercase commit")
+    basis = {
+        "source_commit": commit,
+        "mmvq_sha256": _required_sha(identity.get("mmvq_sha256"), "identity.mmvq_sha256"),
+        "vecdotq_sha256": _required_sha(
+            identity.get("vecdotq_sha256"), "identity.vecdotq_sha256"
+        ),
+        "ggml_header_sha256": _required_sha(
+            identity.get("ggml_header_sha256"), "identity.ggml_header_sha256"
+        ),
+        "binary_sha256": _required_sha(
+            identity.get("binary_sha256"), "identity.binary_sha256"
+        ),
+    }
+    return canonical_sha256(basis)
+
+
+def _device_claim_sha256(
+    opened: dict[str, Any], released: dict[str, Any], *, campaign_id: str
+) -> str:
+    if not isinstance(opened, dict) or not isinstance(released, dict):
+        raise ValueError("opened and released device claims are required")
+    for label, receipt in (("opened", opened), ("released", released)):
+        if receipt.get("schema") != _DEVICE_CLAIM_SCHEMA:
+            raise ValueError(f"{label} device claim has the wrong schema")
+        if receipt.get("campaign_id") != campaign_id:
+            raise ValueError(f"{label} device claim names a different campaign")
+    for field in ("claim_id", "device_id", "acquired_at"):
+        if not isinstance(opened.get(field), str) or not opened[field]:
+            raise ValueError(f"opened device claim lacks {field}")
+        if opened[field] != released.get(field):
+            raise ValueError(f"device claim {field} changed across release")
+    if not isinstance(released.get("released_at"), str) or not released["released_at"]:
+        raise ValueError("released device claim lacks released_at")
+    return canonical_sha256({"opened": opened, "released": released})
 
 
 def utc_now() -> str:
@@ -632,6 +736,156 @@ def paired_block_summary(blocks: list[dict[str, Any]], *,
     }
 
 
+def belief_measurements(
+    summary: dict[str, Any], *, campaign_id: str, workload: dict[str, Any],
+    identity: dict[str, Any], counter_support: dict[str, Any],
+    device_claim_open: dict[str, Any], device_claim_released: dict[str, Any],
+    producer: dict[str, str],
+) -> list[dict[str, Any]]:
+    """Emit prospective, differential mechanism rows from producer-owned evidence.
+
+    The measurement unit is one balanced paired block. Device-duration deltas remain
+    diagnostic dispatch-level evidence: they are never relabelled as unpack wall share.
+    """
+    if not isinstance(summary, dict) or not summary.get("claim_eligible", False):
+        return []
+    if summary.get("inside_unpack_wall_share") is not None:
+        raise ValueError("an inside-kernel unpack wall share is not identifiable")
+    identifiability = summary.get("identifiability")
+    if not isinstance(identifiability, dict) or identifiability.get(
+        "direct_hardware_counter_attribution"
+    ) != "differential_mechanism_only":
+        raise ValueError("summary lacks the differential-mechanism authority boundary")
+    if identifiability.get("exact_inside_kernel_wall_share") is not None:
+        raise ValueError("summary invented an exact inside-kernel wall share")
+    if workload.get("counter_transport") != "rocprofv2":
+        return []
+    if counter_support.get("single_pass_group") is not True:
+        raise ValueError("prospective belief rows require the single-pass rocprofv2 group")
+    if counter_support.get("counter_file_line") != ROCPROFV2_PMC_LINE:
+        raise ValueError("rocprofv2 counter group differs from the governed direct-PMC set")
+    if counter_support.get("arch_device") != "gfx90a:0":
+        raise ValueError("direct-PMC evidence must name gfx90a:0")
+    profiler_sha256 = _required_sha(
+        counter_support.get("profiler_sha256"), "counter_support.profiler_sha256"
+    )
+    if not isinstance(producer, dict) or producer.get("producer_id") != PRODUCER_ID:
+        raise ValueError("producer identity differs from this receipt writer")
+    producer_sha256 = _required_sha(producer.get("sha256"), "producer.sha256")
+    if identity.get("runner_sha256") != producer_sha256:
+        raise ValueError("source identity and producer name different runner bytes")
+    source_digest = _source_identity_sha256(identity)
+    claim_digest = _device_claim_sha256(
+        device_claim_open, device_claim_released, campaign_id=campaign_id
+    )
+    shape = workload.get("shape")
+    if not isinstance(shape, dict) or set(shape) != {"m", "n", "k"}:
+        raise ValueError("workload.shape must contain exactly m, n, and k")
+    if any(isinstance(shape[key], bool) or not isinstance(shape[key], int)
+           or shape[key] < 1 for key in ("m", "n", "k")):
+        raise ValueError("workload.shape must contain positive integers")
+    blocks = workload.get("blocks")
+    active_repetitions = workload.get("active_repetitions")
+    if isinstance(blocks, bool) or not isinstance(blocks, int) or blocks < 1:
+        raise ValueError("workload.blocks must be a positive integer")
+    if (isinstance(active_repetitions, bool)
+            or not isinstance(active_repetitions, int) or active_repetitions < 1):
+        raise ValueError("workload.active_repetitions must be a positive integer")
+    transport = summary.get("transport_integrity")
+    if not isinstance(transport, dict) or transport.get("valid") is not True:
+        raise ValueError("campaign-wide counter transport integrity did not pass")
+    if transport.get("deterministic_counters") != list(ROCPROFV2_COUNTERS):
+        raise ValueError("transport integrity was not proven for the exact direct-PMC set")
+
+    comparisons = summary.get("comparisons")
+    if not isinstance(comparisons, dict) or set(comparisons) != set(_COMPARISONS):
+        raise ValueError("summary must contain exactly the two governed controls")
+    rows: list[dict[str, Any]] = []
+    for comparison_id, control in _COMPARISONS.items():
+        paired = comparisons[comparison_id]
+        if not isinstance(paired, list) or len(paired) != blocks:
+            raise ValueError(f"{comparison_id} must contain one row per scored block")
+        if [row.get("block") for row in paired] != list(range(blocks)):
+            raise ValueError(f"{comparison_id} block identity/order differs from the workload")
+        for native_field, metric, unit, instrument, role in _BELIEF_METRICS:
+            values = [row.get(native_field) for row in paired]
+            if any(isinstance(value, bool) or not isinstance(value, (int, float))
+                   or not math.isfinite(value) for value in values):
+                raise ValueError(f"{comparison_id}.{native_field} must be finite in every block")
+            numeric = [float(value) for value in values]
+            value = float(statistics.median(numeric))
+            basis = {
+                "arm": "q4_K",
+                "control": control,
+                "comparison_id": comparison_id,
+                "shape": dict(shape),
+                "scored_blocks": blocks,
+                "active_dispatches_per_arm_per_block": active_repetitions,
+                "block_values": numeric,
+                "native_field": native_field,
+                "instrument": instrument,
+                "counter_transport": "rocprofv2",
+                "counter_file_line": ROCPROFV2_PMC_LINE,
+                "aggregation": "median(paired_block_arm_minus_control)",
+                "identifiability": dict(identifiability),
+                "source_identity_sha256": source_digest,
+                "producer_sha256": producer_sha256,
+                "profiler_sha256": profiler_sha256,
+                "device_claim_sha256": claim_digest,
+            }
+            if role == "counter":
+                basis["normalizer"] = "SQ_WAVES"
+                basis["per_arm_reduction"] = (
+                    "median(dispatch PMC)/median(dispatch SQ_WAVES)"
+                )
+                basis["counter_semantics"] = ROCPROFV2_COUNTER_SEMANTICS[instrument]
+            else:
+                basis["timestamp_fields"] = ["Start_Timestamp", "End_Timestamp"]
+                basis["per_arm_reduction"] = "median(dispatch End_Timestamp-Start_Timestamp)"
+                basis["diagnostic_only"] = True
+            evidence_sha256 = canonical_sha256(basis)
+            compact_control = control.replace("_", "")
+            row: dict[str, Any] = {
+                "measurement_id": f"q4k_minus_{compact_control}_{native_field}",
+                "metric": metric,
+                "value": value,
+                "unit": unit,
+                "metric_direction": "lower_better",
+                "category": "BASELINE",
+                "reps": blocks,
+                "reps_basis": "scored:balanced paired direct-PMC blocks",
+                "claim": (
+                    f"At m={shape['m']} n={shape['n']} k={shape['k']}, the median "
+                    f"Q4_K-minus-{control} {native_field} is {value:.9g} {unit}"
+                ),
+                "extra": {
+                    "measurement_role": (
+                        "dispatch_duration_diagnostic" if role == "device_duration"
+                        else "differential_mechanism_counter"
+                    ),
+                    "arm": "q4_K",
+                    "control": control,
+                    "shape": dict(shape),
+                    "counter_basis": basis,
+                    "source_commit": identity["source_commit"],
+                    "source_identity_sha256": source_digest,
+                    "binary_sha256": identity["binary_sha256"],
+                    "producer_id": producer["producer_id"],
+                    "producer_sha256": producer_sha256,
+                    "evidence_sha256": evidence_sha256,
+                    "device_id": device_claim_open["device_id"],
+                    "device_claim_id": device_claim_open["claim_id"],
+                    "device_claim_sha256": claim_digest,
+                    "authority": AUTHORITY,
+                    "promotion_authority": False,
+                    "inside_unpack_wall_share_emitted": False,
+                },
+            }
+            row["measurement_sha256"] = canonical_sha256(row)
+            rows.append(row)
+    return rows
+
+
 def shape_evidence(q4_model: Path, q8_model: Path, *, gguf_py: Path,
                    m: int, k: int) -> dict[str, Any]:
     contracts = {}
@@ -917,6 +1171,33 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             f"campaign-wide counter transport integrity failed "
             f"({len(profile_failures)} block-local arm failures); full raw matrix retained, "
             "no normalized comparisons emitted")
+    workload = {"shape": {"m": args.op_m, "n": 1, "k": args.op_k},
+                "blocks": args.blocks,
+                "active_repetitions": args.active_repetitions,
+                "counter_transport": args.counter_transport,
+                "transport_attempts": args.transport_attempts,
+                "profile_schedule": profile_schedule,
+                "q8_prefetch": "forced_off",
+                "graphs": "disabled_by_profiler_environment"}
+    producer = producer_identity()
+    measurements: list[dict[str, Any]] = []
+    source_digest = claim_digest = None
+    if captured_error is None:
+        try:
+            measurements = belief_measurements(
+                summary, campaign_id=args.campaign_id, workload=workload,
+                identity=identity, counter_support=counter_support,
+                device_claim_open=opened, device_claim_released=released,
+                producer=producer)
+            if args.counter_transport == "rocprofv2" and not measurements:
+                raise CounterTransportError(
+                    "a passed direct-PMC campaign must emit prospective belief rows")
+            source_digest = _source_identity_sha256(identity)
+            claim_digest = _device_claim_sha256(
+                opened, released, campaign_id=args.campaign_id)
+        except BaseException as exc:
+            captured_error = exc
+            measurements = []
     payload = {
         "schema": SCHEMA,
         "status": "failed" if captured_error is not None else "passed",
@@ -925,19 +1206,15 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "started_at": started_at, "ended_at": utc_now(),
         "duration_s": time.monotonic() - started,
         "identity": identity, "shape_evidence": shape,
-        "workload": {"shape": {"m": args.op_m, "n": 1, "k": args.op_k},
-                     "blocks": args.blocks,
-                     "active_repetitions": args.active_repetitions,
-                     "counter_transport": args.counter_transport,
-                     "transport_attempts": args.transport_attempts,
-                     "profile_schedule": profile_schedule,
-                     "q8_prefetch": "forced_off",
-                     "graphs": "disabled_by_profiler_environment"},
+        "workload": workload,
         "preflights": preflights, "blocks": blocks, "summary": summary,
         "profile_failures": profile_failures,
         "counter_support": counter_support,
         "identifiability": IDENTIFIABILITY,
-        "belief_measurements": [],
+        "producer": producer,
+        "source_identity_sha256": source_digest,
+        "device_claim_sha256": claim_digest,
+        "belief_measurements": measurements,
         "device_claim_open": opened, "device_claim_released": released,
         "device_sampling": sampling_receipt.to_dict() if sampling_receipt is not None else None,
         "teardown_errors": error_payload(teardown_errors),
@@ -945,6 +1222,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "type": type(captured_error).__name__, "message": str(captured_error)},
     }
     payload["artifacts"] = artifact_inventory(output_dir)
+    payload["receipt_sha256"] = receipt_sha256(payload)
     write_json_atomic(output_dir / "receipt.json", payload)
     if captured_error is not None:
         raise RuntimeError(

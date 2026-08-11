@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import copy
 import csv
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -31,6 +32,63 @@ class Q4KUnpackAttributionTest(unittest.TestCase):
                 "SQ_INSTS_VALU_INT32": int32_per_wave,
                 "SQ_INSTS_VALU": valu_per_wave,
             },
+        }
+
+    def _belief_inputs(self) -> dict:
+        blocks = []
+        for block_id in range(2):
+            blocks.append({
+                "block": block_id,
+                "arms": {
+                    "q4_K": self._valid_profile(
+                        duration=20.0 + block_id, int32_per_wave=4.0,
+                        valu_per_wave=10.0),
+                    "q4_0": self._valid_profile(
+                        duration=15.0, int32_per_wave=2.0, valu_per_wave=7.0),
+                    "q8_0": self._valid_profile(
+                        duration=25.0, int32_per_wave=1.0, valu_per_wave=6.0),
+                },
+            })
+        producer = R.producer_identity()
+        campaign = "prospective-inf37-r8"
+        opened = {
+            "schema": R._DEVICE_CLAIM_SCHEMA,
+            "campaign_id": campaign,
+            "claim_id": "akd-test",
+            "device_id": "mi210_0",
+            "acquired_at": "2026-08-12T00:00:00Z",
+            "released_at": None,
+        }
+        released = dict(opened)
+        released["released_at"] = "2026-08-12T00:01:00Z"
+        return {
+            "summary": R.paired_block_summary(
+                blocks, expected_blocks=2,
+                deterministic_counters=R.ROCPROFV2_COUNTERS),
+            "campaign_id": campaign,
+            "workload": {
+                "shape": {"m": 17408, "n": 1, "k": 5120},
+                "blocks": 2,
+                "active_repetitions": 5,
+                "counter_transport": "rocprofv2",
+            },
+            "identity": {
+                "source_commit": R.FROZEN_V9_COMMIT,
+                "mmvq_sha256": "a" * 64,
+                "vecdotq_sha256": "b" * 64,
+                "ggml_header_sha256": "c" * 64,
+                "binary_sha256": "d" * 64,
+                "runner_sha256": producer["sha256"],
+            },
+            "counter_support": {
+                "single_pass_group": True,
+                "counter_file_line": R.ROCPROFV2_PMC_LINE,
+                "arch_device": "gfx90a:0",
+                "profiler_sha256": "e" * 64,
+            },
+            "device_claim_open": opened,
+            "device_claim_released": released,
+            "producer": producer,
         }
 
     def test_generic_op_rows_are_exact_contiguous_production_shapes(self):
@@ -329,6 +387,86 @@ enum ggml_op {
         self.assertFalse(result["claim_eligible"])
         self.assertEqual(result["comparisons"]["q4_K_minus_q4_0"], [])
         self.assertEqual(result["comparison_eligibility"][0]["invalid_arms"], ["q4_K"])
+
+    def test_prospective_belief_rows_are_directional_identity_bound_and_separate(self):
+        rows = R.belief_measurements(**self._belief_inputs())
+        self.assertEqual(len(rows), 6)
+        self.assertEqual(
+            {row["metric"] for row in rows},
+            {
+                "q4k_minus_control_valu_instructions_per_wave_delta",
+                "q4k_minus_control_int32_instructions_per_wave_delta",
+                "q4k_minus_control_dispatch_device_duration_ns_delta",
+            },
+        )
+        self.assertEqual({row["extra"]["control"] for row in rows}, {"q4_0", "q8_0"})
+        self.assertTrue(all(row["metric_direction"] == "lower_better" for row in rows))
+        self.assertTrue(all(row["category"] == "BASELINE" for row in rows))
+        self.assertTrue(all(row["reps"] == 2 for row in rows))
+        self.assertTrue(all(row["extra"]["shape"] == {
+            "m": 17408, "n": 1, "k": 5120} for row in rows))
+        self.assertTrue(all(row["extra"]["arm"] == "q4_K" for row in rows))
+        for row in rows:
+            self.assertFalse(row["extra"]["promotion_authority"])
+            self.assertFalse(row["extra"]["inside_unpack_wall_share_emitted"])
+            for field in (
+                "source_identity_sha256", "binary_sha256", "producer_sha256",
+                "evidence_sha256", "device_claim_sha256",
+            ):
+                self.assertRegex(row["extra"][field], r"^[0-9a-f]{64}$")
+            self_digest = row["measurement_sha256"]
+            unsigned = dict(row)
+            unsigned.pop("measurement_sha256")
+            self.assertEqual(self_digest, R.canonical_sha256(unsigned))
+
+        by_id = {row["measurement_id"]: row for row in rows}
+        self.assertEqual(
+            by_id["q4k_minus_q40_valu_insts_per_wave_delta"]["value"], 3.0)
+        self.assertEqual(
+            by_id["q4k_minus_q80_device_duration_ns_delta"]["value"], -4.5)
+
+    def test_belief_hook_refuses_wrong_transport_identity_and_wall_share(self):
+        inputs = self._belief_inputs()
+        inputs["counter_support"]["counter_file_line"] = "pmc: SQ_WAVES"
+        with self.assertRaisesRegex(ValueError, "governed direct-PMC"):
+            R.belief_measurements(**inputs)
+
+        inputs = self._belief_inputs()
+        inputs["identity"]["runner_sha256"] = "f" * 64
+        with self.assertRaisesRegex(ValueError, "different runner bytes"):
+            R.belief_measurements(**inputs)
+
+        inputs = self._belief_inputs()
+        inputs["summary"]["inside_unpack_wall_share"] = 0.5
+        with self.assertRaisesRegex(ValueError, "not identifiable"):
+            R.belief_measurements(**inputs)
+
+        inputs = self._belief_inputs()
+        inputs["workload"]["counter_transport"] = "omniperf-v1"
+        self.assertEqual(R.belief_measurements(**inputs), [])
+
+    def test_belief_hook_refuses_missing_blocks_and_device_claim_drift(self):
+        inputs = self._belief_inputs()
+        inputs["summary"]["comparisons"]["q4_K_minus_q4_0"].pop()
+        with self.assertRaisesRegex(ValueError, "one row per scored block"):
+            R.belief_measurements(**inputs)
+
+        inputs = self._belief_inputs()
+        inputs["device_claim_released"]["claim_id"] = "akd-other"
+        with self.assertRaisesRegex(ValueError, "changed across release"):
+            R.belief_measurements(**inputs)
+
+    def test_receipt_self_digest_binds_logical_payload(self):
+        receipt = {
+            "schema": R.SCHEMA,
+            "status": "passed",
+            "belief_measurements": R.belief_measurements(**self._belief_inputs()),
+        }
+        receipt["receipt_sha256"] = R.receipt_sha256(receipt)
+        self.assertEqual(receipt["receipt_sha256"], R.receipt_sha256(receipt))
+        tampered = json.loads(json.dumps(receipt))
+        tampered["belief_measurements"][0]["value"] += 1.0
+        self.assertNotEqual(receipt["receipt_sha256"], R.receipt_sha256(tampered))
 
     def test_cross_block_sq_drift_invalidates_every_comparison(self):
         blocks = []
