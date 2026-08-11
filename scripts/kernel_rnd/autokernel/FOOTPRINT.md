@@ -31,8 +31,8 @@ a module it never looked at.
 | | non-test lines |
 |---|---:|
 | **ON THE CAMPAIGN PATH** | **63,763** |
-| **DEFERRED** (provably unreachable) | **6,815** |
-| **TOTAL** | **70,578** |
+| **DEFERRED** (provably unreachable) | **7,018** |
+| **TOTAL** | **70,781** |
 
 **There is no deferred half.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -170,6 +170,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `resource/claim_witness.py` | 325 | yes | invariant 9 — idle sensing is never a claim, and the witness is what tells the two apart |
 | `controller/__init__.py` | 81 | yes | binds every surviving controller module, so importing one reaches both — which is why `controller.do_not_repeat` is on the path whether or not the driver names it, and why `CONTROLLER_ALLOWED` lists this file rather than leaving the edge unexplained |
 | `controller/arena_adapter.py` | 489 | no | INF-03 paper-pin GEAK/AgentKernelArena integration: validates clean vendor sources and physical gfx90a identity, binds C4 into a hygienic priced prompt, and launches registered whole-agent task adapters without entering campaign mutation or scoring |
+| `controller/arena_roundtrip.py` | 203 | no | EVL-47 SC20/SC21 prospective GEAK/Arena receipt producer; emits only observed correctness/timing rates and retains preflight as non-ordinal dependency evidence, with no launch, mutation, or verdict authority |
 | `controller/authoring_contract.py` | 468 | no | AK-PL-1/AK-LE-4/AK-LE-5 pre-proposal adapter: fully rendered prompt leak refusal, priced never-bulk-read context, reversible compaction, and structured external numbers; it calls no model and must not gain mutation/build authority |
 | `controller/reward_monitor.py` | 453 | no | C6 monitor adapter: binds campaign/candidate traces and the whole journal tree to a predeclared monitor panel, requires awareness plus reasoning visibility, and reports sensitivity/specificity/FPR without calling a model |
 | `controller/hypotheses.py` | 4,493 | yes | `claim_for_hypothesis` — the falsifier-before-compute gate `campaign.py --hypothesis` acquires its region claim through. It calls itself the ONLY route from a hypothesis to a resource claim and had ZERO non-test callers until 2026-08-04, because this boundary put it on the far side of the line: the driver is what SPENDS the claim |
