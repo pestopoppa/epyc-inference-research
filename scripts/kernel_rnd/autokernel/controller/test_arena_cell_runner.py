@@ -17,6 +17,7 @@ from unittest import mock
 from . import arena_adapter as A
 from . import arena_campaign as C
 from . import arena_cell_runner as R
+from . import k_search_arena as KS
 
 
 def canonical_sha(payload: object) -> str:
@@ -97,6 +98,21 @@ class ArenaCellRunnerTest(unittest.TestCase):
         if arm_id == C.BASELINE_ARM_ID:
             return C.ArmImplementation(
                 arm_id, "ready", "arena_measure_baseline", ())
+        if arm_id == KS.CONTROLLER_ID:
+            return C.ArmImplementation(
+                arm_id, "ready", "k_search_world_model_arena_v1", (),
+                argv=KS.campaign_argv(sys.executable),
+                source_root=str(self.root), source_commit="a" * 40,
+                entrypoint_path=KS.ENTRYPOINT_RELATIVE,
+                entrypoint_sha256="b" * 64,
+                model_ids=KS.PINNED_MODEL_IDS, required_clis=KS.REQUIRED_CLIS,
+                upstream_source_root="vendor://k-search",
+                upstream_source_commit=KS.SOURCE_COMMIT,
+                upstream_entrypoint_path=KS.UPSTREAM_ENTRYPOINT,
+                upstream_entrypoint_sha256="c" * 64,
+                upstream_license_path="LICENSE",
+                upstream_license_sha256="d" * 64,
+            )
         return C.ArmImplementation(
             arm_id, "ready", "stdin_workspace_v1", (),
             argv=(sys.executable, "controller.py", "--checkpoint-hours", "32",

@@ -14,9 +14,10 @@ gap for the prospective MI210 comparison:
 * execution is all-or-nothing.  A missing implementation produces a durable
   refusal receipt before any controller or GPU command can start.
 
-The repository carries one in-tree implementation, ``claude_codex_actor_critic``.
-The other six controller names remain exact refusals; a similarly named command
-does not count as their implementation.
+The repository carries ``claude_codex_actor_critic`` plus a governed adapter for
+the pinned upstream K-Search implementation. The other five controller names
+remain exact refusals; a similarly named command does not count as their
+implementation.
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ import shutil
 import subprocess
 from typing import Any, Callable, Mapping, Sequence
 
-from . import arena_adapter, claude_codex_actor_critic
+from . import arena_adapter, claude_codex_actor_critic, k_search_arena
 from ..evaluator import rebench_scoring
 
 
@@ -120,6 +121,12 @@ class ArmImplementation:
     entrypoint_sha256: str | None = None
     model_ids: tuple[str, ...] = ()
     required_clis: tuple[str, ...] = ()
+    upstream_source_root: str | None = None
+    upstream_source_commit: str | None = None
+    upstream_entrypoint_path: str | None = None
+    upstream_entrypoint_sha256: str | None = None
+    upstream_license_path: str | None = None
+    upstream_license_sha256: str | None = None
 
     def __post_init__(self) -> None:
         if self.arm_id not in PRIMARY_PANEL_IDS:
@@ -168,6 +175,26 @@ class ArmImplementation:
                 f"{self.arm_id}: source_commit must be a full lowercase SHA-1")
         if self.entrypoint_sha256 is not None:
             _sha256(self.entrypoint_sha256, f"{self.arm_id}.entrypoint_sha256")
+        upstream_fields = (
+            "upstream_source_root", "upstream_source_commit",
+            "upstream_entrypoint_path", "upstream_entrypoint_sha256",
+            "upstream_license_path", "upstream_license_sha256",
+        )
+        upstream_values = [getattr(self, field) for field in upstream_fields]
+        if any(value is not None for value in upstream_values):
+            if any(value is None for value in upstream_values):
+                raise ArenaCampaignError(
+                    f"{self.arm_id}: upstream source identity must be complete")
+            if not str(self.upstream_source_root).startswith(VENDOR_SOURCE_SCHEME):
+                raise ArenaCampaignError(
+                    f"{self.arm_id}: upstream source must use vendor://")
+            if not re.fullmatch(r"[0-9a-f]{40}", str(self.upstream_source_commit)):
+                raise ArenaCampaignError(
+                    f"{self.arm_id}: upstream_source_commit must be a full SHA-1")
+            _sha256(self.upstream_entrypoint_sha256,
+                    f"{self.arm_id}.upstream_entrypoint_sha256")
+            _sha256(self.upstream_license_sha256,
+                    f"{self.arm_id}.upstream_license_sha256")
         if self.availability == "ready" and self.arm_id == claude_codex_actor_critic.CONTROLLER_ID:
             expected_tail = claude_codex_actor_critic.campaign_argv("python3")[1:]
             if self.adapter_kind != "agentkernelarena_three_arg_v1":
@@ -185,6 +212,24 @@ class ArmImplementation:
             if self.required_clis != claude_codex_actor_critic.REQUIRED_CLIS:
                 raise ArenaCampaignError(
                     "claude_codex_actor_critic requires both installed CLIs")
+        if self.availability == "ready" and self.arm_id == k_search_arena.CONTROLLER_ID:
+            expected_tail = k_search_arena.campaign_argv("python3")[1:]
+            if self.adapter_kind != "k_search_world_model_arena_v1":
+                raise ArenaCampaignError(
+                    "k_search requires its world-model Arena adapter")
+            if len(self.argv) < 2 or self.argv[1:] != expected_tail:
+                raise ArenaCampaignError(
+                    "k_search argv differs from its pinned executable")
+            if self.entrypoint_path != k_search_arena.ENTRYPOINT_RELATIVE:
+                raise ArenaCampaignError(
+                    "k_search entrypoint differs from its implementation")
+            if self.model_ids != k_search_arena.PINNED_MODEL_IDS:
+                raise ArenaCampaignError(
+                    "k_search model_ids differ from exact model/effort pins")
+            if self.required_clis != k_search_arena.REQUIRED_CLIS:
+                raise ArenaCampaignError("k_search requires the Codex CLI")
+            if self.upstream_source_commit != k_search_arena.SOURCE_COMMIT:
+                raise ArenaCampaignError("k_search upstream source pin drifted")
 
 
 @dataclass(frozen=True)
@@ -270,6 +315,12 @@ def load_spec(path: str | Path) -> CampaignSpec:
         entrypoint_sha256=row.get("entrypoint_sha256"),
         model_ids=tuple(row.get("model_ids", ())),
         required_clis=tuple(row.get("required_clis", ())),
+        upstream_source_root=row.get("upstream_source_root"),
+        upstream_source_commit=row.get("upstream_source_commit"),
+        upstream_entrypoint_path=row.get("upstream_entrypoint_path"),
+        upstream_entrypoint_sha256=row.get("upstream_entrypoint_sha256"),
+        upstream_license_path=row.get("upstream_license_path"),
+        upstream_license_sha256=row.get("upstream_license_sha256"),
     ) for row in arm_rows if isinstance(row, Mapping))
     if len(arms) != len(arm_rows):
         raise ArenaCampaignError("every arm row must be an object")
@@ -330,11 +381,79 @@ def _resolve_source_root(value: str | None) -> tuple[Path, bool]:
     return Path(value or "").resolve(), False
 
 
+def _upstream_source_audit(arm: ArmImplementation) -> tuple[dict[str, Any] | None,
+                                                             list[str]]:
+    if arm.upstream_source_root is None:
+        return None, []
+    failures: list[str] = []
+    source, in_tree = _resolve_source_root(arm.upstream_source_root)
+    if in_tree:
+        failures.append("upstream controller source cannot alias the adapter tree")
+    paths = {
+        "entrypoint": (arm.upstream_entrypoint_path,
+                       arm.upstream_entrypoint_sha256),
+        "license": (arm.upstream_license_path, arm.upstream_license_sha256),
+    }
+    observed_commit = None
+    observed_dirty = None
+    observed_files: dict[str, Any] = {}
+    if not source.is_dir():
+        failures.append(f"upstream source root does not exist: {source}")
+    else:
+        try:
+            commit_run = subprocess.run(
+                ("git", "-C", str(source), "rev-parse", "HEAD"),
+                capture_output=True, text=True, check=False, timeout=30)
+            status_run = subprocess.run(
+                ("git", "-C", str(source), "status", "--porcelain=v1",
+                 "--untracked-files=all"),
+                capture_output=True, text=True, check=False, timeout=30)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            failures.append(f"upstream source identity command failed: {exc}")
+        else:
+            if commit_run.returncode != 0 or status_run.returncode != 0:
+                failures.append("upstream source is not a readable git checkout")
+            else:
+                observed_commit = commit_run.stdout.strip()
+                observed_dirty = bool(status_run.stdout.strip())
+                if observed_commit != arm.upstream_source_commit:
+                    failures.append(
+                        f"upstream source expected {arm.upstream_source_commit}, "
+                        f"observed {observed_commit}")
+                if observed_dirty:
+                    failures.append("upstream source checkout is not clean")
+        for label, (relative, expected) in paths.items():
+            path = (source / str(relative or "")).resolve()
+            try:
+                path.relative_to(source)
+            except ValueError:
+                failures.append(f"upstream {label} escapes its source checkout")
+                observed = None
+            else:
+                observed = _sha256_file(path) if path.is_file() else None
+            observed_files[label] = {
+                "path": relative, "expected_sha256": expected,
+                "observed_sha256": observed,
+            }
+            if observed != expected:
+                failures.append(
+                    f"upstream {label} expected {expected}, observed {observed}")
+    return {
+        "root": str(source),
+        "expected_commit": arm.upstream_source_commit,
+        "observed_commit": observed_commit,
+        "clean": False if observed_dirty else (
+            True if observed_dirty is not None else None),
+        "files": observed_files,
+    }, failures
+
+
 def _implementation_audit(arm: ArmImplementation) -> dict[str, Any]:
     failures = list(arm.missing_artifacts)
     executable_path: str | None = None
     executable_sha256: str | None = None
     source_identity: dict[str, Any] | None = None
+    upstream_source_identity: dict[str, Any] | None = None
     cli_identities: list[dict[str, Any]] = []
     if arm.availability == "ready" and arm.arm_id != BASELINE_ARM_ID:
         executable = shutil.which(arm.argv[0])
@@ -432,6 +551,8 @@ def _implementation_audit(arm: ArmImplementation) -> dict[str, Any]:
             "pinned_entrypoint_sha256": pinned_entrypoint_sha256,
             "pin_relation": pin_relation,
         }
+        upstream_source_identity, upstream_failures = _upstream_source_audit(arm)
+        failures.extend(upstream_failures)
     return {
         "arm_id": arm.arm_id,
         "adapter_kind": arm.adapter_kind,
@@ -441,6 +562,7 @@ def _implementation_audit(arm: ArmImplementation) -> dict[str, Any]:
         "executable_path": executable_path,
         "executable_sha256": executable_sha256,
         "source_identity": source_identity,
+        "upstream_source_identity": upstream_source_identity,
         "model_ids": list(arm.model_ids),
         "required_cli_identities": cli_identities,
         "missing_artifacts": failures,

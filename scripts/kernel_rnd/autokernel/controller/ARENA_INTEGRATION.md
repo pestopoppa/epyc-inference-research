@@ -48,7 +48,10 @@ this prospective MI210 comparison.
 `arena_campaign_v1.json` fixes the comparison task, file digests, one-at-a-time
 MI210 use, and the adopted RE-Bench elapsed-wall-time checkpoints of exactly 2,
 8, and 32 hours per controller/task. A ready controller must bind a clean source
-commit, entrypoint digest, executable digest, explicit model IDs, and argv. The
+commit, entrypoint digest, executable digest, explicit model IDs, and argv. A
+licensed port additionally binds the in-repo adapter and external upstream
+checkout as separate identities, including upstream entrypoint and licence
+digests. The
 campaign refuses the entire matrix if any arm, task, source, or hardware identity
 is missing; a partial panel is never rankable. Each non-baseline executor call
 receives a typed cell request carrying the complete `(2.0, 8.0, 32.0)` checkpoint
@@ -97,11 +100,14 @@ before a device claim, model, compiler, or GPU command is started.
 
 ## Controller source availability — 2026-08-11
 
-The source gate is now split by controller rather than treating all six missing
-arms alike:
+The source gate is split by controller rather than treating every unavailable
+arm alike:
 
-- KernelFoundry `v0.3.0` (`1c053e02383d12937f144923bcc1faa82fa7788f`),
-  K-Search (`53c8fab9a5e8fab2c86610d24fbec5067f90e115`), and Xe-Forge
+- K-Search (`53c8fab9a5e8fab2c86610d24fbec5067f90e115`) is a governed
+  executable arm. Its exact `WorldModelKernelGeneratorWithBaseline.generate`
+  loop receives a Task whose benchmark method is the centralized Arena
+  evaluator, with GPT-5.6 Sol/high fixed as the text-model dependency;
+- KernelFoundry `v0.3.0` (`1c053e02383d12937f144923bcc1faa82fa7788f`) and Xe-Forge
   `v0.3.0` (`4dcb5080b0f56d0b655ec8c8c9509b8e3ba0382c`) are Apache-2.0
   upstream implementations and can receive explicit gfx90a evaluator ports;
 - GEAK-v1 `v1.0.0` (`4ffba15a55f250816598b4e27eb56ca40a699cea`)
