@@ -82,3 +82,46 @@ def test_summary_uses_lower_time_as_better() -> None:
     assert all(row["all_candidate_faster"] for row in summary["cells"])
     assert all(row["median_candidate_speedup_fraction"] == pytest.approx(0.25)
                for row in summary["cells"])
+
+
+def test_belief_measurements_are_arm_specific_and_identity_bound() -> None:
+    invocations = []
+    for block in range(4):
+        for arm, scale in (("baseline", 1.0), ("candidate", 0.8)):
+            invocations.append({
+                "block": block, "arm": arm,
+                "rows": [
+                    {"n": 1, "time_us": 100 * scale},
+                    {"n": 512, "time_us": 200 * scale},
+                ],
+            })
+    summary = runner.summarize(invocations, 4)
+    source = {
+        "commit": "a" * 40,
+        "candidate_diff_sha256": "b" * 64,
+        "baseline_source_sha256": "c" * 64,
+        "candidate_source_sha256": "d" * 64,
+    }
+    binaries = {
+        arm: {
+            "path": f"/build/{arm}/test-backend-ops",
+            "sha256": digest * 64,
+            "ggml_cpu_row": f"libggml-cpu => /build/{arm}/libggml-cpu.so",
+        }
+        for arm, digest in (("baseline", "e"), ("candidate", "f"))
+    }
+    rows = runner.belief_measurements(
+        summary, blocks=4, source_identity=source,
+        binary_identity=binaries, claim_id="akclaim-test")
+    assert len(rows) == 4
+    assert {(row["extra"]["shape"]["n"], row["extra"]["arm"])
+            for row in rows} == {
+                (1, "baseline"), (1, "candidate"),
+                (512, "baseline"), (512, "candidate"),
+            }
+    assert all(row["metric_direction"] == "lower_better" for row in rows)
+    assert all(row["reps"] == 4 for row in rows)
+    assert all(row["extra"]["resource_claim_receipt"] == "akclaim-test"
+               for row in rows)
+    assert next(row for row in rows if row["measurement_id"] ==
+                "iq2_xxs_n1_candidate_median_time_us")["value"] == 80.0
