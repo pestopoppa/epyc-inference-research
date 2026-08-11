@@ -39,8 +39,11 @@ RECIPE_ID = "t1b.llama_cpu.llama_bench_prefill.v1"
 CPU_LIST = recipes.CANONICAL_PREFIX[recipes.CANONICAL_PREFIX.index("-c") + 1]
 PRODUCTION_ROOT = Path("/mnt/raid0/llm/llama.cpp")
 PRODUCTION_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
-INSTRUMENT_ROOT = Path("/mnt/raid0/llm/llama.cpp-experimental")
-INSTRUMENT_BINARY = INSTRUMENT_ROOT / "build-v9-cpu/bin/llama-bench"
+INSTRUMENT_ROOT = Path(os.environ.get(
+    "AUTOKERNEL_INSTRUMENT_ROOT", "/mnt/raid0/llm/llama.cpp-experimental"))
+INSTRUMENT_BINARY = Path(os.environ.get(
+    "AUTOKERNEL_INSTRUMENT_BINARY",
+    str(INSTRUMENT_ROOT / "build-v9-cpu/bin/llama-bench")))
 INSTRUMENT_BRANCH = "experimental-v9-autokernel-t1-hardening"
 INSTRUMENT_COMMIT = "0492c2319a79e9bcc4edaa1bfb6af5a096276ab7"
 MODEL = Path(
