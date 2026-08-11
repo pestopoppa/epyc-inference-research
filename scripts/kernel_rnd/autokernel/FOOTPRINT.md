@@ -30,9 +30,9 @@ a module it never looked at.
 
 | | non-test lines |
 |---|---:|
-| **ON THE CAMPAIGN PATH** | **63,763** |
-| **DEFERRED** (provably unreachable) | **7,167** |
-| **TOTAL** | **70,930** |
+| **ON THE CAMPAIGN PATH** | **63,782** |
+| **DEFERRED** (provably unreachable) | **8,290** |
+| **TOTAL** | **72,072** |
 
 **There is no deferred half.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -129,7 +129,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `offline_least_commitment.py` | 345 | no | AP-WM-1 observe-only archive analysis; importing an offline hypothesis diagnostic into the mutation/build path would give it accidental live authority |
 | `turn_productivity.py` | 481 | no | AK-PT-1/AK-X-6 archive reducer; it consumes completed refine-turn records and may only withhold future search advancement, so campaign #1 must not give it live rank or mutation authority |
 | `prior_art.py` | 597 | no | deterministic proposal-input compiler; it classifies findings before a proposal exists and has no place in the mutation/build process |
-| `profile_report.py` | 542 | no | RVP-1–7 deterministic offline C4 report; it consumes completed paired traces and has no mutation, build, profiler-launch or ranking authority |
+| `profile_report.py` | 587 | no | RVP-1–7 deterministic offline C4 report; it consumes completed paired traces and has no mutation, build, profiler-launch or ranking authority |
 | `profile_context.py` | 287 | no | C4 hash-bound discovery/evaluator projection; it exposes diagnostic context to authoring without gaining verdict or ranking authority |
 | `hipkittens_lds.py` | 430 | no | INF-03 deterministic offline gfx90a LDS topology reducer; it consumes completed counter captures and gives authoring diagnostic context without profiler-launch or ranking authority |
 | `c5_seed_corpus.py` | 309 | no | C5 static HyRA task registry; it contributes hash-bound, non-numeric gfx90a authoring context and must never gain campaign mutation, scoring, or NVIDIA-to-MI210 claim-transfer authority |
@@ -145,6 +145,8 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `evaluator/devices.py` | 813 | yes | a GPU cell must not be satisfied by `Device 0: CPU` |
 | `evaluator/controls.py` | 2,406 | yes | the A/A control plane — 2026-08-04 measured 1.62% / 1.88% between-run CV over four identical runs |
 | `evaluator/baseline_honesty.py` | 129 | no | AK-BH-4 exact-surface strongest-provider selector; it rejects AUTO and cross-surface transfer before a campaign can claim an honest floor |
+| `evaluator/c3_epyc_suite.py` | 607 | no | INF-48 offline C3/C5 contract reducer; it binds EPYC op cases to exact vendor evidence and a captured-workload whole-model exit without launch, mutation, release, or promotion authority |
+| `evaluator/c3_epyc_compiler.py` | 471 | no | INF-48 offline JSON plan/receipt compiler; it is the callable controller/backend seam but cannot launch captures, benchmarks, builds, patches, inference, or promotion |
 | `evaluator/sensitivity.py` | 333 | no | RVP-C2-7/C2-11/C5-2 standalone two-axis reducer; missing or insensitive seed/transform populations are unscoreable rather than campaign passes |
 | `evaluator/oracle_integrity.py` | 145 | no | RVP-C2-8/C2-9 standalone reducers: hostile distributions and checker isolation are correctness prerequisites, not campaign-path ranking authority |
 | `evaluator/historical_tasks.py` | 194 | no | RVP-C5-R/C3-2 sealed historical-task descriptor and expert-ceiling reducer; no terminal candidate means `COULD_NOT_CHECK` |
