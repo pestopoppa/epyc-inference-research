@@ -33,6 +33,7 @@ PREFLIGHT_SCHEMA = "epyc.autokernel.geak_arena_preflight.v1"
 TARGET_GPU_MODEL = "MI210"
 TARGET_GFX_ARCH = "gfx90a"
 ARCH_ENV_KEYS = ("PYTORCH_ROCM_ARCH", "AMDGPU_TARGETS", "GPU_TARGETS")
+REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}")
 _CONTROLLER_RE = re.compile(r"[a-z][a-z0-9_]{2,63}")
 
@@ -299,6 +300,16 @@ def architecture_environment(base: Mapping[str, str] | None = None) -> dict[str,
             raise ArenaAdapterError(
                 f"{key} conflicts with MI210 target: {existing!r}")
         env[key] = TARGET_GFX_ARCH
+    # Arena executes controllers from a fresh copied task workspace.  In-tree
+    # controller modules therefore need an explicit import root; relying on the
+    # parent process's cwd made the real worker fail before its first model call.
+    existing_pythonpath = [
+        value for value in env.get("PYTHONPATH", "").split(os.pathsep) if value
+    ]
+    repository = str(REPOSITORY_ROOT)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [repository, *(value for value in existing_pythonpath if value != repository)]
+    )
     return env
 
 

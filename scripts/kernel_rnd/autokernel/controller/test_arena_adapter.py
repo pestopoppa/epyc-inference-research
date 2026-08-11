@@ -52,11 +52,15 @@ class ArenaAdapterTest(unittest.TestCase):
                             for row in A.CONTROLLERS.values()))
 
     def test_prepare_binds_gfx90a_and_runs_final_prompt_hygiene(self):
-        prepared = A.prepare_task(self.task(), base_environment={"PATH": os.environ["PATH"]})
+        prepared = A.prepare_task(
+            self.task(),
+            base_environment={"PATH": os.environ["PATH"], "PYTHONPATH": ""},
+        )
         self.assertIn("MI210, CDNA2 gfx90a", prepared.prompt)
         self.assertEqual(prepared.environment["PYTORCH_ROCM_ARCH"], "gfx90a")
         self.assertEqual(prepared.environment["AMDGPU_TARGETS"], "gfx90a")
         self.assertEqual(prepared.environment["GPU_TARGETS"], "gfx90a")
+        self.assertEqual(prepared.environment["PYTHONPATH"], str(A.REPOSITORY_ROOT))
         self.assertEqual(
             prepared.prompt_sha256,
             hashlib.sha256(prepared.prompt.encode()).hexdigest(),
@@ -81,13 +85,24 @@ class ArenaAdapterTest(unittest.TestCase):
             A.detect_gfx_arch(str(bad))
 
     def test_launch_uses_stdin_no_shell_and_refuses_failed_controller(self):
-        prepared = A.prepare_task(self.task(), base_environment={"PATH": os.environ["PATH"]})
+        prepared = A.prepare_task(
+            self.task(),
+            base_environment={"PATH": os.environ["PATH"], "PYTHONPATH": ""},
+        )
         output = A.launch(
             prepared,
             (sys.executable, "-c", "import sys; print(sys.stdin.read().splitlines()[0])"),
             timeout_seconds=5,
         )
         self.assertEqual(output.strip(), "AUTOKERNEL AUTHORING ROLE: actor")
+        imported = A.launch(
+            prepared,
+            (sys.executable, "-c",
+             "from scripts.kernel_rnd.autokernel.controller import arena_adapter; "
+             "print(arena_adapter.TARGET_GFX_ARCH)"),
+            timeout_seconds=5,
+        )
+        self.assertEqual(imported.strip(), "gfx90a")
         with self.assertRaisesRegex(A.ArenaAdapterError, "exited 7"):
             A.launch(prepared, (sys.executable, "-c", "raise SystemExit(7)"),
                      timeout_seconds=5)

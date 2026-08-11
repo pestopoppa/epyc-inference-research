@@ -604,7 +604,11 @@ def run_worker(request: Mapping[str, Any]) -> dict[str, Any]:
 
 def execute_from_cli(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     spec = arena_campaign.load_spec(args.config)
-    audit = arena_campaign.audit_campaign(
+    available_source = bool(getattr(args, "available_source", False))
+    audit_function = (
+        arena_campaign.audit_available_source_campaign
+        if available_source else arena_campaign.audit_campaign)
+    audit = audit_function(
         spec, arena_root=args.arena_root, geak_root=args.geak_root,
         enumerator=args.enumerator)
     output_root = Path(args.output_root).resolve()
@@ -613,7 +617,7 @@ def execute_from_cli(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     if audit["status"] != "ready":
         return 3, {
             "schema": AGGREGATE_SCHEMA,
-            "campaign_id": spec.campaign_id,
+            "campaign_id": audit["campaign_id"],
             "status": "refused",
             "audit": str(output_root / "audit.json"),
             "controller_or_gpu_command_executed": False,
@@ -622,24 +626,30 @@ def execute_from_cli(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     # with the audit or any predecessor campaign.
     cells_root = output_root / "execution"
     runner = GovernedArenaCellRunner(RunnerConfig(
-        campaign_id=spec.campaign_id,
+        campaign_id=audit["campaign_id"],
         arena_root=str(Path(args.arena_root).resolve()),
         preflight_path=str(Path(args.preflight).resolve()),
         output_root=str(cells_root),
         claim_journal=args.claim_journal,
         claim_timeout_seconds=args.claim_timeout_seconds,
     ))
-    cells = arena_campaign.execute_campaign(spec, audit, run_cell=runner)
+    execute_function = (
+        arena_campaign.execute_available_source_campaign
+        if available_source else arena_campaign.execute_campaign)
+    cells = execute_function(spec, audit, run_cell=runner)
     aggregate = _self_hash({
         "schema": AGGREGATE_SCHEMA,
-        "campaign_id": spec.campaign_id,
+        "campaign_id": audit["campaign_id"],
         "status": "complete",
         "authority": "whole_agent_task_only",
         "audit": str(output_root / "audit.json"),
         "audit_receipt_sha256": audit["receipt_sha256"],
         "cells": cells,
-        "constraints": {"partial_results_rankable": False,
-                        "promotion_authority": False},
+        "constraints": {
+            "partial_results_rankable": False,
+            "availability_conditioned_only": available_source,
+            "full_eight_arm_result_implied": False,
+            "promotion_authority": False},
     })
     _atomic_json(output_root / "execution-receipt.json", aggregate)
     return 0, aggregate
@@ -657,6 +667,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--enumerator", default="/opt/rocm/bin/rocm_agent_enumerator")
     parser.add_argument("--claim-journal", default=DEFAULT_CLAIM_JOURNAL)
     parser.add_argument("--claim-timeout-seconds", type=float, default=0.0)
+    parser.add_argument(
+        "--available-source", action="store_true",
+        help=("run the separately labelled six-arm available-source panel; "
+              "never implies completion of the fixed eight-arm campaign"))
     args = parser.parse_args(argv)
     if args.worker_request or args.worker_output:
         if not args.worker_request or not args.worker_output:
