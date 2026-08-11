@@ -182,6 +182,35 @@ class ActorCriticControllerTest(unittest.TestCase):
                 environment=self.environment(),
                 runner=FakeRunner(escape_workspace, planner_path="../outside.py"))
 
+    def test_contained_absolute_candidate_is_normalized_but_escape_refuses(self):
+        workspace = self.workspace("absolute")
+        proposal = {
+            "schema": A.PROPOSAL_SCHEMA,
+            "proposal_id": "proposal-absolute",
+            "candidate_path": str(workspace / "kernel.py"),
+            "actor_instruction": "Implement the bounded candidate.",
+        }
+        parsed = A.parse_proposal(json.dumps(proposal), workspace)
+        self.assertEqual(parsed["candidate_path"], "kernel.py")
+        self.assertEqual(parsed["candidate_abspath"], str(workspace / "kernel.py"))
+
+        proposal["candidate_path"] = str(self.root / "outside.py")
+        (self.root / "outside.py").write_text("outside\n", encoding="utf-8")
+        with self.assertRaisesRegex(A.ActorCriticError, "escapes"):
+            A.parse_proposal(json.dumps(proposal), workspace)
+
+    def test_candidate_symlink_is_rejected_even_when_target_is_contained(self):
+        workspace = self.workspace("symlink")
+        (workspace / "kernel-link.py").symlink_to("kernel.py")
+        proposal = {
+            "schema": A.PROPOSAL_SCHEMA,
+            "proposal_id": "proposal-symlink",
+            "candidate_path": "kernel-link.py",
+            "actor_instruction": "Implement the bounded candidate.",
+        }
+        with self.assertRaisesRegex(A.ActorCriticError, "non-symlink"):
+            A.parse_proposal(json.dumps(proposal), workspace)
+
     def test_claude_result_accepts_only_an_exact_single_json_fence(self):
         workspace = self.workspace("fenced")
         proposal = {

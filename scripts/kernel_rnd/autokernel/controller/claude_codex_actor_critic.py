@@ -223,15 +223,23 @@ def _workspace_root(workspace: str | Path) -> Path:
 def _relative_candidate(workspace: Path, value: object) -> tuple[str, Path]:
     if not isinstance(value, str) or not value.strip():
         raise ActorCriticError("proposal.candidate_path must be a non-empty string")
-    relative = PurePosixPath(value.strip())
-    if relative.is_absolute() or ".." in relative.parts or "." in relative.parts:
-        raise ActorCriticError("proposal candidate escapes the Arena workspace")
-    candidate = (workspace / Path(*relative.parts)).resolve()
+    workspace = workspace.resolve()
+    supplied = PurePosixPath(value.strip())
+    if supplied.is_absolute():
+        lexical_candidate = Path(supplied)
+    else:
+        if ".." in supplied.parts or "." in supplied.parts:
+            raise ActorCriticError("proposal candidate escapes the Arena workspace")
+        lexical_candidate = workspace / Path(*supplied.parts)
+    if lexical_candidate.is_symlink():
+        raise ActorCriticError(
+            "proposal candidate must name an existing non-symlink workspace file")
+    candidate = lexical_candidate.resolve()
     try:
-        candidate.relative_to(workspace)
+        relative = candidate.relative_to(workspace)
     except ValueError as exc:
         raise ActorCriticError("proposal candidate escapes the Arena workspace") from exc
-    if not candidate.is_file() or candidate.is_symlink():
+    if not candidate.is_file():
         raise ActorCriticError(
             "proposal candidate must name an existing non-symlink workspace file")
     return relative.as_posix(), candidate
@@ -439,8 +447,10 @@ def run_controller(
         planner_prompt = (
             f"{prompt}\n\nYou are the planner for iteration {iteration}. Return only JSON "
             f"with schema {PROPOSAL_SCHEMA}, proposal_id, candidate_path, and "
-            "actor_instruction. candidate_path must name one existing file under "
-            "the supplied Arena workspace. Do not edit files."
+            "actor_instruction. candidate_path must name one existing non-symlink "
+            "file under the supplied Arena workspace; use a workspace-relative "
+            "path when possible, although an exact contained absolute path is "
+            "accepted. Do not edit files."
         )
         before_planner = _workspace_manifest(root)
         capture = runner(
