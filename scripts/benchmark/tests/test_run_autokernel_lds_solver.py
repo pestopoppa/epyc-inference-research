@@ -36,6 +36,12 @@ class LdsRunnerContractTest(unittest.TestCase):
         spec.loader.exec_module(module)
         self.assertEqual(module.PROBE_SOURCE, PROBE)
 
+    def test_runner_writes_prospective_belief_measurement(self):
+        text = RUNNER.read_text(encoding="utf-8")
+        self.assertIn('"belief_measurements": [{', text)
+        self.assertIn('"metric": "cdna3_swizzle_topology_mismatch"', text)
+        self.assertIn('"reps_basis": "scored:complete bank-and-phase solver repetitions"', text)
+
 
 if __name__ == "__main__":
     unittest.main()

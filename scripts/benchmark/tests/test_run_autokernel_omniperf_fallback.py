@@ -101,6 +101,11 @@ class OmniperfFallbackTest(unittest.TestCase):
         self.assertTrue(args.omniperf_python.endswith("/bin/python"))
         self.assertEqual(args.repetitions, 5)
 
+    def test_runner_writes_prospective_belief_measurements_only(self):
+        text = Path(R.__file__).read_text(encoding="utf-8")
+        self.assertIn('"belief_measurements": belief_measurements', text)
+        self.assertIn('"reps_basis": "scored:seeded repeated backend-op suites"', text)
+
 
 if __name__ == "__main__":
     unittest.main()

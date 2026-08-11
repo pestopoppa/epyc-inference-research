@@ -80,6 +80,12 @@ class RocprofV1AttributionTest(unittest.TestCase):
         self.assertEqual(result["dispatches"], 1)
         self.assertEqual(result["gated_delta_net_share"], 1.0)
 
+    def test_runner_writes_prospective_belief_measurements_only(self):
+        text = Path(R.__file__).read_text(encoding="utf-8")
+        self.assertIn('"belief_measurements": belief_measurements', text)
+        self.assertIn('"metric_direction": "lower_better"', text)
+        self.assertIn('"reps_basis": "scored:llama-bench prompt repetitions"', text)
+
 
 def json_line(value):
     import json

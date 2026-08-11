@@ -341,6 +341,25 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 results.append(profile)
         except BaseException as exc:
             captured_error = exc
+    belief_measurements = []
+    if captured_error is None:
+        for profile in results:
+            tokens = profile["prompt_tokens"]
+            share = profile["attribution"]["gated_delta_net_share"]
+            belief_measurements.append({
+                "measurement_id": f"gdn_share_p{tokens}",
+                "metric": "gated_delta_net_summed_kernel_time_share",
+                "value": share,
+                "unit": "fraction",
+                "metric_direction": "lower_better",
+                "category": "BASELINE",
+                "reps": args.repetitions,
+                "reps_basis": "scored:llama-bench prompt repetitions",
+                "claim": (
+                    f"Qwen3.6-35B-A3B Q8 gfx90a p{tokens} gated-delta-net "
+                    f"summed kernel-time share is {share:.12f}"),
+                "extra": {"prompt_tokens": tokens},
+            })
     payload = {
         "schema": SCHEMA,
         "status": "failed" if captured_error is not None else "passed",
@@ -358,6 +377,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         },
         "preflight": preflight,
         "profiles": results,
+        "belief_measurements": belief_measurements,
         "captured_profiles": captured_profiles if captured_error is not None else None,
         "device_claim_open": opened,
         "device_claim_released": released,

@@ -365,6 +365,30 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 output_dir / "pmc_perf.csv", quant_type=args.quant_type)
         except BaseException as exc:
             captured_error = exc
+    belief_measurements = []
+    if captured_error is None:
+        for family in profile["families"]:
+            if family["family"] not in {"mul_mat_vec_q", "quantize_q8_1"}:
+                continue
+            duration_per_suite = family["device_duration_ns_total"] / args.repetitions
+            belief_measurements.append({
+                "measurement_id": f"{args.quant_type}_{family['family']}_device_ns",
+                "metric": "profiled_family_device_duration_ns_per_suite",
+                "value": duration_per_suite,
+                "unit": "ns",
+                "metric_direction": "lower_better",
+                "category": "BASELINE",
+                "reps": args.repetitions,
+                "reps_basis": "scored:seeded repeated backend-op suites",
+                "claim": (
+                    f"{args.quant_type} {family['family']} mean profiled device time per "
+                    f"seeded suite is {duration_per_suite:.3f} ns"),
+                "extra": {
+                    "family": family["family"],
+                    "quant_type": args.quant_type,
+                    "suite_seed": args.suite_seed,
+                },
+            })
     payload = {
         "schema": SCHEMA,
         "status": "failed" if captured_error is not None else "passed",
@@ -383,6 +407,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         },
         "preflight": preflight,
         "profile": profile,
+        "belief_measurements": belief_measurements,
         "preflight_command": list(preflight_command),
         "profile_command": list(profile_command),
         "preflight_duration_s": preflight_duration,

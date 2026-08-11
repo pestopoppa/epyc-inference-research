@@ -273,6 +273,25 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "interpretation": (
                 "Topology compatibility is a design prior only; it does not establish "
                 "correctness or performance of a HipKittens swizzle in llama.cpp."),
+            "belief_measurements": [{
+                "measurement_id": "hipkittens_cdna3_swizzle_topology_mismatch",
+                "metric": "cdna3_swizzle_topology_mismatch",
+                "value": 0 if matches_cdna3 else 1,
+                "unit": "boolean",
+                "metric_direction": "lower_better",
+                "category": "BASELINE",
+                "reps": min(args.bank_repetitions, args.phase_repetitions),
+                "reps_basis": "scored:complete bank-and-phase solver repetitions",
+                "claim": (
+                    "gfx90a LDS topology matches HipKittens CDNA3 swizzle assumptions"
+                    if matches_cdna3 else
+                    "gfx90a LDS topology does not match HipKittens CDNA3 swizzle assumptions"),
+                "extra": {
+                    "bank_count": bank_solution.bank_count,
+                    "phase_count": phase_solution.phase_count,
+                    "phase_group_sizes": [len(row) for row in phase_solution.groups],
+                },
+            }],
             "device_claim": {"opened": opened},
         }
     except BaseException as exc:
