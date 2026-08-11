@@ -795,6 +795,12 @@ What remains is not another hidden static plane:
   `AK_LAYOUT_V1` receipt. The gate requires all three families and at least one case,
   while an unsupported layout is a hard failure rather than `not_supported`. The
   instrument compiles; no layout case has been executed in this session.
+- The value axis is independently selected by `OpSuitePlan.value_transform_probe` and
+  refuses to coexist with the layout flag. Each packed floating case runs identity, x3,
+  x0.01, and negate against the same shape with fail-any semantics; a passing receipt must
+  show all four completed. Property residuals carry the input-transform coordinate through
+  the evaluation event and Vidya projection. The experimental target compiles, but no
+  transform case has run in this session.
 - The release and speech-adapter planes were deliberately removed on 2026-08-04 and
   remain recoverable from `autokernel-preserve-20260804`. Restore the narrow release
   slice only for a real champion/freeze request, and restore the speech slice only

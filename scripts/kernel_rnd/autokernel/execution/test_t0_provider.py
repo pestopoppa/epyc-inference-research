@@ -274,6 +274,29 @@ class BackendOpsConsoleParsing(unittest.TestCase):
         self.assertEqual(run.unsupported_by_op(), ())
         run.reconcile()
 
+    def test_value_transform_receipt_and_v2_property_transform_are_structured(self):
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                "  SOFT_MAX(type=f32): AK_VALUE_V1 "
+                "transforms=identity,x3,x0p01,negate completed=4 suite_seed=4711 | "
+                "AK_PROP_V2 metric=softmax_invariants/v1 residual=2e-08 "
+                "tolerance=0.0001 passed=1 suite_seed=4711 transform=x3 OK\n"
+                "  1/1 tests passed\n  Backend CPU: OK\n"
+                "1/1 backends passed\nOK\n")
+        case = t0.parse_backend_ops_console(text).cases[0]
+        self.assertEqual(case.value_transforms.transforms,
+                         ("identity", "x3", "x0p01", "negate"))
+        self.assertEqual(case.value_transforms.completed, 4)
+        self.assertEqual(case.properties[0].transform, "x3")
+
+    def test_passing_case_cannot_claim_an_incomplete_transform_pass(self):
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                "  MUL_MAT(type=f32): AK_VALUE_V1 "
+                "transforms=identity,x3,x0p01,negate completed=2 suite_seed=4711 OK\n"
+                "  1/1 tests passed\n  Backend CPU: OK\n"
+                "1/1 backends passed\nOK\n")
+        with self.assertRaises(t0.OutputParseError):
+            t0.parse_backend_ops_console(text)
+
     def test_recorded_passing_run_parses_cases_and_ops(self):
         run = t0.parse_backend_ops_console(recorded("recorded_t0_backend_ops_console_ok.txt"))
         self.assertEqual(len(run.backends), 1)
@@ -485,6 +508,16 @@ class BackendOpsCsvParsing(unittest.TestCase):
         case = t0.parse_backend_ops_csv(text).cases[0]
         self.assertEqual(case.status, "fail")
         self.assertEqual(case.layout.families, ("stride_gap",))
+
+    def test_csv_preserves_value_transform_receipt(self):
+        text = (
+            '"backend_name","op_name","op_params","test_mode","supported",'
+            '"error_message","value_receipt"\n'
+            '"CPU","MUL_MAT","type=f32","test","1","",'
+            '"AK_VALUE_V1 transforms=identity,x3,x0p01,negate completed=4 '
+            'suite_seed=4711"\n')
+        case = t0.parse_backend_ops_csv(text).cases[0]
+        self.assertEqual(case.value_transforms.completed, 4)
 
     def test_csv_cannot_express_a_skipped_backend(self):
         """Why console is the T0 default, stated as a test rather than a comment.
@@ -742,6 +775,21 @@ class ProductionTreeRefusals(unittest.TestCase):
 
 class ArgvConstruction(unittest.TestCase):
 
+    def test_value_transforms_have_a_separate_explicit_flag(self):
+        inv = t0.build_backend_ops_invocation(
+            binary=f"{BIN_DIR}/test-backend-ops", library_path=BIN_DIR,
+            backend_filter="CPU", ops=("MUL_MAT",), base_env=(),
+            suite_seed=4711, value_transform_probe=True)
+        self.assertIn("--autokernel-value-transforms", inv.argv)
+        self.assertNotIn("--autokernel-layouts", inv.argv)
+
+    def test_layout_and_value_flags_cannot_merge(self):
+        with self.assertRaises(ValueError):
+            t0.build_backend_ops_invocation(
+                binary=f"{BIN_DIR}/test-backend-ops", library_path=BIN_DIR,
+                backend_filter="CPU", ops=("MUL_MAT",), base_env=(),
+                suite_seed=4711, layout_probe=True, value_transform_probe=True)
+
     def test_layout_probe_has_its_own_explicit_flag_and_receipt(self):
         inv = t0.build_backend_ops_invocation(
             binary=f"{BIN_DIR}/test-backend-ops", library_path=BIN_DIR,
@@ -985,6 +1033,7 @@ def _console_capture(provider_plan, text, *, ops=None, params_filter=None):
         base_env=provider_plan.base_env,
         suite_seed=provider_plan.op_suite.suite_seed,
         layout_probe=provider_plan.op_suite.layout_probe,
+        value_transform_probe=provider_plan.op_suite.value_transform_probe,
         params_filter=params_filter)
     return capture(inv.argv, stdout=text, exit_code=0)
 
@@ -1000,6 +1049,69 @@ def _linkage_capture(provider_plan, text, *, binary=None, library_path=None, exi
 
 
 class OpSuiteCollection(unittest.TestCase):
+
+    def test_value_transform_pass_binds_all_four_transforms_and_seed(self):
+        plan = execution_plan(op_suite=op_suite_plan(
+            ops=("SOFT_MAX",), suite_seed=4711, value_transform_probe=True))
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                "  SOFT_MAX(type=f32): AK_VALUE_V1 "
+                "transforms=identity,x3,x0p01,negate completed=4 suite_seed=4711 | "
+                "AK_PROP_V2 metric=softmax_invariants/v1 residual=2e-08 "
+                "tolerance=0.0001 passed=1 suite_seed=4711 transform=negate OK\n"
+                "  1/1 tests passed\n  Backend CPU: OK\n"
+                "1/1 backends passed\nOK\n")
+        provider = t0.ExecutedT0EvidenceProvider(
+            plan=plan, runner=t0.RecordedProcessRunner([_console_capture(plan, text)]),
+            claim=FakeClaim())
+        evidence = provider.collect_op_suite(t0._Collected())
+        self.assertTrue(evidence.value_transform_probe)
+        self.assertEqual(evidence.value_transform_case_count, 1)
+        self.assertEqual(evidence.value_transforms,
+                         ("identity", "negate", "x0p01", "x3"))
+        self.assertEqual(evidence.property_measurements[0].input_transform, "negate")
+
+    def test_value_transform_receipt_with_wrong_seed_refuses(self):
+        plan = execution_plan(op_suite=op_suite_plan(
+            ops=("MUL_MAT",), suite_seed=4711, value_transform_probe=True))
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                "  MUL_MAT(type=f32): AK_VALUE_V1 "
+                "transforms=identity,x3,x0p01,negate completed=4 suite_seed=99 OK\n"
+                "  1/1 tests passed\n  Backend CPU: OK\n"
+                "1/1 backends passed\nOK\n")
+        provider = t0.ExecutedT0EvidenceProvider(
+            plan=plan, runner=t0.RecordedProcessRunner([_console_capture(plan, text)]),
+            claim=FakeClaim())
+        with self.assertRaises(t0.OutputParseError):
+            provider.collect_op_suite(t0._Collected())
+
+    def test_value_transform_pass_refuses_a_case_without_its_receipt(self):
+        plan = execution_plan(op_suite=op_suite_plan(
+            ops=("MUL_MAT",), suite_seed=4711, value_transform_probe=True))
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                "  MUL_MAT(type=f32): OK\n"
+                "  1/1 tests passed\n  Backend CPU: OK\n"
+                "1/1 backends passed\nOK\n")
+        provider = t0.ExecutedT0EvidenceProvider(
+            plan=plan, runner=t0.RecordedProcessRunner([_console_capture(plan, text)]),
+            claim=FakeClaim())
+        with self.assertRaises(t0.OutputParseError):
+            provider.collect_op_suite(t0._Collected())
+
+    def test_value_transform_pass_refuses_legacy_property_receipt(self):
+        plan = execution_plan(op_suite=op_suite_plan(
+            ops=("SOFT_MAX",), suite_seed=4711, value_transform_probe=True))
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                "  SOFT_MAX(type=f32): AK_VALUE_V1 "
+                "transforms=identity,x3,x0p01,negate completed=4 suite_seed=4711 | "
+                "AK_PROP_V1 metric=softmax_invariants/v1 residual=2e-08 "
+                "tolerance=0.0001 passed=1 suite_seed=4711 OK\n"
+                "  1/1 tests passed\n  Backend CPU: OK\n"
+                "1/1 backends passed\nOK\n")
+        provider = t0.ExecutedT0EvidenceProvider(
+            plan=plan, runner=t0.RecordedProcessRunner([_console_capture(plan, text)]),
+            claim=FakeClaim())
+        with self.assertRaises(t0.OutputParseError):
+            provider.collect_op_suite(t0._Collected())
 
     def test_layout_pass_requires_all_families_and_binds_the_suite_seed(self):
         plan = execution_plan(op_suite=op_suite_plan(

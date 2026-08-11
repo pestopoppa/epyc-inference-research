@@ -1254,6 +1254,7 @@ class PropertyMeasurement:
     tolerance: float
     suite_seed: int
     passed: bool
+    input_transform: str = "identity"
 
     def __post_init__(self) -> None:
         for name in ("shape_id", "op", "backend", "metric_id"):
@@ -1266,6 +1267,9 @@ class PropertyMeasurement:
                     f"property_measurement.{name} must be finite and non-negative")
         _req_int(self.suite_seed, "property_measurement.suite_seed")
         _req_bool(self.passed, "property_measurement.passed")
+        if self.input_transform not in ("identity", "x3", "x0p01", "negate"):
+            raise ValueError(
+                "property_measurement.input_transform must be identity|x3|x0p01|negate")
         derived = self.residual <= self.tolerance
         if self.passed != derived:
             raise ValueError(
@@ -1283,6 +1287,7 @@ class PropertyMeasurement:
             "tolerance": self.tolerance,
             "suite_seed": self.suite_seed,
             "passed": self.passed,
+            "input_transform": self.input_transform,
         }
 
 
@@ -1303,6 +1308,9 @@ class OpSuiteEvidence:
     layout_probe: bool = False
     layout_families: tuple = ()
     layout_case_count: int = 0
+    value_transform_probe: bool = False
+    value_transforms: tuple = ()
+    value_transform_case_count: int = 0
 
     def __post_init__(self) -> None:
         _req_str(self.suite_id, "op_suite.suite_id")
@@ -1342,6 +1350,23 @@ class OpSuiteEvidence:
         if not self.layout_probe and (self.layout_families or self.layout_case_count):
             raise ValueError(
                 "op_suite layout evidence cannot exist when layout_probe is false")
+        _req_bool(self.value_transform_probe, "op_suite.value_transform_probe")
+        _req_int(self.value_transform_case_count,
+                 "op_suite.value_transform_case_count")
+        allowed_transforms = {"identity", "x3", "x0p01", "negate"}
+        for item in _req_tuple(self.value_transforms, "op_suite.value_transforms"):
+            if item not in allowed_transforms:
+                raise ValueError(
+                    f"op_suite.value_transforms contains {item!r}, expected one of "
+                    f"{sorted(allowed_transforms)}")
+        if len(set(self.value_transforms)) != len(self.value_transforms):
+            raise ValueError("op_suite.value_transforms must be unique")
+        if not self.value_transform_probe and (
+                self.value_transforms or self.value_transform_case_count):
+            raise ValueError(
+                "op_suite value-transform evidence cannot exist when the probe is false")
+        if self.layout_probe and self.value_transform_probe:
+            raise ValueError("layout and value-transform evidence must come from separate passes")
 
     def cases_for(self, op: str) -> Optional[tuple]:
         for row in self.cases_by_op:
@@ -2683,6 +2708,18 @@ def check_backend_op_units(request: api.EvaluationRequest,
             reasons.append(
                 f"layout pass did not exercise required family/families {missing_layouts}; "
                 "required=['offset', 'stride_gap', 'transpose']")
+    if evidence.value_transform_probe:
+        required_transforms = {"identity", "x3", "x0p01", "negate"}
+        missing_transforms = sorted(
+            required_transforms - set(evidence.value_transforms))
+        if evidence.value_transform_case_count == 0:
+            reasons.append(
+                "the value-transform pass selected zero cases; a flag over no floating "
+                "input is not a probe")
+        if missing_transforms:
+            reasons.append(
+                f"value-transform pass did not exercise required transform(s) "
+                f"{missing_transforms}; required=['identity', 'negate', 'x0p01', 'x3']")
     for op in required:
         if op not in exercised:
             continue
@@ -2702,7 +2739,10 @@ def check_backend_op_units(request: api.EvaluationRequest,
                         f"shapes={evidence.shapes_ref}",
                         f"layout_probe={evidence.layout_probe}",
                         f"layout_families={list(evidence.layout_families)}",
-                        f"layout_cases={evidence.layout_case_count}"),
+                        f"layout_cases={evidence.layout_case_count}",
+                        f"value_transform_probe={evidence.value_transform_probe}",
+                        f"value_transforms={list(evidence.value_transforms)}",
+                        f"value_transform_cases={evidence.value_transform_case_count}"),
                  measurements=tuple(item.to_dict()
                                     for item in evidence.property_measurements))
 

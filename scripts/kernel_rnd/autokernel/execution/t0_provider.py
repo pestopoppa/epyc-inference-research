@@ -1069,6 +1069,7 @@ class OpSuitePlan:
     suite_source_sha256: str
     suite_seed: int = 0
     layout_probe: bool = False
+    value_transform_probe: bool = False
     timeout_s: float = 1800.0
     parallel_workers: Optional[int] = None
 
@@ -1085,6 +1086,10 @@ class OpSuitePlan:
         _req_sha256(self.suite_source_sha256, "op_suite.suite_source_sha256")
         _req_int(self.suite_seed, "op_suite.suite_seed")
         _req_bool(self.layout_probe, "op_suite.layout_probe")
+        _req_bool(self.value_transform_probe, "op_suite.value_transform_probe")
+        if self.layout_probe and self.value_transform_probe:
+            raise ValueError(
+                "op_suite layout and value-transform probes must be separate passes")
         if self.parallel_workers is not None:
             _req_int(self.parallel_workers, "op_suite.parallel_workers", minimum=1)
 
@@ -1331,14 +1336,23 @@ _REFERENCE_RECEIPT_RE = re.compile(
     r"observed=([0-9]+(?:\.[0-9]*)?(?:e[+-]?\d+)?) "
     r"tolerance=([0-9]+(?:\.[0-9]*)?(?:e[+-]?\d+)?) "
     r"comparisons=([1-9][0-9]*) oracle=([A-Za-z0-9_.:/-]+)$")
-_PROPERTY_RECEIPT_RE = re.compile(
+_PROPERTY_RECEIPT_V1_RE = re.compile(
     r"^AK_PROP_V1 metric=([A-Za-z0-9_.:/-]+) "
     r"residual=([0-9]+(?:\.[0-9]*)?(?:e[+-]?\d+)?) "
     r"tolerance=([0-9]+(?:\.[0-9]*)?(?:e[+-]?\d+)?) "
     r"passed=([01]) suite_seed=([0-9]+)$")
+_PROPERTY_RECEIPT_V2_RE = re.compile(
+    r"^AK_PROP_V2 metric=([A-Za-z0-9_.:/-]+) "
+    r"residual=([0-9]+(?:\.[0-9]*)?(?:e[+-]?\d+)?) "
+    r"tolerance=([0-9]+(?:\.[0-9]*)?(?:e[+-]?\d+)?) "
+    r"passed=([01]) suite_seed=([0-9]+) "
+    r"transform=(identity|x3|x0p01|negate)$")
 _LAYOUT_RECEIPT_RE = re.compile(
     r"^AK_LAYOUT_V1 families=((?:offset|transpose|stride_gap)"
     r"(?:,(?:offset|transpose|stride_gap))*) suite_seed=([0-9]+)$")
+_VALUE_RECEIPT_RE = re.compile(
+    r"^AK_VALUE_V1 transforms=(identity,x3,x0p01,negate) "
+    r"completed=([0-4]) suite_seed=([0-9]+)$")
 
 #: The two skip reasons the tool prints, verbatim
 #: (tests/test-backend-ops.cpp:10368 and :10375). Both increment `n_ok`, so both
@@ -1376,6 +1390,8 @@ class BackendOpsProperty:
     tolerance: float
     passed: bool
     suite_seed: int
+    transform: str = "identity"
+    receipt_version: int = 1
 
     def __post_init__(self) -> None:
         _req_str(self.metric_id, "backend_ops.property.metric_id")
@@ -1387,6 +1403,11 @@ class BackendOpsProperty:
         if not isinstance(self.passed, bool):
             raise OutputParseError("backend-op property passed must be a bool")
         _req_int(self.suite_seed, "backend_ops.property.suite_seed")
+        if self.receipt_version not in (1, 2):
+            raise OutputParseError("backend-op property receipt_version must be 1 or 2")
+        if self.transform not in ("identity", "x3", "x0p01", "negate"):
+            raise OutputParseError(
+                "backend-op property transform must be identity|x3|x0p01|negate")
         derived = self.residual <= self.tolerance
         if self.passed != derived:
             raise OutputParseError(
@@ -1413,6 +1434,25 @@ class BackendOpsLayout:
 
 
 @dataclass(frozen=True)
+class BackendOpsValueTransforms:
+    """The fixed four-transform pass and how many transforms completed."""
+
+    transforms: tuple
+    completed: int
+    suite_seed: int
+
+    def __post_init__(self) -> None:
+        expected = ("identity", "x3", "x0p01", "negate")
+        if self.transforms != expected:
+            raise OutputParseError(
+                f"backend-op value transforms must be exactly {expected}")
+        _req_int(self.completed, "backend_ops.value_transforms.completed")
+        if self.completed > len(expected):
+            raise OutputParseError("backend-op value transforms completed exceeds four")
+        _req_int(self.suite_seed, "backend_ops.value_transforms.suite_seed")
+
+
+@dataclass(frozen=True)
 class BackendOpsCase:
     """One `test-backend-ops` case. `not supported` is NOT a pass."""
 
@@ -1423,6 +1463,7 @@ class BackendOpsCase:
     reference: Optional[BackendOpsReference] = None
     properties: tuple = ()
     layout: Optional[BackendOpsLayout] = None
+    value_transforms: Optional[BackendOpsValueTransforms] = None
 
     @property
     def passed(self) -> bool:
@@ -1435,6 +1476,7 @@ def _case_with_reference(*, op: str, params: str, status: str,
     reference: Optional[BackendOpsReference] = None
     properties: list = []
     layout: Optional[BackendOpsLayout] = None
+    value_transforms: Optional[BackendOpsValueTransforms] = None
     for part in (piece.strip() for piece in interleaved.split(" | ") if piece.strip()):
         if part.startswith("AK_REF_"):
             if reference is not None:
@@ -1449,14 +1491,18 @@ def _case_with_reference(*, op: str, params: str, status: str,
                 tolerance=float(match.group(3)), comparisons=int(match.group(4)),
                 oracle_id=match.group(5))
         elif part.startswith("AK_PROP_"):
-            match = _PROPERTY_RECEIPT_RE.fullmatch(part)
+            match_v2 = _PROPERTY_RECEIPT_V2_RE.fullmatch(part)
+            match_v1 = _PROPERTY_RECEIPT_V1_RE.fullmatch(part)
+            match = match_v2 or match_v1
             if match is None:
                 raise OutputParseError(
                     f"case {op}({params}) emitted malformed property receipt {part!r}")
             properties.append(BackendOpsProperty(
                 metric_id=match.group(1), residual=float(match.group(2)),
                 tolerance=float(match.group(3)), passed=match.group(4) == "1",
-                suite_seed=int(match.group(5))))
+                suite_seed=int(match.group(5)),
+                transform=match.group(6) if match_v2 is not None else "identity",
+                receipt_version=2 if match_v2 is not None else 1))
         elif part.startswith("AK_LAYOUT_"):
             if layout is not None:
                 raise OutputParseError(
@@ -1467,6 +1513,17 @@ def _case_with_reference(*, op: str, params: str, status: str,
                     f"case {op}({params}) emitted malformed layout receipt {part!r}")
             layout = BackendOpsLayout(
                 families=tuple(match.group(1).split(",")), suite_seed=int(match.group(2)))
+        elif part.startswith("AK_VALUE_"):
+            if value_transforms is not None:
+                raise OutputParseError(
+                    f"case {op}({params}) emitted more than one value-transform receipt")
+            match = _VALUE_RECEIPT_RE.fullmatch(part)
+            if match is None:
+                raise OutputParseError(
+                    f"case {op}({params}) emitted malformed value-transform receipt {part!r}")
+            value_transforms = BackendOpsValueTransforms(
+                transforms=tuple(match.group(1).split(",")), completed=int(match.group(2)),
+                suite_seed=int(match.group(3)))
         else:
             diagnostics.append(part)
     if reference is not None and status != "ok":
@@ -1475,9 +1532,13 @@ def _case_with_reference(*, op: str, params: str, status: str,
     if any(not item.passed for item in properties) and status != "fail":
         raise OutputParseError(
             f"case {op}({params}) attached a failed property receipt to status {status}")
+    if value_transforms is not None and status == "ok" and value_transforms.completed != 4:
+        raise OutputParseError(
+            f"case {op}({params}) passed after only {value_transforms.completed}/4 transforms")
     return BackendOpsCase(op=op, params=params, status=status,
                           interleaved=" | ".join(diagnostics), reference=reference,
-                          properties=tuple(properties), layout=layout)
+                          properties=tuple(properties), layout=layout,
+                          value_transforms=value_transforms)
 
 
 @dataclass(frozen=True)
@@ -1558,6 +1619,11 @@ class BackendOpsRun:
     def layout_families(self) -> tuple:
         return tuple(sorted({family for case in self.cases if case.layout is not None
                              for family in case.layout.families}))
+
+    def value_transforms(self) -> tuple:
+        return tuple(sorted({transform for case in self.cases
+                             if case.value_transforms is not None
+                             for transform in case.value_transforms.transforms}))
 
     def cases_by_op(self) -> tuple:
         """`((op, total, passed), ...)` over the cases that were actually COMPARED.
@@ -1805,6 +1871,8 @@ def parse_backend_ops_csv(text: str) -> BackendOpsRun:
         error = cells[index["error_message"]]
         layout_receipt = (cells[index["layout_receipt"]]
                           if "layout_receipt" in index else "")
+        value_receipt = (cells[index["value_receipt"]]
+                         if "value_receipt" in index else "")
         property_receipt = (cells[index["property_receipt"]]
                             if "property_receipt" in index else "")
         reference_receipt = (cells[index["reference_receipt"]]
@@ -1814,7 +1882,8 @@ def parse_backend_ops_csv(text: str) -> BackendOpsRun:
                  "ok" if not error else "fail")
         interleaved = " | ".join(
             value for value in (
-                layout_receipt, property_receipt, reference_receipt, error) if value)
+                layout_receipt, value_receipt, property_receipt, reference_receipt,
+                error) if value)
         by_backend.setdefault(backend, []).append(_case_with_reference(
             op=cells[index["op_name"]], params=cells[index["op_params"]], status=state,
             interleaved=interleaved))
@@ -2230,6 +2299,7 @@ def build_backend_ops_invocation(*, binary: str, library_path: str, backend_filt
                                  ops: Sequence[str], base_env: Sequence[tuple],
                                  suite_seed: int = 0,
                                  layout_probe: bool = False,
+                                 value_transform_probe: bool = False,
                                  parameter_env: Sequence[tuple] = (),
                                  output_format: str = "console",
                                  params_filter: Optional[str] = None,
@@ -2255,11 +2325,16 @@ def build_backend_ops_invocation(*, binary: str, library_path: str, backend_filt
         raise ValueError("backend_ops.ops must be non-empty")
     _req_int(suite_seed, "backend_ops.suite_seed")
     _req_bool(layout_probe, "backend_ops.layout_probe")
+    _req_bool(value_transform_probe, "backend_ops.value_transform_probe")
+    if layout_probe and value_transform_probe:
+        raise ValueError("layout and value-transform probes must be separate invocations")
     argv: list = list(recipes.CANONICAL_PREFIX) if cpu_prefix else []
     argv += [binary, "test", "-o", ",".join(ops), "-b", backend_filter]
     argv += ["--suite-seed", str(suite_seed), "--autokernel-properties"]
     if layout_probe:
         argv += ["--autokernel-layouts"]
+    if value_transform_probe:
+        argv += ["--autokernel-value-transforms"]
     if params_filter is not None:
         argv += ["-p", params_filter]
     if parallel_workers is not None:
@@ -2281,6 +2356,9 @@ def build_backend_ops_invocation(*, binary: str, library_path: str, backend_filt
             ("--autokernel-layouts selects only layout-variant cases and makes an "
              "unsupported layout a hard failure" if layout_probe else
              "the independent layout-variant pass is not requested"),
+            ("--autokernel-value-transforms runs the fixed identity/x3/x0.01/negate "
+             "fail-any pass" if value_transform_probe else
+             "the independent value-transform pass is not requested"),
             "canonical prefix and OMP stack imported from evaluator.recipes, never retyped",
         ))
 
@@ -2461,6 +2539,7 @@ class ExecutedT0EvidenceProvider:
             base_env=self._plan.base_env,
             suite_seed=plan.suite_seed,
             layout_probe=plan.layout_probe,
+            value_transform_probe=plan.value_transform_probe,
             parameter_env=self._plan.parameter_env,
             parallel_workers=plan.parallel_workers,
             cpu_prefix=self._plan.backend == "llama_cpu")
@@ -2526,7 +2605,8 @@ class ExecutedT0EvidenceProvider:
                         residual=property_result.residual,
                         tolerance=property_result.tolerance,
                         suite_seed=property_result.suite_seed,
-                        passed=property_result.passed))
+                        passed=property_result.passed,
+                        input_transform=property_result.transform))
                 case_ordinal += 1
         layout_cases = tuple(case for case in run.cases if case.layout is not None)
         for case in layout_cases:
@@ -2534,6 +2614,26 @@ class ExecutedT0EvidenceProvider:
                 raise OutputParseError(
                     f"layout receipt for {case.op}({case.params}) carries suite_seed "
                     f"{case.layout.suite_seed}, expected {plan.suite_seed}")
+        value_cases = tuple(case for case in run.cases
+                            if case.value_transforms is not None)
+        if plan.value_transform_probe and len(value_cases) != len(run.cases):
+            missing = tuple(
+                f"{case.op}({case.params})" for case in run.cases
+                if case.value_transforms is None)
+            raise OutputParseError(
+                "value-transform pass emitted case(s) without AK_VALUE_V1 receipt: "
+                f"{missing}")
+        for case in value_cases:
+            if case.value_transforms.suite_seed != plan.suite_seed:
+                raise OutputParseError(
+                    f"value-transform receipt for {case.op}({case.params}) carries suite_seed "
+                    f"{case.value_transforms.suite_seed}, expected {plan.suite_seed}")
+            legacy_properties = tuple(
+                item.metric_id for item in case.properties if item.receipt_version != 2)
+            if legacy_properties:
+                raise OutputParseError(
+                    f"value-transform receipt for {case.op}({case.params}) has property "
+                    f"measurement(s) without AK_PROP_V2 transform binding: {legacy_properties}")
         return correctness.OpSuiteEvidence(
             suite_id=plan.suite_id,
             suite_source_sha256=plan.suite_source_sha256,
@@ -2548,6 +2648,9 @@ class ExecutedT0EvidenceProvider:
             layout_probe=plan.layout_probe,
             layout_families=run.layout_families(),
             layout_case_count=len(layout_cases),
+            value_transform_probe=plan.value_transform_probe,
+            value_transforms=run.value_transforms(),
+            value_transform_case_count=len(value_cases),
         )
 
     # -- boundary shapes ---------------------------------------------------

@@ -438,6 +438,37 @@ class TestCleanCandidatePasses(unittest.TestCase):
 
 class TestBackendOpUnits(unittest.TestCase):
 
+    def test_value_transform_probe_passes_only_with_the_fixed_four(self):
+        report = run(ev=evidence(op_suite=op_suite(
+            value_transform_probe=True,
+            value_transforms=("identity", "negate", "x0p01", "x3"),
+            value_transform_case_count=23)))
+        self.assertEqual(report.outcome(C.GID_OP_UNITS), S.PASS)
+
+    def test_value_transform_probe_with_missing_negate_fails(self):
+        report = run(ev=evidence(op_suite=op_suite(
+            value_transform_probe=True,
+            value_transforms=("identity", "x0p01", "x3"),
+            value_transform_case_count=23)))
+        gate = report.gate(C.GID_OP_UNITS)
+        self.assertEqual(gate.check.outcome, S.FAIL)
+        self.assertIn("negate", " ".join(gate.check.reasons))
+
+    def test_value_transform_probe_over_zero_cases_fails(self):
+        report = run(ev=evidence(op_suite=op_suite(
+            value_transform_probe=True, value_transforms=(),
+            value_transform_case_count=0)))
+        gate = report.gate(C.GID_OP_UNITS)
+        self.assertEqual(gate.check.outcome, S.FAIL)
+        self.assertIn("zero cases", " ".join(gate.check.reasons))
+
+    def test_layout_and_value_evidence_cannot_share_one_pass(self):
+        with self.assertRaises(ValueError):
+            op_suite(
+                layout_probe=True, layout_families=("offset",), layout_case_count=1,
+                value_transform_probe=True, value_transforms=("identity",),
+                value_transform_case_count=1)
+
     def test_layout_probe_passes_only_after_all_three_families_ran(self):
         report = run(ev=evidence(op_suite=op_suite(
             layout_probe=True,
@@ -470,6 +501,13 @@ class TestBackendOpUnits(unittest.TestCase):
         gate = report.gate(C.GID_OP_UNITS)
         self.assertEqual(gate.measurements, (measurement.to_dict(),))
         self.assertEqual(gate.to_dict()["measurements"][0]["suite_seed"], 4711)
+
+    def test_property_measurement_preserves_the_input_transform(self):
+        measurement = C.PropertyMeasurement(
+            shape_id="SOFT_MAX(type=f32)#0", op="SOFT_MAX", backend="CPU",
+            metric_id="softmax_invariants/v1", residual=0.0, tolerance=1e-4,
+            suite_seed=4711, passed=True, input_transform="x0p01")
+        self.assertEqual(measurement.to_dict()["input_transform"], "x0p01")
 
     def test_property_measurement_refuses_a_mismatched_suite_seed(self):
         measurement = C.PropertyMeasurement(
