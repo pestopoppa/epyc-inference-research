@@ -34,6 +34,11 @@ SCHEMA = "epyc.autokernel.c4_profile_capture.v1"
 PROFILER_ROOT = Path("/mnt/raid0/llm/tools/rocm-profilers-6.2")
 PROFILER_PREFIX = PROFILER_ROOT / "opt" / "rocm-6.2.0"
 _QUANT_TYPE_RE = re.compile(r"[A-Za-z0-9_]+")
+_STAGE_BY_WORKLOAD = {
+    "llama-prefill": "prefill",
+    "q4k-op": "decode",
+    "quant-op": "decode",
+}
 
 
 def utc_now() -> str:
@@ -70,6 +75,16 @@ def assert_source_identity(source_root: Path, expected_commit: str | None) -> st
         preview = "; ".join(dirty.splitlines()[:8])
         raise RuntimeError(f"C4 source tree is dirty: {preview}")
     return observed
+
+
+def resolve_stage(workload_kind: str, requested_stage: str | None) -> str:
+    """Bind the report stage to the runner's concrete workload semantics."""
+    expected = _STAGE_BY_WORKLOAD[workload_kind]
+    if requested_stage is not None and requested_stage != expected:
+        raise RuntimeError(
+            f"{workload_kind} captures are {expected}-stage evidence, not "
+            f"{requested_stage}-stage evidence")
+    return expected
 
 
 def profiler_environment(binary: Path, *, graphs_disabled: bool) -> dict[str, str]:
@@ -246,6 +261,11 @@ def manifest_for(mapping: dict, formal: dict, *, args: argparse.Namespace,
             "block_id": f"{quant_type.casefold()}-op-requantized-matvec",
             "kernel_families": [
                 "__amd_rocclr_fillBufferAligned", "quantize_q8_1", "mul_mat_vec_q"],
+            "kernel_family_aliases": [
+                ["__amd_rocclr_fillBufferAligned", "runtime_fill"],
+                ["quantize_q8_1"],
+                ["mul_mat_vec_q"],
+            ],
             "source_paths": [
                 "tests/test-backend-ops.cpp",
                 "ggml/src/ggml-cuda/quantize.cu",
@@ -256,6 +276,7 @@ def manifest_for(mapping: dict, formal: dict, *, args: argparse.Namespace,
         architecture_blocks = [{
             "block_id": "qwen2-prefill-quantized-matmul",
             "kernel_families": ["quantize_q8_1", "mul_mat_q"],
+            "kernel_family_aliases": [["quantize_q8_1"], ["mul_mat_q"]],
             "source_paths": ["src/models/qwen2.cpp"],
         }]
     return {
@@ -264,8 +285,11 @@ def manifest_for(mapping: dict, formal: dict, *, args: argparse.Namespace,
         "formal": capture(formal),
         "source_catalog_sha256": catalogue_hash,
         "cumulative_floor": profile_report.CUMULATIVE_FLOOR,
-        "catalogue_scope": "kernel_and_host",
-        "host_catalog_sha256": catalogue_hash,
+        # rocprofv2 kernel traces cannot observe scheduler/event-loop/executor,
+        # offload or load-path bottlenecks. Keep this scope truthful until a
+        # separately hash-bound host catalogue and host trace are paired in.
+        "catalogue_scope": "kernel_only",
+        "host_catalog_sha256": None,
         "patterns": [{
             "pattern_id": "q8-requant-overlap",
             "table": "overlap",
@@ -341,10 +365,7 @@ def run(args: argparse.Namespace) -> dict:
         if not path.is_file():
             raise RuntimeError(f"C4 {label} does not exist: {path}")
     args.source_commit = assert_source_identity(source_root, args.source_commit)
-    if args.stage is None:
-        args.stage = (
-            "decode" if args.workload_kind in ("q4k-op", "quant-op")
-            else "prefill")
+    args.stage = resolve_stage(args.workload_kind, args.stage)
     output_dir = Path(storage.assert_not_scratch(
         args.output_dir, what="C4 paired profile evidence directory"))
     output_dir.mkdir(parents=True, exist_ok=False)

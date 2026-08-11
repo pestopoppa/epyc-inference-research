@@ -186,19 +186,41 @@ class SourcePattern:
 class ArchitectureBlock:
     block_id: str
     kernel_families: tuple[str, ...]
+    kernel_family_aliases: tuple[tuple[str, ...], ...]
     source_paths: tuple[str, ...]
 
     def __post_init__(self) -> None:
         _text(self.block_id, "block_id")
         _string_tuple(self.kernel_families, "kernel_families")
+        if len(self.kernel_family_aliases) != len(self.kernel_families):
+            raise ProfileReportError(
+                "architecture kernel_family_aliases must align with kernel_families")
+        for index, (canonical, aliases) in enumerate(zip(
+                self.kernel_families, self.kernel_family_aliases, strict=True)):
+            _string_tuple(aliases, f"architecture kernel_family_aliases[{index}]")
+            if canonical not in aliases:
+                raise ProfileReportError(
+                    "each canonical architecture kernel family must appear in its aliases")
         _string_tuple(self.source_paths, "architecture source_paths")
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "ArchitectureBlock":
+        families = _string_tuple(
+            payload.get("kernel_families"), "architecture.kernel_families")
+        aliases = payload.get("kernel_family_aliases")
+        if aliases is None:
+            rendered_aliases = tuple((family,) for family in families)
+        elif not isinstance(aliases, (list, tuple)):
+            raise ProfileReportError(
+                "architecture.kernel_family_aliases must be a sequence")
+        else:
+            rendered_aliases = tuple(
+                _string_tuple(row, f"architecture.kernel_family_aliases[{index}]")
+                for index, row in enumerate(aliases))
         return cls(
             block_id=_text(payload.get("block_id"), "architecture.block_id"),
-            kernel_families=_string_tuple(
-                payload.get("kernel_families"), "architecture.kernel_families"),
+            kernel_families=families,
+            kernel_family_aliases=rendered_aliases,
             source_paths=_string_tuple(
                 payload.get("source_paths"), "architecture.source_paths"),
         )
@@ -251,6 +273,12 @@ class ReportManifest:
             raise ProfileReportError("mapping and formal captures must be stage-separated equally")
         if self.mapping.receipt.source_commit != self.formal.receipt.source_commit:
             raise ProfileReportError("mapping and formal captures must bind the same source commit")
+        if self.mapping.receipt.workload_id != self.formal.receipt.workload_id:
+            raise ProfileReportError("mapping and formal captures must bind the same workload")
+        if self.mapping.receipt.corpus_id == self.formal.receipt.corpus_id:
+            raise ProfileReportError("mapping and formal captures must have distinct corpus ids")
+        if self.mapping.receipt.profile_path == self.formal.receipt.profile_path:
+            raise ProfileReportError("mapping and formal captures must use distinct trace paths")
         _sha256_text(self.source_catalog_sha256, "source_catalog_sha256")
         if (not isinstance(self.cumulative_floor, (int, float)) or isinstance(
                 self.cumulative_floor, bool)
@@ -261,6 +289,9 @@ class ReportManifest:
             raise ProfileReportError(f"catalogue_scope must be one of {CATALOGUE_SCOPES}")
         if self.catalogue_scope == "kernel_and_host":
             _sha256_text(self.host_catalog_sha256, "host_catalog_sha256")
+            if self.host_catalog_sha256 == self.source_catalog_sha256:
+                raise ProfileReportError(
+                    "host catalogue must be independently hash-bound, not alias the kernel catalogue")
         elif self.host_catalog_sha256 is not None:
             raise ProfileReportError(
                 "host_catalog_sha256 is only valid with catalogue_scope=kernel_and_host")
@@ -326,6 +357,8 @@ class ReportManifest:
             "architecture_blocks": [{
                 "block_id": row.block_id,
                 "kernel_families": list(row.kernel_families),
+                "kernel_family_aliases": [
+                    list(aliases) for aliases in row.kernel_family_aliases],
                 "source_paths": list(row.source_paths),
             } for row in self.architecture_blocks],
             "profilers": [{
@@ -391,19 +424,23 @@ def _canonical_sha256(payload: Mapping[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _exact_sequence_count(haystack: Sequence[str], needle: Sequence[str]) -> int:
-    if not needle or len(needle) > len(haystack):
+def _exact_architecture_count(
+        haystack: Sequence[str], aliases: Sequence[Sequence[str]]) -> int:
+    """Count a reviewed logical sequence while tolerating declared family renames."""
+    if not aliases or len(aliases) > len(haystack):
         return 0
     return sum(
-        tuple(haystack[index:index + len(needle)]) == tuple(needle)
-        for index in range(len(haystack) - len(needle) + 1)
+        all(haystack[index + offset] in accepted
+            for offset, accepted in enumerate(aliases))
+        for index in range(len(haystack) - len(aliases) + 1)
     )
 
 
 def _pattern_rows(patterns: Iterable[SourcePattern],
                   mapping: Sequence[prior_art.ProfileDispatch],
                   formal: Sequence[prior_art.ProfileDispatch],
-                  formal_shares: Mapping[str, float], table: str
+                  formal_shares: Mapping[str, float], table: str,
+                  cumulative_floor: float,
                   ) -> tuple[Mapping[str, Any], ...]:
     rows = []
     for pattern in patterns:
@@ -414,14 +451,17 @@ def _pattern_rows(patterns: Iterable[SourcePattern],
         if not mapping_match and not formal_match:
             continue
         formal_families = pattern.matched_families(formal)
+        formal_time_share = sum(
+            formal_shares.get(name, 0.0) for name in formal_families)
+        if formal_time_share < cumulative_floor:
+            continue
         rows.append({
             "pattern_id": pattern.pattern_id,
             "mapping_match": mapping_match,
             "formal_match": formal_match,
             "matched_mapping_families": list(pattern.matched_families(mapping)),
             "matched_formal_families": list(formal_families),
-            "formal_time_share": sum(formal_shares.get(name, 0.0)
-                                     for name in formal_families),
+            "formal_time_share": formal_time_share,
             "source_symbols": list(pattern.source_symbols),
             "source_paths": list(pattern.source_paths),
             "reader_should_conclude": pattern.reader_should_conclude,
@@ -452,14 +492,19 @@ def run_profile_report(mapping_path: str | Path, formal_path: str | Path,
     formal_shares = {
         row.kernel_family: row.finding.gpu_time_share for row in formal_findings}
     overlap = _pattern_rows(
-        manifest.patterns, mapping, formal, formal_shares, "overlap")
-    fuse = _pattern_rows(manifest.patterns, mapping, formal, formal_shares, "fuse")
+        manifest.patterns, mapping, formal, formal_shares, "overlap",
+        manifest.cumulative_floor)
+    fuse = _pattern_rows(
+        manifest.patterns, mapping, formal, formal_shares, "fuse",
+        manifest.cumulative_floor)
     mapping_families = tuple(row.kernel_family for row in mapping)
     architecture_rows = tuple({
         "block_id": block.block_id,
-        "exact_sequence_occurrences": _exact_sequence_count(
-            mapping_families, block.kernel_families),
+        "exact_sequence_occurrences": _exact_architecture_count(
+            mapping_families, block.kernel_family_aliases),
         "kernel_families": list(block.kernel_families),
+        "kernel_family_aliases": [
+            list(aliases) for aliases in block.kernel_family_aliases],
         "source_paths": list(block.source_paths),
     } for block in sorted(manifest.architecture_blocks, key=lambda item: item.block_id))
     gaps = []

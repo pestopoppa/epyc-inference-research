@@ -40,6 +40,14 @@ class CaptureAutokernelC4ProfileTest(unittest.TestCase):
         self.assertEqual(args.binary, "/tmp/test-backend-ops")
         self.assertEqual(args.quant_type, "iq2_xxs")
 
+    def test_stage_is_derived_from_workload_and_mislabeling_is_refused(self):
+        self.assertEqual(C.resolve_stage("llama-prefill", None), "prefill")
+        self.assertEqual(C.resolve_stage("quant-op", None), "decode")
+        with self.assertRaisesRegex(RuntimeError, "not decode-stage"):
+            C.resolve_stage("llama-prefill", "decode")
+        with self.assertRaisesRegex(RuntimeError, "not prefill-stage"):
+            C.resolve_stage("q4k-op", "prefill")
+
     def test_quant_op_command_is_exactly_shape_and_type_scoped(self):
         command = C.bench_command(
             Path("/bin/test-backend-ops"), None, repetitions=5,
@@ -65,14 +73,23 @@ class CaptureAutokernelC4ProfileTest(unittest.TestCase):
             "role": "mapping", "attribution_mode": "graphs_disabled",
             "warmup_steps": 10, "active_steps": 5, "receipt": receipt,
         }
+        formal_receipt = type("Receipt", (), {
+            "corpus_id": "f", "workload_id": "w", "profile_path": "p-formal",
+            "profile_sha256": "3" * 64, "source_commit": "deadbeef",
+        })()
         formal = dict(capture, role="formal",
-                      attribution_mode="production_optimizations")
+                      attribution_mode="production_optimizations",
+                      receipt=formal_receipt)
         manifest = C.manifest_for(
             capture, formal, args=self.args(), catalogue_hash="2" * 64)
         self.assertEqual(manifest["mapping"]["stage"], "decode")
         self.assertEqual(
             manifest["architecture_blocks"][0]["block_id"],
             "iq2_xxs-op-requantized-matvec")
+        self.assertEqual(manifest["catalogue_scope"], "kernel_only")
+        self.assertIsNone(manifest["host_catalog_sha256"])
+        validated = C.profile_report.ReportManifest.from_dict(manifest)
+        self.assertEqual(validated.mapping.receipt.workload_id, "w")
 
     def test_artifact_inventory_hashes_files_and_excludes_receipt(self):
         with tempfile.TemporaryDirectory() as tmp:
