@@ -18,6 +18,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -25,9 +26,6 @@ from types import SimpleNamespace
 from typing import Any, Mapping
 
 from . import arena_adapter
-from .arena_cell_runner import _terminate_captured_process_group
-
-
 MODEL_ID = "gpt-5.6-sol"
 MODEL_EFFORT = "high"
 PINNED_MODEL_IDS = (f"{MODEL_ID}:{MODEL_EFFORT}:upstream-controller",)
@@ -42,6 +40,49 @@ class UpstreamControllerError(RuntimeError):
 
 class ControllerBudgetExpired(UpstreamControllerError):
     """The matched controller wall-time budget has been exhausted."""
+
+
+def _live_process_group_members(process_group_id: int) -> tuple[int, ...]:
+    members: list[int] = []
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            stat = (entry / "stat").read_text(encoding="utf-8")
+            fields = stat[stat.rfind(")") + 2:].split()
+            state = fields[0]
+            group = int(fields[2])
+        except (FileNotFoundError, IndexError, PermissionError, ValueError):
+            continue
+        if group == process_group_id and state != "Z":
+            members.append(int(entry.name))
+    return tuple(sorted(members))
+
+
+def _terminate_captured_process_group(
+    process_group_id: int, *, grace_seconds: float = 5.0,
+) -> None:
+    if process_group_id <= 1 or process_group_id == os.getpgrp():
+        raise UpstreamControllerError("refusing an unsafe process-group target")
+    members = _live_process_group_members(process_group_id)
+    if not members:
+        return
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.killpg(process_group_id, sig)
+        except ProcessLookupError:
+            return
+        deadline = time.monotonic() + grace_seconds
+        while time.monotonic() < deadline:
+            members = _live_process_group_members(process_group_id)
+            if not members:
+                return
+            time.sleep(0.05)
+    members = _live_process_group_members(process_group_id)
+    if members:
+        raise UpstreamControllerError(
+            f"model process group {process_group_id} survived teardown: "
+            f"{list(members)}")
 
 
 def _sha256_file(path: Path) -> str:
