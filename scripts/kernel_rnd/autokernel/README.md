@@ -200,6 +200,7 @@ calibration exists. Source-changing campaigns additionally require their own
 | `../../benchmark/run_autokernel_async_prefetch_replay.py` | **Known-real GPU replay.** Runs a balanced 20-block frozen-v9 comparison of `GGML_CUDA_Q8_PREFETCH=1` versus `0` on the original Qwen3.6-27B Q8 tg128 cell. It binds every producer source, binary, linkage and model hash; holds and samples the MI210; applies the locally measured absolute duration floor; and retains every raw repetition. Its result is a GPU-lane historical replay, not v9 CPU calibration or a production mutation. |
 | `../../benchmark/run_inf37_iq2_fancy_simd_ab.py` | **IQ2_XXS SIMD diagnostic.** Runs balanced fresh-process baseline/candidate blocks for the exact `n=1` and `n=512` CPU matmul cells under a full-machine exclusion claim, with the single-thread micro-target pinned to CPU 72 and NUMA node 3. It binds the frozen-v9 source, exact one-line candidate diff, binaries, build-local linkage, raw SQL timings, and claim release. The receipt is screening-only and cannot promote a kernel or replace the model-level RAPL-gated controls. |
 | `../../benchmark/run_autokernel_q4k_unpack_attribution.py` | **INF-37 Q4_K direct-PMC attribution.** Future passing rocprofv2 receipts emit separate Q4_K-minus-Q4_0 and Q4_K-minus-Q8_0 VALU/wave, INT32/wave, and dispatch-duration rows. Every row binds the exact arm/control/shape/counter basis plus source, binary, producer, profiler, evidence, device-claim, measurement-self, and receipt-self digests. Duration remains diagnostic fused-dispatch evidence: no row invents unpack wall share or promotion authority. The admitted pre-hook r7 receipt remains unchanged and projects no belief rows. |
+| `../../benchmark/autokernel_iq2_model_beliefs.py` | **EVL-47 SC23b prospective model-belief finalizer.** Emits separate higher-is-better TG and PP rows for both anchor and candidate only from a new `epyc.autokernel.iq2_xxs_model_confirmation.v1` receipt whose admitted T1/T2 events, exact llama-bench raw vectors, candidate/build/model/anchor identities, and released CPU claim all agree. It refuses old receipts and write-once re-finalization, so the micro result can never be relabelled as model evidence. |
 | `hipkittens_lds.py` | **INF-03 offline gfx90a adapter.** Solves LDS bank count from the complete four-bank overlap pattern, validates the all-pairs phase relation, reads hash-bound rocprofv2/v3 counter CSVs, and projects a diagnostic-only authoring-context item. It neither launches a profiler nor assumes the CDNA3 answer transfers. |
 | `c5_seed_corpus.py` | **C5 static seed registry.** Pins the eight intake-884 HyRA SOL-ExecBench artifacts and their NVIDIA/Hopper-only attestations, separates direct Triton references from CUDA-bound re-authoring targets, and emits non-numeric gfx90a task context. No upstream latency or SOL score is admitted as an MI210 target. |
 | `evaluator/c3_epyc_suite.py` | **INF-48 C3/C5 exit contract.** Selects hash-bound attention and MoE C5 cases plus an explicitly EPYC-native Q4_K dequant case; requires exact captured-tensor surfaces, vendor rather than eager baselines, correctness-first `fast_p`, and a matched whole-model re-bench through the case's declared integration. Missing evidence is `COULD_NOT_CHECK`, and the reducer has no release or promotion authority. |
@@ -211,6 +212,27 @@ calibration exists. Source-changing campaigns additionally require their own
 | `offline_least_commitment.py` | The observe-only AK-WM-2/AP-WM-1 diagnostic over matched completed-proposal archives; it has no live selection authority. |
 | `turn_productivity.py` | **AK-PT-1 / AK-X-6.** Immutable per-refine-turn `(turn, task, correct?, speedup)` records, mechanically derived rescued/persistent classes, and a campaign-calibration-derived e-process rule. It may label a turn repair-only and withhold search advancement; it has no ranking, retention, promotion, or deployment authority. |
 | `dashboard.py` | **AK6.** The compact `/kernel` contract-v2 producer retained by the campaign path after the old `surface/` plane was deleted. It projects only the already-fsynced terminal `STOP_STATE`: campaign and backend standing are observed; champion, headroom and release package are explicitly `not_reported`; journal time drives freshness; and the atomic export is refused under scratch, a production tree, or any checkout. |
+
+### IQ2_XXS model-confirmation belief finalization
+
+`autokernel_iq2_model_beliefs.py` is called by the future model-confirmation runner before that
+runner publishes its receipt. Its input is the unfinalized
+`epyc.autokernel.iq2_xxs_model_confirmation.v1` envelope: exact `model_identity`, the formal
+`candidate_record`, one shared `anchor_identity`, the released CPU claim receipt, and exactly two
+lanes (`tg`, `pp`). Each lane carries its admitted T1 event, its admitted T2 event, and the complete
+`microbench_raw_vector.v1` material named by the T2 event. Finalization is intentionally write-once:
+
+```bash
+python3 scripts/benchmark/autokernel_iq2_model_beliefs.py \
+  --input prospective-model-confirmation.json \
+  --output finalized-model-confirmation.json
+```
+
+The finalizer emits four `belief_measurements` (TG/PP × anchor/candidate). Every row preserves the
+model/quant, source snapshot, patch/build/binary/linkage, anchor, recipe, block/sample denominator,
+claim release, T1/T2 event digests, raw-vector digests, producer digest, source-receipt digest, and a
+row self-digest. It does not run inference and cannot consume the older screening-only INF-37
+receipt.
 
 AK-DEL-1 is replayable from
 `data/autokernel/prior_art/ak-del-1-k25-q8-mmvq-n1-20260717/`. The checked-in
