@@ -21,6 +21,7 @@ from scripts.kernel_rnd.autokernel.execution import cpu_region_claim
 
 
 SCHEMA = "epyc.inf37.iq2_fancy_simd_ab.v1"
+PRODUCER_ID = "autokernel.inf37.iq2_fancy_simd_ab/v1"
 CPU_LIST = "0-191"
 RUN_CPU_LIST = "72"
 RUN_MEMORY_NODE = "3"
@@ -196,6 +197,55 @@ def summarize(invocations: list[dict], blocks: int) -> dict:
     }
 
 
+def belief_measurements(
+    summary: dict, *, blocks: int, source_identity: dict,
+    binary_identity: dict, claim_id: str,
+) -> list[dict]:
+    """Project raw arm times into prospective, producer-written belief rows."""
+    if not isinstance(claim_id, str) or not claim_id:
+        raise ValueError("claim_id must be non-empty")
+    rows = []
+    for cell in summary["cells"]:
+        for arm in ("baseline", "candidate"):
+            values = sorted(
+                float(pair[f"{arm}_time_us"])
+                for pair in cell["paired_blocks"]
+            )
+            if len(values) != blocks:
+                raise ValueError(
+                    f"n={cell['n']} {arm} has {len(values)} scored blocks; expected {blocks}")
+            middle = len(values) // 2
+            median = ((values[middle - 1] + values[middle]) / 2
+                      if len(values) % 2 == 0 else values[middle])
+            binary = binary_identity[arm]
+            rows.append({
+                "measurement_id": f"iq2_xxs_n{cell['n']}_{arm}_median_time_us",
+                "metric": "iq2_xxs_backend_op_median_time_us",
+                "value": median,
+                "unit": "us",
+                "metric_direction": "lower_better",
+                "category": "BASELINE" if arm == "baseline" else "CANDIDATE",
+                "reps": blocks,
+                "reps_basis": "scored:balanced paired fresh-process blocks",
+                "claim": (
+                    f"IQ2_XXS m={cell['m']} n={cell['n']} k={cell['k']} {arm} "
+                    f"median backend-op time is {median:.6f} us"),
+                "extra": {
+                    "measurement_role": "kernel_authoring_screening",
+                    "arm": arm,
+                    "shape": {key: cell[key] for key in ("m", "n", "k")},
+                    "source_commit": source_identity["commit"],
+                    "candidate_diff_sha256": source_identity["candidate_diff_sha256"],
+                    "source_sha256": source_identity[f"{arm}_source_sha256"],
+                    "binary_path": binary["path"],
+                    "binary_sha256": binary["sha256"],
+                    "ggml_cpu_row": binary["ggml_cpu_row"],
+                    "resource_claim_receipt": claim_id,
+                },
+            })
+    return rows
+
+
 def write_json_atomic(path: Path, payload: dict) -> None:
     temporary = path.with_name(f".{path.name}.tmp-{os.getpid()}")
     with temporary.open("w", encoding="utf-8") as handle:
@@ -207,6 +257,7 @@ def write_json_atomic(path: Path, payload: dict) -> None:
 
 
 def run(args: argparse.Namespace) -> dict:
+    started_at = utc_now()
     output = Path(storage.assert_not_scratch(
         args.output_dir, what="INF-37 IQ2 fancy-SIMD evidence directory"))
     output.mkdir(parents=True, exist_ok=False)
@@ -274,10 +325,18 @@ def run(args: argparse.Namespace) -> dict:
         captured_error = exc
     finally:
         released = claim.release().to_dict()
+    summary = summarize(invocations, args.blocks) if captured_error is None else None
+    measurements = (belief_measurements(
+        summary, blocks=args.blocks, source_identity=identity,
+        binary_identity=binary_identity, claim_id=opened["claim_id"])
+        if summary is not None else [])
     payload = {
         "schema": SCHEMA,
+        "producer_id": PRODUCER_ID,
         "campaign_id": args.campaign_id,
-        "created_at": utc_now(),
+        "created_at": started_at,
+        "started_at": started_at,
+        "ended_at": utc_now(),
         "status": "failed" if captured_error else "complete",
         "evidence_grade": "diagnostic_screening",
         "package_energy_required": False,
@@ -295,7 +354,8 @@ def run(args: argparse.Namespace) -> dict:
         "device_claim_open": opened,
         "device_claim_released": released,
         "invocations": invocations,
-        "summary": summarize(invocations, args.blocks) if captured_error is None else None,
+        "summary": summary,
+        "belief_measurements": measurements,
         "error": None if captured_error is None else {
             "type": type(captured_error).__name__, "message": str(captured_error)},
     }
