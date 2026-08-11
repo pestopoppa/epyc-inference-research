@@ -241,6 +241,7 @@ def sanitizers(**overrides) -> C.SanitizerEvidence:
 def op_suite(**overrides) -> C.OpSuiteEvidence:
     kwargs = dict(
         suite_id="test-backend-ops", suite_source_sha256=sha("cand-source"),
+        suite_seed=4711,
         ops_exercised=("MUL_MAT", "MUL_MAT_ID"), ops_failed=(),
         cases_by_op=(("MUL_MAT", 4231, 4231), ("MUL_MAT_ID", 1188, 1188)),
         shapes_ref="data/ak/akc-0001/shapes.json",
@@ -349,7 +350,12 @@ def anti_hack(**overrides) -> C.AntiRewardHackingEvidence:
         environment_probe_findings=(), timing_dependent_branch_findings=(),
         receipt_ref="data/ak/akc-0001/integrity.json",
         environment_probe_detector_id="environment-probe/v1",
-        timing_dependent_branch_detector_id="timing-branch/v1")
+        timing_dependent_branch_detector_id="timing-branch/v1",
+        stream_creation_detector_id="stream-creation/v1",
+        async_escape_detector_id="async-escape/v1",
+        instrument_frame_detector_id="instrument-frame/v1",
+        pointer_memoization_detector_id="pointer-memoization/v1",
+        structured_short_circuit_detector_id="structured-short-circuit/v1")
     kwargs.update(overrides)
     return C.AntiRewardHackingEvidence(**kwargs)
 
@@ -431,6 +437,115 @@ class TestCleanCandidatePasses(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestBackendOpUnits(unittest.TestCase):
+
+    def test_stateful_probe_passes_only_after_all_four_targets_ran(self):
+        report = run(ev=evidence(op_suite=op_suite(
+            stateful_probe=True,
+            stateful_ops=("FLASH_ATTN_EXT", "GATED_DELTA_NET", "SSM_CONV", "SSM_SCAN"),
+            stateful_case_count=12)))
+        self.assertEqual(report.outcome(C.GID_OP_UNITS), S.PASS)
+
+    def test_stateful_probe_with_missing_gdn_fails(self):
+        report = run(ev=evidence(op_suite=op_suite(
+            stateful_probe=True,
+            stateful_ops=("FLASH_ATTN_EXT", "SSM_CONV", "SSM_SCAN"),
+            stateful_case_count=9)))
+        gate = report.gate(C.GID_OP_UNITS)
+        self.assertEqual(gate.check.outcome, S.FAIL)
+        self.assertIn("GATED_DELTA_NET", " ".join(gate.check.reasons))
+
+    def test_stateful_probe_over_zero_cases_fails(self):
+        report = run(ev=evidence(op_suite=op_suite(
+            stateful_probe=True, stateful_ops=(), stateful_case_count=0)))
+        gate = report.gate(C.GID_OP_UNITS)
+        self.assertEqual(gate.check.outcome, S.FAIL)
+        self.assertIn("zero cases", " ".join(gate.check.reasons))
+
+    def test_stateful_and_value_evidence_cannot_share_one_pass(self):
+        with self.assertRaises(ValueError):
+            op_suite(
+                stateful_probe=True, stateful_ops=("SSM_SCAN",), stateful_case_count=1,
+                value_transform_probe=True, value_transforms=("identity",),
+                value_transform_case_count=1)
+
+    def test_value_transform_probe_passes_only_with_the_fixed_four(self):
+        report = run(ev=evidence(op_suite=op_suite(
+            value_transform_probe=True,
+            value_transforms=("identity", "negate", "x0p01", "x3"),
+            value_transform_case_count=23)))
+        self.assertEqual(report.outcome(C.GID_OP_UNITS), S.PASS)
+
+    def test_value_transform_probe_with_missing_negate_fails(self):
+        report = run(ev=evidence(op_suite=op_suite(
+            value_transform_probe=True,
+            value_transforms=("identity", "x0p01", "x3"),
+            value_transform_case_count=23)))
+        gate = report.gate(C.GID_OP_UNITS)
+        self.assertEqual(gate.check.outcome, S.FAIL)
+        self.assertIn("negate", " ".join(gate.check.reasons))
+
+    def test_value_transform_probe_over_zero_cases_fails(self):
+        report = run(ev=evidence(op_suite=op_suite(
+            value_transform_probe=True, value_transforms=(),
+            value_transform_case_count=0)))
+        gate = report.gate(C.GID_OP_UNITS)
+        self.assertEqual(gate.check.outcome, S.FAIL)
+        self.assertIn("zero cases", " ".join(gate.check.reasons))
+
+    def test_layout_and_value_evidence_cannot_share_one_pass(self):
+        with self.assertRaises(ValueError):
+            op_suite(
+                layout_probe=True, layout_families=("offset",), layout_case_count=1,
+                value_transform_probe=True, value_transforms=("identity",),
+                value_transform_case_count=1)
+
+    def test_layout_probe_passes_only_after_all_three_families_ran(self):
+        report = run(ev=evidence(op_suite=op_suite(
+            layout_probe=True,
+            layout_families=("offset", "stride_gap", "transpose"),
+            layout_case_count=17)))
+        self.assertEqual(report.outcome(C.GID_OP_UNITS), S.PASS)
+
+    def test_layout_probe_with_a_missing_family_fails(self):
+        report = run(ev=evidence(op_suite=op_suite(
+            layout_probe=True, layout_families=("offset", "stride_gap"),
+            layout_case_count=9)))
+        gate = report.gate(C.GID_OP_UNITS)
+        self.assertEqual(gate.check.outcome, S.FAIL)
+        self.assertIn("transpose", " ".join(gate.check.reasons))
+
+    def test_layout_probe_over_zero_cases_fails(self):
+        report = run(ev=evidence(op_suite=op_suite(
+            layout_probe=True, layout_families=(), layout_case_count=0)))
+        gate = report.gate(C.GID_OP_UNITS)
+        self.assertEqual(gate.check.outcome, S.FAIL)
+        self.assertIn("zero cases", " ".join(gate.check.reasons))
+
+    def test_property_residuals_travel_as_structured_gate_measurements(self):
+        measurement = C.PropertyMeasurement(
+            shape_id="SOFT_MAX(type=f32,ne=[83,2,1,1])#0",
+            op="SOFT_MAX", backend="CPU", metric_id="softmax_invariants/v1",
+            residual=2.5e-08, tolerance=1e-4, suite_seed=4711, passed=True)
+        report = run(ev=evidence(op_suite=op_suite(
+            property_measurements=(measurement,))))
+        gate = report.gate(C.GID_OP_UNITS)
+        self.assertEqual(gate.measurements, (measurement.to_dict(),))
+        self.assertEqual(gate.to_dict()["measurements"][0]["suite_seed"], 4711)
+
+    def test_property_measurement_preserves_the_input_transform(self):
+        measurement = C.PropertyMeasurement(
+            shape_id="SOFT_MAX(type=f32)#0", op="SOFT_MAX", backend="CPU",
+            metric_id="softmax_invariants/v1", residual=0.0, tolerance=1e-4,
+            suite_seed=4711, passed=True, input_transform="x0p01")
+        self.assertEqual(measurement.to_dict()["input_transform"], "x0p01")
+
+    def test_property_measurement_refuses_a_mismatched_suite_seed(self):
+        measurement = C.PropertyMeasurement(
+            shape_id="SOFT_MAX(type=f32)#0", op="SOFT_MAX", backend="CPU",
+            metric_id="softmax_invariants/v1", residual=0.0, tolerance=1e-4,
+            suite_seed=99, passed=True)
+        with self.assertRaises(ValueError):
+            op_suite(property_measurements=(measurement,))
 
     def test_mul_mat_only_suite_fails_the_way_kernel_eval_sh_did_not(self):
         """`test-backend-ops -o MUL_MAT`, all cases passing, MUL_MAT_ID never run."""
@@ -1233,6 +1348,30 @@ class TestReferenceAndDispatchSurfaces(unittest.TestCase):
             comparisons=reference().comparisons[:1] + (loose,))))
         self.assertEqual(report.outcome(C.GID_EXACT_REFERENCE), S.FAIL)
 
+    def test_declared_metric_within_tolerance_passes(self):
+        bounded = C.ReferenceComparison(
+            shape_id="m4096n1k4096-q4_K", op="MUL_MAT", mode="metric_bounded",
+            mismatch_count=0, max_ulp_observed=None, tolerance_ulp=None,
+            oracle_id="ggml_cpu_reference/v1", oracle_is_candidate_derived=False,
+            metric_id="test_backend_ops_error/v1", max_error_observed=2.5e-9,
+            tolerance_error=1e-7)
+        report = run(ev=evidence(reference=reference(
+            comparisons=(bounded,) + reference().comparisons[1:])))
+        self.assertEqual(report.outcome(C.GID_EXACT_REFERENCE), S.PASS)
+
+    def test_declared_metric_beyond_tolerance_fails(self):
+        bounded = C.ReferenceComparison(
+            shape_id="m4096n1k4096-q4_K", op="MUL_MAT", mode="metric_bounded",
+            mismatch_count=0, max_ulp_observed=None, tolerance_ulp=None,
+            oracle_id="ggml_cpu_reference/v1", oracle_is_candidate_derived=False,
+            metric_id="test_backend_ops_error/v1", max_error_observed=2e-6,
+            tolerance_error=1e-7)
+        report = run(ev=evidence(reference=reference(
+            comparisons=(bounded,) + reference().comparisons[1:])))
+        gate = report.gate(C.GID_EXACT_REFERENCE)
+        self.assertEqual(gate.check.outcome, S.FAIL)
+        self.assertIn("test_backend_ops_error/v1", " ".join(gate.check.reasons))
+
     def test_a_candidate_derived_oracle_is_refused(self):
         cheating = C.ReferenceComparison(
             shape_id="m4096n1k4096-q4_K", op="MUL_MAT", mode="exact_bitwise",
@@ -1707,7 +1846,12 @@ class TestAntiRewardHacking(unittest.TestCase):
     def test_empty_findings_from_detectors_that_did_not_run_are_unknown(self):
         report = run(ev=evidence(anti_reward_hacking=anti_hack(
             environment_probe_detector_id=None,
-            timing_dependent_branch_detector_id=None)))
+            timing_dependent_branch_detector_id=None,
+            stream_creation_detector_id=None,
+            async_escape_detector_id=None,
+            instrument_frame_detector_id=None,
+            pointer_memoization_detector_id=None,
+            structured_short_circuit_detector_id=None)))
         gate = report.gate(C.GID_ANTI_REWARD_HACKING)
         self.assertEqual(gate.check.outcome, S.COULD_NOT_CHECK)
         self.assertIn("did not run", " ".join(gate.check.reasons))
@@ -1716,6 +1860,32 @@ class TestAntiRewardHacking(unittest.TestCase):
         report = run(ev=evidence(anti_reward_hacking=anti_hack(
             timing_dependent_branch_findings=("kernel.hip:7:rdtsc",))))
         self.assertEqual(report.outcome(C.GID_ANTI_REWARD_HACKING), S.FAIL)
+
+    def test_candidate_added_stream_creation_fails(self):
+        report = run(ev=evidence(anti_reward_hacking=anti_hack(
+            stream_creation_findings=("kernel.hip:9:hipStreamCreate",))))
+        gate = report.gate(C.GID_ANTI_REWARD_HACKING)
+        self.assertEqual(gate.check.outcome, S.FAIL)
+        self.assertIn("escape the bracket", " ".join(gate.check.reasons))
+
+    def test_candidate_added_async_work_fails(self):
+        report = run(ev=evidence(anti_reward_hacking=anti_hack(
+            async_escape_findings=("kernel.cpp:12:std::thread",))))
+        gate = report.gate(C.GID_ANTI_REWARD_HACKING)
+        self.assertEqual(gate.check.outcome, S.FAIL)
+        self.assertIn("outlives the timed bracket", " ".join(gate.check.reasons))
+
+    def test_frame_pointer_and_structured_shortcuts_each_fail(self):
+        cases = (
+            ("instrument_frame_findings", "tools/llama-bench/llama-bench.cpp:9"),
+            ("pointer_memoization_findings", "kernel.hip:4:pointer cache"),
+            ("structured_short_circuit_findings", "kernel.hip:8:n == 128"),
+        )
+        for field, finding in cases:
+            with self.subTest(field=field):
+                report = run(ev=evidence(anti_reward_hacking=anti_hack(
+                    **{field: (finding,)})))
+                self.assertEqual(report.outcome(C.GID_ANTI_REWARD_HACKING), S.FAIL)
 
     def test_a_fail_is_not_downgraded_by_an_unknown(self):
         report = run(ev=evidence(anti_reward_hacking=anti_hack(

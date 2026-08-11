@@ -608,6 +608,7 @@ class EndToEndScenario(unittest.TestCase):
                 log_ref="data/ak/akc-0001/sanitizer.log", produced_by="evaluator"),
             op_suite=CO.OpSuiteEvidence(
                 suite_id="test-backend-ops", suite_source_sha256=sha("cand-source"),
+                suite_seed=4711,
                 ops_exercised=("MUL_MAT", "MUL_MAT_ID"), ops_failed=(),
                 cases_by_op=(("MUL_MAT", 4231, 4231), ("MUL_MAT_ID", 1188, 1188)),
                 shapes_ref="data/ak/akc-0001/shapes.json",
@@ -687,7 +688,12 @@ class EndToEndScenario(unittest.TestCase):
                 timing_dependent_branch_findings=(),
                 receipt_ref="data/ak/akc-0001/integrity.json",
                 environment_probe_detector_id="environment-probe/v1",
-                timing_dependent_branch_detector_id="timing-branch/v1"),
+                timing_dependent_branch_detector_id="timing-branch/v1",
+                stream_creation_detector_id="stream-creation/v1",
+                async_escape_detector_id="async-escape/v1",
+                instrument_frame_detector_id="instrument-frame/v1",
+                pointer_memoization_detector_id="pointer-memoization/v1",
+                structured_short_circuit_detector_id="structured-short-circuit/v1"),
         )
         kwargs.update(overrides)
         return CO.T0Evidence(**kwargs)
@@ -1083,6 +1089,7 @@ class EndToEndScenario(unittest.TestCase):
                 op_suite=CO.OpSuiteEvidence(
                     suite_id="test-backend-ops",
                     suite_source_sha256=sha("cand-source"),
+                    suite_seed=4711,
                     ops_exercised=("MUL_MAT",), ops_failed=(),
                     cases_by_op=(("MUL_MAT", 4231, 4231),),
                     shapes_ref="s", receipt_ref="r", produced_by="evaluator"))}),

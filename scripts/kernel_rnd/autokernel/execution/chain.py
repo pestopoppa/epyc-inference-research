@@ -146,6 +146,7 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
 from .. import schemas
@@ -176,6 +177,7 @@ __all__ = [
     # seam 5 — symbols and registrations
     "SymbolEvidence",
     "symbol_evidence",
+    "iqk_parameter_symbol_evidence",
     # seam 6 — the diff
     "DiffEvidence",
     "diff_policy_evidence",
@@ -453,6 +455,7 @@ class BuildEvidence:
                 "production_tree_paths_touched":
                     list(self.provenance.production_tree_paths_touched),
                 "output_binary_sha256": self.provenance.output_binary_sha256,
+                "warnings_as_errors": self.provenance.warnings_as_errors,
             },
             "checks": [[name, {"outcome": c.outcome, "reasons": list(c.reasons)}]
                        for name, c in self.checks],
@@ -582,6 +585,12 @@ def build_evidence(identity: worktree.BuildIdentity, *,
         # anything the candidate declared — the same attribution `symbol_evidence`
         # records above.
         produced_by="evaluator",
+        # This is projected from the configure receipt, not asserted by the
+        # candidate. LLAMA_FATAL_WARNINGS drives both llama and ggml CMake
+        # warning policy in the upstream tree.
+        warnings_as_errors=(
+            str(dict(identity.cmake_defines).get("LLAMA_FATAL_WARNINGS", "OFF")).upper()
+            in ("1", "ON", "TRUE", "YES")),
     )
     return BuildEvidence(provenance=provenance, checks=tuple(checks), notes=tuple(notes))
 
@@ -1241,6 +1250,74 @@ def symbol_evidence(*, anchor_binary: Any, candidate_binary: Any,
         checks=tuple(checks), notes=tuple(notes))
 
 
+_IQK_OP_REGISTRATION_PATTERNS = {
+    "iqk_cpu_hook": r"\bggml_iqk_try_(?P<key>mul_mat(?:_id)?)\s*\(",
+}
+_IQK_DISPATCH_PATTERNS = {
+    "iqk_weight_type": r"\bcase\s+GGML_TYPE_(?P<key>[A-Z0-9_]+)\s*:",
+}
+
+
+def iqk_parameter_symbol_evidence(*, anchor_binary: Any, candidate_binary: Any,
+                                  anchor: AnchorBinding, proposal: Mapping[str, Any],
+                                  anchor_root: Any, candidate_root: Any) -> SymbolEvidence:
+    """The registered IQK adapter's symbol/registration projection.
+
+    This belongs at the chain seam, not in ``campaign.py``: the lean driver is
+    forbidden from importing the low-level integrity subsystem.  The patterns
+    are adapter-owned and non-empty, and both source trees are actually scanned
+    before the ordinary symbol projection is called.
+    """
+    def tables(label: str, root: Any) -> tuple:
+        source_root = Path(root) / "ggml"
+        if not source_root.is_dir():
+            raise EmptyAnchorSurface(
+                f"{label} IQK registration source root is missing: {source_root}")
+        declared_sources = {
+            "ggml/src/ggml-cpu/ggml-cpu.c":
+                source_root / "src" / "ggml-cpu" / "ggml-cpu.c",
+            "ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp":
+                source_root / "src" / "ggml-cpu" / "iqk" / "iqk_dispatch.cpp",
+        }
+        bodies = {}
+        for relative, path in declared_sources.items():
+            try:
+                bodies[relative] = path.read_text(
+                    encoding="utf-8", errors="surrogateescape")
+            except OSError as exc:
+                raise EmptyAnchorSurface(
+                    f"{label} IQK declared registration source is unreadable: "
+                    f"{path} ({exc})") from exc
+        ops = integrity.PatternRegistrationExtractor(
+            kind=integrity.KIND_OP_REGISTRATION,
+            patterns=_IQK_OP_REGISTRATION_PATTERNS,
+            declared_by="autokernel.parameter-registry/ggml_iqk/v1").extract_text(
+                label, {"ggml/src/ggml-cpu/ggml-cpu.c":
+                        bodies["ggml/src/ggml-cpu/ggml-cpu.c"]})
+        predicates = integrity.PatternRegistrationExtractor(
+            kind=integrity.KIND_DISPATCH_PREDICATE,
+            patterns=_IQK_DISPATCH_PATTERNS,
+            declared_by="autokernel.parameter-registry/ggml_iqk/v1").extract_text(
+                label, {"ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp":
+                        bodies["ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp"]})
+        if not ops.entries or not predicates.entries:
+            raise EmptyAnchorSurface(
+                "the registered IQK patterns matched no op/dispatch entries; an empty "
+                "registration table cannot prove preservation")
+        return ops, predicates
+
+    anchor_ops, anchor_predicates = tables("anchor", anchor_root)
+    candidate_ops, candidate_predicates = tables("candidate", candidate_root)
+    return symbol_evidence(
+        anchor_binary=anchor_binary, candidate_binary=candidate_binary,
+        anchor=anchor,
+        declared=integrity.DeclaredSymbolDeltas.from_proposal(proposal),
+        anchor_op_registrations=anchor_ops,
+        candidate_op_registrations=candidate_ops,
+        anchor_dispatch_predicates=anchor_predicates,
+        candidate_dispatch_predicates=candidate_predicates)
+
+
 # =============================================================================
 # Seam 6 — integrity's parsed diff -> the two T0 diff-policy gates
 # =============================================================================
@@ -1394,7 +1471,12 @@ def diff_policy_evidence(*, diff_text: str,
         if t0_provider.under_production_tree(resolved):
             production_paths.append(f"{path} -> {resolved}")
 
-    limited, limit_reason = commit_was_pathspec_limited(commit_argv)
+    if (not tuple(commit_argv) and envelope.change_class == "parameter"
+            and not diff_text.strip()):
+        limited, limit_reason = True, (
+            "no source commit exists: the validated parameter arm has an empty source diff")
+    else:
+        limited, limit_reason = commit_was_pathspec_limited(commit_argv)
 
     checks: list = []
     notes: list = [limit_reason]

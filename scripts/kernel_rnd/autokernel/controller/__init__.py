@@ -44,6 +44,13 @@ provides prompt hygiene, priced context, reversible log compaction, and
 structured external-number validation without selecting work or calling a
 model, so it does not restore the deleted strategy plane.
 
+`reward_monitor` is another explicit off-path seam. It names the C6
+sabotage/sandbagging threat, derives the complete evaluated search tree from raw
+journal events (including discarded higher-scoring variants), requires
+monitor-awareness and reasoning-trace visibility, reduces a complete repeated/model
+panel, and calibrates a declared false-positive-rate budget. It calls no model and
+cannot stamp correctness.
+
 ON THE CAMPAIGN PATH SINCE 2026-08-04
 -------------------------------------
 `campaign.py` imports both. It had not, and that was the defect:

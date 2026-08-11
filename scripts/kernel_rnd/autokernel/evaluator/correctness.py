@@ -124,7 +124,7 @@ __all__ = [
     # evidence types
     "ChangeSurface", "SymbolTableDiff", "BuildProvenance", "DiffPolicyEvidence",
     "StaticAnalysisEvidence", "SanitizerInvocation", "SanitizerEvidence",
-    "OpSuiteEvidence", "ReferenceComparison", "ReferenceEvidence",
+    "OpSuiteEvidence", "PropertyMeasurement", "ReferenceComparison", "ReferenceEvidence",
     "BoundaryShapeEvidence", "DispatchTraceEvidence", "StateSafetyEvidence",
     "CoherenceEvidence", "DeterminismEvidence", "LinkageEvidence",
     "AntiRewardHackingEvidence", "T0Evidence",
@@ -839,6 +839,10 @@ class BuildProvenance:
     #: way; `check_symbol_and_registration_preservation` reads it and FAILs a
     #: self-report. This field is what makes that reading possible here.
     produced_by: str
+    #: True only when the build receipt proves compiler warnings were fatal.
+    #: Static analysis may then compare clean compiler exits without needing a
+    #: historical warning count from an anchor build log that no longer exists.
+    warnings_as_errors: bool = False
 
     def __post_init__(self) -> None:
         _req_sha256(self.built_from_snapshot_sha256, "build.built_from_snapshot_sha256")
@@ -853,6 +857,7 @@ class BuildProvenance:
             _req_str(item, "build.production_tree_paths_touched[]")
         _req_sha256(self.output_binary_sha256, "build.output_binary_sha256")
         _req_producer(self.produced_by, "build.produced_by")
+        _req_bool(self.warnings_as_errors, "build.warnings_as_errors")
 
 
 @dataclass(frozen=True)
@@ -1238,21 +1243,82 @@ class SanitizerEvidence:
 
 
 @dataclass(frozen=True)
+class PropertyMeasurement:
+    """One candidate-only property residual, bound to its replay coordinates."""
+
+    shape_id: str
+    op: str
+    backend: str
+    metric_id: str
+    residual: float
+    tolerance: float
+    suite_seed: int
+    passed: bool
+    input_transform: str = "identity"
+
+    def __post_init__(self) -> None:
+        for name in ("shape_id", "op", "backend", "metric_id"):
+            _req_str(getattr(self, name), f"property_measurement.{name}")
+        for name in ("residual", "tolerance"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) \
+                    or not math.isfinite(value) or value < 0:
+                raise ValueError(
+                    f"property_measurement.{name} must be finite and non-negative")
+        _req_int(self.suite_seed, "property_measurement.suite_seed")
+        _req_bool(self.passed, "property_measurement.passed")
+        if self.input_transform not in ("identity", "x3", "x0p01", "negate"):
+            raise ValueError(
+                "property_measurement.input_transform must be identity|x3|x0p01|negate")
+        derived = self.residual <= self.tolerance
+        if self.passed != derived:
+            raise ValueError(
+                f"property_measurement.passed={self.passed} disagrees with "
+                f"residual <= tolerance ({self.residual} <= {self.tolerance} is {derived})")
+
+    def to_dict(self) -> dict:
+        return {
+            "schema": "epyc.autokernel.property_measurement.v1",
+            "shape_id": self.shape_id,
+            "op": self.op,
+            "backend": self.backend,
+            "metric_id": self.metric_id,
+            "residual": self.residual,
+            "tolerance": self.tolerance,
+            "suite_seed": self.suite_seed,
+            "passed": self.passed,
+            "input_transform": self.input_transform,
+        }
+
+
+@dataclass(frozen=True)
 class OpSuiteEvidence:
     """§8.6 "targeted backend-op unit shapes" — the surface `kernel_eval.sh` truncated."""
 
     suite_id: str
     suite_source_sha256: str
+    suite_seed: int
     ops_exercised: tuple
     ops_failed: tuple
     cases_by_op: tuple           # ((op, cases_total, cases_passed), ...)
     shapes_ref: str
     receipt_ref: str
     produced_by: str
+    property_measurements: tuple = ()
+    layout_probe: bool = False
+    layout_families: tuple = ()
+    layout_case_count: int = 0
+    value_transform_probe: bool = False
+    value_transforms: tuple = ()
+    value_transform_case_count: int = 0
+    stateful_probe: bool = False
+    stateful_ops: tuple = ()
+    stateful_case_count: int = 0
 
     def __post_init__(self) -> None:
         _req_str(self.suite_id, "op_suite.suite_id")
         _req_sha256(self.suite_source_sha256, "op_suite.suite_source_sha256")
+        _req_int(self.suite_seed, "op_suite.suite_seed")
         for name in ("ops_exercised", "ops_failed"):
             for item in _req_tuple(getattr(self, name), f"op_suite.{name}"):
                 _req_str(item, f"op_suite.{name}[]")
@@ -1265,6 +1331,60 @@ class OpSuiteEvidence:
         _req_str(self.shapes_ref, "op_suite.shapes_ref")
         _req_str(self.receipt_ref, "op_suite.receipt_ref")
         _req_producer(self.produced_by, "op_suite.produced_by")
+        for item in _req_tuple(self.property_measurements,
+                               "op_suite.property_measurements"):
+            if not isinstance(item, PropertyMeasurement):
+                raise TypeError(
+                    "op_suite.property_measurements must contain PropertyMeasurement")
+            if item.suite_seed != self.suite_seed:
+                raise ValueError(
+                    f"property measurement {item.shape_id!r} carries suite_seed "
+                    f"{item.suite_seed}, expected {self.suite_seed}")
+        _req_bool(self.layout_probe, "op_suite.layout_probe")
+        _req_int(self.layout_case_count, "op_suite.layout_case_count")
+        allowed_layouts = {"offset", "transpose", "stride_gap"}
+        for item in _req_tuple(self.layout_families, "op_suite.layout_families"):
+            if item not in allowed_layouts:
+                raise ValueError(
+                    f"op_suite.layout_families contains {item!r}, expected one of "
+                    f"{sorted(allowed_layouts)}")
+        if len(set(self.layout_families)) != len(self.layout_families):
+            raise ValueError("op_suite.layout_families must be unique")
+        if not self.layout_probe and (self.layout_families or self.layout_case_count):
+            raise ValueError(
+                "op_suite layout evidence cannot exist when layout_probe is false")
+        _req_bool(self.value_transform_probe, "op_suite.value_transform_probe")
+        _req_int(self.value_transform_case_count,
+                 "op_suite.value_transform_case_count")
+        allowed_transforms = {"identity", "x3", "x0p01", "negate"}
+        for item in _req_tuple(self.value_transforms, "op_suite.value_transforms"):
+            if item not in allowed_transforms:
+                raise ValueError(
+                    f"op_suite.value_transforms contains {item!r}, expected one of "
+                    f"{sorted(allowed_transforms)}")
+        if len(set(self.value_transforms)) != len(self.value_transforms):
+            raise ValueError("op_suite.value_transforms must be unique")
+        if not self.value_transform_probe and (
+                self.value_transforms or self.value_transform_case_count):
+            raise ValueError(
+                "op_suite value-transform evidence cannot exist when the probe is false")
+        _req_bool(self.stateful_probe, "op_suite.stateful_probe")
+        _req_int(self.stateful_case_count, "op_suite.stateful_case_count")
+        allowed_stateful = {
+            "SSM_SCAN", "SSM_CONV", "FLASH_ATTN_EXT", "GATED_DELTA_NET"}
+        for item in _req_tuple(self.stateful_ops, "op_suite.stateful_ops"):
+            if item not in allowed_stateful:
+                raise ValueError(
+                    f"op_suite.stateful_ops contains {item!r}, expected one of "
+                    f"{sorted(allowed_stateful)}")
+        if len(set(self.stateful_ops)) != len(self.stateful_ops):
+            raise ValueError("op_suite.stateful_ops must be unique")
+        if not self.stateful_probe and (self.stateful_ops or self.stateful_case_count):
+            raise ValueError(
+                "op_suite stateful evidence cannot exist when stateful_probe is false")
+        if sum((self.layout_probe, self.value_transform_probe, self.stateful_probe)) > 1:
+            raise ValueError(
+                "layout, value-transform, and stateful evidence must come from separate passes")
 
     def cases_for(self, op: str) -> Optional[tuple]:
         for row in self.cases_by_op:
@@ -1275,33 +1395,50 @@ class OpSuiteEvidence:
 
 @dataclass(frozen=True)
 class ReferenceComparison:
-    """One exact/ULP-bounded comparison against a declared oracle (§6.5)."""
+    """One exact or declared-metric comparison against an oracle (§6.5)."""
 
     shape_id: str
     op: str
-    mode: str                    # exact_bitwise | ulp_bounded
+    mode: str                    # exact_bitwise | ulp_bounded | metric_bounded
     mismatch_count: int
     max_ulp_observed: Optional[float]
     tolerance_ulp: Optional[float]
     oracle_id: str
     oracle_is_candidate_derived: bool
+    metric_id: Optional[str] = None
+    max_error_observed: Optional[float] = None
+    tolerance_error: Optional[float] = None
 
     def __post_init__(self) -> None:
         _req_str(self.shape_id, "reference.shape_id")
         _req_str(self.op, "reference.op")
-        if self.mode not in ("exact_bitwise", "ulp_bounded"):
-            raise ValueError(f"reference.mode: {self.mode!r} must be 'exact_bitwise' or "
-                             "'ulp_bounded'")
-        _req_int(self.mismatch_count, "reference.mismatch_count")
-        for name in ("max_ulp_observed", "tolerance_ulp"):
+        modes = ("exact_bitwise", "ulp_bounded", "metric_bounded")
+        if self.mode not in modes:
+            raise ValueError(f"reference.mode: {self.mode!r} must be one of {modes}")
+        _req_int(self.mismatch_count, "reference.mismatch_count", minimum=0)
+        for name in ("max_ulp_observed", "tolerance_ulp", "max_error_observed",
+                     "tolerance_error"):
             value = getattr(self, name)
             if value is not None and (isinstance(value, bool)
                                       or not isinstance(value, (int, float))
-                                      or not math.isfinite(value)):
-                raise ValueError(f"reference.{name} must be a finite number or None")
+                                      or not math.isfinite(value) or value < 0):
+                raise ValueError(f"reference.{name} must be a finite non-negative number or None")
         if self.mode == "ulp_bounded" and self.tolerance_ulp is None:
             raise ValueError("reference: a ulp_bounded comparison with no declared tolerance "
                              "is not a comparison")
+        if self.mode == "metric_bounded":
+            _req_str(self.metric_id, "reference.metric_id")
+            if self.max_error_observed is None or self.tolerance_error is None:
+                raise ValueError(
+                    "reference: a metric_bounded comparison needs both an observed error "
+                    "and a declared tolerance")
+            if self.max_ulp_observed is not None or self.tolerance_ulp is not None:
+                raise ValueError(
+                    "reference: metric_bounded evidence cannot also carry ULP fields")
+        elif any(value is not None for value in
+                 (self.metric_id, self.max_error_observed, self.tolerance_error)):
+            raise ValueError(
+                "reference: generic metric fields are valid only for metric_bounded mode")
         _req_str(self.oracle_id, "reference.oracle_id")
         _req_bool(self.oracle_is_candidate_derived, "reference.oracle_is_candidate_derived")
 
@@ -1637,6 +1774,16 @@ class AntiRewardHackingEvidence:
     receipt_ref: str
     environment_probe_detector_id: Optional[str] = None
     timing_dependent_branch_detector_id: Optional[str] = None
+    stream_creation_findings: tuple = ()
+    async_escape_findings: tuple = ()
+    instrument_frame_findings: tuple = ()
+    pointer_memoization_findings: tuple = ()
+    structured_short_circuit_findings: tuple = ()
+    stream_creation_detector_id: Optional[str] = None
+    async_escape_detector_id: Optional[str] = None
+    instrument_frame_detector_id: Optional[str] = None
+    pointer_memoization_detector_id: Optional[str] = None
+    structured_short_circuit_detector_id: Optional[str] = None
 
     def recorded_anchor(self) -> Optional[api.AnchorIdentity]:
         """The anchor that delivered `delivered_units_anchor`, or `None` if unrecorded."""
@@ -1663,11 +1810,17 @@ class AntiRewardHackingEvidence:
             binary_sha256=self.anchor_binary_sha256,
             linkage_sha256=self.anchor_linkage_sha256,
             label="anti_reward_hacking")
-        for name in ("environment_probe_findings", "timing_dependent_branch_findings"):
+        for name in ("environment_probe_findings", "timing_dependent_branch_findings",
+                     "stream_creation_findings", "async_escape_findings",
+                     "instrument_frame_findings", "pointer_memoization_findings",
+                     "structured_short_circuit_findings"):
             for item in _req_tuple(getattr(self, name), f"anti_reward_hacking.{name}"):
                 _req_str(item, f"anti_reward_hacking.{name}[]")
         for name in ("environment_probe_detector_id",
-                     "timing_dependent_branch_detector_id"):
+                     "timing_dependent_branch_detector_id",
+                     "stream_creation_detector_id", "async_escape_detector_id",
+                     "instrument_frame_detector_id", "pointer_memoization_detector_id",
+                     "structured_short_circuit_detector_id"):
             value = getattr(self, name)
             if value is not None:
                 _req_str(value, f"anti_reward_hacking.{name}")
@@ -2109,7 +2262,8 @@ del _gid, _cls
 
 def _gate(gate_id: str, check: schemas.Check, *,
           evidence_ref: Optional[str] = None,
-          notes: Sequence[str] = ()) -> api.GateResult:
+          notes: Sequence[str] = (),
+          measurements: Sequence[dict] = ()) -> api.GateResult:
     """Build a `GateResult` from the registry, so class and anchor-ness are never
     supplied at the call site and cannot drift between gates."""
     return api.GateResult(
@@ -2119,6 +2273,7 @@ def _gate(gate_id: str, check: schemas.Check, *,
         requires_anchor=_GATE_ANCHOR_BY_ID[gate_id],
         evidence_ref=evidence_ref,
         notes=tuple(notes),
+        measurements=tuple(measurements),
     )
 
 
@@ -2561,6 +2716,39 @@ def check_backend_op_units(request: api.EvaluationRequest,
             f"surface {list(surface.derived_ops)}")
     if evidence.ops_failed:
         reasons.append(f"op(s) failed: {list(evidence.ops_failed)}")
+    if evidence.layout_probe:
+        required_layouts = {"offset", "transpose", "stride_gap"}
+        missing_layouts = sorted(required_layouts - set(evidence.layout_families))
+        if evidence.layout_case_count == 0:
+            reasons.append(
+                "the layout pass selected zero cases; a flag over no layout is not a probe")
+        if missing_layouts:
+            reasons.append(
+                f"layout pass did not exercise required family/families {missing_layouts}; "
+                "required=['offset', 'stride_gap', 'transpose']")
+    if evidence.value_transform_probe:
+        required_transforms = {"identity", "x3", "x0p01", "negate"}
+        missing_transforms = sorted(
+            required_transforms - set(evidence.value_transforms))
+        if evidence.value_transform_case_count == 0:
+            reasons.append(
+                "the value-transform pass selected zero cases; a flag over no floating "
+                "input is not a probe")
+        if missing_transforms:
+            reasons.append(
+                f"value-transform pass did not exercise required transform(s) "
+                f"{missing_transforms}; required=['identity', 'negate', 'x0p01', 'x3']")
+    if evidence.stateful_probe:
+        required_stateful = {
+            "SSM_SCAN", "SSM_CONV", "FLASH_ATTN_EXT", "GATED_DELTA_NET"}
+        missing_stateful = sorted(required_stateful - set(evidence.stateful_ops))
+        if evidence.stateful_case_count == 0:
+            reasons.append(
+                "the stateful pass selected zero cases; a flag over no recurrent state is not a probe")
+        if missing_stateful:
+            reasons.append(
+                f"stateful pass did not exercise required op(s) {missing_stateful}; "
+                "required=['FLASH_ATTN_EXT', 'GATED_DELTA_NET', 'SSM_CONV', 'SSM_SCAN']")
     for op in required:
         if op not in exercised:
             continue
@@ -2577,7 +2765,18 @@ def check_backend_op_units(request: api.EvaluationRequest,
             reasons.append(f"op {op!r}: {passed}/{total} cases passed")
     return _gate(GID_OP_UNITS, _verdict(reasons), evidence_ref=evidence.receipt_ref,
                  notes=(f"suite={evidence.suite_id}", f"required={list(required)}",
-                        f"shapes={evidence.shapes_ref}"))
+                        f"shapes={evidence.shapes_ref}",
+                        f"layout_probe={evidence.layout_probe}",
+                        f"layout_families={list(evidence.layout_families)}",
+                        f"layout_cases={evidence.layout_case_count}",
+                        f"value_transform_probe={evidence.value_transform_probe}",
+                        f"value_transforms={list(evidence.value_transforms)}",
+                        f"value_transform_cases={evidence.value_transform_case_count}",
+                        f"stateful_probe={evidence.stateful_probe}",
+                        f"stateful_ops={list(evidence.stateful_ops)}",
+                        f"stateful_cases={evidence.stateful_case_count}"),
+                 measurements=tuple(item.to_dict()
+                                    for item in evidence.property_measurements))
 
 
 def check_exact_reference_comparison(request: api.EvaluationRequest,
@@ -2618,6 +2817,12 @@ def check_exact_reference_comparison(request: api.EvaluationRequest,
                     f"shape {comparison.shape_id!r} ({comparison.op}): max ULP "
                     f"{comparison.max_ulp_observed} exceeds the declared tolerance "
                     f"{comparison.tolerance_ulp}")
+        if comparison.mode == "metric_bounded":
+            if comparison.max_error_observed > comparison.tolerance_error:
+                reasons.append(
+                    f"shape {comparison.shape_id!r} ({comparison.op}): "
+                    f"{comparison.metric_id} error {comparison.max_error_observed} exceeds "
+                    f"the declared tolerance {comparison.tolerance_error}")
     declared_undefined = {op for op, _ in evidence.undefined_for}
     required = tuple(dict.fromkeys(tuple(policy.required_backend_ops) + surface.derived_ops))
     silent = tuple(op for op in required
@@ -3143,16 +3348,60 @@ def check_anti_reward_hacking(evidence: Optional[AntiRewardHackingEvidence],
     if evidence.timing_dependent_branch_findings:
         reasons.append(f"timing-dependent branch(es) found: "
                        f"{list(evidence.timing_dependent_branch_findings)}")
+    if evidence.stream_creation_findings:
+        reasons.append(
+            "candidate-added accelerator stream creation found: "
+            f"{list(evidence.stream_creation_findings)}; the timed harness synchronizes "
+            "only its declared stream, so work on another stream can escape the bracket")
+    if evidence.async_escape_findings:
+        reasons.append(
+            "candidate-added thread/async creation found: "
+            f"{list(evidence.async_escape_findings)}; work that outlives the timed bracket "
+            "is not admissible CPU evidence")
+    if evidence.instrument_frame_findings:
+        reasons.append(
+            "candidate edit touched the protected measurement frame: "
+            f"{list(evidence.instrument_frame_findings)}")
+    if evidence.pointer_memoization_findings:
+        reasons.append(
+            "candidate-added pointer-keyed memoization found: "
+            f"{list(evidence.pointer_memoization_findings)}; address identity cannot "
+            "stand in for delivered work")
+    if evidence.structured_short_circuit_findings:
+        reasons.append(
+            "candidate-added structured-input/known-shape short circuit found: "
+            f"{list(evidence.structured_short_circuit_findings)}")
     if evidence.environment_probe_detector_id is None:
         unknown.append(
             "the environment-probe detector did not run; empty findings are not PASS")
     if evidence.timing_dependent_branch_detector_id is None:
         unknown.append(
             "the timing-dependent-branch detector did not run; empty findings are not PASS")
+    if evidence.stream_creation_detector_id is None:
+        unknown.append(
+            "the stream-creation detector did not run; empty findings are not PASS")
+    if evidence.async_escape_detector_id is None:
+        unknown.append(
+            "the thread/async-escape detector did not run; empty findings are not PASS")
+    if evidence.instrument_frame_detector_id is None:
+        unknown.append(
+            "the instrument-frame detector did not run; empty findings are not PASS")
+    if evidence.pointer_memoization_detector_id is None:
+        unknown.append(
+            "the pointer-memoization detector did not run; empty findings are not PASS")
+    if evidence.structured_short_circuit_detector_id is None:
+        unknown.append(
+            "the structured-short-circuit detector did not run; empty findings are not PASS")
     notes = (f"cache_state={evidence.cache_state}", f"control_role={control_role}",
              f"oracles={list(evidence.oracle_ids)}",
              f"environment_detector={evidence.environment_probe_detector_id or 'not_run'}",
              f"timing_detector={evidence.timing_dependent_branch_detector_id or 'not_run'}",
+             f"stream_detector={evidence.stream_creation_detector_id or 'not_run'}",
+             f"async_detector={evidence.async_escape_detector_id or 'not_run'}",
+             f"frame_detector={evidence.instrument_frame_detector_id or 'not_run'}",
+             f"pointer_detector={evidence.pointer_memoization_detector_id or 'not_run'}",
+             f"short_circuit_detector="
+             f"{evidence.structured_short_circuit_detector_id or 'not_run'}",
              f"capture_anchor={'unrecorded' if recorded is None else recorded.short()}")
     if reasons:
         # A FAIL is never downgraded by an unrelated COULD_NOT_CHECK: both are

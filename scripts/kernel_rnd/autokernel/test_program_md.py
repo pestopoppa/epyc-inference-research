@@ -46,9 +46,49 @@ if _KERNEL_RND not in sys.path:
 from autokernel import campaign  # noqa: E402
 from autokernel import schemas as S  # noqa: E402
 from autokernel.evaluator import api  # noqa: E402
+from autokernel.execution import physical_bounds  # noqa: E402
 from autokernel.test_schemas import _proposal as _proposal_fixture  # noqa: E402
 
 PROGRAM_MD = Path(__file__).resolve().parent / "program.md"
+
+
+def _write_current_calibration(root: Path) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    source = {
+        "schema": "epyc.autokernel.runtime_source_label.v1",
+        "production_source_commit": campaign.PRODUCTION_COMMIT,
+        "measurement_instrument_commit": campaign.MEASUREMENT_COMMIT,
+        "measurement_binary_sha256": "1" * 64,
+        "copied_binary_sha256": "1" * 64,
+        "measurement_linkage_sha256": "2" * 64,
+        "copied_linkage_sha256": "2" * 64,
+        "binary_copy_exact": True,
+    }
+    source_sha = S.content_hash(source)
+    (root / "runtime-source-label.json").write_text(
+        json.dumps({**source, "source_sha256": source_sha}), encoding="utf-8")
+    declaration = {
+        "schema": "epyc.autokernel.live_control_campaign_declaration.v1",
+        "campaign_id": "ak-controls-current-doc-test",
+        "recipe_id": campaign.HISTORICAL_CALIBRATED_RECIPE_ID,
+        "contribution_floor": 0.03,
+        "max_blocks_per_candidate": 20,
+        "source_sha256": source_sha,
+    }
+    (root / "campaign_declaration.json").write_text(
+        json.dumps(declaration), encoding="utf-8")
+    (root / "summary.json").write_text(json.dumps({
+        "campaign_id": declaration["campaign_id"],
+        "state": "controls_complete", "may_rank": True,
+        "binary_copy_exact": True,
+        "production_source_commit": campaign.PRODUCTION_COMMIT,
+        "calibration": {
+            "outputs": {"accepted": True, "b_min_blocks": 12,
+                        "noise_floor_phi": 0.04},
+            "attempts": [{"accepted": True,
+                          "mde": {"found": True, "value": 0.025}}],
+        },
+    }), encoding="utf-8")
 
 #: Subpackages the operator has not adopted and which are STILL ON DISK.
 #: `program.md` may not send a reader into any of them by module path.
@@ -225,6 +265,37 @@ class TestTheDocumentedCommandsAreTheRealCommands(unittest.TestCase):
                 manifest = Path(tempdir.name) / "proposal.json"
                 manifest.write_text(json.dumps(proposal), encoding="utf-8")
                 argv[argv.index("--proposal-manifest") + 1] = str(manifest)
+            if "--calibration-bundle" in argv:
+                bundle = Path(tempdir.name) / "calibration"
+                _write_current_calibration(bundle)
+                argv[argv.index("--calibration-bundle") + 1] = str(bundle)
+            if "--physical-envelope" in argv:
+                calibration = campaign.load_calibration_bundle(
+                    argv[argv.index("--calibration-bundle") + 1])
+                model = argv[argv.index("--model") + 1]
+                built = campaign.CampaignSpec(
+                    campaign_id=argv[argv.index("--campaign-id") + 1],
+                    candidate_id=argv[argv.index("--candidate-id") + 1],
+                    candidate_ref=argv[argv.index("--candidate") + 1],
+                    recipe_id=calibration.recipe_id,
+                    blocks=calibration.b_min_blocks,
+                    model=model,
+                    calibration=calibration,
+                )
+                envelope = physical_bounds.PhysicalEnvelope(
+                    shape_id=built.measurement_unit_id,
+                    delivered_unit="token", flops_per_unit=1.0,
+                    bytes_per_unit=1.0, peak_compute_flops_s=1e15,
+                    peak_memory_bytes_s=1e15,
+                    measurement_frame_sha256=physical_bounds.measurement_frame_sha256(
+                        built.recipe_id, built.bench_params),
+                    work_derivation_ref="documented-command test fixture",
+                    hardware_peak_ref="documented-command test fixture",
+                )
+                envelope_path = Path(tempdir.name) / "physical-envelope.json"
+                envelope_path.write_text(
+                    json.dumps(envelope.to_dict()), encoding="utf-8")
+                argv[argv.index("--physical-envelope") + 1] = str(envelope_path)
             out, err = io.StringIO(), io.StringIO()
             stderr, sys.stderr = sys.stderr, err
             try:

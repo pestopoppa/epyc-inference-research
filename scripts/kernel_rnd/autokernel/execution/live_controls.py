@@ -29,7 +29,7 @@ from typing import Sequence
 
 from .. import schemas
 from ..evaluator import api, controls, recipes, statistics
-from . import control_runner, cpu_region_claim, microbench, sandbox
+from . import control_runner, cpu_region_claim, microbench, physical_bounds, sandbox
 
 CAMPAIGN_ID = "ak-controls-3pct-20260811-v9-hardened"
 EVIDENCE_DIR = "autokernel_controls_3pct_20260811_v9_hardened"
@@ -39,8 +39,11 @@ RECIPE_ID = "t1b.llama_cpu.llama_bench_prefill.v1"
 CPU_LIST = recipes.CANONICAL_PREFIX[recipes.CANONICAL_PREFIX.index("-c") + 1]
 PRODUCTION_ROOT = Path("/mnt/raid0/llm/llama.cpp")
 PRODUCTION_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
-INSTRUMENT_ROOT = Path("/mnt/raid0/llm/llama.cpp-experimental")
-INSTRUMENT_BINARY = INSTRUMENT_ROOT / "build-v9-cpu/bin/llama-bench"
+INSTRUMENT_ROOT = Path(os.environ.get(
+    "AUTOKERNEL_INSTRUMENT_ROOT", "/mnt/raid0/llm/llama.cpp-experimental"))
+INSTRUMENT_BINARY = Path(os.environ.get(
+    "AUTOKERNEL_INSTRUMENT_BINARY",
+    str(INSTRUMENT_ROOT / "build-v9-cpu/bin/llama-bench")))
 INSTRUMENT_BRANCH = "experimental-v9-autokernel-t1-hardening"
 INSTRUMENT_COMMIT = "0492c2319a79e9bcc4edaa1bfb6af5a096276ab7"
 MODEL = Path(
@@ -52,6 +55,38 @@ CONTRIBUTION_FLOOR = 0.03
 PROMPT_TOKENS = 512
 WRONG_PROMPT_TOKENS = 2048
 NOMINAL_KHZ = 2_500_000
+# Conservative work LOWER bounds and hardware UPPER bounds. These make the
+# screen permissive: crossing it is evidence of wrong work/unit/timer, while
+# staying below it is not a performance claim.
+DENSE_ACTIVE_PARAMS_LOWER_BOUND = 400_000_000
+MODEL_BYTES_FRACTION_LOWER_BOUND = 0.95
+CPU_PEAK_COMPUTE_FLOPS_S_UPPER_BOUND = 110.8e12
+CPU_PEAK_MEMORY_BYTES_S_UPPER_BOUND = 614.4e9
+WORK_DERIVATION_REF = (
+    "Qwen2.5-Coder-0.5B dense model: 400M active-parameter floor; "
+    "2 FLOP/parameter/token; GGUF file bytes amortized across declared prompt at 95%"
+)
+HARDWARE_PEAK_REF = (
+    "wiki/hardware-optimization.md:1706: EPYC 9655, 12 DDR5-6400 channels, "
+    "614.4 GB/s theoretical; compute ceiling intentionally over-permissive at "
+    "110.8 TFLOP/s"
+)
+CONTROL_PROMPT_BY_LABEL = {
+    "aa_calibration": PROMPT_TOKENS,
+    "neutral_calibration": PROMPT_TOKENS,
+    "positive": PROMPT_TOKENS,
+    "historical_win_replay": PROMPT_TOKENS,
+    "negative_committed_cell": PROMPT_TOKENS,
+    "negative_wrong_cell": WRONG_PROMPT_TOKENS,
+}
+REQUIRED_HARDENING_RECEIPTS = (
+    b"autokernel_hybrid_ab_complete",
+    b"autokernel_thread_set_stable",
+    b"autokernel_escape_checks_complete",
+    b"autokernel_unsynchronized_samples_ns",
+    b"autokernel_thread_set_hashes",
+    b"autokernel_device_sync_mode",
+)
 
 
 def _utc_now() -> str:
@@ -136,6 +171,30 @@ def _check_payload(check: schemas.Check) -> dict:
     return {"outcome": check.outcome, "reasons": list(check.reasons)}
 
 
+def _instrument_receipt_capability(binary: Path) -> schemas.Check:
+    """Prove the selected binary bundle can emit every binding T1 receipt."""
+    payloads = [binary]
+    payloads.extend(sorted(binary.parent.glob("libllama-bench-impl.so*")))
+    observed = set()
+    for payload in payloads:
+        try:
+            content = payload.read_bytes()
+        except OSError:
+            continue
+        observed.update(key for key in REQUIRED_HARDENING_RECEIPTS if key in content)
+    missing = [key.decode("ascii") for key in REQUIRED_HARDENING_RECEIPTS
+               if key not in observed]
+    if missing:
+        return schemas.Check(
+            schemas.FAIL,
+            ("measurement instrument cannot emit required hardening receipts: "
+             + ", ".join(missing),))
+    return schemas.Check(
+        schemas.PASS,
+        ("measurement instrument contains every required hybrid-sync, thread-set, "
+         "escape-check, and device-sync receipt key",))
+
+
 def _write_declaration(output_root: Path, *, instrument_sha: str, copy_sha: str,
                        instrument_linkage: str, copy_linkage: str) -> str:
     """Commit the fresh campaign inputs before the first measurement."""
@@ -169,6 +228,10 @@ def _write_declaration(output_root: Path, *, instrument_sha: str, copy_sha: str,
         "contribution_floor": CONTRIBUTION_FLOOR,
         "max_candidates": 10,
         "max_blocks_per_candidate": 20,
+        "physical_envelopes": {
+            label: envelope.to_dict()
+            for label, envelope in sorted(_declared_physical_envelopes().items())
+        },
         "source_sha256": source_sha,
     }
     _write_json(output_root / "campaign_declaration.json", declaration)
@@ -220,6 +283,8 @@ def _write_preflight(output_root: Path, *, instrument_sha: str, copy_sha: str) -
         "binary_copy": _check_payload(schemas.Check(
             schemas.PASS if instrument_sha == copy_sha else schemas.FAIL,
             (f"instrument and evidence-copy SHA-256 are {instrument_sha}",))),
+        "instrument_receipt_capability": _check_payload(
+            _instrument_receipt_capability(INSTRUMENT_BINARY)),
         "model_present": _check_payload(schemas.Check(
             schemas.PASS if MODEL.is_file() else schemas.FAIL,
             (f"model path is {MODEL}",))),
@@ -272,6 +337,33 @@ def _params(*, prompt: int) -> dict:
             "output_format": "json"}
 
 
+def _unit_id(*, label: str, prompt: int) -> str:
+    return f"{MODEL.name}:pp{prompt}:{label}"
+
+
+def _physical_envelope(*, label: str, prompt: int) -> physical_bounds.PhysicalEnvelope:
+    params = _params(prompt=prompt)
+    return physical_bounds.PhysicalEnvelope(
+        shape_id=_unit_id(label=label, prompt=prompt),
+        delivered_unit="token",
+        flops_per_unit=2.0 * DENSE_ACTIVE_PARAMS_LOWER_BOUND,
+        bytes_per_unit=(MODEL_BYTES_FRACTION_LOWER_BOUND * MODEL.stat().st_size / prompt),
+        peak_compute_flops_s=CPU_PEAK_COMPUTE_FLOPS_S_UPPER_BOUND,
+        peak_memory_bytes_s=CPU_PEAK_MEMORY_BYTES_S_UPPER_BOUND,
+        measurement_frame_sha256=physical_bounds.measurement_frame_sha256(
+            RECIPE_ID, params),
+        work_derivation_ref=WORK_DERIVATION_REF,
+        hardware_peak_ref=HARDWARE_PEAK_REF,
+    )
+
+
+def _declared_physical_envelopes() -> dict:
+    return {
+        label: _physical_envelope(label=label, prompt=prompt)
+        for label, prompt in CONTROL_PROMPT_BY_LABEL.items()
+    }
+
+
 def _wait_for_quiet(*, ceiling_per_core: float = 0.25,
                     timeout_s: float = 300.0) -> None:
     """Let this process's prior leg age out of the one-minute load average.
@@ -299,6 +391,12 @@ def _measure(*, label: str, blocks: int, claim: object,
              anchor: api.AnchorIdentity, prompt: int = PROMPT_TOKENS,
              candidate_iqk: str = "1", anchor_iqk: str = "1",
              output_root: Path) -> LiveMaterial:
+    declared_prompt = CONTROL_PROMPT_BY_LABEL.get(label)
+    if declared_prompt != prompt:
+        raise ValueError(
+            f"control {label!r} at pp{prompt} was not predeclared; expected "
+            f"{None if declared_prompt is None else f'pp{declared_prompt}'}")
+    envelope = _declared_physical_envelopes()[label]
     plan = microbench.MicrobenchPlan(
         recipe_id=RECIPE_ID, candidate_id=f"akc-control-{label}",
         campaign_seed=f"{CAMPAIGN_SEED}/{label}",
@@ -309,7 +407,9 @@ def _measure(*, label: str, blocks: int, claim: object,
         candidate_param_overrides={"ggml_iqk": candidate_iqk},
         anchor_param_overrides={"ggml_iqk": anchor_iqk},
         base_blocks=blocks, pairs_per_block=1,
-        unit_ids=(f"{MODEL.name}:pp{prompt}:{label}",),
+        unit_ids=(_unit_id(label=label, prompt=prompt),),
+        physical_envelopes={
+            _unit_id(label=label, prompt=prompt): envelope},
         stratum=api.STRATUM_SELECTION, timeout_s=300.0)
     sandbox_root = output_root / "candidate-sandbox"
     sandbox_root.mkdir(mode=0o700, exist_ok=True)

@@ -1608,6 +1608,7 @@ class EvaluationRequest:
     campaign_controls: Optional[CampaignControls]
     calibration: Optional[CalibrationOutputs]
     device_state: Optional[devices.DeviceState] = None
+    suite_seed: Optional[int] = None
 
     def __post_init__(self) -> None:
         for name, prefix in (("event_id", "ake-"), ("campaign_id", "ak-"),
@@ -1663,6 +1664,10 @@ class EvaluationRequest:
         if self.device_state is not None and not isinstance(
                 self.device_state, devices.DeviceState):
             raise TypeError("device_state must be a devices.DeviceState or None")
+        if self.suite_seed is not None and (
+                isinstance(self.suite_seed, bool) or not isinstance(self.suite_seed, int)
+                or self.suite_seed < 0):
+            raise ValueError("suite_seed must be a non-negative int or None")
 
 
 # =============================================================================
@@ -1687,6 +1692,7 @@ class GateResult:
     requires_anchor: bool = False
     evidence_ref: Optional[str] = None
     notes: tuple = ()
+    measurements: tuple = ()
 
     def __post_init__(self) -> None:
         _require_nonempty_str(self.gate_id, "gate.gate_id")
@@ -1698,9 +1704,15 @@ class GateResult:
             raise TypeError("gate.requires_anchor must be a bool")
         if not isinstance(self.notes, tuple):
             raise TypeError("gate.notes must be a tuple")
+        if not isinstance(self.measurements, tuple):
+            raise TypeError("gate.measurements must be a tuple")
+        for index, item in enumerate(self.measurements):
+            if not isinstance(item, dict):
+                raise TypeError(f"gate.measurements[{index}] must be a dict")
+            _canonicalizable(item, f"gate.measurements[{index}]")
 
     def to_dict(self) -> dict:
-        return {
+        out = {
             "gate_id": self.gate_id,
             "gate_class": self.gate_class,
             "outcome": self.check.outcome,
@@ -1709,6 +1721,9 @@ class GateResult:
             "evidence_ref": self.evidence_ref,
             "notes": list(self.notes),
         }
+        if self.measurements:
+            out["measurements"] = list(self.measurements)
+        return out
 
 
 @dataclass(frozen=True)
@@ -2702,15 +2717,20 @@ def _canonicalizable(value: Any, path: str) -> Any:
 
 def _vector(gates: Sequence[GateResult], *classes: str) -> dict:
     """Per-case vector, never a rolled-up verdict (§7.4)."""
-    return {
-        g.gate_id: {
+    out = {}
+    for g in gates:
+        if g.gate_class not in classes:
+            continue
+        row = {
             "outcome": g.check.outcome,
             "reasons": list(g.check.reasons),
             "requires_anchor": g.requires_anchor,
             "evidence_ref": g.evidence_ref,
         }
-        for g in gates if g.gate_class in classes
-    }
+        if g.measurements:
+            row["measurements"] = list(g.measurements)
+        out[g.gate_id] = row
+    return out
 
 
 def _anchor_block_for_event(anchor: Any) -> dict:
@@ -2820,6 +2840,7 @@ def build_evaluation_event(*,
         "raw_evidence_ref": window.raw_evidence_ref,
         "preflight_attestation_ref": window.preflight_attestation_ref,
         "record_class": RECORD_CLASS,
+        "suite_seed": request.suite_seed,
     }
 
     uncertainty = None if effect is None else {

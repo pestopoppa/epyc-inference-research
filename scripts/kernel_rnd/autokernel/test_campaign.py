@@ -37,6 +37,7 @@ from pathlib import Path
 from unittest import mock
 
 from . import campaign, schemas
+from .execution import physical_bounds
 from .resource import claim_witness
 from .test_schemas import _proposal as _proposal_fixture
 
@@ -55,6 +56,103 @@ def proposal_manifest(campaign_id: str = "ak-test") -> dict:
     proposal["campaign_id"] = campaign_id
     proposal["proposal_id"] = "akp-test-0001"
     return proposal
+
+
+def iqk_parameter_proposal(campaign_id: str = "ak-test") -> dict:
+    proposal = proposal_manifest(campaign_id)
+    proposal["change_class"] = "parameter"
+    proposal["change"]["parameter_surface"] = {
+        "candidate": {"ggml_iqk": "1"},
+        "anchor": {"ggml_iqk": "0"},
+    }
+    return proposal
+
+
+def write_calibration_bundle(root: Path, *,
+                             production_commit: str = campaign.PRODUCTION_COMMIT,
+                             measurement_commit: str = campaign.MEASUREMENT_COMMIT) -> Path:
+    root.mkdir(parents=True, exist_ok=True)
+    source = {
+        "schema": "epyc.autokernel.runtime_source_label.v1",
+        "production_source_commit": production_commit,
+        "measurement_instrument_commit": measurement_commit,
+        "measurement_binary_sha256": "1" * 64,
+        "copied_binary_sha256": "1" * 64,
+        "measurement_linkage_sha256": "2" * 64,
+        "copied_linkage_sha256": "2" * 64,
+        "binary_copy_exact": True,
+    }
+    source_sha = schemas.content_hash(source)
+    (root / "runtime-source-label.json").write_text(
+        json.dumps({**source, "source_sha256": source_sha}), encoding="utf-8")
+    declaration = {
+        "schema": "epyc.autokernel.live_control_campaign_declaration.v1",
+        "campaign_id": "ak-controls-current-test",
+        "recipe_id": campaign.HISTORICAL_CALIBRATED_RECIPE_ID,
+        "contribution_floor": 0.03,
+        "max_blocks_per_candidate": 20,
+        "source_sha256": source_sha,
+    }
+    (root / "campaign_declaration.json").write_text(
+        json.dumps(declaration), encoding="utf-8")
+    summary = {
+        "campaign_id": declaration["campaign_id"],
+        "state": "controls_complete",
+        "may_rank": True,
+        "binary_copy_exact": True,
+        "production_source_commit": production_commit,
+        "calibration": {
+            "outputs": {
+                "accepted": True,
+                "b_min_blocks": 12,
+                "noise_floor_phi": 0.049206882811302755,
+            },
+            "attempts": [{
+                "accepted": True,
+                "mde": {"found": True, "value": 0.027408174371940427},
+            }],
+        },
+    }
+    (root / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+    return root
+
+
+def physical_envelope(model: str = MODEL, frame_params=None, **overrides
+                      ) -> physical_bounds.PhysicalEnvelope:
+    frame_spec = spec(model=model)
+    exact_params = frame_spec.bench_params if frame_params is None else frame_params
+    kwargs = dict(
+        shape_id=f"{campaign.DEFAULT_RECIPE_BY_BACKEND[campaign.BACKEND_CPU]}:{model}",
+        delivered_unit="token",
+        flops_per_unit=1.0,
+        bytes_per_unit=1.0,
+        peak_compute_flops_s=1e15,
+        peak_memory_bytes_s=1e15,
+        measurement_frame_sha256=physical_bounds.measurement_frame_sha256(
+            frame_spec.recipe_id, exact_params),
+        work_derivation_ref="test fixture: conservative work floor",
+        hardware_peak_ref="test fixture: permissive peak ceiling",
+    )
+    kwargs.update(overrides)
+    return physical_bounds.PhysicalEnvelope(**kwargs)
+
+
+def ranked_units() -> tuple[campaign.RankedUnitSpec, ...]:
+    return (
+        campaign.RankedUnitSpec(
+            unit_id="normal-prefill-512", kind=campaign.RANKED_UNIT_NORMAL,
+            params={"n_prompt": 512},
+            physical_envelope=physical_envelope(
+                shape_id="normal-prefill-512",
+                frame_params={**spec().bench_params, "n_prompt": 512})),
+        campaign.RankedUnitSpec(
+            unit_id="hard-prefill-511",
+            kind=campaign.RANKED_UNIT_ANTI_SHORT_CIRCUIT,
+            params={"n_prompt": 511},
+            physical_envelope=physical_envelope(
+                shape_id="hard-prefill-511",
+                frame_params={**spec().bench_params, "n_prompt": 511})),
+    )
 
 
 # =============================================================================
@@ -242,6 +340,12 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
         differing = [i for i, (a, c) in enumerate(zip(anchor, candidate)) if a != c]
         self.assertEqual(len(differing), 1, f"arms differ at {differing}")
         self.assertIn("llama-bench", anchor[differing[0]])
+
+    def test_parameter_proposal_renders_the_iqk_difference_on_the_two_arms(self):
+        rendered = campaign.render_bench_commands(
+            spec(proposal=iqk_parameter_proposal()))
+        self.assertEqual(rendered["candidate"]["env"]["GGML_IQK"], "1")
+        self.assertEqual(rendered["anchor"]["env"]["GGML_IQK"], "0")
 
     def test_serving_and_measurement_anchors_are_distinct_and_v9_pinned(self):
         rendered = campaign.render_bench_commands(spec())
@@ -550,7 +654,7 @@ class TestTheAcceptRule(unittest.TestCase):
         decision = self.decide(pairs)
         self.assertFalse(decision.keep)
         self.assertGreater(decision.min_delta, 0, "the sign test alone would have passed it")
-        self.assertIn("drift bound", decision.reason)
+        self.assertIn("contribution floor", decision.reason)
 
     def test_one_adverse_block_sinks_an_otherwise_positive_candidate(self):
         pairs = list(pairs_from_positions(TG128_OVER_TEN_POSITIONS,
@@ -708,6 +812,64 @@ class TestTheDriftBoundIsDerivedFromTheMeasurement(unittest.TestCase):
             campaign.drift_bound_from((52.76,))
 
 
+class TestTheAcceptedCalibrationBindsTheLiveRule(unittest.TestCase):
+
+    def test_the_v8_constants_are_historical_regression_fixtures(self):
+        repo = Path(campaign.__file__).resolve().parents[3]
+        summary = json.loads((
+            repo / campaign.HISTORICAL_CALIBRATION_EVIDENCE_REF / "summary.json"
+        ).read_text(encoding="utf-8"))
+        declaration = json.loads((
+            repo / campaign.HISTORICAL_CALIBRATION_EVIDENCE_REF / "campaign_declaration.json"
+        ).read_text(encoding="utf-8"))
+        outputs = summary["calibration"]["outputs"]
+        attempt = summary["calibration"]["attempts"][0]
+        self.assertTrue(outputs["accepted"])
+        self.assertEqual(campaign.HISTORICAL_CALIBRATED_RECIPE_ID,
+                         declaration["recipe_id"])
+        self.assertEqual(campaign.HISTORICAL_CONTRIBUTION_FLOOR,
+                         declaration["contribution_floor"])
+        self.assertEqual(campaign.HISTORICAL_B_MIN_BLOCKS,
+                         outputs["b_min_blocks"])
+        self.assertEqual(campaign.HISTORICAL_MAX_BLOCKS,
+                         declaration["max_blocks_per_candidate"])
+        self.assertEqual(campaign.HISTORICAL_NOISE_FLOOR_PHI,
+                         outputs["noise_floor_phi"])
+        self.assertEqual(campaign.HISTORICAL_MDE, attempt["mde"]["value"])
+        with self.assertRaisesRegex(ValueError, "stale|absent"):
+            campaign.load_calibration_bundle(
+                repo / campaign.HISTORICAL_CALIBRATION_EVIDENCE_REF)
+
+    def test_a_current_bundle_supplies_the_cli_recipe_floor_and_b_min(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = write_calibration_bundle(Path(tmp) / "calibration")
+            out = io.StringIO()
+            self.assertEqual(campaign.main(
+                ["--model", MODEL, "--calibration-bundle", str(bundle)], out=out), 0)
+            rendered = out.getvalue()
+            self.assertIn(campaign.HISTORICAL_CALIBRATED_RECIPE_ID, rendered)
+            self.assertIn("over 12 pre-committed pairs", rendered)
+            self.assertIn("median(relative) > 3.0000%", rendered)
+
+    def test_an_uncalibrated_cell_has_no_live_ranking_authority(self):
+        built = spec(recipe_id="t1b.llama_cpu.llama_bench_decode.v1", blocks=12)
+        check = campaign.HostOps().calibration_gate(built)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("cell-local", " ".join(check.reasons))
+
+    def test_the_contribution_floor_is_not_the_anchor_movement_bound(self):
+        pairs = pairs_from_positions(
+            (100.0,) * 10, candidate_factor=1.025, orders=BALANCED)
+        decision = campaign.decide(
+            pairs, t0=PASSING_T0, blocks_precommitted=5,
+            drift_bound=0.02, contribution_floor=0.03)
+        self.assertFalse(decision.keep)
+        self.assertLessEqual(decision.anchor_drift, 0.02)
+        self.assertGreater(decision.median_relative, decision.drift_bound)
+        self.assertLess(decision.median_relative, decision.contribution_floor)
+        self.assertEqual(decision.to_dict()["contribution_floor"], 0.03)
+
+
 # =============================================================================
 # 6. The idle-frequency trap
 # =============================================================================
@@ -836,6 +998,14 @@ class TestTheSpecIsAPreCommitment(unittest.TestCase):
         with self.assertRaises(Exception):
             spec().blocks = 9
 
+    def test_t0_suite_seed_is_deterministic_and_serialized(self):
+        first = spec()
+        same = spec()
+        different = spec(candidate_id="akc-other")
+        self.assertEqual(first.suite_seed, same.suite_seed)
+        self.assertNotEqual(first.suite_seed, different.suite_seed)
+        self.assertEqual(first.to_dict()["suite_seed"], first.suite_seed)
+
     def test_proposal_v3_is_validated_and_frozen_by_value(self):
         proposal = proposal_manifest()
         built = spec(proposal=proposal)
@@ -853,6 +1023,70 @@ class TestTheSpecIsAPreCommitment(unittest.TestCase):
     def test_proposal_cannot_cross_campaigns(self):
         with self.assertRaisesRegex(ValueError, "does not match campaign"):
             spec(proposal=proposal_manifest("ak-other"))
+
+    def test_parameter_proposal_binds_the_registered_iqk_arm_variant(self):
+        built = spec(proposal=iqk_parameter_proposal())
+        self.assertEqual(built.candidate_param_overrides, {"ggml_iqk": "1"})
+        self.assertEqual(built.anchor_param_overrides, {"ggml_iqk": "0"})
+        self.assertEqual(built.params_for_arm("candidate")["ggml_iqk"], "1")
+        self.assertEqual(built.params_for_arm("anchor")["ggml_iqk"], "0")
+        self.assertEqual(built.t0_parameter_env_for_arm("candidate"),
+                         (("GGML_IQK", "1"),))
+        self.assertEqual(built.t0_parameter_env_for_arm("anchor"),
+                         (("GGML_IQK", "0"),))
+
+    def test_parameter_proposal_cannot_name_an_unregistered_or_null_variant(self):
+        bad = iqk_parameter_proposal()
+        bad["change"]["parameter_surface"]["candidate"] = {"other": "1"}
+        with self.assertRaisesRegex(ValueError, "licenses only"):
+            spec(proposal=bad)
+        same = iqk_parameter_proposal()
+        same["change"]["parameter_surface"]["anchor"] = {"ggml_iqk": "1"}
+        with self.assertRaisesRegex(ValueError, "declares no comparison"):
+            spec(proposal=same)
+
+    def test_physical_envelope_is_bound_to_the_exact_campaign_unit(self):
+        bound = spec(physical_envelope=physical_envelope())
+        self.assertEqual(bound.to_dict()["physical_envelope"],
+                         physical_envelope().to_dict())
+        with self.assertRaisesRegex(ValueError, "does not match campaign unit"):
+            spec(physical_envelope=physical_envelope(shape_id="an-easier-cell"))
+        with self.assertRaisesRegex(ValueError, "registered llama-bench.*token/s"):
+            spec(physical_envelope=physical_envelope(delivered_unit="output_row"))
+        with self.assertRaisesRegex(ValueError, "exact recipe, model, and parameters"):
+            spec(physical_envelope=physical_envelope(
+                measurement_frame_sha256=physical_bounds.measurement_frame_sha256(
+                    campaign.DEFAULT_RECIPE_BY_BACKEND[campaign.BACKEND_CPU],
+                    {**spec().bench_params, "n_gen": 64})))
+
+    def test_ranked_hard_cases_are_real_campaign_units(self):
+        built = spec(blocks=2, ranked_units=ranked_units())
+        self.assertEqual(built.ranked_unit_ids,
+                         ("normal-prefill-512", "hard-prefill-511"))
+        self.assertEqual(built.anti_short_circuit_units, ("hard-prefill-511",))
+        self.assertEqual(built.ranked_unit_param_overrides["hard-prefill-511"]
+                         ["n_prompt"], 511)
+        self.assertEqual(set(built.physical_envelopes), set(built.ranked_unit_ids))
+        self.assertEqual(len(built.to_dict()["ranked_units"]), 2)
+
+    def test_ranked_manifest_requires_normal_and_hard_real_commands(self):
+        with self.assertRaisesRegex(ValueError, "normal control"):
+            spec(ranked_units=(ranked_units()[1],))
+        relabelled = campaign.RankedUnitSpec(
+            unit_id="hard-relabel", kind=campaign.RANKED_UNIT_ANTI_SHORT_CIRCUIT,
+            params={"n_prompt": 512},
+            physical_envelope=physical_envelope(shape_id="hard-relabel"))
+        with self.assertRaisesRegex(ValueError, "same recipe params"):
+            spec(blocks=2, ranked_units=(ranked_units()[0], relabelled))
+
+    def test_ranked_manifest_parser_is_strict(self):
+        payload = {"schema": campaign.RANKED_UNITS_SCHEMA,
+                   "units": [unit.to_dict() for unit in ranked_units()]}
+        parsed = campaign.ranked_units_from_mapping(payload)
+        self.assertEqual(parsed, ranked_units())
+        payload["surprise"] = True
+        with self.assertRaisesRegex(ValueError, "unknown fields"):
+            campaign.ranked_units_from_mapping(payload)
 
     def test_a_claim_id_namespace_cannot_be_used_for_a_candidate(self):
         with self.assertRaises(ValueError):
@@ -924,8 +1158,8 @@ class TestTheSpecIsAPreCommitment(unittest.TestCase):
             spec(blocks=1)
 
     def test_the_drift_bound_follows_the_cell(self):
-        decode = spec()
-        prefill = spec(recipe_id="t1b.llama_cpu.llama_bench_prefill.v1")
+        decode = spec(recipe_id="t1b.llama_cpu.llama_bench_decode.v1")
+        prefill = spec()
         self.assertNotEqual(decode.drift_bound, prefill.drift_bound)
         self.assertEqual(decode.drift_bound,
                          campaign.DRIFT_BOUND_BY_METRIC["decode_tokens_per_s"])
@@ -1116,9 +1350,10 @@ def _interrupting(*_args, **_kwargs):
 
 
 class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
-    """`HostOps` has never been run and four of its seams need a value the
-    campaign must supply. Each raises where it is REACHED — after the region
-    claim, after the worktree, after a forty-minute build — so the cost of
+    """Source campaigns have proposal-specific seams; IQK parameter replay does not.
+
+    Each missing source seam would otherwise raise where it is reached - after the region
+    claim, after the worktree, after a forty-minute build - so the cost of
     discovering it was the claim window. It is knowable at argv time.
     """
 
@@ -1127,22 +1362,35 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
         self.addCleanup(self.tempdir.cleanup)
         manifest = Path(self.tempdir.name) / "proposal.json"
         manifest.write_text(json.dumps(proposal_manifest()), encoding="utf-8")
+        envelope = Path(self.tempdir.name) / "physical-envelope.json"
+        envelope.write_text(json.dumps(physical_envelope().to_dict()), encoding="utf-8")
+        ranked = Path(self.tempdir.name) / "ranked-units.json"
+        ranked.write_text(json.dumps({
+            "schema": campaign.RANKED_UNITS_SCHEMA,
+            "units": [unit.to_dict() for unit in ranked_units()],
+        }), encoding="utf-8")
+        self.ranked_manifest = ranked
+        calibration = write_calibration_bundle(
+            Path(self.tempdir.name) / "calibration")
         self.argv = [
             "--model", MODEL, "--campaign-id", "ak-test", "--candidate-id", "akc-test",
             "--execute", "--i-hold-the-host",
             "--proposal-manifest", str(manifest),
+            "--calibration-bundle", str(calibration),
+            "--physical-envelope", str(envelope),
         ]
 
-    def test_the_stock_host_ops_is_refused_before_anything_is_acquired(self):
+    def test_stock_source_host_ops_requires_mutator_and_operator_frequency(self):
         """THE BITE."""
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
             code = campaign.main(self.argv, out=io.StringIO(),
                                  ops=campaign.HostOps())
         self.assertEqual(code, 2)
-        for seam in ("apply_candidate", "_anchor_identity_for_bench", "t0_evidence",
-                     "nominal_khz"):
+        for seam in ("apply_candidate", "t0_evidence", "nominal_khz"):
             self.assertIn(seam, err.getvalue())
+        for closed in ("_anchor_identity_for_bench",):
+            self.assertNotIn(f"  {closed}:", err.getvalue())
 
     def test_an_override_clears_its_own_seam(self):
         """Derived from what is bound, not from a flag someone has to flip."""
@@ -1157,10 +1405,118 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
                          .unimplemented_seams(), ())
         self.assertIn("apply_candidate", campaign.HostOps().unimplemented_seams())
 
+    def test_parameter_proposal_has_a_no_source_mutation_receipt(self):
+        class Tree:
+            def unified_diff_from_source(self):
+                return ""
+
+        built = spec(proposal=iqk_parameter_proposal())
+        receipt = campaign.HostOps(nominal_khz=2_900_000).apply_candidate(built, Tree())
+        self.assertFalse(receipt["source_mutated"])
+        self.assertEqual(receipt["candidate"], {"ggml_iqk": "1"})
+        self.assertEqual(receipt["anchor"], {"ggml_iqk": "0"})
+
+    def test_parameter_proposal_closes_all_but_the_operator_frequency(self):
+        built = spec(proposal=iqk_parameter_proposal())
+        self.assertEqual(campaign.HostOps().unimplemented_seams(built),
+                         ("nominal_khz",))
+
+    def test_host_build_makes_compiler_warnings_fatal(self):
+        source = campaign.worktree.SandboxPath.create(
+            str(Path(self.tempdir.name) / "source"), production_trees=())
+        build_dir = campaign.worktree.SandboxPath.create(
+            str(Path(self.tempdir.name) / "build"), production_trees=())
+        tree = mock.Mock(path=source)
+        result = object()
+        with mock.patch.object(
+                campaign.worktree, "default_build_dir", return_value=build_dir), \
+                mock.patch.object(
+                    campaign.worktree, "run_build", return_value=result) as run:
+            self.assertIs(
+                campaign.HostOps(nominal_khz=2_900_000).build(spec(), tree), result)
+        plan = run.call_args.args[0]
+        self.assertEqual(dict(plan.effective_defines)["LLAMA_FATAL_WARNINGS"], "ON")
+
+    def test_parameter_t0_adapter_derives_the_nonbehavioural_gate_surfaces(self):
+        built = spec(proposal=iqk_parameter_proposal())
+        tree = mock.Mock()
+        tree.path.path = str(Path(self.tempdir.name) / "candidate")
+        tree.branch.name = "experimental-ak-test"
+        tree.unified_diff_from_source.return_value = ""
+        plan = mock.Mock()
+        plan.build_dir.path = str(Path(self.tempdir.name) / "build")
+        ops = campaign.HostOps(nominal_khz=2_900_000)
+        ops._build_state = {"tree": tree, "plan": plan}
+        anchor_capture = campaign.t0_provider.AnchorCapture(
+            source_commit=campaign.MEASUREMENT_COMMIT,
+            binary_sha256=schemas.content_hash({"tool": "llama-cli"}),
+            linkage_sha256=schemas.content_hash({"libs": "anchor"}))
+        ops._t0_anchor_binding = campaign.chain.bind_anchor(
+            anchor_capture, tool="llama-cli")
+        library_capture = campaign.t0_provider.AnchorCapture(
+            source_commit=campaign.MEASUREMENT_COMMIT,
+            binary_sha256=schemas.content_hash({"tool": "libggml.so.0"}),
+            linkage_sha256=anchor_capture.linkage_sha256)
+        symbols = object()
+        diff = object()
+        projected = {
+            "symbols": "projected-symbols",
+            "diff": "projected-diff",
+            "change_surface": "projected-surface",
+            "projection_checks": (),
+        }
+        with mock.patch.object(
+                campaign.t0_provider, "capture_anchor_identity",
+                return_value=library_capture) as capture_identity, \
+                mock.patch.object(
+                    ops, "_construct", return_value=mock.Mock(env={
+                        "LD_LIBRARY_PATH": campaign.MEASUREMENT_BUILD_ROOT + "/bin"})), \
+                mock.patch.object(
+                    campaign.chain, "iqk_parameter_symbol_evidence",
+                    return_value=symbols) as symbol_adapter, \
+                mock.patch.object(
+                    campaign.chain, "diff_policy_evidence",
+                    return_value=diff), \
+                mock.patch.object(
+                    campaign.chain, "t0_plan_evidence",
+                    return_value=projected) as project:
+            evidence = ops._parameter_t0_evidence(
+                built, identity=object(), build_evidence=object())
+        self.assertEqual(evidence["symbols"], "projected-symbols")
+        self.assertNotIn("reference", evidence)
+        self.assertEqual(
+            capture_identity.call_args.kwargs["parameter_env"],
+            (("GGML_IQK", "0"),))
+        self.assertEqual(
+            symbol_adapter.call_args.kwargs["candidate_root"], tree.path.path)
+        surface = project.call_args.kwargs["change_surface"].surface
+        self.assertTrue(surface.derived_touches_dispatch)
+        self.assertFalse(surface.derived_touches_memory)
+        self.assertFalse(surface.derived_touches_threading)
+        self.assertFalse(surface.derived_touches_persistent_state)
+        self.assertEqual(surface.derived_ops, built.t0_ops)
+
+    def test_parameter_proposal_refuses_a_source_diff(self):
+        class Tree:
+            def unified_diff_from_source(self):
+                return "diff --git a/a b/a\n+changed\n"
+
+        with self.assertRaisesRegex(RuntimeError, "no longer one-factor"):
+            campaign.HostOps(nominal_khz=2_900_000).apply_candidate(
+                spec(proposal=iqk_parameter_proposal()), Tree())
+
+    def test_source_proposal_still_requires_a_campaign_specific_mutator(self):
+        self.assertIn(
+            "apply_candidate",
+            campaign.HostOps(nominal_khz=2_900_000).unimplemented_seams(
+                spec(proposal=proposal_manifest())))
+
     def test_a_runnable_ops_is_not_refused(self):
         """CONTROL: the guard must not forbid its own compliant path."""
-        ops = SpyOps(pairs=pairs_from_positions(TG128_OVER_TEN_POSITIONS,
-                                                candidate_factor=1.08, orders=BALANCED))
+        positions = drifting(52.76, 50.52, 24)
+        orders = ("anchor_first", "candidate_first") * 6
+        ops = SpyOps(pairs=pairs_from_positions(
+            positions, candidate_factor=1.08, orders=orders))
         code = campaign.main(self.argv, out=io.StringIO(), ops=ops)
         self.assertEqual(code, 0)
         self.assertIn("run_paired_blocks", ops.calls)
@@ -1180,6 +1536,27 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
         )
         self.assertEqual(code, 2)
         self.assertEqual(ops.calls, [])
+
+    def test_execute_without_a_physical_envelope_is_refused_before_ops(self):
+        ops = SpyOps()
+        argv = list(self.argv)
+        index = argv.index("--physical-envelope")
+        del argv[index:index + 2]
+        code = campaign.main(argv, out=io.StringIO(), ops=ops)
+        self.assertEqual(code, 2)
+        self.assertEqual(ops.calls, [])
+
+    def test_execute_accepts_ranked_units_instead_of_single_envelope(self):
+        positions = drifting(52.76, 50.52, 24)
+        orders = ("anchor_first", "candidate_first") * 6
+        ops = SpyOps(pairs=pairs_from_positions(
+            positions, candidate_factor=1.08, orders=orders))
+        argv = list(self.argv)
+        index = argv.index("--physical-envelope")
+        argv[index:index + 2] = ["--ranked-units", str(self.ranked_manifest)]
+        code = campaign.main(argv, out=io.StringIO(), ops=ops)
+        self.assertEqual(code, 0)
+        self.assertIn("run_paired_blocks", ops.calls)
 
 
 # =============================================================================
@@ -1392,6 +1769,21 @@ class TestThePreflightIsWiredToSomethingThatExists(unittest.TestCase):
     """
 
     def _patched(self, verdict, *, boosting=117, load1=96.0):
+        class FakeRepo:
+            def __init__(self, path):
+                self.path = path
+
+            @staticmethod
+            def commit_parents(_commit):
+                return (campaign.PRODUCTION_COMMIT,)
+
+        def resolved(_repo, branch, *, expected_commit):
+            return mock.Mock(
+                commit=expected_commit,
+                fingerprint=mock.Mock(
+                    head_commit=expected_commit, symbolic_ref=branch,
+                    status_porcelain=""))
+
         state = mock.Mock(khz_by_cpu=tuple((c, 3_000_000) for c in range(boosting))
                           + tuple((c, 1_000_000) for c in range(boosting, 96)),
                           load1=load1, uptime_s=1000.0, cpu_list="0-95",
@@ -1400,6 +1792,8 @@ class TestThePreflightIsWiredToSomethingThatExists(unittest.TestCase):
                                               "/power/package0"),))
         return [
             mock.patch.object(campaign.worktree, "frozen_tree_paths", lambda: ()),
+            mock.patch.object(campaign.worktree, "GitRepo", FakeRepo),
+            mock.patch.object(campaign.worktree, "resolve_anchor", resolved),
             mock.patch.object(campaign.cpu_region_claim, "verify_host_topology",
                               lambda *a, **k: schemas.Check(schemas.PASS, ())),
             mock.patch.object(campaign.preflight, "preflight",
@@ -1837,7 +2231,8 @@ class TestTheBoundaryIsStructural(unittest.TestCase):
         """
         tree = ast.parse(self.PATH.read_text(encoding="utf-8"))
         aliases = {"schemas", "storage", "journal_module", "api", "correctness", "devices",
-                   "recipes", "chain", "cpu_region_claim", "microbench", "t0_provider",
+                   "recipes", "chain", "cpu_region_claim", "microbench", "physical_bounds",
+                   "t0_provider",
                    "worktree", "claim_witness", "device_claim", "preflight",
                    # 2026-08-04: the hypothesis plane. Every module the driver
                    # imports carries the ones IT imports as attributes, and these

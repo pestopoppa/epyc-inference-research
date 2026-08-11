@@ -20,8 +20,8 @@ Work with the operator to:
 2. **Read the in-scope material.** All of it, before the first round:
    - `execution/README.md` §0 (what exists), §1 (preflight), §6 (the honest list of what is
      still open). §6 decides whether today is a campaign or a plumbing session.
-   - `data/autokernel_aa_20260804/README.md` — the A/A evidence behind the current accept rule;
-     do not re-derive it.
+   - `data/autokernel_aa_20260804/README.md` — historical v8 A/A evidence behind the paired
+     design. It is a regression fixture, not v9 ranking authority.
    - `data/autokernel_aa_20260805_rest_recovery/README.md` — the claimed six-run follow-up that
      tested the earlier decode drift across a 180-second idle boundary.
    - The hardware section of this file.
@@ -42,7 +42,7 @@ The entrypoint:
 cd /mnt/raid0/llm/epyc-inference-research
 python3 -m scripts.kernel_rnd.autokernel.campaign --help
 python3 -m scripts.kernel_rnd.autokernel.campaign --campaign-id ak-aug05 --candidate-id akc-0001 --model /mnt/raid0/llm/models/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
-python3 -m scripts.kernel_rnd.autokernel.campaign --campaign-id ak-aug05 --candidate-id akc-0001 --candidate /path/to/candidate.patch --proposal-manifest /path/to/proposal-v3.json --model /mnt/raid0/llm/models/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf --journal-root /mnt/raid0/llm/autokernel/campaigns/ak-aug05 --execute --i-hold-the-host
+python3 -m scripts.kernel_rnd.autokernel.campaign --campaign-id ak-aug05 --candidate-id akc-0001 --candidate /path/to/candidate.patch --proposal-manifest /path/to/proposal-v3.json --calibration-bundle /path/to/current-v9-control-bundle --physical-envelope /path/to/physical-envelope.json --model /mnt/raid0/llm/models/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf --journal-root /mnt/raid0/llm/autokernel/campaigns/ak-aug05 --execute --i-hold-the-host
 ```
 
 `--model` is required and has no default — the cell must dispatch the path you changed, and a
@@ -57,12 +57,24 @@ the driver fsyncs it before preflight, claim acquisition, candidate mutation, or
 remains readable history but cannot drive a new run because it has no representation/demand frame.
 Current proposal-v3 records also carry `external_numbers` (an empty list when none are used); every
 entry must include source revision and matching per-quant, same-basis roofline normalization.
+`--calibration-bundle` is mandatory for execution and must be the accepted live-control bundle for
+the exact production commit, measurement-instrument commit and recipe. The driver rejects the v8
+bundle in `data/autokernel_controls_3pct_20260805/` on v9; those 3%/12-block values are historical
+regression evidence, not constants to copy. The bundle supplies the contribution floor and B_min.
+`--physical-envelope` (or `--ranked-units`) is also mandatory and binds the physical speed-of-light
+guard to the exact measurement unit.
+The CPU IQK known-win diagnostic is a parameter proposal, not a source patch: set
+`change_class` to `parameter` and declare `change.parameter_surface` as
+`{"candidate":{"ggml_iqk":"1"},"anchor":{"ggml_iqk":"0"}}`. The campaign
+driver projects only that recipe-registered arm-local variant; it rejects identical
+arms and every other key.
 
 **The entrypoint is inert unless you ask for a run.** `--dry-run` is the parser's default, not a
 flag you remember: without `--execute` it acquires nothing, spawns nothing and builds nothing —
 it composes every step, prints the exact argv and env that WOULD be spawned, and emits no speed
-number. `--execute` additionally requires `--i-hold-the-host` and `--proposal-manifest`, spelled out,
-and refuses with exit 2 without either. That is the default because this is a shared host and the failure it prevents
+number. `--execute` additionally requires the host attestation, proposal, current calibration and
+physical envelope spelled out above, and refuses with exit 2 before host work without them. That is
+the default because this is a shared host and the failure it prevents
 is real: on 2026-08-04 two of six A/A runs were destroyed by a legitimate co-tenant. A flagless
 invocation must never be the thing that starts a benchmark.
 
@@ -123,11 +135,12 @@ simpler code? Keep" against "if val_bpb is equal or worse, git reset". Prose can
 decision rule. The rule the driver applies is `campaign.decide`, and it is thirty lines:
 
 ```
-campaign.decide(pairs, t0=..., blocks_precommitted=N, drift_bound=...)  ->  AcceptDecision
+campaign.decide(pairs, t0=..., blocks_precommitted=N, drift_bound=...,
+                contribution_floor=..., calibration_evidence_ref=...) -> AcceptDecision
     RAISES AcceptRuleMisuse if T0 did not all-PASS      (no speed number exists for a
                                                          wrong kernel — not a penalised one)
     RAISES AcceptRuleMisuse if len(pairs) != N          (no optional stopping, by refusal)
-    KEEP iff  min(delta) > 0  AND  median(relative) > drift_bound
+    KEEP iff  min(delta) > 0  AND  median(relative) > contribution_floor
     otherwise REVERT, with the reason on the decision
 ```
 
@@ -145,18 +158,19 @@ Three consequences of the measured A/A, so you understand why the rule is shaped
   day-to-day absolute throughput also shifted sharply. **Interleaved paired blocks are
   mandatory**, not preferred, and
   `Pair.order` carries which arm ran first so the pairing is checkable after the fact. The
-  `median(relative) > drift_bound` conjunct exists for the same reason: `min(delta) > 0` alone
-  is satisfied by a systematic drift, which is precisely what the A/A found.
-- 1.6–1.9% CV does **not** justify an e-process. `drift_bound` is DERIVED at import from the
-  recorded A/A series — the largest single-step move between adjacent runs of identical code,
-  3.08% pp512 / 2.13% tg128 — so nobody can loosen the bound without changing a measurement.
+  separate anchor-movement gate exists for the same reason: `min(delta) > 0` alone is satisfied
+  by systematic drift, which is precisely what the A/A found.
+- The candidate contribution floor and B_min come only from the current identity-bound calibration
+  bundle. The v8 3% / B_min=12 result is historical and is rejected on v9. `drift_bound` remains a
+  separate adjacent-anchor movement control; it is not reused as the candidate threshold.
 
-**The rule is deliberately conservative and it cannot rank a +2% decode win.** That is the
-honest reading of a host whose own A/A spread is 4.3%. The remedy is a quieter host or a bigger
-effect, never a looser rule.
+**The rule is deliberately conservative.** Whether a +2% effect is resolvable is answered by the
+current campaign's predeclared floor and MDE, never by importing the historical v8 answer. The
+remedy for an unresolved effect is more information or a different declared campaign, never a
+post-result looser rule.
 
 **Simplicity is not an exception to any of this.** A change that deletes code and lands inside
-the drift bound is a REVERT under the rule — every parity result is. If you believe a
+the contribution floor is a REVERT under the rule — every parity result is. If you believe a
 simplification is worth keeping anyway, that is a proposal to the operator with the decision's
 own numbers attached, and it is **never** spelled as a keep the loop makes for itself. A
 deletion that also deletes the computation is the exact failure this gate exists for and it

@@ -158,6 +158,8 @@ CAMPAIGN_ROOTS = {
     f"{ROOT_PKG}.execution.microbench":
         "paired alternating blocks: 2026-08-04 A/A decode declined monotonically across "
         "four runs, so candidate-then-anchor charges the second arm ~4% systematically",
+    f"{ROOT_PKG}.execution.physical_bounds":
+        "RVP-C6-4 refuses physically impossible throughput before it can enter a rank",
     f"{ROOT_PKG}.execution.t0_provider":
         "the predecessor harness tested MUL_MAT only, so a kernel that broke MUL_MAT_ID — "
         "MoE dispatch, every token in production — passed it cleanly",
@@ -315,11 +317,9 @@ CONTROLLER_ALLOWED = {
 # The symbol fence — modules that ARE reachable, with a deferred gate surface
 # =============================================================================
 
-#: `evaluator/integrity.py`: reachable for PROVENANCE PRIMITIVES only. Frozen
-#: from the tree on 2026-08-04. A new name here is not a style question — it is
-#: the §8.5.1 gate derivation creeping onto a path that cannot satisfy it,
-#: because T0 today produces nine of seventeen surfaces (README, "Remaining in
-#: AK3", item 2).
+#: `evaluator/integrity.py`: reachable for provenance and raw evidence
+#: primitives only, never its §8.5.1 gate runners. A new name here is not a
+#: style question: it needs a concrete campaign evidence consumer.
 INTEGRITY_ALLOWED_NAMES = frozenset({
     # hashing / build identity — worktree.py's receipt and microbench.py's binary hash
     "sha256_file", "hash_source_tree", "TreeDigest", "BuildProvenance",
@@ -327,6 +327,7 @@ INTEGRITY_ALLOWED_NAMES = frozenset({
     # the anchor/symbol SEAM projections in chain.py: types and pure diff helpers,
     # none of which is a gate runner
     "DeclaredSymbolDeltas", "ElfSymbolTable", "RegistrationDiff", "RegistrationTable",
+    "PatternRegistrationExtractor",
     "SourceDiff", "SymbolDiff", "KIND_DISPATCH_PREDICATE", "KIND_OP_REGISTRATION",
     "diff_registration_tables", "diff_symbol_tables", "extract_elf_symbols",
     "parse_mangled_name", "parse_unified_diff",
