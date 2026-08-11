@@ -55,6 +55,9 @@ MATCHED_BUDGET_HOURS = rebench_scoring.DEFAULT_BUDGET_HOURS
 IMPLEMENTATION_MODULE = Path(__file__).resolve()
 REPOSITORY_ROOT = IMPLEMENTATION_MODULE.parents[4]
 IN_TREE_SOURCE_ROOT = "repository://."
+VENDOR_SOURCE_SCHEME = "vendor://"
+DEFAULT_VENDOR_SOURCE_ROOT = Path(
+    "/mnt/raid0/llm/autokernel/vendor/arena-controllers")
 _SHA256_RE = re.compile(r"[0-9a-f]{64}")
 _ID_RE = re.compile(r"[a-z][a-z0-9_.-]{2,95}")
 
@@ -316,6 +319,14 @@ def _task_audit(arena_root: Path, task: TaskArtifact) -> dict[str, Any]:
 def _resolve_source_root(value: str | None) -> tuple[Path, bool]:
     if value == IN_TREE_SOURCE_ROOT:
         return REPOSITORY_ROOT, True
+    if isinstance(value, str) and value.startswith(VENDOR_SOURCE_SCHEME):
+        relative = Path(value.removeprefix(VENDOR_SOURCE_SCHEME))
+        if (not relative.parts or relative.is_absolute() or ".." in relative.parts
+                or len(relative.parts) != 1):
+            raise ArenaCampaignError("vendor source locator must name one checkout")
+        base = Path(os.environ.get(
+            "AUTOKERNEL_ARENA_CONTROLLER_ROOT", str(DEFAULT_VENDOR_SOURCE_ROOT)))
+        return (base / relative).resolve(), False
     return Path(value or "").resolve(), False
 
 

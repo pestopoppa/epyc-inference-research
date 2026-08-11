@@ -39,9 +39,11 @@ primary INF-03 comparison is exactly eight arms:
 7. GEAK-v1; and
 8. ARGUS.
 
-ARGUS is unavailable, not omitted: its arm names the missing public licensed
-source, gfx90a controller path, and hash-bound Arena wrapper/model pins. No
-MI300X/gfx942 result transfers into this prospective MI210 comparison.
+EvoEngineer and ARGUS are unavailable, not omitted: their public repositories
+do not yet provide licensed controller implementations that can honestly occupy
+those named arms. A controller reconstructed from either paper would be
+``*-inspired``, not the published system. No MI300X/gfx942 result transfers into
+this prospective MI210 comparison.
 
 `arena_campaign_v1.json` fixes the comparison task, file digests, one-at-a-time
 MI210 use, and the adopted RE-Bench elapsed-wall-time checkpoints of exactly 2,
@@ -55,6 +57,19 @@ checkpoint tuple and zero authoring budget. The audit also binds the exact confi
 file and campaign-driver module SHA-256 values, and execution rechecks both to
 prevent a ready receipt from being replayed after either input changes.
 
+`arena_cell_runner.py` is the concrete governed implementation of that typed
+executor seam. It does not patch the pinned Arena checkout. Instead, each cell
+loads Arena's workspace/evaluator modules in an isolated child process while
+the parent holds AutoKernel's cross-process `mi210_0` claim and 250 ms device
+sampler. The baseline runs once without authoring. Every controller runs three
+independent fresh workspaces at 2 h, 8 h, and 32 h; the runner rewrites only the
+two declared budget flags and refuses an adapter that does not expose them.
+Task and controller identities are re-audited before every claim. Arena alone
+compiles, checks correctness, and times the resulting workspace, after which
+the runner writes hash-bound cell evidence plus separate Vidya-compatible
+correctness and timing-validity beliefs. Partial campaign evidence is retained
+but is explicitly non-rankable.
+
 The no-execution audit command is:
 
 ```bash
@@ -64,6 +79,44 @@ python3 -m scripts.kernel_rnd.autokernel.controller.arena_campaign \
   --geak-root /path/to/GEAK-at-4ffba15a \
   --output /path/to/audit-receipt.json
 ```
+
+Once (and only once) the audit reaches 8/8, the same inputs execute through the
+governed bridge with:
+
+```bash
+python3 -m scripts.kernel_rnd.autokernel.controller.arena_cell_runner \
+  --config scripts/kernel_rnd/autokernel/controller/arena_campaign_v1.json \
+  --arena-root /path/to/AgentKernelArena-at-2dbbf1d3 \
+  --geak-root /path/to/GEAK-at-4ffba15a \
+  --preflight /path/to/preflight-receipt.json \
+  --output-root /new/write-once/campaign-directory
+```
+
+If any arm remains unavailable, this command writes the refusal audit and exits
+before a device claim, model, compiler, or GPU command is started.
+
+## Controller source availability — 2026-08-11
+
+The source gate is now split by controller rather than treating all six missing
+arms alike:
+
+- KernelFoundry `v0.3.0` (`1c053e02383d12937f144923bcc1faa82fa7788f`),
+  K-Search (`53c8fab9a5e8fab2c86610d24fbec5067f90e115`), and Xe-Forge
+  `v0.3.0` (`4dcb5080b0f56d0b655ec8c8c9509b8e3ba0382c`) are Apache-2.0
+  upstream implementations and can receive explicit gfx90a evaluator ports;
+- GEAK-v1 `v1.0.0` (`4ffba15a55f250816598b4e27eb56ca40a699cea`)
+  is Apache-2.0 and its real `OptimAgent_ROCm` controller can run against the
+  licensed Arena task. That controller A/B is separate from reproducing the
+  paper's GEAK-eval score; GEAK-eval has no project-level licence and remains a
+  corpus/reproduction gate;
+- EvoEngineer's repository contains only a release-soon notice and no licence;
+  ARGUS has no official source artifact. Those two are external publication
+  gates and keep the fixed eight-arm campaign safely refused.
+
+External checkouts may be addressed as `vendor://<checkout>` in the campaign
+file. The default root is
+`/mnt/raid0/llm/autokernel/vendor/arena-controllers`; an operator may relocate
+the clean exact checkouts with `AUTOKERNEL_ARENA_CONTROLLER_ROOT`.
 
 On 2026-08-11 the physical-gfx90a audit correctly refused before inference at
 **1/8 executable arms**. The starting-state baseline, pinned task, pinned vendor

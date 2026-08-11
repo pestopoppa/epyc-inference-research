@@ -218,6 +218,18 @@ class ArenaCampaignTest(unittest.TestCase):
                 "evoengineer", "ready", "stdin_workspace_v1", (),
                 argv=(sys.executable, "-c", "pass"))
 
+    def test_vendor_source_locator_is_bounded_and_root_is_configurable(self):
+        vendor_root = self.root / "vendor"
+        with mock.patch.dict(
+            "os.environ", {"AUTOKERNEL_ARENA_CONTROLLER_ROOT": str(vendor_root)},
+        ):
+            resolved, in_tree = C._resolve_source_root("vendor://k-search")
+        self.assertEqual(resolved, (vendor_root / "k-search").resolve())
+        self.assertFalse(in_tree)
+        for locator in ("vendor://../escape", "vendor://nested/source", "vendor://"):
+            with self.assertRaisesRegex(C.ArenaCampaignError, "one checkout"):
+                C._resolve_source_root(locator)
+
     def test_complete_fixture_audits_ready_and_binds_executable_hashes(self):
         receipt = self.audit(self.ready_spec())
         self.assertEqual(receipt["status"], "ready")
