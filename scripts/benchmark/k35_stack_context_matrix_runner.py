@@ -531,6 +531,66 @@ SCENARIOS: tuple[Scenario, ...] = (
         extra_args=("-b", "512", "--no-repack", "--no-warmup"),
         prior_evidence="Final-tip replay of the bounded v9 DSpark Q8 parity smoke.",
     ),
+    Scenario(
+        name="v9_dsv4_iq3_xxs_dspark_request_nmax0",
+        role="dsv4_dspark_smoke",
+        description="DeepSeek V4 Flash IQ3_XXS plus DSpark sidecar, disabled per request.",
+        model=Path(
+            "/mnt/raid0/llm/models/deepseek-v4-flash-0731/UD-IQ3_XXS/"
+            "DeepSeek-V4-Flash-0731-UD-IQ3_XXS-00001-of-00004.gguf"
+        ),
+        draft_model=Path(
+            "/mnt/raid0/llm/models/deepseek-v4-flash-0731/"
+            "dspark-DeepSeek-V4-Flash-0731-Q8_0.gguf"
+        ),
+        max_context=4096,
+        threads=24,
+        ubatch=512,
+        device="none",
+        n_gpu_layers=0,
+        kv_k="f16",
+        kv_v="f16",
+        reasoning="auto",
+        parallel=1,
+        request_spec_n_max=0,
+        request_endpoint="completion",
+        spec_type="draft-dspark",
+        spec_draft_n_max=3,
+        spec_draft_device="none",
+        spec_draft_ngl=0,
+        extra_args=("-b", "512", "--no-repack", "--no-warmup"),
+        prior_evidence="Operator-requested quick IQ3_XXS DSpark observation on production v9.",
+    ),
+    Scenario(
+        name="v9_dsv4_iq3_xxs_dspark_request_nmax3",
+        role="dsv4_dspark_smoke",
+        description="DeepSeek V4 Flash IQ3_XXS plus DSpark sidecar, depth three per request.",
+        model=Path(
+            "/mnt/raid0/llm/models/deepseek-v4-flash-0731/UD-IQ3_XXS/"
+            "DeepSeek-V4-Flash-0731-UD-IQ3_XXS-00001-of-00004.gguf"
+        ),
+        draft_model=Path(
+            "/mnt/raid0/llm/models/deepseek-v4-flash-0731/"
+            "dspark-DeepSeek-V4-Flash-0731-Q8_0.gguf"
+        ),
+        max_context=4096,
+        threads=24,
+        ubatch=512,
+        device="none",
+        n_gpu_layers=0,
+        kv_k="f16",
+        kv_v="f16",
+        reasoning="auto",
+        parallel=1,
+        request_spec_n_max=3,
+        request_endpoint="completion",
+        spec_type="draft-dspark",
+        spec_draft_n_max=3,
+        spec_draft_device="none",
+        spec_draft_ngl=0,
+        extra_args=("-b", "512", "--no-repack", "--no-warmup"),
+        prior_evidence="Operator-requested quick IQ3_XXS DSpark observation on production v9.",
+    ),
 )
 
 
@@ -1322,20 +1382,22 @@ def summarize_results_by_scenario(results: list[dict[str, Any]]) -> dict[str, An
 
 
 def evaluate_dspark_parity(results: list[dict[str, Any]]) -> dict[str, Any] | None:
-    names = {
-        "v9_dsv4_q8_dspark_request_nmax0": 0,
-        "v9_dsv4_q8_dspark_request_nmax3": 3,
+    names: dict[str, tuple[str, int]] = {
+        "v9_dsv4_q8_dspark_request_nmax0": ("q8", 0),
+        "v9_dsv4_q8_dspark_request_nmax3": ("q8", 3),
+        "v9_dsv4_iq3_xxs_dspark_request_nmax0": ("iq3_xxs", 0),
+        "v9_dsv4_iq3_xxs_dspark_request_nmax3": ("iq3_xxs", 3),
     }
     selected = [row for row in results if row.get("scenario") in names]
     if not selected:
         return None
-    grouped: dict[tuple[int, int], dict[int, dict[str, Any]]] = {}
+    grouped: dict[tuple[str, int, int], dict[int, dict[str, Any]]] = {}
     for row in selected:
-        key = (int(row.get("nominal_context") or 0), int(row.get("rep") or 0))
-        cap = names[str(row["scenario"])]
+        variant, cap = names[str(row["scenario"])]
+        key = (variant, int(row.get("nominal_context") or 0), int(row.get("rep") or 0))
         grouped.setdefault(key, {})[cap] = row
     comparisons: list[dict[str, Any]] = []
-    for (context, rep), arms in sorted(grouped.items()):
+    for (variant, context, rep), arms in sorted(grouped.items()):
         disabled, enabled = arms.get(0), arms.get(3)
         tokens_disabled = disabled.get("token_ids") if disabled else None
         tokens_enabled = enabled.get("token_ids") if enabled else None
@@ -1350,6 +1412,7 @@ def evaluate_dspark_parity(results: list[dict[str, Any]]) -> dict[str, Any] | No
         }
         comparisons.append(
             {
+                "variant": variant,
                 "nominal_context": context,
                 "rep": rep,
                 "checks": checks,

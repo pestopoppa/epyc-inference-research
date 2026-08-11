@@ -1,0 +1,230 @@
+{
+  "binary": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server",
+  "captured_at": "2026-08-11T06:37:29.170737+00:00",
+  "devices": {
+    "argv": [
+      "env",
+      "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp/build/bin",
+      "ROCR_VISIBLE_DEVICES=0",
+      "HIP_VISIBLE_DEVICES=0",
+      "/mnt/raid0/llm/llama.cpp/build/bin/llama-server",
+      "--list-devices"
+    ],
+    "ok": true,
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "Available devices:\n"
+  },
+  "git": {
+    "binary": {
+      "binary_dir": "/mnt/raid0/llm/llama.cpp/build/bin",
+      "branch": {
+        "argv": [
+          "git",
+          "-C",
+          "/mnt/raid0/llm/llama.cpp",
+          "branch",
+          "--show-current"
+        ],
+        "ok": true,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "production-consolidated-v9\n"
+      },
+      "head": {
+        "argv": [
+          "git",
+          "-C",
+          "/mnt/raid0/llm/llama.cpp",
+          "rev-parse",
+          "--short",
+          "HEAD"
+        ],
+        "ok": true,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "0db32c06e\n"
+      },
+      "production_named_kernel": true,
+      "root": "/mnt/raid0/llm/llama.cpp",
+      "root_probe": {
+        "argv": [
+          "git",
+          "-C",
+          "/mnt/raid0/llm/llama.cpp/build/bin",
+          "rev-parse",
+          "--show-toplevel"
+        ],
+        "ok": true,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "/mnt/raid0/llm/llama.cpp\n"
+      },
+      "status": {
+        "argv": [
+          "git",
+          "-C",
+          "/mnt/raid0/llm/llama.cpp",
+          "status",
+          "--short"
+        ],
+        "ok": true,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "?? .gitnexusignore\n?? tools/math-tools/\n"
+      }
+    },
+    "experimental_head": {
+      "argv": [
+        "git",
+        "-C",
+        "/mnt/raid0/llm/llama.cpp-experimental",
+        "rev-parse",
+        "--short",
+        "HEAD"
+      ],
+      "ok": true,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "0db32c06e\n"
+    },
+    "experimental_status": {
+      "argv": [
+        "git",
+        "-C",
+        "/mnt/raid0/llm/llama.cpp-experimental",
+        "status",
+        "--short"
+      ],
+      "ok": true,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": " M tests/test-backend-ops.cpp\nMM tools/llama-bench/README.md\nMM tools/llama-bench/llama-bench.cpp\n"
+    }
+  },
+  "memory": {
+    "argv": [
+      "free",
+      "-h"
+    ],
+    "ok": true,
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "               total        used        free      shared  buff/cache   available\nMem:           1.1Ti       334Gi       119Gi       154Mi       686Gi       799Gi\nSwap:          8.0Gi       259Mi       7.7Gi\n"
+  },
+  "numa": {
+    "argv": [
+      "numactl",
+      "--hardware"
+    ],
+    "ok": true,
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "available: 4 nodes (0-3)\nnode 0 cpus: 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 96 97 98 99 100 101 102 103 104 105 106 107 108 109 110 111 112 113 114 115 116 117 118 119\nnode 0 size: 289860 MB\nnode 0 free: 15542 MB\nnode 1 cpus: 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 120 121 122 123 124 125 126 127 128 129 130 131 132 133 134 135 136 137 138 139 140 141 142 143\nnode 1 size: 290287 MB\nnode 1 free: 2116 MB\nnode 2 cpus: 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 144 145 146 147 148 149 150 151 152 153 154 155 156 157 158 159 160 161 162 163 164 165 166 167\nnode 2 size: 290287 MB\nnode 2 free: 4535 MB\nnode 3 cpus: 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 168 169 170 171 172 173 174 175 176 177 178 179 180 181 182 183 184 185 186 187 188 189 190 191\nnode 3 size: 290182 MB\nnode 3 free: 100021 MB\nnode distances:\nnode     0    1    2    3 \n   0:   10   12   12   12 \n   1:   12   10   12   12 \n   2:   12   12   10   12 \n   3:   12   12   12   10 \n"
+  },
+  "process_blockers": [
+    {
+      "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 8080 -np 1 -c 262144 -t 48 -ub 8192 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --mlock --no-mmap --spec-type draft-mtp --spec-draft-n-max 4 --reasoning off --slot-save-path /mnt/raid0/llm/cache/kv_slots/frontdoor --device none --device-draft none",
+      "comm": "llama-server",
+      "pid": 4086190,
+      "reason": "llama workload"
+    },
+    {
+      "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 8180 -np 1 -c 262144 -t 48 -ub 8192 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --mlock --no-mmap --spec-type draft-mtp --spec-draft-n-max 4 --reasoning off --slot-save-path /mnt/raid0/llm/cache/kv_slots/frontdoor --device none --device-draft none",
+      "comm": "llama-server",
+      "pid": 4089846,
+      "reason": "llama workload"
+    },
+    {
+      "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf -md /mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf --spec-type draft-mtp --spec-draft-n-max 2 --draft-p-min 0.0 --threads-draft 16 -ub 512 --no-mmap --reasoning off --jinja --host 127.0.0.1 --port 8082 -np 1 -c 262144 -t 48 -ctk q8_0 -ctv q8_0 --flash-attn on --device none --device-draft none",
+      "comm": "llama-server",
+      "pid": 4091290,
+      "reason": "llama workload"
+    },
+    {
+      "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf -md /mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf --spec-type draft-mtp --spec-draft-n-max 2 --draft-p-min 0.0 --threads-draft 16 -ub 512 --no-mmap --reasoning off --jinja --host 127.0.0.1 --port 8182 -np 1 -c 262144 -t 48 -ctk q8_0 -ctv q8_0 --flash-attn on --device none --device-draft none",
+      "comm": "llama-server",
+      "pid": 4092162,
+      "reason": "llama workload"
+    },
+    {
+      "args": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf --host 127.0.0.1 --port 8083 -np 2 -c 65536 -t 8 -ub 8192 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --no-mmap -ngl all --spec-type draft-mtp --spec-draft-n-max 4 --reasoning off --device ROCm0 --slot-save-path /mnt/raid0/llm/cache/kv_slots/architect_general --device-draft ROCm0",
+      "comm": "llama-server",
+      "pid": 4092456,
+      "reason": "llama workload"
+    },
+    {
+      "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf --host 127.0.0.1 --port 8074 -np 1 -c 262144 -t 96 -ub 8192 --flash-attn on --jinja -ctk q4_0 -ctv f16 --mlock --no-mmap --spec-type draft-mtp --spec-draft-n-max 4 --reasoning off --slot-save-path /mnt/raid0/llm/cache/kv_slots/architect_critic --device none --device-draft none",
+      "comm": "llama-server",
+      "pid": 4092667,
+      "reason": "llama workload"
+    },
+    {
+      "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf --host 127.0.0.1 --port 8185 -np 1 -c 262144 -t 48 -ub 8192 --flash-attn on --jinja -ctk q4_0 -ctv q4_0 --mlock --no-mmap --slot-save-path /mnt/raid0/llm/cache/kv_slots/ingest_long_context --device none",
+      "comm": "llama-server",
+      "pid": 4093055,
+      "reason": "llama workload"
+    },
+    {
+      "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf --host 127.0.0.1 --port 8285 -np 1 -c 262144 -t 48 -ub 8192 --flash-attn on --jinja -ctk q4_0 -ctv q4_0 --mlock --no-mmap --slot-save-path /mnt/raid0/llm/cache/kv_slots/ingest_long_context --device none",
+      "comm": "llama-server",
+      "pid": 4093341,
+      "reason": "llama workload"
+    },
+    {
+      "args": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server -m /mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf --mmproj /mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf --host 127.0.0.1 --port 8086 -np 1 -c 65536 -t 8 --flash-attn on -ctk q8_0 -ctv q8_0 --device ROCm0 -ngl 999 --image-min-tokens 1024 --cache-ram 0",
+      "comm": "llama-server",
+      "pid": 4093651,
+      "reason": "llama workload"
+    },
+    {
+      "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/bge-large-en-v1.5-f16.gguf --host 127.0.0.1 --port 8090 -np 4 -c 512 -t 4 --embeddings --pooling cls --flash-attn on --device none",
+      "comm": "llama-server",
+      "pid": 4093907,
+      "reason": "llama workload"
+    },
+    {
+      "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/bge-large-en-v1.5-f16.gguf --host 127.0.0.1 --port 8091 -np 4 -c 512 -t 4 --embeddings --pooling cls --flash-attn on --device none",
+      "comm": "llama-server",
+      "pid": 4094123,
+      "reason": "llama workload"
+    },
+    {
+      "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/bge-large-en-v1.5-f16.gguf --host 127.0.0.1 --port 8092 -np 4 -c 512 -t 4 --embeddings --pooling cls --flash-attn on --device none",
+      "comm": "llama-server",
+      "pid": 4094326,
+      "reason": "llama workload"
+    },
+    {
+      "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/bge-large-en-v1.5-f16.gguf --host 127.0.0.1 --port 8093 -np 4 -c 512 -t 4 --embeddings --pooling cls --flash-attn on --device none",
+      "comm": "llama-server",
+      "pid": 4094529,
+      "reason": "llama workload"
+    },
+    {
+      "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/bge-large-en-v1.5-f16.gguf --host 127.0.0.1 --port 8094 -np 4 -c 512 -t 4 --embeddings --pooling cls --flash-attn on --device none",
+      "comm": "llama-server",
+      "pid": 4094736,
+      "reason": "llama workload"
+    },
+    {
+      "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/bge-large-en-v1.5-f16.gguf --host 127.0.0.1 --port 8095 -np 4 -c 512 -t 4 --embeddings --pooling cls --flash-attn on --device none",
+      "comm": "llama-server",
+      "pid": 4094963,
+      "reason": "llama workload"
+    }
+  ],
+  "runtime_library_dir": "/mnt/raid0/llm/llama.cpp/build/bin",
+  "server_version": {
+    "argv": [
+      "env",
+      "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp/build/bin",
+      "/mnt/raid0/llm/llama.cpp/build/bin/llama-server",
+      "--version"
+    ],
+    "ok": true,
+    "returncode": 0,
+    "stderr": "version: 10125 (0db32c06e)\nbuilt with GNU 15.2.0 for Linux x86_64\n",
+    "stdout": ""
+  }
+}

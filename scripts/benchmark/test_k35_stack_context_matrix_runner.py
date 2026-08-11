@@ -312,6 +312,15 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
             k35.build_chat_request_body(disabled, "prompt", max_tokens=16)["return_tokens"]
         )
 
+    def test_v9_iq3_xxs_dspark_pair_uses_downloaded_target(self):
+        disabled = k35.scenario_by_name("v9_dsv4_iq3_xxs_dspark_request_nmax0")
+        enabled = k35.scenario_by_name("v9_dsv4_iq3_xxs_dspark_request_nmax3")
+        self.assertEqual(disabled.model, enabled.model)
+        self.assertIn("UD-IQ3_XXS", str(disabled.model))
+        self.assertEqual(disabled.draft_model, enabled.draft_model)
+        self.assertEqual(disabled.request_spec_n_max, 0)
+        self.assertEqual(enabled.request_spec_n_max, 3)
+
     def test_dspark_summary_captures_tokens_and_effective_cap(self):
         scenario = k35.scenario_by_name("v9_dsv4_q8_dspark_request_nmax0")
         result = k35.summarize_response(
@@ -350,6 +359,7 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
             ]
         )
         self.assertEqual(result["status"], "pass")
+        self.assertEqual(result["comparisons"][0]["variant"], "q8")
         self.assertTrue(all(result["comparisons"][0]["checks"].values()))
 
     def test_main_dry_run_writes_plan_and_commands(self):
