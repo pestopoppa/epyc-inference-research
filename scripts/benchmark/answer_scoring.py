@@ -13,7 +13,31 @@ from __future__ import annotations
 import re
 
 def extract_letter_answer(response: str) -> str:
-    """Extract a single letter (A-J) from the model's response."""
+    """Extract a single letter (A-J) from the model's response.
+
+    ⚠ NOT interchangeable with `epyc-orchestrator`'s
+    `scripts/benchmark/debug_scorer.py:_extract_multiple_choice_letter`, despite the
+    obvious resemblance. Proven per-consumer 2026-08-11 (`mainC`, A10) rather than
+    assumed, because that scorer is on the authority/sealed-capture path and a
+    silent swap would RE-SCORE sealed evidence. The behavioural deltas:
+
+      1. RANGE. This accepts A-J; debug_scorer accepts A-H. A reply of "I" or "J"
+         parses here and returns None there.
+      2. LAST-RESORT RULE — the big one, and it points in the PERMISSIVE direction.
+         debug_scorer's Strategy 5 returns the LAST standalone letter
+         unconditionally, so a verbose reply mentioning several letters always
+         yields a guess. This function accepts a bare letter only when there is
+         EXACTLY ONE candidate in the whole response, and otherwise returns "".
+         So on the same corpus debug_scorer scores answers this function declines
+         to parse — the divergence is systematic, not incidental.
+      3. `\\boxed{...}` is honoured here (second priority) and not there at all.
+      4. This accepts `ANSWER = X` as well as `is`/`:`; debug_scorer accepts only
+         `is`/`:`.
+
+    Migrating either onto the other is therefore a SCORING CHANGE, not a
+    de-duplication, and is out of scope for the additive A10 pass. If it is ever
+    done, it needs a re-score of the affected sealed captures, not just a diff.
+    """
     stripped = response.strip()
 
     # An explicit final-answer tag wins outright. The delimiter is REQUIRED:
