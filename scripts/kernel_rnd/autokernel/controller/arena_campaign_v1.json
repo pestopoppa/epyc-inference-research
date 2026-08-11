@@ -236,9 +236,9 @@
         "/mnt/raid0/llm/autokernel/vendor/arena-controllers/geak-v1"
       ],
       "source_root": "repository://.",
-      "source_commit": "38b8e07eb08874e98d83a7675bd78768bdc87b25",
+      "source_commit": "743f59df33642cd38e631357772345250919d5f0",
       "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/geak_v1_arena.py",
-      "entrypoint_sha256": "133fb03a1a25c839cf5db597becbb1f1da474471a3bc3cce32121904aafcc8e1",
+      "entrypoint_sha256": "7418493b4322f1be0df76be21686a6e0d48f43f27e0198a0db55b915f27516a7",
       "model_ids": [
         "gpt-5.6-sol:high:upstream-controller"
       ],
