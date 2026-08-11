@@ -200,6 +200,7 @@ def _proposal_payload() -> dict:
         },
         "expected_information_gain": 0.4,
         "representation_contract": _representation_contract(),
+        "external_numbers": [],
         "target": {"regimes": ["decode"], "ops": ["ggml_cuda_op_rms_norm"],
                    "shapes": [], "models": []},
         "non_target": {"regimes": ["prefill"], "shapes": []},

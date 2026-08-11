@@ -102,6 +102,7 @@ import os
 import re
 import signal
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -109,6 +110,8 @@ from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 
 from .. import schemas
 from ..evaluator import api, correctness, recipes
+from . import reward_hack_scan
+from . import sandbox as process_sandbox
 
 __all__ = [
     # errors
@@ -302,21 +305,20 @@ SEAMS = (
      "`fallback_instrumentation_active` is False whenever the campaign's fallback class is "
      "outside it, so the gate reads COULD_NOT_CHECK instead of PASS. Closing it needs "
      "instrumentation inside the backend, which is a source change and a normal candidate."),
-    ("SIX FIELDS ARE ASSERTED, NOT MEASURED, and every one of them is clean-shaped. On "
+    ("FOUR STATE-SAFETY FIELDS AND ONE ORACLE-USE FIELD ARE ASSERTED, NOT MEASURED. On "
      "`StateSafetyEvidence`: `race_detector_id=None`, `race_findings=()`, "
      "`leaked_resources=()` and `rollback_tested=False` — no race detector is run, no resource "
      "table is diffed across teardown, and no rollback is exercised. On "
-     "`AntiRewardHackingEvidence`: `candidate_output_used_as_oracle=False`, "
-     "`environment_probe_findings=()` and `timing_dependent_branch_findings=()` — nothing here "
-     "inspects the candidate for a test-detecting branch or a timing-dependent one. Only "
+     "`AntiRewardHackingEvidence`, `candidate_output_used_as_oracle=False` remains asserted. "
+     "RVP-C6-9 now scans the committed candidate diff for environment probes and timing-"
+     "dependent branches and records versioned detector ids; an absent diff records no detector "
+     "id, so empty findings become COULD_NOT_CHECK rather than PASS. Only "
      "`orphan_processes` is a real observation. Two of these fail CLOSED and one does not: "
      "`rollback_tested=False` makes `check_state_rollback_teardown_race` FAIL outright "
      "whenever `state_safety_probe=True`, so the surface is currently a choice between a "
-     "guaranteed FAIL and no evidence at all; but an empty "
-     "`environment_probe_findings`/`timing_dependent_branch_findings` reads as PASS, which is "
-     "an empty list from a detector that was never built. Closing this needs a real teardown "
-     "probe and a source-level scan of the candidate diff; neither is synthesisable from "
-     "`test-backend-ops` output."),
+     "guaranteed FAIL and no evidence at all. Closing the remaining seam needs a real teardown "
+     "probe and an observation proving whether candidate output entered the oracle; neither is "
+     "synthesisable from `test-backend-ops` output."),
     ("`test-backend-ops test -b CPU` compares the CPU backend against the CPU backend: the "
      "reference in test mode is ggml's own CPU implementation of the same graph. For a CPU "
      "candidate this is a self-consistency check with real value (it catches a kernel that "
@@ -489,6 +491,8 @@ class CompletedProcess:
     timed_out: bool
     signalled: bool
     orphans: tuple = ()
+    sandbox_receipt: Optional[dict] = None
+    sandbox_teardown: Optional[dict] = None
 
     def __post_init__(self) -> None:
         for item in self.argv:
@@ -525,6 +529,8 @@ class CompletedProcess:
             "timed_out": self.timed_out,
             "signalled": self.signalled,
             "orphans": list(self.orphans),
+            "sandbox_receipt": self.sandbox_receipt,
+            "sandbox_teardown": self.sandbox_teardown,
         }
 
     def content_sha256(self) -> str:
@@ -572,33 +578,68 @@ class SubprocessRunner:
        reported as an orphan rather than assumed dead.
     """
 
-    def __init__(self, *, term_grace_s: float = 10.0, kill_grace_s: float = 5.0) -> None:
+    def __init__(self, *, term_grace_s: float = 10.0, kill_grace_s: float = 5.0,
+                 sandbox_policy: Optional[process_sandbox.SandboxPolicy] = None) -> None:
         if term_grace_s <= 0 or kill_grace_s <= 0:
             raise ValueError("grace periods must be positive")
         self._term_grace_s = float(term_grace_s)
         self._kill_grace_s = float(kill_grace_s)
+        if sandbox_policy is not None and not isinstance(
+                sandbox_policy, process_sandbox.SandboxPolicy):
+            raise TypeError("sandbox_policy must be a SandboxPolicy or None")
+        self._sandbox_policy = sandbox_policy
 
     def run(self, argv: Sequence[str], *, env: Mapping[str, str], cwd: str,
             timeout_s: float) -> CompletedProcess:
         argv = tuple(str(token) for token in argv)
         if not argv:
             raise ValueError("argv must be non-empty")
-        env_pairs = tuple(sorted((str(k), str(v)) for k, v in env.items()))
+        executed_env = {str(k): str(v) for k, v in env.items()}
+        scratch = None
+        receipt_path = None
+        spawn_argv = argv
+        if self._sandbox_policy is not None:
+            executed_env["PYTHONDONTWRITEBYTECODE"] = "1"
+            scratch = tempfile.TemporaryDirectory(
+                prefix="autokernel-t0-", dir=self._sandbox_policy.writable_root)
+            evaluator_dir = Path(scratch.name, "evaluator")
+            candidate_dir = Path(scratch.name, "candidate")
+            evaluator_dir.mkdir()
+            candidate_dir.mkdir()
+            receipt_path = evaluator_dir / "sandbox-receipt.json"
+            executed_env["TMPDIR"] = str(candidate_dir)
+            invocation_policy = process_sandbox.SandboxPolicy(
+                writable_root=str(candidate_dir),
+                cgroup_root=self._sandbox_policy.cgroup_root,
+                limits=self._sandbox_policy.limits,
+                token=self._sandbox_policy.token)
+            spawn_argv = invocation_policy.wrap(
+                argv, receipt_path=str(receipt_path))
+        else:
+            invocation_policy = None
+        env_pairs = tuple(sorted(executed_env.items()))
         started = time.monotonic()
-        proc = subprocess.Popen(  # noqa: S603 - argv list, no shell, declared env
-            list(argv),
-            env=dict(env_pairs),
-            cwd=cwd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            stdin=subprocess.DEVNULL,
-            shell=False,
-            start_new_session=True,
-            text=True,
-        )
+        try:
+            proc = subprocess.Popen(  # noqa: S603 - argv list, no shell, declared env
+                list(spawn_argv),
+                env=dict(env_pairs),
+                cwd=cwd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                stdin=subprocess.DEVNULL,
+                shell=False,
+                start_new_session=True,
+                text=True,
+            )
+        except BaseException:
+            if scratch is not None:
+                scratch.cleanup()
+            raise
         timed_out = False
         signalled = False
         orphans: tuple = ()
+        sandbox_receipt = None
+        sandbox_teardown = None
         try:
             stdout, stderr = proc.communicate(timeout=timeout_s)
         except subprocess.TimeoutExpired:
@@ -624,7 +665,25 @@ class SubprocessRunner:
             except BaseException:  # noqa: BLE001 - never mask the original failure
                 pass
             self._close_pipes(proc)
+            self._cleanup_sandbox_after_failure(proc.pid)
+            if scratch is not None:
+                scratch.cleanup()
             raise
+        if self._sandbox_policy is not None:
+            try:
+                sandbox_receipt = process_sandbox.read_receipt(receipt_path)
+                process_sandbox.verify_receipt(
+                    sandbox_receipt, policy=invocation_policy, pid=proc.pid, argv=argv)
+                sandbox_teardown = process_sandbox.cleanup_cgroup(
+                    invocation_policy, proc.pid)
+            except process_sandbox.SandboxError as exc:
+                self._cleanup_sandbox_after_failure(proc.pid)
+                raise ExecutionError(
+                    f"candidate containment did not produce a verified receipt and "
+                    f"teardown: {exc}") from exc
+            finally:
+                if scratch is not None:
+                    scratch.cleanup()
         return CompletedProcess(
             argv=argv,
             env=env_pairs,
@@ -636,7 +695,21 @@ class SubprocessRunner:
             timed_out=timed_out,
             signalled=signalled,
             orphans=orphans,
+            sandbox_receipt=sandbox_receipt,
+            sandbox_teardown=sandbox_teardown,
         )
+
+    def _cleanup_sandbox_after_failure(self, pid: int) -> None:
+        """Best-effort drain on an exceptional path; never hides the first failure."""
+        if self._sandbox_policy is None:
+            return
+        path = self._sandbox_policy.cgroup_path(pid)
+        if not path.exists():
+            return
+        try:
+            process_sandbox.cleanup_cgroup(self._sandbox_policy, pid)
+        except process_sandbox.SandboxError:
+            pass
 
     @staticmethod
     def _close_pipes(proc: "subprocess.Popen") -> None:
@@ -1159,6 +1232,10 @@ class T0ExecutionPlan:
     #: evaluator folds these into the named gate; they are not advisory notes.
     projection_checks: tuple = ()
     state_safety_probe: bool = False
+    #: Committed source delta from the reviewed measurement base. `None` means
+    #: the two C6 source detectors did not run, and empty findings then remain
+    #: UNKNOWN rather than being interpreted as clean.
+    candidate_diff_text: Optional[str] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.candidate, CandidateBuild):
@@ -1193,6 +1270,9 @@ class T0ExecutionPlan:
         if self.backend not in schemas.BACKENDS:
             raise ValueError(f"plan.backend: {self.backend!r} is not one of "
                              f"{sorted(schemas.BACKENDS)}")
+        if self.candidate_diff_text is not None and not isinstance(
+                self.candidate_diff_text, str):
+            raise TypeError("plan.candidate_diff_text must be a string or None")
         # The four pass-through evidence inputs are TYPE-CHECKED, and the reason
         # is seam 1: `integrity.py` and `correctness.py` each define a
         # `BuildProvenance`, they share no field name, and the wrong one arriving
@@ -2743,6 +2823,9 @@ class ExecutedT0EvidenceProvider:
         commit, binary_sha, linkage_sha = _anchor_triple(anchor)
         oracle_ids = tuple(self._plan.oracle_ids) or (
             () if anchor is None else tuple(anchor.oracle_ids))
+        scan = (None if self._plan.candidate_diff_text is None
+                else reward_hack_scan.scan_unified_diff(
+                    self._plan.candidate_diff_text))
         return correctness.AntiRewardHackingEvidence(
             cache_state=self._plan.cache_state,
             correctness_verdict_source=PRODUCER,
@@ -2754,9 +2837,15 @@ class ExecutedT0EvidenceProvider:
             anchor_source_commit=commit,
             anchor_binary_sha256=binary_sha,
             anchor_linkage_sha256=linkage_sha,
-            environment_probe_findings=(),
-            timing_dependent_branch_findings=(),
+            environment_probe_findings=(
+                () if scan is None else scan.environment_probe_findings),
+            timing_dependent_branch_findings=(
+                () if scan is None else scan.timing_dependent_branch_findings),
             receipt_ref=collected.ref(),
+            environment_probe_detector_id=(
+                None if scan is None else scan.environment_probe_detector_id),
+            timing_dependent_branch_detector_id=(
+                None if scan is None else scan.timing_dependent_branch_detector_id),
         )
 
     # -- the Protocol method ----------------------------------------------
@@ -3033,4 +3122,3 @@ def audit_process_discipline(source: Optional[str] = None) -> schemas.Check:
         "no name-pattern process call, no shell=True, no pty/commands import",
         f"signal call sites (each must target a pid this module captured): {signal_sites}",
     ))
-

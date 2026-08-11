@@ -21,7 +21,8 @@ decides whether today is a campaign or a plumbing session.
 | `cpu_region_claim.py` | Acquires the CPU region claim (real `flock`s, per-region, with a journal) | flocks yes, in tests; never around a benchmark |
 | `worktree.py` | Resolves the production tip, adds a campaign worktree, configures + builds, emits a build receipt | never built anything |
 | `t0_provider.py` | Runs `test-backend-ops`, `verify_ggml_linkage.sh`, generations, sanitizers; returns `correctness.T0Evidence` | never launched a tool |
-| `microbench.py` | Runs the T1 paired-block `llama-bench` design under the claim | live controls, 2026-08-05 |
+| `microbench.py` | Runs the T1 paired-block `llama-bench` design under the claim; requires unique-content/address hardening plus bitwise output-invariance receipts | live controls, 2026-08-11 |
+| `instrument_integrity.py` | Pins reward-bearing measurement source to the named anchor before every live invocation | candidate/anchor source roots |
 | `control_runner.py` | Scores the five controls through the same dispatcher a candidate uses | live 5/5 panel, 2026-08-05 |
 | `live_controls.py` | Predeclares, measures, calibrates and scores the live CPU controls | live; dry-run by default |
 | `chain.py` | The **seams** between the above and the evaluator that reads them, plus the four T0 evidence projections (build, symbols, diff, change surface) | projection only; reads ELF/diff/log text it is handed, spawns nothing |
@@ -79,15 +80,25 @@ done
 Expected, and **record this output**; you compare against it at the end:
 
 ```
-/mnt/raid0/llm/llama.cpp   67a433bf45a8a091d83b4ea0b32ff0735fd51800  production-consolidated-v8
+/mnt/raid0/llm/llama.cpp   0db32c06e3e550065b78311a6031ef3dd2c4f27c  production-consolidated-v9
     ?? .gitnexusignore
     ?? tools/math-tools/            <- both pre-date 2026-07-22, leave them
 /mnt/raid0/llm/whisper.cpp  b307379226d93d9c5ed790d7cea0626613c0ef4b  production-speech-v1   (clean)
 /mnt/raid0/llm/qwentts.cpp  2c1b5182e7e9f1acaa04405ff21747d8a7acf4d5  production-speech-v1   (clean)
 ```
 
-If `llama.cpp` is not at `67a433bf4` on `production-consolidated-v8`, **stop**.
+If `llama.cpp` is not at `0db32c06e3e` on `production-consolidated-v9`, **stop**.
 Something else moved production and every anchor you are about to take is wrong.
+
+The reward instrument is a separate reviewed source anchor:
+
+```
+/mnt/raid0/llm/llama.cpp-experimental  0492c2319a79e9bcc4edaa1bfb6af5a096276ab7  experimental-v9-autokernel-t1-hardening
+```
+
+That commit has exactly one parent, the production v9 commit above. It changes
+only the measurement tool and its README; serving remains frozen. The live
+preflight proves the branch, commit, clean source tree, and direct-parent edge.
 
 ### 1.2 The host is yours to measure on
 
@@ -214,19 +225,20 @@ window**, after the worktree is built. Bind once, up front.
 
 Everything from here to Step 8 happens **inside** this claim.
 
-### Step 2 — anchor on the CURRENT production tip and make a worktree
+### Step 2 — anchor on the reviewed measurement overlay and make a worktree
 
 ```python
 from autokernel.execution import worktree as WT
 
-repo = WT.GitRepo("/mnt/raid0/llm/llama.cpp")             # READ-ONLY by construction
-anchor = WT.resolve_anchor(repo, "production-consolidated-v8",
-                           expected_commit="67a433bf45a8a091d83b4ea0b32ff0735fd51800")
+repo = WT.GitRepo("/mnt/raid0/llm/llama.cpp-experimental") # READ-ONLY by construction
+anchor = WT.resolve_anchor(repo, "experimental-v9-autokernel-t1-hardening",
+                           expected_commit="0492c2319a79e9bcc4edaa1bfb6af5a096276ab7")
 wt, proof = WT.create_campaign_worktree(anchor, "ak-0001")   # /mnt/raid0/llm/llama.cpp-ak-0001
 assert proof.holds, proof.differences
 ```
 
-`expected_commit` turns "I believe production is at v8" into a checked
+Production v9 is checked independently. The measurement commit is its reviewed
+one-commit evaluator overlay; `expected_commit` turns that identity into a checked
 precondition. `create_campaign_worktree` re-resolves the tip and raises
 `StaleAnchor` if it moved — CLAUDE.md step 1, and
 INC-20260706-iqk-missing-subsystem is what happens when it is skipped.
@@ -235,7 +247,8 @@ INC-20260706-iqk-missing-subsystem is what happens when it is skipped.
 `SandboxPath` that cannot name a frozen tree. That is why `create_campaign_worktree`
 may address `/mnt/raid0/llm/llama.cpp` at all: `git worktree add` writes
 `.git/worktrees/<name>/` there, which is administrative metadata, and `proof`
-demonstrates the working tree, branch and index did not move.
+demonstrates the working tree, branch and index did not move. The same structural
+guard applies when the addressed clone is the experimental measurement source.
 
 Apply the candidate's mutation in `wt` and commit it **with an explicit
 pathspec** — never `git add .` in a shared clone
@@ -423,6 +436,25 @@ runner = MB.MicrobenchRunner(claim=binding.microbench_claim,
                              run_ledger=run_ledger)
 base_run = runner.run(t1_plan)        # t1_plan.base_blocks == campaign.b_min
 ```
+
+`t1_plan.params` carries a non-zero `autokernel_seed` derived from the committed
+campaign/candidate identity. The recipe always emits
+`--autokernel-harden <seed>`. The instrument creates two simultaneously-live
+contexts per reported repetition: the first sees unique content inside the timing
+bracket; the second sees the same content at different input/context/output
+addresses outside the bracket, and its logits must be bitwise identical. Every
+context receives different warm-up content, so a stale pointer-keyed cache returns
+different stale answers across the pair and is refused. The JSON receipt records
+the content/output hashes, paired addresses, and rotated working-set size;
+`microbench` rejects missing, reused, malformed, or non-invariant material.
+
+The candidate and anchor must both be built from the reviewed experimental
+instrument baseline. `instrument_integrity.compare_manifest_to_anchor()` re-hashes
+`tools/llama-bench/llama-bench.cpp`, `tests/test-backend-ops.cpp`, and
+`tests/test-quantize-perf.cpp` at run open and before every invocation. The plan
+carries explicit source roots; a build directory cannot stand in for source identity.
+Production serving source remains frozen; it is not patched in place to acquire
+this measurement-only mode.
 
 **The base segment cannot cross, so this is not the end of Step 6.** §6.3 is the
 arithmetic: at `B_min = 5` the sign-martingale tops out at `e = 5.5687` against a

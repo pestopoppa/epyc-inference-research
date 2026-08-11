@@ -685,7 +685,9 @@ class EndToEndScenario(unittest.TestCase):
                 anchor_linkage_sha256=sha("anchor-linkage"),
                 environment_probe_findings=(),
                 timing_dependent_branch_findings=(),
-                receipt_ref="data/ak/akc-0001/integrity.json"),
+                receipt_ref="data/ak/akc-0001/integrity.json",
+                environment_probe_detector_id="environment-probe/v1",
+                timing_dependent_branch_detector_id="timing-branch/v1"),
         )
         kwargs.update(overrides)
         return CO.T0Evidence(**kwargs)

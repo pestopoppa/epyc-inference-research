@@ -113,7 +113,22 @@ class FakeTreeMixin:
         return params
 
     def ops_params(self, **overrides):
-        params = {"phase": "prefill", "ops": ["MUL_MAT"]}
+        params = {"phase": "prefill", "ops": ["MUL_MAT"],
+                  "min_measurable_us": self.duration_floor()}
+        params.update(overrides)
+        return params
+
+    @staticmethod
+    def duration_floor():
+        """Synthetic local-A/A fixture; never represented as measured evidence."""
+        return api.MinimumMeasurableDuration(
+            min_measurable_us=10.0, aa_absolute_spread_us=0.3,
+            relative_noise_budget=0.03, aa_pair_count=20,
+            samples_ref="fixture:paired-local-aa-durations")
+
+    def quant_params(self, **overrides):
+        params = {"phase": "decode", "op": "vec_dot_q", "types": ["q4_K"],
+                  "iterations": 10, "min_measurable_us": self.duration_floor()}
         params.update(overrides)
         return params
 
@@ -131,7 +146,7 @@ class FakeTreeMixin:
             ("t1a.llama_gpu.backend_ops_perf.v1", self.binding("test-backend-ops"),
              self.ops_params(device_index=0, device_id="mi210_0")),
             ("t1a.llama_cpu.quantize_perf.v1", self.binding("test-quantize-perf"),
-             {"phase": "decode", "op": "vec_dot_q", "types": ["q4_K"], "iterations": 10}),
+             self.quant_params()),
             ("t1b.llama_cpu.llama_bench_decode.v1", self.binding(),
              self.decode_params()),
             ("t1b.llama_cpu.llama_bench_prefill.v1", self.binding(),
@@ -581,7 +596,7 @@ class ArgvConstructionTest(FakeTreeMixin, unittest.TestCase):
 
     def test_quant_types_come_from_a_declared_enum(self):
         binding = self.binding("test-quantize-perf")
-        base = {"phase": "decode", "op": "vec_dot_q", "iterations": 100}
+        base = self.quant_params(iterations=100)
         good = R.construct("t1a.llama_cpu.quantize_perf.v1", binding=binding,
                            params=dict(base, types=["q4_K", "q8_0"]))
         argv = list(good.argv)
@@ -594,8 +609,8 @@ class ArgvConstructionTest(FakeTreeMixin, unittest.TestCase):
         with self.assertRaises(R.RecipeParameterError) as ctx:
             R.construct("t1a.llama_cpu.quantize_perf.v1",
                         binding=self.binding("test-quantize-perf"),
-                        params={"phase": "decode", "op": "vec_dot_q", "types": ["q4_K"],
-                                "iterations": 100, "size_elements": 100})
+                        params=self.quant_params(
+                            iterations=100, size_elements=100))
         self.assertIn("divisible by 32", str(ctx.exception))
 
     def test_unknown_parameters_are_refused(self):
@@ -704,8 +719,7 @@ class BindingTest(FakeTreeMixin, unittest.TestCase):
         with self.assertRaises(R.RecipeBindingError) as ctx:
             R.construct("t1a.llama_cpu.quantize_perf.v1",
                         binding=self.binding("test-backend-ops"),
-                        params={"phase": "decode", "op": "vec_dot_q",
-                                "types": ["q4_K"], "iterations": 10})
+                        params=self.quant_params())
         self.assertIn("emits argv for 'test-quantize-perf'", str(ctx.exception))
 
     def test_missing_binary_is_refused_when_inputs_are_verified(self):
@@ -974,8 +988,7 @@ class DisciplineTest(FakeTreeMixin, unittest.TestCase):
         def quant(types):
             return R.construct("t1a.llama_cpu.quantize_perf.v1",
                                binding=self.binding("test-quantize-perf"),
-                               params={"phase": "decode", "op": "vec_dot_q",
-                                       "types": types, "iterations": 10})
+                               params=self.quant_params(types=types))
 
         for bad in ("q8_1", "q8_K", "f32", "iq1_s", "iq2_s", "iq3_s"):
             with self.subTest(type=bad):
@@ -1010,8 +1023,7 @@ class DisciplineTest(FakeTreeMixin, unittest.TestCase):
         joined = " ".join(
             R.construct("t1a.llama_cpu.quantize_perf.v1",
                         binding=self.binding("test-quantize-perf"),
-                        params={"phase": "decode", "op": "vec_dot_q",
-                                "types": ["q4_K"], "iterations": 10}).bounded)
+                        params=self.quant_params()).bounded)
         self.assertIn("still exits 0", joined)
 
     def test_backend_ops_csv_output_carries_no_metric_and_says_so(self):
@@ -1072,6 +1084,24 @@ class DisciplineTest(FakeTreeMixin, unittest.TestCase):
         with self.assertRaisesRegex(R.RecipeParameterError, "cache_state"):
             R.construct("t1a.llama_cpu.backend_ops_perf.v1", binding=binding,
                         params=self.ops_params(cache_state="unknown"))
+
+    def test_t1a_requires_a_local_aa_derived_minimum_duration(self):
+        binding = self.binding("test-backend-ops")
+        command = R.construct(
+            "t1a.llama_cpu.backend_ops_perf.v1", binding=binding,
+            params=self.ops_params())
+        floor = command.params["min_measurable_us"]
+        self.assertIsInstance(floor, api.MinimumMeasurableDuration)
+        self.assertEqual(
+            command.finding("minimum_measurable_duration").check.outcome, S.PASS)
+        payload = command.to_dict()
+        self.assertEqual(
+            payload["params"]["min_measurable_us"]["samples_ref"],
+            "fixture:paired-local-aa-durations")
+        with self.assertRaisesRegex(R.RecipeParameterError, "bare microsecond"):
+            R.construct(
+                "t1a.llama_cpu.backend_ops_perf.v1", binding=binding,
+                params=self.ops_params(min_measurable_us=10.0))
 
     def test_linkage_host_and_cli_checks_are_delegated_not_assumed(self):
         command = R.construct("t1b.llama_cpu.llama_bench_decode.v1",
@@ -1432,8 +1462,7 @@ class DryRunTest(FakeTreeMixin, unittest.TestCase):
     def test_to_dict_round_trips_through_the_content_hasher(self):
         command = R.construct("t1a.llama_cpu.quantize_perf.v1",
                               binding=self.binding("test-quantize-perf"),
-                              params={"phase": "decode", "op": "vec_dot_q",
-                                      "types": ["q4_K"], "iterations": 100})
+                              params=self.quant_params(iterations=100))
         self.assertRegex(S.content_hash(command.to_dict()), r"^[0-9a-f]{64}$")
 
 

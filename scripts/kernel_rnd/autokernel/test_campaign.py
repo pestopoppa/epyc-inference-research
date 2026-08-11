@@ -243,6 +243,24 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
         self.assertEqual(len(differing), 1, f"arms differ at {differing}")
         self.assertIn("llama-bench", anchor[differing[0]])
 
+    def test_serving_and_measurement_anchors_are_distinct_and_v9_pinned(self):
+        rendered = campaign.render_bench_commands(spec())
+        anchor_binary = rendered["anchor"]["argv"][
+            next(i for i, value in enumerate(rendered["anchor"]["argv"])
+                 if value.endswith("/llama-bench"))
+        ]
+        self.assertTrue(anchor_binary.startswith(campaign.MEASUREMENT_BUILD_ROOT + "/"))
+        payload = spec().to_dict()
+        self.assertEqual(payload["anchor"]["expected_commit"], campaign.PRODUCTION_COMMIT)
+        self.assertEqual(payload["measurement_instrument"]["expected_commit"],
+                         campaign.MEASUREMENT_COMMIT)
+        self.assertNotEqual(payload["anchor"]["repo"],
+                            payload["measurement_instrument"]["repo"])
+        from .execution import live_controls
+        self.assertEqual(live_controls.PRODUCTION_COMMIT, campaign.PRODUCTION_COMMIT)
+        self.assertEqual(live_controls.INSTRUMENT_BRANCH, campaign.MEASUREMENT_BRANCH)
+        self.assertEqual(live_controls.INSTRUMENT_COMMIT, campaign.MEASUREMENT_COMMIT)
+
     def test_the_ledger_released_everything(self):
         result, _ops, _text = self.compose()
         self.assertTrue(all(r.released for r in result.releases))
@@ -1376,7 +1394,10 @@ class TestThePreflightIsWiredToSomethingThatExists(unittest.TestCase):
     def _patched(self, verdict, *, boosting=117, load1=96.0):
         state = mock.Mock(khz_by_cpu=tuple((c, 3_000_000) for c in range(boosting))
                           + tuple((c, 1_000_000) for c in range(boosting, 96)),
-                          load1=load1)
+                          load1=load1, uptime_s=1000.0, cpu_list="0-95",
+                          package_by_cpu=tuple((c, 0) for c in range(96)),
+                          package_energy_uj=((0, 1_000_000, 100_000_000,
+                                              "/power/package0"),))
         return [
             mock.patch.object(campaign.worktree, "frozen_tree_paths", lambda: ()),
             mock.patch.object(campaign.cpu_region_claim, "verify_host_topology",
@@ -1469,6 +1490,24 @@ class TestThePreflightIsWiredToSomethingThatExists(unittest.TestCase):
         check = self._run(schemas.PASS, boosting=90, load1=96.0)
         self.assertEqual(check.outcome, schemas.FAIL)
         self.assertIn("contention", " ".join(check.reasons))
+
+    def test_a_cpu_campaign_refuses_before_claim_when_package_power_is_unreadable(self):
+        patches = self._patched(schemas.PASS, boosting=16, load1=3.3)
+        state = mock.Mock(
+            khz_by_cpu=tuple((c, 3_000_000) for c in range(16))
+                        + tuple((c, 1_000_000) for c in range(16, 96)),
+            load1=3.3, uptime_s=1000.0, cpu_list="0-95",
+            package_by_cpu=tuple((c, 0) for c in range(96)),
+            package_energy_uj=())
+        patches[-1] = mock.patch.object(
+            campaign.microbench, "read_host_state", lambda **k: state)
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+        check = campaign.HostOps().preflight(spec(
+            journal_root="/mnt/raid0/llm/epyc-inference-research/data/ak-preflight-test"))
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("package_power_available", " ".join(check.reasons))
 
 
 # =============================================================================

@@ -26,8 +26,11 @@ Work with the operator to:
      tested the earlier decode drift across a 180-second idle boundary.
    - The hardware section of this file.
 3. **Verify the frozen trees**, exactly as `execution/README.md` §1.1 prints them. If
-   `/mnt/raid0/llm/llama.cpp` is not at `67a433bf4` on `production-consolidated-v8`, stop:
+   `/mnt/raid0/llm/llama.cpp` is not at `0db32c06e3e` on `production-consolidated-v9`, stop:
    something else moved production and every anchor you are about to take is wrong.
+   Separately verify the reviewed measurement overlay at `0492c2319a79` on
+   `experimental-v9-autokernel-t1-hardening`; candidate worktrees start from that exact
+   one-commit child of production so the hardened evaluator is present without patching serving.
 4. **Verify the claim is acquirable and the host is quiet** — §1.2 and §1.3. Two A/A runs on
    2026-08-04 were destroyed by a legitimate co-tenant because we held no claim. The co-tenant
    did nothing wrong; nothing told it the host was in use.
@@ -52,6 +55,8 @@ result is observed. Use a new durable campaign directory; never put it under `/t
 `--proposal-manifest` is mandatory too. It must be a valid proposal-v3 record for the same campaign;
 the driver fsyncs it before preflight, claim acquisition, candidate mutation, or build. A v2 record
 remains readable history but cannot drive a new run because it has no representation/demand frame.
+Current proposal-v3 records also carry `external_numbers` (an empty list when none are used); every
+entry must include source revision and matching per-quant, same-basis roofline normalization.
 
 **The entrypoint is inert unless you ask for a run.** `--dry-run` is the parser's default, not a
 flag you remember: without `--execute` it acquires nothing, spawns nothing and builds nothing —

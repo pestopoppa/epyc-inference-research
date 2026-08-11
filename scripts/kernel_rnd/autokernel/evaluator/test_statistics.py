@@ -239,6 +239,43 @@ def run_candidate(campaign, *, effect, noise=0.01, seed=99, direction=HIGHER,
 
 
 # =============================================================================
+# T1a absolute measurement floor — local paired A/A only
+# =============================================================================
+
+class TestMinimumMeasurableDuration(unittest.TestCase):
+
+    def test_floor_is_derived_from_local_paired_absolute_spread(self):
+        anchors = (100.0, 101.0, 102.0, 103.0, 104.0)
+        candidates = (100.1, 100.8, 102.3, 102.6, 104.5)
+        differences = [abs(a - b) for a, b in zip(anchors, candidates)]
+        expected_spread = st.percentile(differences, 0.95)
+        floor = st.derive_minimum_measurable_duration(
+            anchors, candidates, relative_noise_budget=0.03,
+            samples_ref="fixture:local-paired-aa-us")
+        self.assertAlmostEqual(floor.aa_absolute_spread_us, expected_spread)
+        self.assertAlmostEqual(floor.min_measurable_us, expected_spread / 0.03)
+        self.assertEqual(floor.aa_pair_count, 5)
+        self.assertEqual(
+            floor.check_observed_us(floor.min_measurable_us / 2).outcome,
+            S.COULD_NOT_CHECK)
+        self.assertEqual(
+            floor.check_observed_us(floor.min_measurable_us).outcome, S.PASS)
+
+    def test_zero_spread_cannot_manufacture_a_zero_us_floor(self):
+        with self.assertRaisesRegex(st.MaterialError, "zero"):
+            st.derive_minimum_measurable_duration(
+                (10.0,) * 5, (10.0,) * 5, relative_noise_budget=0.03,
+                samples_ref="fixture:zero-spread")
+
+    def test_capability_refuses_a_literal_that_breaks_the_derivation(self):
+        with self.assertRaisesRegex(ValueError, "must equal"):
+            api.MinimumMeasurableDuration(
+                min_measurable_us=10.0, aa_absolute_spread_us=1.0,
+                relative_noise_budget=0.05, aa_pair_count=5,
+                samples_ref="fixture:not-derived")
+
+
+# =============================================================================
 # Robust reduction and the named quantile estimator
 # =============================================================================
 

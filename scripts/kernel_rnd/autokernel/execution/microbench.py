@@ -186,6 +186,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import math
 import os
 import re
 import subprocess
@@ -200,6 +201,8 @@ from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 from .. import journal as journal_module
 from .. import schemas, storage
 from ..evaluator import api, integrity, recipes, statistics
+from . import instrument_integrity
+from . import sandbox as process_sandbox
 
 __all__ = [
     # identity
@@ -213,6 +216,7 @@ __all__ = [
     "HeldClaim", "ClaimAttestation", "CpuRegionClaimAdapter",
     # host state
     "HostState", "HostStatePolicy", "read_host_state", "DEFAULT_BASE_ENV_KEYS",
+    "PackagePowerAttestation", "derive_package_power_attestation",
     "FREQUENCY_JUDGED", "FREQUENCY_UNEVALUABLE", "FREQUENCY_DEFERRED_IDLE",
     "FREQUENCY_CLASSIFICATIONS",
     # env
@@ -525,6 +529,9 @@ class HostState:
     source: str
     unreadable: tuple = ()
     uptime_s: Optional[float] = None
+    monotonic_s: Optional[float] = None
+    package_by_cpu: tuple = ()
+    package_energy_uj: tuple = ()
 
     @property
     def min_khz(self) -> Optional[int]:
@@ -555,6 +562,13 @@ class HostState:
             "source": self.source,
             "unreadable": list(self.unreadable),
             "uptime_s": self.uptime_s,
+            "monotonic_s": self.monotonic_s,
+            "package_by_cpu": [[cpu, package] for cpu, package in self.package_by_cpu],
+            "package_energy_uj": [
+                {"package": package, "energy_uj": energy,
+                 "max_energy_range_uj": maximum, "source": source}
+                for package, energy, maximum, source in self.package_energy_uj
+            ],
         }
 
 
@@ -599,8 +613,60 @@ def _read_int_file(path: Path) -> Optional[int]:
         return None
 
 
+def _read_package_energy(*, cpus: Sequence[int], sysfs: Path,
+                         powercap_root: Path, unreadable: list) -> tuple:
+    """Return ``(package_by_cpu, counters)`` from sysfs without a process probe.
+
+    The counter is package-wide; a partition receipt therefore names both the
+    claimed CPU list and the shared package.  It never calls the result
+    lane-exclusive power.  That distinction is what AK-LN-3's cross-lane A/A
+    can test rather than assume away.
+    """
+    package_by_cpu: list[tuple[int, int]] = []
+    packages: set[int] = set()
+    for cpu in cpus:
+        package = _read_int_file(sysfs / f"cpu{cpu}" / "topology"
+                                 / "physical_package_id")
+        if package is None:
+            unreadable.append(f"cpu{cpu}: physical_package_id unreadable")
+            continue
+        package_by_cpu.append((cpu, package))
+        packages.add(package)
+
+    domains: dict[int, Path] = {}
+    try:
+        name_files = tuple(powercap_root.rglob("name"))
+    except OSError:
+        name_files = ()
+    for name_path in name_files:
+        try:
+            name = name_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        match = re.fullmatch(r"package-(\d+)", name)
+        if match:
+            domains[int(match.group(1))] = name_path.parent
+
+    counters: list[tuple[int, int, int, str]] = []
+    for package in sorted(packages):
+        domain = domains.get(package)
+        if domain is None:
+            unreadable.append(f"package{package}: powercap energy domain unavailable")
+            continue
+        energy = _read_int_file(domain / "energy_uj")
+        maximum = _read_int_file(domain / "max_energy_range_uj")
+        if energy is None or maximum is None or maximum <= 0:
+            unreadable.append(f"package{package}: powercap energy counter unreadable")
+            continue
+        counters.append((package, energy, maximum, str(domain / "energy_uj")))
+    return tuple(package_by_cpu), tuple(counters)
+
+
 def read_host_state(*, cpu_list: str, sysfs_root: Any = "/sys/devices/system/cpu",
-                    proc_root: Any = "/proc", now: Callable[[], str] = _utc_now) -> HostState:
+                    proc_root: Any = "/proc",
+                    powercap_root: Any = "/sys/devices/virtual/powercap",
+                    now: Callable[[], str] = _utc_now,
+                    monotonic: Callable[[], float] = time.monotonic) -> HostState:
     """Read per-cpu scaling frequency and 1-minute load for the claimed footprint.
 
     `sysfs_root` and `proc_root` are injectable so the throttle guard can be
@@ -641,10 +707,19 @@ def read_host_state(*, cpu_list: str, sysfs_root: Any = "/sys/devices/system/cpu
     except (OSError, ValueError, IndexError):
         uptime_s = None
 
+    package_by_cpu, package_energy = _read_package_energy(
+        cpus=cpus, sysfs=sysfs, powercap_root=Path(powercap_root),
+        unreadable=unreadable)
+    monotonic_s = float(monotonic())
+    if not math.isfinite(monotonic_s) or monotonic_s < 0:
+        raise HostStateUnreadable("monotonic host-state timestamp is invalid")
+
     return HostState(
         observed_at=now(), cpu_list=cpu_list, khz_by_cpu=tuple(readings),
         driver_min_khz=driver_min, driver_max_khz=driver_max, load1=load1,
-        source=str(sysfs), unreadable=tuple(unreadable), uptime_s=uptime_s)
+        source=str(sysfs), unreadable=tuple(unreadable), uptime_s=uptime_s,
+        monotonic_s=monotonic_s, package_by_cpu=package_by_cpu,
+        package_energy_uj=package_energy)
 
 
 #: How `check_frequency` arrived at its outcome. Three CLASSIFICATIONS, which are
@@ -730,6 +805,7 @@ class HostStatePolicy:
     max_load_per_core: float = 0.25
     require_frequency: bool = True
     require_load: bool = True
+    require_package_power: bool = False
 
     def __post_init__(self) -> None:
         if self.nominal_khz is not None:
@@ -740,6 +816,8 @@ class HostStatePolicy:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
                 raise ValueError(f"{name} must be a positive number")
+        if not isinstance(self.require_package_power, bool):
+            raise TypeError("require_package_power must be a bool")
 
     def frequency_verdict(self, state: HostState, *,
                           under_load: bool = True) -> tuple:
@@ -765,6 +843,10 @@ class HostStatePolicy:
             raise TypeError("frequency_verdict takes a HostState")
         if not isinstance(under_load, bool):
             raise TypeError("under_load must be a bool")
+        frequency_unreadable = tuple(
+            reason for reason in state.unreadable
+            if "scaling_cur_freq" in reason
+        )
         if not self.require_frequency:
             # NOT a PASS. A check the caller switched off did not happen, and
             # this module's own rule everywhere else is that COULD_NOT_CHECK is
@@ -781,11 +863,12 @@ class HostStatePolicy:
             return FREQUENCY_UNEVALUABLE, schemas.Check(schemas.COULD_NOT_CHECK, (
                 "no cpu in the claimed footprint reported scaling_cur_freq; a multi-day "
                 "host throttle has silently poisoned results here before, so an "
-                "unverifiable frequency is not a passing frequency",) + state.unreadable)
+                "unverifiable frequency is not a passing frequency",)
+                + frequency_unreadable)
         reasons: list = []
         min_khz = state.min_khz
-        if state.unreadable:
-            reasons.extend(state.unreadable)
+        if frequency_unreadable:
+            reasons.extend(frequency_unreadable)
         # The idle deferral, and it must come BEFORE the driver-minimum test
         # below: parking at `cpuinfo_min_freq` is precisely what a healthy idle
         # EPYC does, so that test cannot tell an idle host from a throttled one
@@ -878,12 +961,50 @@ class HostStatePolicy:
             f"1-minute load {state.load1:.2f} over {cpu_count} cores = "
             f"{per_core:.2f}/core",))
 
+    def check_package_power_available(self, state: HostState) -> schemas.Check:
+        """Check counter coverage before a claim; this is not yet an interval.
+
+        A point reading cannot attest power.  It can prove that every package
+        containing the declared CPU partition has a readable counter, avoiding
+        a claim and paired block that are known in advance to be unreportable.
+        The interval attestation is still derived from block-open/block-close
+        states by :func:`derive_package_power_attestation`.
+        """
+        if not self.require_package_power:
+            return schemas.Check(schemas.COULD_NOT_CHECK, (
+                "package-power checking was disabled by the caller; no interval may "
+                "be treated as power-attested under this policy",))
+        try:
+            claimed_cpus = set(_parse_cpu_list(state.cpu_list))
+        except ValueError as exc:
+            return schemas.Check(schemas.COULD_NOT_CHECK, (
+                f"the claimed CPU partition could not be parsed: {exc}",))
+        topology = dict(state.package_by_cpu)
+        missing_topology = sorted(claimed_cpus - set(topology))
+        if missing_topology:
+            return schemas.Check(schemas.COULD_NOT_CHECK, (
+                f"CPU-to-package topology is unavailable for claimed CPUs "
+                f"{missing_topology}",))
+        packages = {topology[cpu] for cpu in claimed_cpus}
+        counters = {package for package, _energy, _maximum, _source
+                    in state.package_energy_uj}
+        missing_counters = sorted(packages - counters)
+        if missing_counters:
+            return schemas.Check(schemas.COULD_NOT_CHECK, (
+                f"package energy counters are unreadable for claimed packages "
+                f"{missing_counters}; missing power evidence is not zero watts",))
+        return schemas.Check(schemas.PASS, (
+            f"every claimed CPU in {state.cpu_list} maps to packages "
+            f"{sorted(packages)}, and each package has a readable energy counter; "
+            "the block still needs a positive open/close interval",))
+
     def to_dict(self) -> dict:
         return {"nominal_khz": self.nominal_khz,
                 "min_frequency_ratio": self.min_frequency_ratio,
                 "max_load_per_core": self.max_load_per_core,
                 "require_frequency": self.require_frequency,
-                "require_load": self.require_load}
+                "require_load": self.require_load,
+                "require_package_power": self.require_package_power}
 
 
 # =============================================================================
@@ -1339,6 +1460,13 @@ class BenchRow:
     stddev_ts: float
     samples_ts: tuple
     samples_ns: tuple
+    autokernel_hardened: bool = False
+    autokernel_output_invariant: bool = False
+    autokernel_input_working_set_bytes: int = 0
+    autokernel_input_hashes: str = ""
+    autokernel_input_addresses: str = ""
+    autokernel_context_addresses: str = ""
+    autokernel_output_hashes: str = ""
     raw: dict = field(repr=False, default_factory=dict)
 
     @property
@@ -1352,7 +1480,15 @@ class BenchRow:
                 "use_mmap": self.use_mmap, "model_filename": self.model_filename,
                 "n_batch": self.n_batch, "n_ubatch": self.n_ubatch,
                 "avg_ts": self.avg_ts, "stddev_ts": self.stddev_ts,
-                "samples_ts": list(self.samples_ts), "samples_ns": list(self.samples_ns)}
+                "samples_ts": list(self.samples_ts), "samples_ns": list(self.samples_ns),
+                "autokernel_hardened": self.autokernel_hardened,
+                "autokernel_output_invariant": self.autokernel_output_invariant,
+                "autokernel_input_working_set_bytes":
+                    self.autokernel_input_working_set_bytes,
+                "autokernel_input_hashes": self.autokernel_input_hashes,
+                "autokernel_input_addresses": self.autokernel_input_addresses,
+                "autokernel_context_addresses": self.autokernel_context_addresses,
+                "autokernel_output_hashes": self.autokernel_output_hashes}
 
 
 def _row_int(entry: Mapping, key: str, index: int, *, default: Any = None) -> int:
@@ -1512,9 +1648,101 @@ def parse_llama_bench_json(text: str) -> tuple:
             stddev_ts=_row_float(entry, "stddev_ts", index, default=0.0),
             samples_ts=tuple(values),
             samples_ns=samples_ns,
+            autokernel_hardened=_as_bool(entry.get("autokernel_hardened", False)),
+            autokernel_output_invariant=_as_bool(
+                entry.get("autokernel_output_invariant", False)),
+            autokernel_input_working_set_bytes=_row_int(
+                entry, "autokernel_input_working_set_bytes", index, default=0),
+            autokernel_input_hashes=str(entry.get("autokernel_input_hashes", "")),
+            autokernel_input_addresses=str(entry.get("autokernel_input_addresses", "")),
+            autokernel_context_addresses=str(entry.get("autokernel_context_addresses", "")),
+            autokernel_output_hashes=str(entry.get("autokernel_output_hashes", "")),
             raw=dict(entry),
         ))
     return tuple(rows)
+
+
+_AUTOKERNEL_HASH_RE = re.compile(r"^[0-9a-f]{16}$")
+_AUTOKERNEL_ADDRESS_RE = re.compile(r"^0x[0-9a-f]+$")
+
+
+def _comma_values(value: str) -> tuple:
+    return tuple(part for part in value.split(",") if part)
+
+
+def _address_pairs(value: str, *, label: str, reps: int) -> tuple:
+    pairs = _comma_values(value)
+    if len(pairs) != reps:
+        raise ValueError(f"{label} carries {len(pairs)} pairs for {reps} repetitions")
+    flattened: list[str] = []
+    for pair in pairs:
+        parts = tuple(pair.split("/"))
+        if len(parts) != 2 or any(not _AUTOKERNEL_ADDRESS_RE.fullmatch(p)
+                                  for p in parts):
+            raise ValueError(f"{label} contains malformed address pair {pair!r}")
+        if parts[0] == parts[1]:
+            raise ValueError(f"{label} did not rotate within pair {pair!r}")
+        flattened.extend(parts)
+    if len(set(flattened)) != len(flattened):
+        raise ValueError(f"{label} reuses an address across repetitions")
+    return tuple(flattened)
+
+
+def _check_autokernel_hardening(row: BenchRow, *, reps: int) -> tuple:
+    """Validate the trusted RVP-C6-8 receipt emitted by hardened llama-bench.
+
+    The speed sample is the FIRST execution of each unique content vector.  Its
+    same-content replicate runs outside the timer through a second simultaneously
+    live context/input allocation.  Thus content or pointer memoization cannot
+    accelerate the timed path, while a stale pointer cache is exposed by unequal
+    logits between the address-rotated pair.
+    """
+    reasons: list[str] = []
+    if not row.autokernel_hardened:
+        reasons.append(
+            "argv requested --autokernel-harden but the result row does not attest the "
+            "hardened path; repeated same-buffer samples are not admissible T1 evidence")
+    if not row.autokernel_output_invariant:
+        reasons.append(
+            "the hardened result did not attest bitwise output invariance across each "
+            "same-content, address-rotated replicate")
+    if row.autokernel_input_working_set_bytes <= 0:
+        reasons.append("the hardened result reports no live rotated working set")
+
+    input_hashes = _comma_values(row.autokernel_input_hashes)
+    if len(input_hashes) != reps:
+        reasons.append(
+            f"autokernel_input_hashes carries {len(input_hashes)} values for {reps} "
+            "repetitions")
+    elif any(not _AUTOKERNEL_HASH_RE.fullmatch(value) for value in input_hashes):
+        reasons.append("autokernel_input_hashes contains a malformed digest")
+    elif len(set(input_hashes)) != len(input_hashes):
+        reasons.append(
+            "measured repetitions reused input content; a content-keyed cache could pay")
+
+    for value, label in (
+            (row.autokernel_input_addresses, "autokernel_input_addresses"),
+            (row.autokernel_context_addresses, "autokernel_context_addresses")):
+        try:
+            _address_pairs(value, label=label, reps=reps)
+        except ValueError as exc:
+            reasons.append(str(exc))
+
+    output_pairs = _comma_values(row.autokernel_output_hashes)
+    if len(output_pairs) != reps:
+        reasons.append(
+            f"autokernel_output_hashes carries {len(output_pairs)} pairs for {reps} "
+            "repetitions")
+    else:
+        for pair in output_pairs:
+            parts = tuple(pair.split("/"))
+            if len(parts) != 2 or any(not _AUTOKERNEL_HASH_RE.fullmatch(p)
+                                      for p in parts):
+                reasons.append(f"autokernel_output_hashes contains malformed pair {pair!r}")
+            elif parts[0] != parts[1]:
+                reasons.append(
+                    f"output changed across an address-rotated replicate ({pair})")
+    return tuple(reasons)
 
 
 @dataclass(frozen=True)
@@ -1537,6 +1765,7 @@ class LlamaBenchExpectation:
     reps: int
     model_filename: str
     n_depth: Optional[int] = None
+    autokernel_seed: Optional[int] = None
     expected_build_commit: Optional[str] = None
 
     @classmethod
@@ -1549,6 +1778,7 @@ class LlamaBenchExpectation:
             return argv[argv.index(flag) + 1] if flag in argv else None
 
         depth = after("-d")
+        autokernel_seed = after("--autokernel-harden")
         return cls(
             n_prompt=int(after("-p") or 0),
             n_gen=int(after("-n") or 0),
@@ -1557,6 +1787,8 @@ class LlamaBenchExpectation:
             reps=int(after("-r") or 0),
             model_filename=after("-m") or "",
             n_depth=int(depth) if depth is not None else None,
+            autokernel_seed=(int(autokernel_seed)
+                             if autokernel_seed is not None else None),
             expected_build_commit=expected_build_commit,
         )
 
@@ -1584,6 +1816,8 @@ class LlamaBenchExpectation:
                 f"argv requested -r {self.reps} but the row carries "
                 f"{len(row.samples_ts)} samples; a short sample vector means repetitions "
                 f"were dropped, and the rep count is a constitutional floor")
+        if self.autokernel_seed is not None:
+            reasons.extend(_check_autokernel_hardening(row, reps=self.reps))
         if self.model_filename and row.model_filename != self.model_filename:
             reasons.append(f"argv named -m {self.model_filename!r} but the row reports "
                            f"model_filename={row.model_filename!r}")
@@ -1603,6 +1837,7 @@ class LlamaBenchExpectation:
                 "n_threads": self.n_threads, "flash_attn": self.flash_attn,
                 "reps": self.reps, "model_filename": self.model_filename,
                 "n_depth": self.n_depth,
+                "autokernel_seed": self.autokernel_seed,
                 "expected_build_commit": self.expected_build_commit}
 
 
@@ -1623,6 +1858,8 @@ class SpawnResult:
     timed_out: bool = False
     terminated_by_runner: bool = False
     khz_peak_by_cpu: tuple = ()
+    sandbox_receipt: Optional[dict] = None
+    sandbox_teardown: Optional[dict] = None
 
     def to_dict(self) -> dict:
         return {"argv": list(self.argv), "returncode": self.returncode,
@@ -1631,7 +1868,9 @@ class SpawnResult:
                 "stderr_tail": self.stderr_tail, "pid": self.pid,
                 "duration_s": self.duration_s, "timed_out": self.timed_out,
                 "terminated_by_runner": self.terminated_by_runner,
-                "khz_peak_by_cpu": [[cpu, khz] for cpu, khz in self.khz_peak_by_cpu]}
+                "khz_peak_by_cpu": [[cpu, khz] for cpu, khz in self.khz_peak_by_cpu],
+                "sandbox_receipt": self.sandbox_receipt,
+                "sandbox_teardown": self.sandbox_teardown}
 
 
 class ProductionTreeWrite(MicrobenchError):
@@ -1711,12 +1950,25 @@ class SubprocessSpawner:
 
     def __init__(self, *, term_grace_s: float = 10.0,
                  stderr_tail_bytes: int = 4096,
-                 workdir_root: Optional[str] = None) -> None:
+                 workdir_root: Optional[str] = None,
+                 sandbox_policy: Optional[process_sandbox.SandboxPolicy] = None) -> None:
         if term_grace_s <= 0:
             raise ValueError("term_grace_s must be positive")
         self._term_grace_s = float(term_grace_s)
         self._stderr_tail_bytes = int(stderr_tail_bytes)
         self._workdir_root = assert_scratch_root_is_not_production(workdir_root)
+        if sandbox_policy is not None and not isinstance(
+                sandbox_policy, process_sandbox.SandboxPolicy):
+            raise TypeError("sandbox_policy must be a SandboxPolicy or None")
+        self._sandbox_policy = sandbox_policy
+        if sandbox_policy is not None:
+            actual_root = storage._norm(workdir_root or os.environ.get("TMPDIR")
+                                        or tempfile.gettempdir())
+            allowed_root = storage._norm(sandbox_policy.writable_root)
+            if not storage._under(actual_root, allowed_root):
+                raise process_sandbox.SandboxError(
+                    f"spawner workdir root {actual_root!r} is outside the sandbox's only "
+                    f"writable tree {allowed_root!r}")
 
     def run(self, argv: Sequence[str], env: Mapping, *, timeout_s: float,
             cwd: Optional[str] = None) -> SpawnResult:
@@ -1733,14 +1985,42 @@ class SubprocessSpawner:
         peaks: dict[int, int] = {}
         stop_sampling = threading.Event()
         sampler = None
+        sandbox_receipt = None
+        sandbox_teardown = None
         with tempfile.TemporaryDirectory(prefix="autokernel-microbench-",
                                          dir=self._workdir_root) as workdir:
-            out_path = Path(workdir, "stdout")
-            err_path = Path(workdir, "stderr")
+            evaluator_dir = Path(workdir, "evaluator")
+            candidate_dir = Path(workdir, "candidate")
+            evaluator_dir.mkdir()
+            candidate_dir.mkdir()
+            out_path = evaluator_dir / "stdout"
+            err_path = evaluator_dir / "stderr"
+            receipt_path = evaluator_dir / "sandbox-receipt.json"
+            spawn_argv = argv
+            invocation_policy = self._sandbox_policy
+            if self._sandbox_policy is not None:
+                # The campaign sandbox root and this outer workdir are owned by
+                # the evaluator.  The process receives write authority over the
+                # EMPTY candidate child only.  stdout/stderr and the activation
+                # receipt live in the evaluator sibling, so candidate code
+                # cannot rewrite the evidence used to judge its confinement.
+                # The whole outer directory is deleted before the next arm, so
+                # no process or filesystem memo survives between invocations.
+                invocation_policy = process_sandbox.SandboxPolicy(
+                    writable_root=str(candidate_dir),
+                    cgroup_root=self._sandbox_policy.cgroup_root,
+                    limits=self._sandbox_policy.limits,
+                    token=self._sandbox_policy.token)
+                spawn_argv = list(invocation_policy.wrap(
+                    argv, receipt_path=str(receipt_path)))
+                env = dict(env)
+                env["PYTHONDONTWRITEBYTECODE"] = "1"
+                env["TMPDIR"] = str(candidate_dir)
             with out_path.open("wb") as out_fh, err_path.open("wb") as err_fh:
                 try:
-                    proc = subprocess.Popen(argv, stdout=out_fh, stderr=err_fh,
-                                            stdin=subprocess.DEVNULL, env=env, cwd=cwd)
+                    proc = subprocess.Popen(spawn_argv, stdout=out_fh, stderr=err_fh,
+                                            stdin=subprocess.DEVNULL, env=env, cwd=cwd,
+                                            start_new_session=True)
                 except OSError as exc:
                     raise SpawnFailure(f"could not start {argv[0]!r}: {exc}") from exc
                 pid = proc.pid
@@ -1774,6 +2054,27 @@ class SubprocessSpawner:
                     stop_sampling.set()
                     if sampler is not None:
                         sampler.join(timeout=1.0)
+            if self._sandbox_policy is not None:
+                try:
+                    sandbox_receipt = process_sandbox.read_receipt(receipt_path)
+                    process_sandbox.verify_receipt(
+                        sandbox_receipt, policy=invocation_policy, pid=pid, argv=argv)
+                    sandbox_teardown = process_sandbox.cleanup_cgroup(
+                        invocation_policy, pid)
+                except process_sandbox.SandboxError as exc:
+                    cleanup_note = ""
+                    cgroup_path = invocation_policy.cgroup_path(pid)
+                    if cgroup_path.exists():
+                        try:
+                            process_sandbox.cleanup_cgroup(invocation_policy, pid)
+                            cleanup_note = "; the owned cgroup was drained after refusal"
+                        except process_sandbox.SandboxError as cleanup_exc:
+                            cleanup_note = (
+                                "; additionally, owned-cgroup cleanup failed: "
+                                f"{cleanup_exc}")
+                    raise SpawnFailure(
+                        f"candidate containment did not produce a verified receipt and "
+                        f"teardown: {exc}{cleanup_note}") from exc
             stdout = out_path.read_text(encoding="utf-8", errors="replace")
             stderr = err_path.read_bytes()[-self._stderr_tail_bytes:].decode(
                 "utf-8", errors="replace")
@@ -1782,7 +2083,9 @@ class SubprocessSpawner:
                            stderr_tail=stderr, pid=pid,
                            duration_s=time.monotonic() - started, timed_out=timed_out,
                            terminated_by_runner=terminated,
-                           khz_peak_by_cpu=tuple(sorted(peaks.items())))
+                           khz_peak_by_cpu=tuple(sorted(peaks.items())),
+                           sandbox_receipt=sandbox_receipt,
+                           sandbox_teardown=sandbox_teardown)
 
     def _terminate(self, proc: "subprocess.Popen") -> int:
         """SIGTERM, then SIGKILL, then confirm reaped. Only this handle, ever."""
@@ -2061,6 +2364,91 @@ def assemble_block(plan: BlockPlan, invocations: Sequence[Invocation], *,
 
 
 @dataclass(frozen=True)
+class PackagePowerAttestation:
+    """Package-counter delta over one partition's exact measurement window.
+
+    EPYC exposes package energy, not per-core energy.  This receipt therefore
+    says ``shared_package_window`` explicitly: it binds the partition's CPU
+    mask to the packages it occupied and records the shared-package average. It
+    never relabels a package counter as lane-exclusive power.
+    """
+
+    cpu_list: str
+    duration_s: float
+    average_watts_by_package: tuple
+    counter_sources: tuple
+    scope: str = "shared_package_window"
+
+    def to_dict(self) -> dict:
+        return {
+            "scope": self.scope,
+            "cpu_list": self.cpu_list,
+            "duration_s": self.duration_s,
+            "average_watts_by_package": [
+                [package, watts] for package, watts in self.average_watts_by_package
+            ],
+            "counter_sources": [[package, source]
+                                for package, source in self.counter_sources],
+        }
+
+
+def derive_package_power_attestation(open_state: HostState,
+                                     close_state: Optional[HostState]) -> tuple:
+    """Return ``(Check, attestation-or-None)``; missing energy never becomes zero."""
+    if close_state is None:
+        return schemas.Check(schemas.COULD_NOT_CHECK, (
+            "block has no close host state, so package energy has no interval",)), None
+    if open_state.cpu_list != close_state.cpu_list:
+        return schemas.Check(schemas.FAIL, (
+            "open and close host states name different CPU partitions",)), None
+    if open_state.package_by_cpu != close_state.package_by_cpu:
+        return schemas.Check(schemas.FAIL, (
+            "CPU-to-package topology changed across the measurement window",)), None
+    if open_state.monotonic_s is None or close_state.monotonic_s is None:
+        return schemas.Check(schemas.COULD_NOT_CHECK, (
+            "host states carry no monotonic timestamps for a power denominator",)), None
+    duration = close_state.monotonic_s - open_state.monotonic_s
+    if not math.isfinite(duration) or duration <= 0:
+        return schemas.Check(schemas.FAIL, (
+            f"package-power interval must be positive, got {duration!r}",)), None
+
+    before = {package: (energy, maximum, source)
+              for package, energy, maximum, source in open_state.package_energy_uj}
+    after = {package: (energy, maximum, source)
+             for package, energy, maximum, source in close_state.package_energy_uj}
+    packages = sorted({package for _cpu, package in open_state.package_by_cpu})
+    if not packages or any(package not in before or package not in after
+                           for package in packages):
+        return schemas.Check(schemas.COULD_NOT_CHECK, (
+            "one or more claimed CPU packages has no readable energy counter",)), None
+
+    watts: list[tuple[int, float]] = []
+    sources: list[tuple[int, str]] = []
+    for package in packages:
+        start, maximum, source = before[package]
+        end, close_maximum, close_source = after[package]
+        if maximum != close_maximum or source != close_source:
+            return schemas.Check(schemas.FAIL, (
+                f"package {package} energy-counter identity changed across the window",)), None
+        delta = end - start if end >= start else maximum - start + end
+        if delta < 0 or delta > maximum:
+            return schemas.Check(schemas.FAIL, (
+                f"package {package} energy delta {delta} is outside its counter range",)), None
+        value = delta / 1_000_000.0 / duration
+        if not math.isfinite(value) or value < 0:
+            return schemas.Check(schemas.FAIL, (
+                f"package {package} average power is invalid: {value!r}",)), None
+        watts.append((package, value))
+        sources.append((package, source))
+    attestation = PackagePowerAttestation(
+        cpu_list=open_state.cpu_list, duration_s=duration,
+        average_watts_by_package=tuple(watts), counter_sources=tuple(sources))
+    return schemas.Check(schemas.PASS, (
+        f"package energy covers CPU partition {open_state.cpu_list} for {duration:.6f}s; "
+        "values are shared-package, not lane-exclusive",)), attestation
+
+
+@dataclass(frozen=True)
 class BlockRecord:
     """One block: its plan, its invocations, its host state, and its paired block."""
 
@@ -2077,12 +2465,19 @@ class BlockRecord:
         return self.paired_block is not None and not self.refusals
 
     def to_dict(self) -> dict:
+        power_check, power = derive_package_power_attestation(
+            self.host_state_open, self.host_state_close)
         return {
             "plan": self.plan.to_dict(),
             "invocations": [i.to_dict() for i in self.invocations],
             "host_state_open": self.host_state_open.to_dict(),
             "host_state_close": (self.host_state_close.to_dict()
                                  if self.host_state_close is not None else None),
+            "package_power": {
+                "check": {"outcome": power_check.outcome,
+                          "reasons": list(power_check.reasons)},
+                "attestation": None if power is None else power.to_dict(),
+            },
             "paired_block": (self.paired_block.to_list()
                              if self.paired_block is not None else None),
             "checks": [[n, {"outcome": c.outcome, "reasons": list(c.reasons)}]
@@ -2282,6 +2677,8 @@ class MicrobenchPlan:
     base_blocks: int
     pairs_per_block: int
     unit_ids: tuple
+    candidate_instrument_root: Optional[str] = None
+    anchor_instrument_root: Optional[str] = None
     candidate_param_overrides: Mapping = field(default_factory=dict)
     anchor_param_overrides: Mapping = field(default_factory=dict)
     stratum: str = api.STRATUM_SELECTION
@@ -2298,12 +2695,34 @@ class MicrobenchPlan:
         for name in ("candidate_binding", "anchor_binding"):
             if not isinstance(getattr(self, name), recipes.ToolBinding):
                 raise TypeError(f"plan.{name} must be a recipes.ToolBinding")
+        if (self.candidate_instrument_root is None) != (self.anchor_instrument_root is None):
+            raise ValueError(
+                "candidate_instrument_root and anchor_instrument_root must be supplied "
+                "together; one source tree cannot prove instrument identity")
+        for name in ("candidate_instrument_root", "anchor_instrument_root"):
+            value = getattr(self, name)
+            if value is not None and (not isinstance(value, str) or not value.strip()):
+                raise ValueError(f"plan.{name} must be an absolute non-empty path")
+            if value is not None and not os.path.isabs(value):
+                raise ValueError(f"plan.{name} must be absolute, got {value!r}")
         if not isinstance(self.anchor, api.AnchorIdentity):
             raise TypeError("plan.anchor must be an api.AnchorIdentity — a named immutable "
                             "anchor, not a path")
         for name in ("params", "candidate_param_overrides", "anchor_param_overrides"):
             if not isinstance(getattr(self, name), Mapping):
                 raise TypeError(f"plan.{name} must be a mapping")
+        recipe = recipes.get_recipe(self.recipe_id)
+        if recipe.tool == "llama-bench" and not self.params.get("autokernel_seed"):
+            seed_material = (
+                f"{self.campaign_seed}\0{self.candidate_id}\0{self.attempt}\0"
+                f"{self.recipe_id}"
+            )
+            seed = int.from_bytes(
+                hashlib.sha256(seed_material.encode("utf-8")).digest()[:8], "big"
+            ) & ((1 << 63) - 1)
+            derived = dict(self.params)
+            derived["autokernel_seed"] = seed or 1
+            object.__setattr__(self, "params", derived)
         # The recipe registry currently declares one arm-local variant: GGML_IQK.
         # Keeping the allowlist here prevents this seam from becoming a general
         # way to benchmark the candidate and anchor under different cells.
@@ -2873,6 +3292,7 @@ class MicrobenchRunner:
         # load, and this list is what makes that a structural property of the
         # run rather than a hope about the load average.
         freq_classifications: list = []
+        process_identities: set[tuple[int, int]] = set()
 
         commands = {
             ARM_CANDIDATE: recipes.construct(plan.recipe_id, binding=plan.candidate_binding,
@@ -2925,6 +3345,27 @@ class MicrobenchRunner:
             if check.outcome == schemas.FAIL:
                 refusals.append(f"{name}: {'; '.join(check.reasons)}")
 
+        if getattr(self._spawner, "spawner_id", None) == "subprocess/v1":
+            if plan.candidate_instrument_root is None:
+                source_pin = schemas.Check(schemas.FAIL, (
+                    "live measurement has no explicit candidate/anchor instrument source "
+                    "roots; ToolBinding.source_root names a build closure and is not a "
+                    "translation-unit authority",))
+            else:
+                source_pin = instrument_integrity.compare_manifest_to_anchor(
+                    candidate_root=plan.candidate_instrument_root,
+                    anchor_root=plan.anchor_instrument_root)
+            checks.append(("measurement_source_pin", source_pin))
+            if source_pin.outcome != schemas.PASS:
+                refusals.append(
+                    "measurement source pin: " + "; ".join(source_pin.reasons))
+        else:
+            checks.append(("measurement_source_pin", schemas.Check(
+                schemas.COULD_NOT_CHECK, (
+                    "recorded/fixture spawner launched no measured binary; the live "
+                    "SubprocessSpawner re-hashes candidate and anchor translation units "
+                    "at run open and before every invocation",))))
+
         # Host state at OPEN. Contention is judged here and only here: once the
         # benchmark is running it saturates the claimed cores itself, so a
         # mid-run load reading measures this runner, not a foreign process.
@@ -2970,7 +3411,7 @@ class MicrobenchRunner:
         for block_plan in plans:
             record = self._run_block(plan, block_plan, commands, envs, receipts,
                                      expectations, footprint, attestations,
-                                     freq_classifications)
+                                     freq_classifications, process_identities)
             blocks.append(record)
             if not record.complete:
                 refusals.extend(record.refusals)
@@ -2982,7 +3423,8 @@ class MicrobenchRunner:
     def _run_block(self, plan: MicrobenchPlan, block_plan: BlockPlan, commands: Mapping,
                    envs: Mapping, receipts: Mapping, expectations: Mapping,
                    footprint: recipes.ClaimFootprint, attestations: list,
-                   freq_classifications: list) -> BlockRecord:
+                   freq_classifications: list,
+                   process_identities: set) -> BlockRecord:
         open_state = self._read_host_state(cpu_list=footprint.cpu_list)
         # Between blocks the claimed cores are idle by construction too: the
         # previous block's last invocation has already exited.
@@ -3025,7 +3467,21 @@ class MicrobenchRunner:
             # the loop's own errors become refusals; a `TypeError` from a Spawner
             # that breaks its contract still raises, because that is a defect in
             # the caller's code and not a fact about the host.
+            inv_checks: list = []
             try:
+                if getattr(self._spawner, "spawner_id", None) == "subprocess/v1":
+                    if plan.candidate_instrument_root is None:
+                        source_pin = schemas.Check(schemas.FAIL, (
+                            "live measurement has no explicit instrument source roots",))
+                    else:
+                        source_pin = instrument_integrity.compare_manifest_to_anchor(
+                            candidate_root=plan.candidate_instrument_root,
+                            anchor_root=plan.anchor_instrument_root)
+                    inv_checks.append(("measurement_source_pin", source_pin))
+                    if source_pin.outcome != schemas.PASS:
+                        raise SpawnFailure(
+                            "measurement translation unit changed before the invocation: "
+                            + "; ".join(source_pin.reasons))
                 self._attest_binary(
                     arm=arm, command=command, receipt=receipts[arm],
                     when=f"before block {block_plan.block_index} position {position}")
@@ -3043,7 +3499,27 @@ class MicrobenchRunner:
             if not isinstance(spawn, SpawnResult):
                 raise TypeError(f"Spawner.run() must return a SpawnResult, got "
                                 f"{type(spawn).__name__}")
-            inv_checks: list = []
+            if getattr(self._spawner, "spawner_id", None) == "subprocess/v1":
+                receipt = spawn.sandbox_receipt
+                if receipt is None:
+                    refusals.append(
+                        f"block {block_plan.block_index} position {position} ({arm}): "
+                        "the live subprocess carries no C6 activation receipt; an "
+                        "unsandboxed candidate process is not an admissible arm")
+                else:
+                    identity = (receipt["pid"], receipt["process_start_ticks"])
+                    if identity in process_identities:
+                        refusals.append(
+                            f"block {block_plan.block_index} position {position} ({arm}): "
+                            f"process identity {identity} was already used by another arm; "
+                            "an import/init-gated variant requires a fresh process per arm")
+                    else:
+                        process_identities.add(identity)
+                        inv_checks.append(("fresh_process_per_arm", schemas.Check(
+                            schemas.PASS, (
+                                f"fresh pid/start identity {identity} under invocation-only "
+                                "writable state; no process or filesystem memo survives "
+                                "from the preceding arm",))))
             row = None
             samples: tuple = ()
 
@@ -3114,6 +3590,15 @@ class MicrobenchRunner:
             close_state, under_load=bool(invocations))
         freq_classifications.append(close_class)
         checks.append(("host_frequency_block_close", close_freq))
+        package_power_check, _package_power = derive_package_power_attestation(
+            open_state, close_state)
+        checks.append(("host_package_power_block", package_power_check))
+        if self._policy.require_package_power \
+                and package_power_check.outcome != schemas.PASS:
+            refusals.append(
+                f"block {block_plan.block_index}: package-power attestation "
+                f"{package_power_check.outcome} — "
+                f"{'; '.join(package_power_check.reasons)}")
         if close_class != FREQUENCY_DEFERRED_IDLE and close_freq.outcome != schemas.PASS:
             refusals.append(
                 f"block {block_plan.block_index}: host frequency at block close is "

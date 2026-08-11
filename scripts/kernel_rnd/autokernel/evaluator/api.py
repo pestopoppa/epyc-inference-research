@@ -113,7 +113,8 @@ __all__ = [
     "STRATA", "STRATUM_SELECTION", "STRATUM_CONFIRMATION",
     # typed inputs
     "AnchorIdentity", "ArtifactIdentity", "EvaluatorIdentity", "ScopeDenominator",
-    "DeterminismReport", "RecipeReceipt", "CampaignControls", "CalibrationOutputs",
+    "DeterminismReport", "RecipeReceipt", "CampaignControls",
+    "MinimumMeasurableDuration", "CalibrationOutputs",
     "ControlPanel", "EffectEstimate", "WindowAttestations", "EvaluationRequest",
     # typed outputs
     "GateResult", "VoidFinding", "VoidScan", "PreconditionScan", "SearchGradeResult",
@@ -982,6 +983,80 @@ class CampaignControls:
     def alpha_conf_ceiling(self, alpha_sel: float) -> float:
         """`α_conf` MUST NOT exceed `α_sel / confirmation_admission_count`."""
         return alpha_sel / self.confirmation_admission_count
+
+
+MIN_MEASURABLE_DURATION_DERIVATION_ID = (
+    "paired-aa-absolute-p95-over-relative-budget/v1")
+
+
+@dataclass(frozen=True)
+class MinimumMeasurableDuration:
+    """A T1a timing floor derived from this host's own paired A/A evidence.
+
+    This is deliberately not a bare microsecond literal. The T1a recipes accept
+    this capability-shaped record so a foreign timing convention cannot enter
+    as an unreferenced parameter. The record binds the absolute paired spread,
+    relative error budget, pair count, and durable raw-sample reference used to
+    derive the floor.
+    """
+
+    min_measurable_us: float
+    aa_absolute_spread_us: float
+    relative_noise_budget: float
+    aa_pair_count: int
+    samples_ref: str
+    derivation_id: str = MIN_MEASURABLE_DURATION_DERIVATION_ID
+
+    def __post_init__(self) -> None:
+        for name in ("min_measurable_us", "aa_absolute_spread_us",
+                     "relative_noise_budget"):
+            _require_positive_finite(getattr(self, name),
+                                     f"minimum_measurable_duration.{name}")
+        if self.relative_noise_budget >= 1:
+            raise ValueError(
+                "minimum_measurable_duration.relative_noise_budget must be < 1")
+        if isinstance(self.aa_pair_count, bool) or not isinstance(self.aa_pair_count, int) \
+                or self.aa_pair_count < 5:
+            raise ValueError(
+                "minimum_measurable_duration.aa_pair_count must be an int >= 5")
+        _require_nonempty_str(
+            self.samples_ref, "minimum_measurable_duration.samples_ref",
+            error=ValueError)
+        if self.derivation_id != MIN_MEASURABLE_DURATION_DERIVATION_ID:
+            raise ValueError(
+                "minimum_measurable_duration.derivation_id is not implemented by "
+                "this evaluator bundle")
+        expected = self.aa_absolute_spread_us / self.relative_noise_budget
+        if not math.isclose(self.min_measurable_us, expected,
+                            rel_tol=1e-12, abs_tol=1e-12):
+            raise ValueError(
+                "minimum_measurable_duration.min_measurable_us must equal "
+                "aa_absolute_spread_us / relative_noise_budget")
+
+    def check_observed_us(self, observed_us: Any) -> schemas.Check:
+        try:
+            value = _require_positive_finite(
+                observed_us, "minimum_measurable_duration.observed_us")
+        except (TypeError, ValueError) as exc:
+            return schemas.Check(schemas.COULD_NOT_CHECK, (str(exc),))
+        if value < self.min_measurable_us:
+            return schemas.Check(schemas.COULD_NOT_CHECK, (
+                f"observed cell duration {value:.9g} us is below this host/cell's "
+                f"paired-A/A floor {self.min_measurable_us:.9g} us; the cell is "
+                "inconclusive and receives no speed rank",))
+        return schemas.Check(schemas.PASS, (
+            f"observed cell duration {value:.9g} us is at or above paired-A/A floor "
+            f"{self.min_measurable_us:.9g} us",))
+
+    def to_dict(self) -> dict:
+        return {
+            "min_measurable_us": self.min_measurable_us,
+            "aa_absolute_spread_us": self.aa_absolute_spread_us,
+            "relative_noise_budget": self.relative_noise_budget,
+            "aa_pair_count": self.aa_pair_count,
+            "samples_ref": self.samples_ref,
+            "derivation_id": self.derivation_id,
+        }
 
 
 @dataclass(frozen=True)

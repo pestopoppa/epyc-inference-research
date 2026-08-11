@@ -150,6 +150,7 @@ from typing import Any, ClassVar, Iterable, Mapping, Optional, Sequence
 
 from .. import schemas
 from ..evaluator import integrity
+from . import sandbox as process_sandbox
 
 __all__ = [
     # identity
@@ -831,13 +832,19 @@ class ProcessDisposition:
     verified_dead: bool
     duration_s: float
     started_at: str
+    sandbox_receipt: Optional[Mapping[str, Any]] = None
+    sandbox_teardown: Optional[Mapping[str, Any]] = None
 
     def to_dict(self) -> dict:
         return {"argv": list(self.argv), "pid": self.pid, "pgid": self.pgid,
                 "exit_code": self.exit_code, "timed_out": self.timed_out,
                 "signals_sent": list(self.signals_sent),
                 "verified_dead": self.verified_dead,
-                "duration_s": round(self.duration_s, 6), "started_at": self.started_at}
+                "duration_s": round(self.duration_s, 6), "started_at": self.started_at,
+                "sandbox_receipt": (dict(self.sandbox_receipt)
+                                    if self.sandbox_receipt is not None else None),
+                "sandbox_teardown": (dict(self.sandbox_teardown)
+                                     if self.sandbox_teardown is not None else None)}
 
 
 def _validate_argv(argv: Sequence[str]) -> tuple:
@@ -952,7 +959,9 @@ def _terminate_owned(proc: "subprocess.Popen", pgid: int, *,
 def _run_owned(argv: Sequence[str], *, cwd: Optional[str] = None,
                timeout_s: float = 300.0, env: Optional[Mapping[str, str]] = None,
                stdout_path: Optional[str] = None,
-               kill_grace_s: float = 10.0) -> tuple:
+               kill_grace_s: float = 10.0,
+               sandbox_policy: Optional[process_sandbox.SandboxPolicy] = None,
+               sandbox_receipt_path: Optional[str] = None) -> tuple:
     """Run `argv` as an owned session leader. Returns `(disposition, output_text)`.
 
     Never `shell=True`: a shell would reintroduce word-splitting, globbing and
@@ -965,6 +974,17 @@ def _run_owned(argv: Sequence[str], *, cwd: Optional[str] = None,
     captured through a pipe.
     """
     argv = _validate_argv(argv)
+    if (sandbox_policy is None) != (sandbox_receipt_path is None):
+        raise WorktreeError(
+            "sandbox_policy and sandbox_receipt_path must be supplied together")
+    if sandbox_policy is not None and not isinstance(
+            sandbox_policy, process_sandbox.SandboxPolicy):
+        raise TypeError("sandbox_policy must be a SandboxPolicy")
+    spawn_argv: Sequence[str] = argv
+    executed_env = _sanitized_env(env)
+    if sandbox_policy is not None:
+        spawn_argv = sandbox_policy.wrap(argv, receipt_path=sandbox_receipt_path)
+        executed_env["PYTHONDONTWRITEBYTECODE"] = "1"
     started = time.monotonic()
     started_at = _utc_now_iso()
     sink = None
@@ -975,7 +995,7 @@ def _run_owned(argv: Sequence[str], *, cwd: Optional[str] = None,
         else:
             stdout_target = subprocess.PIPE
         with subprocess.Popen(
-                argv, cwd=cwd, env=_sanitized_env(env),
+                spawn_argv, cwd=cwd, env=executed_env,
                 stdout=stdout_target, stderr=subprocess.STDOUT,
                 stdin=subprocess.DEVNULL, start_new_session=True,
                 close_fds=True) as proc:
@@ -1013,10 +1033,34 @@ def _run_owned(argv: Sequence[str], *, cwd: Optional[str] = None,
             f"pid {pid} (pgid {pgid}) survived {list(signals_sent)}; running "
             f"{' '.join(argv)}. Not reporting a clean teardown for a process still alive")
 
+    sandbox_receipt = None
+    sandbox_teardown = None
+    if sandbox_policy is not None:
+        try:
+            sandbox_receipt = process_sandbox.read_receipt(sandbox_receipt_path)
+            process_sandbox.verify_receipt(
+                sandbox_receipt, policy=sandbox_policy, pid=pid, argv=argv)
+            sandbox_teardown = process_sandbox.cleanup_cgroup(sandbox_policy, pid)
+        except process_sandbox.SandboxError as exc:
+            cleanup_note = ""
+            cgroup_path = sandbox_policy.cgroup_path(pid)
+            if cgroup_path.exists():
+                try:
+                    process_sandbox.cleanup_cgroup(sandbox_policy, pid)
+                    cleanup_note = "; the owned cgroup was drained after refusal"
+                except process_sandbox.SandboxError as cleanup_exc:
+                    cleanup_note = (
+                        "; additionally, owned-cgroup cleanup failed: "
+                        f"{cleanup_exc}")
+            raise WorktreeError(
+                "candidate build containment did not produce a verified activation "
+                f"receipt and teardown: {exc}{cleanup_note}") from exc
+
     disposition = ProcessDisposition(
         argv=argv, pid=pid, pgid=pgid, exit_code=exit_code, timed_out=timed_out,
         signals_sent=signals_sent, verified_dead=verified_dead,
-        duration_s=time.monotonic() - started, started_at=started_at)
+        duration_s=time.monotonic() - started, started_at=started_at,
+        sandbox_receipt=sandbox_receipt, sandbox_teardown=sandbox_teardown)
     return disposition, text
 
 
@@ -1160,6 +1204,15 @@ class GitRepo:
         out = self._git("rev-parse", "--verify", "--end-of-options",
                         f"refs/heads/{branch}").strip()
         return _req_commit(out, f"refs/heads/{branch}")
+
+    def commit_parents(self, commit: str) -> tuple:
+        """Return the ordered parent commits of one immutable commit object."""
+        commit = _req_commit(commit, "commit")
+        fields = self._git("rev-list", "--parents", "-n", "1", commit).split()
+        if not fields or fields[0] != commit:
+            raise WorktreeError(
+                f"git rev-list did not return the requested commit {commit!r}: {fields!r}")
+        return tuple(_req_commit(parent, "parent commit") for parent in fields[1:])
 
     def current_branch(self) -> Optional[str]:
         try:
@@ -1316,6 +1369,12 @@ class Worktree:
         digest is what §8.5.1 (2) compares the build against.
         """
         return self.status_porcelain().strip() == ""
+
+    def unified_diff_from_source(self) -> str:
+        """Committed candidate delta from the immutable worktree source commit."""
+        return self._git(
+            "diff", "--no-ext-diff", "--unified=3",
+            f"{self.source_commit}..{self.head_commit()}", "--")
 
     # -- the pathspec-limited commit --------------------------------------
     def commit_paths(self, paths: Iterable[Any], message: str, *,
@@ -2163,14 +2222,20 @@ def run_build(plan: BuildPlan, *, log_path: Any,
     what `check_clean_build_from_snapshot` compares against `EMPTY_TREE_SHA256`.
     Taking it afterwards would prove nothing at all.
 
-    Configure and build are two owned processes and two log sections, appended
-    to one file. On a configure failure the build is not attempted: cmake will
-    happily "build" a stale cache and the resulting binary would be from a
-    configuration nobody recorded.
+    Configure and build are two owned, sandboxed processes and two log sections,
+    appended to one evaluator-owned file.  Candidate CMake is executable input:
+    both phases therefore run with the same fail-closed Landlock/seccomp/cgroup
+    boundary as candidate benchmarks.  On a configure failure the build is not
+    attempted: cmake will happily "build" a stale cache and the resulting binary
+    would be from a configuration nobody recorded.
     """
     if not isinstance(plan, BuildPlan):
         raise TypeError("run_build takes a BuildPlan")
     log = _real(log_path, "log_path")
+    if _is_within(log, plan.build_dir.path):
+        raise UnsafePath(
+            "build log and sandbox activation receipts must be evaluator-owned "
+            "outside the candidate-writable build directory")
     os.makedirs(os.path.dirname(log), exist_ok=True)
 
     created = not plan.build_dir.exists
@@ -2182,6 +2247,16 @@ def run_build(plan: BuildPlan, *, log_path: Any,
             f"{integrity.EMPTY_TREE_SHA256[:12]}). §8.5.1 (2) requires a FRESH build "
             "directory: an incremental build can link stale objects and hide the error the "
             "snapshot would surface")
+
+    candidate_tmp = os.path.join(plan.build_dir.path, ".autokernel-tmp")
+    os.makedirs(candidate_tmp, mode=0o700, exist_ok=False)
+    build_env = dict(os.environ if env is None else env)
+    build_env["TMPDIR"] = candidate_tmp
+    build_env["PYTHONDONTWRITEBYTECODE"] = "1"
+    sandbox_policy = process_sandbox.SandboxPolicy(
+        writable_root=plan.build_dir.path)
+    configure_sandbox_receipt = log + ".configure-sandbox.json"
+    build_sandbox_receipt = log + ".build-sandbox.json"
 
     # The declared cap is now a PRECONDITION. It was a recorded field that
     # nothing read: `parallelism.load_average_cap` rode into the receipt and
@@ -2201,14 +2276,18 @@ def run_build(plan: BuildPlan, *, log_path: Any,
 
     sections: list = []
     configure_disp, configure_text = _run_owned(
-        plan.configure_argv(), timeout_s=configure_timeout_s, env=env)
+        plan.configure_argv(), timeout_s=configure_timeout_s, env=build_env,
+        sandbox_policy=sandbox_policy,
+        sandbox_receipt_path=configure_sandbox_receipt)
     sections.append("=== configure: " + " ".join(plan.configure_argv()) + "\n")
     sections.append(configure_text)
 
     build_disp = None
     if configure_disp.exit_code == 0:
         build_disp, build_text = _run_owned(
-            plan.build_argv(), timeout_s=build_timeout_s, env=env)
+            plan.build_argv(), timeout_s=build_timeout_s, env=build_env,
+            sandbox_policy=sandbox_policy,
+            sandbox_receipt_path=build_sandbox_receipt)
         sections.append("=== build: " + " ".join(plan.build_argv()) + "\n")
         sections.append(build_text)
 
@@ -2268,6 +2347,7 @@ class BuildIdentity:
     output_binary_sha256: str
     library_sha256s: tuple
     incremental_output_binary_sha256: Optional[str]
+    sandbox_receipts: tuple
     log_facts: BuildLogFacts
     exit_code: Optional[int]
     duration_s: float
@@ -2298,6 +2378,27 @@ class BuildIdentity:
         for name in ("toolchain", "compiler", "command", "configure_command",
                      "build_log_path", "output_binary_path"):
             _req_str(getattr(self, name), f"BuildIdentity.{name}")
+        phases = []
+        for row in self.sandbox_receipts:
+            if not isinstance(row, Mapping):
+                raise TypeError("BuildIdentity.sandbox_receipts entries must be mappings")
+            phase = row.get("phase")
+            if phase not in ("configure", "build"):
+                raise ValueError(f"unknown build sandbox phase {phase!r}")
+            if not isinstance(row.get("activation"), Mapping) \
+                    or not isinstance(row.get("teardown"), Mapping):
+                raise ValueError(
+                    f"build sandbox phase {phase} needs activation and teardown receipts")
+            if row["activation"].get("sandbox_id") != process_sandbox.SANDBOX_ID:
+                raise ValueError(f"build sandbox phase {phase} names another implementation")
+            if row["activation"].get("writable_root") != self.build_dir:
+                raise ValueError(f"build sandbox phase {phase} names another writable root")
+            if not row["teardown"].get("verified_empty") \
+                    or not row["teardown"].get("removed"):
+                raise ValueError(f"build sandbox phase {phase} teardown is not complete")
+            phases.append(phase)
+        if sorted(phases) != ["build", "configure"]:
+            raise ValueError("BuildIdentity requires configure and build sandbox receipts")
 
     # -- projections -------------------------------------------------------
     def to_dict(self) -> dict:
@@ -2322,6 +2423,11 @@ class BuildIdentity:
             "output_binary_path": self.output_binary_path,
             "output_binary_sha256": self.output_binary_sha256,
             "library_sha256s": [list(x) for x in self.library_sha256s],
+            "sandbox_receipts": [
+                {"phase": row["phase"],
+                 "activation": dict(row["activation"]),
+                 "teardown": dict(row["teardown"])}
+                for row in self.sandbox_receipts],
             "linkage_sha256": self.linkage_sha256,
             "incremental_output_binary_sha256": self.incremental_output_binary_sha256,
             "log_facts": self.log_facts.to_dict(),
@@ -2384,7 +2490,12 @@ class BuildIdentity:
             "build": {"toolchain": self.toolchain, "compiler": self.compiler,
                       "command": self.command, "build_dir": self.build_dir,
                       "log_path": self.build_log_path,
-                      "log_sha256": self.build_log_sha256},
+                      "log_sha256": self.build_log_sha256,
+                      "sandbox_receipts": [
+                          {"phase": row["phase"],
+                           "activation": dict(row["activation"]),
+                           "teardown": dict(row["teardown"])}
+                          for row in self.sandbox_receipts]},
             "artifacts": artifacts,
         }
 
@@ -2458,6 +2569,18 @@ def build_identity(result: BuildResult, *, candidate_id: str, campaign_id: str,
             "compiler was passed. Refusing to write a receipt that cannot say what built it")
     libs = tuple(sorted((name, _sha256_file(path)) for name, path in dict(libraries).items()))
     durations = [d.duration_s for d in (result.configure, result.build) if d is not None]
+    sandbox_rows = []
+    for phase, disposition in (("configure", result.configure), ("build", result.build)):
+        if disposition is None or disposition.sandbox_receipt is None \
+                or disposition.sandbox_teardown is None:
+            raise ValueError(
+                f"cannot identify a candidate build without verified {phase} sandbox "
+                "activation and teardown receipts")
+        sandbox_rows.append({
+            "phase": phase,
+            "activation": dict(disposition.sandbox_receipt),
+            "teardown": dict(disposition.sandbox_teardown),
+        })
     extra = list(notes)
     if result.facts.ccache_enabled:
         extra.append(
@@ -2505,6 +2628,7 @@ def build_identity(result: BuildResult, *, candidate_id: str, campaign_id: str,
         output_binary_path=binary, output_binary_sha256=_sha256_file(binary),
         library_sha256s=libs, linkage_sha256=linkage_sha256,
         incremental_output_binary_sha256=incremental_output_binary_sha256,
+        sandbox_receipts=tuple(sandbox_rows),
         log_facts=result.facts, exit_code=result.exit_code,
         duration_s=sum(durations), created_at=_utc_now_iso(), notes=tuple(extra))
 

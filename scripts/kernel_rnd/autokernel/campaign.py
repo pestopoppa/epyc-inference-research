@@ -145,6 +145,7 @@ it must not be skipped by the failure that made it interesting.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -164,7 +165,8 @@ from . import artifact_diff, dashboard, journal as journal_module
 from . import schemas, storage
 from .controller import do_not_repeat, hypotheses
 from .evaluator import api, correctness, devices, recipes
-from .execution import chain, cpu_region_claim, microbench, t0_provider, worktree
+from .execution import (chain, cpu_region_claim, instrument_integrity, microbench,
+                        sandbox, t0_provider, worktree)
 from .resource import claim_witness, device_claim, preflight
 
 __all__ = [
@@ -193,6 +195,9 @@ __all__ = [
     "campaign_purpose",
     "authorize_for",
     "CampaignSpec",
+    "PRODUCTION_REPO", "PRODUCTION_BRANCH", "PRODUCTION_COMMIT",
+    "MEASUREMENT_REPO", "MEASUREMENT_BRANCH", "MEASUREMENT_COMMIT",
+    "MEASUREMENT_BUILD_ROOT",
     "Step",
     "ResourceLedger",
     "ReleaseRecord",
@@ -242,10 +247,16 @@ MODULES_THE_DRIVER_USES: Mapping[str, str] = {
     "evaluator.recipes": "argv from a hashed constructor. Production once drifted off "
                          "NUMA interleave and the front door ended up at 46% of canonical",
     "execution.chain": "the seams; a hand-written evidence record is what T0 exists to refuse",
+    "execution.instrument_integrity": "RVP-C6-1: candidate reward translation units "
+                                      "must equal the reviewed measurement overlay before "
+                                      "T0 or T1 can launch",
     "execution.cpu_region_claim": "TODO-free: two A/A runs were destroyed by a legitimate "
                                   "co-tenant because we held no claim",
     "execution.microbench": "paired ALTERNATING blocks — the measured monotone drift makes "
                             "any sequential design charge the second arm ~4%",
+    "execution.sandbox": "C6: code authored by the loop executes under Landlock, seccomp, "
+                         "non-root finite rlimits and an owned cgroup whose empty teardown "
+                         "is verified; an agent tool allowlist does not constrain a binary",
     "execution.t0_provider": "the executed T0 evidence provider",
     "execution.worktree": "no candidate exists without it; production stays byte-identical",
     "resource.claim_witness": "a claim is witnessed, not asserted",
@@ -916,13 +927,21 @@ DEFAULT_RECIPE_BY_BACKEND = {
     BACKEND_GPU: "t1b.llama_gpu.llama_bench_decode.v1",
 }
 
-#: Production, frozen. `worktree.resolve_anchor(expected_commit=...)` turns
-#: "I believe production is at v8" into a checked precondition, and
-#: `create_campaign_worktree` re-resolves the tip and raises `StaleAnchor` if it
-#: moved (CLAUDE.md step 1; INC-20260706-iqk-missing-subsystem).
+#: Serving production, frozen. `worktree.resolve_anchor(expected_commit=...)`
+#: turns "I believe production is at v9" into a checked precondition.
 PRODUCTION_REPO = "/mnt/raid0/llm/llama.cpp"
-PRODUCTION_BRANCH = "production-consolidated-v8"
-PRODUCTION_COMMIT = "67a433bf45a8a091d83b4ea0b32ff0735fd51800"
+PRODUCTION_BRANCH = "production-consolidated-v9"
+PRODUCTION_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
+
+#: Reviewed measurement source.  The hardened instrument commit is exactly one
+#: child of the frozen v9 serving commit: candidate worktrees start here so the
+#: evaluator-only llama-bench changes are present without modifying production.
+#: Kernel proposals may change kernel sources but RVP-C6-1 requires all reward
+#: translation units to remain byte-identical to this commit.
+MEASUREMENT_REPO = "/mnt/raid0/llm/llama.cpp-experimental"
+MEASUREMENT_BRANCH = "experimental-v9-autokernel-t1-hardening"
+MEASUREMENT_COMMIT = "0492c2319a79e9bcc4edaa1bfb6af5a096276ab7"
+MEASUREMENT_BUILD_ROOT = os.path.join(MEASUREMENT_REPO, "build-v9-cpu")
 
 
 def _utc_now() -> str:
@@ -1155,7 +1174,12 @@ class CampaignSpec:
 
     @property
     def bench_params(self) -> dict:
-        params: dict = {"reps": self.reps}
+        seed_material = f"{self.campaign_id}\0{self.candidate_id}\0{self.recipe_id}"
+        autokernel_seed = int.from_bytes(
+            hashlib.sha256(seed_material.encode("utf-8")).digest()[:8], "big"
+        ) & ((1 << 63) - 1)
+        params: dict = {"reps": self.reps,
+                        "autokernel_seed": autokernel_seed or 1}
         if self.model:
             params["model"] = self.model
         declared = self.recipe.param_map
@@ -1194,6 +1218,13 @@ class CampaignSpec:
             "claim_purpose": self.claim_purpose,
             "anchor": {"repo": PRODUCTION_REPO, "branch": PRODUCTION_BRANCH,
                        "expected_commit": PRODUCTION_COMMIT},
+            "measurement_instrument": {
+                "repo": MEASUREMENT_REPO,
+                "branch": MEASUREMENT_BRANCH,
+                "expected_commit": MEASUREMENT_COMMIT,
+                "parent_production_commit": PRODUCTION_COMMIT,
+                "build_root": MEASUREMENT_BUILD_ROOT,
+            },
         }
 
 
@@ -1409,6 +1440,8 @@ class DryRunOps:
             "(cpu_region_claim.verify_host_topology); and the boost count UNDER LOAD only.",
             frozen_trees=list(worktree.frozen_tree_paths()),
             production=f"{PRODUCTION_REPO}@{PRODUCTION_BRANCH}#{PRODUCTION_COMMIT[:12]}",
+            measurement_instrument=(
+                f"{MEASUREMENT_REPO}@{MEASUREMENT_BRANCH}#{MEASUREMENT_COMMIT[:12]}"),
             cpu_list=spec.cpu_list,
             boost_gate=(f">= {required_boosting_cores(spec.cpu_count)} of this cell's "
                         f"{spec.cpu_count} claimed core(s) at or above "
@@ -1453,8 +1486,9 @@ class DryRunOps:
 
     def create_worktree(self, spec: CampaignSpec) -> Any:
         self._step("create_worktree",
-                   "would re-resolve the CURRENT production tip and add a campaign "
-                   "worktree off it (StaleAnchor if it moved).",
+                   "would re-resolve the reviewed measurement-instrument tip, prove it "
+                   "is the one-child overlay on current production v9, and add a campaign "
+                   "worktree off it (StaleAnchor if either anchor moved).",
                    worktree=spec.worktree_path,
                    branch=f"ak/{spec.campaign_id}/{spec.candidate_id}")
         # A handle, not None: `run_campaign` skips keep-or-revert when there is
@@ -1555,7 +1589,7 @@ def render_bench_commands(spec: CampaignSpec) -> dict:
     """
     out: dict = {}
     tool = spec.recipe.tool
-    for arm, root in (("anchor", os.path.join(PRODUCTION_REPO, "build")),
+    for arm, root in (("anchor", MEASUREMENT_BUILD_ROOT),
                       ("candidate", spec.build_dir)):
         # `ToolBinding.source_root` is the BUILD root, not the git worktree —
         # `BuildPlan` puts the build directory OUTSIDE the worktree by
@@ -1736,6 +1770,41 @@ class HostOps:
             repo = worktree.GitRepo(tree)
             self._fingerprints[tree] = worktree.fingerprint_tree(repo)
 
+        # Serving and reward-instrument identities are distinct.  The latter is
+        # an evaluator-only one-commit overlay on production and is the source
+        # from which both the T1 anchor and every candidate are built.
+        try:
+            production_anchor = worktree.resolve_anchor(
+                worktree.GitRepo(PRODUCTION_REPO), PRODUCTION_BRANCH,
+                expected_commit=PRODUCTION_COMMIT)
+            measurement_repo = worktree.GitRepo(MEASUREMENT_REPO)
+            measurement_anchor = worktree.resolve_anchor(
+                measurement_repo, MEASUREMENT_BRANCH,
+                expected_commit=MEASUREMENT_COMMIT)
+        except worktree.WorktreeError as exc:
+            fold(schemas.Check(schemas.FAIL, (str(exc),)), "source_anchor", hard=True)
+        else:
+            self._fingerprints[MEASUREMENT_REPO] = measurement_anchor.fingerprint
+            if measurement_anchor.fingerprint.head_commit != MEASUREMENT_COMMIT:
+                fold(schemas.Check(schemas.FAIL, (
+                    "measurement working tree HEAD is not the reviewed instrument commit",)),
+                    "measurement_instrument", hard=True)
+            if measurement_anchor.fingerprint.symbolic_ref != MEASUREMENT_BRANCH:
+                fold(schemas.Check(schemas.FAIL, (
+                    f"measurement working tree is on "
+                    f"{measurement_anchor.fingerprint.symbolic_ref!r}, required "
+                    f"{MEASUREMENT_BRANCH!r}",)), "measurement_instrument", hard=True)
+            if measurement_anchor.fingerprint.status_porcelain:
+                fold(schemas.Check(schemas.FAIL, (
+                    "measurement working tree is dirty; source pinning must name committed "
+                    "bytes only",)), "measurement_instrument", hard=True)
+            parents = measurement_repo.commit_parents(MEASUREMENT_COMMIT)
+            if parents != (production_anchor.commit,):
+                fold(schemas.Check(schemas.FAIL, (
+                    f"measurement commit parents are {parents!r}; required the single "
+                    f"current production parent {(production_anchor.commit,)!r}",)),
+                    "measurement_instrument", hard=True)
+
         fold(cpu_region_claim.verify_host_topology(), "topology")
 
         scope = (preflight.PreflightScope.gpu(spec.campaign_id, spec.devices)
@@ -1762,8 +1831,17 @@ class HostOps:
         # it is folded, so it degrades the preflight rather than aborting it.
         fold(boost, "boost_under_load")
 
-        policy = microbench.HostStatePolicy(nominal_khz=self._nominal_khz)
+        policy = microbench.HostStatePolicy(
+            nominal_khz=self._nominal_khz,
+            require_package_power=(spec.backend == BACKEND_CPU))
         fold(policy.check_load(state, cpu_count=len(state.khz_by_cpu) or 1), "load")
+        if spec.backend == BACKEND_CPU:
+            # A point reading is only an availability preflight.  Exact power
+            # is derived later from each block's open/close counter interval.
+            # Hard refusal here avoids acquiring the machine for a CPU campaign
+            # whose required host receipt is known to be impossible.
+            fold(policy.check_package_power_available(state),
+                 "package_power_available", hard=True)
 
         if outcome == schemas.PASS:
             return schemas.Check(schemas.PASS, (
@@ -1861,9 +1939,9 @@ class HostOps:
     # -- 2. worktree -------------------------------------------------------
 
     def create_worktree(self, spec: CampaignSpec) -> Any:
-        repo = worktree.GitRepo(PRODUCTION_REPO)
-        anchor = worktree.resolve_anchor(repo, PRODUCTION_BRANCH,
-                                         expected_commit=PRODUCTION_COMMIT)
+        repo = worktree.GitRepo(MEASUREMENT_REPO)
+        anchor = worktree.resolve_anchor(repo, MEASUREMENT_BRANCH,
+                                         expected_commit=MEASUREMENT_COMMIT)
         tree, proof = worktree.create_campaign_worktree(anchor, spec.campaign_id)
         if not proof.holds:
             # The worktree EXISTS at this point and the ledger has not been told
@@ -1931,6 +2009,13 @@ class HostOps:
         tree = self._build_state["tree"]
         plan = self._build_state["plan"]
 
+        source_pin = instrument_integrity.compare_manifest_to_anchor(
+            candidate_root=tree.path.path, anchor_root=MEASUREMENT_REPO)
+        if source_pin.outcome != schemas.PASS:
+            return T0Outcome(all_pass=False, gates=((
+                "t0.measurement_source_pin", source_pin.outcome,
+                tuple(source_pin.reasons)),))
+
         snapshot = _source_tree_digest(tree.path.path)
         identity = worktree.build_identity(
             result, candidate_id=spec.candidate_id, campaign_id=spec.campaign_id,
@@ -1988,11 +2073,14 @@ class HostOps:
                 prompt="The capital of France is", prompt_ref="ak-prompt-001",
                 n_predict=32, seed=42),
             determinism_runs=2, cache_state="cold", state_safety_probe=False,
+            candidate_diff_text=tree.unified_diff_from_source(),
             oracle_ids=(f"oracle://{PRODUCTION_BRANCH}",),
             build=build_ev.provenance,
             **extra)
         provider = t0_provider.ExecutedT0EvidenceProvider(
-            plan=t0_plan, runner=t0_provider.SubprocessRunner(),
+            plan=t0_plan,
+            runner=t0_provider.SubprocessRunner(
+                sandbox_policy=self._candidate_sandbox_policy(spec)),
             claim=self._claim_binding.t0_claim,
             anchor_capture=t0_anchor.capture)
         request = self._evaluation_request(
@@ -2045,7 +2133,7 @@ class HostOps:
         plan = self._build_state["plan"]
         tool = spec.recipe.tool
         # The BUILD root, not the worktree — see `render_bench_commands`.
-        root = (os.path.join(PRODUCTION_REPO, "build") if arm == "anchor"
+        root = (MEASUREMENT_BUILD_ROOT if arm == "anchor"
                 else plan.build_dir.path)
         bindir = os.path.join(root, "bin")
         binding = recipes.ToolBinding(binary=os.path.join(bindir, tool),
@@ -2077,6 +2165,8 @@ class HostOps:
             candidate_binding=candidate_cmd.binding,
             anchor_binding=anchor_cmd.binding,
             anchor=anchor_identity,
+            candidate_instrument_root=self._build_state["tree"].path.path,
+            anchor_instrument_root=MEASUREMENT_REPO,
             params=spec.bench_params,
             base_blocks=spec.blocks, pairs_per_block=1,
             unit_ids=(f"{spec.recipe_id}:{spec.model or 'declared-model'}",),
@@ -2094,13 +2184,45 @@ class HostOps:
                 "`decide()` refuses it after the fact; refusing it here costs no blocks. "
                 "Re-run under a fresh campaign seed (retry() reverses every element and "
                 "would produce the mirror-image degenerate draw).")
+        sandbox_policy = self._candidate_sandbox_policy(spec)
         runner = microbench.MicrobenchRunner(
             claim=self._claim_binding.microbench_claim,
-            policy=microbench.HostStatePolicy(nominal_khz=self._nominal_khz),
-            spawner=self._spawner or microbench.SubprocessSpawner(),
+            policy=microbench.HostStatePolicy(
+                nominal_khz=self._nominal_khz,
+                require_package_power=(spec.backend == BACKEND_CPU)),
+            spawner=self._spawner or microbench.SubprocessSpawner(
+                workdir_root=sandbox_policy.writable_root,
+                sandbox_policy=sandbox_policy),
             run_ledger=self._completed_run_ledger(spec))
         run = runner.run(plan)
         return pairs_from_run(run)
+
+    @staticmethod
+    def _candidate_sandbox_policy(spec: CampaignSpec) -> sandbox.SandboxPolicy:
+        """The only live-campaign route to a process runner.
+
+        The evaluator creates the directory; the candidate receives write
+        authority over exactly that directory after Landlock activates.  The
+        journal itself is a sibling and therefore remains read-only to code the
+        loop authored.  A missing durable journal root is already illegal for
+        execution and is refused here again so no caller can fall back to /tmp.
+        """
+        if not spec.journal_root:
+            raise RuntimeError(
+                "candidate sandbox needs the executing campaign's durable journal root")
+        journal_root = storage.assert_not_scratch(
+            spec.journal_root, what="campaign journal root")
+        root = os.path.realpath(os.path.join(
+            journal_root, spec.campaign_id, "candidate-sandbox"))
+        if not storage._under(root, journal_root):
+            raise RuntimeError("candidate sandbox escaped the campaign journal root")
+        for production in worktree.frozen_tree_paths():
+            if storage._under(root, production) or storage._under(production, root):
+                raise RuntimeError(
+                    f"candidate sandbox {root!r} touches frozen tree {production!r}")
+        os.makedirs(root, mode=0o700, exist_ok=True)
+        limits = sandbox.ResourceLimits(cpu_time_s=max(60, min(spec.max_hold_s, 8 * 3600)))
+        return sandbox.SandboxPolicy(writable_root=root, limits=limits)
 
     def _completed_run_ledger(self, spec: CampaignSpec) -> microbench.CompletedRunLedger:
         """The executing path cannot spend a benchmark leg without durability."""

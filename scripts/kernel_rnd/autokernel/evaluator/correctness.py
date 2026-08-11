@@ -1635,6 +1635,8 @@ class AntiRewardHackingEvidence:
     environment_probe_findings: tuple
     timing_dependent_branch_findings: tuple
     receipt_ref: str
+    environment_probe_detector_id: Optional[str] = None
+    timing_dependent_branch_detector_id: Optional[str] = None
 
     def recorded_anchor(self) -> Optional[api.AnchorIdentity]:
         """The anchor that delivered `delivered_units_anchor`, or `None` if unrecorded."""
@@ -1664,6 +1666,11 @@ class AntiRewardHackingEvidence:
         for name in ("environment_probe_findings", "timing_dependent_branch_findings"):
             for item in _req_tuple(getattr(self, name), f"anti_reward_hacking.{name}"):
                 _req_str(item, f"anti_reward_hacking.{name}[]")
+        for name in ("environment_probe_detector_id",
+                     "timing_dependent_branch_detector_id"):
+            value = getattr(self, name)
+            if value is not None:
+                _req_str(value, f"anti_reward_hacking.{name}")
         _req_str(self.receipt_ref, "anti_reward_hacking.receipt_ref")
 
 
@@ -3136,8 +3143,16 @@ def check_anti_reward_hacking(evidence: Optional[AntiRewardHackingEvidence],
     if evidence.timing_dependent_branch_findings:
         reasons.append(f"timing-dependent branch(es) found: "
                        f"{list(evidence.timing_dependent_branch_findings)}")
+    if evidence.environment_probe_detector_id is None:
+        unknown.append(
+            "the environment-probe detector did not run; empty findings are not PASS")
+    if evidence.timing_dependent_branch_detector_id is None:
+        unknown.append(
+            "the timing-dependent-branch detector did not run; empty findings are not PASS")
     notes = (f"cache_state={evidence.cache_state}", f"control_role={control_role}",
              f"oracles={list(evidence.oracle_ids)}",
+             f"environment_detector={evidence.environment_probe_detector_id or 'not_run'}",
+             f"timing_detector={evidence.timing_dependent_branch_detector_id or 'not_run'}",
              f"capture_anchor={'unrecorded' if recorded is None else recorded.short()}")
     if reasons:
         # A FAIL is never downgraded by an unrelated COULD_NOT_CHECK: both are

@@ -137,7 +137,8 @@ def op_suite_plan(**overrides):
 def execution_plan(**overrides):
     kwargs = dict(
         candidate=candidate_build(), tools=tools(), op_suite=op_suite_plan(),
-        dispatch=t0.DispatchTracePlan(derived_surface=("MUL_MAT", "MUL_MAT_ID")))
+        dispatch=t0.DispatchTracePlan(derived_surface=("MUL_MAT", "MUL_MAT_ID")),
+        candidate_diff_text="")
     kwargs.update(overrides)
     return t0.T0ExecutionPlan(**kwargs)
 
@@ -2015,31 +2016,37 @@ class DeliveredUnitsDoNotDependOnTheSink(unittest.TestCase):
 
 
 class AssertedSurfacesAreRecordedAsGaps(unittest.TestCase):
-    """E/denial 6. Six clean-shaped fields nothing measured.
+    """E/denial 6. Remaining clean-shaped fields nothing measured.
 
     `race_findings`, `leaked_resources`, `rollback_tested`,
-    `candidate_output_used_as_oracle`, `environment_probe_findings` and
-    `timing_dependent_branch_findings` are all constants in this module. Two of
-    them read as PASS on an empty list — an empty list from a detector that was
-    never built. The gap is now in `SEAMS`; this pins it there.
+    `candidate_output_used_as_oracle` remain constants. Environment and timing
+    findings were removed from this list when RVP-C6-9 installed real versioned
+    source-diff detectors; their absence now reads UNKNOWN.
     """
 
     def test_the_seam_names_every_asserted_field(self):
         blob = "\n".join(t0.SEAMS)
         for field_name in ("race_findings", "leaked_resources", "rollback_tested",
-                           "candidate_output_used_as_oracle",
-                           "environment_probe_findings",
-                           "timing_dependent_branch_findings"):
+                           "candidate_output_used_as_oracle"):
             self.assertIn(field_name, blob, f"{field_name} is asserted, not measured")
 
     def test_the_fields_really_are_constants_here(self):
         """If any of them becomes a measurement, the SEAM must be rewritten."""
         source = Path(t0.__file__).read_text(encoding="utf-8")
         for literal in ("race_findings=()", "leaked_resources=()",
-                        "rollback_tested=False", "candidate_output_used_as_oracle=False",
-                        "environment_probe_findings=()",
-                        "timing_dependent_branch_findings=()"):
+                        "rollback_tested=False", "candidate_output_used_as_oracle=False"):
             self.assertIn(literal, source)
+
+    def test_the_two_source_detectors_populate_versioned_receipts(self):
+        provider = t0.ExecutedT0EvidenceProvider(
+            plan=execution_plan(candidate_diff_text=(
+                "diff --git a/k.hip b/k.hip\n--- a/k.hip\n+++ b/k.hip\n"
+                "@@ -1 +1 @@\n-int x;\n+if (getenv(\"BENCH\")) fast();\n")),
+            runner=t0.RecordedProcessRunner([]))
+        evidence = provider.collect_anti_reward_hacking(1, t0._Collected())
+        self.assertTrue(evidence.environment_probe_findings)
+        self.assertRegex(evidence.environment_probe_detector_id, r"/v\d+$")
+        self.assertRegex(evidence.timing_dependent_branch_detector_id, r"/v\d+$")
 
 
 class ThePlanCarriesTheDerivationAndTypeChecksIt(unittest.TestCase):

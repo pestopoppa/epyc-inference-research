@@ -480,6 +480,14 @@ class TestPathspecLimitedCommitInASharedClone(_TmpMixin):
         self.assertEqual(changed, ["ggml/src/kernel.c"])
         self.assertIn("README.md", self.wt.status_porcelain())
 
+    def test_committed_candidate_diff_is_anchored_at_the_worktree_source(self):
+        mine = os.path.join(self.wt.path.path, "ggml", "src", "kernel.c")
+        _write(mine, "int mine(void){return getenv(\"BENCH\") != 0;}\n")
+        self.wt.commit_paths(["ggml/src/kernel.c"], "candidate: probe")
+        diff = self.wt.unified_diff_from_source()
+        self.assertIn("+++ b/ggml/src/kernel.c", diff)
+        self.assertIn('+int mine(void){return getenv("BENCH") != 0;}', diff)
+
     def test_a_file_ANOTHER_session_staged_does_not_ride_along(self):
         """The exact failure `feedback_pathspec_limited_commit_in_shared_tree` records.
 
@@ -746,18 +754,18 @@ class TestReadingFrozenProductionChangesNothing(unittest.TestCase):
     resolved HEAD are captured on both sides of a full anchor resolution.
     """
 
-    def test_resolving_the_v8_anchor_leaves_the_tree_byte_identical(self):
+    def test_resolving_the_v9_anchor_leaves_the_tree_byte_identical(self):
         repo = W.GitRepo("/mnt/raid0/llm/llama.cpp")
         before = W.fingerprint_tree(repo)
-        anchor = W.resolve_anchor(repo, "production-consolidated-v8")
+        anchor = W.resolve_anchor(repo, "production-consolidated-v9")
         after = W.fingerprint_tree(repo)
 
         proof = W.prove_unchanged(before, after)
         self.assertTrue(proof.holds, proof.differences)
         self.assertEqual(before.status_porcelain, after.status_porcelain)
         self.assertEqual(anchor.commit,
-                         "67a433bf45a8a091d83b4ea0b32ff0735fd51800")
-        self.assertEqual(before.symbolic_ref, "production-consolidated-v8")
+                         "0db32c06e3e550065b78311a6031ef3dd2c4f27c")
+        self.assertEqual(before.symbolic_ref, "production-consolidated-v9")
 
     def test_the_frozen_tree_cannot_become_a_sandbox_path_on_the_real_host(self):
         with self.assertRaises(W.ProductionTreeViolation):
@@ -1130,6 +1138,43 @@ class TestRunBuildEndToEnd(_TmpMixin):
         self.assertTrue(result.configure.verified_dead)
         self.assertTrue(result.build.verified_dead)
         self.assertFalse(result.configure.timed_out)
+        for disposition in (result.configure, result.build):
+            self.assertEqual(
+                disposition.sandbox_receipt["sandbox_id"], W.process_sandbox.SANDBOX_ID)
+            self.assertEqual(disposition.sandbox_receipt["writable_root"], self.bld.path)
+            self.assertTrue(disposition.sandbox_teardown["verified_empty"])
+            self.assertTrue(disposition.sandbox_teardown["removed"])
+        self.assertTrue(os.path.isfile(self.log + ".configure-sandbox.json"))
+        self.assertTrue(os.path.isfile(self.log + ".build-sandbox.json"))
+
+    def test_candidate_cmake_cannot_write_outside_the_build_tree(self):
+        escaped = os.path.join(self.tmp, "escaped-by-candidate")
+        _write(os.path.join(self.src.path, "CMakeLists.txt"), textwrap.dedent(f"""\
+            cmake_minimum_required(VERSION 3.16)
+            project(ak_probe C)
+            file(WRITE "{escaped}" "candidate escaped")
+            add_executable(ak_probe main.c)
+            """))
+        result = W.run_build(self.plan, log_path=self.log)
+        self.assertFalse(result.succeeded)
+        self.assertFalse(os.path.exists(escaped))
+        self.assertIsNotNone(result.configure.sandbox_receipt)
+        self.assertTrue(result.configure.sandbox_teardown["verified_empty"])
+
+    def test_build_refuses_before_spawn_when_sandbox_is_unavailable(self):
+        with mock.patch.object(
+                W.process_sandbox, "landlock_abi",
+                side_effect=W.process_sandbox.SandboxError("probe unavailable")):
+            with self.assertRaisesRegex(W.process_sandbox.SandboxError,
+                                        "probe unavailable"):
+                W.run_build(self.plan, log_path=self.log)
+        self.assertFalse(os.path.exists(self.log))
+
+    def test_candidate_writable_tree_cannot_own_the_evidence(self):
+        with self.assertRaisesRegex(W.UnsafePath, "evaluator-owned"):
+            W.run_build(
+                self.plan,
+                log_path=os.path.join(self.bld.path, "candidate-build.log"))
 
     def test_the_receipt_is_accepted_by_the_8_5_1_clean_build_gate(self):
         """The reason `integrity.py` was read before this module was written.
@@ -1189,6 +1234,10 @@ class TestRunBuildEndToEnd(_TmpMixin):
         self.assertEqual(blob["output_binary_sha256"],
                          W._sha256_file(binary))
         self.assertEqual(blob["worktree"]["branch"], f"ak/{CAMPAIGN}/base")
+        self.assertEqual([row["phase"] for row in blob["sandbox_receipts"]],
+                         ["configure", "build"])
+        self.assertTrue(all(row["teardown"]["verified_empty"]
+                            for row in blob["sandbox_receipts"]))
         self.assertEqual(identity.content_hash, schemas.content_hash(blob))
 
     def test_the_candidate_records_fit_the_schema_and_NAME_what_is_missing(self):
@@ -1216,7 +1265,7 @@ class TestRunBuildEndToEnd(_TmpMixin):
         self.assertNotIn("linkage_sha256", blocks["artifacts"])
         self.assertNotIn("patch_bundle_sha256", blocks["source_snapshot"])
         for key in ("toolchain", "compiler", "command", "build_dir", "log_path",
-                    "log_sha256"):
+                    "log_sha256", "sandbox_receipts"):
             self.assertIn(key, blocks["build"])
         self.assertRegex(blocks["build"]["log_sha256"], r"^[0-9a-f]{64}$")
 
@@ -1970,8 +2019,27 @@ class TestRedTeamReceiptCannotAttestAForeignArtifact(_TmpMixin):
         _write(log, "-- The CXX compiler identification is GNU 15.2.0\n"
                     f"-- Build files have been written to: {self.bld.path}\n"
                     "[100%] Built target ak_probe\n")
+        def disposition(argv, phase):
+            return W.ProcessDisposition(
+                argv=tuple(argv), pid=0, pgid=0, exit_code=0,
+                timed_out=False, signals_sent=(), verified_dead=True,
+                duration_s=0.0, started_at="2026-08-11T00:00:00Z",
+                sandbox_receipt={
+                    "sandbox_id": W.process_sandbox.SANDBOX_ID,
+                    "writable_root": self.bld.path,
+                    "fixture_only": True,
+                    "phase": phase,
+                },
+                sandbox_teardown={
+                    "verified_empty": True,
+                    "removed": True,
+                    "fixture_only": True,
+                })
+
         self.result = W.BuildResult(
-            plan=self.plan, configure=None, build=None, log_path=log,
+            plan=self.plan,
+            configure=disposition(self.plan.configure_argv(), "configure"),
+            build=disposition(self.plan.build_argv(), "build"), log_path=log,
             # The REAL digest of the log this fixture just wrote. It used to be
             # `"0" * 64`, which `_req_sha256` now refuses: a fabricated digest in
             # a fixture is the same fabricated digest a red-team suite exists to

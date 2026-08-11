@@ -625,7 +625,8 @@ class ParamSpec:
     maximum: Optional[int] = None
     suffix: Optional[str] = None
 
-    _KINDS = ("int", "path", "enum", "op_list", "type_list", "params_filter", "device_id")
+    _KINDS = ("int", "path", "enum", "op_list", "type_list", "params_filter",
+              "device_id", "min_duration")
 
     def __post_init__(self) -> None:
         _require_str(self.name, "param.name")
@@ -667,6 +668,13 @@ class ParamSpec:
                     f"{_DEVICE_ID_RE.pattern}; the recipe's device must be the one the "
                     f"exclusive device claim was acquired for (precondition 1)")
             return token
+        if self.kind == "min_duration":
+            if not isinstance(value, api.MinimumMeasurableDuration):
+                raise RecipeParameterError(
+                    f"{field}: expected api.MinimumMeasurableDuration derived from "
+                    "paired local A/A durations; a bare microsecond literal or foreign "
+                    "timing floor is not admissible")
+            return value
         if self.kind == "op_list":
             return self._validate_list(value, field, _validate_op, MAX_OPS_PER_INVOCATION)
         if self.kind == "type_list":
@@ -1031,6 +1039,10 @@ _P_CACHE_STATE = ParamSpec(
     doc="Declared T1a cache state. It is recorded in the recipe parameters and receipt; "
         "candidate and anchor arms must use the same value. The default is explicitly cold, "
         "never unknown.")
+_P_MIN_MEASURABLE_US = ParamSpec(
+    name="min_measurable_us", kind="min_duration", required=True,
+    doc="Host/cell-specific minimum measurable duration, constructed from paired local "
+        "A/A durations. Below this floor a T1a cell is inconclusive, never ranked.")
 _P_MODEL = ParamSpec(
     name="model", kind="path", required=True, suffix=".gguf",
     doc="Absolute path to the production-representative GGUF (§9.4: one model/quant/"
@@ -1039,6 +1051,14 @@ _P_REPS = ParamSpec(
     name="reps", kind="int", required=True, minimum=1, maximum=1000,
     doc="llama-bench `-r`. Required, never defaulted: the rep count is a calibrated "
         "quantity (`B_min`, bench-cpu.md:21-22), not a convenience.")
+_P_AUTOKERNEL_SEED = ParamSpec(
+    name="autokernel_seed", kind="int", required=False, default=0, minimum=0,
+    maximum=(1 << 63) - 1,
+    doc="Evaluator-chosen seed for llama-bench `--autokernel-harden`. Zero is a "
+        "constructor-only dry-run sentinel; MicrobenchPlan replaces it with a non-zero "
+        "seed derived from the committed campaign/candidate identity. The seed derives a "
+        "different trusted input for every measured repetition while the tool holds a "
+        "second address-rotated context for the untimed output-invariance replicate.")
 _P_LB_OUTPUT = ParamSpec(
     name="output_format", kind="enum", default="json", choices=LLAMA_BENCH_OUTPUT_FORMATS,
     doc="llama-bench `-o`. Only json/jsonl carry samples_ns/samples_ts, which the "
@@ -1293,6 +1313,8 @@ class ConstructedCommand:
 
 
 def _jsonable(value: Any) -> Any:
+    if isinstance(value, api.MinimumMeasurableDuration):
+        return value.to_dict()
     if isinstance(value, dict):
         return {k: _jsonable(v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
@@ -1452,6 +1474,17 @@ def _build_backend_ops(*, spec: RecipeSpec, binding: ToolBinding, params: Mappin
         findings.append(_assert_canonical_prefix(argv))
         findings.append(_assert_canonical_env(env, deviations))
     findings.append(_NO_THREAD_FLAG_FINDING)
+    floor = params["min_measurable_us"]
+    findings.append(DisciplineFinding(
+        finding_id="minimum_measurable_duration",
+        check=schemas.Check(schemas.PASS, (
+            f"T1a floor {floor.min_measurable_us:.9g} us was derived from "
+            f"{floor.aa_pair_count} paired local A/A durations at "
+            f"{floor.samples_ref}; observations below it are inconclusive",)),
+        clause="AutoKernel §9.3 / AK-X-3 (local A/A-derived min_measurable_us)"))
+    bounded.append(
+        f"timing rankability floor is {floor.min_measurable_us:.9g} us from "
+        f"{floor.derivation_id}; a shorter cell receives no speed rank")
     fmt = params["output_format"]
     if fmt in BACKEND_OPS_METRIC_BEARING_FORMATS:
         samples_check = schemas.Check(schemas.COULD_NOT_CHECK, (
@@ -1552,6 +1585,14 @@ def _build_quantize_perf(*, spec: RecipeSpec, binding: ToolBinding,
         _DELEGATED_GIT_IDENTITY,
         _DELEGATED_HOST_ENV,
     ]
+    floor = params["min_measurable_us"]
+    findings.append(DisciplineFinding(
+        finding_id="minimum_measurable_duration",
+        check=schemas.Check(schemas.PASS, (
+            f"T1a floor {floor.min_measurable_us:.9g} us was derived from "
+            f"{floor.aa_pair_count} paired local A/A durations at "
+            f"{floor.samples_ref}; observations below it are inconclusive",)),
+        clause="AutoKernel §9.3 / AK-X-3 (local A/A-derived min_measurable_us)"))
     bounded = (
         f"`--type` accepts at most {MAX_TYPES_PER_INVOCATION} names from the declared "
         f"ggml type enum; anything else is REFUSED, never dropped",
@@ -1565,6 +1606,8 @@ def _build_quantize_perf(*, spec: RecipeSpec, binding: ToolBinding,
         f"output in the reference tree (from_float/to_float guard, :273) and the tool "
         f"still exits 0; requesting one is a FAIL discipline finding, not a refusal, "
         f"because supplying the missing trait is itself a legitimate candidate",
+        f"timing rankability floor is {floor.min_measurable_us:.9g} us from "
+        f"{floor.derivation_id}; a shorter cell receives no speed rank",
     )
     raw = ("captured stdout of each invocation; one invocation = one paired-block sample "
            "(test-quantize-perf emits no per-repetition sample vector)")
@@ -1615,6 +1658,7 @@ def _build_llama_bench(*, spec: RecipeSpec, binding: ToolBinding, params: Mappin
         "-p", str(n_prompt),
         "-n", str(n_gen),
         "-r", str(params["reps"]),
+        "--autokernel-harden", str(params["autokernel_seed"]),
     ]
     for flag, key in (("-d", "n_depth"), ("-ub", "ubatch"), ("-b", "batch")):
         if params.get(key) is not None:
@@ -1741,7 +1785,8 @@ _SPECS = (
         cell_class=CELL_CLASS_OPERATOR, tool="test-backend-ops",
         metric="op_throughput_gflops", metric_direction="higher_better",
         params=(_phase_param(("prefill", "decode")), _P_OPS, _P_PARAMS_FILTER,
-                _P_BACKEND_OPS_OUTPUT, _P_CACHE_STATE, _P_GGML_IQK),
+                _P_BACKEND_OPS_OUTPUT, _P_CACHE_STATE, _P_MIN_MEASURABLE_US,
+                _P_GGML_IQK),
         builder="_builder_backend_ops_cpu",
         summary="CPU target-operator discriminator: test-backend-ops perf under the "
                 "canonical taskset/NUMA/OMP baseline."),
@@ -1751,7 +1796,8 @@ _SPECS = (
         cell_class=CELL_CLASS_OPERATOR, tool="test-backend-ops",
         metric="op_throughput_gflops", metric_direction="higher_better",
         params=(_phase_param(("prefill", "decode")), _P_OPS, _P_PARAMS_FILTER,
-                _P_BACKEND_OPS_OUTPUT, _P_CACHE_STATE, _P_GGML_IQK,
+                _P_BACKEND_OPS_OUTPUT, _P_CACHE_STATE, _P_MIN_MEASURABLE_US,
+                _P_GGML_IQK,
                 _P_DEVICE_INDEX, _P_DEVICE_ID),
         builder="_builder_backend_ops_gpu",
         summary="MI210 target-operator discriminator: test-backend-ops perf on ROCm<n>, "
@@ -1777,7 +1823,7 @@ _SPECS = (
             ParamSpec(name="alignment_offset", kind="int", required=False, default=None,
                       minimum=0, maximum=64,
                       doc="test-quantize-perf `--alignment-offset` (MAX_ALIGNMENT=64)."),
-            _P_CACHE_STATE, _P_GGML_IQK),
+            _P_CACHE_STATE, _P_MIN_MEASURABLE_US, _P_GGML_IQK),
         builder="_builder_quantize_perf",
         summary="CPU quantization-kernel discriminator for arithmetic/layout change "
                 "classes: test-quantize-perf under the canonical baseline."),
@@ -1786,7 +1832,7 @@ _SPECS = (
         family=RECIPE_FAMILY_T1B, tier="T1b", backend="llama_cpu", phase="decode",
         cell_class=CELL_CLASS_TINY_GRAPH, tool="llama-bench",
         metric="decode_tokens_per_s", metric_direction="higher_better",
-        params=(_P_MODEL, _P_N_GEN, _P_REPS, _P_LB_OUTPUT, _P_DEPTH, _P_UBATCH, _P_BATCH,
+        params=(_P_MODEL, _P_N_GEN, _P_REPS, _P_AUTOKERNEL_SEED, _P_LB_OUTPUT, _P_DEPTH, _P_UBATCH, _P_BATCH,
                 _P_GGML_IQK),
         builder="_builder_llama_bench_decode_cpu",
         summary="Tiny real-graph decode slice on CPU: the ratified canonical llama-bench "
@@ -1796,7 +1842,7 @@ _SPECS = (
         family=RECIPE_FAMILY_T1B, tier="T1b", backend="llama_cpu", phase="prefill",
         cell_class=CELL_CLASS_TINY_GRAPH, tool="llama-bench",
         metric="prefill_tokens_per_s", metric_direction="higher_better",
-        params=(_P_MODEL, _P_N_PROMPT, _P_REPS, _P_LB_OUTPUT, _P_DEPTH, _P_UBATCH,
+        params=(_P_MODEL, _P_N_PROMPT, _P_REPS, _P_AUTOKERNEL_SEED, _P_LB_OUTPUT, _P_DEPTH, _P_UBATCH,
                 _P_BATCH, _P_GGML_IQK),
         builder="_builder_llama_bench_prefill_cpu",
         summary="Tiny real-graph prefill slice on CPU: the ratified canonical llama-bench "
@@ -1806,7 +1852,7 @@ _SPECS = (
         family=RECIPE_FAMILY_T1B, tier="T1b", backend="llama_gpu", phase="decode",
         cell_class=CELL_CLASS_TINY_GRAPH, tool="llama-bench",
         metric="decode_tokens_per_s", metric_direction="higher_better",
-        params=(_P_MODEL, _P_N_GEN, _P_REPS, _P_LB_OUTPUT, _P_DEPTH, _P_UBATCH, _P_BATCH,
+        params=(_P_MODEL, _P_N_GEN, _P_REPS, _P_AUTOKERNEL_SEED, _P_LB_OUTPUT, _P_DEPTH, _P_UBATCH, _P_BATCH,
                 _P_GGML_IQK, _P_DEVICE_INDEX, _P_DEVICE_ID, _P_NGL, _P_GPU_THREADS),
         builder="_builder_llama_bench_decode_gpu",
         summary="Tiny real-graph decode slice on MI210: explicit -t/-fa/-mmp/-ngl/-dev "
@@ -1816,7 +1862,7 @@ _SPECS = (
         family=RECIPE_FAMILY_T1B, tier="T1b", backend="llama_gpu", phase="prefill",
         cell_class=CELL_CLASS_TINY_GRAPH, tool="llama-bench",
         metric="prefill_tokens_per_s", metric_direction="higher_better",
-        params=(_P_MODEL, _P_N_PROMPT, _P_REPS, _P_LB_OUTPUT, _P_DEPTH, _P_UBATCH,
+        params=(_P_MODEL, _P_N_PROMPT, _P_REPS, _P_AUTOKERNEL_SEED, _P_LB_OUTPUT, _P_DEPTH, _P_UBATCH,
                 _P_BATCH, _P_GGML_IQK, _P_DEVICE_INDEX, _P_DEVICE_ID, _P_NGL,
                 _P_GPU_THREADS),
         builder="_builder_llama_bench_prefill_gpu",

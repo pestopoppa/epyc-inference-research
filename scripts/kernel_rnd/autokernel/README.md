@@ -79,6 +79,22 @@ acquired the claim directly. Writing your own question:
    1.6–1.9% CV does not justify one. Evidence:
    [`data/autokernel_aa_20260804/`](../../../data/autokernel_aa_20260804/README.md).
 
+### Quant-specific roofline targets
+
+`substrate.compare_per_quant()` keeps Q4, Q8 and BF16 as separate cells because
+their `bytes_per_token` values are different denominators. Local headroom uses
+the MI210's measured-achievable bandwidth; cross-vendor comparison is
+datasheet-to-datasheet only. The result is permanently labelled
+`diagnostic_and_routing_only` and is not accepted by a promotion gate.
+
+The checked-in CUDA registry currently has one absolute primary-source anchor:
+Hazy Research's reported 78% H100 memory-bandwidth utilization for batch-1,
+single-sequence BF16 Llama-3.2-1B decode. It is usable only by the exact BF16
+regime. Q4_K and Q8_0 return `COULD_NOT_CHECK`: Marlin reports a near-ideal
+3.87x *relative* INT4-g128 speedup, not absolute spec-basis bandwidth use, and
+INT4-g128 is not GGUF Q4_K. The implementation records that evidence gap rather
+than borrowing BF16's target or converting a relative speedup into a roofline.
+
 ### Where to read next
 
 | You want | Go to |
@@ -131,28 +147,36 @@ reached, after the claim and after the build.
 
 | Module | What it owns |
 |---|---|
-| `schemas.py` | The §7 record contracts (`v2`–`v4` remain readable; evaluation-event `v5` adds parsed device state to v4's transfer surface), canonical JSON/content hashing, the `PASS`/`FAIL`/`COULD_NOT_CHECK` `Check` type, and record-level checkers. **Single source of truth: every other module is written against these and must not invent a record shape.** |
+| `schemas.py` | The §7 record contracts (`v2`–`v4` remain readable; evaluation-event `v5` adds parsed device state to v4's transfer surface), canonical JSON/content hashing, the `PASS`/`FAIL`/`COULD_NOT_CHECK` `Check` type, and record-level checkers. Proposal v3 requires a structured `external_numbers` list with source revision and independently re-derived same-quant/same-basis roofline utilization. **Single source of truth: every other module is written against these and must not invent a record shape.** |
 | `journal.py` | The append-only, fsynced, **sharded** primary record. Shard ordering, torn-tail repair, cursors, archiving, supersession (record-scope and retrieval-scope), tombstones, preflight attestations, derived views, and `check_view_consistency`. |
 | `storage.py` | §3.7 durability classes, §5.8 retention classes and rule-bound tombstoned expiry, per-campaign quota and `DISK_PRESSURE`, the `data/<campaign>/` evidence root with `SHA256SUMS` + README, and `verify_durability`. |
 | `resource/device_claim.py` | The cross-process **exclusive GPU device claim** (§2.6) — `flock(LOCK_EX)` on a never-unlinked lock file, PID+start-time+boot-id liveness, journaled crash reclamation, quiesce-and-drain revocation, and the claim receipt id that lands in every evaluation event. |
 | `resource/preflight.py` | The **one** audited read-only inference preflight (§3.5): claim witness as the target instrument, an opt-in name-pattern enumerator as the labelled interim one, and an AST self-audit proving the module cannot deliver a signal. |
 | `resource/claim_witness.py` | The seam between the three above: a conforming `GpuClaimReader` over the device claim, and resolution of an evaluation event's opaque `resource_claim_receipt` back to the claim that produced it. |
-| `evaluator/api.py` | **AK3.** The typed evaluator interface and the only place a verdict is COMPUTED. Owns the protocol's eight preconditions, twelve void conditions, fourteen search-grade conjuncts, the record grammar, the tier state machine, and `E_PROCESS_CONSTRUCTION_IDS` — the bundle's construction registry-of-record. |
+| `evaluator/api.py` | **AK3.** The typed evaluator interface and the only place a verdict is COMPUTED. Owns the protocol's eight preconditions, twelve void conditions, fourteen search-grade conjuncts, the record grammar, the tier state machine, and the local-A/A-derived `MinimumMeasurableDuration`: a T1a cell below that floor is inconclusive and has no speed rank. |
 | `evaluator/integrity.py` | **AK3.** §8.5.1 source integrity: an ELF `.dynsym`/`.symtab` reader, an Itanium-ABI demangler, symbol/arity/registration/dispatch-predicate diffs, clean-build-from-snapshot provenance, unified-diff parsing against the change-class envelope, the mechanically derived `core_header` risk tier, the §10.6 complexity ceiling, repair-from-clean-parent, and the gates that bind all of it to the request's anchor, artifact and derived surface. |
 | `evaluator/surface.py` | **AK3.** §6.4 affected-surface derivation from the build system's OWN dependency information (make/ninja depfiles, cmake link lines), the dispatch-trace stage, three-stage reconciliation (`derived ⊇ traced`), the actor's declaration as a SCORED prediction rather than a scope input, and §3.2 normalized-binary comparison. |
 | `evaluator/correctness.py` | **AK3.** The seventeen T0 gates: backend-op units, exact-reference comparison, unseen boundary shapes, surface reconciliation, the no-fallback proof, state/rollback/teardown, sanitizers (ASAN/UBSAN, no core dumps), output coherence vs the anchor, determinism class, binary+linkage identity, and anti-reward-hacking. `CoherenceVerdict` is computed and cannot be stamped. |
 | `evaluator/statistics.py` | **AK3.** The calibration block in its normative solve order — `φ`, `B_min`, the α budgets and their thresholds, the anchor-gate band — the anytime-valid e-process (two bundle-fixed constructions), the pre-committed stopping rule with bounded extension, the MDE, order control, the selection/confirmation split, and the reducer that produces a conforming `api.EffectEstimate`. |
 | `evaluator/controls.py` | **AK3.** The five controls as hashed data (definitions AND predicates), the A/A cadence scheduler, the historical-win-replay declared contract with its normative unavailable branch and operator escalation, and the projection into `api.WindowAttestations`. |
-| `evaluator/recipes.py` | **AK3.** The codified recipe constructors — every measurement argv is emitted by one, carrying its constructor id and content hash — for `test-backend-ops`, `test-quantize-perf` and `llama-bench`, CPU and GPU. |
-| `execution/live_controls.py` | **AK3 live calibration.** Dry-run-default CPU producer that predeclares a campaign, copies the frozen anchor binary and its build-local DSOs byte-for-byte into the evidence bundle, acquires q0–q3, measures fresh A/A/neutral/control legs, solves calibration, and sends all five controls through the candidate dispatcher. First live result: 5/5 and `may_rank=true` in `data/autokernel_controls_3pct_20260805/`. |
+| `evaluator/recipes.py` | **AK3.** The codified recipe constructors — every measurement argv is emitted by one, carrying its constructor id and content hash — for `test-backend-ops`, `test-quantize-perf` and `llama-bench`, CPU and GPU. Every T1a recipe requires a typed local A/A timing floor; a bare numeric or foreign floor is refused. |
+| `execution/worktree.py` | **AK2.** Fresh worktrees from the reviewed one-commit measurement overlay on current production v9, pathspec commits, clean candidate-local builds, and build identities. Candidate-controlled CMake configure/build is C6-sandboxed and returns evaluator-owned activation plus verified-cgroup-teardown receipts. |
+| `execution/sandbox.py` | **C6.** Native Landlock write confinement, seccomp signal/network/namespace denial, non-root identity, finite rlimits, per-invocation cgroup-v2 containment, candidate-proof activation receipts, and descendant-draining teardown. Startup is fail-closed. |
+| `execution/t0_provider.py` | **AK3 T0.** Real correctness invocations. The live campaign constructs it only with a C6 policy; recorded replay starts no process. |
+| `execution/microbench.py` | **AK3 T1.** Fresh process and empty invocation-only writable state for every arm, interleaved paired blocks, mandatory `--autokernel-harden` receipts, per-CPU frequency observations, and exact-window package-energy deltas. Each timed repetition uses unique content and a unique context/input address; an untimed address-rotated replicate must return bitwise-identical logits. Package values are explicitly shared-package rather than lane-exclusive. |
+| `execution/instrument_integrity.py` | **RVP-C6-1.** Re-hashes the complete three-file reward-instrument manifest in explicit candidate and named-anchor source roots before live T0/T1 work and immediately before every T1 invocation; missing, unreadable, or changed source is a hard refusal. Build roots are never accepted as source identity. |
+| `execution/reward_hack_scan.py` | **RVP-C6-9.** Versioned added-line detectors over the committed candidate diff for environment probes and timing-dependent branches. Missing detector ids make empty findings `COULD_NOT_CHECK`; the checked-in detector corpus records 100% sensitivity and specificity for this deliberately narrow source-pattern taxonomy. The broader RVP-C6-6 exploit corpus remains a separate task. |
+| `execution/live_controls.py` | **AK3 live calibration.** Dry-run-default CPU producer that predeclares a fresh v9/hardened campaign, copies the reviewed measurement binary and its build-local DSOs byte-for-byte into the evidence bundle, acquires q0–q3, measures fresh A/A/neutral/control legs, solves calibration, and sends all five controls through the candidate dispatcher. The prior v8 result remains historical evidence in `data/autokernel_controls_3pct_20260805/`; it is not silently reused as v9 calibration. |
 | `controller/hypotheses.py` | The operator hypothesis store and falsifier-before-claim gate used by `campaign.py --hypothesis`. |
 | `controller/do_not_repeat.py` | The receipt-bearing negative/constraint ledger required before a hypothesis can spend a claim. |
 | `controller/shared.py` | The small shared vocabulary needed by the two surviving controller-memory modules. |
+| `controller/authoring_contract.py` | **AK-PL-1 / AK-LE-4 / AK-LE-5 (off campaign path).** The only reviewed fully-rendered authoring-prompt seam; sealed-evaluator leak scan with compliant control, priced never-bulk-read context, reversible compaction headers with exact git recovery, and typed external numeric priors. It calls no model and selects no work. |
 | `prior_art.py` | The deterministic four-way prior-art gate, expected-absence override, pinned source catalogue, and cumulative wall-share pruning. |
-| `substrate.py` | Validates the checked-in MI210 compute/bandwidth/PCIe/NUMA facts, preserves measured and datasheet bases separately, and re-derives both roofline ridges. |
+| `substrate.py` | Validates the checked-in MI210 compute/bandwidth/PCIe/NUMA facts, preserves measured and datasheet bases separately, re-derives both roofline ridges, and builds exact-quant diagnostic surfaces. Cross-vendor cells are spec-basis; a missing exact CUDA anchor is `COULD_NOT_CHECK`, never a pooled or borrowed target. |
 | `lanes.py` | The lane registry, historical 4/8/16/32/48-way CPU shapes, isolation checks, change-class-specific rank calibration, and full-instance verification rule. |
 | `artifact_diff.py` | The compile-only VGPR/SGPR/scratch/instruction-mix comparison that vetoes an unconfirmed GPU claim before behavioral T0 can launch. |
 | `offline_least_commitment.py` | The observe-only AK-WM-2/AP-WM-1 diagnostic over matched completed-proposal archives; it has no live selection authority. |
+| `turn_productivity.py` | **AK-PT-1 / AK-X-6.** Immutable per-refine-turn `(turn, task, correct?, speedup)` records, mechanically derived rescued/persistent classes, and a campaign-calibration-derived e-process rule. It may label a turn repair-only and withhold search advancement; it has no ranking, retention, promotion, or deployment authority. |
 | `dashboard.py` | **AK6.** The compact `/kernel` contract-v2 producer retained by the campaign path after the old `surface/` plane was deleted. It projects only the already-fsynced terminal `STOP_STATE`: campaign and backend standing are observed; champion, headroom and release package are explicitly `not_reported`; journal time drives freshness; and the atomic export is refused under scratch, a production tree, or any checkout. |
 
 ### AK6 — the operator surface
@@ -754,15 +778,17 @@ future cross-suite fixture reuse.
 
 ### Remaining in AK2
 
-- **CLOSED 2026-08-03/04 — worktree managers and build layout.**
+- **CLOSED 2026-08-03/04, hardened 2026-08-11 — worktree managers and build layout.**
   `execution/worktree.py` creates `llama.cpp-ak-<campaign_id>` worktrees off the
   re-resolved production tip, namespaces `ak/<campaign_id>/…` branches, does
   pathspec-limited commits in the shared clone, configures and builds with
   `GGML_CCACHE=OFF` forced and a load-average cap that is a precondition rather
   than a note, and emits a build-identity receipt. Production-path denial is now
   a TYPE (`SandboxPath`) rather than a check, and `GitRepo` — the only class that
-  may address a frozen tree — carries no content-mutating git verb. NOT RUN: no
-  build has been executed by it.
+  may address a frozen tree — carries no content-mutating git verb. Candidate-
+  controlled configure and build processes now run under the C6 sandbox too;
+  tiny real CMake projects exercise that exact path, while no kernel candidate
+  build has yet been run.
 - **CLOSED 2026-08-03/04 — CPU region claim *acquisition*.**
   `execution/cpu_region_claim.py` acquires it: per-region `flock`s with a payload,
   a journal, partial-acquisition unwind, and a `verify_held()` that re-reads the
@@ -772,18 +798,24 @@ future cross-suite fixture reuse.
   (see the three items above).
 - **Co-residency policy integration.** `evaluation_event.co_residency` is
   validated; nothing decides it.
-- **Owned cgroup / PID-receipt process scope with verified teardown.** Not
-  started. `preflight.read_own_scope` enumerates the scope; nothing *creates*
-  one.
+- **Owned cgroup / PID-receipt process scope with verified teardown.** Delivered
+  for candidate execution by `execution/sandbox.py`: one cgroup-v2 leaf per
+  invocation, descendant kill through that leaf only, empty-membership proof,
+  then removal.
 - **Host-health / reboot-required / cache-preparation states**, the one-week
   uptime ceiling, and the §10.7 reboot decision package.
 - **Session-bus registration** — roster id, heartbeat at every task boundary,
   outbox, lane declaration, revoke handling, C19/C20 visibility, and the
   re-read-instructions checkpoint.
 - **`scripts/utils/agent_log.sh` wiring** and rollback-command logging.
-- **C6 sandbox verification on the real host**, and its extension to *candidate
-  binary execution* (the loop compiles code it authored and then runs it with
-  GPU access on a shared host — §8.5.1).
+- **CLOSED 2026-08-11 — C6 candidate execution is native and fail-closed on this host.** Landlock
+  ABI 6 confines writes to the invocation-owned campaign directory; seccomp
+  denies host signalling, networking and namespace escape; uid 0 is refused;
+  finite rlimits and the owned cgroup apply before `execve`. Candidate-controlled
+  CMake configure/build, live T0, and paired-block runners all require this path.
+  Activation receipts and stdout/stderr live in an evaluator-owned sibling the
+  candidate cannot rewrite; teardown drains descendants, proves empty membership,
+  and removes the cgroup. Recorded/replay runners spawn nothing.
 - **`kernel_eval.sh`'s `gpu_idle()` is not yet deleted.** AK2's acceptance
   criterion is "deleted, not wrapped"; the replacement now exists, the deletion
   has not happened.

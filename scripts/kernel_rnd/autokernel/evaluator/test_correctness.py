@@ -347,7 +347,9 @@ def anti_hack(**overrides) -> C.AntiRewardHackingEvidence:
         anchor_source_commit=V8_COMMIT, anchor_binary_sha256=sha("anchor-binary"),
         anchor_linkage_sha256=sha("anchor-linkage"),
         environment_probe_findings=(), timing_dependent_branch_findings=(),
-        receipt_ref="data/ak/akc-0001/integrity.json")
+        receipt_ref="data/ak/akc-0001/integrity.json",
+        environment_probe_detector_id="environment-probe/v1",
+        timing_dependent_branch_detector_id="timing-branch/v1")
     kwargs.update(overrides)
     return C.AntiRewardHackingEvidence(**kwargs)
 
@@ -1701,6 +1703,19 @@ class TestAntiRewardHacking(unittest.TestCase):
         gate = report.gate(C.GID_ANTI_REWARD_HACKING)
         self.assertEqual(gate.check.outcome, S.FAIL)
         self.assertIn("under test", " ".join(gate.check.reasons))
+
+    def test_empty_findings_from_detectors_that_did_not_run_are_unknown(self):
+        report = run(ev=evidence(anti_reward_hacking=anti_hack(
+            environment_probe_detector_id=None,
+            timing_dependent_branch_detector_id=None)))
+        gate = report.gate(C.GID_ANTI_REWARD_HACKING)
+        self.assertEqual(gate.check.outcome, S.COULD_NOT_CHECK)
+        self.assertIn("did not run", " ".join(gate.check.reasons))
+
+    def test_timing_dependent_branch_fails(self):
+        report = run(ev=evidence(anti_reward_hacking=anti_hack(
+            timing_dependent_branch_findings=("kernel.hip:7:rdtsc",))))
+        self.assertEqual(report.outcome(C.GID_ANTI_REWARD_HACKING), S.FAIL)
 
     def test_a_fail_is_not_downgraded_by_an_unknown(self):
         report = run(ev=evidence(anti_reward_hacking=anti_hack(

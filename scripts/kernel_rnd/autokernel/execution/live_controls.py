@@ -6,10 +6,11 @@ explicit host handoff flag, acquires one q0-q3 claim, measures fresh A/A and
 neutral pools, solves the campaign calibration, then drives all five controls
 through :mod:`execution.control_runner`'s candidate pipeline.
 
-The frozen production tree is read only.  A byte-for-byte copy of its
-``llama-bench`` and ggml DSOs is made inside the evidence bundle so the
-candidate arm can execute the A/A control without either mislabelling the
-frozen tree as a candidate or rebuilding it.
+The frozen production tree is read only. Both arms use the reviewed hardened
+measurement overlay, whose commit is a one-change child of production v9. A
+byte-for-byte copy of its ``llama-bench`` and ggml DSOs is made inside the
+evidence bundle so the candidate arm can execute A/A without mislabelling the
+serving tree or rebuilding the trusted instrument.
 """
 from __future__ import annotations
 
@@ -28,20 +29,23 @@ from typing import Sequence
 
 from .. import schemas
 from ..evaluator import api, controls, recipes, statistics
-from . import control_runner, cpu_region_claim, microbench
+from . import control_runner, cpu_region_claim, microbench, sandbox
 
-CAMPAIGN_ID = "ak-controls-3pct-20260805"
-EVIDENCE_DIR = "autokernel_controls_3pct_20260805"
-CAMPAIGN_SEED = "ak-controls-3pct-20260805-seed-v1"
-WINDOW_ID = "akw-controls-3pct-20260805-0001"
+CAMPAIGN_ID = "ak-controls-3pct-20260811-v9-hardened"
+EVIDENCE_DIR = "autokernel_controls_3pct_20260811_v9_hardened"
+CAMPAIGN_SEED = "ak-controls-3pct-20260811-v9-hardened-seed-v1"
+WINDOW_ID = "akw-controls-3pct-20260811-v9-hardened-0001"
 RECIPE_ID = "t1b.llama_cpu.llama_bench_prefill.v1"
 CPU_LIST = recipes.CANONICAL_PREFIX[recipes.CANONICAL_PREFIX.index("-c") + 1]
 PRODUCTION_ROOT = Path("/mnt/raid0/llm/llama.cpp")
-PRODUCTION_BINARY = PRODUCTION_ROOT / "build/bin/llama-bench"
+PRODUCTION_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
+INSTRUMENT_ROOT = Path("/mnt/raid0/llm/llama.cpp-experimental")
+INSTRUMENT_BINARY = INSTRUMENT_ROOT / "build-v9-cpu/bin/llama-bench"
+INSTRUMENT_BRANCH = "experimental-v9-autokernel-t1-hardening"
+INSTRUMENT_COMMIT = "0492c2319a79e9bcc4edaa1bfb6af5a096276ab7"
 MODEL = Path(
     "/mnt/raid0/llm/models/lmstudio-community/"
     "Qwen2.5-Coder-0.5B-GGUF/Qwen2.5-Coder-0.5B-Q4_K_M.gguf")
-SOURCE_COMMIT = "67a433bf45a8a091d83b4ea0b32ff0735fd51800"
 CALIBRATION_BLOCKS = 200
 NEUTRAL_BLOCKS = 60
 CONTRIBUTION_FLOOR = 0.03
@@ -89,11 +93,11 @@ def _copy_anchor_bundle(root: Path) -> recipes.ToolBinding:
     """Copy the measured tool and every DSO it resolves inside the frozen build."""
     bundle = root / "anchor_binary_copy"
     bundle.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(PRODUCTION_BINARY, bundle / "llama-bench")
+    shutil.copy2(INSTRUMENT_BINARY, bundle / "llama-bench")
     env = dict(os.environ)
-    env["LD_LIBRARY_PATH"] = f"{PRODUCTION_BINARY.parent}:/usr/lib/llvm-20/lib"
+    env["LD_LIBRARY_PATH"] = f"{INSTRUMENT_BINARY.parent}:/usr/lib/llvm-20/lib"
     linked = subprocess.run(
-        ("ldd", str(PRODUCTION_BINARY)), env=env, text=True,
+        ("ldd", str(INSTRUMENT_BINARY)), env=env, text=True,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True).stdout
     copied = []
     for line in linked.splitlines():
@@ -103,7 +107,7 @@ def _copy_anchor_bundle(root: Path) -> recipes.ToolBinding:
         name, resolved = fields[0], Path(fields[2])
         try:
             inside = resolved.resolve(strict=True).is_relative_to(
-                PRODUCTION_BINARY.parent.resolve())
+                INSTRUMENT_BINARY.parent.resolve())
         except (OSError, RuntimeError):
             inside = False
         if inside:
@@ -111,8 +115,8 @@ def _copy_anchor_bundle(root: Path) -> recipes.ToolBinding:
             copied.append(name)
     if not copied:
         raise RuntimeError("ldd found no production-build DSOs to copy with llama-bench")
-    if _sha256_file(bundle / "llama-bench") != _sha256_file(PRODUCTION_BINARY):
-        raise RuntimeError("the copied A/A binary is not byte-identical to production")
+    if _sha256_file(bundle / "llama-bench") != _sha256_file(INSTRUMENT_BINARY):
+        raise RuntimeError("the copied A/A binary is not byte-identical to the instrument")
     return recipes.ToolBinding(
         binary=str(bundle / "llama-bench"), source_root=str(root),
         library_path=str(bundle))
@@ -132,17 +136,18 @@ def _check_payload(check: schemas.Check) -> dict:
     return {"outcome": check.outcome, "reasons": list(check.reasons)}
 
 
-def _write_declaration(output_root: Path, *, prod_sha: str, copy_sha: str,
-                       prod_linkage: str, copy_linkage: str) -> str:
+def _write_declaration(output_root: Path, *, instrument_sha: str, copy_sha: str,
+                       instrument_linkage: str, copy_linkage: str) -> str:
     """Commit the fresh campaign inputs before the first measurement."""
     source_manifest = {
         "schema": "epyc.autokernel.runtime_source_label.v1",
-        "production_source_commit": SOURCE_COMMIT,
-        "production_binary_sha256": prod_sha,
+        "production_source_commit": PRODUCTION_COMMIT,
+        "measurement_instrument_commit": INSTRUMENT_COMMIT,
+        "measurement_binary_sha256": instrument_sha,
         "copied_binary_sha256": copy_sha,
-        "production_linkage_sha256": prod_linkage,
+        "measurement_linkage_sha256": instrument_linkage,
         "copied_linkage_sha256": copy_linkage,
-        "binary_copy_exact": prod_sha == copy_sha,
+        "binary_copy_exact": instrument_sha == copy_sha,
     }
     source_sha = schemas.content_hash(source_manifest)
     _write_json(output_root / "runtime-source-label.json",
@@ -170,27 +175,59 @@ def _write_declaration(output_root: Path, *, prod_sha: str, copy_sha: str,
     return source_sha
 
 
-def _write_preflight(output_root: Path, *, prod_sha: str, copy_sha: str) -> None:
+def _write_preflight(output_root: Path, *, instrument_sha: str, copy_sha: str) -> None:
     topology = cpu_region_claim.verify_host_topology()
     free_bytes = shutil.disk_usage(output_root).free
     source_head = subprocess.run(
         ("git", "-C", str(PRODUCTION_ROOT), "rev-parse", "HEAD"),
         text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         check=True).stdout.strip()
+    instrument_head = subprocess.run(
+        ("git", "-C", str(INSTRUMENT_ROOT), "rev-parse", "HEAD"),
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        check=True).stdout.strip()
+    instrument_branch = subprocess.run(
+        ("git", "-C", str(INSTRUMENT_ROOT), "branch", "--show-current"),
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        check=True).stdout.strip()
+    instrument_status = subprocess.run(
+        ("git", "-C", str(INSTRUMENT_ROOT), "status", "--porcelain"),
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        check=True).stdout
+    instrument_parents = subprocess.run(
+        ("git", "-C", str(INSTRUMENT_ROOT), "rev-list", "--parents", "-n", "1",
+         INSTRUMENT_COMMIT),
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        check=True).stdout.split()[1:]
+    host_state = microbench.read_host_state(cpu_list=CPU_LIST)
+    host_policy = microbench.HostStatePolicy(
+        nominal_khz=NOMINAL_KHZ, require_package_power=True)
     checks = {
         "topology": _check_payload(topology),
         "production_commit": _check_payload(schemas.Check(
-            schemas.PASS if source_head == SOURCE_COMMIT else schemas.FAIL,
-            (f"production HEAD is {source_head}; required {SOURCE_COMMIT}",))),
+            schemas.PASS if source_head == PRODUCTION_COMMIT else schemas.FAIL,
+            (f"production HEAD is {source_head}; required {PRODUCTION_COMMIT}",))),
+        "measurement_instrument": _check_payload(schemas.Check(
+            schemas.PASS if (
+                instrument_head == INSTRUMENT_COMMIT
+                and instrument_branch == INSTRUMENT_BRANCH
+                and not instrument_status
+                and instrument_parents == [PRODUCTION_COMMIT]
+            ) else schemas.FAIL,
+            (f"instrument head={instrument_head}, branch={instrument_branch}, "
+             f"dirty={bool(instrument_status)}, parents={instrument_parents}; required "
+             f"clean {INSTRUMENT_COMMIT} directly on {PRODUCTION_COMMIT}",))),
         "binary_copy": _check_payload(schemas.Check(
-            schemas.PASS if prod_sha == copy_sha else schemas.FAIL,
-            (f"production and evidence-copy SHA-256 are {prod_sha}",))),
+            schemas.PASS if instrument_sha == copy_sha else schemas.FAIL,
+            (f"instrument and evidence-copy SHA-256 are {instrument_sha}",))),
         "model_present": _check_payload(schemas.Check(
             schemas.PASS if MODEL.is_file() else schemas.FAIL,
             (f"model path is {MODEL}",))),
         "storage": _check_payload(schemas.Check(
             schemas.PASS if free_bytes >= 200 * 1024 ** 3 else schemas.FAIL,
             (f"{free_bytes} bytes free at campaign open",))),
+        "package_power_available": _check_payload(
+            host_policy.check_package_power_available(host_state)),
     }
     _write_json(output_root / "preflight.json", {
         "schema": "epyc.autokernel.live_control_preflight.v1",
@@ -231,6 +268,7 @@ class LiveMaterial:
 
 def _params(*, prompt: int) -> dict:
     return {"model": str(MODEL), "n_prompt": prompt, "reps": 1,
+            "autokernel_seed": 2026081101,
             "output_format": "json"}
 
 
@@ -266,15 +304,22 @@ def _measure(*, label: str, blocks: int, claim: object,
         campaign_seed=f"{CAMPAIGN_SEED}/{label}",
         candidate_binding=candidate_binding, anchor_binding=anchor_binding,
         anchor=anchor, params=_params(prompt=prompt),
+        candidate_instrument_root=str(INSTRUMENT_ROOT),
+        anchor_instrument_root=str(INSTRUMENT_ROOT),
         candidate_param_overrides={"ggml_iqk": candidate_iqk},
         anchor_param_overrides={"ggml_iqk": anchor_iqk},
         base_blocks=blocks, pairs_per_block=1,
         unit_ids=(f"{MODEL.name}:pp{prompt}:{label}",),
         stratum=api.STRATUM_SELECTION, timeout_s=300.0)
+    sandbox_root = output_root / "candidate-sandbox"
+    sandbox_root.mkdir(mode=0o700, exist_ok=True)
+    sandbox_policy = sandbox.SandboxPolicy(writable_root=str(sandbox_root))
     runner = microbench.MicrobenchRunner(
         claim=microbench.CpuRegionClaimAdapter(claim, cpu_list=CPU_LIST),
-        policy=microbench.HostStatePolicy(nominal_khz=NOMINAL_KHZ),
-        spawner=microbench.SubprocessSpawner())
+        policy=microbench.HostStatePolicy(
+            nominal_khz=NOMINAL_KHZ, require_package_power=True),
+        spawner=microbench.SubprocessSpawner(
+            workdir_root=str(sandbox_root), sandbox_policy=sandbox_policy))
     run = runner.run(plan)
     _write_json(output_root / "raw" / f"{label}.json", run.raw_vector())
     if not run.complete:
@@ -473,7 +518,8 @@ def _evaluate_controls(*, solve: statistics.CalibrationSolve,
         evaluator_bundle=passed(
             f"control definitions resolve to {controls.CONTROL_DEFINITIONS_DIGEST}"),
         runtime_source_label=passed(
-            f"runtime source manifest binds production {SOURCE_COMMIT} to {source_sha}"),
+            f"runtime source manifest binds production {PRODUCTION_COMMIT} and "
+            f"instrument {INSTRUMENT_COMMIT} to {source_sha}"),
         recipe=recipe_receipt,
         storage_open=passed("campaign preflight satisfied the declared storage floor"),
         storage_close=passed("storage remained above the declared floor at close"),
@@ -514,26 +560,28 @@ def _evaluate_controls(*, solve: statistics.CalibrationSolve,
 
 def execute(output_root: Path) -> dict:
     output_root.mkdir(parents=True, exist_ok=False)
-    if _sha256_file(PRODUCTION_BINARY) == "":  # pragma: no cover - explicit read gate
-        raise RuntimeError("unreadable production binary")
+    if _sha256_file(INSTRUMENT_BINARY) == "":  # pragma: no cover - explicit read gate
+        raise RuntimeError("unreadable hardened measurement binary")
     candidate_binding = _copy_anchor_bundle(output_root)
     anchor_binding = recipes.ToolBinding(
-        binary=str(PRODUCTION_BINARY), source_root=str(PRODUCTION_ROOT),
-        library_path=str(PRODUCTION_BINARY.parent))
-    prod_linkage, prod_ldd = _linkage(PRODUCTION_BINARY, PRODUCTION_BINARY.parent)
+        binary=str(INSTRUMENT_BINARY), source_root=str(INSTRUMENT_ROOT),
+        library_path=str(INSTRUMENT_BINARY.parent))
+    instrument_linkage, instrument_ldd = _linkage(
+        INSTRUMENT_BINARY, INSTRUMENT_BINARY.parent)
     copy_linkage, copy_ldd = _linkage(
         Path(candidate_binding.binary), Path(candidate_binding.library_path))
-    (output_root / "linkage.production.txt").write_text(prod_ldd, encoding="utf-8")
+    (output_root / "linkage.instrument.txt").write_text(
+        instrument_ldd, encoding="utf-8")
     (output_root / "linkage.copy.txt").write_text(copy_ldd, encoding="utf-8")
-    prod_sha = _sha256_file(PRODUCTION_BINARY)
+    instrument_sha = _sha256_file(INSTRUMENT_BINARY)
     copy_sha = _sha256_file(Path(candidate_binding.binary))
     source_sha = _write_declaration(
-        output_root, prod_sha=prod_sha, copy_sha=copy_sha,
-        prod_linkage=prod_linkage, copy_linkage=copy_linkage)
-    _write_preflight(output_root, prod_sha=prod_sha, copy_sha=copy_sha)
+        output_root, instrument_sha=instrument_sha, copy_sha=copy_sha,
+        instrument_linkage=instrument_linkage, copy_linkage=copy_linkage)
+    _write_preflight(output_root, instrument_sha=instrument_sha, copy_sha=copy_sha)
     anchor = api.AnchorIdentity(
-        source_commit=SOURCE_COMMIT, binary_sha256=prod_sha,
-        linkage_sha256=prod_linkage, tool="llama-bench")
+        source_commit=INSTRUMENT_COMMIT, binary_sha256=instrument_sha,
+        linkage_sha256=instrument_linkage, tool="llama-bench")
     journal = cpu_region_claim.RegionClaimJournal(output_root / "region_claim.jsonl")
     materials = []
     with cpu_region_claim.acquire_cpu_region_claim(
@@ -590,10 +638,11 @@ def execute(output_root: Path) -> dict:
         summary = {
             "campaign_id": CAMPAIGN_ID, "measured_at": _utc_now(),
             "state": "calibration_rejected", "controls_started": False,
-            "production_source_commit": SOURCE_COMMIT,
-            "production_binary_sha256": prod_sha,
+            "production_source_commit": PRODUCTION_COMMIT,
+            "measurement_instrument_commit": INSTRUMENT_COMMIT,
+            "measurement_binary_sha256": instrument_sha,
             "copied_binary_sha256": copy_sha,
-            "binary_copy_exact": prod_sha == copy_sha,
+            "binary_copy_exact": instrument_sha == copy_sha,
             "calibration": solve.to_dict(), "controls": None, "may_rank": False,
         }
         _write_json(output_root / "summary.json", summary)
@@ -637,10 +686,11 @@ def execute(output_root: Path) -> dict:
     summary = {
         "campaign_id": CAMPAIGN_ID, "measured_at": _utc_now(),
         "state": "controls_complete", "controls_started": True,
-        "production_source_commit": SOURCE_COMMIT,
-        "production_binary_sha256": prod_sha,
+        "production_source_commit": PRODUCTION_COMMIT,
+        "measurement_instrument_commit": INSTRUMENT_COMMIT,
+        "measurement_binary_sha256": instrument_sha,
         "copied_binary_sha256": copy_sha,
-        "binary_copy_exact": prod_sha == copy_sha,
+        "binary_copy_exact": instrument_sha == copy_sha,
         "calibration": solve.to_dict(), "controls": result.to_dict(),
         "may_rank": result.may_rank,
     }
@@ -661,7 +711,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     plan = {
         "campaign_id": CAMPAIGN_ID, "cpu_list": CPU_LIST,
-        "production_binary": str(PRODUCTION_BINARY), "model": str(MODEL),
+        "production_source": f"{PRODUCTION_ROOT}@{PRODUCTION_COMMIT}",
+        "measurement_binary": str(INSTRUMENT_BINARY),
+        "measurement_instrument_commit": INSTRUMENT_COMMIT,
+        "model": str(MODEL),
         "calibration_blocks": CALIBRATION_BLOCKS,
         "neutral_blocks": NEUTRAL_BLOCKS,
         "contribution_floor": CONTRIBUTION_FLOOR,

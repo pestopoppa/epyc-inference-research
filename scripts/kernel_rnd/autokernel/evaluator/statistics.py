@@ -112,6 +112,7 @@ __all__ = [
     "CrossingRate", "resampled_crossing_rate", "empirical_crossing_rate",
     "required_disjoint_windows", "MinimumDetectableEffect", "solve_mde",
     "AnchorGateBand", "anchor_gate_band", "anchor_gate_check",
+    "derive_minimum_measurable_duration",
     "CalibrationInputs", "CalibrationAttempt", "CalibrationSolve", "solve_calibration",
     # strata
     "RotationSchedule", "StratumSplitRule",
@@ -2233,6 +2234,50 @@ def anchor_gate_check(observed_anchor_samples: Sequence[float], *,
 # =============================================================================
 # The calibration solve — the normative order, executed and recorded
 # =============================================================================
+
+def derive_minimum_measurable_duration(
+        aa_anchor_us: Sequence[float], aa_candidate_us: Sequence[float], *,
+        relative_noise_budget: float, samples_ref: str
+) -> api.MinimumMeasurableDuration:
+    """Derive T1a's absolute timing floor from paired local A/A durations.
+
+    The absolute 95th percentile of paired A/A differences is the observed
+    microsecond noise numerator. Dividing it by the predeclared relative error
+    budget yields the shortest duration for which that noise fits inside the
+    budget. No foreign device floor and no hard-coded 10-us convention enters
+    the calculation.
+    """
+    anchors = _finite_floats(aa_anchor_us, "aa_anchor_us")
+    candidates = _finite_floats(aa_candidate_us, "aa_candidate_us")
+    if len(anchors) != len(candidates):
+        raise MaterialError(
+            "minimum measurable duration needs equal-length paired A/A arms")
+    if len(anchors) < 5:
+        raise MaterialError(
+            "minimum measurable duration needs at least five paired A/A durations")
+    if any(value <= 0 for value in anchors + candidates):
+        raise MaterialError("paired A/A durations must be strictly positive")
+    if isinstance(relative_noise_budget, bool) or not isinstance(
+            relative_noise_budget, (int, float)) \
+            or not math.isfinite(float(relative_noise_budget)) \
+            or not 0 < float(relative_noise_budget) < 1:
+        raise MaterialError("relative_noise_budget must be finite and in (0, 1)")
+    if not isinstance(samples_ref, str) or not samples_ref.strip():
+        raise MaterialError("samples_ref must be a non-empty durable reference")
+    spread = percentile(
+        [abs(anchor - candidate)
+         for anchor, candidate in zip(anchors, candidates)], 0.95)
+    if spread <= 0:
+        raise MaterialError(
+            "paired A/A spread is zero, so the timer's absolute resolution is not "
+            "identified; zero may not become a zero-us measurement floor")
+    budget = float(relative_noise_budget)
+    return api.MinimumMeasurableDuration(
+        min_measurable_us=spread / budget,
+        aa_absolute_spread_us=spread,
+        relative_noise_budget=budget,
+        aa_pair_count=len(anchors),
+        samples_ref=samples_ref)
 
 @dataclass(frozen=True)
 class CalibrationInputs:

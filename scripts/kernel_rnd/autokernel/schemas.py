@@ -1707,6 +1707,81 @@ def check_representation_comparable(left: Any, right: Any) -> Check:
     return Check(PASS)
 
 
+EXTERNAL_NUMBER_BASES = frozenset({"spec", "measured_achievable"})
+
+
+def validate_external_number(obj: Any, prefix: str = "") -> list:
+    """Validate one AK-LE-5 externally sourced numeric design prior.
+
+    The utilization is carried for review but is not trusted: it is re-derived
+    from the quoted observation and its same-unit, same-quant, same-basis
+    roofline denominator.  A vendor or paper number without this record is not
+    admissible in proposal.v3.
+    """
+    out: list = []
+    if not isinstance(obj, Mapping):
+        return [f"{prefix.rstrip('.') or 'external_number'}: expected a mapping, got "
+                f"{type(obj).__name__}"]
+    _need_id(obj, "external_number_id", out, prefix, "akxn-")
+    _need_str(obj, "label", out, prefix)
+    observed = _need_number(obj, "observed_value", out, prefix, minimum=0)
+    unit = _need_str(obj, "unit", out, prefix)
+    _need_str(obj, "source_ref", out, prefix)
+    quant = _need_str(obj, "quant", out, prefix)
+    basis = _need_str(obj, "basis", out, prefix, choices=EXTERNAL_NUMBER_BASES)
+    if quant is not _MISSING and quant.strip().casefold() in {
+            "all", "any", "mixed", "pooled", "multiple"}:
+        out.append(f"{prefix}quant: {quant!r} pools quantisations; AK-TR-4 requires "
+                   "an exact-quant denominator")
+
+    retrieved_at = obj.get("retrieved_at")
+    source_commit = obj.get("source_commit")
+    if retrieved_at is None and source_commit is None:
+        out.append(f"{prefix}retrieved_at/source_commit: at least one source revision "
+                   "is required")
+    if retrieved_at is not None:
+        _need_timestamp(obj, "retrieved_at", out, prefix)
+    if source_commit is not None:
+        _need_commit(obj, "source_commit", out, prefix)
+
+    denominator = _need_dict(obj, "roofline_denominator", out, prefix)
+    denom_value = denom_unit = denom_quant = denom_basis = _MISSING
+    if denominator is not _MISSING:
+        denom_value = _need_number(
+            denominator, "value", out, f"{prefix}roofline_denominator.", minimum=0)
+        if denom_value == 0:
+            out.append(f"{prefix}roofline_denominator.value: must be > 0")
+        denom_unit = _need_str(
+            denominator, "unit", out, f"{prefix}roofline_denominator.")
+        denom_quant = _need_str(
+            denominator, "quant", out, f"{prefix}roofline_denominator.")
+        denom_basis = _need_str(
+            denominator, "basis", out, f"{prefix}roofline_denominator.",
+            choices=EXTERNAL_NUMBER_BASES)
+        _need_str(denominator, "source_ref", out,
+                  f"{prefix}roofline_denominator.")
+    normalized = _need_number(
+        obj, "normalized_roofline_utilization", out, prefix, minimum=0, maximum=1)
+
+    if unit is not _MISSING and denom_unit is not _MISSING and unit != denom_unit:
+        out.append(f"{prefix}roofline_denominator.unit: {denom_unit!r} does not match "
+                   f"observed unit {unit!r}")
+    if quant is not _MISSING and denom_quant is not _MISSING and quant != denom_quant:
+        out.append(f"{prefix}roofline_denominator.quant: {denom_quant!r} does not match "
+                   f"observed quant {quant!r}")
+    if basis is not _MISSING and denom_basis is not _MISSING and basis != denom_basis:
+        out.append(f"{prefix}roofline_denominator.basis: {denom_basis!r} does not match "
+                   f"observed basis {basis!r}")
+    if (observed is not _MISSING and denom_value is not _MISSING
+            and denom_value != 0 and normalized is not _MISSING):
+        derived = float(observed) / float(denom_value)
+        if not math.isclose(float(normalized), derived, rel_tol=1e-12, abs_tol=1e-12):
+            out.append(
+                f"{prefix}normalized_roofline_utilization: {normalized!r} does not "
+                f"equal observed/denominator ({derived!r})")
+    return out
+
+
 def _validate_proposal(obj: Any, schema: str) -> list:
     """Shared proposal validation; ``schema`` fixes the versioned contract."""
     out: list = []
@@ -1778,11 +1853,21 @@ def _validate_proposal(obj: Any, schema: str) -> list:
         representation = _need_dict(obj, "representation_contract", out, "")
         if representation is not _MISSING:
             out.extend(validate_representation_contract(representation))
-    elif "representation_contract" in obj:
-        out.append(
-            "representation_contract: belongs to proposal.v3; a v3 record may not "
-            "be relabelled as historical proposal.v2"
-        )
+        external_numbers = _need_list(obj, "external_numbers", out, "")
+        if external_numbers is not _MISSING:
+            for index, external in enumerate(external_numbers):
+                out.extend(validate_external_number(
+                    external, f"external_numbers[{index}]."))
+    else:
+        if "representation_contract" in obj:
+            out.append(
+                "representation_contract: belongs to proposal.v3; a v3 record may not "
+                "be relabelled as historical proposal.v2"
+            )
+        if "external_numbers" in obj:
+            out.append(
+                "external_numbers: belongs to proposal.v3; historical proposal.v2 "
+                "cannot acquire the current external-number contract by relabelling")
 
     for key in ("target", "non_target"):
         block = _need_dict(obj, key, out, "")
@@ -3250,7 +3335,7 @@ __all__ = [
     "is_placeholder_digest", "declared_anchor_void_reasons",
     "require", "EVIDENCE_PRODUCERS", "SHA256_RE", "COMMIT_RE",
     "validate_campaign", "validate_proposal", "validate_proposal_v2",
-    "validate_proposal_v3", "validate_candidate",
+    "validate_proposal_v3", "validate_external_number", "validate_candidate",
     "validate_evaluation_event", "validate_evaluation_event_v2",
     "validate_evaluation_event_v3", "validate_evaluation_event_v4",
     "validate_evaluation_event_v5",

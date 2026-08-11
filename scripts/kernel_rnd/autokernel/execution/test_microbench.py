@@ -52,7 +52,31 @@ ANCHOR_COMMIT = "91745611f" + "0" * 31          # a 40-hex commit with the real 
 
 
 def read_fixture(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+    """Retain the recorded samples and add a labelled synthetic C6-8 receipt.
+
+    The source files predate the hardened instrument and remain checksum-pinned
+    below. Only the new receipt fields are synthesized so parser/runner regression
+    tests can exercise the now-mandatory contract without claiming a live run.
+    """
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    for row in rows:
+        reps = len(row["samples_ts"])
+        row.update({
+            "autokernel_hardened": True,
+            "autokernel_output_invariant": True,
+            "autokernel_input_working_set_bytes": 1 << 30,
+            "autokernel_input_hashes": ",".join(
+                f"{index + 1:016x}" for index in range(reps)),
+            "autokernel_input_addresses": ",".join(
+                f"0x{0x1000 + 2 * index:x}/0x{0x1001 + 2 * index:x}"
+                for index in range(reps)),
+            "autokernel_context_addresses": ",".join(
+                f"0x{0x4000 + 2 * index:x}/0x{0x4001 + 2 * index:x}"
+                for index in range(reps)),
+            "autokernel_output_hashes": ",".join(
+                f"{index + 101:016x}/{index + 101:016x}" for index in range(reps)),
+        })
+    return json.dumps(rows)
 
 
 def scaled_fixture(path: Path, *, factor: float, build_commit: str | None = None) -> str:
@@ -64,7 +88,7 @@ def scaled_fixture(path: Path, *, factor: float, build_commit: str | None = None
     needs two arms that differ, and the host is too contended tonight to measure
     a second one.
     """
-    rows = json.loads(path.read_text(encoding="utf-8"))
+    rows = json.loads(read_fixture(path))
     for row in rows:
         row["samples_ts"] = [round(v * factor, 6) for v in row["samples_ts"]]
         row["avg_ts"] = round(sum(row["samples_ts"]) / len(row["samples_ts"]), 6)
@@ -106,7 +130,7 @@ class BindingFixture:
 
 def default_params(model: str = FIXTURE_MODEL) -> dict:
     return {"model": model, "n_gen": FIXTURE_N_GEN, "reps": FIXTURE_REPS,
-            "output_format": "json"}
+            "autokernel_seed": 20260811, "output_format": "json"}
 
 
 def completed_run_ledger(case: unittest.TestCase, *,
@@ -296,6 +320,25 @@ class TestPairingIsStructural(unittest.TestCase):
 
 
 class TestOrderComesFromTheCampaignSeed(unittest.TestCase):
+
+    def test_plan_derives_a_stable_nonzero_hardening_seed(self):
+        binding = BindingFixture(self)
+        params = default_params()
+        params.pop("autokernel_seed")
+        first = make_plan(binding, params=params)
+        second = make_plan(binding, params=params)
+        self.assertGreater(first.params["autokernel_seed"], 0)
+        self.assertEqual(first.params["autokernel_seed"],
+                         second.params["autokernel_seed"])
+
+    def test_candidate_identity_changes_the_hardening_seed(self):
+        binding = BindingFixture(self)
+        params = default_params()
+        params.pop("autokernel_seed")
+        first = make_plan(binding, params=params)
+        second = replace(first, candidate_id="another-candidate", params=params)
+        self.assertNotEqual(first.params["autokernel_seed"],
+                            second.params["autokernel_seed"])
 
     def test_the_runner_surface_has_no_order_parameter(self):
         """Requirement 1: order must not be declarable anywhere in the public API.
@@ -712,6 +755,48 @@ class TestOutputIsCheckedAgainstTheRecipe(unittest.TestCase):
         self.assertEqual(self.expect.n_gen, FIXTURE_N_GEN)
         self.assertEqual(self.expect.reps, FIXTURE_REPS)
         self.assertEqual(self.expect.model_filename, FIXTURE_MODEL)
+        self.assertEqual(self.expect.autokernel_seed, 20260811)
+
+    def test_the_constructor_emits_the_hardened_instrument_seed(self):
+        argv = list(self.command.argv)
+        index = argv.index("--autokernel-harden")
+        self.assertEqual(argv[index + 1], "20260811")
+
+    def test_legacy_same_buffer_output_is_refused(self):
+        legacy = M.parse_llama_bench_json(CANONICAL.read_text())[0]
+        check = self.expect.check_row(legacy)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("same-buffer", " ".join(check.reasons))
+
+    def test_reused_content_is_refused(self):
+        rows = json.loads(read_fixture(CANONICAL))
+        hashes = rows[0]["autokernel_input_hashes"].split(",")
+        hashes[1] = hashes[0]
+        rows[0]["autokernel_input_hashes"] = ",".join(hashes)
+        row = M.parse_llama_bench_json(json.dumps(rows))[0]
+        check = self.expect.check_row(row)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("content-keyed", " ".join(check.reasons))
+
+    def test_reused_context_address_is_refused(self):
+        rows = json.loads(read_fixture(CANONICAL))
+        pairs = rows[0]["autokernel_context_addresses"].split(",")
+        pairs[1] = pairs[0]
+        rows[0]["autokernel_context_addresses"] = ",".join(pairs)
+        row = M.parse_llama_bench_json(json.dumps(rows))[0]
+        check = self.expect.check_row(row)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("reuses an address", " ".join(check.reasons))
+
+    def test_output_change_across_rotated_pair_is_refused(self):
+        rows = json.loads(read_fixture(CANONICAL))
+        pairs = rows[0]["autokernel_output_hashes"].split(",")
+        pairs[0] = "deadbeef00000001/deadbeef00000002"
+        rows[0]["autokernel_output_hashes"] = ",".join(pairs)
+        row = M.parse_llama_bench_json(json.dumps(rows))[0]
+        check = self.expect.check_row(row)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("output changed", " ".join(check.reasons))
 
     def test_real_output_with_flash_attention_off_is_refused(self):
         """Real recorded output, flash_attn=false, against an `-fa 1` recipe."""
@@ -782,6 +867,71 @@ class TestHostStateGuards(unittest.TestCase):
         self.assertEqual(len(state.khz_by_cpu), 8)
         self.assertEqual(state.min_khz, 3500000)
         self.assertEqual(state.load1, 1.5)
+
+    def test_reads_package_energy_and_binds_it_to_the_partition_cpu_list(self):
+        sysfs = fake_sysfs(self.root, cpus=range(4), khz=3500000)
+        for cpu in range(4):
+            topology = sysfs / f"cpu{cpu}" / "topology"
+            topology.mkdir()
+            (topology / "physical_package_id").write_text("0\n")
+        powercap = self.root / "powercap" / "intel-rapl:0"
+        powercap.mkdir(parents=True)
+        (powercap / "name").write_text("package-0\n")
+        (powercap / "energy_uj").write_text("12000000\n")
+        (powercap / "max_energy_range_uj").write_text("100000000\n")
+        state = M.read_host_state(
+            cpu_list="0-3", sysfs_root=sysfs,
+            proc_root=fake_proc(self.root, load1=1.0),
+            powercap_root=powercap.parent, monotonic=lambda: 10.0)
+        self.assertEqual(state.package_by_cpu, ((0, 0), (1, 0), (2, 0), (3, 0)))
+        self.assertEqual(state.package_energy_uj[0][:3], (0, 12000000, 100000000))
+        self.assertEqual(state.monotonic_s, 10.0)
+
+    def test_derives_shared_package_power_over_the_exact_partition_window(self):
+        base = healthy_state()
+        before = replace(
+            base, cpu_list="0-23", monotonic_s=10.0,
+            package_by_cpu=tuple((cpu, 0) for cpu in range(24)),
+            package_energy_uj=((0, 90_000_000, 100_000_000, "/power/package0"),))
+        after = replace(
+            before, monotonic_s=12.0,
+            package_energy_uj=((0, 10_000_000, 100_000_000, "/power/package0"),))
+        check, attestation = M.derive_package_power_attestation(before, after)
+        self.assertEqual(check.outcome, schemas.PASS, check.reasons)
+        self.assertEqual(attestation.cpu_list, "0-23")
+        self.assertEqual(attestation.scope, "shared_package_window")
+        self.assertAlmostEqual(attestation.average_watts_by_package[0][1], 10.0)
+
+    def test_missing_package_counter_is_could_not_check_not_zero_watts(self):
+        before = replace(healthy_state(), monotonic_s=1.0,
+                         package_by_cpu=((0, 0),), package_energy_uj=())
+        after = replace(before, monotonic_s=2.0)
+        check, attestation = M.derive_package_power_attestation(before, after)
+        self.assertEqual(check.outcome, schemas.COULD_NOT_CHECK)
+        self.assertIsNone(attestation)
+
+    def test_required_package_power_preflight_passes_only_with_full_coverage(self):
+        state = replace(
+            healthy_state(), cpu_list="0-1",
+            package_by_cpu=((0, 0), (1, 0)),
+            package_energy_uj=((0, 5_000_000, 100_000_000, "/power/package0"),))
+        policy = M.HostStatePolicy(
+            nominal_khz=3500000, require_package_power=True)
+        self.assertEqual(
+            policy.check_package_power_available(state).outcome, schemas.PASS)
+        missing = replace(state, package_energy_uj=())
+        self.assertEqual(
+            policy.check_package_power_available(missing).outcome,
+            schemas.COULD_NOT_CHECK)
+
+    def test_disabled_package_power_is_not_a_passing_attestation(self):
+        state = replace(
+            healthy_state(), cpu_list="0",
+            package_by_cpu=((0, 0),),
+            package_energy_uj=((0, 5_000_000, 100_000_000, "/power/package0"),))
+        check = M.HostStatePolicy(
+            nominal_khz=3500000).check_package_power_available(state)
+        self.assertEqual(check.outcome, schemas.COULD_NOT_CHECK)
 
     def test_one_parked_core_is_visible_but_does_not_defeat_the_boost_quorum(self):
         """Post-exit parking is recorded without making 80-of-96 mean 96-of-96."""
@@ -953,12 +1103,13 @@ def anchor_identity(binding: BindingFixture, *, binary_sha256: str | None = None
 def make_plan(binding: BindingFixture, *, blocks: int = 4, pairs: int = 1,
               anchor: api.AnchorIdentity | None = None,
               **kwargs) -> M.MicrobenchPlan:
+    params = kwargs.pop("params", default_params())
     return M.MicrobenchPlan(
         recipe_id=RECIPE_ID, candidate_id="cand-alpha",
         campaign_seed="campaign-seed-2026-08-03",
         candidate_binding=binding.candidate, anchor_binding=binding.anchor,
         anchor=anchor or anchor_identity(binding),
-        params=default_params(), base_blocks=blocks, pairs_per_block=pairs,
+        params=params, base_blocks=blocks, pairs_per_block=pairs,
         unit_ids=("unit-0",), **kwargs)
 
 

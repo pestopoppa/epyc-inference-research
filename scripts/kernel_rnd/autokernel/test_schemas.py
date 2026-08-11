@@ -173,6 +173,7 @@ def _proposal() -> dict:
         },
         "expected_information_gain": 0.4,
         "representation_contract": _representation_contract(),
+        "external_numbers": [],
         "target": {"regimes": ["decode"], "ops": ["mul_mat"], "shapes": [], "models": []},
         "non_target": {"regimes": ["prefill"], "shapes": []},
         "mechanism_prediction": {
@@ -219,6 +220,7 @@ def _proposal_v2() -> dict:
     record = _proposal()
     record["schema"] = S.SCHEMA_PROPOSAL_V2
     del record["representation_contract"]
+    del record["external_numbers"]
     return record
 
 

@@ -286,7 +286,8 @@ SCHED_TRACE = (
 )
 
 
-def _disposition(argv, exit_code: int) -> WT.ProcessDisposition:
+def _disposition(argv, exit_code: int, *, writable_root: str,
+                 phase: str) -> WT.ProcessDisposition:
     """A disposition for a process that was NEVER LAUNCHED, and it says so.
 
     `pid=0`/`pgid=0` are not plausible pids: they are the sentinel that makes a
@@ -296,7 +297,18 @@ def _disposition(argv, exit_code: int) -> WT.ProcessDisposition:
     return WT.ProcessDisposition(
         argv=tuple(argv), pid=0, pgid=0, exit_code=exit_code, timed_out=False,
         signals_sent=(), verified_dead=True, duration_s=1.0,
-        started_at="2026-08-03T23:00:00Z")
+        started_at="2026-08-03T23:00:00Z",
+        sandbox_receipt={
+            "sandbox_id": WT.process_sandbox.SANDBOX_ID,
+            "writable_root": writable_root,
+            "fixture_only": True,
+            "phase": phase,
+        },
+        sandbox_teardown={
+            "verified_empty": True,
+            "removed": True,
+            "fixture_only": True,
+        })
 
 
 # =============================================================================
@@ -399,8 +411,12 @@ class ChainWorld:
         pre = integrity.hash_source_tree(plan.build_dir.path).sha256
         log_path = os.path.join(self.root, "build.log")
         Path(log_path).write_text(log_text, encoding="utf-8")
-        disp = _disposition(plan.build_argv(), exit_code)
-        conf = _disposition(plan.configure_argv(), 0)
+        disp = _disposition(
+            plan.build_argv(), exit_code,
+            writable_root=plan.build_dir.path, phase="build")
+        conf = _disposition(
+            plan.configure_argv(), 0,
+            writable_root=plan.build_dir.path, phase="configure")
         return WT.BuildResult(
             plan=plan, configure=conf, build=disp, log_path=log_path,
             log_sha256=WT._sha256_text(log_text), facts=WT.parse_build_log(log_text),
@@ -724,6 +740,7 @@ class ChainLeg:
                 visible_to_planner=False),
             determinism_runs=2, cache_state="cold", state_safety_probe=False,
             oracle_ids=("oracle://anchor-v8",),
+            candidate_diff_text=CANDIDATE_DIFF,
             build=self.build_evidence.provenance,
             **chain.t0_plan_evidence(
                 symbols=symbols, diff=diff, change_surface=surface_evidence),
@@ -1156,6 +1173,22 @@ def scaled_bench(*, factor: float, build_commit: str | None = None) -> str:
         row["avg_ts"] = round(sum(row["samples_ts"]) / len(row["samples_ts"]), 6)
         if build_commit is not None:
             row["build_commit"] = build_commit
+        reps = len(row["samples_ts"])
+        row.update({
+            "autokernel_hardened": True,
+            "autokernel_output_invariant": True,
+            "autokernel_input_working_set_bytes": 1 << 30,
+            "autokernel_input_hashes": ",".join(
+                f"{index + 1:016x}" for index in range(reps)),
+            "autokernel_input_addresses": ",".join(
+                f"0x{0x1000 + 2 * index:x}/0x{0x1001 + 2 * index:x}"
+                for index in range(reps)),
+            "autokernel_context_addresses": ",".join(
+                f"0x{0x4000 + 2 * index:x}/0x{0x4001 + 2 * index:x}"
+                for index in range(reps)),
+            "autokernel_output_hashes": ",".join(
+                f"{index + 101:016x}/{index + 101:016x}" for index in range(reps)),
+        })
     return json.dumps(rows)
 
 
@@ -1175,7 +1208,7 @@ def bench_responses(effect, *, first_block: int, blocks: int) -> dict:
     letting `RecordedSpawner`'s `(arm, index)` lookup pick is the only way to
     key on the block without re-deriving the order schedule in a fixture.
     """
-    anchor_payload = BENCH_FIXTURE.read_text(encoding="utf-8")
+    anchor_payload = scaled_bench(factor=1.0)
     out: dict = {}
     for i in range(blocks):
         index = first_block + i
@@ -1882,7 +1915,14 @@ class TestAFrozenTreeIsRefusedAtEveryDoor(_ChainCase):
         """SEAM 1's polarity, at the value the gate actually reads."""
         leg = ChainLeg(self.world)
         leg.up_to("build")
-        forged = dataclasses.replace(leg.identity, build_dir=f"{self.FROZEN}/build")
+        forged_dir = f"{self.FROZEN}/build"
+        forged_receipts = tuple(
+            {**row,
+             "activation": {**row["activation"], "writable_root": forged_dir}}
+            for row in leg.identity.sandbox_receipts)
+        forged = dataclasses.replace(
+            leg.identity, build_dir=forged_dir,
+            sandbox_receipts=forged_receipts)
         touched = chain.production_trees_touched_by(forged)
         # Every SPELLING of the tree, because `frozen_tree_paths()` carries the
         # aliases too (`/workspace/repos/epyc-llama` is a symlink to this path)
@@ -2044,7 +2084,7 @@ class TestAContendedRunEmitsNoNumber(_ChainCase):
             claim=leg.claim_binding.microbench_claim, policy=HEALTHY_POLICY,
             spawner=MB.RecordedSpawner({
                 MB.ARM_CANDIDATE: scaled_bench(factor=1.08, build_commit="cafe12345"),
-                MB.ARM_ANCHOR: BENCH_FIXTURE.read_text(encoding="utf-8")}),
+                MB.ARM_ANCHOR: scaled_bench(factor=1.0)}),
             host_state=HostStateStub(state))
         return runner.run(plan)
 
@@ -2676,12 +2716,12 @@ class TestFrozenTreesAreUntouched(_ChainCase):
         after = fingerprint_frozen()
         self.assertEqual(before, after)
 
-    def test_llama_cpp_is_still_on_the_v8_freeze_commit(self):
+    def test_llama_cpp_is_still_on_the_v9_freeze_commit(self):
         fp = fingerprint_frozen()["/mnt/raid0/llm/llama.cpp"]
         if fp is None:
             self.skipTest("the frozen llama.cpp clone is not present on this host")
-        self.assertEqual(fp["branch"], "production-consolidated-v8")
-        self.assertEqual(fp["head"], "67a433bf45a8a091d83b4ea0b32ff0735fd51800")
+        self.assertEqual(fp["branch"], "production-consolidated-v9")
+        self.assertEqual(fp["head"], "0db32c06e3e550065b78311a6031ef3dd2c4f27c")
 
 
 # =============================================================================

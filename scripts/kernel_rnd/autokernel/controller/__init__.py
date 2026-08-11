@@ -39,6 +39,11 @@ failed" from "never tried" re-runs dead ideas until someone notices.
 Neither decides what to try next. That is the agent's job, per the operator, and
 that is the whole point of the removal above.
 
+`authoring_contract` is the deliberate off-campaign-path adapter seam. It
+provides prompt hygiene, priced context, reversible log compaction, and
+structured external-number validation without selecting work or calling a
+model, so it does not restore the deleted strategy plane.
+
 ON THE CAMPAIGN PATH SINCE 2026-08-04
 -------------------------------------
 `campaign.py` imports both. It had not, and that was the defect:
