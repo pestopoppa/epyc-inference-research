@@ -1,0 +1,205 @@
+{
+  "schema": "epyc.autokernel.c5_seed_corpus.v1",
+  "corpus_id": "hyra-sol-execbench-gfx90a-seeds-v1",
+  "provenance": {
+    "project": "Tencent-Hunyuan/Hyra-results",
+    "url": "https://github.com/Tencent-Hunyuan/Hyra-results",
+    "revision": "26ebfbe7d491e6521d8bb5fc21fe88bb31460825",
+    "artifact_root": "AI4AI/sol_execbench",
+    "intake_ref": "intake-884#record"
+  },
+  "source_attestation": {
+    "platform_family": "nvidia_hopper",
+    "scope": "nvidia_only",
+    "basis": "operator_handoff_intake_884"
+  },
+  "gfx90a_contract": {
+    "hardware": "AMD Instinct MI210",
+    "architecture": "gfx90a",
+    "required_mechanisms": [
+      "wavefront_64",
+      "mfma",
+      "lds"
+    ],
+    "disposition": "re_author_and_re_attest",
+    "attestation_status": "absent"
+  },
+  "seeds": [
+    {
+      "seed_id": "k138",
+      "submission_id": 25471,
+      "slug": "mamba_discretization_and_segsum",
+      "artifact": "AI4AI/sol_execbench/k138__sid25471__mamba_discretization_and_segsum__044_mamba_discretization_and_segsum.json",
+      "artifact_sha256": "bf6c46522953c4a097f0ee9441bba62a537ad9127ab15f8a7ad62a8ef52599b4",
+      "reference_kind": "direct_triton_spec",
+      "operator_family": "mamba_discretization_segsum",
+      "dtypes": ["bf16"],
+      "observed_nvidia_bindings": [],
+      "upstream_result": {
+        "status": "COMPLETED",
+        "is_correct": true,
+        "sol_score": 0.913815,
+        "latency_ms": 0.025766
+      },
+      "gfx90a": {
+        "disposition": "re_author_and_re_attest",
+        "attestation_status": "absent",
+        "source_use": "reference_spec_only"
+      }
+    },
+    {
+      "seed_id": "k145",
+      "submission_id": 25621,
+      "slug": "hyena_complete_forward_block",
+      "artifact": "AI4AI/sol_execbench/k145__sid25621__hyena_complete_forward_block__051_seqlen-finetuned-reconstructed_hyena_complete_forward_block.json",
+      "artifact_sha256": "ef27652cc3eaf0fa6e6941d0fce941e04f80a65a2de2449944352cb8dc149a8b",
+      "reference_kind": "direct_triton_spec",
+      "operator_family": "hyena_forward_block",
+      "dtypes": ["fp16"],
+      "observed_nvidia_bindings": ["cublas"],
+      "upstream_result": {
+        "status": "COMPLETED",
+        "is_correct": true,
+        "sol_score": 0.965872,
+        "latency_ms": 0.021479
+      },
+      "gfx90a": {
+        "disposition": "re_author_and_re_attest",
+        "attestation_status": "absent",
+        "source_use": "reference_spec_only"
+      }
+    },
+    {
+      "seed_id": "k154",
+      "submission_id": 25648,
+      "slug": "chunk_gated_delta_rule_linear_attention",
+      "artifact": "AI4AI/sol_execbench/k154__sid25648__chunk_gated_delta_rule_linear_attention__060_chunk_gated_delta_rule_linear_attention.json",
+      "artifact_sha256": "1b499470fe74b2189c1fc6f26acd60cb626093a32a8fb703120998901798ebdd",
+      "reference_kind": "direct_triton_spec",
+      "operator_family": "chunk_gated_delta_linear_attention",
+      "dtypes": ["bf16"],
+      "observed_nvidia_bindings": [],
+      "upstream_result": {
+        "status": "COMPLETED",
+        "is_correct": true,
+        "sol_score": 0.909533,
+        "latency_ms": 0.05929
+      },
+      "gfx90a": {
+        "disposition": "re_author_and_re_attest",
+        "attestation_status": "absent",
+        "source_use": "reference_spec_only"
+      }
+    },
+    {
+      "seed_id": "k175",
+      "submission_id": 25683,
+      "slug": "moe_sparse_expert_dispatch",
+      "artifact": "AI4AI/sol_execbench/k175__sid25683__moe_sparse_expert_dispatch__081_moe_sparse_expert_dispatch.json",
+      "artifact_sha256": "5b28cd02aab7e1ad1b8c48394e220ae398036ce81416e153c7a5e3237ba6f8c3",
+      "reference_kind": "direct_triton_spec",
+      "operator_family": "moe_sparse_expert_dispatch",
+      "dtypes": ["bf16"],
+      "observed_nvidia_bindings": [],
+      "upstream_result": {
+        "status": "COMPLETED",
+        "is_correct": true,
+        "sol_score": 0.924206,
+        "latency_ms": 0.887775
+      },
+      "gfx90a": {
+        "disposition": "re_author_and_re_attest",
+        "attestation_status": "absent",
+        "source_use": "reference_spec_only"
+      }
+    },
+    {
+      "seed_id": "k215",
+      "submission_id": 25844,
+      "slug": "gemm_n2048_k4096",
+      "artifact": "AI4AI/sol_execbench/k215__sid25844__gemm_n2048_k4096__006_gemm_n2048_k4096.json",
+      "artifact_sha256": "69d62082dc00bc3a021dd8195d28dce73891519e50db3bd3c8278522f7f48a3c",
+      "reference_kind": "cuda_bound_reauthor_target",
+      "operator_family": "gemm",
+      "dtypes": ["fp16"],
+      "observed_nvidia_bindings": ["cublaslt", "cupy", "flashinfer", "wmma"],
+      "upstream_result": {
+        "status": "COMPLETED",
+        "is_correct": true,
+        "sol_score": 0.536168,
+        "latency_ms": 0.023509
+      },
+      "gfx90a": {
+        "disposition": "re_author_and_re_attest",
+        "attestation_status": "absent",
+        "source_use": "behavior_and_target_only"
+      }
+    },
+    {
+      "seed_id": "k225",
+      "submission_id": 25891,
+      "slug": "gqa_ragged_prefill_causal_h32_kv4_d128",
+      "artifact": "AI4AI/sol_execbench/k225__sid25891__gqa_ragged_prefill_causal_h32_kv4_d128__016_gqa_ragged_prefill_causal_h32_kv4_d128.json",
+      "artifact_sha256": "ba01245fbb525d7c087ae250c1c00e6a86a40b2655082be4ce151e6158c13583",
+      "reference_kind": "cuda_bound_reauthor_target",
+      "operator_family": "gqa_ragged_prefill",
+      "dtypes": ["bf16"],
+      "observed_nvidia_bindings": ["cupy", "flashinfer"],
+      "upstream_result": {
+        "status": "COMPLETED",
+        "is_correct": true,
+        "sol_score": 0.925048,
+        "latency_ms": 0.008197
+      },
+      "gfx90a": {
+        "disposition": "re_author_and_re_attest",
+        "attestation_status": "absent",
+        "source_use": "behavior_and_target_only"
+      }
+    },
+    {
+      "seed_id": "k227",
+      "submission_id": 25893,
+      "slug": "mla_paged_decode_h16_ckv512_kpe64_ps1",
+      "artifact": "AI4AI/sol_execbench/k227__sid25893__mla_paged_decode_h16_ckv512_kpe64_ps1__018_mla_paged_decode_h16_ckv512_kpe64_ps1.json",
+      "artifact_sha256": "a14c14b3935399befda9bb9910e72c685c03b92055481f96d44e79744a783869",
+      "reference_kind": "cuda_bound_reauthor_target",
+      "operator_family": "mla_paged_decode",
+      "dtypes": ["bf16", "fp16"],
+      "observed_nvidia_bindings": ["cupy", "mma_sync", "wmma"],
+      "upstream_result": {
+        "status": "COMPLETED",
+        "is_correct": true,
+        "sol_score": 0.956477,
+        "latency_ms": 0.018297
+      },
+      "gfx90a": {
+        "disposition": "re_author_and_re_attest",
+        "attestation_status": "absent",
+        "source_use": "behavior_and_target_only"
+      }
+    },
+    {
+      "seed_id": "k228",
+      "submission_id": 25896,
+      "slug": "mla_paged_prefill_causal_h16_ckv512_kpe64_ps1",
+      "artifact": "AI4AI/sol_execbench/k228__sid25896__mla_paged_prefill_causal_h16_ckv512_kpe64_ps1__019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1.json",
+      "artifact_sha256": "696b6b0802ba4d2ae371cbdeddee07f5ca2796827805dcc90561205c3f81d83a",
+      "reference_kind": "direct_triton_spec",
+      "operator_family": "mla_paged_prefill",
+      "dtypes": ["bf16"],
+      "observed_nvidia_bindings": ["flashinfer"],
+      "upstream_result": {
+        "status": "COMPLETED",
+        "is_correct": true,
+        "sol_score": 0.96666,
+        "latency_ms": 0.045929
+      },
+      "gfx90a": {
+        "disposition": "re_author_and_re_attest",
+        "attestation_status": "absent",
+        "source_use": "reference_spec_only"
+      }
+    }
+  ]
+}

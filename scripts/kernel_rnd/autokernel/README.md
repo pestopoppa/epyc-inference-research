@@ -171,6 +171,7 @@ calibration exists. Source-changing campaigns additionally require their own
 | `evaluator/correctness.py` | **AK3.** The seventeen T0 gates: backend-op units, exact-reference comparison, unseen boundary shapes, surface reconciliation, the no-fallback proof, state/rollback/teardown, sanitizers (ASAN/UBSAN, no core dumps), output coherence vs the anchor, determinism class, binary+linkage identity, and anti-reward-hacking. `CoherenceVerdict` is computed and cannot be stamped. |
 | `evaluator/statistics.py` | **AK3.** The calibration block in its normative solve order — `φ`, `B_min`, the α budgets and their thresholds, the anchor-gate band — the anytime-valid e-process (two bundle-fixed constructions), the pre-committed stopping rule with bounded extension, the MDE, order control, the selection/confirmation split, and the reducer that produces a conforming `api.EffectEstimate`. |
 | `evaluator/controls.py` | **AK3.** The five controls as hashed data (definitions AND predicates), the A/A cadence scheduler, the historical-win-replay declared contract with its normative unavailable branch and operator escalation, and the projection into `api.WindowAttestations`. |
+| `evaluator/rebench_scoring.py` | **AK-RB-1.** Reference-normalized log-time scoring for behavior-preserving optimization: 0 is the measured starting state, 1 is the measured strong reference, incorrect/unverified work receives no score, and best-so-far curves are emitted at matched 2h/8h/32h budgets. The score is deliberately unclipped so regressions and reference-beating candidates remain visible. |
 | `evaluator/oracle_integrity.py` | **RVP-C2-8/C2-9.** Fail-closed reducers for same-shape hostile input distributions and checker isolation. They bind suite seed/version, require four distinct materialized populations, and refuse property/reference evidence whose checker translation unit reaches device code, forced MMQ, CUDA flash attention, or rocWMMA paths. The live runner refuses dirty or frozen source identities and retains one device claim plus numeric sampling across both probes. |
 | `evaluator/historical_tasks.py` | **RVP-C5-R/C3-2.** Validates sealed local historical-task descriptors that expose only the pre-optimization parent to the actor, preserve whether the original argv was recovered, and pin the model, full benchmark surface, metric direction, repeats, parent, and human expert. The expert-ceiling reducer reports candidate-to-parent and candidate-to-human deltas only when a terminal candidate exists; an archive with no candidate is `COULD_NOT_CHECK`, never a stamped win. |
 | `evaluator/recipes.py` | **AK3.** The codified recipe constructors — every measurement argv is emitted by one, carrying its constructor id and content hash — for `test-backend-ops`, `test-quantize-perf` and `llama-bench`, CPU and GPU. Every T1a recipe requires a typed local A/A timing floor; a bare numeric or foreign floor is refused. |
@@ -185,6 +186,8 @@ calibration exists. Source-changing campaigns additionally require their own
 | `controller/hypotheses.py` | The operator hypothesis store and falsifier-before-claim gate used by `campaign.py --hypothesis`. |
 | `controller/do_not_repeat.py` | The receipt-bearing negative/constraint ledger required before a hypothesis can spend a claim. |
 | `controller/shared.py` | The small shared vocabulary needed by the two surviving controller-memory modules. |
+| `controller/arena_adapter.py` | **INF-03 paper-pin adapter (off campaign path).** Registers the seven controller families against AgentKernelArena's exact launcher contract, refuses gfx90a spoofing, and binds C4/C5 context through the priced prompt seam without gaining verdict authority. |
+| `controller/arena_roundtrip.py` | **EVL-47 SC20/SC21 (off campaign path).** Prospective write-side GEAK/Arena receipt producer. It emits correctness pass rate and timing-harness validity as separate repetition-based `belief_measurements`; preflight source/license/hardware/registry findings remain hash-bound dependency evidence and never become a fabricated ordinal metric. |
 | `controller/authoring_contract.py` | **AK-PL-1 / AK-LE-4 / AK-LE-5 (off campaign path).** The only reviewed fully-rendered authoring-prompt seam; sealed-evaluator leak scan with compliant control, priced never-bulk-read context, reversible compaction headers with exact git recovery, and typed external numeric priors. It calls no model and selects no work. |
 | `controller/reward_monitor.py` | **C6 sabotage/sandbagging monitor contract (off campaign path).** Compiles the named threat model with monitor-awareness and reasoning visibility mandatory, binds every reasoning trace to its campaign/candidate plus the whole journal tree, reduces a declaration-bound complete model×sample panel as mean-of-mean@k, and reports sensitivity, specificity, and false-positive rate against a predeclared budget. It calls no model and cannot stamp correctness. |
 | `prior_art.py` | The deterministic four-way prior-art gate, explicit any/all trace-keyword matching, expected-absence override, v9-pinned source catalogue, cumulative wall-share pruning, and hash-bound offline `rocprofv2` reducer used by AK-DEL-1. |
@@ -192,6 +195,8 @@ calibration exists. Source-changing campaigns additionally require their own
 | `../../benchmark/run_autokernel_omniperf_fallback.py` | **INF-37 profiler fallback.** Captures seeded, repeated fixed-shape ROCm op families through Omniperf 2.0.1 plus `rocprof` v1 when `rocprofv2` crashes. It requires a clean exact source commit, hashes the binary/profiler/Python environment, holds the MI210 claim across correctness preflight and SQ/TCC collection, samples device state, and emits diagnostic-only receipts with device timestamps and counter totals. |
 | `../../benchmark/run_autokernel_rocprofv1_attribution.py` | **K28 whole-model fallback.** Captures timestamp-only `rocprof` v1 attribution at predeclared prompt lengths when `rocprofv2` cannot trace the model. It binds a clean source, binary, model, profiler, and exact build-local linkage; holds and samples the MI210; requires the real GDN kernel; and emits diagnostic-only active-kernel shares rather than a throughput verdict. |
 | `hipkittens_lds.py` | **INF-03 offline gfx90a adapter.** Solves LDS bank count from the complete four-bank overlap pattern, validates the all-pairs phase relation, reads hash-bound rocprofv2/v3 counter CSVs, and projects a diagnostic-only authoring-context item. It neither launches a profiler nor assumes the CDNA3 answer transfers. |
+| `c5_seed_corpus.py` | **C5 static seed registry.** Pins the eight intake-884 HyRA SOL-ExecBench artifacts and their NVIDIA/Hopper-only attestations, separates direct Triton references from CUDA-bound re-authoring targets, and emits non-numeric gfx90a task context. No upstream latency or SOL score is admitted as an MI210 target. |
+| `datatype_targets.py` | **INF-03 FP8 authoring target.** Declares FP8-weight/software-upcast-to-bf16 as an experimental gfx90a task, not a native capability; forces independent decoding, upcast-cost attribution, exact-shape baselines and whole-model confirmation, and mechanically defers NVFP4 until FP8 has a terminal result. |
 | `substrate.py` | Validates the checked-in MI210 compute/bandwidth/PCIe/NUMA facts, preserves measured and datasheet bases separately, re-derives both roofline ridges, and builds exact-quant diagnostic surfaces. Cross-vendor cells are spec-basis; a missing exact CUDA anchor is `COULD_NOT_CHECK`, never a pooled or borrowed target. |
 | `lanes.py` | The lane registry, historical 4/8/16/32/48-way CPU shapes, isolation checks, change-class-specific rank calibration, and full-instance verification rule. |
 | `artifact_diff.py` | The compile-only VGPR/SGPR/scratch/instruction-mix comparison that vetoes an unconfirmed GPU claim before behavioral T0 can launch. |
@@ -249,6 +254,24 @@ their correctness or performance in a llama.cpp kernel. Controllers consume the
 receipt only through `hipkittens_lds.topology_context_item(path,
 expected_sha256=...)`, which preserves the evidence hash and exposes no verdict or
 ranking authority.
+
+### C5 HyRA seed corpus
+
+`c5_seed_corpus.json` pins Hyra-results commit
+`26ebfbe7d491e6521d8bb5fc21fe88bb31460825` and exact artifact hashes for
+k138, k145, k154, k175, k215, k225, k227, and k228. The handoff-designated
+direct set is k138, k145, k154, k175, and k228; k215, k225, and k227
+are explicitly CUDA-bound behavior/target references. A direct reference can
+still contain a supplemental NVIDIA path, so the registry records observed
+cuBLAS, FlashInfer, CuPy, WMMA, and `mma.sync` bindings instead of implying
+source-level portability.
+
+Every row has the same terminal intake disposition: re-author for MI210/gfx90a
+with wavefront-64, MFMA, and LDS assumptions made explicit, then re-attest from
+correctness through timing on the physical card. The upstream completed/correct
+results remain NVIDIA/Hopper-only provenance. `seed_context_item()` deliberately
+omits their SOL scores and latencies from authoring context; an arena task may
+select exact rows through `ArenaTask.c5_seed_ids`.
 
 ### AK6 — the operator surface
 
