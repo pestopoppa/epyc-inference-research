@@ -29,12 +29,41 @@
     },
     {
       "arm_id": "claude_codex_actor_critic",
-      "availability": "missing",
-      "adapter_kind": "stdin_workspace_v1",
-      "missing_artifacts": [
-        "a callable Claude-planner/Codex-actor implementation (the deleted AutoKernel strategy plane is not an implementation)",
-        "a hash-bound three-argument AgentKernelArena launcher for that implementation",
-        "an explicit Claude model/effort pin and Codex model pin with wall-time termination"
+      "availability": "ready",
+      "adapter_kind": "agentkernelarena_three_arg_v1",
+      "missing_artifacts": [],
+      "argv": [
+        "python3",
+        "-m",
+        "scripts.kernel_rnd.autokernel.controller.claude_codex_actor_critic",
+        "--claude-model",
+        "claude-opus-5",
+        "--claude-effort",
+        "high",
+        "--codex-model",
+        "gpt-5.6-sol",
+        "--codex-effort",
+        "high",
+        "--checkpoint-hours",
+        "32",
+        "--timeout-seconds",
+        "115200",
+        "--max-iterations",
+        "64",
+        "--workspace",
+        "."
+      ],
+      "source_root": "repository://.",
+      "source_commit": "dcdc2311912ffad94deb2e9e578e31661d63f2fa",
+      "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/claude_codex_actor_critic.py",
+      "entrypoint_sha256": "161c29650a1271d7b14a5aea256b874b041a3820e200d6efa535e341929b93d2",
+      "model_ids": [
+        "claude-opus-5:high:planner+critic",
+        "gpt-5.6-sol:high:actor"
+      ],
+      "required_clis": [
+        "claude",
+        "codex"
       ]
     },
     {

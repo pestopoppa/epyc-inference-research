@@ -124,7 +124,26 @@ class ArenaCampaignTest(unittest.TestCase):
     def test_repository_config_names_missing_implementations_instead_of_argv_aliases(self):
         spec = C.load_spec(CONFIG)
         self.assertEqual(spec.arms[0].availability, "ready")
-        for arm in spec.arms[1:]:
+        actor = spec.arms[1]
+        self.assertEqual(actor.arm_id, AC.CONTROLLER_ID)
+        self.assertEqual(actor.availability, "ready")
+        self.assertEqual(actor.adapter_kind, "agentkernelarena_three_arg_v1")
+        self.assertEqual(actor.argv, AC.campaign_argv("python3"))
+        self.assertEqual(actor.source_root, C.IN_TREE_SOURCE_ROOT)
+        self.assertEqual(actor.entrypoint_path, AC.ENTRYPOINT_RELATIVE)
+        self.assertEqual(actor.model_ids, AC.PINNED_MODEL_IDS)
+        self.assertEqual(actor.required_clis, AC.REQUIRED_CLIS)
+        self.assertEqual(actor.missing_artifacts, ())
+        pinned = subprocess.run(
+            ("git", "-C", str(C.REPOSITORY_ROOT), "show",
+             f"{actor.source_commit}:{actor.entrypoint_path}"),
+            capture_output=True, check=True)
+        self.assertEqual(hashlib.sha256(pinned.stdout).hexdigest(),
+                         actor.entrypoint_sha256)
+        subprocess.run(
+            ("git", "-C", str(C.REPOSITORY_ROOT), "merge-base", "--is-ancestor",
+             actor.source_commit, "HEAD"), check=True)
+        for arm in spec.arms[2:]:
             self.assertEqual(arm.availability, "missing")
             self.assertFalse(arm.argv)
             self.assertGreaterEqual(len(arm.missing_artifacts), 3)
@@ -134,6 +153,48 @@ class ArenaCampaignTest(unittest.TestCase):
         argus = spec.arms[-1]
         self.assertIn("licensed", " ".join(argus.missing_artifacts))
         self.assertIn("gfx90a", " ".join(argus.missing_artifacts))
+
+    def test_controller_coverage_is_two_only_when_both_clis_are_present(self):
+        actor = C.ArmImplementation(
+            arm_id=AC.CONTROLLER_ID,
+            availability="ready",
+            adapter_kind="agentkernelarena_three_arg_v1",
+            missing_artifacts=(),
+            argv=AC.campaign_argv(sys.executable),
+            source_root=str(self.source),
+            source_commit=self.source_commit,
+            entrypoint_path=AC.ENTRYPOINT_RELATIVE,
+            entrypoint_sha256=sha(self.entrypoint),
+            model_ids=AC.PINNED_MODEL_IDS,
+            required_clis=AC.REQUIRED_CLIS,
+        )
+        original_which = C.shutil.which
+
+        def all_present(name):
+            if name in {"claude", "codex"}:
+                return sys.executable
+            return original_which(name)
+
+        with mock.patch.object(C.shutil, "which", side_effect=all_present):
+            row = C._implementation_audit(actor)
+        self.assertTrue(row["executable"])
+        self.assertEqual(
+            [item["name"] for item in row["required_cli_identities"]],
+            ["claude", "codex"],
+        )
+
+        def codex_missing(name):
+            if name == "claude":
+                return sys.executable
+            if name == "codex":
+                return None
+            return original_which(name)
+
+        with mock.patch.object(C.shutil, "which", side_effect=codex_missing):
+            row = C._implementation_audit(actor)
+        self.assertFalse(row["executable"])
+        self.assertTrue(any("not found: codex" in item
+                            for item in row["missing_artifacts"]))
 
     def test_panel_cardinality_order_budget_and_registered_coverage_fail_closed(self):
         spec = self.ready_spec()
