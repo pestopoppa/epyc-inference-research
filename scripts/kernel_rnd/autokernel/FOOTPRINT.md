@@ -31,8 +31,8 @@ a module it never looked at.
 | | non-test lines |
 |---|---:|
 | **ON THE CAMPAIGN PATH** | **63,782** |
-| **DEFERRED** (provably unreachable) | **12,688** |
-| **TOTAL** | **76,470** |
+| **DEFERRED** (provably unreachable) | **13,781** |
+| **TOTAL** | **77,563** |
 
 **There is no deferred half.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the

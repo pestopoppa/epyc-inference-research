@@ -310,7 +310,7 @@ class XeForgeArenaTest(unittest.TestCase):
                 [str(X.RUNTIME_PYTHON), "-m", "unittest",
                  f"{__name__}.{type(self).__name__}."
                  "test_pinned_upstream_prompts_are_amd_only_and_executor_closes"],
-                cwd=Path(__file__).resolve().parents[4], env=env,
+                cwd=Path(__file__).resolve().parents[2], env=env,
                 text=True, capture_output=True, check=False)
             self.assertEqual(
                 completed.returncode, 0,
