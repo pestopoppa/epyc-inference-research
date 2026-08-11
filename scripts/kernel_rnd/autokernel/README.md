@@ -203,6 +203,8 @@ calibration exists. Source-changing campaigns additionally require their own
 | `../../benchmark/run_autokernel_q4k_unpack_attribution.py` | **INF-37 Q4_K direct-PMC attribution.** Future passing rocprofv2 receipts emit separate Q4_K-minus-Q4_0 and Q4_K-minus-Q8_0 VALU/wave, INT32/wave, and dispatch-duration rows. Every row binds the exact arm/control/shape/counter basis plus source, binary, producer, profiler, evidence, device-claim, measurement-self, and receipt-self digests. Duration remains diagnostic fused-dispatch evidence: no row invents unpack wall share or promotion authority. The admitted pre-hook r7 receipt remains unchanged and projects no belief rows. |
 | `../../benchmark/autokernel_iq2_model_beliefs.py` | **EVL-47 SC23b prospective model-belief finalizer.** Emits separate higher-is-better TG and PP rows for both anchor and candidate only from a new `epyc.autokernel.iq2_xxs_model_confirmation.v1` receipt whose admitted T1/T2 events, exact llama-bench raw vectors, candidate/build/model/anchor identities, and released CPU claim all agree. It refuses old receipts and write-once re-finalization, so the micro result can never be relabelled as model evidence. |
 | `../../benchmark/autokernel_profile_beliefs.py` | **INF-48 ROCm-profile belief finalizer.** Verifies immutable G15, C4 formal-report, and standalone WGM-proxy receipts and writes a separate self-hashed `epyc.autokernel.profile_beliefs.v1` receipt. G15 performance and target-selection rows remain distinct; C4 emits formal per-suite family durations; proxy rows retain an explicit non-transfer-to-real-MMQ boundary. |
+| `../../benchmark/autokernel_p2_5j_receipt.py` | **P2-5j four-arm placement finalizer.** Parses the actual P-BENCH-3 row and live-affinity artifact for every balanced block, verifies binary/model bytes plus released CPU/GPU claims, and recomputes medians/MAD/paired ratios. Because CPU affinity varies, P-BENCH-PLACEMENT-1 controls; the historical four-arm design lacks its full composite and the receipt is observation-only. It cannot select a placement, claim kernel speedup, authorize a carve, or activate production. |
+| `placement_context.py` | **AutoKernel G1 host-topology bridge.** Loads only hash-valid P2-5j receipts, preserves all four placements and their uncertainty rather than passing a winner alone, and carries the no-speedup/no-carve/no-activation boundary into discovery context. |
 | `hipkittens_lds.py` | **INF-03 offline gfx90a adapter.** Solves LDS bank count from the complete four-bank overlap pattern, validates the all-pairs phase relation, reads hash-bound rocprofv2/v3 counter CSVs, and projects a diagnostic-only authoring-context item. It neither launches a profiler nor assumes the CDNA3 answer transfers. |
 | `c5_seed_corpus.py` | **C5 static seed registry.** Pins the eight intake-884 HyRA SOL-ExecBench artifacts and their NVIDIA/Hopper-only attestations, separates direct Triton references from CUDA-bound re-authoring targets, and emits non-numeric gfx90a task context. No upstream latency or SOL score is admitted as an MI210 target. |
 | `evaluator/c3_epyc_suite.py` | **INF-48 C3/C5 exit contract.** Selects hash-bound attention and MoE C5 cases plus an explicitly EPYC-native Q4_K dequant case; requires exact captured-tensor surfaces, vendor rather than eager baselines, correctness-first `fast_p`, and a matched whole-model re-bench through the case's declared integration. Missing evidence is `COULD_NOT_CHECK`, and the reducer has no release or promotion authority. |
@@ -1002,9 +1004,11 @@ authoritative for what is live now.
 - **`PREFLIGHT_ATTESTATION` is folded into no view.** It is in the record and the
   consistency checker ignores it, exactly like `OPERATOR_CONTROL_ACK` and
   `VIEW_REBASED`. AK3's evaluator is the consumer that will want the fold.
-- **The §3.7 durability exposures are not cleared** — the np_context decision
-  surface is still under `/mnt/raid0/llm/tmp/`, the two np_context study bundles
-  are untracked, and the P2-5j protocol is not restored to git.
+- **The §3.7 durability exposures are not fully cleared** — the np_context
+  decision surface is still under `/mnt/raid0/llm/tmp/` and the two np_context
+  study bundles are untracked. The P2-5j protocol is restored in root and its
+  strict receipt/context bridge now exists; a real four-arm receipt still awaits
+  the protocolled campaign.
 - **`check_evidence_durability.py` is not extended** to cover AutoKernel
   citations.
 - **Validators not yet written:** stale production anchor, undeclared change
