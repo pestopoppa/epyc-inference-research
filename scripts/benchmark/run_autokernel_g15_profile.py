@@ -297,10 +297,12 @@ def summarize_timestamps(path: Path) -> dict[str, Any]:
     }
 
 
-def hypothesis_result(share: float) -> dict[str, Any]:
+def hypothesis_result(share: float, *, parallel: int) -> dict[str, Any]:
     return {
         "hypothesis_id": HYPOTHESIS_ID,
-        "question": "is the B=128 elementwise/norm tail large enough to fund fusion authoring?",
+        "question": (
+            f"is the B={parallel} elementwise/norm tail large enough "
+            "to fund fusion authoring?"),
         "minimum_target_share": MIN_TARGET_SHARE,
         "observed_target_share": share,
         "verdict": (
@@ -434,7 +436,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 attribution = summarize_timestamps(Path(profile["timestamp_csv"]))
                 profile["attribution"] = attribution
                 profile["hypothesis"] = hypothesis_result(
-                    attribution["elementwise_norm_target_share"])
+                    attribution["elementwise_norm_target_share"],
+                    parallel=profile["parallel"])
                 profiles.append(profile)
         except BaseException as exc:
             captured_error = exc

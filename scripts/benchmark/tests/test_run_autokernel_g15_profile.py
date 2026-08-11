@@ -86,13 +86,15 @@ class G15ProfileTest(unittest.TestCase):
             result["target_cluster_table"][0]["kernel_sequence"],
             ["rms_norm_f32", "silu_f32", "mul_f32"])
         self.assertEqual(
-            R.hypothesis_result(result["elementwise_norm_target_share"])["verdict"],
+            R.hypothesis_result(
+                result["elementwise_norm_target_share"], parallel=128)["verdict"],
             "READY_PROFILE_SELECTED")
 
     def test_a_subthreshold_profile_falsifies_target_selection(self):
-        result = R.hypothesis_result(0.199)
+        result = R.hypothesis_result(0.199, parallel=64)
         self.assertEqual(result["verdict"], "FALSIFIED_PROFILE_TARGET")
         self.assertEqual(result["authority"], "target_selection_only")
+        self.assertIn("B=64", result["question"])
 
     def test_large_trace_reduction_happens_after_sampler_teardown(self):
         source = inspect.getsource(R.run)
