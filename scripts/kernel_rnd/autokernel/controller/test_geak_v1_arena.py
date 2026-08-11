@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
 import tempfile
+from types import ModuleType
 import unittest
 
 from . import arena_upstream_common as common
@@ -106,6 +108,39 @@ class GeakArenaTest(unittest.TestCase):
         self.assertTrue((dataset.log_root / "pass_exe" / filename).is_file())
         perf = dataset.run_perf_evaluation("pass_exe", "perf_results")
         self.assertEqual(perf[filename], {"ms": 1.5, "efficiency": 1.5})
+
+    def test_upstream_import_restores_preloaded_arena_agents_namespace(self):
+        source = self.root / "namespace-fixture"
+        agents = source / "src" / "agents"
+        agents.mkdir(parents=True)
+        (agents / "__init__.py").write_text("", encoding="utf-8")
+        (agents / "helper.py").write_text("TOKEN = 'geak'\n", encoding="utf-8")
+        (agents / "OptimAgent_ROCm.py").write_text(
+            "from agents.helper import TOKEN\n"
+            "class OptimAgent:\n"
+            "    marker = TOKEN\n",
+            encoding="utf-8",
+        )
+        sentinel = ModuleType("agents")
+        sentinel.__path__ = []
+        previous = {
+            name: module for name, module in tuple(sys.modules.items())
+            if name == "agents" or name.startswith("agents.")
+        }
+        for name in previous:
+            sys.modules.pop(name, None)
+        sys.modules["agents"] = sentinel
+        try:
+            optim_agent = G._import_optim_agent_isolated(source)
+            self.assertEqual(optim_agent.marker, "geak")
+            self.assertIs(sys.modules["agents"], sentinel)
+            self.assertNotIn("agents.OptimAgent_ROCm", sys.modules)
+            self.assertNotIn("agents.helper", sys.modules)
+        finally:
+            for name in tuple(sys.modules):
+                if name == "agents" or name.startswith("agents."):
+                    sys.modules.pop(name, None)
+            sys.modules.update(previous)
 
     def test_upstream_optimagent_run_uses_safe_runtime_and_arena_dataset(self):
         receipt = G.run_controller(
