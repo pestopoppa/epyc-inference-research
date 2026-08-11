@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Copy a legacy DFlash GGUF while adding canonical ``dflash.target_layers``.
+"""Copy a legacy DFlash GGUF into the current upstream metadata/tensor grammar.
 
-The source is never modified. Tensor payloads, tensor types, tensor ordering,
-and all existing metadata are copied verbatim through gguf-py's reader/writer.
-The command fails closed if the canonical key already exists or the legacy
-array is missing/invalid.
+The source is never modified. Tensor payloads, tensor types, and tensor ordering
+are copied verbatim through gguf-py's reader/writer. Only the legacy target-layer
+key and the two pre-upstream tensor names are canonicalized. The command fails
+closed if the expected legacy grammar is incomplete or ambiguous.
 """
 
 from __future__ import annotations
@@ -17,6 +17,10 @@ from pathlib import Path
 DEFAULT_GGUF_PY = Path("/mnt/raid0/llm/llama.cpp/gguf-py")
 LEGACY_KEY = "dflash.target_layer_ids"
 CANONICAL_KEY = "dflash.target_layers"
+TENSOR_RENAMES = {
+    "dflash.fc.weight": "fc.weight",
+    "dflash.hidden_norm.weight": "enc.output_norm.weight",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -75,9 +79,18 @@ def main() -> int:
         sub_type=gguf.GGUFValueType.INT32,
     )
 
+    source_tensor_names = {tensor.name for tensor in reader.tensors}
+    missing_legacy_tensors = sorted(set(TENSOR_RENAMES) - source_tensor_names)
+    canonical_collisions = sorted(set(TENSOR_RENAMES.values()) & source_tensor_names)
+    if missing_legacy_tensors or canonical_collisions:
+        raise RuntimeError(
+            "legacy tensor grammar is incomplete or ambiguous: "
+            f"missing={missing_legacy_tensors}, collisions={canonical_collisions}"
+        )
+
     for tensor in reader.tensors:
         writer.add_tensor_info(
-            tensor.name,
+            TENSOR_RENAMES.get(tensor.name, tensor.name),
             tensor.data.shape,
             tensor.data.dtype,
             tensor.data.nbytes,
@@ -94,6 +107,7 @@ def main() -> int:
         raise RuntimeError("canonicalized output was not created")
     print(f"created {args.output} ({args.output.stat().st_size} bytes)")
     print(f"added {CANONICAL_KEY}={target_layers}")
+    print(f"renamed tensors: {TENSOR_RENAMES}")
     return 0
 
 
