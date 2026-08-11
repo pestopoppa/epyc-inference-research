@@ -14,9 +14,9 @@ gap for the prospective MI210 comparison:
 * execution is all-or-nothing.  A missing implementation produces a durable
   refusal receipt before any controller or GPU command can start.
 
-The current repository contains no complete implementation for any of the seven
-registered controllers.  That is an expected, useful result of the preflight,
-not a reason to substitute a similarly named command.
+The repository carries one in-tree implementation, ``claude_codex_actor_critic``.
+The other six controller names remain exact refusals; a similarly named command
+does not count as their implementation.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ import shutil
 import subprocess
 from typing import Any, Callable, Mapping, Sequence
 
-from . import arena_adapter
+from . import arena_adapter, claude_codex_actor_critic
 from ..evaluator import rebench_scoring
 
 
@@ -53,6 +53,8 @@ PRIMARY_PANEL_IDS = (BASELINE_ARM_ID, *PRIMARY_CONTROLLER_IDS)
 DISCOVERY_ONLY_CONTROLLER_IDS: tuple[str, ...] = ()
 MATCHED_BUDGET_HOURS = rebench_scoring.DEFAULT_BUDGET_HOURS
 IMPLEMENTATION_MODULE = Path(__file__).resolve()
+REPOSITORY_ROOT = IMPLEMENTATION_MODULE.parents[4]
+IN_TREE_SOURCE_ROOT = "repository://."
 _SHA256_RE = re.compile(r"[0-9a-f]{64}")
 _ID_RE = re.compile(r"[a-z][a-z0-9_.-]{2,95}")
 
@@ -114,6 +116,7 @@ class ArmImplementation:
     entrypoint_path: str | None = None
     entrypoint_sha256: str | None = None
     model_ids: tuple[str, ...] = ()
+    required_clis: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.arm_id not in PRIMARY_PANEL_IDS:
@@ -150,12 +153,35 @@ class ArmImplementation:
             raise ArenaCampaignError(f"{self.arm_id}: argv must contain non-empty strings")
         if any(not isinstance(model, str) or not model.strip() for model in self.model_ids):
             raise ArenaCampaignError(f"{self.arm_id}: model_ids must be non-empty strings")
+        if (not isinstance(self.required_clis, tuple)
+                or any(not isinstance(name, str) or not re.fullmatch(
+                    r"[a-z][a-z0-9_-]{1,31}", name) for name in self.required_clis)
+                or len(set(self.required_clis)) != len(self.required_clis)):
+            raise ArenaCampaignError(
+                f"{self.arm_id}: required_clis must be unique executable names")
         if self.source_commit is not None and not re.fullmatch(
                 r"[0-9a-f]{40}", self.source_commit):
             raise ArenaCampaignError(
                 f"{self.arm_id}: source_commit must be a full lowercase SHA-1")
         if self.entrypoint_sha256 is not None:
             _sha256(self.entrypoint_sha256, f"{self.arm_id}.entrypoint_sha256")
+        if self.availability == "ready" and self.arm_id == claude_codex_actor_critic.CONTROLLER_ID:
+            expected_tail = claude_codex_actor_critic.campaign_argv("python3")[1:]
+            if self.adapter_kind != "agentkernelarena_three_arg_v1":
+                raise ArenaCampaignError(
+                    "claude_codex_actor_critic requires its exact three-argument adapter")
+            if len(self.argv) < 2 or self.argv[1:] != expected_tail:
+                raise ArenaCampaignError(
+                    "claude_codex_actor_critic argv differs from its pinned executable")
+            if self.entrypoint_path != claude_codex_actor_critic.ENTRYPOINT_RELATIVE:
+                raise ArenaCampaignError(
+                    "claude_codex_actor_critic entrypoint differs from its implementation")
+            if self.model_ids != claude_codex_actor_critic.PINNED_MODEL_IDS:
+                raise ArenaCampaignError(
+                    "claude_codex_actor_critic model_ids differ from exact model/effort pins")
+            if self.required_clis != claude_codex_actor_critic.REQUIRED_CLIS:
+                raise ArenaCampaignError(
+                    "claude_codex_actor_critic requires both installed CLIs")
 
 
 @dataclass(frozen=True)
@@ -240,6 +266,7 @@ def load_spec(path: str | Path) -> CampaignSpec:
         entrypoint_path=row.get("entrypoint_path"),
         entrypoint_sha256=row.get("entrypoint_sha256"),
         model_ids=tuple(row.get("model_ids", ())),
+        required_clis=tuple(row.get("required_clis", ())),
     ) for row in arm_rows if isinstance(row, Mapping))
     if len(arms) != len(arm_rows):
         raise ArenaCampaignError("every arm row must be an object")
@@ -286,11 +313,18 @@ def _task_audit(arena_root: Path, task: TaskArtifact) -> dict[str, Any]:
     }
 
 
+def _resolve_source_root(value: str | None) -> tuple[Path, bool]:
+    if value == IN_TREE_SOURCE_ROOT:
+        return REPOSITORY_ROOT, True
+    return Path(value or "").resolve(), False
+
+
 def _implementation_audit(arm: ArmImplementation) -> dict[str, Any]:
     failures = list(arm.missing_artifacts)
     executable_path: str | None = None
     executable_sha256: str | None = None
     source_identity: dict[str, Any] | None = None
+    cli_identities: list[dict[str, Any]] = []
     if arm.availability == "ready" and arm.arm_id != BASELINE_ARM_ID:
         executable = shutil.which(arm.argv[0])
         if executable is None:
@@ -299,7 +333,22 @@ def _implementation_audit(arm: ArmImplementation) -> dict[str, Any]:
             resolved = Path(executable).resolve()
             executable_path = str(resolved)
             executable_sha256 = _sha256_file(resolved)
-        source = Path(arm.source_root or "").resolve()
+        for name in arm.required_clis:
+            cli = shutil.which(name)
+            if cli is None:
+                failures.append(f"required controller CLI not found: {name}")
+                cli_identities.append({"name": name, "available": False})
+            else:
+                resolved_cli = Path(cli).resolve()
+                if not resolved_cli.is_file() or not os.access(resolved_cli, os.X_OK):
+                    failures.append(f"required controller CLI is not executable: {name}")
+                    cli_identities.append({"name": name, "available": False})
+                else:
+                    cli_identities.append({
+                        "name": name, "available": True, "path": str(resolved_cli),
+                        "sha256": _sha256_file(resolved_cli),
+                    })
+        source, in_tree = _resolve_source_root(arm.source_root)
         entrypoint = (source / (arm.entrypoint_path or "")).resolve()
         try:
             entrypoint.relative_to(source)
@@ -307,6 +356,8 @@ def _implementation_audit(arm: ArmImplementation) -> dict[str, Any]:
             failures.append("controller entrypoint escapes its source checkout")
         observed_commit = None
         observed_dirty = None
+        pin_relation = None
+        pinned_entrypoint_sha256 = None
         if not source.is_dir():
             failures.append(f"controller source root does not exist: {source}")
         else:
@@ -326,10 +377,32 @@ def _implementation_audit(arm: ArmImplementation) -> dict[str, Any]:
                 else:
                     observed_commit = commit_run.stdout.strip()
                     observed_dirty = bool(status_run.stdout.strip())
-                    if observed_commit != arm.source_commit:
+                    if in_tree:
+                        ancestor_run = subprocess.run(
+                            ("git", "-C", str(source), "merge-base", "--is-ancestor",
+                             str(arm.source_commit), observed_commit),
+                            capture_output=True, text=True, check=False, timeout=30)
+                        pin_relation = "ancestor" if ancestor_run.returncode == 0 else None
+                        if pin_relation is None:
+                            failures.append(
+                                f"controller source pin {arm.source_commit} is not an "
+                                f"ancestor of {observed_commit}")
+                        pinned_run = subprocess.run(
+                            ("git", "-C", str(source), "show",
+                             f"{arm.source_commit}:{arm.entrypoint_path}"),
+                            capture_output=True, check=False, timeout=30)
+                        if pinned_run.returncode == 0:
+                            pinned_entrypoint_sha256 = hashlib.sha256(
+                                pinned_run.stdout).hexdigest()
+                        if pinned_entrypoint_sha256 != arm.entrypoint_sha256:
+                            failures.append(
+                                "controller entrypoint digest is not present at its source pin")
+                    elif observed_commit != arm.source_commit:
                         failures.append(
                             f"controller source expected {arm.source_commit}, "
                             f"observed {observed_commit}")
+                    else:
+                        pin_relation = "exact"
                     if observed_dirty:
                         failures.append("controller source checkout is not clean")
         observed_entrypoint = _sha256_file(entrypoint) if entrypoint.is_file() else None
@@ -345,6 +418,8 @@ def _implementation_audit(arm: ArmImplementation) -> dict[str, Any]:
             "entrypoint_path": arm.entrypoint_path,
             "expected_entrypoint_sha256": arm.entrypoint_sha256,
             "observed_entrypoint_sha256": observed_entrypoint,
+            "pinned_entrypoint_sha256": pinned_entrypoint_sha256,
+            "pin_relation": pin_relation,
         }
     return {
         "arm_id": arm.arm_id,
@@ -356,6 +431,7 @@ def _implementation_audit(arm: ArmImplementation) -> dict[str, Any]:
         "executable_sha256": executable_sha256,
         "source_identity": source_identity,
         "model_ids": list(arm.model_ids),
+        "required_cli_identities": cli_identities,
         "missing_artifacts": failures,
     }
 
@@ -366,37 +442,23 @@ def _receipt_hash(receipt: Mapping[str, Any]) -> str:
 
 
 def _cli_inventory() -> list[dict[str, Any]]:
-    """Record locally visible upstream CLIs without calling a model."""
+    """Record locally visible upstream CLIs without invoking any CLI."""
     rows = []
     for name in ("claude", "codex", "cursor", "geak"):
         executable = shutil.which(name)
-        version = None
-        error = None
         digest = None
         resolved = None
         if executable is not None:
             path = Path(executable).resolve()
             resolved = str(path)
             digest = _sha256_file(path)
-            try:
-                result = subprocess.run(
-                    (str(path), "--version"), capture_output=True, text=True,
-                    check=False, timeout=5)
-            except (OSError, subprocess.TimeoutExpired) as exc:
-                error = f"version probe failed: {type(exc).__name__}"
-            else:
-                rendered = (result.stdout or result.stderr).strip()
-                if result.returncode == 0 and rendered:
-                    version = rendered.splitlines()[0][:200]
-                else:
-                    error = f"version probe exited {result.returncode}"
         rows.append({
             "name": name,
             "available": executable is not None,
             "path": resolved,
             "sha256": digest,
-            "version": version,
-            "error": error,
+            "version": None,
+            "version_probe_executed": False,
             "implementation_coverage_implied": False,
         })
     return rows
