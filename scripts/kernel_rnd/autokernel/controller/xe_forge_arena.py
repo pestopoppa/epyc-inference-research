@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
 import json
@@ -46,16 +47,22 @@ UPSTREAM_ENTRYPOINT = "src/xe_forge/engines/dspy_engine.py"
 PINNED_MODEL_IDS = common.PINNED_MODEL_IDS
 REQUIRED_CLIS = common.REQUIRED_CLIS
 
-# Xe-Forge gates all executor calls on a truthy KernelBench shape list.  Arena
-# owns the real workload shapes, so this marker only opens the upstream seam;
-# it is explicitly excluded from model guidance and never creates tensors.
-_ARENA_SHAPE_MARKER = [(1,)]
+class _ArenaExecutorGate(list):
+    """Truthy empty collection opening Xe-Forge's executor-owned branches."""
+
+    def __bool__(self) -> bool:
+        return True
+
+
+# Xe-Forge gates executor calls on a truthy shape collection.  Arena owns the
+# actual workload and does not expose KernelBench-style input tuples, so this
+# empty gate opens those branches without inventing a shape.  The ported agents
+# explicitly treat it as absent model context.
+_ARENA_EXECUTOR_GATE = _ArenaExecutorGate()
 _AMD_GUIDANCE = """
-This is an AMD gfx90a port of Xe-Forge. Target the physical AMD Instinct MI210
-with wavefront size 64. The AgentKernelArena source file and its embedded tests
-are the complete task authority. Ignore any Intel XPU, NVIDIA CUDA, SM,
-compute-capability, warp-32, GRF, TMA, or placeholder input-shape guidance
-inherited from upstream prompts. Use ROCm Triton constructs supported on gfx90a;
+Target the physical AMD Instinct MI210 (gfx90a) with wavefront size 64. The
+AgentKernelArena source file and its embedded tests are the complete task
+authority. Use ROCm Triton constructs supported on gfx90a;
 preserve the complete file, every public signature, imports, and test harness.
 Never replace the target Triton kernel with a vendor-library call. The
 compile_and_verify tool is the sole authority for compilation, correctness,
@@ -76,6 +83,11 @@ class _Upstream:
     pipeline_type: Any
     analyzer_type: Any
     optimizer_type: Any
+    analyzer_module: Any
+    optimizer_module: Any
+    planner_module: Any
+    prompt_module: Any
+    device_query_module: Any
     executor_type: Any
     execution_result_type: Any
     comparison_result_type: Any
@@ -136,10 +148,10 @@ def _make_executor(upstream: _Upstream,
         """KernelBench-shaped adapter whose only backend is AgentKernelArena."""
 
         def __init__(self) -> None:
-            self.device = "cuda"  # PyTorch's stable ROCm device spelling.
-            self.require_correctness = True
-            self.rtol = 1e-2
-            self.atol = 1e-5
+            super().__init__(
+                device="cuda",  # PyTorch's stable ROCm device spelling.
+                warmup_iters=1, benchmark_iters=1,
+                require_correctness=True, rtol=1e-2, atol=1e-5)
             self._records: dict[str, common.EvaluationRecord] = {}
 
         @staticmethod
@@ -192,7 +204,58 @@ def _make_executor(upstream: _Upstream,
 
 
 def _make_pipeline(upstream: _Upstream, model: common.CodexTextModel) -> Any:
+    def _without_gate(value: Any) -> Any:
+        return None if isinstance(value, _ArenaExecutorGate) else value
+
+    class ArenaAnalyzerAgent(upstream.analyzer_type):
+        def __init__(self, *args, **kwargs):
+            self.knowledge_base = kwargs.get(
+                "knowledge_base", args[0] if args else None)
+            dsl = kwargs.get("dsl", "triton")
+            self.dsl = (upstream.analyzer_module.DSL(dsl)
+                        if isinstance(dsl, str) else dsl)
+            sig = upstream.analyzer_module.AnalysisSignature.with_instructions(
+                "Analyze the complete Triton task source for safe, measurable "
+                "optimization opportunities on AMD Instinct MI210 (gfx90a).\n\n"
+                + _AMD_GUIDANCE)
+            sig = sig.with_updated_fields(
+                "knowledge_base_context",
+                desc=("Relevant target-neutral constraints. Empty when the "
+                      "knowledge base is disabled."))
+            self.predictor = upstream.dspy.Predict(sig)
+
+        def _build_problem_context(self, input_shapes, flop,
+                                   target_dtype=None):
+            return super()._build_problem_context(
+                _without_gate(input_shapes), flop, target_dtype)
+
+    class ArenaPlannerAgent:
+        def __init__(self) -> None:
+            self._delegate = upstream.planner_module.PlannerAgent.__new__(
+                upstream.planner_module.PlannerAgent)
+            sig = upstream.planner_module.PlanningSignature.with_instructions(
+                "Order the detected optimization stages for AMD Instinct "
+                "MI210 (gfx90a), prioritizing correctness and measured impact.\n\n"
+                + _AMD_GUIDANCE)
+            self._delegate.predictor = upstream.dspy.Predict(sig)
+
+        def plan(self, stages_needed, analysis, input_shapes=None, flop=None):
+            return self._delegate.plan(
+                stages_needed=stages_needed, analysis=analysis,
+                input_shapes=_without_gate(input_shapes), flop=flop)
+
     class ArenaOptimizerAgent(upstream.optimizer_type):
+        def _build_problem_context(self, input_shapes, dtype, init_args, flop):
+            return super()._build_problem_context(
+                _without_gate(input_shapes), dtype, init_args, flop)
+
+        def _build_problem_shapes(self, input_shapes):
+            return super()._build_problem_shapes(_without_gate(input_shapes))
+
+        def _build_autotune_configs(self, xpu_config, input_shapes):
+            return super()._build_autotune_configs(
+                xpu_config, _without_gate(input_shapes))
+
         def _create_verify_tool(
             self, original_code, kernel_name, input_shapes, flop, dtype=None,
             init_args=None, skip_speedup_check=False, stage=None,
@@ -253,10 +316,10 @@ def _make_pipeline(upstream: _Upstream, model: common.CodexTextModel) -> Any:
 
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
-            self.analyzer = upstream.analyzer_type(
+            self.analyzer = ArenaAnalyzerAgent(
                 knowledge_base=self.knowledge_base,
-                dsl=self.config.device_config.dsl,
-                extra_instructions=_AMD_GUIDANCE)
+                dsl=self.config.device_config.dsl)
+            self.planner = ArenaPlannerAgent()
             self.optimizer = ArenaOptimizerAgent(
                 executor=self.executor, validator=self.validator,
                 max_iterations=self.config.agent.max_iterations,
@@ -268,6 +331,107 @@ def _make_pipeline(upstream: _Upstream, model: common.CodexTextModel) -> Any:
     return ArenaXeForgePipeline
 
 
+def _amd_device_config(*, input_shapes=None, config=None, dtype="float16",
+                       **kwargs) -> dict[str, Any]:
+    del input_shapes, kwargs
+    device = config.device_config if config is not None else None
+    return {
+        "device": "amd", "device_name": "AMD Instinct MI210 (gfx90a)",
+        "wavefront_size": 64, "num_warps": getattr(
+            device, "default_num_warps", 4),
+        "num_stages": getattr(device, "default_num_stages", 2),
+        "BLOCK_SIZE_M": getattr(device, "preferred_tile_m", 128),
+        "BLOCK_SIZE_N": getattr(device, "preferred_tile_n", 128),
+        "BLOCK_SIZE_K": getattr(device, "preferred_tile_k", 32),
+        "dtype": dtype,
+    }
+
+
+def _format_amd_device_config(config: dict[str, Any],
+                              device_type: str = "amd") -> str:
+    del device_type
+    return "\n".join((
+        "AMD Instinct MI210 (gfx90a) configuration:",
+        f"  wavefront_size: {config.get('wavefront_size', 64)}",
+        f"  BLOCK_SIZE_M: {config.get('BLOCK_SIZE_M', 128)}",
+        f"  BLOCK_SIZE_N: {config.get('BLOCK_SIZE_N', 128)}",
+        f"  BLOCK_SIZE_K: {config.get('BLOCK_SIZE_K', 32)}",
+        f"  num_warps: {config.get('num_warps', 4)}",
+        f"  num_stages: {config.get('num_stages', 2)}",
+    ))
+
+
+def _ported_signature(signature: Any, *, instruction: str,
+                       fields: dict[str, dict[str, str]]) -> Any:
+    ported = signature.with_instructions(instruction + "\n\n" + _AMD_GUIDANCE)
+    for name, updates in fields.items():
+        ported = ported.with_updated_fields(name, **updates)
+    return ported
+
+
+@contextmanager
+def _install_amd_port(upstream: _Upstream, config: Any):
+    """Install and exactly restore Xe-Forge's process-global AMD port seams."""
+    signature_fields = {
+        "xpu_config": {
+            "prefix": "AMD Device Config:",
+            "desc": "AMD Instinct MI210 (gfx90a) configuration parameters."},
+        "knowledge_base_context": {
+            "desc": ("Relevant optimization patterns and constraints. Empty "
+                     "when the knowledge base is disabled.")},
+    }
+    patches = [
+        (upstream.config, "_config_manager",
+         SimpleNamespace(get=lambda: config)),
+        (upstream.pipeline_module, "get_device_config_for_pipeline",
+         _amd_device_config),
+        (upstream.device_query_module, "format_device_config_for_llm",
+         _format_amd_device_config),
+    ]
+    for name, signature in (
+        ("OptimizationSignature", upstream.optimizer_module.OptimizationSignature),
+        ("AlgorithmicOptimizationSignature",
+         upstream.optimizer_module.AlgorithmicOptimizationSignature),
+        ("AutotuneSignature", upstream.optimizer_module.AutotuneSignature),
+    ):
+        fields = dict(signature_fields)
+        if "vtune_report" in signature.fields:
+            fields["vtune_report"] = {
+                "prefix": "Profiler Report:",
+                "desc": "Optional target-appropriate profiler report."}
+        patches.append((
+            upstream.optimizer_module, name,
+            _ported_signature(
+                signature,
+                instruction=("Optimize the complete Triton task source for "
+                             "AMD Instinct MI210 (gfx90a)."),
+                fields=fields)))
+    prompt_descriptions = upstream.prompt_module._DEVICE_DESCRIPTIONS
+    prompt_defaults = upstream.prompt_module._DEVICE_TUNING_DEFAULTS
+    description_was = prompt_descriptions.get("amd")
+    defaults_was = prompt_defaults.get("amd")
+    previous = [(obj, name, getattr(obj, name)) for obj, name, _ in patches]
+    try:
+        prompt_descriptions["amd"] = "AMD Instinct MI210 (gfx90a)"
+        prompt_defaults["amd"] = {
+            "BLOCK_M": 128, "BLOCK_N": 128, "BLOCK_K": 32,
+            "num_warps": 4, "num_stages": 2}
+        for obj, name, value in patches:
+            setattr(obj, name, value)
+        yield
+    finally:
+        for obj, name, value in reversed(previous):
+            setattr(obj, name, value)
+        if description_was is None:
+            prompt_descriptions.pop("amd", None)
+        else:
+            prompt_descriptions["amd"] = description_was
+        if defaults_was is None:
+            prompt_defaults.pop("amd", None)
+        else:
+            prompt_defaults["amd"] = defaults_was
+
+
 def _load_upstream(source_root: Path) -> _Upstream:
     arena_adapter.inspect_vendor_source(source_root, SOURCE_PIN)
     sys.path.insert(0, str(source_root / "src"))
@@ -275,6 +439,11 @@ def _load_upstream(source_root: Path) -> _Upstream:
         import dspy
         import xe_forge.config as config_module
         import xe_forge.pipeline as pipeline_module
+        import xe_forge.agents.analyzer_agent as analyzer_module
+        import xe_forge.agents.optimizer_agent as optimizer_module
+        import xe_forge.planner as planner_module
+        import xe_forge.prompts.device_prompts as prompt_module
+        import xe_forge.core.device_query as device_query_module
         from xe_forge.agents import AnalyzerAgent, OptimizerAgent
         from xe_forge.agents.optimizer_agent import _extract_code_from_response
         from xe_forge.agents.utils import SUCCESS_MESSAGE
@@ -288,6 +457,9 @@ def _load_upstream(source_root: Path) -> _Upstream:
         dspy=dspy, config=config_module, pipeline_module=pipeline_module,
         engine_type=DSPyEngine, pipeline_type=XeForgePipeline,
         analyzer_type=AnalyzerAgent, optimizer_type=OptimizerAgent,
+        analyzer_module=analyzer_module, optimizer_module=optimizer_module,
+        planner_module=planner_module, prompt_module=prompt_module,
+        device_query_module=device_query_module,
         executor_type=KernelBenchExecutor,
         execution_result_type=ExecutionResult,
         comparison_result_type=ComparisonResult,
@@ -302,8 +474,8 @@ def _config(upstream: _Upstream, artifact_root: Path, max_iterations: int) -> An
     cfg.llm.max_tokens = 32768
     cfg.agent.strategy = "cover"
     cfg.agent.max_iterations = max_iterations
-    cfg.device_config = upstream.config.CUDAConfig(
-        device="cuda", dsl="triton", default_num_warps=4,
+    cfg.device_config = upstream.config.DeviceConfig(
+        device="amd", dsl="triton", default_num_warps=4,
         default_num_stages=2, preferred_tile_m=128,
         preferred_tile_n=128, preferred_tile_k=32)
     cfg.knowledge.enabled = False
@@ -336,20 +508,20 @@ def run_controller(
     upstream = upstream_loader(source)
     executor = _make_executor(upstream, evaluator)
     pipeline_type = _make_pipeline(upstream, model)
+    config = _config(upstream, model.artifact_root, max_iterations)
     previous_pipeline = upstream.pipeline_module.XeForgePipeline
     stop_reason = "upstream_complete"
     result = None
     try:
-        upstream.pipeline_module.XeForgePipeline = pipeline_type
-        engine = upstream.engine_type(
-            _config(upstream, model.artifact_root, max_iterations),
-            executor=executor)
-        result = engine.optimize(
-            kernel_code=_source_text(evaluator),
-            reference_code=evaluator.definition(prompt),
-            kernel_name=str(evaluator.config.get(
-                "target_kernel_functions", ["kernel"])[0]),
-            input_shapes=_ARENA_SHAPE_MARKER)
+        with _install_amd_port(upstream, config):
+            upstream.pipeline_module.XeForgePipeline = pipeline_type
+            engine = upstream.engine_type(config, executor=executor)
+            result = engine.optimize(
+                kernel_code=_source_text(evaluator),
+                reference_code=evaluator.definition(prompt),
+                kernel_name=str(evaluator.config.get(
+                    "target_kernel_functions", ["kernel"])[0]),
+                input_shapes=_ARENA_EXECUTOR_GATE)
     except common.ControllerBudgetExpired:
         stop_reason = "campaign_checkpoint"
     finally:
@@ -364,7 +536,7 @@ def run_controller(
             "upstream_strategy": "linear CoVeR",
             "gfx90a_port": True,
             "max_iterations": max_iterations,
-            "arena_shape_marker_not_evidence": list(_ARENA_SHAPE_MARKER),
+            "arena_executor_gate": "truthy_empty_no_shape_evidence",
             "returned_optimized_code": bool(
                 result is not None and getattr(result, "optimized_code", None)),
         })

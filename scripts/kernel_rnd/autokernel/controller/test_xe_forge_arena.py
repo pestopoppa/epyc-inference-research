@@ -4,8 +4,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import gc
 import json
+import os
 from pathlib import Path
+import subprocess
 from types import SimpleNamespace
 import tempfile
 import unittest
@@ -75,7 +78,9 @@ class FakeExecutionResult(SimpleNamespace):
 
 
 class FakeExecutor:
-    pass
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+        self._temp_dir = None
 
 
 class FakeTool:
@@ -95,6 +100,10 @@ class FakeDspy:
     Tool = FakeTool
     configured = None
 
+    class Predict:
+        def __init__(self, signature):
+            self.signature = signature
+
     @classmethod
     def configure(cls, **kwargs):
         cls.configured = kwargs
@@ -104,10 +113,38 @@ class FakeAnalyzer:
     def __init__(self, **kwargs):
         self.kwargs = kwargs
 
+    def _build_problem_context(self, input_shapes, flop, target_dtype=None):
+        return f"shapes={input_shapes};flop={flop};dtype={target_dtype}"
+
 
 class FakeOptimizer:
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
+
+    def _build_problem_context(self, input_shapes, dtype, init_args, flop):
+        return str((input_shapes, dtype, init_args, flop))
+
+    def _build_problem_shapes(self, input_shapes):
+        return str(input_shapes)
+
+    def _build_autotune_configs(self, xpu_config, input_shapes):
+        return str((xpu_config, input_shapes))
+
+
+class FakeSignature:
+    fields = {
+        "xpu_config": object(), "knowledge_base_context": object(),
+        "vtune_report": object()}
+
+    @classmethod
+    def with_instructions(cls, instructions):
+        del instructions
+        return cls
+
+    @classmethod
+    def with_updated_fields(cls, name, **updates):
+        del name, updates
+        return cls
 
 
 class FakePipeline:
@@ -131,7 +168,7 @@ class FakeConfig:
         self.profiler = SimpleNamespace(vtune_enabled=False)
 
 
-class FakeCUDAConfig(SimpleNamespace):
+class FakeDeviceConfig(SimpleNamespace):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -154,7 +191,9 @@ class XeForgeArenaTest(unittest.TestCase):
         entrypoint.write_text("# fixture DSPyEngine\n", encoding="utf-8")
 
     def fake_upstream(self):
-        pipeline_module = SimpleNamespace(XeForgePipeline=FakePipeline)
+        pipeline_module = SimpleNamespace(
+            XeForgePipeline=FakePipeline,
+            get_device_config_for_pipeline=lambda **kwargs: kwargs)
 
         class FakeEngine:
             calls = 0
@@ -186,12 +225,31 @@ class XeForgeArenaTest(unittest.TestCase):
                 executor_ref[0] = executor
                 super().__init__(config, executor)
 
+        analyzer_module = SimpleNamespace(
+            AnalysisSignature=FakeSignature, DSL=lambda value: value)
+        optimizer_module = SimpleNamespace(
+            OptimizationSignature=FakeSignature,
+            AlgorithmicOptimizationSignature=FakeSignature,
+            AutotuneSignature=FakeSignature)
+        planner_module = SimpleNamespace(
+            PlanningSignature=FakeSignature, PlannerAgent=SimpleNamespace)
+        prompt_module = SimpleNamespace(
+            _DEVICE_DESCRIPTIONS={}, _DEVICE_TUNING_DEFAULTS={})
+        config_module = SimpleNamespace(
+            Config=FakeConfig, DeviceConfig=FakeDeviceConfig,
+            _config_manager=SimpleNamespace(get=lambda: None))
         return X._Upstream(
             dspy=FakeDspy,
-            config=SimpleNamespace(Config=FakeConfig, CUDAConfig=FakeCUDAConfig),
+            config=config_module,
             pipeline_module=pipeline_module, engine_type=CapturingEngine,
             pipeline_type=FakePipeline, analyzer_type=FakeAnalyzer,
             optimizer_type=FakeOptimizer, executor_type=FakeExecutor,
+            analyzer_module=analyzer_module,
+            optimizer_module=optimizer_module,
+            planner_module=planner_module,
+            prompt_module=prompt_module,
+            device_query_module=SimpleNamespace(
+                format_device_config_for_llm=lambda config, device_type: "old"),
             execution_result_type=FakeExecutionResult,
             comparison_result_type=FakeComparison,
             success_message="SUCCESS", extract_code=lambda value: str(value))
@@ -240,6 +298,73 @@ class XeForgeArenaTest(unittest.TestCase):
         evaluator.source_paths = ("a.py", "b.py")
         with self.assertRaisesRegex(X.XeForgeArenaError, "one Arena source"):
             X._source_text(evaluator)
+
+    def test_pinned_upstream_prompts_are_amd_only_and_executor_closes(self):
+        marker = "AUTOKERNEL_XE_REAL_UPSTREAM_TEST"
+        if os.environ.get(marker) != "1":
+            if not X.RUNTIME_PYTHON.is_file() or not X.DEFAULT_SOURCE_ROOT.is_dir():
+                self.skipTest("pinned Xe-Forge runtime is not installed")
+            env = os.environ.copy()
+            env[marker] = "1"
+            completed = subprocess.run(
+                [str(X.RUNTIME_PYTHON), "-m", "unittest",
+                 f"{__name__}.{type(self).__name__}."
+                 "test_pinned_upstream_prompts_are_amd_only_and_executor_closes"],
+                cwd=Path(__file__).resolve().parents[4], env=env,
+                text=True, capture_output=True, check=False)
+            self.assertEqual(
+                completed.returncode, 0,
+                msg=completed.stdout + "\n" + completed.stderr)
+            return
+
+        upstream = X._load_upstream(X.DEFAULT_SOURCE_ROOT)
+        model = FakeModel(
+            workspace=self.workspace,
+            budget=common.ControllerBudget(2.0, 7200))
+        evaluator = FakeEvaluator(
+            workspace=self.workspace, arena_root=self.arena)
+        executor = X._make_executor(upstream, evaluator)
+        pipeline_type = X._make_pipeline(upstream, model)
+        config = X._config(upstream, model.artifact_root, 2)
+        old_pipeline = upstream.pipeline_module.XeForgePipeline
+
+        def visible(signature):
+            parts = [signature.instructions]
+            for field in signature.fields.values():
+                parts.extend(str(field.json_schema_extra.get(key, ""))
+                             for key in ("prefix", "desc"))
+            return "\n".join(parts)
+
+        try:
+            with X._install_amd_port(upstream, config):
+                upstream.pipeline_module.XeForgePipeline = pipeline_type
+                pipeline = pipeline_type(config=config, executor=executor)
+                signatures = [
+                    pipeline.analyzer.predictor.signature,
+                    pipeline.planner._delegate.predictor.signature,
+                    upstream.optimizer_module.OptimizationSignature,
+                    upstream.optimizer_module.AlgorithmicOptimizationSignature,
+                    upstream.optimizer_module.AutotuneSignature,
+                ]
+                prompt_text = "\n".join(visible(sig) for sig in signatures)
+                prompt_text += pipeline.analyzer._build_problem_context(
+                    X._ARENA_EXECUTOR_GATE, None, None)
+                prompt_text += pipeline.optimizer._build_problem_context(
+                    X._ARENA_EXECUTOR_GATE, None, None, None)
+                lowered = prompt_text.lower()
+                for forbidden in (
+                    "intel", "nvidia", "xpu", "sm count",
+                    "compute capability", "[(1,)]", "input shapes: []",
+                ):
+                    self.assertNotIn(forbidden, lowered)
+                self.assertEqual(config.device_config.device, "amd")
+                self.assertEqual(type(executor).__name__,
+                                 "ArenaKernelBenchExecutor")
+                self.assertTrue(hasattr(executor, "_temp_dir"))
+        finally:
+            upstream.pipeline_module.XeForgePipeline = old_pipeline
+        del pipeline, executor
+        gc.collect()
 
 
 if __name__ == "__main__":
