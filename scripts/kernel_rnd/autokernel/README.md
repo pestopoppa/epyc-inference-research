@@ -188,6 +188,7 @@ calibration exists. Source-changing campaigns additionally require their own
 | `controller/reward_monitor.py` | **C6 sabotage/sandbagging monitor contract (off campaign path).** Compiles the named threat model with monitor-awareness and reasoning visibility mandatory, binds every reasoning trace to its campaign/candidate plus the whole journal tree, reduces a declaration-bound complete model×sample panel as mean-of-mean@k, and reports sensitivity, specificity, and false-positive rate against a predeclared budget. It calls no model and cannot stamp correctness. |
 | `prior_art.py` | The deterministic four-way prior-art gate, explicit any/all trace-keyword matching, expected-absence override, v9-pinned source catalogue, cumulative wall-share pruning, and hash-bound offline `rocprofv2` reducer used by AK-DEL-1. |
 | `profile_report.py` | **RVP-1–7 offline C4.** Consumes paired hash-bound mapping/formal `rocprofv2` captures, enforces stage separation and the 10-warm-up/5-active window, renders kernel/overlap/fuse plus architecture-shape tables above the 1% family floor, records the complete profiler candidate registry including RPD/gfx90a reachability, and makes host-catalogue exclusions explicit. Source matching is exact and reviewed; the optional judgment pass can attach only `low`/`medium`/`high` similarity plus a catalogue note. It launches nothing. |
+| `hipkittens_lds.py` | **INF-03 offline gfx90a adapter.** Solves LDS bank count from the complete four-bank overlap pattern, validates the all-pairs phase relation, reads hash-bound rocprofv2/v3 counter CSVs, and projects a diagnostic-only authoring-context item. It neither launches a profiler nor assumes the CDNA3 answer transfers. |
 | `substrate.py` | Validates the checked-in MI210 compute/bandwidth/PCIe/NUMA facts, preserves measured and datasheet bases separately, re-derives both roofline ridges, and builds exact-quant diagnostic surfaces. Cross-vendor cells are spec-basis; a missing exact CUDA anchor is `COULD_NOT_CHECK`, never a pooled or borrowed target. |
 | `lanes.py` | The lane registry, historical 4/8/16/32/48-way CPU shapes, isolation checks, change-class-specific rank calibration, and full-instance verification rule. |
 | `artifact_diff.py` | The compile-only VGPR/SGPR/scratch/instruction-mix comparison that vetoes an unconfirmed GPU claim before behavioral T0 can launch. |
@@ -211,6 +212,39 @@ source commit. The deterministic pass owns every measured value and source
 locator. A later model sees only emitted pattern ids and may add one bounded
 similarity label plus a catalogue comparison; it cannot rewrite timing,
 attribution, scope, or architecture-shape facts.
+
+### gfx90a LDS topology (HipKittens method, not framework)
+
+`scripts/benchmark/run_autokernel_lds_solver.py` adapts HipKittens's
+`ds_read_b128` bank/phase experiment to the installed MI210. It builds a
+self-contained HIP probe for exactly `gfx90a`, holds the normal AutoKernel device
+claim, samples device state, and captures `SQ_INSTS_LDS` plus
+`SQ_LDS_BANK_CONFLICT` with the side-loaded ROCm 6.2 profiler. The probe contains
+no HipKittens headers or Torch dependency.
+
+The upstream script equates the first conflict offset with the bank count. That
+is not valid for `ds_read_b128`: each lane spans four banks, so an access starting
+at bank `N-3` already overlaps bank zero. The local reducer instead fits every
+measured offset against the exact modular-overlap pattern for 16/32/64/128-bank
+candidates and requires one unique exact fit. It then measures all 2,016 lane
+pairs and requires the same-phase relation to form cliques before emitting a
+result. Repeated samples use a median conflict predicate.
+
+Run from a clean, committed research checkout and place evidence outside scratch:
+
+```bash
+python3 scripts/benchmark/run_autokernel_lds_solver.py \
+  --campaign-id inf03-lds-gfx90a-YYYYMMDD \
+  --source-commit "$(git rev-parse HEAD)" \
+  --output-dir /mnt/raid0/llm/autokernel/probes/inf03-lds-gfx90a-YYYYMMDD
+```
+
+The passing receipt is `diagnostic_only`. A `topology_matches_cdna3` result says
+the CDNA3 swizzle constants are a plausible authoring prior; it does not establish
+their correctness or performance in a llama.cpp kernel. Controllers consume the
+receipt only through `hipkittens_lds.topology_context_item(path,
+expected_sha256=...)`, which preserves the evidence hash and exposes no verdict or
+ranking authority.
 
 ### AK6 — the operator surface
 

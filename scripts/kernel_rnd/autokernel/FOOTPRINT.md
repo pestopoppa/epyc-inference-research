@@ -31,8 +31,8 @@ a module it never looked at.
 | | non-test lines |
 |---|---:|
 | **ON THE CAMPAIGN PATH** | **63,758** |
-| **DEFERRED** (provably unreachable) | **5,467** |
-| **TOTAL** | **69,225** |
+| **DEFERRED** (provably unreachable) | **5,890** |
+| **TOTAL** | **69,648** |
 
 **There is no deferred half.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -131,6 +131,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `prior_art.py` | 597 | no | deterministic proposal-input compiler; it classifies findings before a proposal exists and has no place in the mutation/build process |
 | `profile_report.py` | 542 | no | RVP-1–7 deterministic offline C4 report; it consumes completed paired traces and has no mutation, build, profiler-launch or ranking authority |
 | `profile_context.py` | 287 | no | C4 hash-bound discovery/evaluator projection; it exposes diagnostic context to authoring without gaining verdict or ranking authority |
+| `hipkittens_lds.py` | 423 | no | INF-03 deterministic offline gfx90a LDS topology reducer; it consumes completed counter captures and gives authoring diagnostic context without profiler-launch or ranking authority |
 | `substrate.py` | 340 | no | validated planning facts; it reads checked-in measured/datasheet receipts before proposal construction and never joins the mutation/build path |
 | `lanes.py` | 314 | no | screening declarations and rank-transfer calibration; without measured calibration campaign #1 stays on the full verified path |
 | `artifact_diff.py` | 200 | yes | AK-TR-6 must veto an unconfirmed GPU claim before the behavioral T0 provider can launch |
