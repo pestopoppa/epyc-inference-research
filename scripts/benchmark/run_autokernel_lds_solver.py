@@ -17,6 +17,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from scripts.benchmark.autokernel_claimed_sampling import (
+    error_payload,
+    stop_sampler_and_release,
+)
 from scripts.kernel_rnd.autokernel import hipkittens_lds as lds
 from scripts.kernel_rnd.autokernel import storage
 from scripts.kernel_rnd.autokernel.execution import device_sampler
@@ -274,9 +278,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     except BaseException as exc:
         captured_error = exc
     finally:
-        if sampler is not None:
-            sampling = sampler.stop()
-        released = claim.release().to_dict()
+        sampling, released_receipt, teardown_errors = stop_sampler_and_release(
+            sampler=sampler, claim=claim)
+        released = released_receipt.to_dict() if released_receipt is not None else None
+    if teardown_errors and captured_error is None:
+        captured_error = teardown_errors[0]
     if payload is None:
         payload = {
             "schema": lds.SCHEMA, "status": "failed",
@@ -291,6 +297,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     if sampling is not None:
         payload["device_sampling"] = sampling.to_dict()
     payload["device_claim"]["released"] = released
+    payload["teardown_errors"] = error_payload(teardown_errors)
     payload["artifacts"] = inventory(output_dir)
     write_json_atomic(output_dir / "receipt.json", payload)
     if captured_error is not None:
