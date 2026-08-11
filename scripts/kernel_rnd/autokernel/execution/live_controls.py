@@ -79,6 +79,14 @@ CONTROL_PROMPT_BY_LABEL = {
     "negative_committed_cell": PROMPT_TOKENS,
     "negative_wrong_cell": WRONG_PROMPT_TOKENS,
 }
+REQUIRED_HARDENING_RECEIPTS = (
+    b"autokernel_hybrid_ab_complete",
+    b"autokernel_thread_set_stable",
+    b"autokernel_escape_checks_complete",
+    b"autokernel_unsynchronized_samples_ns",
+    b"autokernel_thread_set_hashes",
+    b"autokernel_device_sync_mode",
+)
 
 
 def _utc_now() -> str:
@@ -161,6 +169,30 @@ def _linkage(binary: Path, library_path: Path) -> tuple[str, str]:
 
 def _check_payload(check: schemas.Check) -> dict:
     return {"outcome": check.outcome, "reasons": list(check.reasons)}
+
+
+def _instrument_receipt_capability(binary: Path) -> schemas.Check:
+    """Prove the selected binary bundle can emit every binding T1 receipt."""
+    payloads = [binary]
+    payloads.extend(sorted(binary.parent.glob("libllama-bench-impl.so*")))
+    observed = set()
+    for payload in payloads:
+        try:
+            content = payload.read_bytes()
+        except OSError:
+            continue
+        observed.update(key for key in REQUIRED_HARDENING_RECEIPTS if key in content)
+    missing = [key.decode("ascii") for key in REQUIRED_HARDENING_RECEIPTS
+               if key not in observed]
+    if missing:
+        return schemas.Check(
+            schemas.FAIL,
+            ("measurement instrument cannot emit required hardening receipts: "
+             + ", ".join(missing),))
+    return schemas.Check(
+        schemas.PASS,
+        ("measurement instrument contains every required hybrid-sync, thread-set, "
+         "escape-check, and device-sync receipt key",))
 
 
 def _write_declaration(output_root: Path, *, instrument_sha: str, copy_sha: str,
@@ -251,6 +283,8 @@ def _write_preflight(output_root: Path, *, instrument_sha: str, copy_sha: str) -
         "binary_copy": _check_payload(schemas.Check(
             schemas.PASS if instrument_sha == copy_sha else schemas.FAIL,
             (f"instrument and evidence-copy SHA-256 are {instrument_sha}",))),
+        "instrument_receipt_capability": _check_payload(
+            _instrument_receipt_capability(INSTRUMENT_BINARY)),
         "model_present": _check_payload(schemas.Check(
             schemas.PASS if MODEL.is_file() else schemas.FAIL,
             (f"model path is {MODEL}",))),
