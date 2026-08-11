@@ -1,0 +1,45 @@
+warning: no usable GPU found, --gpu-layers option will be ignored
+warning: one possible reason is that llama.cpp was compiled without GPU support
+warning: consult docs/build.md for compilation instructions
+warning: no usable GPU found, --gpu-layers-draft option will be ignored
+warning: one possible reason is that llama.cpp was compiled without GPU support
+warning: consult docs/build.md for compilation instructions
+0.00.001.409 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.001.707 W srv  llama_server: -----------------
+0.00.001.708 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.001.708 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.001.708 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.001.708 W srv  llama_server: -----------------
+0.00.002.901 I srv    load_model: loading model '/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf'
+0.00.334.778 E llama_init_from_model: failed to initialize the context: Gemma4Assistant requires ctx_other to be set (this warning is normal during memory fitting)
+0.00.416.906 W srv    load_model: [spec] failed to measure draft model memory: failed to create llama_context from model
+0.01.093.528 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.01.093.772 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.01.105.846 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list
+0.03.109.266 W llama_context: n_ctx is not divisible by n_seq_max - rounding down to 13312
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=12 activation=99 ne00=2816)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 activation=99 ne00=2816)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 activation=99 n_as=128)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=6 activation=99 n_as=128)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=6 activation=99 ne00=2112)
+0.03.543.277 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.03.543.537 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.03.555.824 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list
+0.03.621.300 W llama_context: n_ctx is not divisible by n_seq_max - rounding down to 13312
+0.03.621.479 W llama_kv_cache: layer   3: sharing with layer 29. k = 0x7e919245f040, v = 0x7e919322f040
+0.03.621.537 W llama_kv_cache: layer   0: sharing with layer 28. k = 0x7e9189c5e040, v = 0x7e918a91e040
+0.03.621.539 W llama_kv_cache: layer   1: sharing with layer 28. k = 0x7e9189c5e040, v = 0x7e918a91e040
+0.03.621.540 W llama_kv_cache: layer   2: sharing with layer 28. k = 0x7e9189c5e040, v = 0x7e918a91e040
+0.03.718.669 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 3328, kv_unified = 'false'
+0.03.737.613 I srv  llama_server: model loaded
+0.03.737.620 I srv  llama_server: listening on http://127.0.0.1:19706
+0.04.282.680 I slot get_availabl: id  3 | task -1 | selected slot by LRU, t_last = -1
+0.04.282.739 I slot launch_slot_: id  3 | task 0 | processing task, is_child = 0
+0.09.374.914 I slot print_timing: id  3 | task 0 | n_decoded =    106, tg =  34.38 t/s, tg_3s =  34.38 t/s
+0.10.047.199 I slot print_timing: id  3 | task 0 | prompt eval time =    2008.54 ms /   966 tokens (    2.08 ms per token,   480.95 tokens per second)
+0.10.047.204 I slot print_timing: id  3 | task 0 |        eval time =    3755.89 ms /   128 tokens (   29.34 ms per token,    34.08 tokens per second)
+0.10.047.205 I slot print_timing: id  3 | task 0 |       total time =    5764.42 ms /  1094 tokens
+0.10.047.213 I slot print_timing: id  3 | task 0 |    graphs reused =         41
+0.10.047.217 I slot print_timing: id  3 | task 0 | draft acceptance = 1.00000 (   84 accepted /    84 generated), mean len =  3.00
+0.10.047.327 I slot      release: id  3 | task 0 | stop processing: n_tokens = 1093, truncated = 0
+0.11.641.682 I srv    operator(): operator(): cleaning up before exit...

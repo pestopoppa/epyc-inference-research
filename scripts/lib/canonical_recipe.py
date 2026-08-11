@@ -316,15 +316,12 @@ EXPECTED_LIBS_V6_IQK: list[str] = [
     "/mnt/raid0/llm/llama.cpp/build/bin/libggml-cpu.so.0.15.2",
 ]
 
-# Strategy-B fork for DeepSeek-V4 (antirez/llama.cpp-deepseek-v4-flash). Cloned
-# 2026-05-28 into /mnt/raid0/llm/llama.cpp-deepseek-v4 and built with the same
-# canonical hardening as ik_llama (-Wl,--disable-new-dtags so DT_RPATH wins
-# over LD_LIBRARY_PATH; clang-20 + LLVM-20 libomp + znver5 native).
-#
-# This binary is used ONLY for DeepSeek-V4 — it does NOT support gemma4 / Qwen3.6
-# / other production-stack models. Bench numbers from this fork are comparable
-# to other mainstream-llama.cpp-based forks (e.g. v5_clean) but NOT to ik_llama
-# (different codepaths). See handoff deepseek-v4-flash-cpu-port.md Strategy D.
+# Retired Strategy-B fork for the deleted antirez DeepSeek-V4 artifact.  Kept as
+# a tombstone so old scripts fail with a precise migration message instead of
+# silently selecting a different kernel.  Current DeepSeek-V4/DeepSeek-V4-Flash
+# measurements use mainline llama.cpp: default production discovery, or the
+# explicit --binary/--source-root/--library-path identity tuple for candidate
+# arms.
 V4_FORK_BENCH: str = "/mnt/raid0/llm/llama.cpp-deepseek-v4/build/bin/llama-bench"
 EXPECTED_LIBS_V4_FORK: list[str] = [
     "/mnt/raid0/llm/llama.cpp-deepseek-v4/build/bin/libllama.so",
@@ -550,22 +547,18 @@ def assert_explicit_bench_identity(
 
 
 def discover_v4_fork_bench() -> tuple[str, list[str]]:
-    """Return (V4_FORK_BENCH, EXPECTED_LIBS_V4_FORK) if available and correctly
-    linked. Used ONLY for DeepSeek-V4 — this binary doesn't support other archs.
+    """Refuse the retired antirez DeepSeek-V4 fork path.
 
-    Raises CanonicalRecipeViolation if the fork isn't built or has the same
-    RUNPATH-vs-LD_LIBRARY_PATH issue that ik_llama had pre-2026-05-28.
+    DeepSeek-V4 is supported by the production mainline kernel.  Candidate A/B
+    runs must use an explicit identity tuple so linkage cannot fall through to
+    production libraries.
     """
-    if not os.path.isfile(V4_FORK_BENCH):
-        raise FileNotFoundError(
-            f"DeepSeek-V4 fork bench not found at {V4_FORK_BENCH}.\n"
-            f"Build it first: cd /mnt/raid0/llm/llama.cpp-deepseek-v4/build && "
-            f"cmake .. -DCMAKE_EXE_LINKER_FLAGS='-Wl,--disable-new-dtags' "
-            f"-DCMAKE_SHARED_LINKER_FLAGS='-Wl,--disable-new-dtags' && "
-            f"cmake --build . -j 32"
-        )
-    assert_binary_resolves_correctly(V4_FORK_BENCH, EXPECTED_LIBS_V4_FORK)
-    return V4_FORK_BENCH, EXPECTED_LIBS_V4_FORK
+    raise CanonicalRecipeViolation(
+        "--v4-fork is retired: the antirez DeepSeek-V4 tree and model artifact "
+        "were deleted after mainline llama.cpp gained DeepSeek-V4 support. "
+        "Use the default production binary, or pass the complete "
+        "--binary/--source-root/--library-path tuple for a candidate arm."
+    )
 
 
 def discover_canonical_bench_binary(
@@ -589,9 +582,9 @@ def discover_canonical_bench_binary(
     ONLY as a historical fallback; reproducibility now requires the v6 binary +
     GGML_IQK=1 (threaded in via build_canonical_env), not ik_llama.
 
-    NOTE: this function does NOT consider V4_FORK_BENCH; that binary supports
-    ONLY DeepSeek-V4 and is selected explicitly via discover_v4_fork_bench()
-    or by passing the v4-fork flag through CLI / build_canonical_bench_command.
+    NOTE: the retired V4_FORK_BENCH is deliberately excluded. DeepSeek-V4 now
+    uses this mainline production discovery path, or an explicit candidate
+    identity tuple.
     """
     candidates: list[tuple[str, list[str]]] = []
     if prefer_ik_llama:
@@ -846,9 +839,8 @@ def build_canonical_bench_command(
         prefer_ik_llama: legacy two-kernel preference (ik_llama first). Retained
             only as a fallback knob; ik_llama is deprecated post-cutover.
             Ignored when use_v4_fork=True.
-        use_v4_fork: select the DeepSeek-V4 fork binary (V4_FORK_BENCH). The
-            V4 fork is the ONLY way to run V4 GGUFs; it doesn't support other
-            archs. See handoff deepseek-v4-flash-cpu-port.md Strategy D.
+        use_v4_fork: retired compatibility switch. Always fails with migration
+            guidance; DeepSeek-V4 now uses mainline llama.cpp.
         binary: explicit llama-bench binary for a candidate A/B arm. Must be
             supplied together with source_root and library_path.
         source_root: Git worktree root owning an explicit binary.
@@ -1066,7 +1058,7 @@ def _main() -> int:
     pv.add_argument(
         "--v4-fork",
         action="store_true",
-        help="Validate the DeepSeek-V4 fork binary instead of v6-iqk/ik_llama/v5_clean.",
+        help="Retired compatibility flag; fails with mainline migration guidance.",
     )
     pv.add_argument(
         "--with-perf",
@@ -1121,8 +1113,7 @@ def _main() -> int:
     pe.add_argument(
         "--v4-fork",
         action="store_true",
-        help="Select the DeepSeek-V4 fork binary (V4_FORK_BENCH). Only valid for "
-        "V4 GGUFs; this binary doesn't support other archs.",
+        help="Retired compatibility flag; fails with mainline migration guidance.",
     )
     pe.add_argument(
         "--no-validate-host",

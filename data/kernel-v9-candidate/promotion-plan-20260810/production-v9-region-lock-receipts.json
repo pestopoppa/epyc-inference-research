@@ -1,0 +1,41 @@
+{
+  "schema": "epyc.kernel_promotion_region_lock_receipts.v1",
+  "created_at": "2026-08-11T01:15:25Z",
+  "lock_implementation": "/workspace/repos/epyc-orchestrator/scripts/region-lock",
+  "lock_scope": {
+    "regions": [
+      "q0",
+      "q1",
+      "q2",
+      "q3"
+    ],
+    "role": "bench",
+    "cross_role_preflight": true
+  },
+  "observation_contract": "The wrapper reported all four regions acquired before launching each child; region-lock status was inspected while each child was live and showed all four regions held under the matching tag; status after each child showed all four regions free.",
+  "runs": [
+    {
+      "tag": "v9-production-gpu-cert-locked",
+      "child_exit_status": 0,
+      "summary": "data/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run-locked/summary.json",
+      "summary_sha256": "14cb55f5525c2231b44ee4a8caf1d67976f650393ff8843ebb68d4397a479bd6",
+      "summary_status": "ok"
+    },
+    {
+      "tag": "v9-production-dflash-cert-locked",
+      "child_exit_status": 2,
+      "summary": "data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/summary.json",
+      "summary_sha256": "136dc83488b7a00d903da460bd59943442126ef2dc2ab45e40672cecb1dd4fbb",
+      "summary_status": "failed",
+      "expected_gate_result": "lane ineligible because pooled acceptance is below P-DFLASH-LINEUP-1; this does not block the kernel capability or v9 promotion"
+    },
+    {
+      "tag": "v9-production-dspark-cert-locked",
+      "child_exit_status": 0,
+      "summary": "data/kernel-v9-candidate/promotion-plan-20260810/production-v9-dspark-cert-run-locked/summary.json",
+      "summary_sha256": "ba0e52e323782c8c6f6a3edf32738d9b17c25f61866532ce99e175782bb2fe74",
+      "summary_status": "ok"
+    }
+  ],
+  "final_lock_state": "all regions free"
+}

@@ -1,0 +1,1694 @@
+{
+  "cleanup_failures": [],
+  "cleanup_process_blockers": [],
+  "created_at": "2026-08-10T23:52:41.314359+00:00",
+  "dspark_parity": null,
+  "operator_waivers": {
+    "uptime": "operator_20260810_current_boot_pass_stands_reboot_only_on_fail_or_gray"
+  },
+  "pgpu1_protocol_fields": {
+    "certification_note": "Ratified P-GPU-1 is production-named-kernel only: experimental, candidate, or fork GPU rows remain observation-grade unless MEASUREMENT explicitly permits pre-promotion evidence or retro-certification.",
+    "cpu_interference_policy": "CPU stack quiet required; runner aborts on AutoPilot or llama workload process blockers unless --allow-dirty-host is explicit",
+    "operator_execution_output_dir": "${K35_EXECUTION_BASE}/${K35_RUN_ID}",
+    "operator_invocation": "operator_run.sh records the exact --execute runner invocation for the prepared plan",
+    "post_cleanup_vram_sample": "collected as memory_samples phase=after_cleanup after server termination",
+    "pre_launch_gpu_sample": "collected as memory_samples phase=before_launch before server start",
+    "request_artifacts": "each executed cell writes prompt.txt, prompt_sha256.txt, request.json, response.json, and result.json",
+    "rocm_hardware_state": "collect_rocm_snapshot captures pid/memory/utilization plus clocks, power, and temperature",
+    "warmup_discard_policy": "no warm-up requests; no discarded reps; fresh server per rep; graph recapture, if any, is included in the measured row"
+  },
+  "results": [
+    {
+      "cleanup": {
+        "completed": true,
+        "dead": true,
+        "killed": false,
+        "pid": 3744411,
+        "ps_after": {
+          "argv": [
+            "ps",
+            "-p",
+            "3744411",
+            "-o",
+            "pid=,comm=,args="
+          ],
+          "ok": false,
+          "returncode": 1,
+          "stderr": "",
+          "stdout": ""
+        },
+        "returncode": 0,
+        "terminated": true
+      },
+      "completion_tokens": 128,
+      "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+      "decode_tps": 53.35936825842942,
+      "draft_n": 125,
+      "draft_n_accepted": 95,
+      "effective_speculative_n_max": null,
+      "elapsed_s": 3.658493536990136,
+      "max_tokens": 128,
+      "memory_samples": [
+        {
+          "phase": "before_launch",
+          "process_blockers": [],
+          "rocm": {
+            "argv": [
+              "rocm-smi",
+              "--showpidgpus",
+              "--showmemuse",
+              "--showuse"
+            ],
+            "captured_at": "2026-08-10T23:52:07.346358+00:00",
+            "ok": true,
+            "returncode": 0,
+            "schema": "epyc.rocm_snapshot.v2",
+            "snapshots": {
+              "clocks": {
+                "argv": [
+                  "rocm-smi",
+                  "--showclocks"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=============================== Current clock frequencies ================================\nGPU[0]\t\t: fclk clock level: 0: (400Mhz)\nGPU[0]\t\t: mclk clock level: 3: (1600Mhz)\nGPU[0]\t\t: sclk clock level: 1: (800Mhz)\nGPU[0]\t\t: socclk clock level: 3: (1090Mhz)\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "power": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpower"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== Power Consumption ====================================\nGPU[0]\t\t: Average Graphics Package Power (W): 42.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "temperature": {
+                "argv": [
+                  "rocm-smi",
+                  "--showtemp"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n====================================== Temperature =======================================\nGPU[0]\t\t: Temperature (Sensor edge) (C): 36.0\nGPU[0]\t\t: Temperature (Sensor junction) (C): 39.0\nGPU[0]\t\t: Temperature (Sensor memory) (C): 42.0\nGPU[0]\t\t: Temperature (Sensor HBM 0) (C): 37.0\nGPU[0]\t\t: Temperature (Sensor HBM 1) (C): 39.0\nGPU[0]\t\t: Temperature (Sensor HBM 2) (C): 37.0\nGPU[0]\t\t: Temperature (Sensor HBM 3) (C): 42.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "utilization_memory_pid": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpidgpus",
+                  "--showmemuse",
+                  "--showuse"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2883899950\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 0\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780125387\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              }
+            },
+            "stderr": "",
+            "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2883899950\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 0\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780125387\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+          }
+        },
+        {
+          "phase": "after_health",
+          "process": {
+            "captured_at": "2026-08-10T23:52:15.436631+00:00",
+            "pid": 3744411,
+            "ps": {
+              "argv": [
+                "ps",
+                "-p",
+                "3744411",
+                "-o",
+                "pid=,comm=,rss=,vsz=,psr=,args="
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "3744411 llama-server    2337144 46329944 77 /mnt/raid0/llm/llama.cpp-experimental/build-v9-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf --host 127.0.0.1 --port 19900 -np 2 -c 6400 -t 24 --metrics --slots -ub 8192 --jinja --reasoning off --device ROCm0 -ngl 999 -ctk q8_0 -ctv q8_0 -fa on --spec-type draft-mtp --no-mmap --spec-draft-n-max 4 --slot-save-path /mnt/raid0/llm/cache/kv_slots/architect_general\n"
+            },
+            "smaps_rollup": {
+              "error": null,
+              "fields": {
+                "AnonHugePages_kib": 1675264,
+                "Anonymous_kib": 2153544,
+                "Private_Clean_kib": 442268,
+                "Private_Dirty_kib": 1888484,
+                "Pss_Dirty_kib": 1888484,
+                "Pss_kib": 2331539,
+                "Rss_kib": 2337144,
+                "Shared_Clean_kib": 6392,
+                "Shared_Dirty_kib": 0,
+                "Swap_kib": 0
+              },
+              "ok": true
+            },
+            "status": {
+              "error": null,
+              "fields": {
+                "Cpus_allowed_list": "0-191",
+                "Mems_allowed_list": "0-3",
+                "Name": "llama-server",
+                "RssAnon": "2153544 kB",
+                "RssFile": "183600 kB",
+                "RssShmem": "0 kB",
+                "State": "S (sleeping)",
+                "Threads": "196",
+                "VmHWM": "2353600 kB",
+                "VmPeak": "47874168 kB",
+                "VmRSS": "2337144 kB",
+                "VmSize": "46329944 kB",
+                "VmSwap": "0 kB"
+              },
+              "ok": true
+            }
+          },
+          "rocm": {
+            "argv": [
+              "rocm-smi",
+              "--showpidgpus",
+              "--showmemuse",
+              "--showuse"
+            ],
+            "captured_at": "2026-08-10T23:52:15.703541+00:00",
+            "ok": true,
+            "returncode": 0,
+            "schema": "epyc.rocm_snapshot.v2",
+            "snapshots": {
+              "clocks": {
+                "argv": [
+                  "rocm-smi",
+                  "--showclocks"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=============================== Current clock frequencies ================================\nGPU[0]\t\t: fclk clock level: 0: (400Mhz)\nGPU[0]\t\t: mclk clock level: 3: (1600Mhz)\nGPU[0]\t\t: sclk clock level: 1: (800Mhz)\nGPU[0]\t\t: socclk clock level: 3: (1090Mhz)\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "power": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpower"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== Power Consumption ====================================\nGPU[0]\t\t: Average Graphics Package Power (W): 60.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "temperature": {
+                "argv": [
+                  "rocm-smi",
+                  "--showtemp"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n====================================== Temperature =======================================\nGPU[0]\t\t: Temperature (Sensor edge) (C): 37.0\nGPU[0]\t\t: Temperature (Sensor junction) (C): 40.0\nGPU[0]\t\t: Temperature (Sensor memory) (C): 43.0\nGPU[0]\t\t: Temperature (Sensor HBM 0) (C): 38.0\nGPU[0]\t\t: Temperature (Sensor HBM 1) (C): 40.0\nGPU[0]\t\t: Temperature (Sensor HBM 2) (C): 37.0\nGPU[0]\t\t: Temperature (Sensor HBM 3) (C): 43.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "utilization_memory_pid": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpidgpus",
+                  "--showmemuse",
+                  "--showuse"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2884067997\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 45\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780129766\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 3744411 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              }
+            },
+            "stderr": "",
+            "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2884067997\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 45\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780129766\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 3744411 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+          }
+        },
+        {
+          "phase": "after_request",
+          "process": {
+            "captured_at": "2026-08-10T23:52:19.368472+00:00",
+            "pid": 3744411,
+            "ps": {
+              "argv": [
+                "ps",
+                "-p",
+                "3744411",
+                "-o",
+                "pid=,comm=,rss=,vsz=,psr=,args="
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "3744411 llama-server    2622012 47501248 77 /mnt/raid0/llm/llama.cpp-experimental/build-v9-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf --host 127.0.0.1 --port 19900 -np 2 -c 6400 -t 24 --metrics --slots -ub 8192 --jinja --reasoning off --device ROCm0 -ngl 999 -ctk q8_0 -ctv q8_0 -fa on --spec-type draft-mtp --no-mmap --spec-draft-n-max 4 --slot-save-path /mnt/raid0/llm/cache/kv_slots/architect_general\n"
+            },
+            "smaps_rollup": {
+              "error": null,
+              "fields": {
+                "AnonHugePages_kib": 1943552,
+                "Anonymous_kib": 2435528,
+                "Private_Clean_kib": 445152,
+                "Private_Dirty_kib": 2170468,
+                "Pss_Dirty_kib": 2170468,
+                "Pss_kib": 2616407,
+                "Rss_kib": 2622012,
+                "Shared_Clean_kib": 6392,
+                "Shared_Dirty_kib": 0,
+                "Swap_kib": 0
+              },
+              "ok": true
+            },
+            "status": {
+              "error": null,
+              "fields": {
+                "Cpus_allowed_list": "0-191",
+                "Mems_allowed_list": "0-3",
+                "Name": "llama-server",
+                "RssAnon": "2435528 kB",
+                "RssFile": "186484 kB",
+                "RssShmem": "0 kB",
+                "State": "S (sleeping)",
+                "Threads": "196",
+                "VmHWM": "2622012 kB",
+                "VmPeak": "47874168 kB",
+                "VmRSS": "2622012 kB",
+                "VmSize": "47501248 kB",
+                "VmSwap": "0 kB"
+              },
+              "ok": true
+            }
+          },
+          "rocm": {
+            "argv": [
+              "rocm-smi",
+              "--showpidgpus",
+              "--showmemuse",
+              "--showuse"
+            ],
+            "captured_at": "2026-08-10T23:52:19.643058+00:00",
+            "ok": true,
+            "returncode": 0,
+            "schema": "epyc.rocm_snapshot.v2",
+            "snapshots": {
+              "clocks": {
+                "argv": [
+                  "rocm-smi",
+                  "--showclocks"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=============================== Current clock frequencies ================================\nGPU[0]\t\t: fclk clock level: 0: (400Mhz)\nGPU[0]\t\t: mclk clock level: 3: (1600Mhz)\nGPU[0]\t\t: sclk clock level: 1: (800Mhz)\nGPU[0]\t\t: socclk clock level: 3: (1090Mhz)\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "power": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpower"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== Power Consumption ====================================\nGPU[0]\t\t: Average Graphics Package Power (W): 189.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "temperature": {
+                "argv": [
+                  "rocm-smi",
+                  "--showtemp"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n====================================== Temperature =======================================\nGPU[0]\t\t: Temperature (Sensor edge) (C): 43.0\nGPU[0]\t\t: Temperature (Sensor junction) (C): 46.0\nGPU[0]\t\t: Temperature (Sensor memory) (C): 48.0\nGPU[0]\t\t: Temperature (Sensor HBM 0) (C): 43.0\nGPU[0]\t\t: Temperature (Sensor HBM 1) (C): 44.0\nGPU[0]\t\t: Temperature (Sensor HBM 2) (C): 42.0\nGPU[0]\t\t: Temperature (Sensor HBM 3) (C): 48.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "utilization_memory_pid": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpidgpus",
+                  "--showmemuse",
+                  "--showuse"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2884422141\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 46\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780244284\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 3744411 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              }
+            },
+            "stderr": "",
+            "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2884422141\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 46\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780244284\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 3744411 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+          }
+        },
+        {
+          "phase": "before_cleanup",
+          "process": {
+            "captured_at": "2026-08-10T23:52:19.649509+00:00",
+            "pid": 3744411,
+            "ps": {
+              "argv": [
+                "ps",
+                "-p",
+                "3744411",
+                "-o",
+                "pid=,comm=,rss=,vsz=,psr=,args="
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "3744411 llama-server    2622012 47501248 77 /mnt/raid0/llm/llama.cpp-experimental/build-v9-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf --host 127.0.0.1 --port 19900 -np 2 -c 6400 -t 24 --metrics --slots -ub 8192 --jinja --reasoning off --device ROCm0 -ngl 999 -ctk q8_0 -ctv q8_0 -fa on --spec-type draft-mtp --no-mmap --spec-draft-n-max 4 --slot-save-path /mnt/raid0/llm/cache/kv_slots/architect_general\n"
+            },
+            "smaps_rollup": {
+              "error": null,
+              "fields": {
+                "AnonHugePages_kib": 1943552,
+                "Anonymous_kib": 2435528,
+                "Private_Clean_kib": 445152,
+                "Private_Dirty_kib": 2170468,
+                "Pss_Dirty_kib": 2170468,
+                "Pss_kib": 2616407,
+                "Rss_kib": 2622012,
+                "Shared_Clean_kib": 6392,
+                "Shared_Dirty_kib": 0,
+                "Swap_kib": 0
+              },
+              "ok": true
+            },
+            "status": {
+              "error": null,
+              "fields": {
+                "Cpus_allowed_list": "0-191",
+                "Mems_allowed_list": "0-3",
+                "Name": "llama-server",
+                "RssAnon": "2435528 kB",
+                "RssFile": "186484 kB",
+                "RssShmem": "0 kB",
+                "State": "S (sleeping)",
+                "Threads": "196",
+                "VmHWM": "2622012 kB",
+                "VmPeak": "47874168 kB",
+                "VmRSS": "2622012 kB",
+                "VmSize": "47501248 kB",
+                "VmSwap": "0 kB"
+              },
+              "ok": true
+            }
+          },
+          "rocm": {
+            "argv": [
+              "rocm-smi",
+              "--showpidgpus",
+              "--showmemuse",
+              "--showuse"
+            ],
+            "captured_at": "2026-08-10T23:52:19.915390+00:00",
+            "ok": true,
+            "returncode": 0,
+            "schema": "epyc.rocm_snapshot.v2",
+            "snapshots": {
+              "clocks": {
+                "argv": [
+                  "rocm-smi",
+                  "--showclocks"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=============================== Current clock frequencies ================================\nGPU[0]\t\t: fclk clock level: 0: (400Mhz)\nGPU[0]\t\t: mclk clock level: 3: (1600Mhz)\nGPU[0]\t\t: sclk clock level: 1: (800Mhz)\nGPU[0]\t\t: socclk clock level: 3: (1090Mhz)\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "power": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpower"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== Power Consumption ====================================\nGPU[0]\t\t: Average Graphics Package Power (W): 166.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "temperature": {
+                "argv": [
+                  "rocm-smi",
+                  "--showtemp"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n====================================== Temperature =======================================\nGPU[0]\t\t: Temperature (Sensor edge) (C): 41.0\nGPU[0]\t\t: Temperature (Sensor junction) (C): 45.0\nGPU[0]\t\t: Temperature (Sensor memory) (C): 47.0\nGPU[0]\t\t: Temperature (Sensor HBM 0) (C): 43.0\nGPU[0]\t\t: Temperature (Sensor HBM 1) (C): 44.0\nGPU[0]\t\t: Temperature (Sensor HBM 2) (C): 42.0\nGPU[0]\t\t: Temperature (Sensor HBM 3) (C): 47.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "utilization_memory_pid": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpidgpus",
+                  "--showmemuse",
+                  "--showuse"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2884422141\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 46\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780244284\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 3744411 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              }
+            },
+            "stderr": "",
+            "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2884422141\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 46\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780244284\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 3744411 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+          }
+        },
+        {
+          "phase": "after_cleanup",
+          "pid": 3744411,
+          "ps": {
+            "argv": [
+              "ps",
+              "-p",
+              "3744411",
+              "-o",
+              "pid=,comm=,args="
+            ],
+            "ok": false,
+            "returncode": 1,
+            "stderr": "",
+            "stdout": ""
+          },
+          "rocm": {
+            "argv": [
+              "rocm-smi",
+              "--showpidgpus",
+              "--showmemuse",
+              "--showuse"
+            ],
+            "captured_at": "2026-08-10T23:52:21.358845+00:00",
+            "ok": true,
+            "returncode": 0,
+            "schema": "epyc.rocm_snapshot.v2",
+            "snapshots": {
+              "clocks": {
+                "argv": [
+                  "rocm-smi",
+                  "--showclocks"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=============================== Current clock frequencies ================================\nGPU[0]\t\t: fclk clock level: 0: (400Mhz)\nGPU[0]\t\t: mclk clock level: 3: (1600Mhz)\nGPU[0]\t\t: sclk clock level: 1: (800Mhz)\nGPU[0]\t\t: socclk clock level: 3: (1090Mhz)\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "power": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpower"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== Power Consumption ====================================\nGPU[0]\t\t: Average Graphics Package Power (W): 95.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "temperature": {
+                "argv": [
+                  "rocm-smi",
+                  "--showtemp"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n====================================== Temperature =======================================\nGPU[0]\t\t: Temperature (Sensor edge) (C): 41.0\nGPU[0]\t\t: Temperature (Sensor junction) (C): 45.0\nGPU[0]\t\t: Temperature (Sensor memory) (C): 46.0\nGPU[0]\t\t: Temperature (Sensor HBM 0) (C): 42.0\nGPU[0]\t\t: Temperature (Sensor HBM 1) (C): 43.0\nGPU[0]\t\t: Temperature (Sensor HBM 2) (C): 41.0\nGPU[0]\t\t: Temperature (Sensor HBM 3) (C): 46.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "utilization_memory_pid": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpidgpus",
+                  "--showmemuse",
+                  "--showuse"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2884422626\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 0\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780246415\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              }
+            },
+            "stderr": "",
+            "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2884422626\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 0\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780246415\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+          }
+        }
+      ],
+      "min_completion_tokens": 128,
+      "nominal_context": 2048,
+      "passed_min_completion": true,
+      "prompt_path": "/workspace/worktrees/v9-promotion-research/data/kernel-v9-candidate/promotion-plan-20260810/v9-gpu-smoke-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/prompt.txt",
+      "prompt_sha256_path": "/workspace/worktrees/v9-promotion-research/data/kernel-v9-candidate/promotion-plan-20260810/v9-gpu-smoke-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/prompt_sha256.txt",
+      "prompt_tokens": 965,
+      "prompt_tps": 773.6370159256988,
+      "rep": 1,
+      "request_path": "/workspace/worktrees/v9-promotion-research/data/kernel-v9-candidate/promotion-plan-20260810/v9-gpu-smoke-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/request.json",
+      "response_path": "/workspace/worktrees/v9-promotion-research/data/kernel-v9-candidate/promotion-plan-20260810/v9-gpu-smoke-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/response.json",
+      "role": "architect_general",
+      "scenario": "v9_architect_general_gpu_native_mtp",
+      "server_log": "/workspace/worktrees/v9-promotion-research/data/kernel-v9-candidate/promotion-plan-20260810/v9-gpu-smoke-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/server.stderr",
+      "started_at_monotonic": 1073432.085849006,
+      "status": "ok",
+      "token_ids": null
+    },
+    {
+      "cleanup": {
+        "completed": true,
+        "dead": true,
+        "killed": false,
+        "pid": 3745153,
+        "ps_after": {
+          "argv": [
+            "ps",
+            "-p",
+            "3745153",
+            "-o",
+            "pid=,comm=,args="
+          ],
+          "ok": false,
+          "returncode": 1,
+          "stderr": "",
+          "stdout": ""
+        },
+        "returncode": 0,
+        "terminated": true
+      },
+      "completion_tokens": 128,
+      "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+      "decode_tps": 30.267775223934244,
+      "draft_n": null,
+      "draft_n_accepted": null,
+      "effective_speculative_n_max": null,
+      "elapsed_s": 5.48984593199566,
+      "max_tokens": 128,
+      "memory_samples": [
+        {
+          "phase": "before_launch",
+          "process_blockers": [],
+          "rocm": {
+            "argv": [
+              "rocm-smi",
+              "--showpidgpus",
+              "--showmemuse",
+              "--showuse"
+            ],
+            "captured_at": "2026-08-10T23:52:21.586765+00:00",
+            "ok": true,
+            "returncode": 0,
+            "schema": "epyc.rocm_snapshot.v2",
+            "snapshots": {
+              "clocks": {
+                "argv": [
+                  "rocm-smi",
+                  "--showclocks"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=============================== Current clock frequencies ================================\nGPU[0]\t\t: fclk clock level: 0: (400Mhz)\nGPU[0]\t\t: mclk clock level: 3: (1600Mhz)\nGPU[0]\t\t: sclk clock level: 1: (800Mhz)\nGPU[0]\t\t: socclk clock level: 3: (1090Mhz)\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "power": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpower"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== Power Consumption ====================================\nGPU[0]\t\t: Average Graphics Package Power (W): 88.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "temperature": {
+                "argv": [
+                  "rocm-smi",
+                  "--showtemp"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n====================================== Temperature =======================================\nGPU[0]\t\t: Temperature (Sensor edge) (C): 41.0\nGPU[0]\t\t: Temperature (Sensor junction) (C): 44.0\nGPU[0]\t\t: Temperature (Sensor memory) (C): 46.0\nGPU[0]\t\t: Temperature (Sensor HBM 0) (C): 42.0\nGPU[0]\t\t: Temperature (Sensor HBM 1) (C): 43.0\nGPU[0]\t\t: Temperature (Sensor HBM 2) (C): 41.0\nGPU[0]\t\t: Temperature (Sensor HBM 3) (C): 46.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "utilization_memory_pid": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpidgpus",
+                  "--showmemuse",
+                  "--showuse"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2884422626\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 0\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780246415\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              }
+            },
+            "stderr": "",
+            "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2884422626\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 0\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780246415\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+          }
+        },
+        {
+          "phase": "after_health",
+          "process": {
+            "captured_at": "2026-08-10T23:52:24.660722+00:00",
+            "pid": 3745153,
+            "ps": {
+              "argv": [
+                "ps",
+                "-p",
+                "3745153",
+                "-o",
+                "pid=,comm=,rss=,vsz=,psr=,args="
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "3745153 llama-server    2339136 46002264 80 /mnt/raid0/llm/llama.cpp-experimental/build-v9-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf --host 127.0.0.1 --port 19901 -np 2 -c 6400 -t 24 --metrics --slots -ub 8192 --jinja --reasoning off --device ROCm0 -ngl 999 -ctk q8_0 -ctv q8_0 -fa on --spec-type draft-mtp --no-mmap --spec-draft-n-max 4 --slot-save-path /mnt/raid0/llm/cache/kv_slots/architect_general\n"
+            },
+            "smaps_rollup": {
+              "error": null,
+              "fields": {
+                "AnonHugePages_kib": 1683456,
+                "Anonymous_kib": 2155464,
+                "Private_Clean_kib": 323260,
+                "Private_Dirty_kib": 2009492,
+                "Pss_Dirty_kib": 2009492,
+                "Pss_kib": 2333537,
+                "Rss_kib": 2339136,
+                "Shared_Clean_kib": 6384,
+                "Shared_Dirty_kib": 0,
+                "Swap_kib": 0
+              },
+              "ok": true
+            },
+            "status": {
+              "error": null,
+              "fields": {
+                "Cpus_allowed_list": "0-191",
+                "Mems_allowed_list": "0-3",
+                "Name": "llama-server",
+                "RssAnon": "2155464 kB",
+                "RssFile": "183672 kB",
+                "RssShmem": "0 kB",
+                "State": "S (sleeping)",
+                "Threads": "196",
+                "VmHWM": "2356516 kB",
+                "VmPeak": "47546488 kB",
+                "VmRSS": "2339136 kB",
+                "VmSize": "46002264 kB",
+                "VmSwap": "0 kB"
+              },
+              "ok": true
+            }
+          },
+          "rocm": {
+            "argv": [
+              "rocm-smi",
+              "--showpidgpus",
+              "--showmemuse",
+              "--showuse"
+            ],
+            "captured_at": "2026-08-10T23:52:25.390010+00:00",
+            "ok": true,
+            "returncode": 0,
+            "schema": "epyc.rocm_snapshot.v2",
+            "snapshots": {
+              "clocks": {
+                "argv": [
+                  "rocm-smi",
+                  "--showclocks"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=============================== Current clock frequencies ================================\nGPU[0]\t\t: fclk clock level: 0: (400Mhz)\nGPU[0]\t\t: mclk clock level: 3: (1600Mhz)\nGPU[0]\t\t: sclk clock level: 1: (800Mhz)\nGPU[0]\t\t: socclk clock level: 3: (1090Mhz)\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "power": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpower"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== Power Consumption ====================================\nGPU[0]\t\t: Average Graphics Package Power (W): 62.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "temperature": {
+                "argv": [
+                  "rocm-smi",
+                  "--showtemp"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n====================================== Temperature =======================================\nGPU[0]\t\t: Temperature (Sensor edge) (C): 41.0\nGPU[0]\t\t: Temperature (Sensor junction) (C): 44.0\nGPU[0]\t\t: Temperature (Sensor memory) (C): 46.0\nGPU[0]\t\t: Temperature (Sensor HBM 0) (C): 41.0\nGPU[0]\t\t: Temperature (Sensor HBM 1) (C): 43.0\nGPU[0]\t\t: Temperature (Sensor HBM 2) (C): 41.0\nGPU[0]\t\t: Temperature (Sensor HBM 3) (C): 46.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "utilization_memory_pid": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpidgpus",
+                  "--showmemuse",
+                  "--showuse"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2884584456\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 45\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780252290\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 3745153 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              }
+            },
+            "stderr": "",
+            "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2884584456\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 45\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780252290\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 3745153 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+          }
+        },
+        {
+          "phase": "after_request",
+          "process": {
+            "captured_at": "2026-08-10T23:52:30.886731+00:00",
+            "pid": 3745153,
+            "ps": {
+              "argv": [
+                "ps",
+                "-p",
+                "3745153",
+                "-o",
+                "pid=,comm=,rss=,vsz=,psr=,args="
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "3745153 llama-server    2620204 47167632 80 /mnt/raid0/llm/llama.cpp-experimental/build-v9-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf --host 127.0.0.1 --port 19901 -np 2 -c 6400 -t 24 --metrics --slots -ub 8192 --jinja --reasoning off --device ROCm0 -ngl 999 -ctk q8_0 -ctv q8_0 -fa on --spec-type draft-mtp --no-mmap --spec-draft-n-max 4 --slot-save-path /mnt/raid0/llm/cache/kv_slots/architect_general\n"
+            },
+            "smaps_rollup": {
+              "error": null,
+              "fields": {
+                "AnonHugePages_kib": 1949696,
+                "Anonymous_kib": 2434044,
+                "Private_Clean_kib": 325748,
+                "Private_Dirty_kib": 2288072,
+                "Pss_Dirty_kib": 2288072,
+                "Pss_kib": 2614597,
+                "Rss_kib": 2620204,
+                "Shared_Clean_kib": 6384,
+                "Shared_Dirty_kib": 0,
+                "Swap_kib": 0
+              },
+              "ok": true
+            },
+            "status": {
+              "error": null,
+              "fields": {
+                "Cpus_allowed_list": "0-191",
+                "Mems_allowed_list": "0-3",
+                "Name": "llama-server",
+                "RssAnon": "2434044 kB",
+                "RssFile": "186160 kB",
+                "RssShmem": "0 kB",
+                "State": "S (sleeping)",
+                "Threads": "196",
+                "VmHWM": "2620204 kB",
+                "VmPeak": "47546488 kB",
+                "VmRSS": "2620204 kB",
+                "VmSize": "47167632 kB",
+                "VmSwap": "0 kB"
+              },
+              "ok": true
+            }
+          },
+          "rocm": {
+            "argv": [
+              "rocm-smi",
+              "--showpidgpus",
+              "--showmemuse",
+              "--showuse"
+            ],
+            "captured_at": "2026-08-10T23:52:31.417449+00:00",
+            "ok": true,
+            "returncode": 0,
+            "schema": "epyc.rocm_snapshot.v2",
+            "snapshots": {
+              "clocks": {
+                "argv": [
+                  "rocm-smi",
+                  "--showclocks"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=============================== Current clock frequencies ================================\nGPU[0]\t\t: fclk clock level: 0: (400Mhz)\nGPU[0]\t\t: mclk clock level: 3: (1600Mhz)\nGPU[0]\t\t: sclk clock level: 1: (800Mhz)\nGPU[0]\t\t: socclk clock level: 3: (1090Mhz)\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "power": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpower"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== Power Consumption ====================================\nGPU[0]\t\t: Average Graphics Package Power (W): 208.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "temperature": {
+                "argv": [
+                  "rocm-smi",
+                  "--showtemp"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n====================================== Temperature =======================================\nGPU[0]\t\t: Temperature (Sensor edge) (C): 46.0\nGPU[0]\t\t: Temperature (Sensor junction) (C): 50.0\nGPU[0]\t\t: Temperature (Sensor memory) (C): 52.0\nGPU[0]\t\t: Temperature (Sensor HBM 0) (C): 48.0\nGPU[0]\t\t: Temperature (Sensor HBM 1) (C): 49.0\nGPU[0]\t\t: Temperature (Sensor HBM 2) (C): 47.0\nGPU[0]\t\t: Temperature (Sensor HBM 3) (C): 52.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "utilization_memory_pid": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpidgpus",
+                  "--showmemuse",
+                  "--showuse"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2885125583\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 46\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780512769\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 3745153 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              }
+            },
+            "stderr": "",
+            "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2885125583\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 46\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780512769\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 3745153 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+          }
+        },
+        {
+          "phase": "before_cleanup",
+          "process": {
+            "captured_at": "2026-08-10T23:52:31.423772+00:00",
+            "pid": 3745153,
+            "ps": {
+              "argv": [
+                "ps",
+                "-p",
+                "3745153",
+                "-o",
+                "pid=,comm=,rss=,vsz=,psr=,args="
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "3745153 llama-server    2620204 47167632 80 /mnt/raid0/llm/llama.cpp-experimental/build-v9-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf --host 127.0.0.1 --port 19901 -np 2 -c 6400 -t 24 --metrics --slots -ub 8192 --jinja --reasoning off --device ROCm0 -ngl 999 -ctk q8_0 -ctv q8_0 -fa on --spec-type draft-mtp --no-mmap --spec-draft-n-max 4 --slot-save-path /mnt/raid0/llm/cache/kv_slots/architect_general\n"
+            },
+            "smaps_rollup": {
+              "error": null,
+              "fields": {
+                "AnonHugePages_kib": 1949696,
+                "Anonymous_kib": 2434044,
+                "Private_Clean_kib": 325748,
+                "Private_Dirty_kib": 2288072,
+                "Pss_Dirty_kib": 2288072,
+                "Pss_kib": 2614597,
+                "Rss_kib": 2620204,
+                "Shared_Clean_kib": 6384,
+                "Shared_Dirty_kib": 0,
+                "Swap_kib": 0
+              },
+              "ok": true
+            },
+            "status": {
+              "error": null,
+              "fields": {
+                "Cpus_allowed_list": "0-191",
+                "Mems_allowed_list": "0-3",
+                "Name": "llama-server",
+                "RssAnon": "2434044 kB",
+                "RssFile": "186160 kB",
+                "RssShmem": "0 kB",
+                "State": "S (sleeping)",
+                "Threads": "196",
+                "VmHWM": "2620204 kB",
+                "VmPeak": "47546488 kB",
+                "VmRSS": "2620204 kB",
+                "VmSize": "47167632 kB",
+                "VmSwap": "0 kB"
+              },
+              "ok": true
+            }
+          },
+          "rocm": {
+            "argv": [
+              "rocm-smi",
+              "--showpidgpus",
+              "--showmemuse",
+              "--showuse"
+            ],
+            "captured_at": "2026-08-10T23:52:31.693398+00:00",
+            "ok": true,
+            "returncode": 0,
+            "schema": "epyc.rocm_snapshot.v2",
+            "snapshots": {
+              "clocks": {
+                "argv": [
+                  "rocm-smi",
+                  "--showclocks"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=============================== Current clock frequencies ================================\nGPU[0]\t\t: fclk clock level: 0: (400Mhz)\nGPU[0]\t\t: mclk clock level: 3: (1600Mhz)\nGPU[0]\t\t: sclk clock level: 1: (800Mhz)\nGPU[0]\t\t: socclk clock level: 3: (1090Mhz)\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "power": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpower"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== Power Consumption ====================================\nGPU[0]\t\t: Average Graphics Package Power (W): 181.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "temperature": {
+                "argv": [
+                  "rocm-smi",
+                  "--showtemp"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n====================================== Temperature =======================================\nGPU[0]\t\t: Temperature (Sensor edge) (C): 47.0\nGPU[0]\t\t: Temperature (Sensor junction) (C): 50.0\nGPU[0]\t\t: Temperature (Sensor memory) (C): 52.0\nGPU[0]\t\t: Temperature (Sensor HBM 0) (C): 48.0\nGPU[0]\t\t: Temperature (Sensor HBM 1) (C): 49.0\nGPU[0]\t\t: Temperature (Sensor HBM 2) (C): 47.0\nGPU[0]\t\t: Temperature (Sensor HBM 3) (C): 52.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "utilization_memory_pid": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpidgpus",
+                  "--showmemuse",
+                  "--showuse"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2885125583\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 46\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780512769\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 3745153 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              }
+            },
+            "stderr": "",
+            "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2885125583\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 46\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780512769\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 3745153 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+          }
+        },
+        {
+          "phase": "after_cleanup",
+          "pid": 3745153,
+          "ps": {
+            "argv": [
+              "ps",
+              "-p",
+              "3745153",
+              "-o",
+              "pid=,comm=,args="
+            ],
+            "ok": false,
+            "returncode": 1,
+            "stderr": "",
+            "stdout": ""
+          },
+          "rocm": {
+            "argv": [
+              "rocm-smi",
+              "--showpidgpus",
+              "--showmemuse",
+              "--showuse"
+            ],
+            "captured_at": "2026-08-10T23:52:32.157418+00:00",
+            "ok": true,
+            "returncode": 0,
+            "schema": "epyc.rocm_snapshot.v2",
+            "snapshots": {
+              "clocks": {
+                "argv": [
+                  "rocm-smi",
+                  "--showclocks"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=============================== Current clock frequencies ================================\nGPU[0]\t\t: fclk clock level: 0: (400Mhz)\nGPU[0]\t\t: mclk clock level: 3: (1600Mhz)\nGPU[0]\t\t: sclk clock level: 1: (800Mhz)\nGPU[0]\t\t: socclk clock level: 3: (1090Mhz)\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "power": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpower"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== Power Consumption ====================================\nGPU[0]\t\t: Average Graphics Package Power (W): 148.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "temperature": {
+                "argv": [
+                  "rocm-smi",
+                  "--showtemp"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n====================================== Temperature =======================================\nGPU[0]\t\t: Temperature (Sensor edge) (C): 46.0\nGPU[0]\t\t: Temperature (Sensor junction) (C): 50.0\nGPU[0]\t\t: Temperature (Sensor memory) (C): 52.0\nGPU[0]\t\t: Temperature (Sensor HBM 0) (C): 48.0\nGPU[0]\t\t: Temperature (Sensor HBM 1) (C): 49.0\nGPU[0]\t\t: Temperature (Sensor HBM 2) (C): 47.0\nGPU[0]\t\t: Temperature (Sensor HBM 3) (C): 52.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "utilization_memory_pid": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpidgpus",
+                  "--showmemuse",
+                  "--showuse"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2885126016\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 40\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 1\nGPU[0]\t\t: Memory Activity: 780513330\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              }
+            },
+            "stderr": "",
+            "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2885126016\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 40\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 1\nGPU[0]\t\t: Memory Activity: 780513330\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+          }
+        }
+      ],
+      "min_completion_tokens": 128,
+      "nominal_context": 2048,
+      "passed_min_completion": true,
+      "prompt_path": "/workspace/worktrees/v9-promotion-research/data/kernel-v9-candidate/promotion-plan-20260810/v9-gpu-smoke-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/prompt.txt",
+      "prompt_sha256_path": "/workspace/worktrees/v9-promotion-research/data/kernel-v9-candidate/promotion-plan-20260810/v9-gpu-smoke-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/prompt_sha256.txt",
+      "prompt_tokens": 965,
+      "prompt_tps": 772.8594196746783,
+      "rep": 1,
+      "request_path": "/workspace/worktrees/v9-promotion-research/data/kernel-v9-candidate/promotion-plan-20260810/v9-gpu-smoke-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/request.json",
+      "response_path": "/workspace/worktrees/v9-promotion-research/data/kernel-v9-candidate/promotion-plan-20260810/v9-gpu-smoke-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/response.json",
+      "role": "coder_escalation",
+      "scenario": "v9_coder_escalation_gpu_request_no_spec",
+      "server_log": "/workspace/worktrees/v9-promotion-research/data/kernel-v9-candidate/promotion-plan-20260810/v9-gpu-smoke-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/server.stderr",
+      "started_at_monotonic": 1073446.326190815,
+      "status": "ok",
+      "token_ids": null
+    },
+    {
+      "cleanup": {
+        "completed": true,
+        "dead": true,
+        "killed": false,
+        "pid": 3754317,
+        "ps_after": {
+          "argv": [
+            "ps",
+            "-p",
+            "3754317",
+            "-o",
+            "pid=,comm=,args="
+          ],
+          "ok": false,
+          "returncode": 1,
+          "stderr": "",
+          "stdout": ""
+        },
+        "returncode": 0,
+        "terminated": true
+      },
+      "completion_tokens": 128,
+      "content_preview": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+      "decode_tps": 96.67082300856217,
+      "draft_n": null,
+      "draft_n_accepted": null,
+      "effective_speculative_n_max": null,
+      "elapsed_s": 1.8183565228246152,
+      "max_tokens": 128,
+      "memory_samples": [
+        {
+          "phase": "before_launch",
+          "process_blockers": [],
+          "rocm": {
+            "argv": [
+              "rocm-smi",
+              "--showpidgpus",
+              "--showmemuse",
+              "--showuse"
+            ],
+            "captured_at": "2026-08-10T23:52:33.394268+00:00",
+            "ok": true,
+            "returncode": 0,
+            "schema": "epyc.rocm_snapshot.v2",
+            "snapshots": {
+              "clocks": {
+                "argv": [
+                  "rocm-smi",
+                  "--showclocks"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=============================== Current clock frequencies ================================\nGPU[0]\t\t: fclk clock level: 0: (400Mhz)\nGPU[0]\t\t: mclk clock level: 3: (1600Mhz)\nGPU[0]\t\t: sclk clock level: 1: (800Mhz)\nGPU[0]\t\t: socclk clock level: 3: (1090Mhz)\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "power": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpower"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== Power Consumption ====================================\nGPU[0]\t\t: Average Graphics Package Power (W): 91.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "temperature": {
+                "argv": [
+                  "rocm-smi",
+                  "--showtemp"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n====================================== Temperature =======================================\nGPU[0]\t\t: Temperature (Sensor edge) (C): 45.0\nGPU[0]\t\t: Temperature (Sensor junction) (C): 48.0\nGPU[0]\t\t: Temperature (Sensor memory) (C): 51.0\nGPU[0]\t\t: Temperature (Sensor HBM 0) (C): 47.0\nGPU[0]\t\t: Temperature (Sensor HBM 1) (C): 48.0\nGPU[0]\t\t: Temperature (Sensor HBM 2) (C): 46.0\nGPU[0]\t\t: Temperature (Sensor HBM 3) (C): 51.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "utilization_memory_pid": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpidgpus",
+                  "--showmemuse",
+                  "--showuse"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2885126016\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 0\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780514897\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              }
+            },
+            "stderr": "",
+            "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2885126016\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 0\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780514897\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+          }
+        },
+        {
+          "phase": "after_health",
+          "process": {
+            "captured_at": "2026-08-10T23:52:36.445905+00:00",
+            "pid": 3754317,
+            "ps": {
+              "argv": [
+                "ps",
+                "-p",
+                "3754317",
+                "-o",
+                "pid=,comm=,rss=,vsz=,psr=,args="
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "3754317 llama-server    896532 31121252 121 /mnt/raid0/llm/llama.cpp-experimental/build-v9-hip/bin/llama-server -m /mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf --host 127.0.0.1 --port 19902 -np 1 -c 3200 -t 24 --metrics --slots --reasoning auto --device ROCm0 -ngl 999 -ctk q8_0 -ctv q8_0 -fa on --spec-type none --mmproj /mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf --image-min-tokens 1024 --cache-ram 0\n"
+            },
+            "smaps_rollup": {
+              "error": null,
+              "fields": {
+                "AnonHugePages_kib": 122880,
+                "Anonymous_kib": 540896,
+                "Private_Clean_kib": 474040,
+                "Private_Dirty_kib": 416100,
+                "Pss_Dirty_kib": 416100,
+                "Pss_kib": 890714,
+                "Rss_kib": 896532,
+                "Shared_Clean_kib": 6392,
+                "Shared_Dirty_kib": 0,
+                "Swap_kib": 0
+              },
+              "ok": true
+            },
+            "status": {
+              "error": null,
+              "fields": {
+                "Cpus_allowed_list": "0-191",
+                "Mems_allowed_list": "0-3",
+                "Name": "llama-server",
+                "RssAnon": "540896 kB",
+                "RssFile": "355636 kB",
+                "RssShmem": "0 kB",
+                "State": "S (sleeping)",
+                "Threads": "196",
+                "VmHWM": "18589472 kB",
+                "VmPeak": "46839432 kB",
+                "VmRSS": "896532 kB",
+                "VmSize": "31121252 kB",
+                "VmSwap": "0 kB"
+              },
+              "ok": true
+            }
+          },
+          "rocm": {
+            "argv": [
+              "rocm-smi",
+              "--showpidgpus",
+              "--showmemuse",
+              "--showuse"
+            ],
+            "captured_at": "2026-08-10T23:52:37.419611+00:00",
+            "ok": true,
+            "returncode": 0,
+            "schema": "epyc.rocm_snapshot.v2",
+            "snapshots": {
+              "clocks": {
+                "argv": [
+                  "rocm-smi",
+                  "--showclocks"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=============================== Current clock frequencies ================================\nGPU[0]\t\t: fclk clock level: 0: (400Mhz)\nGPU[0]\t\t: mclk clock level: 3: (1600Mhz)\nGPU[0]\t\t: sclk clock level: 1: (800Mhz)\nGPU[0]\t\t: socclk clock level: 3: (1090Mhz)\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "power": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpower"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== Power Consumption ====================================\nGPU[0]\t\t: Average Graphics Package Power (W): 51.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "temperature": {
+                "argv": [
+                  "rocm-smi",
+                  "--showtemp"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n====================================== Temperature =======================================\nGPU[0]\t\t: Temperature (Sensor edge) (C): 44.0\nGPU[0]\t\t: Temperature (Sensor junction) (C): 47.0\nGPU[0]\t\t: Temperature (Sensor memory) (C): 49.0\nGPU[0]\t\t: Temperature (Sensor HBM 0) (C): 45.0\nGPU[0]\t\t: Temperature (Sensor HBM 1) (C): 47.0\nGPU[0]\t\t: Temperature (Sensor HBM 2) (C): 44.0\nGPU[0]\t\t: Temperature (Sensor HBM 3) (C): 49.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "utilization_memory_pid": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpidgpus",
+                  "--showmemuse",
+                  "--showuse"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2885131589\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 30\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780516621\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 3754317 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              }
+            },
+            "stderr": "",
+            "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2885131589\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 30\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780516621\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 3754317 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+          }
+        },
+        {
+          "phase": "after_request",
+          "process": {
+            "captured_at": "2026-08-10T23:52:39.244901+00:00",
+            "pid": 3754317,
+            "ps": {
+              "argv": [
+                "ps",
+                "-p",
+                "3754317",
+                "-o",
+                "pid=,comm=,rss=,vsz=,psr=,args="
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "3754317 llama-server    921272 31353064 27 /mnt/raid0/llm/llama.cpp-experimental/build-v9-hip/bin/llama-server -m /mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf --host 127.0.0.1 --port 19902 -np 1 -c 3200 -t 24 --metrics --slots --reasoning auto --device ROCm0 -ngl 999 -ctk q8_0 -ctv q8_0 -fa on --spec-type none --mmproj /mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf --image-min-tokens 1024 --cache-ram 0\n"
+            },
+            "smaps_rollup": {
+              "error": null,
+              "fields": {
+                "AnonHugePages_kib": 137216,
+                "Anonymous_kib": 561496,
+                "Private_Clean_kib": 478180,
+                "Private_Dirty_kib": 436700,
+                "Pss_Dirty_kib": 436700,
+                "Pss_kib": 915667,
+                "Rss_kib": 921272,
+                "Shared_Clean_kib": 6392,
+                "Shared_Dirty_kib": 0,
+                "Swap_kib": 0
+              },
+              "ok": true
+            },
+            "status": {
+              "error": null,
+              "fields": {
+                "Cpus_allowed_list": "0-191",
+                "Mems_allowed_list": "0-3",
+                "Name": "llama-server",
+                "RssAnon": "561496 kB",
+                "RssFile": "359776 kB",
+                "RssShmem": "0 kB",
+                "State": "S (sleeping)",
+                "Threads": "196",
+                "VmHWM": "18589472 kB",
+                "VmPeak": "46839432 kB",
+                "VmRSS": "921272 kB",
+                "VmSize": "31353064 kB",
+                "VmSwap": "0 kB"
+              },
+              "ok": true
+            }
+          },
+          "rocm": {
+            "argv": [
+              "rocm-smi",
+              "--showpidgpus",
+              "--showmemuse",
+              "--showuse"
+            ],
+            "captured_at": "2026-08-10T23:52:39.511230+00:00",
+            "ok": true,
+            "returncode": 0,
+            "schema": "epyc.rocm_snapshot.v2",
+            "snapshots": {
+              "clocks": {
+                "argv": [
+                  "rocm-smi",
+                  "--showclocks"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=============================== Current clock frequencies ================================\nGPU[0]\t\t: fclk clock level: 0: (400Mhz)\nGPU[0]\t\t: mclk clock level: 3: (1600Mhz)\nGPU[0]\t\t: sclk clock level: 1: (800Mhz)\nGPU[0]\t\t: socclk clock level: 3: (1090Mhz)\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "power": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpower"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== Power Consumption ====================================\nGPU[0]\t\t: Average Graphics Package Power (W): 116.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "temperature": {
+                "argv": [
+                  "rocm-smi",
+                  "--showtemp"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n====================================== Temperature =======================================\nGPU[0]\t\t: Temperature (Sensor edge) (C): 45.0\nGPU[0]\t\t: Temperature (Sensor junction) (C): 48.0\nGPU[0]\t\t: Temperature (Sensor memory) (C): 50.0\nGPU[0]\t\t: Temperature (Sensor HBM 0) (C): 47.0\nGPU[0]\t\t: Temperature (Sensor HBM 1) (C): 48.0\nGPU[0]\t\t: Temperature (Sensor HBM 2) (C): 46.0\nGPU[0]\t\t: Temperature (Sensor HBM 3) (C): 50.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "utilization_memory_pid": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpidgpus",
+                  "--showmemuse",
+                  "--showuse"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2885305204\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 30\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780537280\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 3754317 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              }
+            },
+            "stderr": "",
+            "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2885305204\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 30\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780537280\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 3754317 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+          }
+        },
+        {
+          "phase": "before_cleanup",
+          "process": {
+            "captured_at": "2026-08-10T23:52:39.517881+00:00",
+            "pid": 3754317,
+            "ps": {
+              "argv": [
+                "ps",
+                "-p",
+                "3754317",
+                "-o",
+                "pid=,comm=,rss=,vsz=,psr=,args="
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "3754317 llama-server    921272 31353064 27 /mnt/raid0/llm/llama.cpp-experimental/build-v9-hip/bin/llama-server -m /mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf --host 127.0.0.1 --port 19902 -np 1 -c 3200 -t 24 --metrics --slots --reasoning auto --device ROCm0 -ngl 999 -ctk q8_0 -ctv q8_0 -fa on --spec-type none --mmproj /mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf --image-min-tokens 1024 --cache-ram 0\n"
+            },
+            "smaps_rollup": {
+              "error": null,
+              "fields": {
+                "AnonHugePages_kib": 137216,
+                "Anonymous_kib": 561496,
+                "Private_Clean_kib": 478180,
+                "Private_Dirty_kib": 436700,
+                "Pss_Dirty_kib": 436700,
+                "Pss_kib": 915667,
+                "Rss_kib": 921272,
+                "Shared_Clean_kib": 6392,
+                "Shared_Dirty_kib": 0,
+                "Swap_kib": 0
+              },
+              "ok": true
+            },
+            "status": {
+              "error": null,
+              "fields": {
+                "Cpus_allowed_list": "0-191",
+                "Mems_allowed_list": "0-3",
+                "Name": "llama-server",
+                "RssAnon": "561496 kB",
+                "RssFile": "359776 kB",
+                "RssShmem": "0 kB",
+                "State": "S (sleeping)",
+                "Threads": "196",
+                "VmHWM": "18589472 kB",
+                "VmPeak": "46839432 kB",
+                "VmRSS": "921272 kB",
+                "VmSize": "31353064 kB",
+                "VmSwap": "0 kB"
+              },
+              "ok": true
+            }
+          },
+          "rocm": {
+            "argv": [
+              "rocm-smi",
+              "--showpidgpus",
+              "--showmemuse",
+              "--showuse"
+            ],
+            "captured_at": "2026-08-10T23:52:39.787931+00:00",
+            "ok": true,
+            "returncode": 0,
+            "schema": "epyc.rocm_snapshot.v2",
+            "snapshots": {
+              "clocks": {
+                "argv": [
+                  "rocm-smi",
+                  "--showclocks"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=============================== Current clock frequencies ================================\nGPU[0]\t\t: fclk clock level: 0: (400Mhz)\nGPU[0]\t\t: mclk clock level: 3: (1600Mhz)\nGPU[0]\t\t: sclk clock level: 1: (800Mhz)\nGPU[0]\t\t: socclk clock level: 3: (1090Mhz)\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "power": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpower"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== Power Consumption ====================================\nGPU[0]\t\t: Average Graphics Package Power (W): 104.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "temperature": {
+                "argv": [
+                  "rocm-smi",
+                  "--showtemp"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n====================================== Temperature =======================================\nGPU[0]\t\t: Temperature (Sensor edge) (C): 45.0\nGPU[0]\t\t: Temperature (Sensor junction) (C): 48.0\nGPU[0]\t\t: Temperature (Sensor memory) (C): 50.0\nGPU[0]\t\t: Temperature (Sensor HBM 0) (C): 46.0\nGPU[0]\t\t: Temperature (Sensor HBM 1) (C): 48.0\nGPU[0]\t\t: Temperature (Sensor HBM 2) (C): 45.0\nGPU[0]\t\t: Temperature (Sensor HBM 3) (C): 50.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "utilization_memory_pid": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpidgpus",
+                  "--showmemuse",
+                  "--showuse"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2885305204\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 30\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780537280\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 3754317 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              }
+            },
+            "stderr": "",
+            "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2885305204\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 30\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 780537280\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 3754317 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+          }
+        },
+        {
+          "phase": "after_cleanup",
+          "pid": 3754317,
+          "ps": {
+            "argv": [
+              "ps",
+              "-p",
+              "3754317",
+              "-o",
+              "pid=,comm=,args="
+            ],
+            "ok": false,
+            "returncode": 1,
+            "stderr": "",
+            "stdout": ""
+          },
+          "rocm": {
+            "argv": [
+              "rocm-smi",
+              "--showpidgpus",
+              "--showmemuse",
+              "--showuse"
+            ],
+            "captured_at": "2026-08-10T23:52:41.272036+00:00",
+            "ok": true,
+            "returncode": 0,
+            "schema": "epyc.rocm_snapshot.v2",
+            "snapshots": {
+              "clocks": {
+                "argv": [
+                  "rocm-smi",
+                  "--showclocks"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=============================== Current clock frequencies ================================\nGPU[0]\t\t: fclk clock level: 0: (400Mhz)\nGPU[0]\t\t: mclk clock level: 3: (1600Mhz)\nGPU[0]\t\t: sclk clock level: 1: (800Mhz)\nGPU[0]\t\t: socclk clock level: 3: (1090Mhz)\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "power": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpower"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== Power Consumption ====================================\nGPU[0]\t\t: Average Graphics Package Power (W): 68.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "temperature": {
+                "argv": [
+                  "rocm-smi",
+                  "--showtemp"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n====================================== Temperature =======================================\nGPU[0]\t\t: Temperature (Sensor edge) (C): 44.0\nGPU[0]\t\t: Temperature (Sensor junction) (C): 48.0\nGPU[0]\t\t: Temperature (Sensor memory) (C): 49.0\nGPU[0]\t\t: Temperature (Sensor HBM 0) (C): 45.0\nGPU[0]\t\t: Temperature (Sensor HBM 1) (C): 47.0\nGPU[0]\t\t: Temperature (Sensor HBM 2) (C): 45.0\nGPU[0]\t\t: Temperature (Sensor HBM 3) (C): 49.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              },
+              "utilization_memory_pid": {
+                "argv": [
+                  "rocm-smi",
+                  "--showpidgpus",
+                  "--showmemuse",
+                  "--showuse"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2885305580\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 29\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 1\nGPU[0]\t\t: Memory Activity: 780537847\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+              }
+            },
+            "stderr": "",
+            "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2885305580\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 29\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 1\nGPU[0]\t\t: Memory Activity: 780537847\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+          }
+        }
+      ],
+      "min_completion_tokens": 128,
+      "nominal_context": 2048,
+      "passed_min_completion": true,
+      "prompt_path": "/workspace/worktrees/v9-promotion-research/data/kernel-v9-candidate/promotion-plan-20260810/v9-gpu-smoke-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/prompt.txt",
+      "prompt_sha256_path": "/workspace/worktrees/v9-promotion-research/data/kernel-v9-candidate/promotion-plan-20260810/v9-gpu-smoke-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/prompt_sha256.txt",
+      "prompt_tokens": 959,
+      "prompt_tps": 1964.4514182355988,
+      "rep": 1,
+      "request_path": "/workspace/worktrees/v9-promotion-research/data/kernel-v9-candidate/promotion-plan-20260810/v9-gpu-smoke-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/request.json",
+      "response_path": "/workspace/worktrees/v9-promotion-research/data/kernel-v9-candidate/promotion-plan-20260810/v9-gpu-smoke-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/response.json",
+      "role": "worker_vision",
+      "scenario": "v9_worker_vision_gpu_no_spec",
+      "server_log": "/workspace/worktrees/v9-promotion-research/data/kernel-v9-candidate/promotion-plan-20260810/v9-gpu-smoke-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/server.stderr",
+      "started_at_monotonic": 1073458.133174769,
+      "status": "ok",
+      "token_ids": null
+    }
+  ],
+  "scenario_summaries": {
+    "v9_architect_general_gpu_native_mtp": {
+      "all_ok": true,
+      "completion_tokens": 128,
+      "decode_tps": {
+        "mad": 0.0,
+        "max": 53.35936825842942,
+        "median": 53.35936825842942,
+        "min": 53.35936825842942,
+        "n": 1
+      },
+      "draft_acceptance_rate": 0.76,
+      "draft_n": 125,
+      "draft_n_accepted": 95,
+      "elapsed_s": {
+        "mad": 0.0,
+        "max": 3.658493536990136,
+        "median": 3.658493536990136,
+        "min": 3.658493536990136,
+        "n": 1
+      },
+      "ok_rows": 1,
+      "prompt_tokens": 965,
+      "prompt_tps": {
+        "mad": 0.0,
+        "max": 773.6370159256988,
+        "median": 773.6370159256988,
+        "min": 773.6370159256988,
+        "n": 1
+      },
+      "rows": 1
+    },
+    "v9_coder_escalation_gpu_request_no_spec": {
+      "all_ok": true,
+      "completion_tokens": 128,
+      "decode_tps": {
+        "mad": 0.0,
+        "max": 30.267775223934244,
+        "median": 30.267775223934244,
+        "min": 30.267775223934244,
+        "n": 1
+      },
+      "draft_acceptance_rate": null,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "elapsed_s": {
+        "mad": 0.0,
+        "max": 5.48984593199566,
+        "median": 5.48984593199566,
+        "min": 5.48984593199566,
+        "n": 1
+      },
+      "ok_rows": 1,
+      "prompt_tokens": 965,
+      "prompt_tps": {
+        "mad": 0.0,
+        "max": 772.8594196746783,
+        "median": 772.8594196746783,
+        "min": 772.8594196746783,
+        "n": 1
+      },
+      "rows": 1
+    },
+    "v9_worker_vision_gpu_no_spec": {
+      "all_ok": true,
+      "completion_tokens": 128,
+      "decode_tps": {
+        "mad": 0.0,
+        "max": 96.67082300856217,
+        "median": 96.67082300856217,
+        "min": 96.67082300856217,
+        "n": 1
+      },
+      "draft_acceptance_rate": null,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "elapsed_s": {
+        "mad": 0.0,
+        "max": 1.8183565228246152,
+        "median": 1.8183565228246152,
+        "min": 1.8183565228246152,
+        "n": 1
+      },
+      "ok_rows": 1,
+      "prompt_tokens": 959,
+      "prompt_tps": {
+        "mad": 0.0,
+        "max": 1964.4514182355988,
+        "median": 1964.4514182355988,
+        "min": 1964.4514182355988,
+        "n": 1
+      },
+      "rows": 1
+    }
+  },
+  "schema": "epyc.k35_stack_context_matrix.summary.v1",
+  "status": "ok"
+}

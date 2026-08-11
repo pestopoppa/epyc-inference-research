@@ -1,0 +1,499 @@
+{
+  "attestation": {
+    "bytes": 954,
+    "document": {
+      "frozen": false,
+      "production_branch": "production-consolidated-v9",
+      "production_head": "0db32c06e3e550065b78311a6031ef3dd2c4f27c",
+      "promoted_at": "2026-08-10T23:59:00Z",
+      "qualification": {
+        "path": "artifacts/operator/v9-qualification-20260810T235723Z-0db32c06e/summary.json",
+        "sha256": "04344a3624247646d0ebd795c12abfa4db48be895ebc8ccc465867917e7da679",
+        "status": "preproduction_qualification_pass"
+      },
+      "rollback": {
+        "backup_ref": "refs/heads/production-consolidated-v8",
+        "branch": "production-consolidated-v8",
+        "head": "67a433bf45a8a091d83b4ea0b32ff0735fd51800",
+        "source_ref": "refs/heads/production-consolidated-v9"
+      },
+      "schema": "epyc.kernel_promotion_attestation.v1",
+      "server_binary": {
+        "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+        "sha256": "21cfb750dc0ba4b3add0674fcb9dd061d77b3604ebf8e1d063ba0e2c51902feb"
+      },
+      "status": "production_promoted_pending_gpu_certification"
+    },
+    "governance_head_blob": "5643da077279413e6cba750f1917ddf9b5768d5b",
+    "path": "/mnt/raid0/llm/epyc-root/handoffs/active/v9-kernel-promotion-attestation.json",
+    "sha256": "813bf569c03aace2fb57856edff7dbc20e8bc8fb5fecdd1f6e3342169d15486a"
+  },
+  "attestation_reason": "ok",
+  "attestation_ref": "/mnt/raid0/llm/epyc-root/handoffs/active/v9-kernel-promotion-attestation.json",
+  "attestation_valid": true,
+  "cpu_interference_policy": "CPU production stack quiesced and verified before the window; no concurrent llama-server, AutoPilot, or KFD model-owner process is permitted",
+  "expected_production_head": "0db32c06e3e550065b78311a6031ef3dd2c4f27c",
+  "expected_server_sha256": "21cfb750dc0ba4b3add0674fcb9dd061d77b3604ebf8e1d063ba0e2c51902feb",
+  "hardware_state": {
+    "gfx_target": {
+      "argv": [
+        "rocminfo"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "\u001b[37mROCk module is loaded\u001b[0m\n=====================    \nHSA System Attributes    \n=====================    \nRuntime Version:         1.14\nRuntime Ext Version:     1.6\nSystem Timestamp Freq.:  1000.000000MHz\nSig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)\nMachine Model:           LARGE                              \nSystem Endianness:       LITTLE                             \nMwaitx:                  DISABLED\nDMAbuf Support:          YES\n\n==========               \nHSA Agents               \n==========               \n*******                  \nAgent 1                  \n*******                  \n  Name:                    AMD EPYC 9655 96-Core Processor    \n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD EPYC 9655 96-Core Processor    \n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    0                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  ASIC Revision:           0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   4510                               \n  BDFID:                   0                                  \n  Internal Node ID:        0                                  \n  Compute Unit:            48                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  WatchPts on Addr. Ranges:1                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    296817520(0x11b11370) KB           \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    296817520(0x11b11370) KB           \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    296817520(0x11b11370) KB           \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 2                  \n*******                  \n  Name:                    AMD EPYC 9655 96-Core Processor    \n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD EPYC 9655 96-Core Processor    \n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    1                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  ASIC Revision:           0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   4510                               \n  BDFID:                   0                                  \n  Internal Node ID:        1                                  \n  Compute Unit:            48                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  WatchPts on Addr. Ranges:1                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    297254044(0x11b7bc9c) KB           \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    297254044(0x11b7bc9c) KB           \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    297254044(0x11b7bc9c) KB           \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 3                  \n*******                  \n  Name:                    AMD EPYC 9655 96-Core Processor    \n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD EPYC 9655 96-Core Processor    \n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    2                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  ASIC Revision:           0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   4510                               \n  BDFID:                   0                                  \n  Internal Node ID:        2                                  \n  Compute Unit:            48                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  WatchPts on Addr. Ranges:1                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    297254048(0x11b7bca0) KB           \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    297254048(0x11b7bca0) KB           \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    297254048(0x11b7bca0) KB           \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 4                  \n*******                  \n  Name:                    AMD EPYC 9655 96-Core Processor    \n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD EPYC 9655 96-Core Processor    \n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    3                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  ASIC Revision:           0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   4510                               \n  BDFID:                   0                                  \n  Internal Node ID:        3                                  \n  Compute Unit:            48                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  WatchPts on Addr. Ranges:1                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    297146864(0x11b619f0) KB           \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    297146864(0x11b619f0) KB           \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    297146864(0x11b619f0) KB           \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 5                  \n*******                  \n  Name:                    gfx90a                             \n  Uuid:                    GPU-c6cb1cf088bd97ec               \n  Marketing Name:          AMD Instinct MI210                 \n  Vendor Name:             AMD                                \n  Feature:                 KERNEL_DISPATCH                    \n  Profile:                 BASE_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        128(0x80)                          \n  Queue Min Size:          64(0x40)                           \n  Queue Max Size:          131072(0x20000)                    \n  Queue Type:              MULTI                              \n  Node:                    4                                  \n  Device Type:             GPU                                \n  Cache Info:              \n    L1:                      16(0x10) KB                        \n    L2:                      8192(0x2000) KB                    \n  Chip ID:                 29711(0x740f)                      \n  ASIC Revision:           1(0x1)                             \n  Cacheline Size:          128(0x80)                          \n  Max Clock Freq. (MHz):   1700                               \n  BDFID:                   17152                              \n  Internal Node ID:        4                                  \n  Compute Unit:            104                                \n  SIMDs per CU:            4                                  \n  Shader Engines:          8                                  \n  Shader Arrs. per Eng.:   1                                  \n  WatchPts on Addr. Ranges:4                                  \n  Coherent Host Access:    FALSE                              \n  Memory Properties:       \n  Features:                KERNEL_DISPATCH \n  Fast F16 Operation:      TRUE                               \n  Wavefront Size:          64(0x40)                           \n  Workgroup Max Size:      1024(0x400)                        \n  Workgroup Max Size per Dimension:\n    x                        1024(0x400)                        \n    y                        1024(0x400)                        \n    z                        1024(0x400)                        \n  Max Waves Per CU:        32(0x20)                           \n  Max Work-item Per CU:    2048(0x800)                        \n  Grid Max Size:           4294967295(0xffffffff)             \n  Grid Max Size per Dimension:\n    x                        4294967295(0xffffffff)             \n    y                        4294967295(0xffffffff)             \n    z                        4294967295(0xffffffff)             \n  Max fbarriers/Workgrp:   32                                 \n  Packet Processor uCode:: 96                                 \n  SDMA engine uCode::      9                                  \n  IOMMU Support::          None                               \n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    67092480(0x3ffc000) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    67092480(0x3ffc000) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 3                   \n      Segment:                 GROUP                              \n      Size:                    64(0x40) KB                        \n      Allocatable:             FALSE                              \n      Alloc Granule:           0KB                                \n      Alloc Recommended Granule:0KB                                \n      Alloc Alignment:         0KB                                \n      Accessible by all:       FALSE                              \n  ISA Info:                \n    ISA 1                    \n      Name:                    amdgcn-amd-amdhsa--gfx90a:sramecc+:xnack-\n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        4294967295(0xffffffff)             \n        y                        4294967295(0xffffffff)             \n        z                        4294967295(0xffffffff)             \n      FBarrier Max Size:       32                                 \n*** Done ***             \n"
+    },
+    "gpu_product": {
+      "argv": [
+        "rocm-smi",
+        "--showproductname"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "\n\n============================ ROCm System Management Interface ============================\n====================================== Product Info ======================================\nGPU[0]\t\t: Card Series: \t\tInstinct MI210\nGPU[0]\t\t: Card Model: \t\t0x740f\nGPU[0]\t\t: Card Vendor: \t\tAdvanced Micro Devices, Inc. [AMD/ATI]\nGPU[0]\t\t: Card SKU: \t\tD67301V\nGPU[0]\t\t: Subsystem ID: \t0x0c34\nGPU[0]\t\t: Device Rev: \t\t0x02\nGPU[0]\t\t: Node ID: \t\t4\nGPU[0]\t\t: GUID: \t\t57300\nGPU[0]\t\t: GFX Version: \t\tgfx9010\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    "kernel": {
+      "argv": [
+        "uname",
+        "-srvmo"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "Linux 6.14.0-37-generic #37~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Thu Nov 20 10:25:38 UTC 2 x86_64 GNU/Linux\n"
+    },
+    "rocm_driver": {
+      "argv": [
+        "rocm-smi",
+        "--showdriverversion"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "\n\n============================ ROCm System Management Interface ============================\n============================== Version of System Component ===============================\nDriver version: 6.14.0-37-generic\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    "rocm_runtime": {
+      "argv": [
+        "hipconfig",
+        "--version"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "6.2.41133-dd7f95766"
+    }
+  },
+  "hardware_valid": true,
+  "harness": {
+    "bytes": 105518,
+    "dev": 2431,
+    "git": {
+      "branch": {
+        "argv": [
+          "git",
+          "-C",
+          "/workspace/worktrees/v9-promotion-research",
+          "branch",
+          "--show-current"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "v9-promotion-instrument-20260810\n"
+      },
+      "commit": {
+        "argv": [
+          "git",
+          "-C",
+          "/workspace/worktrees/v9-promotion-research",
+          "rev-parse",
+          "HEAD"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "96420244a96b83038ebf6003236f83fe40d5980a\n"
+      },
+      "index_diff": {
+        "argv": [
+          "git",
+          "-C",
+          "/workspace/worktrees/v9-promotion-research",
+          "diff",
+          "--cached",
+          "--name-only"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "source_root": "/workspace/worktrees/v9-promotion-research",
+      "tracked_diff": {
+        "argv": [
+          "git",
+          "-C",
+          "/workspace/worktrees/v9-promotion-research",
+          "diff",
+          "--name-only"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "uv.lock\n"
+      },
+      "untracked": {
+        "argv": [
+          "git",
+          "-C",
+          "/workspace/worktrees/v9-promotion-research",
+          "ls-files",
+          "--others",
+          "--exclude-standard"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "data/gpu-mi210/laguna-iq2-dflash-pgpu1-v9/run-20260811T000819Z/summary.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/operator_run.sh\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/plan.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/binary_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/candidate_smoke_summary.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/completeness_audit.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/guard_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/hardware_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/operator_run.sh\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/plan.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/post_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/pre_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/binding_after.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/request_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/response_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/result.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/summary.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/binary_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/candidate_smoke_summary.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/completeness_audit.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/guard_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/hardware_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/operator_run.sh\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/plan.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/post_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/pre_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/binding_after.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/request_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/request_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/request_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/response_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/response_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/response_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/result.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/summary.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/binary_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/guard_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/hardware_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/operator_run.sh\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/plan.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/pre_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/binding_after.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/request_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/request_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/request_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/response_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/response_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/response_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/result.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/dflash_rep1/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/dflash_rep1/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/dflash_rep1/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/dflash_rep1/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/dflash_rep1/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/dflash_rep1/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/dflash_rep1/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/binary_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/candidate_smoke_summary.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/completeness_audit.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/guard_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/hardware_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/operator_run.sh\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/plan.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/post_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/pre_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/binding_after.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/request_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/request_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/request_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/response_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/response_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/response_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/result.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/binding_after.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/result.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/summary.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-plan/commands.sh\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-plan/operator_run.sh\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-plan/plan.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/commands.sh\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/guard_state.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/operator_run.sh\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/plan.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep2/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep2/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep2/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep2/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep2/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep2/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep2/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep3/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep3/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep3/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep3/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep3/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep3/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep3/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep4/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep4/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep4/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep4/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep4/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep4/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep4/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep5/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep5/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep5/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep5/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep5/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep5/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep5/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep2/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep2/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep2/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep2/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep2/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep2/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep2/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep3/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep3/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep3/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep3/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep3/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep3/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep3/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep4/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep4/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep4/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep4/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep4/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep4/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep4/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep5/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep5/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep5/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep5/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep5/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep5/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep5/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep2/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep2/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep2/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep2/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep2/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep2/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep2/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep3/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep3/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep3/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep3/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep3/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep3/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep3/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep4/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep4/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep4/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep4/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep4/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep4/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep4/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep5/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep5/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep5/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep5/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep5/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep5/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep5/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/summary.json\n"
+      }
+    },
+    "index_unchanged": {
+      "argv": [
+        "git",
+        "-C",
+        "/workspace/worktrees/v9-promotion-research",
+        "diff",
+        "--cached",
+        "--quiet",
+        "--",
+        "scripts/benchmark/laguna_pgpu1_dflash_runner.py"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": ""
+    },
+    "inode": 102791693,
+    "mtime_ns": 1786409254594374127,
+    "path": "/workspace/worktrees/v9-promotion-research/scripts/benchmark/laguna_pgpu1_dflash_runner.py",
+    "resolved_path": "/workspace/worktrees/v9-promotion-research/scripts/benchmark/laguna_pgpu1_dflash_runner.py",
+    "sha256": "cc9868b14c4e808569359936aa8af15d794c37f8b0de2bdd289b54f6601aec3a",
+    "stable": true,
+    "tracked": {
+      "argv": [
+        "git",
+        "-C",
+        "/workspace/worktrees/v9-promotion-research",
+        "ls-files",
+        "--error-unmatch",
+        "scripts/benchmark/laguna_pgpu1_dflash_runner.py"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "scripts/benchmark/laguna_pgpu1_dflash_runner.py\n"
+    },
+    "worktree_unchanged": {
+      "argv": [
+        "git",
+        "-C",
+        "/workspace/worktrees/v9-promotion-research",
+        "diff",
+        "--quiet",
+        "HEAD",
+        "--",
+        "scripts/benchmark/laguna_pgpu1_dflash_runner.py"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": ""
+    }
+  },
+  "harness_reason": "ok",
+  "harness_valid": true,
+  "initial_rocm": {
+    "available": true,
+    "captures": [
+      {
+        "argv": [
+          "rocm-smi",
+          "--showpids",
+          "--showmeminfo",
+          "vram",
+          "--showuse"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 2902592174\n==========================================================================================\n===================================== KFD Processes ======================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== Memory Usage (Bytes) ==================================\nGPU[0]\t\t: VRAM Total Memory (B): 68702699520\nGPU[0]\t\t: VRAM Total Used Memory (B): 13094912\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+      },
+      {
+        "argv": [
+          "rocm-smi",
+          "--showclocks"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "\n\n============================ ROCm System Management Interface ============================\n=============================== Current clock frequencies ================================\nGPU[0]\t\t: fclk clock level: 0: (400Mhz)\nGPU[0]\t\t: mclk clock level: 3: (1600Mhz)\nGPU[0]\t\t: sclk clock level: 1: (800Mhz)\nGPU[0]\t\t: socclk clock level: 3: (1090Mhz)\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+      },
+      {
+        "argv": [
+          "rocm-smi",
+          "--showpower"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== Power Consumption ====================================\nGPU[0]\t\t: Average Graphics Package Power (W): 42.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+      },
+      {
+        "argv": [
+          "rocm-smi",
+          "--showtemp"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "\n\n============================ ROCm System Management Interface ============================\n====================================== Temperature =======================================\nGPU[0]\t\t: Temperature (Sensor edge) (C): 36.0\nGPU[0]\t\t: Temperature (Sensor junction) (C): 39.0\nGPU[0]\t\t: Temperature (Sensor memory) (C): 42.0\nGPU[0]\t\t: Temperature (Sensor HBM 0) (C): 37.0\nGPU[0]\t\t: Temperature (Sensor HBM 1) (C): 39.0\nGPU[0]\t\t: Temperature (Sensor HBM 2) (C): 36.0\nGPU[0]\t\t: Temperature (Sensor HBM 3) (C): 42.0\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+      }
+    ]
+  },
+  "interference_reason": "ok",
+  "interference_valid": true,
+  "model_identities_reason": "ok",
+  "model_identities_valid": true,
+  "processes_before": {
+    "autopilot": {
+      "argv": [
+        "/proc",
+        "argv-basename",
+        "autopilot.py",
+        "autopilot_supervisor.py"
+      ],
+      "owners": [],
+      "returncode": 1,
+      "stderr": "",
+      "stdout": ""
+    },
+    "kfd_lsof": {
+      "argv": [
+        "lsof",
+        "-nP",
+        "/dev/kfd"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 1,
+      "stderr": "",
+      "stdout": ""
+    },
+    "kfd_proc": {
+      "owners": [],
+      "returncode": 0
+    },
+    "listeners_lsof": {
+      "argv": [
+        "lsof",
+        "-nP",
+        "-iTCP",
+        "-sTCP:LISTEN"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "COMMAND     PID USER FD   TYPE    DEVICE SIZE/OFF NODE NAME\nuvicorn 2324109 node 14u  IPv4  79041127      0t0  TCP *:8300 (LISTEN)\npython  3688087 node  4u  IPv4 142307753      0t0  TCP *:8100 (LISTEN)\n"
+    },
+    "listeners_proc": {
+      "owners": [
+        {
+          "fd": "14",
+          "pid": 2324109,
+          "port": 8300,
+          "target": "socket:[79041127]"
+        },
+        {
+          "fd": "4",
+          "pid": 3688087,
+          "port": 8100,
+          "target": "socket:[142307753]"
+        }
+      ],
+      "returncode": 0
+    },
+    "model_binaries": {
+      "commands": {
+        "llama-bench": {
+          "argv": [
+            "/proc",
+            "exact-comm-or-exe",
+            "llama-bench"
+          ],
+          "returncode": 1,
+          "stderr": "",
+          "stdout": ""
+        },
+        "llama-cli": {
+          "argv": [
+            "/proc",
+            "exact-comm-or-exe",
+            "llama-cli"
+          ],
+          "returncode": 1,
+          "stderr": "",
+          "stdout": ""
+        },
+        "llama-server": {
+          "argv": [
+            "/proc",
+            "exact-comm-or-exe",
+            "llama-server"
+          ],
+          "returncode": 1,
+          "stderr": "",
+          "stdout": ""
+        }
+      },
+      "proc_owners": [],
+      "returncode": 0
+    },
+    "rocm_pids": {
+      "argv": [
+        "rocm-smi",
+        "--showpids"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "\n\n============================ ROCm System Management Interface ============================\n===================================== KFD Processes ======================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    }
+  },
+  "production_identity_valid": true,
+  "reason": "ok",
+  "source_untracked_allowlist": {
+    ".gitnexusignore": "local GitNexus configuration; not a llama.cpp build input",
+    "tools/math-tools/": "operator-owned unrelated tool subtree; not linked into llama-server"
+  }
+}

@@ -1,0 +1,29 @@
+warning: no usable GPU found, --gpu-layers option will be ignored
+warning: one possible reason is that llama.cpp was compiled without GPU support
+warning: consult docs/build.md for compilation instructions
+0.00.001.429 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.001.709 W srv  llama_server: -----------------
+0.00.001.710 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.001.710 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.001.711 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.001.711 W srv  llama_server: -----------------
+0.00.002.889 I srv    load_model: loading model '/mnt/raid0/llm/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf'
+0.00.241.521 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.02.530.422 W warning: failed to mlock 48405008384-byte buffer (after previously locking 0 bytes): Cannot allocate memory
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=12 activation=99 ne00=2048)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 activation=99 n_as=512)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=14 activation=99 n_as=512)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 activation=99 ne00=512)
+0.06.207.823 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 3328, kv_unified = 'false'
+0.06.211.266 I srv  llama_server: model loaded
+0.06.211.272 I srv  llama_server: listening on http://127.0.0.1:19818
+0.07.842.077 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.07.842.138 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.12.174.361 I slot print_timing: id  0 | task 0 | prompt processing, n_tokens =    955, progress = 1.00, t =   4.33 s / 220.44 tokens per second
+0.18.090.337 I slot print_timing: id  0 | task 0 | n_decoded =    100, tg =  17.17 t/s, tg_3s =  17.17 t/s
+0.19.671.374 I slot print_timing: id  0 | task 0 | prompt eval time =    4424.84 ms /   959 tokens (    4.61 ms per token,   216.73 tokens per second)
+0.19.671.379 I slot print_timing: id  0 | task 0 |        eval time =    7404.37 ms /   128 tokens (   57.85 ms per token,    17.29 tokens per second)
+0.19.671.380 I slot print_timing: id  0 | task 0 |       total time =   11829.21 ms /  1087 tokens
+0.19.671.385 I slot print_timing: id  0 | task 0 |    graphs reused =        126
+0.19.671.437 I slot      release: id  0 | task 0 | stop processing: n_tokens = 1086, truncated = 0
+0.20.317.184 I srv    operator(): operator(): cleaning up before exit...

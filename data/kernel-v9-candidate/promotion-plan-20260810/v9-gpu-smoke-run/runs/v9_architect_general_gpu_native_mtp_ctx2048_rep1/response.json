@@ -1,0 +1,38 @@
+{
+  "choices": [
+    {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+        "content": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1786405939,
+  "id": "chatcmpl-MMCM6luQ2UcChNhZVwbyQgdrXO3DTcc2",
+  "model": "/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10125-0db32c06e",
+  "timings": {
+    "cache_n": 0,
+    "draft_n": 125,
+    "draft_n_accepted": 95,
+    "predicted_ms": 2398.829,
+    "predicted_n": 128,
+    "predicted_per_second": 53.35936825842942,
+    "predicted_per_token_ms": 18.7408515625,
+    "prompt_ms": 1247.355,
+    "prompt_n": 965,
+    "prompt_per_second": 773.6370159256988,
+    "prompt_per_token_ms": 1.2925958549222798
+  },
+  "usage": {
+    "completion_tokens": 128,
+    "prompt_tokens": 965,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 1093
+  }
+}
