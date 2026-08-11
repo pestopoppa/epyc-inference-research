@@ -240,7 +240,7 @@ def campaign_argv(executable: str = "python3") -> tuple[str, ...]:
         "--max-rounds", "64", "--workspace", ".",
         "--arena-root", os.environ.get(
             "AUTOKERNEL_AGENT_KERNEL_ARENA_ROOT",
-            "/mnt/raid0/llm/tmp/inf03-vendor-inspect-UqTLqw/AgentKernelArena"),
+            "/mnt/raid0/llm/autokernel/vendor/agent-kernel-arena"),
         "--source-root", str(source_root),
     )
 
