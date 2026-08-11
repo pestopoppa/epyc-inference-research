@@ -124,7 +124,7 @@ __all__ = [
     # evidence types
     "ChangeSurface", "SymbolTableDiff", "BuildProvenance", "DiffPolicyEvidence",
     "StaticAnalysisEvidence", "SanitizerInvocation", "SanitizerEvidence",
-    "OpSuiteEvidence", "ReferenceComparison", "ReferenceEvidence",
+    "OpSuiteEvidence", "PropertyMeasurement", "ReferenceComparison", "ReferenceEvidence",
     "BoundaryShapeEvidence", "DispatchTraceEvidence", "StateSafetyEvidence",
     "CoherenceEvidence", "DeterminismEvidence", "LinkageEvidence",
     "AntiRewardHackingEvidence", "T0Evidence",
@@ -1243,6 +1243,50 @@ class SanitizerEvidence:
 
 
 @dataclass(frozen=True)
+class PropertyMeasurement:
+    """One candidate-only property residual, bound to its replay coordinates."""
+
+    shape_id: str
+    op: str
+    backend: str
+    metric_id: str
+    residual: float
+    tolerance: float
+    suite_seed: int
+    passed: bool
+
+    def __post_init__(self) -> None:
+        for name in ("shape_id", "op", "backend", "metric_id"):
+            _req_str(getattr(self, name), f"property_measurement.{name}")
+        for name in ("residual", "tolerance"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) \
+                    or not math.isfinite(value) or value < 0:
+                raise ValueError(
+                    f"property_measurement.{name} must be finite and non-negative")
+        _req_int(self.suite_seed, "property_measurement.suite_seed")
+        _req_bool(self.passed, "property_measurement.passed")
+        derived = self.residual <= self.tolerance
+        if self.passed != derived:
+            raise ValueError(
+                f"property_measurement.passed={self.passed} disagrees with "
+                f"residual <= tolerance ({self.residual} <= {self.tolerance} is {derived})")
+
+    def to_dict(self) -> dict:
+        return {
+            "schema": "epyc.autokernel.property_measurement.v1",
+            "shape_id": self.shape_id,
+            "op": self.op,
+            "backend": self.backend,
+            "metric_id": self.metric_id,
+            "residual": self.residual,
+            "tolerance": self.tolerance,
+            "suite_seed": self.suite_seed,
+            "passed": self.passed,
+        }
+
+
+@dataclass(frozen=True)
 class OpSuiteEvidence:
     """§8.6 "targeted backend-op unit shapes" — the surface `kernel_eval.sh` truncated."""
 
@@ -1255,6 +1299,7 @@ class OpSuiteEvidence:
     shapes_ref: str
     receipt_ref: str
     produced_by: str
+    property_measurements: tuple = ()
 
     def __post_init__(self) -> None:
         _req_str(self.suite_id, "op_suite.suite_id")
@@ -1272,6 +1317,15 @@ class OpSuiteEvidence:
         _req_str(self.shapes_ref, "op_suite.shapes_ref")
         _req_str(self.receipt_ref, "op_suite.receipt_ref")
         _req_producer(self.produced_by, "op_suite.produced_by")
+        for item in _req_tuple(self.property_measurements,
+                               "op_suite.property_measurements"):
+            if not isinstance(item, PropertyMeasurement):
+                raise TypeError(
+                    "op_suite.property_measurements must contain PropertyMeasurement")
+            if item.suite_seed != self.suite_seed:
+                raise ValueError(
+                    f"property measurement {item.shape_id!r} carries suite_seed "
+                    f"{item.suite_seed}, expected {self.suite_seed}")
 
     def cases_for(self, op: str) -> Optional[tuple]:
         for row in self.cases_by_op:
@@ -2149,7 +2203,8 @@ del _gid, _cls
 
 def _gate(gate_id: str, check: schemas.Check, *,
           evidence_ref: Optional[str] = None,
-          notes: Sequence[str] = ()) -> api.GateResult:
+          notes: Sequence[str] = (),
+          measurements: Sequence[dict] = ()) -> api.GateResult:
     """Build a `GateResult` from the registry, so class and anchor-ness are never
     supplied at the call site and cannot drift between gates."""
     return api.GateResult(
@@ -2159,6 +2214,7 @@ def _gate(gate_id: str, check: schemas.Check, *,
         requires_anchor=_GATE_ANCHOR_BY_ID[gate_id],
         evidence_ref=evidence_ref,
         notes=tuple(notes),
+        measurements=tuple(measurements),
     )
 
 
@@ -2617,7 +2673,9 @@ def check_backend_op_units(request: api.EvaluationRequest,
             reasons.append(f"op {op!r}: {passed}/{total} cases passed")
     return _gate(GID_OP_UNITS, _verdict(reasons), evidence_ref=evidence.receipt_ref,
                  notes=(f"suite={evidence.suite_id}", f"required={list(required)}",
-                        f"shapes={evidence.shapes_ref}"))
+                        f"shapes={evidence.shapes_ref}"),
+                 measurements=tuple(item.to_dict()
+                                    for item in evidence.property_measurements))
 
 
 def check_exact_reference_comparison(request: api.EvaluationRequest,

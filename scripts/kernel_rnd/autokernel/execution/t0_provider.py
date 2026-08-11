@@ -1328,6 +1328,11 @@ _REFERENCE_RECEIPT_RE = re.compile(
     r"observed=([0-9]+(?:\.[0-9]*)?(?:e[+-]?\d+)?) "
     r"tolerance=([0-9]+(?:\.[0-9]*)?(?:e[+-]?\d+)?) "
     r"comparisons=([1-9][0-9]*) oracle=([A-Za-z0-9_.:/-]+)$")
+_PROPERTY_RECEIPT_RE = re.compile(
+    r"^AK_PROP_V1 metric=([A-Za-z0-9_.:/-]+) "
+    r"residual=([0-9]+(?:\.[0-9]*)?(?:e[+-]?\d+)?) "
+    r"tolerance=([0-9]+(?:\.[0-9]*)?(?:e[+-]?\d+)?) "
+    r"passed=([01]) suite_seed=([0-9]+)$")
 
 #: The two skip reasons the tool prints, verbatim
 #: (tests/test-backend-ops.cpp:10368 and :10375). Both increment `n_ok`, so both
@@ -1357,6 +1362,33 @@ class BackendOpsReference:
 
 
 @dataclass(frozen=True)
+class BackendOpsProperty:
+    """One reference-free raw-buffer property residual emitted by the tool."""
+
+    metric_id: str
+    residual: float
+    tolerance: float
+    passed: bool
+    suite_seed: int
+
+    def __post_init__(self) -> None:
+        _req_str(self.metric_id, "backend_ops.property.metric_id")
+        for name in ("residual", "tolerance"):
+            value = getattr(self, name)
+            if not isinstance(value, float) or not math.isfinite(value) or value < 0:
+                raise OutputParseError(
+                    f"backend-op property {name} must be finite and non-negative")
+        if not isinstance(self.passed, bool):
+            raise OutputParseError("backend-op property passed must be a bool")
+        _req_int(self.suite_seed, "backend_ops.property.suite_seed")
+        derived = self.residual <= self.tolerance
+        if self.passed != derived:
+            raise OutputParseError(
+                f"backend-op property {self.metric_id!r} says passed={self.passed} but "
+                f"residual={self.residual} and tolerance={self.tolerance} derive {derived}")
+
+
+@dataclass(frozen=True)
 class BackendOpsCase:
     """One `test-backend-ops` case. `not supported` is NOT a pass."""
 
@@ -1365,6 +1397,7 @@ class BackendOpsCase:
     status: str          # ok | fail | not_supported
     interleaved: str = ""
     reference: Optional[BackendOpsReference] = None
+    properties: tuple = ()
 
     @property
     def passed(self) -> bool:
@@ -1375,6 +1408,7 @@ def _case_with_reference(*, op: str, params: str, status: str,
                          interleaved: str = "") -> BackendOpsCase:
     diagnostics: list = []
     reference: Optional[BackendOpsReference] = None
+    properties: list = []
     for part in (piece.strip() for piece in interleaved.split(" | ") if piece.strip()):
         if part.startswith("AK_REF_"):
             if reference is not None:
@@ -1388,13 +1422,26 @@ def _case_with_reference(*, op: str, params: str, status: str,
                 metric_id=match.group(1), observed=float(match.group(2)),
                 tolerance=float(match.group(3)), comparisons=int(match.group(4)),
                 oracle_id=match.group(5))
+        elif part.startswith("AK_PROP_"):
+            match = _PROPERTY_RECEIPT_RE.fullmatch(part)
+            if match is None:
+                raise OutputParseError(
+                    f"case {op}({params}) emitted malformed property receipt {part!r}")
+            properties.append(BackendOpsProperty(
+                metric_id=match.group(1), residual=float(match.group(2)),
+                tolerance=float(match.group(3)), passed=match.group(4) == "1",
+                suite_seed=int(match.group(5))))
         else:
             diagnostics.append(part)
     if reference is not None and status != "ok":
         raise OutputParseError(
             f"case {op}({params}) attached a passing reference receipt to status {status}")
+    if any(not item.passed for item in properties) and status != "fail":
+        raise OutputParseError(
+            f"case {op}({params}) attached a failed property receipt to status {status}")
     return BackendOpsCase(op=op, params=params, status=status,
-                          interleaved=" | ".join(diagnostics), reference=reference)
+                          interleaved=" | ".join(diagnostics), reference=reference,
+                          properties=tuple(properties))
 
 
 @dataclass(frozen=True)
@@ -1714,10 +1761,13 @@ def parse_backend_ops_csv(text: str) -> BackendOpsRun:
         backend = cells[index["backend_name"]]
         supported = cells[index["supported"]] == "1"
         error = cells[index["error_message"]]
+        property_receipt = (cells[index["property_receipt"]]
+                            if "property_receipt" in index else "")
         reference_receipt = (cells[index["reference_receipt"]]
                              if "reference_receipt" in index else "")
         state = "not_supported" if not supported else ("ok" if not error else "fail")
-        interleaved = " | ".join(value for value in (error, reference_receipt) if value)
+        interleaved = " | ".join(
+            value for value in (error, property_receipt, reference_receipt) if value)
         by_backend.setdefault(backend, []).append(_case_with_reference(
             op=cells[index["op_name"]], params=cells[index["op_params"]], status=state,
             interleaved=interleaved))
@@ -2407,6 +2457,22 @@ class ExecutedT0EvidenceProvider:
                 undefined_for=(),
                 oracle_registry_ref=f"{ref}#backend-ops-reference-v1",
                 produced_by=PRODUCER)
+        property_measurements: list = []
+        case_ordinal = 0
+        for backend in run.backends:
+            for case in backend.cases:
+                shape_id = f"{case.op}({case.params})#{case_ordinal}"
+                for property_result in case.properties:
+                    property_measurements.append(correctness.PropertyMeasurement(
+                        shape_id=shape_id,
+                        op=case.op,
+                        backend=backend.name,
+                        metric_id=property_result.metric_id,
+                        residual=property_result.residual,
+                        tolerance=property_result.tolerance,
+                        suite_seed=property_result.suite_seed,
+                        passed=property_result.passed))
+                case_ordinal += 1
         return correctness.OpSuiteEvidence(
             suite_id=plan.suite_id,
             suite_source_sha256=plan.suite_source_sha256,
@@ -2417,6 +2483,7 @@ class ExecutedT0EvidenceProvider:
             shapes_ref=f"test-backend-ops:{plan.backend_filter}:{','.join(plan.ops)}",
             receipt_ref=ref,
             produced_by=PRODUCER,
+            property_measurements=tuple(property_measurements),
         )
 
     # -- boundary shapes ---------------------------------------------------

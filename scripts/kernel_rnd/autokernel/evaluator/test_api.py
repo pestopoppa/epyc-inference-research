@@ -464,6 +464,21 @@ class AnchorRequiredTest(unittest.TestCase):
         self.assertEqual(event["performance"]["search_discipline"]["suite_seed"],
                          4711)
 
+    def test_gate_vector_preserves_structured_property_measurements(self):
+        measurement = {
+            "schema": "epyc.autokernel.property_measurement.v1",
+            "shape_id": "SOFT_MAX(type=f32,ne=[83,2,1,1])#0",
+            "op": "SOFT_MAX", "backend": "CPU",
+            "metric_id": "softmax_invariants/v1", "residual": 2.5e-08,
+            "tolerance": 1e-4, "suite_seed": 4711, "passed": True,
+        }
+        gate = api.GateResult(
+            gate_id="t0.backend_op_units", gate_class=api.GATE_CORRECTNESS,
+            check=S.Check(S.PASS, ()), measurements=(measurement,))
+        vector = api._vector((gate,), api.GATE_CORRECTNESS)
+        self.assertEqual(
+            vector["t0.backend_op_units"]["measurements"], [measurement])
+
     def test_a_placeholder_anchor_digest_is_refused_at_emission(self):
         """`0`*64 is not "no anchor recorded"; it is a claim that one WAS."""
         for field, filler in (("binary_sha256", "0" * 64),

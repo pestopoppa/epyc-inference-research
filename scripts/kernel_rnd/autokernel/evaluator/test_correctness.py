@@ -438,6 +438,25 @@ class TestCleanCandidatePasses(unittest.TestCase):
 
 class TestBackendOpUnits(unittest.TestCase):
 
+    def test_property_residuals_travel_as_structured_gate_measurements(self):
+        measurement = C.PropertyMeasurement(
+            shape_id="SOFT_MAX(type=f32,ne=[83,2,1,1])#0",
+            op="SOFT_MAX", backend="CPU", metric_id="softmax_invariants/v1",
+            residual=2.5e-08, tolerance=1e-4, suite_seed=4711, passed=True)
+        report = run(ev=evidence(op_suite=op_suite(
+            property_measurements=(measurement,))))
+        gate = report.gate(C.GID_OP_UNITS)
+        self.assertEqual(gate.measurements, (measurement.to_dict(),))
+        self.assertEqual(gate.to_dict()["measurements"][0]["suite_seed"], 4711)
+
+    def test_property_measurement_refuses_a_mismatched_suite_seed(self):
+        measurement = C.PropertyMeasurement(
+            shape_id="SOFT_MAX(type=f32)#0", op="SOFT_MAX", backend="CPU",
+            metric_id="softmax_invariants/v1", residual=0.0, tolerance=1e-4,
+            suite_seed=99, passed=True)
+        with self.assertRaises(ValueError):
+            op_suite(property_measurements=(measurement,))
+
     def test_mul_mat_only_suite_fails_the_way_kernel_eval_sh_did_not(self):
         """`test-backend-ops -o MUL_MAT`, all cases passing, MUL_MAT_ID never run."""
         report = run(ev=evidence(op_suite=op_suite(

@@ -221,6 +221,33 @@ class BackendOpsConsoleParsing(unittest.TestCase):
         with self.assertRaises(t0.OutputParseError):
             t0.parse_backend_ops_console(text)
 
+    def test_property_residual_is_parsed_as_candidate_only_measurement(self):
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                "  SOFT_MAX(type=f32,ne=[83,2,1,1]): "
+                "AK_PROP_V1 metric=softmax_invariants/v1 residual=2.5e-08 "
+                "tolerance=0.0001 passed=1 suite_seed=4711 | "
+                "AK_REF_V1 metric=test_backend_ops_error/v1 observed=1e-09 "
+                "tolerance=1e-07 comparisons=1 oracle=ggml_cpu_reference/v1 OK\n"
+                "  1/1 tests passed\n  Backend CPU: OK\n"
+                "1/1 backends passed\nOK\n")
+        case = t0.parse_backend_ops_console(text).cases[0]
+        self.assertEqual(len(case.properties), 1)
+        measurement = case.properties[0]
+        self.assertEqual(measurement.metric_id, "softmax_invariants/v1")
+        self.assertEqual(measurement.residual, 2.5e-08)
+        self.assertEqual(measurement.tolerance, 0.0001)
+        self.assertTrue(measurement.passed)
+        self.assertEqual(measurement.suite_seed, 4711)
+
+    def test_property_receipt_cannot_lie_about_its_derived_verdict(self):
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                "  SOFT_MAX(type=f32): AK_PROP_V1 metric=softmax_invariants/v1 "
+                "residual=0.25 tolerance=0.0001 passed=1 suite_seed=4711 OK\n"
+                "  1/1 tests passed\n  Backend CPU: OK\n"
+                "1/1 backends passed\nOK\n")
+        with self.assertRaises(t0.OutputParseError):
+            t0.parse_backend_ops_console(text)
+
     def test_recorded_passing_run_parses_cases_and_ops(self):
         run = t0.parse_backend_ops_console(recorded("recorded_t0_backend_ops_console_ok.txt"))
         self.assertEqual(len(run.backends), 1)
@@ -408,6 +435,19 @@ class BackendOpsCsvParsing(unittest.TestCase):
         self.assertEqual(run.cases[0].status, "ok")
         self.assertEqual(run.cases[0].interleaved, "")
         self.assertEqual(run.cases[0].reference.oracle_id, "ggml_cpu_reference/v1")
+
+    def test_current_csv_keeps_property_receipt_structured(self):
+        property_receipt = (
+            "AK_PROP_V1 metric=argsort_permutation_violations/v1 residual=0 "
+            "tolerance=0 passed=1 suite_seed=99")
+        text = (
+            '"backend_name","op_name","op_params","test_mode","supported",'
+            '"error_message","backend_reg_name","property_receipt","reference_receipt"\n'
+            f'"CPU","ARGSORT","type=i32","test","1","","CPU",'
+            f'"{property_receipt}",""\n')
+        case = t0.parse_backend_ops_csv(text).cases[0]
+        self.assertEqual(case.properties[0].suite_seed, 99)
+        self.assertEqual(case.properties[0].residual, 0.0)
 
     def test_csv_cannot_express_a_skipped_backend(self):
         """Why console is the T0 default, stated as a test rather than a comment.
@@ -897,6 +937,7 @@ def _console_capture(provider_plan, text, *, ops=None, params_filter=None):
         backend_filter=provider_plan.op_suite.backend_filter,
         ops=ops or provider_plan.op_suite.ops,
         base_env=provider_plan.base_env,
+        suite_seed=provider_plan.op_suite.suite_seed,
         params_filter=params_filter)
     return capture(inv.argv, stdout=text, exit_code=0)
 
@@ -912,6 +953,27 @@ def _linkage_capture(provider_plan, text, *, binary=None, library_path=None, exi
 
 
 class OpSuiteCollection(unittest.TestCase):
+
+    def test_property_residuals_bind_backend_shape_and_suite_seed(self):
+        plan = execution_plan(op_suite=op_suite_plan(
+            ops=("SOFT_MAX",), suite_seed=4711))
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                "  SOFT_MAX(type=f32,ne=[83,2,1,1]): "
+                "AK_PROP_V1 metric=softmax_invariants/v1 residual=2.5e-08 "
+                "tolerance=0.0001 passed=1 suite_seed=4711 OK\n"
+                "  1/1 tests passed\n  Backend CPU: OK\n"
+                "1/1 backends passed\nOK\n")
+        provider = t0.ExecutedT0EvidenceProvider(
+            plan=plan, runner=t0.RecordedProcessRunner([_console_capture(plan, text)]),
+            claim=FakeClaim())
+        evidence = provider.collect_op_suite(t0._Collected())
+        self.assertEqual(len(evidence.property_measurements), 1)
+        measurement = evidence.property_measurements[0]
+        self.assertEqual(measurement.backend, "CPU")
+        self.assertEqual(measurement.op, "SOFT_MAX")
+        self.assertEqual(measurement.shape_id,
+                         "SOFT_MAX(type=f32,ne=[83,2,1,1])#0")
+        self.assertEqual(measurement.suite_seed, 4711)
 
     def test_op_suite_evidence_reports_only_what_ran(self):
         plan = execution_plan()

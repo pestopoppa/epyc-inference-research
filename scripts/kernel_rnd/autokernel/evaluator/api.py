@@ -1692,6 +1692,7 @@ class GateResult:
     requires_anchor: bool = False
     evidence_ref: Optional[str] = None
     notes: tuple = ()
+    measurements: tuple = ()
 
     def __post_init__(self) -> None:
         _require_nonempty_str(self.gate_id, "gate.gate_id")
@@ -1703,9 +1704,15 @@ class GateResult:
             raise TypeError("gate.requires_anchor must be a bool")
         if not isinstance(self.notes, tuple):
             raise TypeError("gate.notes must be a tuple")
+        if not isinstance(self.measurements, tuple):
+            raise TypeError("gate.measurements must be a tuple")
+        for index, item in enumerate(self.measurements):
+            if not isinstance(item, dict):
+                raise TypeError(f"gate.measurements[{index}] must be a dict")
+            _canonicalizable(item, f"gate.measurements[{index}]")
 
     def to_dict(self) -> dict:
-        return {
+        out = {
             "gate_id": self.gate_id,
             "gate_class": self.gate_class,
             "outcome": self.check.outcome,
@@ -1714,6 +1721,9 @@ class GateResult:
             "evidence_ref": self.evidence_ref,
             "notes": list(self.notes),
         }
+        if self.measurements:
+            out["measurements"] = list(self.measurements)
+        return out
 
 
 @dataclass(frozen=True)
@@ -2707,15 +2717,20 @@ def _canonicalizable(value: Any, path: str) -> Any:
 
 def _vector(gates: Sequence[GateResult], *classes: str) -> dict:
     """Per-case vector, never a rolled-up verdict (§7.4)."""
-    return {
-        g.gate_id: {
+    out = {}
+    for g in gates:
+        if g.gate_class not in classes:
+            continue
+        row = {
             "outcome": g.check.outcome,
             "reasons": list(g.check.reasons),
             "requires_anchor": g.requires_anchor,
             "evidence_ref": g.evidence_ref,
         }
-        for g in gates if g.gate_class in classes
-    }
+        if g.measurements:
+            row["measurements"] = list(g.measurements)
+        out[g.gate_id] = row
+    return out
 
 
 def _anchor_block_for_event(anchor: Any) -> dict:

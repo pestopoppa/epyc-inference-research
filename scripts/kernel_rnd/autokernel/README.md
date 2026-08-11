@@ -782,7 +782,13 @@ What remains is not another hidden static plane:
   champion, or empirical input for AK-WM-2/AP-WM-1b.
 - The independent C2 property/reference oracle is owned by the ROCm verify/profile
   backend. AutoKernel consumes its evidence but does not manufacture a sibling
-  implementation and call that independent.
+  implementation and call that independent. The consumption seam is now complete:
+  `test-backend-ops` `AK_PROP_V1` receipts are parsed separately from reference and
+  diagnostic text, the residual verdict is re-derived, suite-seed mismatches refuse,
+  and each per-op/backend/shape residual travels as a structured
+  `epyc.autokernel.property_measurement.v1` row inside the evaluation event's
+  `t0.backend_op_units` vector. Real rows still await a sealed experimental instrument
+  and an authorized backend-op run.
 - The release and speech-adapter planes were deliberately removed on 2026-08-04 and
   remain recoverable from `autokernel-preserve-20260804`. Restore the narrow release
   slice only for a real champion/freeze request, and restore the speech slice only
