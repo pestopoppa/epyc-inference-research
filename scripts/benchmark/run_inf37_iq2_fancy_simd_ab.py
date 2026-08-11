@@ -92,8 +92,11 @@ def assert_sources(baseline: Path, candidate: Path, *, commit: str,
 def linkage(binary: Path) -> dict:
     if not binary.is_file() or not os.access(binary, os.X_OK):
         raise RuntimeError(f"binary is not executable: {binary}")
+    env = os.environ.copy()
+    env["LD_LIBRARY_PATH"] = (
+        f"{binary.parent}:{env.get('LD_LIBRARY_PATH', '')}").rstrip(":")
     result = subprocess.run(
-        ("ldd", str(binary)), check=True, text=True,
+        ("ldd", str(binary)), check=True, text=True, env=env,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     lines = tuple(line.strip() for line in result.stdout.splitlines())
     cpu_rows = tuple(line for line in lines if "libggml-cpu" in line)
@@ -229,8 +232,6 @@ def run(args: argparse.Namespace) -> dict:
     invocations = []
     captured_error = None
     try:
-        env = os.environ.copy()
-        env["GGML_IQK"] = "1"
         for block, order in enumerate(balanced_orders(args.blocks)):
             for position, arm in enumerate(order):
                 held = claim.verify_held()
@@ -240,6 +241,10 @@ def run(args: argparse.Namespace) -> dict:
                 command = (
                     "taskset", "-c", CPU_LIST, "numactl", "--interleave=all",
                     str(binaries[arm]), *command_tail)
+                env = os.environ.copy()
+                env["GGML_IQK"] = "1"
+                env["LD_LIBRARY_PATH"] = (
+                    f"{binaries[arm].parent}:{env.get('LD_LIBRARY_PATH', '')}").rstrip(":")
                 result = subprocess.run(
                     command, env=env, text=True, stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE, timeout=args.timeout_s)

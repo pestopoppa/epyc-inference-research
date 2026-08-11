@@ -39,6 +39,26 @@ def test_git_status_preserves_porcelain_index_column(tmp_path, monkeypatch) -> N
     assert runner.git_status(tmp_path).startswith(" M ")
 
 
+def test_linkage_prepends_build_local_library_path(tmp_path, monkeypatch) -> None:
+    binary = tmp_path / "bin" / "test-backend-ops"
+    binary.parent.mkdir()
+    binary.write_bytes(b"executable")
+    binary.chmod(0o755)
+    seen = {}
+
+    class Result:
+        stdout = f"libggml-cpu.so.0 => {binary.parent}/libggml-cpu.so.0\n"
+
+    def fake_run(*args, **kwargs):
+        seen.update(kwargs["env"])
+        return Result()
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+    row = runner.linkage(binary)
+    assert seen["LD_LIBRARY_PATH"].split(":")[0] == str(binary.parent)
+    assert str(binary.parent) in row["ggml_cpu_row"]
+
+
 def test_parse_sql_rows_requires_exact_cells() -> None:
     rows = runner.parse_sql_rows(sql([(1, 100.0, 10), (512, 200.0, 5)]))
     assert [row["n"] for row in rows] == [1, 512]
