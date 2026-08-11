@@ -73,8 +73,10 @@ TARGET_MODEL_BYTES = 29_047_084_160
 TARGET_MODEL_SHA256 = "9408dcb356cc061a05c139e5647cbde0698ff980c6a69f7fc214e9989f86cfa8"
 DRAFTER_MODEL_BYTES = 8_558_077_216
 DRAFTER_MODEL_SHA256 = "7d6f97cc3c77f69c466da15f050dc5d1fc8b0641ba748b3803cc3ddcac8ba1ee"
-TARGET_LAYER_COUNT = 65
-DRAFTER_LAYER_COUNT = 5
+TARGET_OFFLOAD_LAYER_COUNT = 66
+DRAFTER_OFFLOAD_LAYER_COUNT = 6
+TARGET_POSITIVE_KV_BUFFER_COUNT = 1
+DRAFTER_POSITIVE_KV_BUFFER_COUNT = 1
 SOURCE_UNTRACKED_ALLOWLIST = {
     ".gitnexusignore": "local GitNexus configuration; not a llama.cpp build input",
     "tools/math-tools/": "operator-owned unrelated tool subtree; not linked into llama-server",
@@ -1117,17 +1119,17 @@ def parse_log_residency(log_text: str, arm: Arm) -> dict[str, Any]:
     split_at = draft_load.start() if draft_load is not None else len(log_text)
     target_section = log_text[:split_at]
     draft_section = log_text[split_at:] if draft_load is not None else ""
-    target_models = _positive_model_buffers(target_section, TARGET_LAYER_COUNT)
+    target_models = _positive_model_buffers(target_section, TARGET_OFFLOAD_LAYER_COUNT)
     target_kv = _positive_kv_buffers(
         target_section, cache_k=TARGET_CACHE_K, cache_v=TARGET_CACHE_V
     )
-    draft_models = _positive_model_buffers(draft_section, DRAFTER_LAYER_COUNT)
+    draft_models = _positive_model_buffers(draft_section, DRAFTER_OFFLOAD_LAYER_COUNT)
     draft_kv = _positive_kv_buffers(
         draft_section, cache_k=DRAFTER_CACHE_K, cache_v=DRAFTER_CACHE_V
     )
-    target_valid = target_load is not None and len(target_models) == 1 and len(target_kv) == 2
+    target_valid = target_load is not None and len(target_models) == 1 and len(target_kv) == TARGET_POSITIVE_KV_BUFFER_COUNT
     draft_valid = (
-        draft_load is not None and len(draft_models) == 1 and len(draft_kv) == 1
+        draft_load is not None and len(draft_models) == 1 and len(draft_kv) == DRAFTER_POSITIVE_KV_BUFFER_COUNT
         if arm.speculative
         else draft_load is None and not draft_models and not draft_kv
     )

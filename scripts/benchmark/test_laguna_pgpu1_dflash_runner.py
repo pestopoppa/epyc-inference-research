@@ -652,14 +652,14 @@ def _log_line(seconds: str, function: str, message: str, module: str = "") -> st
 
 def _residency_log(*, speculative: bool = True) -> str:
     text = _log_line("100", "load_model", f"loading model '{runner.DEFAULT_TARGET_MODEL}'", "srv")
-    text += _log_line("200", "load_tensors", f"offloaded {runner.TARGET_LAYER_COUNT}/{runner.TARGET_LAYER_COUNT} layers to GPU")
+    text += _log_line("200", "load_tensors", f"offloaded {runner.TARGET_OFFLOAD_LAYER_COUNT}/{runner.TARGET_OFFLOAD_LAYER_COUNT} layers to GPU")
     text += _log_line("201", "load_tensors", "       ROCm0 model buffer size = 35538.61 MiB")
-    for offset, size in enumerate((102.0, 192.0), 300):
+    for offset, size in enumerate((136.0,), 300):
         text += _log_line(str(offset), "llama_kv_cache", f"     ROCm0 KV buffer size = {size:.2f} MiB")
         text += _log_line(str(offset + 1), "llama_kv_cache", f"size = {size:.2f} MiB ( 4096 cells), K (q8_0): {size / 2:.2f} MiB, V (q8_0): {size / 2:.2f} MiB")
     if speculative:
         text += _log_line("500", "common_speculative_init_result", f"loading draft model '{runner.DEFAULT_DRAFTER_MODEL}'")
-        text += _log_line("600", "load_tensors", f"offloaded {runner.DRAFTER_LAYER_COUNT}/{runner.DRAFTER_LAYER_COUNT} layers to GPU")
+        text += _log_line("600", "load_tensors", f"offloaded {runner.DRAFTER_OFFLOAD_LAYER_COUNT}/{runner.DRAFTER_OFFLOAD_LAYER_COUNT} layers to GPU")
         text += _log_line("601", "load_tensors", "       ROCm0 model buffer size = 2126.77 MiB")
         text += _log_line("700", "llama_kv_cache", "     ROCm0 KV buffer size = 51.00 MiB")
         text += _log_line("701", "llama_kv_cache", "size = 51.00 MiB ( 4096 cells), K (q8_0): 25.50 MiB, V (q8_0): 25.50 MiB")
@@ -671,12 +671,12 @@ def test_log_residency_requires_anchored_target_and_drafter_q8_kv_lines() -> Non
     dflash = runner.parse_log_residency(_residency_log(), runner.DFLASH_ARM)
     assert base["passed"] and base["target_positive_rocm0_model_buffers_mib"] == [35538.61]
     assert dflash["passed"] and dflash["drafter_positive_rocm0_model_buffers_mib"] == [2126.77]
-    assert len(dflash["target_positive_kv_buffers"]) == 2
+    assert len(dflash["target_positive_kv_buffers"]) == runner.TARGET_POSITIVE_KV_BUFFER_COUNT
     assert len(dflash["drafter_positive_q8_kv_buffers"]) == 1
     assert not runner.parse_log_residency(_residency_log().replace("2126.77 MiB", "0.00 MiB"), runner.DFLASH_ARM)["passed"]
     assert not runner.parse_log_residency(_residency_log().replace("K (q8_0)", "K (f16)", 1), runner.DFLASH_ARM)["passed"]
     assert not runner.parse_log_residency(_residency_log().replace("V (q8_0)", "V (f16)", 1), runner.DFLASH_ARM)["passed"]
-    assert not runner.parse_log_residency(f"noise offloaded {runner.TARGET_LAYER_COUNT}/{runner.TARGET_LAYER_COUNT} layers to GPU\nnoise ROCm0 model buffer size = 1 MiB\n", runner.BASE_ARM)["passed"]
+    assert not runner.parse_log_residency(f"noise offloaded {runner.TARGET_OFFLOAD_LAYER_COUNT}/{runner.TARGET_OFFLOAD_LAYER_COUNT} layers to GPU\nnoise ROCm0 model buffer size = 1 MiB\n", runner.BASE_ARM)["passed"]
 
 
 def _response() -> dict:
