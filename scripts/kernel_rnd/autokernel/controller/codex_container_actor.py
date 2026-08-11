@@ -92,7 +92,7 @@ def build_docker_argv(
         raise CodexContainerError("actor container name is outside its owned namespace")
     user = f"{uid}:{gid}"
     return (
-        DOCKER_EXECUTABLE, "run", "--rm", "--name", container_name,
+        DOCKER_EXECUTABLE, "run", "--rm", "--interactive", "--name", container_name,
         "--init", "--read-only",
         "--network", "bridge", "--cap-drop", "ALL",
         "--security-opt", "no-new-privileges", "--pids-limit", "256",

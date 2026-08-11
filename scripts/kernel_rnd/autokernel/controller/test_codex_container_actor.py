@@ -25,6 +25,7 @@ class CodexContainerActorTest(unittest.TestCase):
         self.assertEqual(argv[0], C.DOCKER_EXECUTABLE)
         self.assertIn(C.CONTAINER_IMAGE_ID, argv)
         self.assertIn("autokernel-codex-unit", argv)
+        self.assertIn("--interactive", argv)
         self.assertIn("--read-only", argv)
         self.assertIn("no-new-privileges", argv)
         self.assertIn(f"type=bind,src={workspace},dst=/workspace", argv)
