@@ -2253,6 +2253,53 @@ def aggregate_basis(row: dict[str, Any]) -> str:
     return "none"
 
 
+def _apply_basis_caveat(entry: dict[str, Any]) -> dict[str, Any]:
+    """Demote a decision-grade R2/R4 verdict to caveated on a mixed basis.
+
+    R1 has done this per-pair since review F3 (`_pair_verdict`: a mixed basis
+    makes the status `winner_caveated`, never `winner`). R2 and R4 computed the
+    same two flags and then ignored them, so a model-level verdict could report
+    `status="decision_grade"` while its own `mixed_throughput_basis` was true —
+    the machine-readable key said decision-grade and the flag beside it said the
+    comparison was not like-for-like. This makes the three rules agree.
+
+    Mirrors R1's contract exactly, including what it does NOT do: `decision_grade`
+    keeps describing the member CELLS and is left alone. Only `status` carries the
+    caveat, so nothing here can re-grade a banked cell.
+
+    Both bases demote, for different reasons. `mixed_throughput_basis` is the
+    PRIMARY metric (decode vs wallclock_fallback, operator ruling 2026-07-30) and
+    a mixed one compares a decode rate against a wall-clock rate that includes
+    load/prefill/idle. `mixed_metric_basis` is the SECONDARY tasks/hour number
+    (trimmed vs raw_fallback); it no longer selects anything, but per
+    `aggregate_basis` a mixed tasks/hour basis "never promotes a verdict, it only
+    demotes one", so it still caveats rather than being silently dropped.
+    """
+    if entry.get("status") != "decision_grade":
+        return entry
+    mixed_tps = bool(entry.get("mixed_throughput_basis"))
+    mixed_metric = bool(entry.get("mixed_metric_basis"))
+    if not (mixed_tps or mixed_metric):
+        return entry
+    entry["status"] = "decision_grade_caveated"
+    reasons = []
+    if mixed_tps:
+        reasons.append(
+            "mixed throughput basis (decode vs wallclock_fallback): the "
+            "wall-clock rate includes load/prefill/idle and reads LOW"
+        )
+    if mixed_metric:
+        reasons.append(
+            "mixed metric basis (trimmed vs raw_fallback): raw includes "
+            "ramp+drain and understates steady-state (review F3)"
+        )
+    entry["basis_note"] = (
+        "; ".join(reasons)
+        + " — verdict is observational, not decision-grade"
+    )
+    return entry
+
+
 def _row_families(row: dict[str, Any]) -> list[str]:
     fams = row.get("stage_b_families")
     return [str(fam) for fam in fams] if isinstance(fams, list) else []
@@ -2688,6 +2735,7 @@ def evaluate_r2(rows: list[dict[str, Any]]) -> dict[str, Any]:
         verdict["mixed_throughput_basis"] = len(set(tps_bases.values())) > 1
         verdict["metric_basis"] = bases
         verdict["mixed_metric_basis"] = len(set(bases.values())) > 1
+        _apply_basis_caveat(verdict)
         verdicts[model_label] = verdict
     return {
         "rule": "R2 lanes: lanes are real iff the peak aggregate-decode-tok/s cell's "
@@ -2917,6 +2965,7 @@ def evaluate_r4(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 },
             }
         )
+        _apply_basis_caveat(output[-1])
     return output
 
 

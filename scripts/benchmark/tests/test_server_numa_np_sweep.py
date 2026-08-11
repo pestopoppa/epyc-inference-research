@@ -1631,6 +1631,101 @@ def test_summarizer_mixed_metric_basis_flagged():
     assert "observation-only" in observation_pair["grade_note"]
 
 
+def test_r2_r4_demote_status_on_mixed_basis_like_r1_does():
+    """A5: R2/R4 computed both basis flags and then ignored them.
+
+    R1 has demoted to `winner_caveated` on a mixed basis since review F3. R2 and
+    R4 emitted `status="decision_grade"` next to their own
+    `mixed_throughput_basis: true` — the machine-readable key claimed
+    decision-grade while the flag beside it said the comparison was not
+    like-for-like. All three rules now agree.
+    """
+    # R2 builds its basis maps from the PEAK, that config's K=1 baseline and any
+    # holder — not from every row — so the mix has to exist across those cells.
+    # Peak is C1@8 (decode basis); its K=1 baseline has no decode sample, so
+    # throughput_basis falls back to wall-clock.
+    mixed = [
+        summary_row("C1", 8, 120.0, 20000.0),
+        summary_row(
+            "C1", 1, 40.0, 8000.0,
+            cell_id="testmodel_q8_0-C1-np1-wallclock",
+            aggregate_decode_tps=0.0,
+            decode_tokens_total=0,
+            decode_seconds_total=0.0,
+        ),
+    ]
+    bases = {sns.throughput_basis(row) for row in mixed}
+    assert bases == {"decode", "wallclock_fallback"}, (
+        f"fixture must actually mix the primary basis, got {bases} — otherwise "
+        "this test passes by never exercising the guard"
+    )
+
+    r2 = sns.evaluate_r2(mixed)["models"]["testmodel_q8_0+Q8_0"]
+    assert r2["mixed_throughput_basis"] is True
+    assert r2["status"] == "decision_grade_caveated"
+    assert "wallclock_fallback" in r2["basis_note"]
+    # decision_grade describes the member CELLS and must NOT be re-graded.
+    assert r2["decision_grade"] is True
+
+    r4 = sns.evaluate_r4(mixed)[0]
+    assert r4["mixed_throughput_basis"] is True
+    assert r4["status"] == "decision_grade_caveated"
+    assert r4["decision_grade"] is True
+
+    # The secondary tasks/hour basis demotes too — it never promotes, only demotes.
+    metric_mixed = [
+        summary_row("C1", 8, 120.0, 20000.0),
+        summary_row(
+            "C1", 1, 40.0, 8000.0,
+            cell_id="testmodel_q8_0-C1-np1-rawonly",
+            tasks_per_hour_trimmed=0.0,
+        ),
+    ]
+    assert {sns.aggregate_basis(r) for r in metric_mixed} == {"trimmed", "raw_fallback"}
+    r2m = sns.evaluate_r2(metric_mixed)["models"]["testmodel_q8_0+Q8_0"]
+    assert r2m["mixed_metric_basis"] is True
+    assert r2m["status"] == "decision_grade_caveated"
+    assert "ramp+drain" in r2m["basis_note"]
+
+
+def test_r2_r4_keep_plain_decision_grade_on_a_consistent_basis():
+    """The guard must not forbid its own compliant path.
+
+    A caveat that fires on every verdict is indistinguishable from no verdict.
+    Same-basis decision-grade rows must still come out plain `decision_grade`
+    with no basis_note — this is the case all three banked E5 run dirs are in
+    (measured 2026-08-11: 0 of 3 have a mixed basis among decision-grade cells,
+    which is why landing this guard changes no banked result).
+    """
+    clean = [
+        summary_row("C1", 8, 120.0, 20000.0),
+        summary_row("C1", 1, 40.0, 8000.0),
+    ]
+    assert len({sns.throughput_basis(r) for r in clean}) == 1
+    assert len({sns.aggregate_basis(r) for r in clean}) == 1
+
+    r2 = sns.evaluate_r2(clean)["models"]["testmodel_q8_0+Q8_0"]
+    assert r2["status"] == "decision_grade"
+    assert r2["mixed_throughput_basis"] is False
+    assert "basis_note" not in r2
+
+    r4 = sns.evaluate_r4(clean)[0]
+    assert r4["status"] == "decision_grade"
+    assert "basis_note" not in r4
+
+
+def test_basis_caveat_never_upgrades_a_refusal():
+    """`insufficient_decision_grade_data` must survive the caveat pass.
+
+    The helper keys on `status == "decision_grade"`; a refusal carries a
+    different status and must be returned untouched rather than rewritten into
+    a caveated *verdict*, which would read as weaker evidence than it is.
+    """
+    refusal = {"status": "insufficient_decision_grade_data", "mixed_throughput_basis": True}
+    assert sns._apply_basis_caveat(refusal)["status"] == "insufficient_decision_grade_data"
+    assert "basis_note" not in refusal
+
+
 def test_summarizer_r2_r4_refuse_observation_only_cells() -> None:
     rows = [
         summary_row("C1", 1, 40.0, 10000.0, decision_grade=False),
