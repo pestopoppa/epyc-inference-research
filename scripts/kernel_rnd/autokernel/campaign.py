@@ -165,8 +165,8 @@ from . import artifact_diff, dashboard, journal as journal_module
 from . import schemas, storage
 from .controller import do_not_repeat, hypotheses
 from .evaluator import api, correctness, devices, recipes
-from .execution import (chain, cpu_region_claim, instrument_integrity, microbench,
-                        physical_bounds, sandbox, t0_provider, worktree)
+from .execution import (chain, cpu_region_claim, device_sampler, instrument_integrity,
+                        microbench, physical_bounds, sandbox, t0_provider, worktree)
 from .resource import claim_witness, device_claim, preflight
 
 __all__ = [
@@ -255,6 +255,9 @@ MODULES_THE_DRIVER_USES: Mapping[str, str] = {
                                       "T0 or T1 can launch",
     "execution.cpu_region_claim": "TODO-free: two A/A runs were destroyed by a legitimate "
                                   "co-tenant because we held no claim",
+    "execution.device_sampler": "RVP-C3-4: a GPU result needs numeric power/clock/temperature "
+                                "samples every 250 ms across each exact subprocess lifetime; "
+                                "two endpoint text blobs cannot reveal a mid-run excursion",
     "execution.microbench": "paired ALTERNATING blocks — the measured monotone drift makes "
                             "any sequential design charge the second arm ~4%",
     "execution.physical_bounds": "RVP-C6-4 refuses a live throughput sample that exceeds "
@@ -2769,7 +2772,10 @@ class HostOps:
                 require_package_power=(spec.backend == BACKEND_CPU)),
             spawner=self._spawner or microbench.SubprocessSpawner(
                 workdir_root=sandbox_policy.writable_root,
-                sandbox_policy=sandbox_policy),
+                sandbox_policy=sandbox_policy,
+                device_sampler=(
+                    device_sampler.RocmSmiSampler(device_index=spec.device_index)
+                    if spec.backend == BACKEND_GPU else None)),
             run_ledger=self._completed_run_ledger(spec))
         run = runner.run(plan)
         return pairs_from_run(run)
@@ -3449,7 +3455,7 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
           file=stream)
     print(f"  cell        {spec.recipe_id}  metric={spec.metric}", file=stream)
     if spec.calibration is None:
-        print(f"  accept      UNCALIBRATED CELL — dry-run composition only; live ranking "
+        print("  accept      UNCALIBRATED CELL — dry-run composition only; live ranking "
               "will refuse", file=stream)
     else:
         print(f"  accept      min(delta) > 0 over {spec.blocks} pre-committed pairs AND "

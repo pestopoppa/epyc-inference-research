@@ -202,6 +202,7 @@ from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 from .. import journal as journal_module
 from .. import schemas, storage
 from ..evaluator import api, integrity, recipes, statistics
+from . import device_sampler as gpu_device_sampler
 from . import instrument_integrity
 from . import physical_bounds
 from . import sandbox as process_sandbox
@@ -1865,6 +1866,24 @@ def _check_autokernel_hardening(row: BenchRow, *, reps: int,
     return tuple(reasons)
 
 
+def check_gpu_device_sampling(
+        receipt: Optional[gpu_device_sampler.DeviceSamplingReceipt], *,
+        n_gpu_layers: int, live_subprocess: bool) -> schemas.Check:
+    """Make the C3-4 in-window trace verdict-bearing on live GPU arms."""
+    if not live_subprocess or n_gpu_layers <= 0:
+        return schemas.Check(schemas.PASS, (
+            "an in-window GPU trace is not required for this non-live or CPU-only arm",))
+    if receipt is None:
+        return schemas.Check(schemas.COULD_NOT_CHECK, (
+            "the live GPU arm carries no 250 ms in-window device-state receipt",))
+    if not isinstance(receipt, gpu_device_sampler.DeviceSamplingReceipt):
+        return schemas.Check(schemas.COULD_NOT_CHECK, (
+            "the live GPU arm carries an unrecognized device-state receipt type",))
+    return receipt.device_state(
+        nominal_sclk_mhz=gpu_device_sampler.MI210_NOMINAL_SCLK_MHZ,
+        min_sclk_ratio=gpu_device_sampler.MI210_MIN_SCLK_RATIO).check()
+
+
 @dataclass(frozen=True)
 class LlamaBenchExpectation:
     """What the recipe said, so the OUTPUT can be checked against it.
@@ -1988,6 +2007,7 @@ class SpawnResult:
     khz_peak_by_cpu: tuple = ()
     sandbox_receipt: Optional[dict] = None
     sandbox_teardown: Optional[dict] = None
+    device_sampling_receipt: Optional[gpu_device_sampler.DeviceSamplingReceipt] = None
 
     def to_dict(self) -> dict:
         return {"argv": list(self.argv), "returncode": self.returncode,
@@ -1998,7 +2018,10 @@ class SpawnResult:
                 "terminated_by_runner": self.terminated_by_runner,
                 "khz_peak_by_cpu": [[cpu, khz] for cpu, khz in self.khz_peak_by_cpu],
                 "sandbox_receipt": self.sandbox_receipt,
-                "sandbox_teardown": self.sandbox_teardown}
+                "sandbox_teardown": self.sandbox_teardown,
+                "device_sampling_receipt": (
+                    None if self.device_sampling_receipt is None
+                    else self.device_sampling_receipt.to_dict())}
 
 
 class ProductionTreeWrite(MicrobenchError):
@@ -2079,7 +2102,8 @@ class SubprocessSpawner:
     def __init__(self, *, term_grace_s: float = 10.0,
                  stderr_tail_bytes: int = 4096,
                  workdir_root: Optional[str] = None,
-                 sandbox_policy: Optional[process_sandbox.SandboxPolicy] = None) -> None:
+                 sandbox_policy: Optional[process_sandbox.SandboxPolicy] = None,
+                 device_sampler: Optional[gpu_device_sampler.RocmSmiSampler] = None) -> None:
         if term_grace_s <= 0:
             raise ValueError("term_grace_s must be positive")
         self._term_grace_s = float(term_grace_s)
@@ -2089,6 +2113,10 @@ class SubprocessSpawner:
                 sandbox_policy, process_sandbox.SandboxPolicy):
             raise TypeError("sandbox_policy must be a SandboxPolicy or None")
         self._sandbox_policy = sandbox_policy
+        if device_sampler is not None and not isinstance(
+                device_sampler, gpu_device_sampler.RocmSmiSampler):
+            raise TypeError("device_sampler must be a RocmSmiSampler or None")
+        self._device_sampler = device_sampler
         if sandbox_policy is not None:
             actual_root = storage._norm(workdir_root or os.environ.get("TMPDIR")
                                         or tempfile.gettempdir())
@@ -2115,6 +2143,7 @@ class SubprocessSpawner:
         sampler = None
         sandbox_receipt = None
         sandbox_teardown = None
+        device_sampling_receipt = None
         with tempfile.TemporaryDirectory(prefix="autokernel-microbench-",
                                          dir=self._workdir_root) as workdir:
             evaluator_dir = Path(workdir, "evaluator")
@@ -2152,6 +2181,14 @@ class SubprocessSpawner:
                 except OSError as exc:
                     raise SpawnFailure(f"could not start {argv[0]!r}: {exc}") from exc
                 pid = proc.pid
+                device_session = None
+                if self._device_sampler is not None:
+                    try:
+                        device_session = self._device_sampler.start()
+                    except gpu_device_sampler.DeviceSamplingError as exc:
+                        self._terminate(proc)
+                        raise SpawnFailure(
+                            f"could not start the required in-window GPU sampler: {exc}") from exc
                 try:
                     cpu_list = argv[argv.index("-c") + 1]
                     cpus = _parse_cpu_list(cpu_list)
@@ -2182,6 +2219,13 @@ class SubprocessSpawner:
                     stop_sampling.set()
                     if sampler is not None:
                         sampler.join(timeout=1.0)
+                    if device_session is not None:
+                        try:
+                            device_sampling_receipt = device_session.stop()
+                        except gpu_device_sampler.DeviceSamplingError as exc:
+                            raise SpawnFailure(
+                                "the benchmark completed without a valid in-window GPU "
+                                f"device-state trace: {exc}") from exc
             if self._sandbox_policy is not None:
                 try:
                     sandbox_receipt = process_sandbox.read_receipt(receipt_path)
@@ -2213,7 +2257,8 @@ class SubprocessSpawner:
                            terminated_by_runner=terminated,
                            khz_peak_by_cpu=tuple(sorted(peaks.items())),
                            sandbox_receipt=sandbox_receipt,
-                           sandbox_teardown=sandbox_teardown)
+                           sandbox_teardown=sandbox_teardown,
+                           device_sampling_receipt=device_sampling_receipt)
 
     def _terminate(self, proc: "subprocess.Popen") -> int:
         """SIGTERM, then SIGKILL, then confirm reaped. Only this handle, ever."""
@@ -3800,6 +3845,16 @@ class MicrobenchRunner:
                                 f"fresh pid/start identity {identity} under invocation-only "
                                 "writable state; no process or filesystem memo survives "
                                 "from the preceding arm",))))
+            device_state_check = check_gpu_device_sampling(
+                spawn.device_sampling_receipt,
+                n_gpu_layers=unit_expectations[arm].n_gpu_layers,
+                live_subprocess=(
+                    getattr(self._spawner, "spawner_id", None) == "subprocess/v1"))
+            inv_checks.append(("gpu_device_state_window", device_state_check))
+            if device_state_check.outcome != schemas.PASS:
+                refusals.append(
+                    f"block {block_plan.block_index} position {position} ({arm}): "
+                    + "; ".join(device_state_check.reasons))
             row = None
             samples: tuple = ()
 
