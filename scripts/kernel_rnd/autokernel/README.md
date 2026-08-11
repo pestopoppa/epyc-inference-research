@@ -177,6 +177,7 @@ calibration exists. Source-changing campaigns additionally require their own
 | `evaluator/recipes.py` | **AK3.** The codified recipe constructors — every measurement argv is emitted by one, carrying its constructor id and content hash — for `test-backend-ops`, `test-quantize-perf` and `llama-bench`, CPU and GPU. Every T1a recipe requires a typed local A/A timing floor; a bare numeric or foreign floor is refused. |
 | `execution/worktree.py` | **AK2.** Fresh worktrees from the reviewed one-commit measurement overlay on current production v9, pathspec commits, clean candidate-local builds, and build identities. Candidate-controlled CMake configure/build is C6-sandboxed and returns evaluator-owned activation plus verified-cgroup-teardown receipts. |
 | `execution/sandbox.py` | **C6.** Native Landlock write confinement, seccomp signal/network/namespace denial, non-root identity, finite rlimits, per-invocation cgroup-v2 containment, candidate-proof activation receipts, and descendant-draining teardown. Startup is fail-closed. |
+| `execution/provision_cgroup.sh` | **C6 host setup.** Root-only, explicit UID/GID provisioning of the narrow `/sys/fs/cgroup/autokernel` parent. The candidate still runs unprivileged and receives only a fresh per-invocation child leaf. |
 | `execution/t0_provider.py` | **AK3 T0.** Real correctness invocations. The live campaign constructs it only with a C6 policy; recorded replay starts no process. |
 | `execution/microbench.py` | **AK3 T1 / RVP-C6-2/C6-3/C6-10.** Fresh process and empty invocation-only writable state for every arm, interleaved paired blocks, mandatory `--autokernel-harden` receipts, per-CPU frequency observations, and exact-window package-energy deltas. Each repetition uses unique content and context/input addresses in an ordinary/full-device-sync hybrid pair; only the synchronized twin is ranked, both brackets must preserve the exact thread set, and a >20% GPU median divergence is an integrity failure rather than a corrected speed result. Anti-short-circuit units must change the real recipe, appear beside a normal control, and receive blocks in the same ranked stream. Package values are explicitly shared-package rather than lane-exclusive. |
 | `execution/instrument_integrity.py` | **RVP-C6-1.** Re-hashes the complete three-file reward-instrument manifest in explicit candidate and named-anchor source roots before live T0/T1 work and immediately before every T1 invocation; missing, unreadable, or changed source is a hard refusal. Build roots are never accepted as source identity. |
@@ -967,6 +968,12 @@ authoritative for what is live now.
   Activation receipts and stdout/stderr live in an evaluator-owned sibling the
   candidate cannot rewrite; teardown drains descendants, proves empty membership,
   and removes the cgroup. Recorded/replay runners spawn nothing.
+  The host prerequisite is reproducible after boot with
+  `sudo scripts/kernel_rnd/autokernel/execution/provision_cgroup.sh "$(id -u)" "$(id -g)"`;
+  the evaluator prefers that narrow delegation, permits an absolute
+  `EPYC_AUTOKERNEL_CGROUP_ROOT` override for another deliberately delegated
+  parent, and otherwise retains the old cgroup-root check. Missing delegation
+  remains a pre-spawn refusal, never an unsandboxed fallback.
 - **`kernel_eval.sh`'s `gpu_idle()` is not yet deleted.** AK2's acceptance
   criterion is "deleted, not wrapped"; the replacement now exists, the deletion
   has not happened.

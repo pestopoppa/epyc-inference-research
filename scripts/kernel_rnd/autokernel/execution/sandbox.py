@@ -26,22 +26,41 @@ import ctypes
 import errno
 import hashlib
 import json
-import math
 import os
 import resource
 import secrets
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 
 SANDBOX_ID = "autokernel.execution.sandbox/landlock-seccomp-cgroup-v1"
+CGROUP_ROOT_ENV = "EPYC_AUTOKERNEL_CGROUP_ROOT"
+HOST_CGROUP_ROOT = "/sys/fs/cgroup/autokernel"
 
 
 class SandboxError(RuntimeError):
     """A required containment control was unavailable or contradicted itself."""
+
+
+def default_cgroup_root() -> str:
+    """Return the evaluator-selected cgroup parent without weakening failure.
+
+    The host provisions one narrow, unprivileged delegation for AutoKernel.
+    Older environments that deliberately made the cgroup-v2 mount root
+    writable keep working; an unavailable or non-writable result is rejected
+    by :class:`SandboxPolicy` before a candidate is spawned.
+    """
+    configured = os.environ.get(CGROUP_ROOT_ENV, "").strip()
+    if configured:
+        if not os.path.isabs(configured):
+            raise SandboxError(f"{CGROUP_ROOT_ENV} must name an absolute path")
+        return configured
+    if os.path.isdir(HOST_CGROUP_ROOT):
+        return HOST_CGROUP_ROOT
+    return "/sys/fs/cgroup"
 
 
 # x86_64 syscall numbers.  AutoKernel's production host is x86_64; refusing a
@@ -309,7 +328,7 @@ def install_resource_limits(limits: ResourceLimits) -> None:
 @dataclass(frozen=True)
 class SandboxPolicy:
     writable_root: str
-    cgroup_root: str = "/sys/fs/cgroup"
+    cgroup_root: str = dataclass_field(default_factory=default_cgroup_root)
     limits: ResourceLimits = ResourceLimits()
     token: str = ""
 
