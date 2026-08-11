@@ -1007,10 +1007,12 @@ def request_body(prompt: str, args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
-def wait_for_health(port: int, timeout_s: int) -> None:
+def wait_for_health(port: int, timeout_s: int, proc: subprocess.Popen[str] | None = None) -> None:
     deadline = time.monotonic() + timeout_s
     last_error = ""
     while time.monotonic() < deadline:
+        if proc is not None and proc.poll() is not None:
+            raise RuntimeError(f"llama-server exited before health became ready (returncode={proc.returncode})")
         try:
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5) as response:
                 if response.status == 200:
@@ -1491,7 +1493,7 @@ def run_replicate(args: argparse.Namespace, arm: Arm, rep: int, port: int, outpu
             raise RuntimeError("pre-launch ROCm snapshot incomplete")
         with log_path.open("w", encoding="utf-8") as stderr:
             proc = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=stderr, text=True, start_new_session=True, env=runtime_env(args.binary))
-        wait_for_health(port, args.startup_timeout)
+        wait_for_health(port, args.startup_timeout, proc)
         resident_rocm = collect_rocm_snapshot(proc.pid)
         resident_processes = process_snapshot()
         resident_valid, resident_reason = live_binding_is_valid(resident_processes, resident_rocm, proc.pid, port, args.binary, expected_identity["binding"], arm.speculative)
