@@ -61,6 +61,10 @@ for _p in (str(_REPO_ROOT / "scripts" / "lib"), str(_BENCHMARK_DIR)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+from instrument_era import (  # noqa: E402
+    EraDerivationError,
+    era_for_binary,
+)
 from canonical_recipe import (  # noqa: E402
     CANONICAL_OMP_ENV,
     FREQ_BOOST_MIN_CORES,
@@ -1875,6 +1879,59 @@ class TeardownFailure(RuntimeError):
     """Raised when a cell teardown leaves surviving processes; aborts the run."""
 
 
+
+def _run_era_block(
+    cell_era: dict[str, Any] | None,
+    attestation: dict[str, Any] | None,
+    dry_run: bool,
+) -> dict[str, Any]:
+    """The run manifest's era, resolved from the WITNESS rather than copied.
+
+    This line used to read ``"era": first.manifest.get("era")`` — the block was
+    copied verbatim from the cell template and the registry was never consulted,
+    which is why repairing only the generator would have left every remaining run
+    still minting a mis-stamped manifest. It is also why the earlier repair package
+    was refused: nothing bound ``era.cpu_kernel`` to ``attestation.binary_version``,
+    the ONLY field that witnesses which kernel actually executed.
+
+    Note where the two live: ``"attestation": attestation`` is set ~34 lines below
+    this in the same dict literal. The witness and the claim were assembled side by
+    side and the claim ignored the witness. No plumbing was missing, only the binding.
+
+    Three cases, all explicit:
+      * dry run / no attestation -> nothing executed, so nothing is witnessed. The
+        cell's pre-registration stamp is carried through, labelled as unwitnessed.
+      * attested binary the registry can name -> the era of THAT binary. This is
+        what makes the run manifest self-consistent: era and attestation now agree
+        by construction rather than by coincidence of dates.
+      * attested binary the registry cannot name -> `cpu_kernel` is OMITTED and the
+        reason recorded. A consumer reading `era.cpu_kernel` gets nothing and fails
+        closed, rather than inheriting a plausible wrong answer. Deliberately not an
+        exception: by this point the cells, requests and responses are already on
+        disk, and destroying the manifest for an unnameable kernel would lose the
+        run's provenance entirely instead of marking it unusable.
+    """
+    block: dict[str, Any] = dict(cell_era or {})
+    if dry_run or not attestation:
+        block["witness"] = "none (dry run — nothing executed)"
+        return block
+    binary = attestation.get("binary_version")
+    if not binary:
+        block["witness"] = "none (attestation carries no binary_version)"
+        block["cpu_kernel_unresolved"] = "attestation.binary_version is absent"
+        block.pop("cpu_kernel", None)
+        return block
+    try:
+        block["cpu_kernel"] = era_for_binary(binary)
+        block["witness"] = "attestation.binary_version"
+    except EraDerivationError as exc:
+        block.pop("cpu_kernel", None)
+        block["witness"] = "attestation.binary_version (UNRESOLVED)"
+        block["cpu_kernel_unresolved"] = str(exc)
+        print(f"ERROR: cannot bind era to the executed binary: {exc}", file=sys.stderr)
+    return block
+
+
 def build_run_manifest(
     *,
     args: argparse.Namespace,
@@ -1892,7 +1949,7 @@ def build_run_manifest(
         "created_at": utc_now(),
         "protocol_id": EXPECTED_PROTOCOL_ID,
         "schema_version": EXPECTED_SCHEMA_VERSION,
-        "era": first.manifest.get("era"),
+        "era": _run_era_block(first.manifest.get("era"), attestation, dry_run),
         "dry_run": dry_run,
         "output_dir": str(output_dir),
         "args": {

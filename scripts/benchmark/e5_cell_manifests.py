@@ -60,6 +60,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import datetime as _dt
 import json
 import sys
 from pathlib import Path
@@ -67,17 +68,46 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST_DIR = REPO_ROOT / "data" / "batched_decode" / "e5_manifests"
 
+# Same bootstrap server_numa_np_sweep.py uses, so era derivation is shared rather
+# than reimplemented per script — two copies of a derivation rule is how the two
+# copies disagree.
+for _p in (str(REPO_ROOT / "scripts" / "lib"),):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 SCHEMA_VERSION = "e5-cell-manifest/1"
 PROTOCOL_ID = "P-BENCH-3"
 
-# Instrument-era stamps (verified against epyc-orchestrator
-# orchestration/instrument_eras.yaml — E6-cpu-kernel: v7 cutover
-# 2026-07-20T13:30:13Z; E7-eval-instrument: pool/scorer boundary 2026-07-21).
-ERA_CPU_KERNEL = "E6-cpu-kernel"
-ERA_EVAL_INSTRUMENT = "E7-eval-instrument"
-ERA_SOURCE = "epyc-orchestrator/orchestration/instrument_eras.yaml"
-INSTRUMENT_ERAS_PATH = Path(
-    "/mnt/raid0/llm/epyc-orchestrator/orchestration/instrument_eras.yaml"
+# ---------------------------------------------------------------------------
+# Instrument-era stamps — DERIVED, never pinned.
+#
+# Until 2026-08-11 this block read:
+#     ERA_CPU_KERNEL     = "E6-cpu-kernel"
+#     ERA_EVAL_INSTRUMENT = "E7-eval-instrument"
+# Both were correct when written on 2026-07-23 and silently wrong from the v8
+# cutover two days later. A constant naming the CURRENT era goes stale at every
+# cutover by construction, and the v9 freeze proved it a second time — which is
+# why the repair is derivation and not a new constant.
+#
+# Ordinals are no help either: the cpu_bench timeline is E0, E1, E5-cpu-kernel
+# (v6+iqk), E6-cpu-kernel (**v7**), E8-cpu-kernel (v8), E9-cpu-kernel (v9), with
+# no E7-cpu-kernel at all. Reading "E6" as "v6" is the natural and wrong
+# inference, and is exactly how this survived a cutover.
+#
+# Kernel era is resolved by `derive_kernel_era`, NOT by scope alone: since the
+# operator-signed consolidated token of 2026-08-11T21:35Z, `cpu_bench` carries
+# both kernel cutovers and an ELIGIBILITY boundary
+# (E8-cpu-bench-throttle-scope), and a latest-in-scope lookup returns the
+# eligibility row for the whole W1/W2/W4 window. See scripts/lib/instrument_era.py.
+from instrument_era import (  # noqa: E402
+    ERA_SOURCE,
+    INSTRUMENT_ERAS_PATH,
+    SCOPE_EVAL_INSTRUMENT,
+    EraDerivationError,
+    derive_era,
+    derive_kernel_era,
+    known_era_ids,
+    load_registry,
 )
 
 # NUMA shapes — mirror epyc-orchestrator scripts/server/stack_numa.py constants.
@@ -521,11 +551,14 @@ def make_cell(
     return {
         "schema_version": SCHEMA_VERSION,
         "protocol_id": PROTOCOL_ID,
-        "era": {
-            "cpu_kernel": ERA_CPU_KERNEL,
-            "eval_instrument": ERA_EVAL_INSTRUMENT,
-            "source": ERA_SOURCE,
-        },
+        # The pre-registration instant, recorded because the manifest is the only
+        # thing that can witness it. Design doc 01 section 4 measured the
+        # alternatives and both fail: git last-touch would reject 19 of 191 real
+        # files, and filesystem mtime is worse. Without this field a validator can
+        # only check that a stamp EXISTS; with it, it can check the stamp is the
+        # one that was current when the cell was registered.
+        "generated_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+        "era": _era_block_now(),
         "window": window,
         "cell_id": f"{model_key}-{config_id}-np{np}{cell_id_suffix}",
         "model_key": model_key,
@@ -760,13 +793,56 @@ def validate_cell_manifest(manifest: dict) -> list[str]:
     if not isinstance(era, dict):
         err("era block missing or not an object")
     else:
-        if era.get("cpu_kernel") != ERA_CPU_KERNEL:
-            err(f"era.cpu_kernel {era.get('cpu_kernel')!r} is not {ERA_CPU_KERNEL!r}")
-        if era.get("eval_instrument") != ERA_EVAL_INSTRUMENT:
-            err(
-                f"era.eval_instrument {era.get('eval_instrument')!r} is not "
-                f"{ERA_EVAL_INSTRUMENT!r}"
-            )
+        # Era validation is DATE-DERIVED, not equality-to-a-current-constant.
+        #
+        # The equality form was campaign-breaking, not merely stale: `revalidate_cells`
+        # is fail-closed and runs this over every manifest it loads, so advancing the
+        # constant to E8 would have made the sweep refuse to start against all 191
+        # pre-registered manifests — including the un-executed templates W2/W4 depend
+        # on. The rule that keeps them valid is the append-only one: a manifest is
+        # correct if it carries the era that was current WHEN IT WAS PRE-REGISTERED.
+        #
+        # Two paths, and the loose one is bounded and shrinking:
+        #   * `generated_at` present -> exact match against the derived era. Every
+        #     manifest generated from today forward carries it, so this is the path
+        #     that applies going forward and it admits exactly one answer.
+        #   * `generated_at` absent (the 191 files pre-dating this repair) -> the
+        #     stamp must still be a REAL era id of the right scope. This is NOT the
+        #     "permanently whitelist {E6-cpu-kernel, E7-eval-instrument}" shape that
+        #     got the earlier package refused: no specific stale pair is blessed, an
+        #     invented or wrong-scope id is still rejected, and the path closes by
+        #     itself as the legacy corpus is regenerated.
+        registered_at = manifest.get("generated_at")
+        try:
+            if registered_at:
+                want_kernel = derive_kernel_era(registered_at)
+                want_eval = derive_era(SCOPE_EVAL_INSTRUMENT, registered_at)
+                if era.get("cpu_kernel") != want_kernel:
+                    err(
+                        f"era.cpu_kernel {era.get('cpu_kernel')!r} is not {want_kernel!r}, "
+                        f"the kernel era in force at generated_at={registered_at}"
+                    )
+                if era.get("eval_instrument") != want_eval:
+                    err(
+                        f"era.eval_instrument {era.get('eval_instrument')!r} is not "
+                        f"{want_eval!r}, the eval era in force at generated_at={registered_at}"
+                    )
+            else:
+                kernel_ids = known_era_ids("cpu_bench")
+                eval_ids = known_era_ids(SCOPE_EVAL_INSTRUMENT)
+                if era.get("cpu_kernel") not in kernel_ids:
+                    err(
+                        f"era.cpu_kernel {era.get('cpu_kernel')!r} is not any recorded "
+                        f"cpu_bench era (manifest carries no generated_at, so the stamp "
+                        f"can only be checked for existence)"
+                    )
+                if era.get("eval_instrument") not in eval_ids:
+                    err(
+                        f"era.eval_instrument {era.get('eval_instrument')!r} is not any "
+                        f"recorded {SCOPE_EVAL_INSTRUMENT} era"
+                    )
+        except EraDerivationError as exc:
+            err(f"era derivation failed closed: {exc}")
         if era.get("source") != ERA_SOURCE:
             err(f"era.source {era.get('source')!r} is not {ERA_SOURCE!r}")
 
@@ -1135,18 +1211,61 @@ def annotate_file_presence(cells: list[dict]) -> None:
                 )
 
 
+def _era_block_now() -> dict[str, str]:
+    """The era block for a manifest generated NOW, derived from the registry.
+
+    Fails closed. A generator that cannot name its own instrument must not mint a
+    pre-registration — an unstamped or wrongly-stamped manifest is the artifact
+    this whole repair exists to stop producing.
+    """
+    now = _dt.datetime.now(_dt.timezone.utc)
+    return {
+        "cpu_kernel": derive_kernel_era(now),
+        "eval_instrument": derive_era(SCOPE_EVAL_INSTRUMENT, now),
+        "source": ERA_SOURCE,
+    }
+
+
 def _warn_if_era_stamps_stale() -> None:
-    """Best-effort drift check of the pinned era ids against instrument_eras.yaml."""
+    """Drift check against the DERIVED current era, not registry membership.
+
+    The previous form was structurally dead: it fired only `if era_id not in text`
+    over the raw registry, but era registries are append-only, so a superseded id
+    is always still present. Its only possible trigger was DELETION of an era,
+    which policy forbids — a staleness detector that can fire only on the one event
+    that never happens. That is why the v8 cutover passed green and the mis-stamp
+    survived it.
+
+    It now compares what this generator WOULD stamp against what the registry says
+    is current, so an advance is exactly what makes it fire.
+    """
     try:
-        text = INSTRUMENT_ERAS_PATH.read_text()
-    except OSError:
+        block = _era_block_now()
+    except EraDerivationError as exc:
+        print(
+            f"ERROR: cannot derive the current instrument era: {exc}",
+            file=sys.stderr,
+        )
         return
-    for era_id in (ERA_CPU_KERNEL, ERA_EVAL_INSTRUMENT):
-        if era_id not in text:
+    # Derivation IS the source of truth now, so a mismatch is impossible by
+    # construction here; what is still worth reporting is a registry whose newest
+    # cpu_bench row carries no binary_version, i.e. a kernel cutover recorded
+    # without the field that witnesses it. That WOULD silently freeze kernel
+    # derivation at the previous era, so say so loudly.
+    try:
+        eras = load_registry()
+    except EraDerivationError:
+        return
+    cpu_rows = [row for row in eras if row.get("scope") == "cpu_bench" and row.get("from")]
+    if cpu_rows:
+        newest = max(cpu_rows, key=lambda row: str(row["from"]))
+        if newest.get("binary_version") is None and newest["id"] != block["cpu_kernel"]:
             print(
-                f"WARN: pinned era id {era_id!r} not found in "
-                f"{INSTRUMENT_ERAS_PATH} — era registry may have moved past "
-                f"this generator; re-verify before decision-grade cells.",
+                f"WARN: newest cpu_bench row {newest['id']!r} records no "
+                f"binary_version, so kernel derivation is pinned at "
+                f"{block['cpu_kernel']!r}. If {newest['id']!r} is a kernel cutover "
+                f"this is a MIS-STAMP waiting to happen — add binary_version via an "
+                f"operator-signed registry amendment before generating cells.",
                 file=sys.stderr,
             )
 

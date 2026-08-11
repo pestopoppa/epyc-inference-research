@@ -724,5 +724,166 @@ def test_request_endpoint_production_chat_with_per_model_template_kwargs():
             assert c["chat_template_kwargs"] == {}, c["cell_id"]
 
 
+# ---------------------------------------------------------------------------
+# Era derivation (A7 Token 2 Block B, 2026-08-11). The constants these replace
+# were correct when written and silently wrong two days later.
+# ---------------------------------------------------------------------------
+
+
+def test_no_era_id_is_hardcoded_in_the_generator():
+    """The defect was the PRESENCE of a constant, not its value.
+
+    Any era id written here is correct only until the next cutover — E6 lasted
+    five days. Prose mentions in the explanatory comment are fine; string
+    literals that code could read are not.
+    """
+    # Scan CODE, not prose: the module comment quotes the two constants this
+    # replaced, and keeping that history is the point. Strip whole-line comments
+    # and check what is left.
+    code = "\n".join(
+        line for line in Path(e5.__file__).read_text(encoding="utf-8").splitlines()
+        if not line.lstrip().startswith("#")
+    )
+    for literal in ("E6-cpu-kernel", "E7-eval-instrument", "E8-cpu-kernel", "E9-cpu-kernel"):
+        assert f'"{literal}"' not in code and f"'{literal}'" not in code, (
+            f"{literal} is a string literal in the generator; the era must be derived"
+        )
+
+
+def test_kernel_era_is_binary_witnessed_not_scope_latest():
+    """Scope alone gives the wrong kernel for the entire W1/W2/W4 window.
+
+    Since the consolidated era token of 2026-08-11T21:35Z, `cpu_bench` carries
+    both kernel cutovers and E8-cpu-bench-throttle-scope, an ELIGIBILITY
+    boundary. A latest-in-scope lookup returns the eligibility row for any
+    instant in 2026-07-29..2026-08-10 — precisely the window of the six known
+    mis-stamped run manifests, so it would hand them a second wrong answer.
+    """
+    import instrument_era as ie
+
+    eras = ie.load_registry()
+    w1_instant = "2026-07-29T15:47:29Z"
+    assert ie.derive_era("cpu_bench", w1_instant, eras) == "E8-cpu-bench-throttle-scope"
+    assert ie.derive_kernel_era(w1_instant, eras) == "E8-cpu-kernel"
+    # The instants either side are unaffected, so the discriminator is not just
+    # shifting the error somewhere else.
+    assert ie.derive_kernel_era("2026-07-23T19:03:41Z", eras) == "E6-cpu-kernel"
+    assert ie.derive_kernel_era("2026-08-11T22:00:00Z", eras) == "E9-cpu-kernel"
+
+
+def test_kernel_derivation_fails_closed_in_the_unwitnessed_window():
+    """[2026-06-26T22:07:11Z, 2026-07-20T13:30:13Z) must REFUSE, loudly.
+
+    E5-cpu-kernel was deliberately excluded from
+    RATIFY-CPU-BENCH-BINARY-VERSION-20260811: its registry note records no
+    binary version and no commit sha, and inventing one is the exact failure the
+    repair exists to stop. So there is a real window with no witnessed kernel.
+    The requirement is that it raises rather than silently picking the nearest
+    neighbour — a silent neighbour is indistinguishable from a correct answer,
+    which is how the original mis-stamp survived a cutover.
+
+    No banked manifest falls in this window (E5 pre-registration begins
+    2026-07-23), so this test is the only thing standing between the gap and a
+    future silent fallback.
+    """
+    import instrument_era as ie
+
+    eras = ie.load_registry()
+    for instant in (
+        "2026-06-26T22:07:11Z",  # exactly E5-cpu-kernel's own boundary
+        "2026-07-01T00:00:00Z",  # mid-window
+        "2026-07-20T13:30:12Z",  # one second before E6 opens
+    ):
+        try:
+            resolved = ie.derive_kernel_era(instant, eras)
+        except ie.EraDerivationError as exc:
+            text = str(exc)
+            assert "binary_version" in text, "the refusal must say WHY"
+            assert "REFUSING" in text
+        else:
+            raise AssertionError(
+                f"derive_kernel_era({instant}) silently returned {resolved!r} — it must "
+                "refuse; a neighbouring era here is a stamp naming an instrument that "
+                "nothing witnessed"
+            )
+    # And the boundary itself opens exactly on time, so the refusal window is not
+    # one second too wide.
+    assert ie.derive_kernel_era("2026-07-20T13:30:13Z", eras) == "E6-cpu-kernel"
+
+
+def test_era_for_binary_binds_to_the_witness_and_refuses_an_unknown_one():
+    """binary_version is the only field that witnesses what actually executed."""
+    import instrument_era as ie
+
+    eras = ie.load_registry()
+    assert ie.era_for_binary(10098, eras) == "E6-cpu-kernel"
+    assert ie.era_for_binary(10107, eras) == "E8-cpu-kernel"
+    # The attestation records a multi-line blob, not a bare int.
+    assert ie.era_for_binary("version: 10125 (0db32c06e)\nbuilt with GNU", eras) == "E9-cpu-kernel"
+    try:
+        ie.era_for_binary(99999, eras)
+    except ie.EraDerivationError as exc:
+        assert "REFUSING" in str(exc)
+    else:
+        raise AssertionError("an unregistered binary must not resolve to any era")
+
+
+def test_generated_manifests_carry_generated_at_and_the_derived_era():
+    cell = e5.make_cell(window="W1", model_key="qwen36_q8_0", config_id="C1", np=1,
+                       decision_grade_intent=True, n_predict=e5.N_PREDICT_STAGE_B)
+    assert cell["generated_at"], "a manifest must witness its own pre-registration instant"
+    import instrument_era as ie
+
+    eras = ie.load_registry()
+    assert cell["era"]["cpu_kernel"] == ie.derive_kernel_era(cell["generated_at"], eras)
+    assert cell["era"]["eval_instrument"] == ie.derive_era(
+        "eval_quality", cell["generated_at"], eras
+    )
+    assert e5.validate_cell_manifest(cell) == []
+
+
+def test_legacy_manifests_without_generated_at_still_validate():
+    """The 191 pre-registered files must stay valid — this was campaign-breaking.
+
+    `revalidate_cells` is fail-closed and runs the validator over every manifest
+    it loads, so an equality-to-current-era rule makes the sweep refuse to start
+    against the whole corpus, including the un-executed templates W2/W4 depend on.
+    """
+    cell = e5.make_cell(window="W1", model_key="qwen36_q8_0", config_id="C1", np=1,
+                       decision_grade_intent=True, n_predict=e5.N_PREDICT_STAGE_B)
+    legacy = copy.deepcopy(cell)
+    legacy.pop("generated_at", None)
+    legacy["era"] = {
+        "cpu_kernel": "E6-cpu-kernel",
+        "eval_instrument": "E7-eval-instrument",
+        "source": legacy["era"]["source"],
+    }
+    assert e5.validate_cell_manifest(legacy) == []
+
+
+def test_a_dated_manifest_with_the_wrong_era_is_rejected():
+    """The loose legacy path must not become a blanket amnesty.
+
+    Once a manifest says when it was registered, exactly one era is correct for
+    it — otherwise this repair would be the 'permanently whitelist the stale
+    pair' shape that got the earlier package refused.
+    """
+    cell = e5.make_cell(window="W1", model_key="qwen36_q8_0", config_id="C1", np=1,
+                       decision_grade_intent=True, n_predict=e5.N_PREDICT_STAGE_B)
+    cell["generated_at"] = "2026-08-11T22:00:00Z"  # v9 era
+    cell["era"] = dict(cell["era"], cpu_kernel="E6-cpu-kernel")  # claims v7
+    problems = e5.validate_cell_manifest(cell)
+    assert any("cpu_kernel" in p for p in problems), problems
+
+
+def test_an_invented_era_id_is_rejected_even_without_generated_at():
+    cell = e5.make_cell(window="W1", model_key="qwen36_q8_0", config_id="C1", np=1,
+                       decision_grade_intent=True, n_predict=e5.N_PREDICT_STAGE_B)
+    cell.pop("generated_at", None)
+    cell["era"] = dict(cell["era"], cpu_kernel="E42-invented-kernel")
+    problems = e5.validate_cell_manifest(cell)
+    assert any("cpu_kernel" in p for p in problems), problems
+
+
 if __name__ == "__main__":
     raise SystemExit(_run_all())
