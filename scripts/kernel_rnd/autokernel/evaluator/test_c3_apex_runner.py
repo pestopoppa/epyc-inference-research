@@ -188,9 +188,61 @@ class C3ApexRunnerTest(unittest.TestCase):
 
     def test_missing_mapping_is_a_typed_prelaunch_refusal(self):
         self.mapping.unlink()
-        with self.assertRaisesRegex(A.MissingCaseMapping, "kernel-name similarity"):
+        with self.assertRaisesRegex(
+                A.StructuralMappingMismatch,
+                "gfx90a_mla_prefill_kernel_object.*base2_lse_contract.*c5_abi_adapter"):
             self.plan()
         self.assertFalse(self.results.exists())
+
+    def test_checked_in_mapping_audit_names_exact_static_blockers(self):
+        audit = A.load_mapping_audit()
+        self.assertRegex(audit.artifact_sha256, r"^[0-9a-f]{64}$")
+        mla = audit.select("epyc.attention.mla_paged_prefill.k228")
+        self.assertEqual(mla.closest_registry_entries,
+                         ("aiter.hip.mla_prefill_asm_fwd",))
+        self.assertEqual({name for name, _ in mla.missing_components}, {
+            "gfx90a_mla_prefill_kernel_object", "base2_lse_contract",
+            "c5_abi_adapter",
+        })
+        moe = audit.select("epyc.moe.sparse_expert_dispatch.k175")
+        self.assertEqual(len(moe.component_graph), 8)
+        self.assertEqual({name for name, _ in moe.missing_components}, {
+            "router_projection_gemm", "biased_top8_counts_and_ranks",
+            "dispatch_scatter_gather_inverse_map", "shared_expert_branch",
+            "weighted_undispatch_shared_add", "component_graph_trace_plan",
+        })
+        with self.assertRaisesRegex(
+                A.StructuralMappingMismatch,
+                "router_projection_gemm.*biased_top8_counts_and_ranks.*"
+                "dispatch_scatter_gather_inverse_map.*shared_expert_branch.*"
+                "weighted_undispatch_shared_add.*component_graph_trace_plan"):
+            A.load_case_mapping(
+                self.root / "absent.json",
+                case_id="epyc.moe.sparse_expert_dispatch.k175")
+
+    def test_mapping_audit_pins_registry_hsa_inventory_and_c5_hashes(self):
+        original = json.loads(A.DEFAULT_MAPPING_AUDIT.read_text(encoding="utf-8"))
+        mutations = (
+            (("pins", "registry_sha256"), hashlib.sha256(b"registry-drift").hexdigest(),
+             "registry hash"),
+            (("pins", "aiter_hsa_inventory_sha256"),
+             hashlib.sha256(b"hsa-drift").hexdigest(), "HSA inventory hash"),
+            (("pins", "aiter_hsa_architectures"), ["gfx90a", "gfx942", "gfx950"],
+             "architecture inventory"),
+            (("cases", 0, "c5_artifact_sha256"), hashlib.sha256(b"c5-drift").hexdigest(),
+             "exact C5 artifact"),
+        )
+        for path, value, message in mutations:
+            document = json.loads(json.dumps(original))
+            target = document
+            for key in path[:-1]:
+                target = target[key]
+            target[path[-1]] = value
+            artifact = self.root / f"bad-audit-{message.replace(' ', '-')}.json"
+            artifact.write_text(json.dumps(document), encoding="utf-8")
+            with self.subTest(message=message), self.assertRaisesRegex(
+                    A.ApexPreflightRefusal, message):
+                A.load_mapping_audit(artifact)
 
     def test_mapping_must_bind_both_exact_c5_records_and_semantic_artifacts(self):
         self.mapping_document["cases"] = self.mapping_document["cases"][:1]
