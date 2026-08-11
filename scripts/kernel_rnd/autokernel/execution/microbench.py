@@ -201,7 +201,7 @@ from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 
 from .. import journal as journal_module
 from .. import schemas, storage
-from ..evaluator import api, integrity, recipes, statistics
+from ..evaluator import api, devices, integrity, recipes, statistics
 from . import device_sampler as gpu_device_sampler
 from . import instrument_integrity
 from . import physical_bounds
@@ -1882,6 +1882,23 @@ def check_gpu_device_sampling(
     return receipt.device_state(
         nominal_sclk_mhz=gpu_device_sampler.MI210_NOMINAL_SCLK_MHZ,
         min_sclk_ratio=gpu_device_sampler.MI210_MIN_SCLK_RATIO).check()
+
+
+def check_gpu_ranked_duration_windows(
+        observed_ns: Sequence[Any],
+        receipt: Optional[gpu_device_sampler.DeviceSamplingReceipt], *,
+        n_gpu_layers: int, live_subprocess: bool) -> schemas.Check:
+    """Apply RVP-C3-5 before any live GPU timing sample can be ranked."""
+    if not live_subprocess or n_gpu_layers <= 0:
+        return schemas.Check(schemas.PASS, (
+            "the gfx90a absolute duration floor is not required for this non-live or "
+            "CPU-only arm",))
+    if not isinstance(receipt, gpu_device_sampler.DeviceSamplingReceipt):
+        return schemas.Check(schemas.COULD_NOT_CHECK, (
+            "the live GPU arm has no recognized device receipt to bind the local "
+            "gfx90a duration floor to",))
+    return devices.GFX90A_RANKED_DURATION_ADMISSION.check(
+        observed_ns, device_id=receipt.device_id)
 
 
 @dataclass(frozen=True)
@@ -3889,6 +3906,17 @@ class MicrobenchRunner:
                                         f"{position} ({arm}): "
                                         f"{'; '.join(agreement.reasons)}")
                     else:
+                        duration_check = check_gpu_ranked_duration_windows(
+                            row.samples_ns, spawn.device_sampling_receipt,
+                            n_gpu_layers=unit_expectations[arm].n_gpu_layers,
+                            live_subprocess=(
+                                getattr(self._spawner, "spawner_id", None)
+                                == "subprocess/v1"))
+                        inv_checks.append(("gpu_absolute_duration_window", duration_check))
+                        if duration_check.outcome != schemas.PASS:
+                            refusals.append(
+                                f"block {block_plan.block_index} position {position} "
+                                f"({arm}): {'; '.join(duration_check.reasons)}")
                         samples = row.metric_samples
                         envelope = plan.physical_envelopes.get(block_plan.unit_id)
                         if envelope is not None:
