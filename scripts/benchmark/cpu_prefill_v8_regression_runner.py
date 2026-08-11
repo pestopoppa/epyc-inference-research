@@ -477,27 +477,45 @@ def instrument_era_attestation() -> dict[str, Any]:
         raise RuntimeError("instrument-era registry lacks a valid eras list")
 
     rows: dict[str, dict[str, Any]] = {}
-    for scope, expected_id in (("cpu_bench", "E6-cpu-kernel"), ("eval_quality", "E7-eval-instrument")):
+    # The active row is DERIVED from the registry, never named here. This used to
+    # pin {cpu_bench: E6-cpu-kernel, eval_quality: E7-eval-instrument} and refuse
+    # unless the newest row still equalled that id, which made the pin a landmine
+    # rather than a guard: it fired the moment the registry moved on, which is the
+    # thing the registry exists to do. It had been raising on BOTH scopes since the
+    # v8 cutover of 2026-07-25 (E6 -> E8-cpu-kernel), so this runner could not
+    # start at all, and by 2026-08-11 it was two kernel eras and nine eval eras
+    # stale. A hardcoded id here goes stale at every cutover by construction; the
+    # v9 freeze proved that a second time.
+    #
+    # The registry is append-only (its own contract, and what makes a superseded id
+    # permanently present), so the LAST row of a scope is the newest one. That is
+    # the whole derivation. Note this is deliberately positional, not date-derived:
+    # `cpu_bench` now carries two different KINDS of boundary — kernel cutovers
+    # (E9-cpu-kernel) and an eligibility correction (E8-cpu-bench-throttle-scope) —
+    # so "latest by from-date within scope" and "last appended within scope" can
+    # disagree, as they do for any instant in 2026-07-29..2026-08-10. Appending
+    # order is what "active" has always meant to this attestation.
+    for scope in ("cpu_bench", "eval_quality"):
         scoped = [row for row in eras if row.get("scope") == scope]
-        if not scoped or scoped[-1].get("id") != expected_id:
-            raise RuntimeError(
-                f"instrument-era registry active {scope} row drifted: "
-                f"expected={expected_id!r} actual={scoped[-1].get('id') if scoped else None!r}"
-            )
+        if not scoped:
+            raise RuntimeError(f"instrument-era registry has no {scope} row")
         row = scoped[-1]
+        active_id = row.get("id")
+        if not isinstance(active_id, str) or not active_id:
+            raise RuntimeError(f"instrument-era registry active {scope} row has no id")
         if not isinstance(row.get("from"), (str, datetime)):
-            raise RuntimeError(f"instrument-era registry {expected_id} lacks a valid from boundary")
-        pattern = re.compile(rf"^  - id: {re.escape(expected_id)}\s*$", re.MULTILINE)
+            raise RuntimeError(f"instrument-era registry {active_id} lacks a valid from boundary")
+        pattern = re.compile(rf"^  - id: {re.escape(active_id)}\s*$", re.MULTILINE)
         match = pattern.search(raw)
         if match is None:
-            raise RuntimeError(f"instrument-era registry cannot locate raw row {expected_id}")
+            raise RuntimeError(f"instrument-era registry cannot locate raw row {active_id}")
         start_line = raw.count("\n", 0, match.start()) + 1
         next_row = re.compile(r"^  - id: ", re.MULTILINE).search(raw, match.end())
         end_offset = next_row.start() if next_row else len(raw)
         raw_row = raw[match.start():end_offset]
         end_line = raw.count("\n", 0, end_offset)
         rows[scope] = {
-            "id": expected_id,
+            "id": active_id,
             "scope": scope,
             "from": row["from"].isoformat() if isinstance(row["from"], datetime) else row["from"],
             "parsed_row": row,

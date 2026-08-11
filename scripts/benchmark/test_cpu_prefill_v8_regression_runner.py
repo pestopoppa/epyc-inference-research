@@ -1079,8 +1079,65 @@ def test_instrument_era_attestation_fails_closed_on_missing_or_drift(
     with pytest.raises(RuntimeError, match="changed between identity hashing and parsing"):
         runner.instrument_era_attestation()
     monkeypatch.setattr(runner, "file_identity", real_file_identity)
-    registry.write_text(registry.read_text(encoding="utf-8").replace("E6-cpu-kernel", "E9-cpu-kernel"), encoding="utf-8")
-    with pytest.raises(RuntimeError, match="drifted"):
+    # REPLACED, not adjusted. This block used to append a newer era and assert the
+    # attestation RAISED "drifted". Its passing condition WAS the defect: the pin
+    # refused whenever the registry advanced, which is the one thing an append-only
+    # registry is guaranteed to do. It had been failing closed on both scopes on the
+    # real registry since the v8 cutover of 2026-07-25, so the runner could not
+    # start; the v9 freeze on 2026-08-11 made it two kernel eras stale. A guard
+    # whose green state requires the outage cannot survive the fix.
+    registry.write_text(
+        registry.read_text(encoding="utf-8")
+        + "  - id: E9-cpu-kernel\n    from: '2026-08-10T23:59:00Z'\n    scope: cpu_bench\n",
+        encoding="utf-8",
+    )
+    advanced = runner.instrument_era_attestation()
+    assert advanced["active"]["cpu_bench"]["id"] == "E9-cpu-kernel"
+    # The other scope is untouched by a cpu_bench append.
+    assert advanced["active"]["eval_quality"]["id"] == "E7-eval-instrument"
+    # The raw-row binding must follow the derived row, not the previous one.
+    assert advanced["active"]["cpu_bench"]["from"] == "2026-08-10T23:59:00Z"
+    assert (
+        advanced["active"]["cpu_bench"]["raw_row_sha256"]
+        != attestation["active"]["cpu_bench"]["raw_row_sha256"]
+    )
+
+
+def test_instrument_era_attestation_derives_and_never_names_an_era_id(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """No era id may be hardcoded in the runner, and a scope must never be empty.
+
+    The staleness this replaced was not a wrong constant, it was the presence of a
+    constant: any id written here is correct only until the next cutover. Two
+    checks, because either alone passes while broken — the source must contain no
+    era literal, AND the derivation must actually track an arbitrary id it could
+    not have been written against.
+    """
+    source = Path(runner.__file__).read_text(encoding="utf-8")
+    for literal in ("E6-cpu-kernel", "E7-eval-instrument", "E8-cpu-kernel", "E9-cpu-kernel"):
+        assert f'"{literal}"' not in source and f"'{literal}'" not in source, (
+            f"{literal} is hardcoded in the runner; the active era must be derived. "
+            "Prose mentions in the explanatory comment are fine, string literals are not."
+        )
+
+    registry = tmp_path / "eras.yaml"
+    registry.write_text(
+        "eras:\n  - id: E42-invented-kernel\n    from: '2030-01-01T00:00:00Z'\n    scope: cpu_bench\n"
+        "  - id: E43-invented-eval\n    from: '2030-01-02T00:00:00Z'\n    scope: eval_quality\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runner, "INSTRUMENT_ERAS", registry)
+    active = runner.instrument_era_attestation()["active"]
+    assert active["cpu_bench"]["id"] == "E42-invented-kernel"
+    assert active["eval_quality"]["id"] == "E43-invented-eval"
+
+    # Still fails closed where it should: a scope with no row at all.
+    registry.write_text(
+        "eras:\n  - id: E42-invented-kernel\n    from: '2030-01-01T00:00:00Z'\n    scope: cpu_bench\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="no eval_quality row"):
         runner.instrument_era_attestation()
 
 
