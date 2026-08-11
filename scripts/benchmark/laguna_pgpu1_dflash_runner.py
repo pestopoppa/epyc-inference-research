@@ -2,7 +2,7 @@
 """Production-only P-GPU-1 Laguna IQ2 DFlash base-vs-spec runner.
 
 Dry-run is the default.  ``--execute`` is intentionally guarded: it requires a
-clean production-consolidated-v8 HIP tree, then runs five fresh-server
+clean production-consolidated-v9 HIP tree, then runs five fresh-server
 replicates *per arm*.  Every replicate executes the same immutable prompt pack.
 """
 
@@ -57,8 +57,8 @@ PROMPT_SPECS = (
 PROMPTS = tuple(text for _, text in PROMPT_SPECS)
 PGPU1_WARMUP_POLICY = "no warm-up requests; no discarded reps; fresh server per rep; graph recapture remains inside each measured fresh-server replicate"
 CPU_INTERFERENCE_POLICY = "CPU production stack quiesced and verified before the window; no concurrent llama-server, AutoPilot, or KFD model-owner process is permitted"
-EXPECTED_BRANCH = "production-consolidated-v8"
-ROLLBACK_BRANCH = "production-consolidated-v7"
+EXPECTED_BRANCH = "production-consolidated-v9"
+ROLLBACK_BRANCH = "production-consolidated-v8"
 PROMOTION_ATTESTATION_SCHEMA = "epyc.kernel_promotion_attestation.v1"
 CANDIDATE_SMOKE_SCHEMA = "epyc.laguna_iq2_dflash_candidate_smoke.v2"
 SAFE_PATH = "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -67,7 +67,7 @@ PINNED_VISIBLE_DEVICE_ENVIRONMENT = {"HIP_VISIBLE_DEVICES": "0", "ROCR_VISIBLE_D
 SCRUBBED_ENV_PREFIXES = ("GGML_", "HSA_", "HIP_", "ROCR_")
 SCRUBBED_ENV_NAMES = ("LD_PRELOAD",)
 GOVERNANCE_REPO = Path("/mnt/raid0/llm/epyc-root")
-PROMOTION_ATTESTATION_RELATIVE_PATH = Path("handoffs/active/laguna-pgpu1-v8-promotion-attestation.json")
+PROMOTION_ATTESTATION_RELATIVE_PATH = Path("handoffs/active/v9-kernel-promotion-attestation.json")
 PROMOTION_ATTESTATION_PATH = GOVERNANCE_REPO / PROMOTION_ATTESTATION_RELATIVE_PATH
 TARGET_MODEL_BYTES = 37_268_665_376
 TARGET_MODEL_SHA256 = "1a0d44795f71044de1a9671bf70def4655f4ab7294b002263dfc8046820bfd2c"
@@ -500,7 +500,7 @@ def load_promotion_attestation(path: Path, expected_head: str, expected_server_s
         "frozen": False,
     }
     if not isinstance(document, dict) or any(document.get(key) != value for key, value in required.items()):
-        return None, "attestation must be the provisional v8 promotion record for this execution, not a final frozen record"
+        return None, "attestation must be the provisional v9 promotion record for this execution, not a final frozen record"
     server = document.get("server_binary")
     if not isinstance(server, dict) or server.get("path") != str(DEFAULT_BINARY) or server.get("sha256") != expected_server_sha256:
         return None, "attestation server binary path/SHA256 does not match the execution"
@@ -516,19 +516,19 @@ def load_promotion_attestation(path: Path, expected_head: str, expected_server_s
     if not isinstance(rollback, dict):
         return None, "attestation rollback metadata is missing"
     if rollback.get("branch") != ROLLBACK_BRANCH or not re.fullmatch(r"[0-9a-f]{40}", str(rollback.get("head") or "")):
-        return None, "attestation rollback branch/head must identify production-consolidated-v7 exactly"
+        return None, f"attestation rollback branch/head must identify {ROLLBACK_BRANCH} exactly"
     backup_ref = rollback.get("backup_ref")
     source_ref = rollback.get("source_ref")
     expected_backup_ref = f"refs/heads/{ROLLBACK_BRANCH}"
     expected_source_ref = f"refs/heads/{EXPECTED_BRANCH}"
     if backup_ref != expected_backup_ref or source_ref != expected_source_ref:
-        return None, "attestation rollback refs must be the canonical v7 backup and v8 production refs"
+        return None, f"attestation rollback refs must be the canonical {ROLLBACK_BRANCH} backup and {EXPECTED_BRANCH} production refs"
     backup_commit = git_ref_commit(DEFAULT_SOURCE_ROOT, backup_ref)
     source_commit = git_ref_commit(DEFAULT_SOURCE_ROOT, source_ref)
     if backup_commit is None or source_commit is None:
         return None, "attestation rollback refs must resolve in the canonical production repository"
     if backup_commit != rollback["head"] or source_commit != expected_head or backup_commit == source_commit:
-        return None, "attestation rollback refs do not resolve to the distinct attested v7/v8 commits"
+        return None, "attestation rollback refs do not resolve to the distinct attested rollback/production commits"
     return {**identity, "document": document}, "ok"
 
 
