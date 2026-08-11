@@ -201,6 +201,8 @@ calibration exists. Source-changing campaigns additionally require their own
 | `../../benchmark/run_inf37_iq2_fancy_simd_ab.py` | **IQ2_XXS SIMD diagnostic.** Runs balanced fresh-process baseline/candidate blocks for the exact `n=1` and `n=512` CPU matmul cells under a full-machine exclusion claim, with the single-thread micro-target pinned to CPU 72 and NUMA node 3. It binds the frozen-v9 source, exact one-line candidate diff, binaries, build-local linkage, raw SQL timings, and claim release. The receipt is screening-only and cannot promote a kernel or replace the model-level RAPL-gated controls. |
 | `hipkittens_lds.py` | **INF-03 offline gfx90a adapter.** Solves LDS bank count from the complete four-bank overlap pattern, validates the all-pairs phase relation, reads hash-bound rocprofv2/v3 counter CSVs, and projects a diagnostic-only authoring-context item. It neither launches a profiler nor assumes the CDNA3 answer transfers. |
 | `c5_seed_corpus.py` | **C5 static seed registry.** Pins the eight intake-884 HyRA SOL-ExecBench artifacts and their NVIDIA/Hopper-only attestations, separates direct Triton references from CUDA-bound re-authoring targets, and emits non-numeric gfx90a task context. No upstream latency or SOL score is admitted as an MI210 target. |
+| `evaluator/c3_epyc_suite.py` | **INF-48 C3/C5 exit contract.** Selects hash-bound attention and MoE C5 cases plus an explicitly EPYC-native Q4_K dequant case; requires exact captured-tensor surfaces, vendor rather than eager baselines, correctness-first `fast_p`, and a matched whole-model re-bench through the case's declared integration. Missing evidence is `COULD_NOT_CHECK`, and the reducer has no release or promotion authority. |
+| `evaluator/c3_epyc_compiler.py` | **INF-48 controller/backend JSON seam.** Emits a source-hash-bound three-case plan and compiles only hash-bound vendor, candidate, correctness, integrity, capture, integration, and whole-model observations. Unavailable evidence withholds `fast_p` and whole-model speedup; the CLI and direct-call backend execute no workload. |
 | `datatype_targets.py` | **INF-03 FP8 authoring target.** Declares FP8-weight/software-upcast-to-bf16 as an experimental gfx90a task, not a native capability; forces independent decoding, upcast-cost attribution, exact-shape baselines and whole-model confirmation, and mechanically defers NVFP4 until FP8 has a terminal result. |
 | `substrate.py` | Validates the checked-in MI210 compute/bandwidth/PCIe/NUMA facts, preserves measured and datasheet bases separately, re-derives both roofline ridges, and builds exact-quant diagnostic surfaces. Cross-vendor cells are spec-basis; a missing exact CUDA anchor is `COULD_NOT_CHECK`, never a pooled or borrowed target. |
 | `lanes.py` | The lane registry, historical 4/8/16/32/48-way CPU shapes, isolation checks, change-class-specific rank calibration, and full-instance verification rule. |
@@ -277,6 +279,32 @@ correctness through timing on the physical card. The upstream completed/correct
 results remain NVIDIA/Hopper-only provenance. `seed_context_item()` deliberately
 omits their SOL scores and latencies from authoring context; an arena task may
 select exact rows through `ArenaTask.c5_seed_ids`.
+
+### INF-48 C3/EPYC JSON seam
+
+Emit the exact non-numeric suite plan from a clean research checkout:
+
+```bash
+python3 -m scripts.kernel_rnd.autokernel.evaluator.c3_epyc_compiler plan
+```
+
+After a governed runner supplies an `epyc.autokernel.c3_epyc_observations.v1`
+document, compile it without launching a workload:
+
+```bash
+python3 -m scripts.kernel_rnd.autokernel.evaluator.c3_epyc_compiler receipt \
+  --input /path/to/hash-bound-observations.json
+```
+
+The audited Apex pin is `e06b5d1cd58996a82c5e2897164f760c3b3f87ac`.
+Its capture path is `workload_optimizer.py trace-kernel` →
+`pipeline.kernel_tracing.runner.run_trace_kernel`; its Python/Triton hot-patch
+path is `integrate` → `_reinject_kernel`, followed by `benchmark-final` →
+`_run_final_benchmark`. The pin explicitly excludes system C/C++ libraries and
+monolithic binaries from hot-patching. Consequently the attention and MoE
+cases use the Apex overlay binding, while the llama.cpp Q4_K dequant case uses
+an immutable experimental binary through the codified llama-bench recipe. The
+compiler refuses those runner identities if they are swapped.
 
 ### AK6 — the operator surface
 
