@@ -150,15 +150,48 @@ file. The default root is
 `/mnt/raid0/llm/autokernel/vendor/arena-controllers`; an operator may relocate
 the clean exact checkouts with `AUTOKERNEL_ARENA_CONTROLLER_ROOT`.
 
-On 2026-08-11 the clean physical-gfx90a audit correctly refused before inference
-at **6/8 executable arms**. Its receipt is
-`/mnt/raid0/llm/autokernel/probes/inf03-six-arm-audit-20260811-MRKZLV/receipt.json`
-(receipt SHA-256 `500e355991b4c33ae0547891d120a9648186acf06aa4e5992f5add3ba5b119a7`;
-file SHA-256 `7de9fbc9a70a879badf3a2acecc163c555f6fb2a934854cf24fd7d41e12bf8fe`).
-Only EvoEngineer and ARGUS remain external source/port/launcher refusals. The
-receipt records that no controller or GPU command executed. CLI presence still
-implies no controller-family coverage: every ready arm binds a clean source
-commit, entrypoint digest, executable digest, and explicit model identity.
+On 2026-08-11 the final clean physical-gfx90a audit pair at research
+`26ad617883ec72d417d98815aac38aa585236305` made the two authorities explicit:
+
+- the fixed full panel correctly **refused at 6/8** before inference. Receipt
+  `/mnt/raid0/llm/autokernel/probes/inf03-final-audits-20260811-Kpg5wU/full-eight-arm-refusal.json`
+  carries receipt SHA-256 `3f67b750c99dccbbe45f5c0043c8aa11973c3e014ab3610bb117786f60a79f7f`
+  and file SHA-256 `b432fcb802797136444b510618966489529147aac60d73209b0c1ee946231b1d`;
+- the separately labelled available-source panel is **ready at 6/6**. Receipt
+  `/mnt/raid0/llm/autokernel/probes/inf03-final-audits-20260811-Kpg5wU/available-source-six-arm.json`
+  carries receipt SHA-256 `d812b69ce380613bd854dd0d15206c09981899abac11b10234a8f98bb02482b8`
+  and file SHA-256 `88101db4f28f909f220acb3bf906f488fe8b4f8e7c307821d325a5542fd4627d`.
+
+Both receipts bind config SHA-256
+`4cadf1e5120c5439132249f6126901207602dc22065a1b643cb41ca68b7dc5ba`
+and driver SHA-256 `b839a35cb79627bb27c7f1be6902e91365a1ce8beb0fc26edff58bae5d003866`,
+and record that no controller or GPU command executed. The 6/6 receipt has
+availability-conditioned diagnostic authority only: it cannot imply an 8-arm
+result, rank partial full-panel evidence, or authorize promotion. Only
+EvoEngineer and ARGUS remain external source/port/launcher refusals. CLI presence
+still implies no controller-family coverage: every ready arm binds a clean
+source commit, entrypoint digest, executable digest, and explicit model identity.
+
+The first real one-iteration/two-branch KernelFoundry smoke then tested the
+boundary that a no-execution audit cannot. It exposed two integration defects
+without producing rankable evidence: v1 could not import the in-tree `scripts`
+package from the copied task workspace, and v2 reached both real GPT-5.6 Sol/high
+model branches but raced when their shared evaluator materialized the same
+workspace. Research `f8569112` supplies the immutable repository import root to
+the child, and `8afd016c` serializes shared Arena evaluation while preserving
+concurrent upstream authoring.
+
+The v3 smoke completed under a cleanly released MI210 claim. Its receipt is
+`/mnt/raid0/llm/autokernel/probes/inf03-kernelfoundry-real-smoke-v3-20260811-Mg6Fl9/smoke-receipt.json`
+(receipt SHA-256 `cd61675e83040b196a92aa85f2c0bd951f34912bef10a37e1b07f41864f52276`;
+file SHA-256 `9b47fefcb2744392923745385053aa6ee9a8a959102a17acb7eaea079a1be5b1`).
+Both model calls returned successfully; the centralized evaluator passed
+compilation and correctness, admitted all four baseline and four optimized
+timing cases, and reported diagnostic average speedup `0.9986680991832163`.
+The controller retained two programs, one occupied MAP-Elites cell, 159 added
+Triton patterns, and enabled QD tracking; zero transitions is expected with only
+one iteration. The 164.54-second sampler captured 659 samples. This smoke is
+explicitly diagnostic, non-rankable, and does not imply the matched campaign.
 
 An arena-side launcher should:
 
