@@ -24,7 +24,7 @@ import sys
 import time
 from typing import Any, Callable, Mapping, Sequence
 
-from . import arena_adapter
+from . import arena_adapter, codex_container_actor
 
 
 CONTROLLER_ID = "claude_codex_actor_critic"
@@ -394,10 +394,9 @@ def _claude_argv(identity: Mapping[str, str], config: ControllerConfig) -> tuple
 def _codex_argv(identity: Mapping[str, str], config: ControllerConfig,
                 workspace: Path) -> tuple[str, ...]:
     return (
-        identity["path"], "exec", "--json", "--model", config.codex_model,
-        "--config", f'model_reasoning_effort="{config.codex_effort}"',
-        "--config", 'approval_policy="never"', "--sandbox", "workspace-write",
-        "--skip-git-repo-check", "--cd", str(workspace), "-",
+        sys.executable, "-m", codex_container_actor.EXECUTABLE_MODULE,
+        "--codex-wrapper", identity["path"], "--workspace", str(workspace),
+        "--model", config.codex_model, "--effort", config.codex_effort,
     )
 
 
@@ -504,8 +503,9 @@ def run_controller(
             f"{prompt}\n\nYou are the critic. Review proposal "
             f"{proposal['proposal_id']} for {proposal['candidate_path']}. The candidate "
             f"changed from SHA-256 {before_sha} to {after_sha}. Return only JSON with "
-            f"schema {CRITIQUE_SCHEMA}, the same proposal_id, decision accept/revise/stop, "
-            "and a non-empty reason. Do not edit files."
+            f"schema {CRITIQUE_SCHEMA}. The object must contain exactly these four "
+            "fields and no others: schema, proposal_id (the same value), decision "
+            "(accept, revise, or stop), and a non-empty reason. Do not edit files."
         )
         remaining = deadline - monotonic()
         if remaining <= 0:
@@ -551,7 +551,9 @@ def run_controller(
         "constraints": {
             "workspace_only": True,
             "planner_critic_write_access": False,
-            "actor_sandbox": "workspace-write",
+            "actor_sandbox": "docker_workspace_bind_only",
+            "actor_runtime": codex_container_actor.runtime_identity(
+                Path(cli["codex"]["path"])),
             "promotion_authority": False,
             "model_or_kernel_invoked_by_preflight": False,
         },
