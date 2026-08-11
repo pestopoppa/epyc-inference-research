@@ -65,6 +65,7 @@ def main() -> int:
         for value in target_layers
     ):
         raise RuntimeError(f"invalid legacy target layer array: {target_layers!r}")
+    canonical_target_layers = [value + 1 for value in target_layers]
 
     architecture = reader.get_field(gguf.Keys.General.ARCHITECTURE)
     if architecture is None or architecture.contents() != "dflash":
@@ -77,6 +78,17 @@ def main() -> int:
     target_hidden_size = target_hidden_field.contents() if target_hidden_field else None
     if isinstance(target_hidden_size, bool) or not isinstance(target_hidden_size, int) or target_hidden_size <= 0:
         raise RuntimeError(f"invalid target embedding length: {target_hidden_size!r}")
+    target_block_field = target_reader.get_field(f"{target_architecture_name}.block_count")
+    target_block_count = target_block_field.contents() if target_block_field else None
+    if (
+        isinstance(target_block_count, bool)
+        or not isinstance(target_block_count, int)
+        or target_block_count <= 0
+        or any(layer >= target_block_count for layer in canonical_target_layers)
+    ):
+        raise RuntimeError(
+            f"canonical target layers {canonical_target_layers!r} exceed target block count {target_block_count!r}"
+        )
     legacy_mask_field = reader.get_field(LEGACY_MASK_KEY)
     mask_token_id = legacy_mask_field.contents() if legacy_mask_field else None
     if isinstance(mask_token_id, bool) or not isinstance(mask_token_id, int) or mask_token_id < 0:
@@ -109,7 +121,7 @@ def main() -> int:
         writer.add_key_value(field.name, field.contents(), value_type, sub_type=sub_type)
     writer.add_key_value(
         CANONICAL_KEY,
-        target_layers,
+        canonical_target_layers,
         gguf.GGUFValueType.ARRAY,
         sub_type=gguf.GGUFValueType.INT32,
     )
@@ -150,7 +162,7 @@ def main() -> int:
     if not args.output.is_file() or args.output.stat().st_size <= 0:
         raise RuntimeError("canonicalized output was not created")
     print(f"created {args.output} ({args.output.stat().st_size} bytes)")
-    print(f"added {CANONICAL_KEY}={target_layers}")
+    print(f"mapped {LEGACY_KEY}={target_layers} to {CANONICAL_KEY}={canonical_target_layers}")
     print(f"added {TARGET_HIDDEN_SIZE_KEY}={target_hidden_size}")
     print(f"added {CANONICAL_MASK_KEY}={mask_token_id}")
     print(f"copied {len(target_tokenizer_fields)} tokenizer fields from {args.target_model}")
