@@ -196,6 +196,27 @@ def t0_policy():
 
 class BackendOpsConsoleParsing(unittest.TestCase):
 
+    def test_stateful_receipt_preserves_the_complete_triad(self):
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                "  SSM_SCAN(type=f32): AK_STATE_V1 inputs=1 initial_equal=1 "
+                "input_immutable=1 final_outputs=1 suite_seed=4711 OK\n"
+                "  1/1 tests passed\n  Backend CPU: OK\n"
+                "1/1 backends passed\nOK\n")
+        case = t0.parse_backend_ops_console(text).cases[0]
+        self.assertEqual(case.stateful.input_count, 1)
+        self.assertTrue(case.stateful.initial_equal)
+        self.assertTrue(case.stateful.input_immutable)
+        self.assertEqual(case.stateful.final_output_count, 1)
+
+    def test_passing_case_cannot_claim_a_mutated_state_input(self):
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                "  GATED_DELTA_NET(type=f32): AK_STATE_V1 inputs=1 initial_equal=1 "
+                "input_immutable=0 final_outputs=1 suite_seed=4711 OK\n"
+                "  1/1 tests passed\n  Backend CPU: OK\n"
+                "1/1 backends passed\nOK\n")
+        with self.assertRaises(t0.OutputParseError):
+            t0.parse_backend_ops_console(text)
+
     def test_structured_reference_receipt_is_parsed_separately_from_diagnostics(self):
         text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
                 "  MUL_MAT(type_a=q4_K,type_b=f32,m=16,n=1,k=256): "
@@ -519,6 +540,17 @@ class BackendOpsCsvParsing(unittest.TestCase):
         case = t0.parse_backend_ops_csv(text).cases[0]
         self.assertEqual(case.value_transforms.completed, 4)
 
+    def test_csv_preserves_stateful_receipt(self):
+        text = (
+            '"backend_name","op_name","op_params","test_mode","supported",'
+            '"error_message","state_receipt"\n'
+            '"CPU","FLASH_ATTN_EXT","type=f32","test","1","",'
+            '"AK_STATE_V1 inputs=2 initial_equal=1 input_immutable=1 '
+            'final_outputs=2 suite_seed=4711"\n')
+        case = t0.parse_backend_ops_csv(text).cases[0]
+        self.assertEqual(case.stateful.input_count, 2)
+        self.assertEqual(case.stateful.final_output_count, 2)
+
     def test_csv_cannot_express_a_skipped_backend(self):
         """Why console is the T0 default, stated as a test rather than a comment.
 
@@ -774,6 +806,22 @@ class ProductionTreeRefusals(unittest.TestCase):
 # =============================================================================
 
 class ArgvConstruction(unittest.TestCase):
+
+    def test_stateful_probe_has_a_separate_explicit_flag(self):
+        inv = t0.build_backend_ops_invocation(
+            binary=f"{BIN_DIR}/test-backend-ops", library_path=BIN_DIR,
+            backend_filter="CPU", ops=("SSM_SCAN",), base_env=(),
+            suite_seed=4711, stateful_probe=True)
+        self.assertIn("--autokernel-stateful", inv.argv)
+        self.assertNotIn("--autokernel-layouts", inv.argv)
+        self.assertNotIn("--autokernel-value-transforms", inv.argv)
+
+    def test_stateful_flag_cannot_merge_with_another_axis(self):
+        with self.assertRaises(ValueError):
+            t0.build_backend_ops_invocation(
+                binary=f"{BIN_DIR}/test-backend-ops", library_path=BIN_DIR,
+                backend_filter="CPU", ops=("SSM_SCAN",), base_env=(),
+                suite_seed=4711, stateful_probe=True, layout_probe=True)
 
     def test_value_transforms_have_a_separate_explicit_flag(self):
         inv = t0.build_backend_ops_invocation(
@@ -1034,6 +1082,7 @@ def _console_capture(provider_plan, text, *, ops=None, params_filter=None):
         suite_seed=provider_plan.op_suite.suite_seed,
         layout_probe=provider_plan.op_suite.layout_probe,
         value_transform_probe=provider_plan.op_suite.value_transform_probe,
+        stateful_probe=provider_plan.op_suite.stateful_probe,
         params_filter=params_filter)
     return capture(inv.argv, stdout=text, exit_code=0)
 
@@ -1049,6 +1098,53 @@ def _linkage_capture(provider_plan, text, *, binary=None, library_path=None, exi
 
 
 class OpSuiteCollection(unittest.TestCase):
+
+    def test_stateful_pass_binds_all_four_ops_and_the_suite_seed(self):
+        ops = ("SSM_SCAN", "SSM_CONV", "FLASH_ATTN_EXT", "GATED_DELTA_NET")
+        plan = execution_plan(op_suite=op_suite_plan(
+            ops=ops, suite_seed=4711, stateful_probe=True))
+        rows = "".join(
+            f"  {op}(type=f32): AK_STATE_V1 inputs=1 initial_equal=1 "
+            f"input_immutable=1 final_outputs=1 suite_seed=4711 OK\n"
+            for op in ops)
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n" + rows +
+                "  4/4 tests passed\n  Backend CPU: OK\n"
+                "1/1 backends passed\nOK\n")
+        provider = t0.ExecutedT0EvidenceProvider(
+            plan=plan, runner=t0.RecordedProcessRunner([_console_capture(plan, text)]),
+            claim=FakeClaim())
+        evidence = provider.collect_op_suite(t0._Collected())
+        self.assertTrue(evidence.stateful_probe)
+        self.assertEqual(evidence.stateful_case_count, 4)
+        self.assertEqual(evidence.stateful_ops,
+                         ("FLASH_ATTN_EXT", "GATED_DELTA_NET", "SSM_CONV", "SSM_SCAN"))
+
+    def test_stateful_pass_refuses_a_case_without_its_receipt(self):
+        plan = execution_plan(op_suite=op_suite_plan(
+            ops=("SSM_SCAN",), suite_seed=4711, stateful_probe=True))
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                "  SSM_SCAN(type=f32): OK\n"
+                "  1/1 tests passed\n  Backend CPU: OK\n"
+                "1/1 backends passed\nOK\n")
+        provider = t0.ExecutedT0EvidenceProvider(
+            plan=plan, runner=t0.RecordedProcessRunner([_console_capture(plan, text)]),
+            claim=FakeClaim())
+        with self.assertRaises(t0.OutputParseError):
+            provider.collect_op_suite(t0._Collected())
+
+    def test_stateful_receipt_with_wrong_seed_refuses(self):
+        plan = execution_plan(op_suite=op_suite_plan(
+            ops=("SSM_SCAN",), suite_seed=4711, stateful_probe=True))
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                "  SSM_SCAN(type=f32): AK_STATE_V1 inputs=1 initial_equal=1 "
+                "input_immutable=1 final_outputs=1 suite_seed=99 OK\n"
+                "  1/1 tests passed\n  Backend CPU: OK\n"
+                "1/1 backends passed\nOK\n")
+        provider = t0.ExecutedT0EvidenceProvider(
+            plan=plan, runner=t0.RecordedProcessRunner([_console_capture(plan, text)]),
+            claim=FakeClaim())
+        with self.assertRaises(t0.OutputParseError):
+            provider.collect_op_suite(t0._Collected())
 
     def test_value_transform_pass_binds_all_four_transforms_and_seed(self):
         plan = execution_plan(op_suite=op_suite_plan(

@@ -1070,6 +1070,7 @@ class OpSuitePlan:
     suite_seed: int = 0
     layout_probe: bool = False
     value_transform_probe: bool = False
+    stateful_probe: bool = False
     timeout_s: float = 1800.0
     parallel_workers: Optional[int] = None
 
@@ -1087,9 +1088,10 @@ class OpSuitePlan:
         _req_int(self.suite_seed, "op_suite.suite_seed")
         _req_bool(self.layout_probe, "op_suite.layout_probe")
         _req_bool(self.value_transform_probe, "op_suite.value_transform_probe")
-        if self.layout_probe and self.value_transform_probe:
+        _req_bool(self.stateful_probe, "op_suite.stateful_probe")
+        if sum((self.layout_probe, self.value_transform_probe, self.stateful_probe)) > 1:
             raise ValueError(
-                "op_suite layout and value-transform probes must be separate passes")
+                "op_suite layout, value-transform, and stateful probes must be separate passes")
         if self.parallel_workers is not None:
             _req_int(self.parallel_workers, "op_suite.parallel_workers", minimum=1)
 
@@ -1353,6 +1355,9 @@ _LAYOUT_RECEIPT_RE = re.compile(
 _VALUE_RECEIPT_RE = re.compile(
     r"^AK_VALUE_V1 transforms=(identity,x3,x0p01,negate) "
     r"completed=([0-4]) suite_seed=([0-9]+)$")
+_STATE_RECEIPT_RE = re.compile(
+    r"^AK_STATE_V1 inputs=([0-9]+) initial_equal=([01]) "
+    r"input_immutable=([01]) final_outputs=([0-9]+) suite_seed=([0-9]+)$")
 
 #: The two skip reasons the tool prints, verbatim
 #: (tests/test-backend-ops.cpp:10368 and :10375). Both increment `n_ok`, so both
@@ -1453,6 +1458,24 @@ class BackendOpsValueTransforms:
 
 
 @dataclass(frozen=True)
+class BackendOpsStateful:
+    """The explicit-input, immutable-input, final-output state contract."""
+
+    input_count: int
+    initial_equal: bool
+    input_immutable: bool
+    final_output_count: int
+    suite_seed: int
+
+    def __post_init__(self) -> None:
+        _req_int(self.input_count, "backend_ops.stateful.input_count")
+        _req_bool(self.initial_equal, "backend_ops.stateful.initial_equal")
+        _req_bool(self.input_immutable, "backend_ops.stateful.input_immutable")
+        _req_int(self.final_output_count, "backend_ops.stateful.final_output_count")
+        _req_int(self.suite_seed, "backend_ops.stateful.suite_seed")
+
+
+@dataclass(frozen=True)
 class BackendOpsCase:
     """One `test-backend-ops` case. `not supported` is NOT a pass."""
 
@@ -1464,6 +1487,7 @@ class BackendOpsCase:
     properties: tuple = ()
     layout: Optional[BackendOpsLayout] = None
     value_transforms: Optional[BackendOpsValueTransforms] = None
+    stateful: Optional[BackendOpsStateful] = None
 
     @property
     def passed(self) -> bool:
@@ -1477,6 +1501,7 @@ def _case_with_reference(*, op: str, params: str, status: str,
     properties: list = []
     layout: Optional[BackendOpsLayout] = None
     value_transforms: Optional[BackendOpsValueTransforms] = None
+    stateful: Optional[BackendOpsStateful] = None
     for part in (piece.strip() for piece in interleaved.split(" | ") if piece.strip()):
         if part.startswith("AK_REF_"):
             if reference is not None:
@@ -1524,6 +1549,18 @@ def _case_with_reference(*, op: str, params: str, status: str,
             value_transforms = BackendOpsValueTransforms(
                 transforms=tuple(match.group(1).split(",")), completed=int(match.group(2)),
                 suite_seed=int(match.group(3)))
+        elif part.startswith("AK_STATE_"):
+            if stateful is not None:
+                raise OutputParseError(
+                    f"case {op}({params}) emitted more than one stateful receipt")
+            match = _STATE_RECEIPT_RE.fullmatch(part)
+            if match is None:
+                raise OutputParseError(
+                    f"case {op}({params}) emitted malformed stateful receipt {part!r}")
+            stateful = BackendOpsStateful(
+                input_count=int(match.group(1)), initial_equal=match.group(2) == "1",
+                input_immutable=match.group(3) == "1",
+                final_output_count=int(match.group(4)), suite_seed=int(match.group(5)))
         else:
             diagnostics.append(part)
     if reference is not None and status != "ok":
@@ -1535,10 +1572,15 @@ def _case_with_reference(*, op: str, params: str, status: str,
     if value_transforms is not None and status == "ok" and value_transforms.completed != 4:
         raise OutputParseError(
             f"case {op}({params}) passed after only {value_transforms.completed}/4 transforms")
+    if stateful is not None and status == "ok" and (
+            stateful.input_count == 0 or not stateful.initial_equal or
+            not stateful.input_immutable or stateful.final_output_count == 0):
+        raise OutputParseError(
+            f"case {op}({params}) passed without satisfying the stateful triad")
     return BackendOpsCase(op=op, params=params, status=status,
                           interleaved=" | ".join(diagnostics), reference=reference,
                           properties=tuple(properties), layout=layout,
-                          value_transforms=value_transforms)
+                          value_transforms=value_transforms, stateful=stateful)
 
 
 @dataclass(frozen=True)
@@ -1624,6 +1666,9 @@ class BackendOpsRun:
         return tuple(sorted({transform for case in self.cases
                              if case.value_transforms is not None
                              for transform in case.value_transforms.transforms}))
+
+    def stateful_ops(self) -> tuple:
+        return tuple(sorted({case.op for case in self.cases if case.stateful is not None}))
 
     def cases_by_op(self) -> tuple:
         """`((op, total, passed), ...)` over the cases that were actually COMPARED.
@@ -1873,6 +1918,8 @@ def parse_backend_ops_csv(text: str) -> BackendOpsRun:
                           if "layout_receipt" in index else "")
         value_receipt = (cells[index["value_receipt"]]
                          if "value_receipt" in index else "")
+        state_receipt = (cells[index["state_receipt"]]
+                         if "state_receipt" in index else "")
         property_receipt = (cells[index["property_receipt"]]
                             if "property_receipt" in index else "")
         reference_receipt = (cells[index["reference_receipt"]]
@@ -1882,7 +1929,7 @@ def parse_backend_ops_csv(text: str) -> BackendOpsRun:
                  "ok" if not error else "fail")
         interleaved = " | ".join(
             value for value in (
-                layout_receipt, value_receipt, property_receipt, reference_receipt,
+                layout_receipt, value_receipt, state_receipt, property_receipt, reference_receipt,
                 error) if value)
         by_backend.setdefault(backend, []).append(_case_with_reference(
             op=cells[index["op_name"]], params=cells[index["op_params"]], status=state,
@@ -2300,6 +2347,7 @@ def build_backend_ops_invocation(*, binary: str, library_path: str, backend_filt
                                  suite_seed: int = 0,
                                  layout_probe: bool = False,
                                  value_transform_probe: bool = False,
+                                 stateful_probe: bool = False,
                                  parameter_env: Sequence[tuple] = (),
                                  output_format: str = "console",
                                  params_filter: Optional[str] = None,
@@ -2326,8 +2374,10 @@ def build_backend_ops_invocation(*, binary: str, library_path: str, backend_filt
     _req_int(suite_seed, "backend_ops.suite_seed")
     _req_bool(layout_probe, "backend_ops.layout_probe")
     _req_bool(value_transform_probe, "backend_ops.value_transform_probe")
-    if layout_probe and value_transform_probe:
-        raise ValueError("layout and value-transform probes must be separate invocations")
+    _req_bool(stateful_probe, "backend_ops.stateful_probe")
+    if sum((layout_probe, value_transform_probe, stateful_probe)) > 1:
+        raise ValueError(
+            "layout, value-transform, and stateful probes must be separate invocations")
     argv: list = list(recipes.CANONICAL_PREFIX) if cpu_prefix else []
     argv += [binary, "test", "-o", ",".join(ops), "-b", backend_filter]
     argv += ["--suite-seed", str(suite_seed), "--autokernel-properties"]
@@ -2335,6 +2385,8 @@ def build_backend_ops_invocation(*, binary: str, library_path: str, backend_filt
         argv += ["--autokernel-layouts"]
     if value_transform_probe:
         argv += ["--autokernel-value-transforms"]
+    if stateful_probe:
+        argv += ["--autokernel-stateful"]
     if params_filter is not None:
         argv += ["-p", params_filter]
     if parallel_workers is not None:
@@ -2359,6 +2411,9 @@ def build_backend_ops_invocation(*, binary: str, library_path: str, backend_filt
             ("--autokernel-value-transforms runs the fixed identity/x3/x0.01/negate "
              "fail-any pass" if value_transform_probe else
              "the independent value-transform pass is not requested"),
+            ("--autokernel-stateful proves equal and immutable explicit state inputs and "
+             "compares final state outputs" if stateful_probe else
+             "the independent stateful pass is not requested"),
             "canonical prefix and OMP stack imported from evaluator.recipes, never retyped",
         ))
 
@@ -2540,6 +2595,7 @@ class ExecutedT0EvidenceProvider:
             suite_seed=plan.suite_seed,
             layout_probe=plan.layout_probe,
             value_transform_probe=plan.value_transform_probe,
+            stateful_probe=plan.stateful_probe,
             parameter_env=self._plan.parameter_env,
             parallel_workers=plan.parallel_workers,
             cpu_prefix=self._plan.backend == "llama_cpu")
@@ -2634,6 +2690,18 @@ class ExecutedT0EvidenceProvider:
                 raise OutputParseError(
                     f"value-transform receipt for {case.op}({case.params}) has property "
                     f"measurement(s) without AK_PROP_V2 transform binding: {legacy_properties}")
+        stateful_cases = tuple(case for case in run.cases if case.stateful is not None)
+        if plan.stateful_probe and len(stateful_cases) != len(run.cases):
+            missing = tuple(
+                f"{case.op}({case.params})" for case in run.cases if case.stateful is None)
+            raise OutputParseError(
+                "stateful pass emitted case(s) without AK_STATE_V1 receipt: "
+                f"{missing}")
+        for case in stateful_cases:
+            if case.stateful.suite_seed != plan.suite_seed:
+                raise OutputParseError(
+                    f"stateful receipt for {case.op}({case.params}) carries suite_seed "
+                    f"{case.stateful.suite_seed}, expected {plan.suite_seed}")
         return correctness.OpSuiteEvidence(
             suite_id=plan.suite_id,
             suite_source_sha256=plan.suite_source_sha256,
@@ -2651,6 +2719,9 @@ class ExecutedT0EvidenceProvider:
             value_transform_probe=plan.value_transform_probe,
             value_transforms=run.value_transforms(),
             value_transform_case_count=len(value_cases),
+            stateful_probe=plan.stateful_probe,
+            stateful_ops=run.stateful_ops(),
+            stateful_case_count=len(stateful_cases),
         )
 
     # -- boundary shapes ---------------------------------------------------

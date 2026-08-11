@@ -438,6 +438,36 @@ class TestCleanCandidatePasses(unittest.TestCase):
 
 class TestBackendOpUnits(unittest.TestCase):
 
+    def test_stateful_probe_passes_only_after_all_four_targets_ran(self):
+        report = run(ev=evidence(op_suite=op_suite(
+            stateful_probe=True,
+            stateful_ops=("FLASH_ATTN_EXT", "GATED_DELTA_NET", "SSM_CONV", "SSM_SCAN"),
+            stateful_case_count=12)))
+        self.assertEqual(report.outcome(C.GID_OP_UNITS), S.PASS)
+
+    def test_stateful_probe_with_missing_gdn_fails(self):
+        report = run(ev=evidence(op_suite=op_suite(
+            stateful_probe=True,
+            stateful_ops=("FLASH_ATTN_EXT", "SSM_CONV", "SSM_SCAN"),
+            stateful_case_count=9)))
+        gate = report.gate(C.GID_OP_UNITS)
+        self.assertEqual(gate.check.outcome, S.FAIL)
+        self.assertIn("GATED_DELTA_NET", " ".join(gate.check.reasons))
+
+    def test_stateful_probe_over_zero_cases_fails(self):
+        report = run(ev=evidence(op_suite=op_suite(
+            stateful_probe=True, stateful_ops=(), stateful_case_count=0)))
+        gate = report.gate(C.GID_OP_UNITS)
+        self.assertEqual(gate.check.outcome, S.FAIL)
+        self.assertIn("zero cases", " ".join(gate.check.reasons))
+
+    def test_stateful_and_value_evidence_cannot_share_one_pass(self):
+        with self.assertRaises(ValueError):
+            op_suite(
+                stateful_probe=True, stateful_ops=("SSM_SCAN",), stateful_case_count=1,
+                value_transform_probe=True, value_transforms=("identity",),
+                value_transform_case_count=1)
+
     def test_value_transform_probe_passes_only_with_the_fixed_four(self):
         report = run(ev=evidence(op_suite=op_suite(
             value_transform_probe=True,

@@ -801,6 +801,14 @@ What remains is not another hidden static plane:
   show all four completed. Property residuals carry the input-transform coordinate through
   the evaluation event and Vidya projection. The experimental target compiles, but no
   transform case has run in this session.
+- The recurrent-state axis is independently selected by `OpSuitePlan.stateful_probe`.
+  Each emitted `SSM_SCAN`, `SSM_CONV`, cache-backed `FLASH_ATTN_EXT`, or
+  `GATED_DELTA_NET` case must carry `AK_STATE_V1` proof that its explicit state inputs
+  began byte-identical across candidate/reference runs, remained byte-identical to their
+  initial contents, and exposed at least one final-state tensor in the compared output
+  set. Missing cases, receipts, target ops, seed bindings, or any triad leg refuse. The
+  experimental target and no-backend contract self-test compile; no stateful case has run
+  in this session.
 - The release and speech-adapter planes were deliberately removed on 2026-08-04 and
   remain recoverable from `autokernel-preserve-20260804`. Restore the narrow release
   slice only for a real champion/freeze request, and restore the speech slice only

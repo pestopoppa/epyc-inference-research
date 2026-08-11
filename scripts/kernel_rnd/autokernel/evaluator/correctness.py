@@ -1311,6 +1311,9 @@ class OpSuiteEvidence:
     value_transform_probe: bool = False
     value_transforms: tuple = ()
     value_transform_case_count: int = 0
+    stateful_probe: bool = False
+    stateful_ops: tuple = ()
+    stateful_case_count: int = 0
 
     def __post_init__(self) -> None:
         _req_str(self.suite_id, "op_suite.suite_id")
@@ -1365,8 +1368,23 @@ class OpSuiteEvidence:
                 self.value_transforms or self.value_transform_case_count):
             raise ValueError(
                 "op_suite value-transform evidence cannot exist when the probe is false")
-        if self.layout_probe and self.value_transform_probe:
-            raise ValueError("layout and value-transform evidence must come from separate passes")
+        _req_bool(self.stateful_probe, "op_suite.stateful_probe")
+        _req_int(self.stateful_case_count, "op_suite.stateful_case_count")
+        allowed_stateful = {
+            "SSM_SCAN", "SSM_CONV", "FLASH_ATTN_EXT", "GATED_DELTA_NET"}
+        for item in _req_tuple(self.stateful_ops, "op_suite.stateful_ops"):
+            if item not in allowed_stateful:
+                raise ValueError(
+                    f"op_suite.stateful_ops contains {item!r}, expected one of "
+                    f"{sorted(allowed_stateful)}")
+        if len(set(self.stateful_ops)) != len(self.stateful_ops):
+            raise ValueError("op_suite.stateful_ops must be unique")
+        if not self.stateful_probe and (self.stateful_ops or self.stateful_case_count):
+            raise ValueError(
+                "op_suite stateful evidence cannot exist when stateful_probe is false")
+        if sum((self.layout_probe, self.value_transform_probe, self.stateful_probe)) > 1:
+            raise ValueError(
+                "layout, value-transform, and stateful evidence must come from separate passes")
 
     def cases_for(self, op: str) -> Optional[tuple]:
         for row in self.cases_by_op:
@@ -2720,6 +2738,17 @@ def check_backend_op_units(request: api.EvaluationRequest,
             reasons.append(
                 f"value-transform pass did not exercise required transform(s) "
                 f"{missing_transforms}; required=['identity', 'negate', 'x0p01', 'x3']")
+    if evidence.stateful_probe:
+        required_stateful = {
+            "SSM_SCAN", "SSM_CONV", "FLASH_ATTN_EXT", "GATED_DELTA_NET"}
+        missing_stateful = sorted(required_stateful - set(evidence.stateful_ops))
+        if evidence.stateful_case_count == 0:
+            reasons.append(
+                "the stateful pass selected zero cases; a flag over no recurrent state is not a probe")
+        if missing_stateful:
+            reasons.append(
+                f"stateful pass did not exercise required op(s) {missing_stateful}; "
+                "required=['FLASH_ATTN_EXT', 'GATED_DELTA_NET', 'SSM_CONV', 'SSM_SCAN']")
     for op in required:
         if op not in exercised:
             continue
@@ -2742,7 +2771,10 @@ def check_backend_op_units(request: api.EvaluationRequest,
                         f"layout_cases={evidence.layout_case_count}",
                         f"value_transform_probe={evidence.value_transform_probe}",
                         f"value_transforms={list(evidence.value_transforms)}",
-                        f"value_transform_cases={evidence.value_transform_case_count}"),
+                        f"value_transform_cases={evidence.value_transform_case_count}",
+                        f"stateful_probe={evidence.stateful_probe}",
+                        f"stateful_ops={list(evidence.stateful_ops)}",
+                        f"stateful_cases={evidence.stateful_case_count}"),
                  measurements=tuple(item.to_dict()
                                     for item in evidence.property_measurements))
 
