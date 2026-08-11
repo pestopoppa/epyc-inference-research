@@ -97,11 +97,21 @@ class CounterCsvTest(unittest.TestCase):
             path = Path(directory) / "counter.csv"
             path.write_text(
                 "Dispatch_Id,Kernel_Name,SQ_INSTS_LDS,SQ_LDS_BANK_CONFLICT\n"
-                f"9,{H.TARGET_KERNEL},2,0\n", encoding="utf-8")
+                f"9,{H.TARGET_KERNEL},2.000000,0.000000\n", encoding="utf-8")
             rows = H.load_counter_samples(
                 path, expected_sha256=H.sha256_file(path))
             self.assertEqual(len(rows), 1)
             self.assertFalse(rows[0].conflict)
+
+    def test_fractional_counter_refuses(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "counter.csv"
+            path.write_text(
+                "Dispatch_Id,Kernel_Name,SQ_INSTS_LDS,SQ_LDS_BANK_CONFLICT\n"
+                f"9,{H.TARGET_KERNEL},1.5,0.0\n", encoding="utf-8")
+            with self.assertRaisesRegex(H.LdsSolverError, "finite integer"):
+                H.load_counter_samples(
+                    path, expected_sha256=H.sha256_file(path))
 
     def test_hash_mismatch_refuses(self):
         with tempfile.TemporaryDirectory() as directory:

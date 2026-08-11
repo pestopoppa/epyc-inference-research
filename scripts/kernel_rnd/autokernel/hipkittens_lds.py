@@ -19,6 +19,7 @@ import math
 import re
 import statistics
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -64,9 +65,12 @@ def _integer(value: Any, label: str, *, minimum: int = 0) -> int:
     if isinstance(value, bool):
         raise LdsSolverError(f"{label} must be an integer")
     try:
-        rendered = int(value)
-    except (TypeError, ValueError) as exc:
+        number = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError) as exc:
         raise LdsSolverError(f"{label} must be an integer") from exc
+    if not number.is_finite() or number != number.to_integral_value():
+        raise LdsSolverError(f"{label} must be a finite integer")
+    rendered = int(number)
     if rendered < minimum:
         raise LdsSolverError(f"{label} must be >= {minimum}")
     return rendered
