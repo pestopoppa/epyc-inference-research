@@ -156,7 +156,13 @@ class C3EpycCompilerTest(unittest.TestCase):
         apex = self.plan["runner_bindings"][C.APEX_PYTHON_OVERLAY]
         self.assertEqual(apex["revision"], C.PINNED_APEX_REVISION)
         self.assertEqual(apex["capture"]["python_entrypoint"],
+                         "scripts.kernel_rnd.autokernel.evaluator."
+                         "c3_apex_runner.execute_trace")
+        self.assertEqual(apex["capture"]["pinned_downstream_entrypoint"],
                          "pipeline.kernel_tracing.runner.run_trace_kernel")
+        self.assertIn("c3_apex_case_mapping.v1", apex["capture"]["cli"])
+        self.assertEqual(self.plan["external_artifacts"][0]["artifact_id"],
+                         "c3_apex_case_mapping")
         self.assertIn("_run_final_benchmark",
                       apex["whole_model"]["python_entrypoint"])
         self.assertIn("no system C++", apex["boundary"])
