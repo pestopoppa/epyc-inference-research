@@ -135,6 +135,22 @@ def test_full_campaign_emits_observation_signal_and_all_arms(tmp_path) -> None:
     assert value["verdict"]["kernel_speedup_claim"] is False
     assert set(value["arm_summaries"]) == set(P.ARM_SPECS)
     assert value["arm_summaries"]["Lp"]["n"] == 10
+    assert value["producer"]["producer_id"] == P.PRODUCER_ID
+    assert len(value["belief_measurements"]) == 16
+    assert {row["measurement_id"] for row in value["belief_measurements"]} == {
+        f"p2_5j_{arm.lower()}_{metric}"
+        for arm in P.ARM_SPECS
+        for metric in ("decode_tps", "p50_latency_ms", "p95_latency_ms",
+                       "paired_ratio_to_incumbent")
+    }
+    for row in value["belief_measurements"]:
+        assert row["reps"] == P.REQUIRED_BLOCKS
+        assert len(row["extra"]["block_values"]) == P.REQUIRED_BLOCKS
+        assert row["extra"]["placement_selection_authority"] is False
+        assert row["extra"]["kernel_speedup_authority"] is False
+        unsigned = dict(row)
+        digest = unsigned.pop("measurement_sha256")
+        assert digest == P.canonical_sha256(unsigned)
     assert value["receipt_sha256"] == P.receipt_sha256(value)
 
 

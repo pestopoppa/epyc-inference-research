@@ -24,6 +24,8 @@ from typing import Any, Mapping
 
 INPUT_SCHEMA = "epyc.autokernel.p2_5j_campaign_record.v1"
 SCHEMA = "epyc.autokernel.p2_5j_placement_receipt.v1"
+PRODUCER_ID = "scripts.benchmark.autokernel_p2_5j_receipt/v1"
+PRODUCER_PATH = "scripts/benchmark/autokernel_p2_5j_receipt.py"
 CPU_CLAIM_SCHEMA = "epyc.autokernel.cpu_region_claim_receipt.v1"
 DEVICE_CLAIM_SCHEMA = "epyc.autokernel.device_claim_receipt.v1"
 PROTOCOL_ID = "P2-5j"
@@ -65,6 +67,15 @@ def sha256_file(path: str | Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _producer_identity() -> dict[str, str]:
+    path = Path(__file__).resolve()
+    return {
+        "producer_id": PRODUCER_ID,
+        "path": PRODUCER_PATH,
+        "sha256": sha256_file(path),
+    }
 
 
 def _mapping(value: Any, label: str) -> Mapping[str, Any]:
@@ -251,6 +262,36 @@ def _median_absolute_deviation(values: list[float]) -> float:
     return statistics.median(abs(value - median) for value in values)
 
 
+def _belief_measurement(
+    *, arm: str, metric_suffix: str, metric: str, value: float, unit: str,
+    direction: str, values: list[float], claim: str, extra: Mapping[str, Any],
+) -> dict[str, Any]:
+    if direction not in {"higher_better", "lower_better"}:
+        raise PlacementReceiptError("belief measurement direction is unsupported")
+    if len(values) != REQUIRED_BLOCKS or any(
+            not math.isfinite(item) for item in values):
+        raise PlacementReceiptError(
+            "belief measurement must bind one finite value per scored block")
+    row = {
+        "measurement_id": f"p2_5j_{arm.lower()}_{metric_suffix}",
+        "metric": metric,
+        "value": value,
+        "unit": unit,
+        "metric_direction": direction,
+        "category": "BASELINE" if arm in {"I", "H"} else "CANDIDATE",
+        "reps": REQUIRED_BLOCKS,
+        "reps_basis": "scored:ten randomized complete four-arm placement blocks",
+        "claim": claim,
+        "extra": {
+            **dict(extra),
+            "block_values": values,
+            "aggregation": "median",
+        },
+    }
+    row["measurement_sha256"] = canonical_sha256(row)
+    return row
+
+
 def finalize_campaign(source: Mapping[str, Any], *, base_dir: str | Path) -> dict[str, Any]:
     """Verify and summarize one complete four-arm observation campaign.
 
@@ -412,12 +453,16 @@ def finalize_campaign(source: Mapping[str, Any], *, base_dir: str | Path) -> dic
     for arm, spec in ARM_SPECS.items():
         samples = sorted(arm_samples[arm], key=lambda row: row["block"])
         values = [sample["aggregate_decode_tps"] for sample in samples]
+        p50_values = [sample["p50_latency_ms"] for sample in samples]
+        p95_values = [sample["p95_latency_ms"] for sample in samples]
         ratios = [values[index] / incumbent[index] for index in range(REQUIRED_BLOCKS)]
         arm_summaries[arm] = {
             **spec,
             "n": len(values),
             "median_decode_tps": statistics.median(values),
             "mad_decode_tps": _median_absolute_deviation(values),
+            "median_p50_latency_ms": statistics.median(p50_values),
+            "median_p95_latency_ms": statistics.median(p95_values),
             "paired_ratios_to_incumbent": ratios,
             "median_paired_ratio_to_incumbent": statistics.median(ratios),
             "samples": samples,
@@ -452,6 +497,74 @@ def finalize_campaign(source: Mapping[str, Any], *, base_dir: str | Path) -> dic
     verdict_status = (
         "observation_only_device_local_signal"
         if selected else "no_demonstrated_device_local_signal")
+    belief_measurements: list[dict[str, Any]] = []
+    for arm, summary in arm_summaries.items():
+        samples = summary["samples"]
+        common = {
+            "measurement_surface": "p2_5j_four_arm_host_thread_placement",
+            "arm": arm,
+            "arm_role": summary["role"],
+            "cpu_list": summary["cpu_list"],
+            "cpu_region": summary["cpu_region"],
+            "numa_node": summary["numa_node"],
+            "relation": summary["relation"],
+            "device_id": normalized_identity["device"]["device_id"],
+            "shape": normalized_shape,
+            "authority": AUTHORITY,
+            "placement_selection_authority": False,
+            "kernel_speedup_authority": False,
+            "carve_authority": False,
+            "production_activation_authority": False,
+            "sample_ids": [sample["sample_id"] for sample in samples],
+            "cpu_claim_ids": [sample["cpu_claim"]["opened"]["claim_id"]
+                              for sample in samples],
+            "device_claim_ids": [sample["device_claim"]["opened"]["claim_id"]
+                                 for sample in samples],
+        }
+        decode_values = [sample["aggregate_decode_tps"] for sample in samples]
+        p50_values = [sample["p50_latency_ms"] for sample in samples]
+        p95_values = [sample["p95_latency_ms"] for sample in samples]
+        ratio_values = list(summary["paired_ratios_to_incumbent"])
+        belief_measurements.extend((
+            _belief_measurement(
+                arm=arm, metric_suffix="decode_tps",
+                metric="aggregate_decode_tokens_per_second",
+                value=summary["median_decode_tps"], unit="tokens/s",
+                direction="higher_better", values=decode_values,
+                claim=(f"P2-5j arm {arm} observed median aggregate decode throughput "
+                       f"{summary['median_decode_tps']:.9g} tokens/s; observation only"),
+                extra={**common, "measurement_role": "placement_observation"},
+            ),
+            _belief_measurement(
+                arm=arm, metric_suffix="p50_latency_ms",
+                metric="request_latency_p50_ms",
+                value=summary["median_p50_latency_ms"], unit="ms",
+                direction="lower_better", values=p50_values,
+                claim=(f"P2-5j arm {arm} observed median p50 request latency "
+                       f"{summary['median_p50_latency_ms']:.9g} ms; observation only"),
+                extra={**common, "measurement_role": "placement_observation"},
+            ),
+            _belief_measurement(
+                arm=arm, metric_suffix="p95_latency_ms",
+                metric="request_latency_p95_ms",
+                value=summary["median_p95_latency_ms"], unit="ms",
+                direction="lower_better", values=p95_values,
+                claim=(f"P2-5j arm {arm} observed median p95 request latency "
+                       f"{summary['median_p95_latency_ms']:.9g} ms; observation only"),
+                extra={**common, "measurement_role": "placement_observation"},
+            ),
+            _belief_measurement(
+                arm=arm, metric_suffix="paired_ratio_to_incumbent",
+                metric="paired_decode_ratio_to_incumbent",
+                value=summary["median_paired_ratio_to_incumbent"], unit="ratio",
+                direction="higher_better", values=ratio_values,
+                claim=(f"P2-5j arm {arm} observed median paired decode ratio "
+                       f"{summary['median_paired_ratio_to_incumbent']:.9g} versus I; "
+                       "observation only"),
+                extra={**common, "measurement_role": "placement_comparison",
+                       "incumbent_arm": "I"},
+            ),
+        ))
     payload = {
         "schema": SCHEMA,
         "status": "passed",
@@ -461,12 +574,14 @@ def finalize_campaign(source: Mapping[str, Any], *, base_dir: str | Path) -> dic
         "measurement_protocol": MEASUREMENT_PROTOCOL,
         "started_at": started_at,
         "ended_at": ended_at,
+        "producer": _producer_identity(),
         "identity": normalized_identity,
         "shape": normalized_shape,
         "arm_definitions": {arm: dict(spec) for arm, spec in ARM_SPECS.items()},
         "blocks": sorted(normalized_blocks, key=lambda row: row["block"]),
         "arm_summaries": arm_summaries,
         "comparisons": comparisons,
+        "belief_measurements": belief_measurements,
         "verdict": {
             "status": verdict_status,
             "observed_leader_arm": selected or "I",
