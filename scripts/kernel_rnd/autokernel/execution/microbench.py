@@ -190,6 +190,7 @@ import math
 import os
 import re
 import subprocess
+import statistics as python_statistics
 import tempfile
 import threading
 import time
@@ -202,7 +203,23 @@ from .. import journal as journal_module
 from .. import schemas, storage
 from ..evaluator import api, integrity, recipes, statistics
 from . import instrument_integrity
+from . import physical_bounds
 from . import sandbox as process_sandbox
+
+
+# A synchronized twin that is more than 20% slower in the median is not used as
+# a corrected performance result. It is an integrity failure: the ordinary arm
+# returned before device work was complete. The threshold is deliberately a
+# large-divergence screen, not a noise-floor or speed-claim threshold.
+STREAM_ESCAPE_MAX_MEDIAN_GAP_FRACTION = 0.20
+
+# llama-bench emits tokens/s for both live campaign recipes. The envelope must
+# use the same delivered unit; matching only the shape id would still allow a
+# ceiling derived for output rows or requests to grade a token/s vector.
+_DELIVERED_UNIT_BY_METRIC = {
+    "decode_tokens_per_s": "token",
+    "prefill_tokens_per_s": "token",
+}
 
 __all__ = [
     # identity
@@ -212,6 +229,7 @@ __all__ = [
     "RecipeOutputMismatch", "RunRefused", "SpawnFailure", "HostStateUnreadable",
     "ExtensionNotDeclared", "ScheduleMismatch", "RunLedgerRequired",
     "RunAlreadyCompleted", "RunNotJournaled", "RunIdentityMismatch",
+    "STREAM_ESCAPE_MAX_MEDIAN_GAP_FRACTION",
     # claim seam
     "HeldClaim", "ClaimAttestation", "CpuRegionClaimAdapter",
     # host state
@@ -1451,6 +1469,7 @@ class BenchRow:
     n_gen: int
     n_depth: int
     n_threads: int
+    n_gpu_layers: int
     flash_attn: bool
     use_mmap: bool
     model_filename: str
@@ -1462,11 +1481,17 @@ class BenchRow:
     samples_ns: tuple
     autokernel_hardened: bool = False
     autokernel_output_invariant: bool = False
+    autokernel_hybrid_ab_complete: bool = False
     autokernel_input_working_set_bytes: int = 0
     autokernel_input_hashes: str = ""
     autokernel_input_addresses: str = ""
     autokernel_context_addresses: str = ""
     autokernel_output_hashes: str = ""
+    autokernel_unsynchronized_samples_ns: str = ""
+    autokernel_thread_set_stable: bool = False
+    autokernel_escape_checks_complete: bool = False
+    autokernel_thread_set_hashes: str = ""
+    autokernel_device_sync_mode: str = ""
     raw: dict = field(repr=False, default_factory=dict)
 
     @property
@@ -1476,19 +1501,29 @@ class BenchRow:
     def to_dict(self) -> dict:
         return {"build_commit": self.build_commit, "n_prompt": self.n_prompt,
                 "n_gen": self.n_gen, "n_depth": self.n_depth,
-                "n_threads": self.n_threads, "flash_attn": self.flash_attn,
+                "n_threads": self.n_threads, "n_gpu_layers": self.n_gpu_layers,
+                "flash_attn": self.flash_attn,
                 "use_mmap": self.use_mmap, "model_filename": self.model_filename,
                 "n_batch": self.n_batch, "n_ubatch": self.n_ubatch,
                 "avg_ts": self.avg_ts, "stddev_ts": self.stddev_ts,
                 "samples_ts": list(self.samples_ts), "samples_ns": list(self.samples_ns),
                 "autokernel_hardened": self.autokernel_hardened,
                 "autokernel_output_invariant": self.autokernel_output_invariant,
+                "autokernel_hybrid_ab_complete":
+                    self.autokernel_hybrid_ab_complete,
                 "autokernel_input_working_set_bytes":
                     self.autokernel_input_working_set_bytes,
                 "autokernel_input_hashes": self.autokernel_input_hashes,
                 "autokernel_input_addresses": self.autokernel_input_addresses,
                 "autokernel_context_addresses": self.autokernel_context_addresses,
-                "autokernel_output_hashes": self.autokernel_output_hashes}
+                "autokernel_output_hashes": self.autokernel_output_hashes,
+                "autokernel_unsynchronized_samples_ns":
+                    self.autokernel_unsynchronized_samples_ns,
+                "autokernel_thread_set_stable": self.autokernel_thread_set_stable,
+                "autokernel_escape_checks_complete":
+                    self.autokernel_escape_checks_complete,
+                "autokernel_thread_set_hashes": self.autokernel_thread_set_hashes,
+                "autokernel_device_sync_mode": self.autokernel_device_sync_mode}
 
 
 def _row_int(entry: Mapping, key: str, index: int, *, default: Any = None) -> int:
@@ -1639,6 +1674,7 @@ def parse_llama_bench_json(text: str) -> tuple:
             n_gen=_row_int(entry, "n_gen", index, default=0),
             n_depth=_row_int(entry, "n_depth", index, default=0),
             n_threads=_row_int(entry, "n_threads", index),
+            n_gpu_layers=_row_int(entry, "n_gpu_layers", index, default=0),
             flash_attn=_as_bool(entry.get("flash_attn", False)),
             use_mmap=_as_bool(entry.get("use_mmap", False)),
             model_filename=str(entry.get("model_filename", "")),
@@ -1651,12 +1687,24 @@ def parse_llama_bench_json(text: str) -> tuple:
             autokernel_hardened=_as_bool(entry.get("autokernel_hardened", False)),
             autokernel_output_invariant=_as_bool(
                 entry.get("autokernel_output_invariant", False)),
+            autokernel_hybrid_ab_complete=_as_bool(
+                entry.get("autokernel_hybrid_ab_complete", False)),
             autokernel_input_working_set_bytes=_row_int(
                 entry, "autokernel_input_working_set_bytes", index, default=0),
             autokernel_input_hashes=str(entry.get("autokernel_input_hashes", "")),
             autokernel_input_addresses=str(entry.get("autokernel_input_addresses", "")),
             autokernel_context_addresses=str(entry.get("autokernel_context_addresses", "")),
             autokernel_output_hashes=str(entry.get("autokernel_output_hashes", "")),
+            autokernel_unsynchronized_samples_ns=str(
+                entry.get("autokernel_unsynchronized_samples_ns", "")),
+            autokernel_thread_set_stable=_as_bool(
+                entry.get("autokernel_thread_set_stable", False)),
+            autokernel_escape_checks_complete=_as_bool(
+                entry.get("autokernel_escape_checks_complete", False)),
+            autokernel_thread_set_hashes=str(
+                entry.get("autokernel_thread_set_hashes", "")),
+            autokernel_device_sync_mode=str(
+                entry.get("autokernel_device_sync_mode", "")),
             raw=dict(entry),
         ))
     return tuple(rows)
@@ -1688,14 +1736,16 @@ def _address_pairs(value: str, *, label: str, reps: int) -> tuple:
     return tuple(flattened)
 
 
-def _check_autokernel_hardening(row: BenchRow, *, reps: int) -> tuple:
+def _check_autokernel_hardening(row: BenchRow, *, reps: int,
+                                n_gpu_layers: int) -> tuple:
     """Validate the trusted RVP-C6-8 receipt emitted by hardened llama-bench.
 
-    The speed sample is the FIRST execution of each unique content vector.  Its
-    same-content replicate runs outside the timer through a second simultaneously
-    live context/input allocation.  Thus content or pointer memoization cannot
-    accelerate the timed path, while a stale pointer cache is exposed by unequal
-    logits between the address-rotated pair.
+    The ranked speed sample is the full-device-synchronized SECOND execution of
+    each unique content vector, through a second simultaneously live
+    context/input allocation. The ordinary first execution remains a diagnostic
+    twin. Thus content or pointer memoization cannot accelerate the ranked path,
+    while a stale pointer cache is exposed by unequal logits between the
+    address-rotated pair.
     """
     reasons: list[str] = []
     if not row.autokernel_hardened:
@@ -1706,8 +1756,20 @@ def _check_autokernel_hardening(row: BenchRow, *, reps: int) -> tuple:
         reasons.append(
             "the hardened result did not attest bitwise output invariance across each "
             "same-content, address-rotated replicate")
+    if not row.autokernel_hybrid_ab_complete:
+        reasons.append(
+            "the hardened result did not attest completion of the ordinary/full-device-"
+            "synchronize hybrid A/B for every repetition")
     if row.autokernel_input_working_set_bytes <= 0:
         reasons.append("the hardened result reports no live rotated working set")
+    if not row.autokernel_thread_set_stable:
+        reasons.append(
+            "the hardened result did not attest that the process thread set was stable "
+            "across every timed repetition")
+    if not row.autokernel_escape_checks_complete:
+        reasons.append(
+            "the hardened result did not attest completion of the thread/device escape "
+            "checks for every timed repetition")
 
     input_hashes = _comma_values(row.autokernel_input_hashes)
     if len(input_hashes) != reps:
@@ -1742,6 +1804,64 @@ def _check_autokernel_hardening(row: BenchRow, *, reps: int) -> tuple:
             elif parts[0] != parts[1]:
                 reasons.append(
                     f"output changed across an address-rotated replicate ({pair})")
+
+    unsynchronized_text = _comma_values(row.autokernel_unsynchronized_samples_ns)
+    unsynchronized_ns: list[int] = []
+    if len(unsynchronized_text) != reps:
+        reasons.append(
+            f"autokernel_unsynchronized_samples_ns carries {len(unsynchronized_text)} "
+            f"values for {reps} repetitions")
+    else:
+        for value in unsynchronized_text:
+            try:
+                parsed = int(value)
+            except ValueError:
+                reasons.append(
+                    f"autokernel_unsynchronized_samples_ns contains non-integer "
+                    f"value {value!r}")
+                continue
+            if parsed <= 0:
+                reasons.append(
+                    "autokernel_unsynchronized_samples_ns contains a non-positive "
+                    f"duration {value!r}")
+                continue
+            unsynchronized_ns.append(parsed)
+    if (n_gpu_layers > 0 and len(unsynchronized_ns) == reps
+            and len(row.samples_ns) == reps):
+        ordinary_median = python_statistics.median(unsynchronized_ns)
+        synchronized_median = python_statistics.median(row.samples_ns)
+        gap_fraction = synchronized_median / ordinary_median - 1.0
+        if gap_fraction > STREAM_ESCAPE_MAX_MEDIAN_GAP_FRACTION:
+            reasons.append(
+                "the full-device-synchronized twin is "
+                f"{gap_fraction:.1%} slower in the median than the ordinary twin, above "
+                f"the declared {STREAM_ESCAPE_MAX_MEDIAN_GAP_FRACTION:.0%} stream-escape "
+                "screen; this is an integrity flag, not a corrected speed measurement")
+
+    thread_pairs = _comma_values(row.autokernel_thread_set_hashes)
+    if len(thread_pairs) != reps:
+        reasons.append(
+            f"autokernel_thread_set_hashes carries {len(thread_pairs)} pairs for "
+            f"{reps} repetitions")
+    else:
+        for pair in thread_pairs:
+            parts = tuple(pair.split("/"))
+            if len(parts) != 4 or any(not _AUTOKERNEL_HASH_RE.fullmatch(part)
+                                      for part in parts):
+                reasons.append(
+                    f"autokernel_thread_set_hashes contains malformed pair {pair!r}")
+            elif len(set(parts)) != 1:
+                reasons.append(
+                    "the process thread set changed across the ordinary/synchronized "
+                    f"timed pair ({pair})")
+
+    required_sync_mode = (
+        "hip_full_device" if n_gpu_layers > 0 else "cpu_not_applicable")
+    if row.autokernel_device_sync_mode != required_sync_mode:
+        reasons.append(
+            f"the recipe's n_gpu_layers={n_gpu_layers} requires device sync mode "
+            f"{required_sync_mode!r}, but the result reports "
+            f"{row.autokernel_device_sync_mode!r}")
     return tuple(reasons)
 
 
@@ -1761,6 +1881,7 @@ class LlamaBenchExpectation:
     n_prompt: int
     n_gen: int
     n_threads: int
+    n_gpu_layers: int
     flash_attn: bool
     reps: int
     model_filename: str
@@ -1783,6 +1904,7 @@ class LlamaBenchExpectation:
             n_prompt=int(after("-p") or 0),
             n_gen=int(after("-n") or 0),
             n_threads=int(after("-t") or 0),
+            n_gpu_layers=int(after("-ngl") or -1),
             flash_attn=(after("-fa") == "1"),
             reps=int(after("-r") or 0),
             model_filename=after("-m") or "",
@@ -1804,6 +1926,10 @@ class LlamaBenchExpectation:
         if row.n_threads != self.n_threads:
             reasons.append(f"argv requested -t {self.n_threads} but the row ran with "
                            f"n_threads={row.n_threads}")
+        if row.n_gpu_layers != self.n_gpu_layers:
+            reasons.append(
+                f"argv requested n_gpu_layers={self.n_gpu_layers} but the row reports "
+                f"n_gpu_layers={row.n_gpu_layers}; the offload split is a different cell")
         if row.n_prompt != self.n_prompt or row.n_gen != self.n_gen:
             reasons.append(f"argv requested (-p {self.n_prompt}, -n {self.n_gen}) but the "
                            f"row is (n_prompt={row.n_prompt}, n_gen={row.n_gen}); a "
@@ -1817,7 +1943,8 @@ class LlamaBenchExpectation:
                 f"{len(row.samples_ts)} samples; a short sample vector means repetitions "
                 f"were dropped, and the rep count is a constitutional floor")
         if self.autokernel_seed is not None:
-            reasons.extend(_check_autokernel_hardening(row, reps=self.reps))
+            reasons.extend(_check_autokernel_hardening(
+                row, reps=self.reps, n_gpu_layers=self.n_gpu_layers))
         if self.model_filename and row.model_filename != self.model_filename:
             reasons.append(f"argv named -m {self.model_filename!r} but the row reports "
                            f"model_filename={row.model_filename!r}")
@@ -1834,7 +1961,8 @@ class LlamaBenchExpectation:
 
     def to_dict(self) -> dict:
         return {"n_prompt": self.n_prompt, "n_gen": self.n_gen,
-                "n_threads": self.n_threads, "flash_attn": self.flash_attn,
+                "n_threads": self.n_threads, "n_gpu_layers": self.n_gpu_layers,
+                "flash_attn": self.flash_attn,
                 "reps": self.reps, "model_filename": self.model_filename,
                 "n_depth": self.n_depth,
                 "autokernel_seed": self.autokernel_seed,
@@ -2681,6 +2809,13 @@ class MicrobenchPlan:
     anchor_instrument_root: Optional[str] = None
     candidate_param_overrides: Mapping = field(default_factory=dict)
     anchor_param_overrides: Mapping = field(default_factory=dict)
+    #: Per-ranked-unit recipe changes (shape/value-distribution selectors only).
+    #: Unlike ``unit_ids`` alone, these mappings change the command that runs.
+    unit_param_overrides: Mapping = field(default_factory=dict)
+    #: Units deliberately hostile to structured-input/shape short-circuiting.
+    #: They remain ordinary ranked blocks; this label grants no gate-only path.
+    anti_short_circuit_units: tuple = ()
+    physical_envelopes: Mapping = field(default_factory=dict)
     stratum: str = api.STRATUM_SELECTION
     timeout_s: float = 1800.0
     attempt: int = 0
@@ -2708,7 +2843,8 @@ class MicrobenchPlan:
         if not isinstance(self.anchor, api.AnchorIdentity):
             raise TypeError("plan.anchor must be an api.AnchorIdentity — a named immutable "
                             "anchor, not a path")
-        for name in ("params", "candidate_param_overrides", "anchor_param_overrides"):
+        for name in ("params", "candidate_param_overrides", "anchor_param_overrides",
+                     "unit_param_overrides", "physical_envelopes"):
             if not isinstance(getattr(self, name), Mapping):
                 raise TypeError(f"plan.{name} must be a mapping")
         recipe = recipes.get_recipe(self.recipe_id)
@@ -2740,6 +2876,92 @@ class MicrobenchPlan:
                 raise ValueError(f"plan.{name} must be a positive int")
         if not self.unit_ids:
             raise ValueError("plan.unit_ids must name at least one measurement-material unit")
+        if len(set(self.unit_ids)) != len(self.unit_ids):
+            raise ValueError("plan.unit_ids must be unique")
+        unknown_unit_params = sorted(set(self.unit_param_overrides) - set(self.unit_ids))
+        if unknown_unit_params:
+            raise ValueError(
+                f"plan.unit_param_overrides names unknown units {unknown_unit_params}")
+        normalized_unit_params = {}
+        for unit_id, overrides in self.unit_param_overrides.items():
+            if not isinstance(overrides, Mapping):
+                raise TypeError(
+                    f"plan.unit_param_overrides[{unit_id!r}] must be a mapping")
+            unknown = sorted(set(overrides) - set(recipe.param_map))
+            if unknown:
+                raise ValueError(
+                    f"plan.unit_param_overrides[{unit_id!r}] contains recipe-unknown "
+                    f"parameters {unknown}")
+            normalized_unit_params[unit_id] = json.loads(schemas.canonical_json(overrides))
+        object.__setattr__(self, "unit_param_overrides", normalized_unit_params)
+        if not isinstance(self.anti_short_circuit_units, tuple):
+            raise TypeError("plan.anti_short_circuit_units must be a tuple")
+        if len(set(self.anti_short_circuit_units)) != len(
+                self.anti_short_circuit_units):
+            raise ValueError("plan.anti_short_circuit_units must be unique")
+        unknown_anti = sorted(set(self.anti_short_circuit_units) - set(self.unit_ids))
+        if unknown_anti:
+            raise ValueError(
+                f"plan.anti_short_circuit_units names unknown units {unknown_anti}")
+        if self.anti_short_circuit_units:
+            normal = set(self.unit_ids) - set(self.anti_short_circuit_units)
+            if not normal:
+                raise ValueError(
+                    "an anti-short-circuit ranked set also needs a normal control unit")
+            if set(self.unit_param_overrides) != set(self.unit_ids):
+                missing = sorted(set(self.unit_ids) - set(self.unit_param_overrides))
+                raise ValueError(
+                    "anti-short-circuit units must be real per-unit commands; "
+                    f"unit_param_overrides is missing {missing}")
+            if self.base_blocks < len(self.unit_ids):
+                raise ValueError(
+                    f"base_blocks={self.base_blocks} cannot rank all {len(self.unit_ids)} "
+                    "declared units at least once")
+            normal_frames = {
+                schemas.canonical_json(self.unit_param_overrides[unit]) for unit in normal}
+            for unit in self.anti_short_circuit_units:
+                if schemas.canonical_json(self.unit_param_overrides[unit]) in normal_frames:
+                    raise ValueError(
+                        f"anti-short-circuit unit {unit!r} has the same recipe parameters "
+                        "as a normal unit; relabelling one command does not price the hard case")
+        unknown_envelopes = sorted(set(self.physical_envelopes) - set(self.unit_ids))
+        if unknown_envelopes:
+            raise ValueError(
+                f"plan.physical_envelopes names unknown units {unknown_envelopes}")
+        if self.physical_envelopes and set(self.physical_envelopes) != set(self.unit_ids):
+            missing = sorted(set(self.unit_ids) - set(self.physical_envelopes))
+            raise ValueError(
+                f"plan.physical_envelopes is partial; missing units {missing}. A physical "
+                "screen that grades only the easy cells is not a campaign screen")
+        for unit_id, envelope in self.physical_envelopes.items():
+            if not isinstance(envelope, physical_bounds.PhysicalEnvelope):
+                raise TypeError(
+                    f"plan.physical_envelopes[{unit_id!r}] must be a PhysicalEnvelope")
+            if envelope.shape_id != unit_id:
+                raise ValueError(
+                    f"plan.physical_envelopes[{unit_id!r}] declares shape_id "
+                    f"{envelope.shape_id!r}; the envelope key and measured unit must be "
+                    "identical so a permissive shape cannot grade a harder cell")
+            metric = recipes.get_recipe(self.recipe_id).metric
+            expected_unit = _DELIVERED_UNIT_BY_METRIC.get(metric)
+            if expected_unit is None:
+                raise ValueError(
+                    f"recipe {self.recipe_id!r} emits metric {metric!r}, which has no "
+                    "declared physical-envelope unit; refusing to compare unlike units")
+            if envelope.delivered_unit != expected_unit:
+                raise ValueError(
+                    f"plan.physical_envelopes[{unit_id!r}] is expressed in "
+                    f"{envelope.delivered_unit!r}/s, but recipe {self.recipe_id!r} emits "
+                    f"{metric!r} in {expected_unit!r}/s")
+            frame_params = dict(self.params)
+            frame_params.update(self.unit_param_overrides.get(unit_id, {}))
+            frame = physical_bounds.measurement_frame_sha256(
+                self.recipe_id, frame_params)
+            if envelope.measurement_frame_sha256 != frame:
+                raise ValueError(
+                    f"plan.physical_envelopes[{unit_id!r}] is bound to measurement "
+                    f"frame {envelope.measurement_frame_sha256}, but the exact recipe, "
+                    f"model, and parameters derive {frame}")
         if self.timeout_s <= 0:
             raise ValueError("plan.timeout_s must be positive")
         if self.segment not in statistics.SEGMENTS:
@@ -2796,7 +3018,7 @@ class MicrobenchPlan:
             campaign_seed=self.campaign_seed, candidate_id=self.candidate_id,
             base_blocks=self.base_blocks, attempt=self.attempt)
 
-    def params_for(self, arm: str) -> dict:
+    def params_for(self, arm: str, unit_id: Optional[str] = None) -> dict:
         """Return the committed recipe parameters for one arm.
 
         `recipes._P_GGML_IQK` explicitly licenses an env-flag variant "one flag
@@ -2806,9 +3028,13 @@ class MicrobenchPlan:
         """
         if arm not in (ARM_CANDIDATE, ARM_ANCHOR):
             raise ValueError(f"arm must be candidate or anchor, got {arm!r}")
+        if unit_id is not None and unit_id not in self.unit_ids:
+            raise ValueError(f"unit_id {unit_id!r} is not declared by this plan")
         override = (self.candidate_param_overrides if arm == ARM_CANDIDATE
                     else self.anchor_param_overrides)
         merged = dict(self.params)
+        if unit_id is not None:
+            merged.update(self.unit_param_overrides.get(unit_id, {}))
         merged.update(override)
         return merged
 
@@ -2841,8 +3067,15 @@ class MicrobenchPlan:
                 "anchor": self.anchor.short(), "params": dict(self.params),
                 "candidate_param_overrides": dict(self.candidate_param_overrides),
                 "anchor_param_overrides": dict(self.anchor_param_overrides),
+                "unit_param_overrides": {
+                    unit: dict(overrides)
+                    for unit, overrides in sorted(self.unit_param_overrides.items())},
+                "anti_short_circuit_units": list(self.anti_short_circuit_units),
                 "base_blocks": self.base_blocks, "pairs_per_block": self.pairs_per_block,
                 "unit_ids": list(self.unit_ids), "stratum": self.stratum,
+                "physical_envelopes": {
+                    unit: envelope.to_dict()
+                    for unit, envelope in sorted(self.physical_envelopes.items())},
                 "timeout_s": self.timeout_s, "attempt": self.attempt,
                 "segment": self.segment, "extension_round": self.extension_round,
                 "blocks_to_run": self.blocks_to_run,
@@ -2872,6 +3105,7 @@ class MicrobenchRun:
     claim_attestations: tuple
     candidate_receipt: Optional[ExecutionReceipt]
     anchor_receipt: Optional[ExecutionReceipt]
+    unit_receipts: Mapping
 
     @property
     def order_control(self) -> schemas.Check:
@@ -2971,6 +3205,9 @@ class MicrobenchRun:
                                   if self.candidate_receipt is not None else None),
             "anchor_receipt": (self.anchor_receipt.to_dict()
                                if self.anchor_receipt is not None else None),
+            "unit_receipts": {
+                unit: {arm: receipt.to_dict() for arm, receipt in sorted(by_arm.items())}
+                for unit, by_arm in sorted(self.unit_receipts.items())},
             "claim_attestations": [a.to_dict() for a in self.claim_attestations],
             "blocks": [b.to_dict() for b in self.blocks],
         }
@@ -3295,55 +3532,75 @@ class MicrobenchRunner:
         process_identities: set[tuple[int, int]] = set()
 
         commands = {
-            ARM_CANDIDATE: recipes.construct(plan.recipe_id, binding=plan.candidate_binding,
-                                             params=plan.params_for(ARM_CANDIDATE),
-                                             arm=ARM_CANDIDATE,
-                                             verify_inputs=False),
-            ARM_ANCHOR: recipes.construct(plan.recipe_id, binding=plan.anchor_binding,
-                                          params=plan.params_for(ARM_ANCHOR), arm=ARM_ANCHOR,
-                                          verify_inputs=False),
+            unit: {
+                ARM_CANDIDATE: recipes.construct(
+                    plan.recipe_id, binding=plan.candidate_binding,
+                    params=plan.params_for(ARM_CANDIDATE, unit),
+                    arm=ARM_CANDIDATE, verify_inputs=False),
+                ARM_ANCHOR: recipes.construct(
+                    plan.recipe_id, binding=plan.anchor_binding,
+                    params=plan.params_for(ARM_ANCHOR, unit),
+                    arm=ARM_ANCHOR, verify_inputs=False),
+            }
+            for unit in plan.unit_ids
         }
-        scope = commands[ARM_CANDIDATE].scope_denominator
-        footprint = commands[ARM_CANDIDATE].claim_footprint
+        first_unit = plan.unit_ids[0]
+        multi_unit = len(plan.unit_ids) > 1
+        scope = commands[first_unit][ARM_CANDIDATE].scope_denominator
+        footprint = commands[first_unit][ARM_CANDIDATE].claim_footprint
 
         envs: dict = {}
         receipts: dict = {}
         expectations: dict = {}
-        for arm, command in commands.items():
-            assembly = assemble_env(command.env)
-            envs[arm] = assembly.env
-            discipline = check_recipe_discipline(command, assembly.env)
-            checks.append((f"recipe_discipline.{arm}", discipline))
-            if discipline.outcome != schemas.PASS:
-                refusals.append(f"{arm}: {'; '.join(discipline.reasons)}")
-            try:
-                receipts[arm] = build_receipt(command, env=assembly.env)
-            except (OSError, integrity.IntegrityError) as exc:
-                refusals.append(f"{arm}: cannot digest the binary that would run: {exc}")
-            expectations[arm] = LlamaBenchExpectation.from_command(
-                command,
-                expected_build_commit=(plan.anchor.source_commit if arm == ARM_ANCHOR
-                                       else None))
-            for finding in command.discipline:
-                if finding.check.outcome == schemas.PASS:
-                    continue
-                checks.append((f"delegated.{arm}.{finding.finding_id}", finding.check))
-            # `verify_inputs=False` above turns every input check into one
-            # COULD_NOT_CHECK. That is the right call at construction — the
-            # binary's digest is taken here anyway and a missing model fails the
-            # tool loudly — but `command.inputs_verified` being False must APPEAR
-            # in the record. An unverified conjunct that appears nowhere is
-            # indistinguishable from one that passed.
-            if not command.inputs_verified:
-                checks.append((f"inputs_verified.{arm}", schemas.Check(
-                    schemas.COULD_NOT_CHECK,
-                    tuple(r for c in command.input_checks for r in c.reasons))))
+        for unit, unit_commands in commands.items():
+            envs[unit] = {}
+            receipts[unit] = {}
+            expectations[unit] = {}
+            for arm, command in unit_commands.items():
+                if command.scope_denominator != scope or command.claim_footprint != footprint:
+                    refusals.append(
+                        f"{unit}/{arm}: per-unit parameters changed the claimed scope or "
+                        "CPU footprint; ranked cases may vary work, never resource identity")
+                assembly = assemble_env(command.env)
+                envs[unit][arm] = assembly.env
+                discipline = check_recipe_discipline(command, assembly.env)
+                discipline_name = (f"recipe_discipline.{unit}.{arm}" if multi_unit
+                                   else f"recipe_discipline.{arm}")
+                checks.append((discipline_name, discipline))
+                if discipline.outcome != schemas.PASS:
+                    refusals.append(f"{unit}/{arm}: {'; '.join(discipline.reasons)}")
+                try:
+                    receipts[unit][arm] = build_receipt(command, env=assembly.env)
+                except (OSError, integrity.IntegrityError) as exc:
+                    refusals.append(
+                        f"{unit}/{arm}: cannot digest the binary that would run: {exc}")
+                expectations[unit][arm] = LlamaBenchExpectation.from_command(
+                    command,
+                    expected_build_commit=(plan.anchor.source_commit
+                                           if arm == ARM_ANCHOR else None))
+                for finding in command.discipline:
+                    if finding.check.outcome == schemas.PASS:
+                        continue
+                    delegated_name = (
+                        f"delegated.{unit}.{arm}.{finding.finding_id}" if multi_unit
+                        else f"delegated.{arm}.{finding.finding_id}")
+                    checks.append((delegated_name, finding.check))
+                # `verify_inputs=False` above turns every input check into one
+                # COULD_NOT_CHECK. It must remain visible in the record.
+                if not command.inputs_verified:
+                    inputs_name = (f"inputs_verified.{unit}.{arm}" if multi_unit
+                                   else f"inputs_verified.{arm}")
+                    checks.append((inputs_name, schemas.Check(
+                        schemas.COULD_NOT_CHECK,
+                        tuple(r for c in command.input_checks for r in c.reasons))))
 
-        anchor_checks = self._check_anchor_identity(plan, receipts.get(ARM_ANCHOR))
-        checks.extend(anchor_checks)
-        for name, check in anchor_checks:
-            if check.outcome == schemas.FAIL:
-                refusals.append(f"{name}: {'; '.join(check.reasons)}")
+            anchor_checks = self._check_anchor_identity(
+                plan, receipts[unit].get(ARM_ANCHOR))
+            for name, check in anchor_checks:
+                qualified = f"{name}.{unit}" if multi_unit else name
+                checks.append((qualified, check))
+                if check.outcome == schemas.FAIL:
+                    refusals.append(f"{qualified}: {'; '.join(check.reasons)}")
 
         if getattr(self._spawner, "spawner_id", None) == "subprocess/v1":
             if plan.candidate_instrument_root is None:
@@ -3365,6 +3622,25 @@ class MicrobenchRunner:
                     "recorded/fixture spawner launched no measured binary; the live "
                     "SubprocessSpawner re-hashes candidate and anchor translation units "
                     "at run open and before every invocation",))))
+
+        if getattr(self._spawner, "spawner_id", None) == "subprocess/v1":
+            if not plan.physical_envelopes:
+                physical_screen = schemas.Check(schemas.FAIL, (
+                    "live measurement has no predeclared RVP-C6-4 physical envelope; "
+                    "a missing speed-of-light screen cannot be interpreted as below the "
+                    "ceiling",))
+            else:
+                physical_screen = schemas.Check(schemas.PASS, (
+                    f"RVP-C6-4 envelopes are predeclared for all {len(plan.unit_ids)} "
+                    "measurement units",))
+        else:
+            physical_screen = schemas.Check(schemas.COULD_NOT_CHECK, (
+                "recorded/fixture spawner launches no live benchmark; the live runner "
+                "requires a per-unit physical envelope and checks every emitted sample",))
+        checks.append(("physical_speed_of_light_predeclared", physical_screen))
+        if physical_screen.outcome == schemas.FAIL:
+            refusals.append("physical speed-of-light screen: "
+                            + "; ".join(physical_screen.reasons))
 
         # Host state at OPEN. Contention is judged here and only here: once the
         # benchmark is running it saturates the claimed cores itself, so a
@@ -3434,6 +3710,10 @@ class MicrobenchRunner:
         checks: list = [("host_frequency_block_open", open_freq)]
         refusals: list = []
         invocations: list = []
+        unit_commands = commands[block_plan.unit_id]
+        unit_envs = envs[block_plan.unit_id]
+        unit_receipts = receipts[block_plan.unit_id]
+        unit_expectations = expectations[block_plan.unit_id]
 
         # Same deferral as at run open, and for the same reason: between blocks
         # the claimed cores are idle by construction, so the first block would
@@ -3458,7 +3738,7 @@ class MicrobenchRunner:
                 break
             attestations.append(attestation)
 
-            command = commands[arm]
+            command = unit_commands[arm]
             # Everything from here to the parse is driven by material this runner
             # does not control — the filesystem, the process, and the tool's own
             # stdout. A `MicrobenchError` raised out of `run()` would take the
@@ -3483,9 +3763,9 @@ class MicrobenchRunner:
                             "measurement translation unit changed before the invocation: "
                             + "; ".join(source_pin.reasons))
                 self._attest_binary(
-                    arm=arm, command=command, receipt=receipts[arm],
+                    arm=arm, command=command, receipt=unit_receipts[arm],
                     when=f"before block {block_plan.block_index} position {position}")
-                spawn = self._spawner.run(command.argv, envs[arm],
+                spawn = self._spawner.run(command.argv, unit_envs[arm],
                                           timeout_s=plan.timeout_s)
             except MicrobenchError as exc:
                 refusals.append(f"block {block_plan.block_index} position {position} "
@@ -3547,7 +3827,7 @@ class MicrobenchRunner:
                         f"exactly one (n_prompt, n_gen) point per invocation.")
                 elif rows:
                     row = rows[0]
-                    agreement = expectations[arm].check_row(row)
+                    agreement = unit_expectations[arm].check_row(row)
                     inv_checks.append(("output_matches_recipe", agreement))
                     if agreement.outcome != schemas.PASS:
                         refusals.append(f"block {block_plan.block_index} position "
@@ -3555,10 +3835,18 @@ class MicrobenchRunner:
                                         f"{'; '.join(agreement.reasons)}")
                     else:
                         samples = row.metric_samples
+                        envelope = plan.physical_envelopes.get(block_plan.unit_id)
+                        if envelope is not None:
+                            physical_check = envelope.check_throughput(samples)
+                            inv_checks.append(("physical_speed_of_light", physical_check))
+                            if physical_check.outcome != schemas.PASS:
+                                refusals.append(
+                                    f"block {block_plan.block_index} position {position} "
+                                    f"({arm}): {'; '.join(physical_check.reasons)}")
 
             invocations.append(Invocation(
                 block_index=block_plan.block_index, position=position, arm=arm,
-                receipt=receipts[arm], spawn=spawn, row=row, samples=samples,
+                receipt=unit_receipts[arm], spawn=spawn, row=row, samples=samples,
                 claim=attestation, checks=tuple(inv_checks)))
 
             if refusals:
@@ -3647,12 +3935,15 @@ class MicrobenchRunner:
             refusals.append(
                 f"only {len(blocks)}/{plan.blocks_to_run} paired blocks completed; a run "
                 f"short of its declared block count does not emit a number")
+        single_receipts = receipts.get(plan.unit_ids[0], {}) \
+            if len(plan.unit_ids) == 1 else {}
         run = MicrobenchRun(
             plan=plan, runner_id=RUNNER_ID, started_at=started_at, ended_at=self._now(),
             blocks=tuple(blocks), refusals=tuple(refusals), checks=tuple(checks),
             scope_denominator=scope, claim_attestations=tuple(attestations),
-            candidate_receipt=receipts.get(ARM_CANDIDATE),
-            anchor_receipt=receipts.get(ARM_ANCHOR))
+            candidate_receipt=single_receipts.get(ARM_CANDIDATE),
+            anchor_receipt=single_receipts.get(ARM_ANCHOR),
+            unit_receipts=receipts)
         # The reducer's own order control is NOT copied into `checks` here.
         # `MicrobenchRun.order_control` re-derives it from the plan on every
         # read, `complete` is conjoined with it, and `raw_vector()` emits it —

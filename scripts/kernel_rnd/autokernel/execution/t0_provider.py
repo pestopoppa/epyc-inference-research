@@ -85,19 +85,18 @@ the same way `api.py` and `recipes.py` prove their own denials.
 
 WHAT THIS MODULE DOES NOT PRODUCE
 ----------------------------------
-`SymbolTableDiff`, `BuildProvenance`, `DiffPolicyEvidence` and `ReferenceEvidence`
-are accepted as INPUTS and passed through. `integrity.py` already parses ELF
-tables, build provenance and diffs against real artifacts, and duplicating it
-here would create the second derivation `correctness.SEAMS` already records.
-`ReferenceEvidence` is not synthesisable from `test-backend-ops` output at all —
-the tool prints an error metric only on failure, so a passing `ulp_bounded`
-comparison has no observed ULP to record and would FAIL its own gate. Both gaps
-are recorded in `SEAMS`, not papered over (denial 6).
+`SymbolTableDiff`, `BuildProvenance` and `DiffPolicyEvidence` are accepted as
+INPUTS and passed through. `integrity.py` already parses ELF tables, build
+provenance and diffs against real artifacts, and duplicating it here would
+create the second derivation `correctness.SEAMS` already records. Reference
+evidence is instead projected from the instrument's structured per-case receipt;
+without that receipt the exact-reference gate remains uncovered.
 """
 from __future__ import annotations
 
 import ast
 import hashlib
+import math
 import os
 import re
 import signal
@@ -129,13 +128,13 @@ __all__ = [
     "CandidateBuild", "AnchorBuild", "ToolPaths", "OpSuitePlan", "GenerationPlan",
     "HoldoutPlan", "T0ExecutionPlan",
     # parsers
-    "BackendOpsCase", "BackendOpsBackend", "BackendOpsRun",
+    "BackendOpsReference", "BackendOpsCase", "BackendOpsBackend", "BackendOpsRun",
     "parse_backend_ops_console", "parse_backend_ops_csv",
     "LinkageRow", "LinkageReport", "parse_linkage_report",
     "parse_sanitizer_findings", "parse_compiler_diagnostics", "parse_sched_trace",
     "parse_delivered_tokens",
     # anchor
-    "AnchorCapture", "capture_anchor",
+    "AnchorCapture", "capture_anchor_identity", "capture_anchor",
     # provider
     "ExecutedT0EvidenceProvider", "audit_process_discipline",
 ]
@@ -262,16 +261,6 @@ SCHEMA_FOLLOWUPS = (
 
 #: Seams that still need something this module cannot supply. Recorded, not resolved.
 SEAMS = (
-    ("`ReferenceEvidence` is NOT produced here and the gate is left COULD_NOT_CHECK rather "
-     "than filled in. `test-backend-ops` prints its error metric only on FAILURE "
-     "(`[OP] ERR = %.9f > %.9f`, test-backend-ops.cpp:1472), so a PASSING case yields no "
-     "observed ULP. Constructing a `ulp_bounded` ReferenceComparison from it would either "
-     "record `max_ulp_observed=None` — which `check_exact_reference_comparison` FAILs with "
-     "'the tolerance was never applied' — or claim `exact_bitwise`, which is false: the tool "
-     "compares under an NMSE bound, not bitwise. The honest state is 'not compared', and the "
-     "gate already says exactly that. Closing it needs an exact-reference harness that emits "
-     "per-case error magnitudes; `reference` is an injectable input so that harness can plug "
-     "in without editing this module."),
     ("`SymbolTableDiff`, `BuildProvenance` and `DiffPolicyEvidence` are pass-through inputs. "
      "`integrity.py` already derives all three from real ELF tables, build logs and parsed "
      "diffs; producing them again here would create a second derivation of the §8.5.1 gates, "
@@ -1077,6 +1066,7 @@ class OpSuitePlan:
     ops: tuple
     suite_id: str
     suite_source_sha256: str
+    suite_seed: int = 0
     timeout_s: float = 1800.0
     parallel_workers: Optional[int] = None
 
@@ -1091,6 +1081,7 @@ class OpSuitePlan:
             _req_str(op, "op_suite.ops[]")
         _req_str(self.suite_id, "op_suite.suite_id")
         _req_sha256(self.suite_source_sha256, "op_suite.suite_source_sha256")
+        _req_int(self.suite_seed, "op_suite.suite_seed")
         if self.parallel_workers is not None:
             _req_int(self.parallel_workers, "op_suite.parallel_workers", minimum=1)
 
@@ -1214,6 +1205,10 @@ class T0ExecutionPlan:
     delivered_unit_name: str = "tokens_generated"
     oracle_ids: tuple = ()
     base_env: tuple = ()
+    #: Arm-local variants licensed by the campaign parameter registry.  Kept
+    #: separate from ``base_env`` so an ambient variable cannot override the
+    #: canonical evaluator environment while a declared IQK comparison can.
+    parameter_env: tuple = ()
     reference: Any = None
     symbols: Any = None
     build: Any = None
@@ -1273,6 +1268,7 @@ class T0ExecutionPlan:
         if self.candidate_diff_text is not None and not isinstance(
                 self.candidate_diff_text, str):
             raise TypeError("plan.candidate_diff_text must be a string or None")
+        _validated_parameter_env(self.parameter_env)
         # The four pass-through evidence inputs are TYPE-CHECKED, and the reason
         # is seam 1: `integrity.py` and `correctness.py` each define a
         # `BuildProvenance`, they share no field name, and the wrong one arriving
@@ -1285,6 +1281,7 @@ class T0ExecutionPlan:
         for name, expected in (("symbols", correctness.SymbolTableDiff),
                                ("build", correctness.BuildProvenance),
                                ("diff", correctness.DiffPolicyEvidence),
+                               ("reference", correctness.ReferenceEvidence),
                                ("change_surface", correctness.ChangeSurface)):
             value = getattr(self, name)
             if value is not None and not isinstance(value, expected):
@@ -1326,11 +1323,37 @@ _BACKENDS_PASSED_RE = re.compile(r"^(\d+)/(\d+) backends passed\s*$")
 _BACKEND_INIT_RE = re.compile(r"^Backend (\d+)/(\d+): (\S+)\s*$")
 _BACKEND_STATUS_RE = re.compile(r"^ {2}Backend (\S+):\s*(OK|FAIL)\s*$")
 _TESTING_RE = re.compile(r"^Testing (\d+) devices\s*$")
+_REFERENCE_RECEIPT_RE = re.compile(
+    r"^AK_REF_V1 metric=([A-Za-z0-9_.:/-]+) "
+    r"observed=([0-9]+(?:\.[0-9]*)?(?:e[+-]?\d+)?) "
+    r"tolerance=([0-9]+(?:\.[0-9]*)?(?:e[+-]?\d+)?) "
+    r"comparisons=([1-9][0-9]*) oracle=([A-Za-z0-9_.:/-]+)$")
 
 #: The two skip reasons the tool prints, verbatim
 #: (tests/test-backend-ops.cpp:10368 and :10375). Both increment `n_ok`, so both
 #: end in `N/N backends passed` + `OK` + exit 0 with nothing run.
 _SKIP_REASONS = ("Skipping", "Skipping CPU backend")
+
+
+@dataclass(frozen=True)
+class BackendOpsReference:
+    """A passing case's comparison against the activated CPU reference path."""
+
+    metric_id: str
+    observed: float
+    tolerance: float
+    comparisons: int
+    oracle_id: str
+
+    def __post_init__(self) -> None:
+        for name in ("metric_id", "oracle_id"):
+            _req_str(getattr(self, name), f"backend_ops.reference.{name}")
+        for name in ("observed", "tolerance"):
+            value = getattr(self, name)
+            if not isinstance(value, float) or not math.isfinite(value) or value < 0:
+                raise OutputParseError(
+                    f"backend-op reference {name} must be finite and non-negative")
+        _req_int(self.comparisons, "backend_ops.reference.comparisons", minimum=1)
 
 
 @dataclass(frozen=True)
@@ -1341,10 +1364,37 @@ class BackendOpsCase:
     params: str
     status: str          # ok | fail | not_supported
     interleaved: str = ""
+    reference: Optional[BackendOpsReference] = None
 
     @property
     def passed(self) -> bool:
         return self.status == "ok"
+
+
+def _case_with_reference(*, op: str, params: str, status: str,
+                         interleaved: str = "") -> BackendOpsCase:
+    diagnostics: list = []
+    reference: Optional[BackendOpsReference] = None
+    for part in (piece.strip() for piece in interleaved.split(" | ") if piece.strip()):
+        if part.startswith("AK_REF_"):
+            if reference is not None:
+                raise OutputParseError(
+                    f"case {op}({params}) emitted more than one reference receipt")
+            match = _REFERENCE_RECEIPT_RE.fullmatch(part)
+            if match is None:
+                raise OutputParseError(
+                    f"case {op}({params}) emitted malformed reference receipt {part!r}")
+            reference = BackendOpsReference(
+                metric_id=match.group(1), observed=float(match.group(2)),
+                tolerance=float(match.group(3)), comparisons=int(match.group(4)),
+                oracle_id=match.group(5))
+        else:
+            diagnostics.append(part)
+    if reference is not None and status != "ok":
+        raise OutputParseError(
+            f"case {op}({params}) attached a passing reference receipt to status {status}")
+    return BackendOpsCase(op=op, params=params, status=status,
+                          interleaved=" | ".join(diagnostics), reference=reference)
 
 
 @dataclass(frozen=True)
@@ -1557,7 +1607,7 @@ def parse_backend_ops_console(text: str) -> BackendOpsRun:
             # to this case's diagnostic block.
             stripped = line.strip()
             if stripped in ("OK", "FAIL"):
-                cases.append(BackendOpsCase(
+                cases.append(_case_with_reference(
                     op=pending[0], params=pending[1],
                     status="ok" if stripped == "OK" else "fail",
                     interleaved=" | ".join(p for p in pending[2] if p)))
@@ -1589,8 +1639,9 @@ def parse_backend_ops_console(text: str) -> BackendOpsRun:
             if state == "pending":
                 pending = [case.group(1), case.group(2), [interleaved]]
                 continue
-            cases.append(BackendOpsCase(op=case.group(1), params=case.group(2), status=state,
-                                        interleaved=interleaved))
+            cases.append(_case_with_reference(
+                op=case.group(1), params=case.group(2), status=state,
+                interleaved=interleaved))
             continue
         tests = _TESTS_PASSED_RE.match(line)
         if tests and name is not None:
@@ -1635,10 +1686,11 @@ _CSV_ROW_RE = re.compile(r'"((?:[^"]|"")*)"')
 def parse_backend_ops_csv(text: str) -> BackendOpsRun:
     """Parse `--output csv`. Provided for completeness; NOT the T0 default.
 
-    Recorded header, verbatim:
+    Historical recorded header, verbatim:
     `"backend_name","op_name","op_params","test_mode","supported","error_message","backend_reg_name"`.
     `error_message` is `""` on pass and carries the reason on failure
-    (test-backend-ops.cpp:1495). There is no backend-init or skip line in this
+    (test-backend-ops.cpp:1495). Current instruments add a separate optional
+    `reference_receipt` column; it never overloads failure semantics. There is no backend-init or skip line in this
     format at all, so a zero-row CSV cannot be distinguished from a skipped run
     — which is why `parse_backend_ops_console` is what the provider uses.
     """
@@ -1662,9 +1714,13 @@ def parse_backend_ops_csv(text: str) -> BackendOpsRun:
         backend = cells[index["backend_name"]]
         supported = cells[index["supported"]] == "1"
         error = cells[index["error_message"]]
-        state = "ok" if supported and not error else ("not_supported" if not supported else "fail")
-        by_backend.setdefault(backend, []).append(BackendOpsCase(
-            op=cells[index["op_name"]], params=cells[index["op_params"]], status=state))
+        reference_receipt = (cells[index["reference_receipt"]]
+                             if "reference_receipt" in index else "")
+        state = "not_supported" if not supported else ("ok" if not error else "fail")
+        interleaved = " | ".join(value for value in (error, reference_receipt) if value)
+        by_backend.setdefault(backend, []).append(_case_with_reference(
+            op=cells[index["op_name"]], params=cells[index["op_params"]], status=state,
+            interleaved=interleaved))
     backends = tuple(
         BackendOpsBackend(name=name, skipped=False, skip_reason=None, cases=tuple(cases),
                           reported_passed=None, reported_total=None, status=None)
@@ -2014,8 +2070,28 @@ def _receipt(constructor_id: str, argv: Sequence[str], env: Sequence[tuple]) -> 
     )
 
 
+_REGISTERED_PARAMETER_ENV = {"GGML_IQK": frozenset({"0", "1"})}
+
+
+def _validated_parameter_env(parameter_env: Sequence[tuple]) -> dict:
+    out: dict = {}
+    for row in parameter_env:
+        if not isinstance(row, (tuple, list)) or len(row) != 2:
+            raise TypeError("parameter_env rows must be (name, value) pairs")
+        key, value = str(row[0]), str(row[1])
+        if key in out:
+            raise ValueError(f"parameter_env names {key!r} more than once")
+        choices = _REGISTERED_PARAMETER_ENV.get(key)
+        if choices is None or value not in choices:
+            raise ValueError(
+                f"parameter_env {key}={value!r} is not a registered arm-local variant")
+        out[key] = value
+    return out
+
+
 def _launch_env(library_path: str, base_env: Sequence[tuple],
-                extra: Optional[Mapping[str, str]] = None) -> tuple:
+                extra: Optional[Mapping[str, str]] = None,
+                parameter_env: Sequence[tuple] = ()) -> tuple:
     """The launch environment: the binary's OWN library path first, nothing inherited.
 
     `LD_LIBRARY_PATH` is set to the binary's own directory and is not appended
@@ -2029,6 +2105,11 @@ def _launch_env(library_path: str, base_env: Sequence[tuple],
     env: dict = {str(k): str(v) for k, v in base_env}
     if extra:
         env.update({str(k): str(v) for k, v in extra.items()})
+    # Applied after the canonical environment, but only through the closed
+    # registry above.  This is the one-factor arm difference; ``base_env`` is
+    # not allowed to win last-writer merely because it happened to carry the
+    # same spelling.
+    env.update(_validated_parameter_env(parameter_env))
     # The pin is applied LAST and refuses to be named twice. It used to be
     # applied BEFORE `extra`, so any caller-supplied mapping silently won
     # last-wins — and `collect_sanitizers` passes a mapping it did not build
@@ -2050,6 +2131,8 @@ def _launch_env(library_path: str, base_env: Sequence[tuple],
 
 def build_backend_ops_invocation(*, binary: str, library_path: str, backend_filter: str,
                                  ops: Sequence[str], base_env: Sequence[tuple],
+                                 suite_seed: int = 0,
+                                 parameter_env: Sequence[tuple] = (),
                                  output_format: str = "console",
                                  params_filter: Optional[str] = None,
                                  parallel_workers: Optional[int] = None,
@@ -2072,16 +2155,18 @@ def build_backend_ops_invocation(*, binary: str, library_path: str, backend_filt
     _req_str(backend_filter, "backend_ops.backend_filter")
     if not ops:
         raise ValueError("backend_ops.ops must be non-empty")
+    _req_int(suite_seed, "backend_ops.suite_seed")
     argv: list = list(recipes.CANONICAL_PREFIX) if cpu_prefix else []
     argv += [binary, "test", "-o", ",".join(ops), "-b", backend_filter]
+    argv += ["--suite-seed", str(suite_seed), "--autokernel-properties"]
     if params_filter is not None:
         argv += ["-p", params_filter]
     if parallel_workers is not None:
         argv += ["-j", str(parallel_workers)]
     argv += ["--output", output_format]
     extra = dict(recipes.CANONICAL_OMP_ENV) if cpu_prefix else {}
-    env = _launch_env(library_path, base_env, extra)
-    constructor_id = "ak.t0.backend_ops_test/v1"
+    env = _launch_env(library_path, base_env, extra, parameter_env)
+    constructor_id = "ak.t0.backend_ops_test/v2"
     return ConstructedInvocation(
         constructor_id=constructor_id, argv=tuple(argv), env=env,
         receipt=_receipt(constructor_id, argv, env),
@@ -2089,13 +2174,17 @@ def build_backend_ops_invocation(*, binary: str, library_path: str, backend_filt
             "correctness mode ('test'), not the T1a 'perf' recipe",
             "-b is explicit: test mode skips the CPU device outright without it "
             "(test-backend-ops.cpp:10372) and still prints OK",
+            "--suite-seed fixes every tensor input for deterministic replay",
+            "--autokernel-properties runs independent raw-buffer host-double properties "
+            "and their planted-defect self-test",
             "canonical prefix and OMP stack imported from evaluator.recipes, never retyped",
         ))
 
 
 def build_linkage_invocation(*, bash: str, script: str, binary: str, expected_root: str,
                              library_path: str,
-                             base_env: Sequence[tuple]) -> ConstructedInvocation:
+                             base_env: Sequence[tuple],
+                             parameter_env: Sequence[tuple] = ()) -> ConstructedInvocation:
     """`verify_ggml_linkage.sh <binary> <root>`, under the launcher's own LD_LIBRARY_PATH.
 
     The script reports what the LOADER would do, so it must run under the same
@@ -2107,7 +2196,7 @@ def build_linkage_invocation(*, bash: str, script: str, binary: str, expected_ro
     _req_abs(script, "linkage.script")
     _req_abs(binary, "linkage.binary")
     argv = [bash, script, binary, str(Path(expected_root))]
-    env = _launch_env(library_path, base_env)
+    env = _launch_env(library_path, base_env, parameter_env=parameter_env)
     constructor_id = "ak.t0.verify_ggml_linkage/v1"
     return ConstructedInvocation(
         constructor_id=constructor_id, argv=tuple(argv), env=env,
@@ -2118,6 +2207,7 @@ def build_linkage_invocation(*, bash: str, script: str, binary: str, expected_ro
 def build_generation_invocation(*, binary: str, library_path: str, plan: GenerationPlan,
                                 base_env: Sequence[tuple], seed: Optional[int] = None,
                                 extra_env: Optional[Mapping[str, str]] = None,
+                                parameter_env: Sequence[tuple] = (),
                                 cpu_prefix: bool = True) -> ConstructedInvocation:
     """One llama-cli generation. Sampling parameters are EXPLICIT in the argv.
 
@@ -2138,7 +2228,7 @@ def build_generation_invocation(*, binary: str, library_path: str, plan: Generat
     extra = dict(recipes.CANONICAL_OMP_ENV) if cpu_prefix else {}
     if extra_env:
         extra.update(extra_env)
-    env = _launch_env(library_path, base_env, extra)
+    env = _launch_env(library_path, base_env, extra, parameter_env)
     constructor_id = "ak.t0.generation/v1"
     return ConstructedInvocation(
         constructor_id=constructor_id, argv=tuple(argv), env=env,
@@ -2258,12 +2348,15 @@ class ExecutedT0EvidenceProvider:
         module makes — an `ldd` and a loop over its output take no core.
         """
         plan = self._plan.op_suite
+        self._op_suite_reference = None
         require_claim(self._claim, what="the backend-op suite", cpu_list=self._pinned_cpus())
         invocation = build_backend_ops_invocation(
             binary=self._plan.candidate.test_backend_ops,
             library_path=self._plan.candidate.library_path,
             backend_filter=plan.backend_filter, ops=plan.ops,
             base_env=self._plan.base_env,
+            suite_seed=plan.suite_seed,
+            parameter_env=self._plan.parameter_env,
             parallel_workers=plan.parallel_workers,
             cpu_prefix=self._plan.backend == "llama_cpu")
         capture, ref = self._execute(invocation, timeout_s=plan.timeout_s, collected=collected)
@@ -2293,9 +2386,31 @@ class ExecutedT0EvidenceProvider:
                 f"contributed no cases; the tool still reports "
                 f"{run.backends_passed}/{run.backends_total} backends passed and exits "
                 f"{capture.exit_code}")
+        comparisons = tuple(
+            correctness.ReferenceComparison(
+                shape_id=f"{case.op}({case.params})#{ordinal}",
+                op=case.op,
+                mode="metric_bounded",
+                mismatch_count=0,
+                max_ulp_observed=None,
+                tolerance_ulp=None,
+                oracle_id=case.reference.oracle_id,
+                oracle_is_candidate_derived=False,
+                metric_id=case.reference.metric_id,
+                max_error_observed=case.reference.observed,
+                tolerance_error=case.reference.tolerance)
+            for ordinal, case in enumerate(run.cases)
+            if case.reference is not None)
+        if comparisons:
+            self._op_suite_reference = correctness.ReferenceEvidence(
+                comparisons=comparisons,
+                undefined_for=(),
+                oracle_registry_ref=f"{ref}#backend-ops-reference-v1",
+                produced_by=PRODUCER)
         return correctness.OpSuiteEvidence(
             suite_id=plan.suite_id,
             suite_source_sha256=plan.suite_source_sha256,
+            suite_seed=plan.suite_seed,
             ops_exercised=run.exercised_ops(),
             ops_failed=run.failed_ops(),
             cases_by_op=run.cases_by_op(),
@@ -2325,6 +2440,8 @@ class ExecutedT0EvidenceProvider:
                 backend_filter=self._plan.op_suite.backend_filter,
                 ops=self._plan.op_suite.ops,
                 base_env=self._plan.base_env,
+                suite_seed=self._plan.op_suite.suite_seed,
+                parameter_env=self._plan.parameter_env,
                 params_filter=case_filter,
                 cpu_prefix=self._plan.backend == "llama_cpu")
             capture, ref = self._execute(invocation, timeout_s=holdout.timeout_s,
@@ -2381,16 +2498,24 @@ class ExecutedT0EvidenceProvider:
             library_path=self._plan.candidate.library_path,
             plan=generation, base_env=self._plan.base_env,
             extra_env={"GGML_SCHED_DEBUG": str(plan.debug_level)},
+            parameter_env=self._plan.parameter_env,
             cpu_prefix=self._plan.backend == "llama_cpu")
         capture, ref = self._execute(invocation, timeout_s=plan.timeout_s, collected=collected)
         emitted, _splits, nodes = parse_sched_trace(capture.combined)
-        traced = tuple(dict.fromkeys(op for _, op, _, _, _ in nodes))
+        derived = set(plan.derived_surface)
+        affected_nodes = tuple(node for node in nodes if node[1] in derived)
+        traced = tuple(dict.fromkeys(op for _, op, _, _, _ in affected_nodes))
+        ignored = tuple(dict.fromkeys(op for _, op, _, _, _ in nodes if op not in derived))
+        if ignored:
+            collected.notes.append(
+                f"dispatch trace: ignored {len(ignored)} executed op kind(s) outside the "
+                f"mechanically derived affected surface: {list(ignored)}")
         # An op assigned to a backend other than the one under test is an
         # inter-backend fallback; that is the only class this instrument sees.
         expected_backend = self._plan.op_suite.backend_filter
         fallback_events = tuple(
             f"node #{index} {op} ran on {backend} (cause {cause}), not {expected_backend}"
-            for index, op, _, backend, cause in nodes
+            for index, op, _, backend, cause in affected_nodes
             if backend not in (expected_backend, "NULL"))
         in_scope = plan.fallback_scope == DispatchTracePlan.INSTRUMENTED_SCOPE
         if not in_scope:
@@ -2416,7 +2541,7 @@ class ExecutedT0EvidenceProvider:
             bash=self._plan.tools.bash,
             script=self._plan.tools.verify_ggml_linkage_sh,
             binary=binary, expected_root=expected_root, library_path=library_path,
-            base_env=self._plan.base_env)
+            base_env=self._plan.base_env, parameter_env=self._plan.parameter_env)
         capture, ref = self._execute(invocation, timeout_s=120.0, collected=collected)
         return parse_linkage_report(capture.combined), ref
 
@@ -2430,9 +2555,19 @@ class ExecutedT0EvidenceProvider:
         with identical binaries that resolve different libraries have different
         linkage, which is the whole point of the field.
         """
+        # T0 binds ``llama-cli``, T1 binds ``llama-bench``, and source-integrity
+        # binds ``libggml.so``.  Their non-ggml DT_NEEDED sets legitimately
+        # differ (for example only the executables load libllama), while the
+        # authority this field names is the resolved ggml generation.  Hashing
+        # libllama made two tools from one build look like two anchor builds.
+        ggml_rows = [row for row in report.rows if row.soname.startswith("libggml")]
+        if not ggml_rows:
+            raise OutputParseError(
+                "the linkage verifier reported no libggml rows; the resolved ggml "
+                "generation cannot be identified")
         return schemas.content_hash({
             "expected_root": report.expected_root,
-            "resolved": sorted([row.soname, row.path] for row in report.rows),
+            "resolved": sorted([row.soname, row.path] for row in ggml_rows),
         })
 
     def collect_linkage(self, collected: _Collected):
@@ -2522,7 +2657,7 @@ class ExecutedT0EvidenceProvider:
             # against the uninstrumented libraries the finding would be in.
             env = _launch_env(
                 sanitizer_lib_dir if is_run else str(Path(plan.sanitizer_build_dir)),
-                plan.base_env, sanitizer_env)
+                plan.base_env, sanitizer_env, plan.parameter_env)
             stage = ConstructedInvocation(
                 constructor_id=invocation.constructor_id, argv=tuple(argv), env=env,
                 receipt=invocation.receipt)
@@ -2614,6 +2749,7 @@ class ExecutedT0EvidenceProvider:
         invocation = build_generation_invocation(
             binary=binary, library_path=library_path, plan=plan,
             base_env=self._plan.base_env, seed=seed,
+            parameter_env=self._plan.parameter_env,
             cpu_prefix=self._plan.backend == "llama_cpu")
         capture, ref = self._execute(invocation, timeout_s=plan.timeout_s, collected=collected)
         return capture, ref
@@ -2770,7 +2906,7 @@ class ExecutedT0EvidenceProvider:
             anchor_source_commit=commit,
             anchor_binary_sha256=binary_sha,
             anchor_linkage_sha256=linkage_sha,
-            warnings_as_errors=False,
+            warnings_as_errors=build.warnings_as_errors,
             analyzer_id=None,
             analyzer_error_findings=findings,
             receipt_ref=str(log_path),
@@ -2841,11 +2977,31 @@ class ExecutedT0EvidenceProvider:
                 () if scan is None else scan.environment_probe_findings),
             timing_dependent_branch_findings=(
                 () if scan is None else scan.timing_dependent_branch_findings),
+            stream_creation_findings=(
+                () if scan is None else scan.stream_creation_findings),
+            async_escape_findings=(
+                () if scan is None else scan.async_escape_findings),
+            instrument_frame_findings=(
+                () if scan is None else scan.instrument_frame_findings),
+            pointer_memoization_findings=(
+                () if scan is None else scan.pointer_memoization_findings),
+            structured_short_circuit_findings=(
+                () if scan is None else scan.structured_short_circuit_findings),
             receipt_ref=collected.ref(),
             environment_probe_detector_id=(
                 None if scan is None else scan.environment_probe_detector_id),
             timing_dependent_branch_detector_id=(
                 None if scan is None else scan.timing_dependent_branch_detector_id),
+            stream_creation_detector_id=(
+                None if scan is None else scan.stream_creation_detector_id),
+            async_escape_detector_id=(
+                None if scan is None else scan.async_escape_detector_id),
+            instrument_frame_detector_id=(
+                None if scan is None else scan.instrument_frame_detector_id),
+            pointer_memoization_detector_id=(
+                None if scan is None else scan.pointer_memoization_detector_id),
+            structured_short_circuit_detector_id=(
+                None if scan is None else scan.structured_short_circuit_detector_id),
         )
 
     # -- the Protocol method ----------------------------------------------
@@ -2880,7 +3036,8 @@ class ExecutedT0EvidenceProvider:
             static_analysis=static_analysis,
             sanitizers=sanitizers,
             op_suite=op_suite,
-            reference=self._plan.reference,
+            reference=(self._plan.reference if self._plan.reference is not None
+                       else self._op_suite_reference),
             boundary_shapes=boundary,
             dispatch_trace=dispatch,
             state_safety=state_safety,
@@ -2959,6 +3116,94 @@ class ExecutedT0EvidenceProvider:
 # Anchor capture
 # =============================================================================
 
+_CMAKE_COMPILER_ID_RE = re.compile(
+    r'^set\(CMAKE_CXX_COMPILER_ID\s+"(?P<value>[^"]+)"\)\s*$', re.MULTILINE)
+_CMAKE_COMPILER_VERSION_RE = re.compile(
+    r'^set\(CMAKE_CXX_COMPILER_VERSION\s+"(?P<value>[^"]+)"\)\s*$', re.MULTILINE)
+
+
+def _measure_cmake_toolchain(binary: str) -> tuple:
+    """Read the toolchain CMake recorded for the build containing ``binary``."""
+    build_root = Path(binary).resolve().parent.parent
+    compiler_files = sorted(
+        (build_root / "CMakeFiles").glob("*/CMakeCXXCompiler.cmake"))
+    if not compiler_files:
+        return None, None
+    measured = set()
+    for path in compiler_files:
+        try:
+            body = path.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            raise CaptureUnavailable(
+                f"anchor toolchain metadata {path} is unreadable: {exc}") from exc
+        id_match = _CMAKE_COMPILER_ID_RE.search(body)
+        version_match = _CMAKE_COMPILER_VERSION_RE.search(body)
+        if id_match is None or version_match is None:
+            raise CaptureUnavailable(
+                f"anchor toolchain metadata {path} does not record both CXX compiler "
+                "identity and version")
+        measured.add((f"CXX {id_match.group('value')}", version_match.group("value")))
+    if len(measured) != 1:
+        raise CaptureUnavailable(
+            f"anchor build {build_root} has conflicting CXX toolchains: {sorted(measured)}")
+    return next(iter(measured))
+
+
+def _complete_anchor_toolchain(binary: str, compiler_id: Optional[str],
+                               compiler_version: Optional[str]) -> tuple:
+    if (compiler_id is None) != (compiler_version is None):
+        raise ValueError(
+            "anchor compiler_id and compiler_version must be supplied together or measured "
+            "together")
+    if compiler_id is not None:
+        return compiler_id, compiler_version
+    return _measure_cmake_toolchain(binary)
+
+def capture_anchor_identity(*, anchor: AnchorBuild, tools: ToolPaths, runner: Any,
+                            base_env: Sequence[tuple] = (), sink: Any = None,
+                            parameter_env: Sequence[tuple] = (),
+                            compiler_id: Optional[str] = None,
+                            compiler_version: Optional[str] = None,
+                            warning_count: Optional[int] = None) -> AnchorCapture:
+    """Measure one anchor tool's immutable identity without executing inference.
+
+    T0 and T1 use different binaries.  The full ``capture_anchor`` entry point
+    is intentionally shaped around a T0 plan because it may also execute seeded
+    generation.  T1 needs only the hash and resolved-library table for
+    ``llama-bench``; forcing callers to fabricate an op-suite plan to obtain
+    those two read-only measurements made the stock campaign adapter impossible
+    to wire honestly.
+    """
+    if not isinstance(anchor, AnchorBuild):
+        raise TypeError("capture_anchor_identity.anchor must be an AnchorBuild")
+    if not isinstance(tools, ToolPaths):
+        raise TypeError("capture_anchor_identity.tools must be ToolPaths")
+    compiler_id, compiler_version = _complete_anchor_toolchain(
+        anchor.binary, compiler_id, compiler_version)
+    sink = sink if sink is not None else MemoryCaptureSink()
+    invocation = build_linkage_invocation(
+        bash=tools.bash, script=tools.verify_ggml_linkage_sh,
+        binary=anchor.binary, expected_root=anchor.library_path,
+        library_path=anchor.library_path, base_env=base_env,
+        parameter_env=parameter_env)
+    capture = runner.run(
+        invocation.argv, env=invocation.env_dict(), cwd=anchor.worktree, timeout_s=120.0)
+    if not isinstance(capture, CompletedProcess):
+        raise TypeError(
+            f"runner returned {type(capture).__name__}, expected CompletedProcess")
+    ref = sink.store(capture)
+    report = parse_linkage_report(capture.combined)
+    return AnchorCapture(
+        source_commit=anchor.source_commit,
+        binary_sha256=sha256_file(anchor.binary),
+        linkage_sha256=ExecutedT0EvidenceProvider.linkage_digest(report),
+        resolved_libraries=tuple((row.soname, row.path) for row in report.rows),
+        compiler_id=compiler_id,
+        compiler_version=compiler_version,
+        warning_count=warning_count,
+        capture_refs=(ref,),
+    )
+
 def capture_anchor(*, plan: T0ExecutionPlan, runner: Any, claim: Any = None,
                    sink: Any = None, generation_seeds: Sequence[int] = (),
                    compiler_id: Optional[str] = None,
@@ -2983,6 +3228,8 @@ def capture_anchor(*, plan: T0ExecutionPlan, runner: Any, claim: Any = None,
             "measure an anchor's identity without an anchor; an evidence set with no anchor "
             "capture records no anchor components at all, which is the correct answer.")
     anchor = plan.anchor
+    compiler_id, compiler_version = _complete_anchor_toolchain(
+        anchor.binary, compiler_id, compiler_version)
     sink = sink if sink is not None else MemoryCaptureSink()
     collected = _Collected()
     provider = ExecutedT0EvidenceProvider(plan=plan, runner=runner, claim=claim, sink=sink)

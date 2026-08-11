@@ -1608,6 +1608,7 @@ class EvaluationRequest:
     campaign_controls: Optional[CampaignControls]
     calibration: Optional[CalibrationOutputs]
     device_state: Optional[devices.DeviceState] = None
+    suite_seed: Optional[int] = None
 
     def __post_init__(self) -> None:
         for name, prefix in (("event_id", "ake-"), ("campaign_id", "ak-"),
@@ -1663,6 +1664,10 @@ class EvaluationRequest:
         if self.device_state is not None and not isinstance(
                 self.device_state, devices.DeviceState):
             raise TypeError("device_state must be a devices.DeviceState or None")
+        if self.suite_seed is not None and (
+                isinstance(self.suite_seed, bool) or not isinstance(self.suite_seed, int)
+                or self.suite_seed < 0):
+            raise ValueError("suite_seed must be a non-negative int or None")
 
 
 # =============================================================================
@@ -2820,6 +2825,7 @@ def build_evaluation_event(*,
         "raw_evidence_ref": window.raw_evidence_ref,
         "preflight_attestation_ref": window.preflight_attestation_ref,
         "record_class": RECORD_CLASS,
+        "suite_seed": request.suite_seed,
     }
 
     uncertainty = None if effect is None else {

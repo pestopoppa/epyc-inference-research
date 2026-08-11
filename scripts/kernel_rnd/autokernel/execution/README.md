@@ -21,15 +21,36 @@ decides whether today is a campaign or a plumbing session.
 | `cpu_region_claim.py` | Acquires the CPU region claim (real `flock`s, per-region, with a journal) | flocks yes, in tests; never around a benchmark |
 | `worktree.py` | Resolves the production tip, adds a campaign worktree, configures + builds, emits a build receipt | never built anything |
 | `t0_provider.py` | Runs `test-backend-ops`, `verify_ggml_linkage.sh`, generations, sanitizers; returns `correctness.T0Evidence` | never launched a tool |
-| `microbench.py` | Runs the T1 paired-block `llama-bench` design under the claim; requires unique-content/address hardening plus bitwise output-invariance receipts | live controls, 2026-08-11 |
+| `microbench.py` | Runs the T1 paired-block `llama-bench` design under the claim; requires unique content/address, ordinary/full-device-sync hybrid, stable thread-set, and bitwise output receipts | pre-v9 controls ran 2026-08-05; hardened hybrid awaits explicit inference permission |
 | `instrument_integrity.py` | Pins reward-bearing measurement source to the named anchor before every live invocation | candidate/anchor source roots |
+| `physical_bounds.py` | Re-derives the per-shape physical time floor and throughput ceiling from predeclared work/peak receipts | live runner requires it |
 | `control_runner.py` | Scores the five controls through the same dispatcher a candidate uses | live 5/5 panel, 2026-08-05 |
 | `live_controls.py` | Predeclares, measures, calibrates and scores the live CPU controls | live; dry-run by default |
 | `chain.py` | The **seams** between the above and the evaluator that reads them, plus the four T0 evidence projections (build, symbols, diff, change surface) | projection only; reads ELF/diff/log text it is handed, spawns nothing |
 | `../campaign.py` | **The entrypoint.** Composes everything above into one loop and gives it a `main()` | dry-run composition yes; no candidate built, no bench spawned |
 
-The evaluator, journal, storage, controller, release plane and operator surface
-were built and green before any of this existed. They are not the risk.
+A live T1 plan is not constructively admissible without one physical envelope
+for every measurement-material unit. Work terms are conservative lower bounds;
+hardware peaks are conservative upper bounds. Therefore elapsed time uses
+`max(work / peak_compute, bytes / peak_memory)`, while throughput uses the
+inverse `min(peak_compute / work, peak_memory / bytes)`. The runner checks every
+emitted repetition, not only the median, and refuses a missing, partial,
+cross-shape, non-finite, or above-ceiling vector before it can be ranked.
+The envelope is also bound to the registered metric's delivered unit and to a
+digest of the exact recipe, model path, and parameter frame; a ceiling derived
+for another unit or an easier invocation cannot grade the run.
+
+An anti-short-circuit case is also not a gate-only label. `MicrobenchPlan`
+requires its per-unit recipe parameters to differ from a normal control, ensures
+the base segment contains every declared unit, constructs a distinct receipted
+argv for each unit and arm, and places all of them on the same block schedule
+consumed by the reducer. A hard case therefore contributes its actual cost to
+the rank; it cannot merely pass correctness while the easy path supplies speed.
+
+The surviving evaluator, journal, storage, controller-memory path and operator
+surface are on the lean campaign path. The former broad release/adapters plane
+was deliberately deleted on 2026-08-04 and is restored only for a scheduled
+freeze or speech campaign; it is not silently present behind this driver.
 
 **Read `../campaign.py` before working through §2 by hand.** Until 2026-08-04 this
 package had NO entrypoint at all — `grep -rln '__main__|argparse|def main('` over
@@ -44,16 +65,19 @@ python3 -m scripts.kernel_rnd.autokernel.campaign --model /path/to/model.gguf
 Dry run is the **default**; `--execute` additionally requires `--i-hold-the-host`
 AND an ops object with no unimplemented seams (refused at argv time, before the
 claim — see `HostOps.unimplemented_seams`). An executing run also requires a
-validated `--proposal-manifest` using proposal-v3. The proposal is fsynced before
-preflight or any host work, and an identical resume reuses that event; the same
-proposal id with different bytes is refused.
+validated `--proposal-manifest` using proposal-v3, an exact-unit
+`--physical-envelope` (or `--ranked-units`), and a current
+`--calibration-bundle`. The bundle is identity-bound to the production commit,
+measurement-instrument commit and recipe; the v8 control bundle is rejected on
+v9. The proposal is fsynced before preflight or any host work, and an identical
+resume reuses that event; the same proposal id with different bytes is refused.
 
 The driver's accept rule is `min(delta) > 0` over N pre-committed paired blocks
-AND `median(relative) >` the drift bound measured in
-[`data/autokernel_aa_20260804/`](../../../../data/autokernel_aa_20260804/README.md)
-— not an e-process; §6.8's arithmetic and the A/A's 1.6–1.9 % CV are why. The
-stock driver pre-commits N and has no extension round; the reusable extension
-path is also protected by the durable completed-run ledger described in §6.5.
+AND `median(relative) > contribution_floor`; both N's minimum and the floor come
+from the current calibration bundle. A separate adjacent-anchor movement gate
+retains the paired-design A/A control. The stock driver has no extension round;
+the reusable extension path is protected by the durable completed-run ledger
+described in §6.5.
 
 `OrderSchedule` is a per-block coin flip on the campaign seed, **not** an
 alternation: five blocks land all one way once in sixteen runs, and such a run
@@ -542,10 +566,12 @@ you have a finding that outranks everything else you did today.
   `BuildResult.log_disagrees_with_exit_code` is `False`.
 * `verify_ggml_linkage.sh` says `PASS: all linked ggml libraries resolve inside
   <your build>/bin`.
-* `t0_report` has **17** gates. Since 2026-08-04 a good candidate looks like
-  *11 PASS and 6 COULD_NOT_CHECK, zero FAIL* — see §6.1. Two of the six are
-  projection limitations that were previously silent; their appearance is the
-  §6.1b fail-open closing, not a regression. Note that the six
+* `t0_report` has **17** gates. The generic recorded fixture now looks like
+  *12 PASS and 5 COULD_NOT_CHECK, zero FAIL* — see §6.1. That fixture predates
+  the structured `AK_REF_V1` receipt; the current instrument closes exact
+  reference when it emits one for every required op. One remaining
+  projection limitation was previously silent; its appearance is the §6.1b
+  fail-open closing, not a regression. Note that the five
   remaining COULD_NOT_CHECKs each have a NAMED reason. A `FAIL` on
   `t0.source_integrity.clean_build_from_snapshot` or
   `t0.affected_surface_reconciliation` is a real finding about your candidate.
@@ -629,7 +655,7 @@ a window the stopping rule cannot license. The rest shape what a green run means
 
 | § | What | State |
 |---|---|---|
-| 6.1 | T0's unwired producers | **CLOSED** — 11 PASS / 6 COULD_NOT_CHECK after §6.1b made projection limitations verdict-bearing |
+| 6.1 | T0's unwired producers | **CLOSED** — 12 PASS / 5 COULD_NOT_CHECK after exported-version coverage became conditional and §6.1b made remaining limitations verdict-bearing |
 | 6.1a | Four defects in what 6.1 produced | **CLOSED** — bite-tested |
 | 6.1b | The projections' refusal channel reaches nothing | **CLOSED 2026-08-10** — projection checks merge into their existing integrity gates |
 | 6.2 | One anchor triple cannot name two tools | **CLOSED** — `AnchorIdentity.tool`, enforced three ways |
@@ -640,7 +666,7 @@ a window the stopping rule cannot license. The rest shape what a green run means
 | 6.7 | The published MDE described an unlicensable window | **CLOSED** — `b_min`, plus a new `mde_window` check |
 | 6.8 | How much block noise the declared budget tolerates | **OPEN as a PLANNING decision** — read it before you declare a rule |
 
-### 6.1 T0's unwired producers — WIRED 2026-08-04, four surfaces still open
+### 6.1 T0's unwired producers — WIRED 2026-08-04; current receipts close exact reference
 
 Was: *8 PASS and 9 COULD_NOT_CHECK*, because four of the nine were unevaluated
 only for want of a line of code carrying `integrity.py`'s and `surface.py`'s
@@ -648,14 +674,21 @@ output across to `correctness.py`'s shape. Those lines are now
 `chain.symbol_evidence`, `chain.diff_policy_evidence`,
 `chain.anchor_toolchain_from_build_log` and `chain.change_surface_from`; the
 wiring is in Step 5 above and in `test_execution_chain.ChainLeg`. **A candidate
-now gets 11 PASS and 6 COULD_NOT_CHECK.** The additional two are the explicit
-ELF-version and derived-surface limitations §6.1b had previously dropped.
+now gets 12 PASS and 5 COULD_NOT_CHECK.** The remaining additional limitation is
+the derived-surface absence proof §6.1b had previously dropped. ELF version
+coverage closes when exported definitions are demonstrably unversioned; a
+genuinely versioned exported surface still reports `COULD_NOT_CHECK`.
 
-**Census re-verified 2026-08-04, after the extension round and the §6.7 MDE fix
-landed: still 17 gates, 11 PASS, 6 COULD_NOT_CHECK, 0 FAIL.** Neither change
-touches a T0 surface — the extension is T1 and the MDE is the reducer's — and
-the count is pinned by
-`TestTheChainFits.test_exactly_four_t0_surfaces_still_have_no_producer`, which
+**Recorded-fixture census re-verified 2026-08-11: 17 gates, 12 PASS, 5
+COULD_NOT_CHECK, 0 FAIL.** The fixture is deliberately retained in its historical
+pre-receipt form, so exact reference remains one of its five named gaps. A run
+from the current instrument emits `AK_REF_V1` with the actual comparator metric,
+observed maximum, tolerance, comparison count, and activated CPU-reference oracle;
+the provider projects it as `metric_bounded` evidence and refuses malformed,
+missing-op, candidate-derived, or over-tolerance receipts. The symbol-version
+closure is T0-local; the extension is T1 and the MDE is the reducer's. The
+recorded-fixture count is pinned by
+`TestTheChainFits.test_exactly_five_t0_surfaces_are_explicitly_unevaluated`, which
 fails if it moves. The thirteen, by name:
 
 `symbol_and_registration_preservation`, `clean_build_from_snapshot`,
@@ -685,20 +718,22 @@ which is honest:
   (`integrity.DeclaredSymbolDeltas.from_proposal`, which RAISES on an absent
   declaration rather than defaulting to empty).
 
-The four that remain COULD_NOT_CHECK, with the reason each one is still open —
-each reason re-read against the running code on 2026-08-04, not carried forward:
+The generic source-candidate limitations, with the reason each remains open:
 
 | Surface | Why it is still unmeasured | Is it closable here? |
 |---|---|---|
 | `sanitizer.asan` | needs `derived_touches_memory` **or** `derived_touches_threading` to be `False` before it can PASS by non-applicability. `chain.classify_behavioural_surface` answers `True` or `None` and **never `False`** by construction — proving "no reachable path allocates" needs a whole-program analysis, not a token list. For THIS candidate the diff matches no memory or threading token, so the flag is `None`. | No. A candidate whose diff *does* touch memory gets a real, speed-blocking FAIL instead — `TestTheBehaviouralClassifierOnlyWidens` — so the surface is a gate whenever it can be one. |
 | `sanitizer.ubsan` | identical; the two share `derived_touches_*` and the same PASS branch. | No, same reason. |
 | `state_rollback_teardown_race` | `t0_provider.collect_state_safety` hardcodes `rollback_tested=False`, so `state_safety_probe=True` is a guaranteed FAIL for every candidate and `state_safety_probe=False` leaves the gate to the change derivation, which is `None` here. Proved by exhaustion in `test_t0_provider.TheStateSafetyGateCannotPass`. | No. It needs a rollback probe that does not exist. **Leave the probe off**; that test is the tripwire for when one lands. |
-| `exact_reference_comparison` | `test-backend-ops` prints its error metric only on FAILURE, so a passing case yields no observed ULP and there is nothing to compare against a reference. | No. Needs an exact-reference harness — `t0_provider.SEAMS[0]`. |
+| `affected_surface_reconciliation` | the source classifier can widen memory/thread/state touches but cannot prove their absence for arbitrary source edits. | No for generic source edits without a whole-program closure proof. The registered source-free IQK parameter surface does prove all three false. |
+| `exact_reference_comparison` | Historical captures have no positive receipt. The current `test-backend-ops` emits `AK_REF_V1` only after its separately activated CPU reference path ran and the case passed. | **Closed for current-instrument runs.** Missing or malformed receipts remain speed-blocking; old fixtures are not upgraded by assertion. |
 
-None of the four is a want of wiring. Three of them cannot PASS on any evidence
-this package can produce, and the fourth (`asan`/`ubsan`) can only PASS on a
-negative nothing here can establish — which is why they read COULD_NOT_CHECK
-rather than PASS, and why a green report has exactly four of them.
+None of the remaining generic limitations is a want of pass-through wiring.
+For the first source-free parameter candidate, the registered surface proves
+memory, threading, and persistent state are untouched, so ASAN, UBSAN, state
+safety, and surface reconciliation resolve by non-applicability while the
+structured backend-op receipt supplies the reference leg. Arbitrary source
+proposals still need stronger reachability and rollback instruments.
 
 **Read this before you over-read the sanitizer surface.**
 `surface.AffectedSurface` has no memory / threading / persistent-state axis — its

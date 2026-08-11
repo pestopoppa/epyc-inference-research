@@ -196,6 +196,31 @@ def t0_policy():
 
 class BackendOpsConsoleParsing(unittest.TestCase):
 
+    def test_structured_reference_receipt_is_parsed_separately_from_diagnostics(self):
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                "  MUL_MAT(type_a=q4_K,type_b=f32,m=16,n=1,k=256): "
+                "AK_REF_V1 metric=test_backend_ops_error/v1 observed=2.5e-09 "
+                "tolerance=1e-07 comparisons=3 oracle=ggml_cpu_reference/v1 OK\n"
+                "  1/1 tests passed\n  Backend CPU: OK\n"
+                "1/1 backends passed\nOK\n")
+        run = t0.parse_backend_ops_console(text)
+        case = run.cases[0]
+        self.assertEqual(case.interleaved, "")
+        self.assertEqual(case.reference.metric_id, "test_backend_ops_error/v1")
+        self.assertEqual(case.reference.observed, 2.5e-09)
+        self.assertEqual(case.reference.tolerance, 1e-07)
+        self.assertEqual(case.reference.comparisons, 3)
+        self.assertEqual(case.reference.oracle_id, "ggml_cpu_reference/v1")
+        run.reconcile()
+
+    def test_malformed_reference_receipt_refuses(self):
+        text = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
+                "  MUL_MAT(type_a=q4_K): AK_REF_V1 observed=0 tolerance=1e-7 OK\n"
+                "  1/1 tests passed\n  Backend CPU: OK\n"
+                "1/1 backends passed\nOK\n")
+        with self.assertRaises(t0.OutputParseError):
+            t0.parse_backend_ops_console(text)
+
     def test_recorded_passing_run_parses_cases_and_ops(self):
         run = t0.parse_backend_ops_console(recorded("recorded_t0_backend_ops_console_ok.txt"))
         self.assertEqual(len(run.backends), 1)
@@ -372,6 +397,18 @@ class BackendOpsCsvParsing(unittest.TestCase):
         self.assertEqual(run.exercised_ops(), ("ARANGE",))
         self.assertEqual(run.cases_by_op(), (("ARANGE", 2, 2),))
 
+    def test_current_csv_keeps_reference_receipt_out_of_error_message(self):
+        receipt = ("AK_REF_V1 metric=test_backend_ops_error/v1 observed=0 "
+                   "tolerance=1e-07 comparisons=2 oracle=ggml_cpu_reference/v1")
+        text = (
+            '"backend_name","op_name","op_params","test_mode","supported",'
+            '"error_message","backend_reg_name","reference_receipt"\n'
+            f'"CPU","MUL_MAT","type_a=q4_K","test","1","","CPU","{receipt}"\n')
+        run = t0.parse_backend_ops_csv(text)
+        self.assertEqual(run.cases[0].status, "ok")
+        self.assertEqual(run.cases[0].interleaved, "")
+        self.assertEqual(run.cases[0].reference.oracle_id, "ggml_cpu_reference/v1")
+
     def test_csv_cannot_express_a_skipped_backend(self):
         """Why console is the T0 default, stated as a test rather than a comment.
 
@@ -432,6 +469,18 @@ class LinkageParsing(unittest.TestCase):
         bad = t0.parse_linkage_report(recorded("recorded_t0_linkage_fail.txt"))
         self.assertNotEqual(t0.ExecutedT0EvidenceProvider.linkage_digest(good),
                             t0.ExecutedT0EvidenceProvider.linkage_digest(bad))
+
+    def test_linkage_digest_names_the_ggml_generation_not_tool_specific_libs(self):
+        rows = (
+            t0.LinkageRow("libggml.so.0", "/anchor/libggml.so.0", True),
+            t0.LinkageRow("libggml-base.so.0", "/anchor/libggml-base.so.0", True),
+        )
+        cli = t0.LinkageReport("llama-cli", "/anchor", rows + (
+            t0.LinkageRow("libllama.so.0", "/anchor/libllama.so.0", True),
+        ), schemas.PASS, ())
+        bench = t0.LinkageReport("llama-bench", "/anchor", rows, schemas.PASS, ())
+        self.assertEqual(t0.ExecutedT0EvidenceProvider.linkage_digest(cli),
+                         t0.ExecutedT0EvidenceProvider.linkage_digest(bench))
 
 
 # =============================================================================
@@ -626,6 +675,18 @@ class ArgvConstruction(unittest.TestCase):
         self.assertNotIn("perf", inv.argv)
         self.assertEqual(inv.argv[inv.argv.index("-b") + 1], "CPU")
         self.assertEqual(inv.argv[inv.argv.index("-o") + 1], "MUL_MAT,MUL_MAT_ID")
+        self.assertEqual(inv.argv[inv.argv.index("--suite-seed") + 1], "0")
+        self.assertIn("--autokernel-properties", inv.argv)
+
+    def test_backend_ops_seed_is_explicit_and_receipted(self):
+        zero = t0.build_backend_ops_invocation(
+            binary=f"{BIN_DIR}/test-backend-ops", library_path=BIN_DIR,
+            backend_filter="CPU", ops=("MUL_MAT",), base_env=(), suite_seed=0)
+        seeded = t0.build_backend_ops_invocation(
+            binary=f"{BIN_DIR}/test-backend-ops", library_path=BIN_DIR,
+            backend_filter="CPU", ops=("MUL_MAT",), base_env=(), suite_seed=4711)
+        self.assertEqual(seeded.argv[seeded.argv.index("--suite-seed") + 1], "4711")
+        self.assertNotEqual(zero.receipt.argv_sha256, seeded.receipt.argv_sha256)
 
     def test_backend_ops_env_carries_the_full_canonical_omp_stack(self):
         inv = t0.build_backend_ops_invocation(
@@ -634,6 +695,24 @@ class ArgvConstruction(unittest.TestCase):
         env = inv.env_dict()
         for key, value in recipes.CANONICAL_OMP_ENV.items():
             self.assertEqual(env[key], value, key)
+
+    def test_registered_parameter_env_is_the_only_canonical_override(self):
+        inv = t0.build_backend_ops_invocation(
+            binary=f"{BIN_DIR}/test-backend-ops", library_path=BIN_DIR,
+            backend_filter="CPU", ops=("MUL_MAT",), base_env=(),
+            parameter_env=(("GGML_IQK", "0"),))
+        env = inv.env_dict()
+        self.assertEqual(env["GGML_IQK"], "0")
+        for key, value in recipes.CANONICAL_OMP_ENV.items():
+            if key != "GGML_IQK":
+                self.assertEqual(env[key], value, key)
+
+    def test_unregistered_parameter_env_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "not a registered arm-local variant"):
+            t0.build_backend_ops_invocation(
+                binary=f"{BIN_DIR}/test-backend-ops", library_path=BIN_DIR,
+                backend_filter="CPU", ops=("MUL_MAT",), base_env=(),
+                parameter_env=(("UNSAFE", "1"),))
 
     def test_launch_env_overrides_an_ambient_production_library_path(self):
         """THE GUARD, with its compliant control.
@@ -846,6 +925,7 @@ class OpSuiteCollection(unittest.TestCase):
         self.assertEqual(evidence.cases_for("MUL_MAT"), (178, 178))
         self.assertIsNone(evidence.cases_for("MUL_MAT_ID"))
         self.assertTrue(any("MUL_MAT_ID" in note for note in collected.notes))
+        self.assertIsNone(provider._op_suite_reference)
 
     def test_the_gate_fails_the_unexercised_mandatory_op(self):
         """End to end through the REAL gate, on REAL recorded output.
@@ -1013,12 +1093,22 @@ class DispatchTraceCollection(unittest.TestCase):
 
     def test_node_on_another_backend_is_a_fallback_event(self):
         trace = self.TRACE + (
-            "node #  1 (MUL_MAT_ID):           ffn_moe-0 (  2MB) [ ROCm0 1.src ] use=1,c=1:\n")
+            "node #  1 (   MUL_MAT):           ffn_moe-0 (  2MB) [ ROCm0 1.src ] use=1,c=1:\n")
         provider = self._provider(trace)
         evidence = provider.collect_dispatch_trace(t0._Collected())
         self.assertEqual(len(evidence.fallback_events), 1)
         gate = correctness.check_no_fallback_dispatch_proof(evidence)
         self.assertEqual(gate.check.outcome, schemas.FAIL)
+
+    def test_unaffected_graph_nodes_do_not_expand_the_change_surface(self):
+        trace = self.TRACE + (
+            "node #  1 (       ADD):             residual (  2MB) [  CPU 1.dst  ] use=1,c=1:\n")
+        provider = self._provider(trace)
+        collected = t0._Collected()
+        evidence = provider.collect_dispatch_trace(collected)
+        self.assertEqual(evidence.traced_kernels, ("MUL_MAT",))
+        self.assertTrue(any("outside the mechanically derived affected surface" in note
+                            for note in collected.notes))
 
 
 class CoherenceAndDeterminismCollection(unittest.TestCase):
@@ -1426,10 +1516,12 @@ class EndToEndT0Report(unittest.TestCase):
         produce a real MUL_MAT_ID case list under a shape filter, which is the
         finding the other test records.
         """
+        receipt = ("AK_REF_V1 metric=test_backend_ops_error/v1 observed=0 "
+                   "tolerance=1e-07 comparisons=2 oracle=ggml_cpu_reference/v1")
         synthetic = ("Testing 1 devices\n\nBackend 1/1: CPU\n"
                      "  Device description: AMD EPYC 9655 96-Core Processor\n\n"
-                     "  MUL_MAT(type_a=f32,type_b=f32,m=16,n=1,k=256): OK\n"
-                     "  MUL_MAT_ID(type_a=f32,type_b=f32,n_mats=4,n_used=2): OK\n"
+                     f"  MUL_MAT(type_a=f32,type_b=f32,m=16,n=1,k=256): {receipt} OK\n"
+                     f"  MUL_MAT_ID(type_a=f32,type_b=f32,n_mats=4,n_used=2): {receipt} OK\n"
                      "  2/2 tests passed\n  Backend CPU: OK\n1/1 backends passed\nOK\n")
         anchor = anchor_capture(output_digests=(t0.sha256_text("Paris."),),
                                 output_lengths=(6,), determinism_class="bitwise_stable",
@@ -1442,6 +1534,11 @@ class EndToEndT0Report(unittest.TestCase):
         self.assertNotIn(correctness.GID_OP_UNITS, report.failed)
         self.assertEqual(report.outcome(correctness.GID_OP_UNITS), schemas.PASS,
                          report.gate(correctness.GID_OP_UNITS).check.reasons)
+        self.assertEqual(report.outcome(correctness.GID_EXACT_REFERENCE), schemas.PASS,
+                         report.gate(correctness.GID_EXACT_REFERENCE).check.reasons)
+        self.assertEqual(len(evidence.reference.comparisons), 2)
+        self.assertTrue(all(c.mode == "metric_bounded"
+                            for c in evidence.reference.comparisons))
 
     def test_provider_satisfies_the_t0_correctness_runner_seam(self):
         anchor = anchor_capture(output_digests=(t0.sha256_text("Paris."),),
@@ -1469,10 +1566,10 @@ class EndToEndT0Report(unittest.TestCase):
 
 class SeamsAreRecorded(unittest.TestCase):
 
-    def test_reference_evidence_gap_is_recorded_not_filled_in(self):
+    def test_reference_evidence_is_instrument_derived_not_plan_asserted(self):
         plan = execution_plan()
         self.assertIsNone(plan.reference)
-        self.assertTrue(any("ReferenceEvidence" in seam for seam in t0.SEAMS))
+        self.assertFalse(any("ReferenceEvidence" in seam for seam in t0.SEAMS))
 
     def test_seams_name_the_dispatch_instrumentation_limit(self):
         self.assertTrue(any("INTER-backend" in seam for seam in t0.SEAMS))
@@ -1780,6 +1877,49 @@ class AFailedGenerationIsNotAMeasurement(unittest.TestCase):
         self.assertEqual(result.determinism_class, "not_measured")
         self.assertEqual(result.output_digests, ())
         self.assertEqual(len(result.notes), 2)
+
+    def test_identity_only_capture_hashes_the_named_tool_without_generation(self):
+        plan = execution_plan()
+        anchor = t0.AnchorBuild(
+            worktree=PROD_TREE, source_commit=COMMIT_ANCHOR,
+            binary=f"{PROD_TREE}/build/bin/llama-bench",
+            library_path=f"{PROD_TREE}/build/bin")
+        invocation = t0.build_linkage_invocation(
+            bash=plan.tools.bash, script=plan.tools.verify_ggml_linkage_sh,
+            binary=anchor.binary, expected_root=anchor.library_path,
+            library_path=anchor.library_path, base_env=())
+        runner = t0.RecordedProcessRunner([
+            capture(list(invocation.argv), stdout=recorded("recorded_t0_linkage_pass.txt"))
+        ])
+        with unittest.mock.patch.object(t0, "sha256_file", return_value=SHA_B):
+            result = t0.capture_anchor_identity(
+                anchor=anchor, tools=plan.tools, runner=runner)
+        self.assertEqual(result.binary_sha256, SHA_B)
+        self.assertEqual(result.source_commit, COMMIT_ANCHOR)
+        self.assertEqual(result.output_digests, ())
+        self.assertEqual(result.determinism_class, "not_measured")
+        self.assertEqual(len(result.capture_refs), 1)
+
+    def test_anchor_toolchain_is_measured_from_its_own_cmake_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            build = Path(directory, "build")
+            binary = build / "bin" / "llama-cli"
+            binary.parent.mkdir(parents=True)
+            binary.write_bytes(b"anchor")
+            cmake = build / "CMakeFiles" / "3.31.6" / "CMakeCXXCompiler.cmake"
+            cmake.parent.mkdir(parents=True)
+            cmake.write_text(
+                'set(CMAKE_CXX_COMPILER_ID "GNU")\n'
+                'set(CMAKE_CXX_COMPILER_VERSION "15.2.0")\n',
+                encoding="utf-8")
+            self.assertEqual(
+                t0._measure_cmake_toolchain(str(binary)),
+                ("CXX GNU", "15.2.0"))
+
+    def test_half_an_anchor_toolchain_attestation_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "supplied together"):
+            t0._complete_anchor_toolchain(
+                f"{PROD_TREE}/build/bin/llama-cli", "CXX GNU", None)
 
 
 class ClaimsAreCheckedAgainstTheRealImplementation(unittest.TestCase):
@@ -2191,6 +2331,20 @@ class TheStaticAnalysisSurfaceNamesTheCandidatesOwnToolchain(unittest.TestCase):
                                                     anchor.identity())
         self.assertEqual(gate.check.outcome, schemas.COULD_NOT_CHECK)
         self.assertTrue(any("anchor warning count" in r for r in gate.check.reasons))
+
+    def test_a_receipted_fatal_warnings_build_needs_no_anchor_warning_count(self):
+        self.build = correctness.BuildProvenance(
+            built_from_snapshot_sha256=SHA_A, build_dir=BUILD_DIR,
+            build_dir_was_fresh=True, incremental_objects_present=False,
+            compiler_id="CXX GNU", compiler_version="15.2.0",
+            build_log_ref=f"file://{self.log}", production_tree_paths_touched=(),
+            output_binary_sha256=SHA_D, produced_by="evaluator",
+            warnings_as_errors=True)
+        anchor = anchor_capture(compiler_id="CXX GNU", compiler_version="15.2.0")
+        evidence = self._evidence(anchor)
+        self.assertTrue(evidence.warnings_as_errors)
+        gate = correctness.check_static_and_compile(evidence, anchor.identity())
+        self.assertEqual(gate.check.outcome, schemas.PASS, gate.check.reasons)
 
 
 class TheStateSafetyGateCannotPass(unittest.TestCase):

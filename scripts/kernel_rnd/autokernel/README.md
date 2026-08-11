@@ -13,8 +13,9 @@ python3 -m scripts.kernel_rnd.autokernel.campaign --model /path/to/model.gguf
 
 **Dry run is the default.** It composes and prints every applicable step, including
 the exact argv and env both arms would be spawned with, and executes nothing.
-`--execute` additionally requires `--i-hold-the-host` and a validated
-`--proposal-manifest`; proposal-v3 is fsynced before any host work.
+`--execute` additionally requires `--i-hold-the-host`, a validated
+`--proposal-manifest`, an exact-unit physical envelope and a current
+identity-bound calibration bundle; proposal-v3 is fsynced before any host work.
 
 **Status: no candidate has ever been built, and no benchmark has ever been run
 by this package.** Not one. The loop above has been composed end to end and
@@ -75,9 +76,10 @@ acquired the claim directly. Writing your own question:
    52.31 → 51.62 → 50.52). A candidate-then-anchor A/B therefore charges the
    second arm a systematic ~4%, and *more repetitions do not remove it.* The
    accept rule is `min(delta) > 0` over N pre-committed pairs AND
-   `median(relative) >` a drift bound derived from that A/A — not an e-process;
-   1.6–1.9% CV does not justify one. Evidence:
-   [`data/autokernel_aa_20260804/`](../../../data/autokernel_aa_20260804/README.md).
+   `median(relative) > contribution_floor`, with the floor and B_min supplied by
+   a current identity-bound calibration bundle. The historical A/A still
+   motivates pairing and the separate anchor-movement control; it does not
+   authorize v9 ranking.
 
 ### Quant-specific roofline targets
 
@@ -118,6 +120,13 @@ robust sign error, effective pairs/noise exclusions, and recoding stability. Its
 only authority label is `observe_only`; it is intentionally outside the campaign
 import path and exposes no selector, champion, T2, or T3 mutation API.
 
+For the CPU known-win diagnostic, a `change_class: "parameter"` proposal must
+declare `change.parameter_surface` with exact `candidate` and `anchor` mappings.
+The only arm-local key currently licensed by the recipe registry is
+`ggml_iqk` (`"0"` or `"1"`). `campaign.py` projects that declaration into the
+existing `MicrobenchPlan` arm overrides, and its dry run prints the two distinct
+environments; identical arms or any unregistered key are refused before a claim.
+
 ---
 
 ## Scope and authority
@@ -136,10 +145,12 @@ Nothing here writes to a production kernel tree. Nothing outside `execution/`
 starts a process, runs a benchmark, or runs inference; `execution/`'s five
 executors do, under a held claim, and only when the driver is run with
 `--execute`. `--execute` is refused at argv time — before any claim — while
-`HostOps.unimplemented_seams()` is non-empty: `apply_candidate`,
-`_anchor_identity_for_bench`, `t0_evidence` and `--nominal-khz` each need a
-value the campaign must supply, and each would otherwise raise where it is
-reached, after the claim and after the build.
+`HostOps.unimplemented_seams()` is non-empty. The first IQK parameter campaign
+has built-in no-source mutation, measured per-tool anchor, and registered T0
+evidence adapters; it requires only the operator's healthy all-core
+`--nominal-khz` at its remaining adapter seam after the current live-control
+calibration exists. Source-changing campaigns additionally require their own
+`apply_candidate` and proposal-specific `t0_evidence` adapters.
 
 ---
 
@@ -163,14 +174,16 @@ reached, after the claim and after the build.
 | `execution/worktree.py` | **AK2.** Fresh worktrees from the reviewed one-commit measurement overlay on current production v9, pathspec commits, clean candidate-local builds, and build identities. Candidate-controlled CMake configure/build is C6-sandboxed and returns evaluator-owned activation plus verified-cgroup-teardown receipts. |
 | `execution/sandbox.py` | **C6.** Native Landlock write confinement, seccomp signal/network/namespace denial, non-root identity, finite rlimits, per-invocation cgroup-v2 containment, candidate-proof activation receipts, and descendant-draining teardown. Startup is fail-closed. |
 | `execution/t0_provider.py` | **AK3 T0.** Real correctness invocations. The live campaign constructs it only with a C6 policy; recorded replay starts no process. |
-| `execution/microbench.py` | **AK3 T1.** Fresh process and empty invocation-only writable state for every arm, interleaved paired blocks, mandatory `--autokernel-harden` receipts, per-CPU frequency observations, and exact-window package-energy deltas. Each timed repetition uses unique content and a unique context/input address; an untimed address-rotated replicate must return bitwise-identical logits. Package values are explicitly shared-package rather than lane-exclusive. |
+| `execution/microbench.py` | **AK3 T1 / RVP-C6-2/C6-3/C6-10.** Fresh process and empty invocation-only writable state for every arm, interleaved paired blocks, mandatory `--autokernel-harden` receipts, per-CPU frequency observations, and exact-window package-energy deltas. Each repetition uses unique content and context/input addresses in an ordinary/full-device-sync hybrid pair; only the synchronized twin is ranked, both brackets must preserve the exact thread set, and a >20% GPU median divergence is an integrity failure rather than a corrected speed result. Anti-short-circuit units must change the real recipe, appear beside a normal control, and receive blocks in the same ranked stream. Package values are explicitly shared-package rather than lane-exclusive. |
 | `execution/instrument_integrity.py` | **RVP-C6-1.** Re-hashes the complete three-file reward-instrument manifest in explicit candidate and named-anchor source roots before live T0/T1 work and immediately before every T1 invocation; missing, unreadable, or changed source is a hard refusal. Build roots are never accepted as source identity. |
-| `execution/reward_hack_scan.py` | **RVP-C6-9.** Versioned added-line detectors over the committed candidate diff for environment probes and timing-dependent branches. Missing detector ids make empty findings `COULD_NOT_CHECK`; the checked-in detector corpus records 100% sensitivity and specificity for this deliberately narrow source-pattern taxonomy. The broader RVP-C6-6 exploit corpus remains a separate task. |
-| `execution/live_controls.py` | **AK3 live calibration.** Dry-run-default CPU producer that predeclares a fresh v9/hardened campaign, copies the reviewed measurement binary and its build-local DSOs byte-for-byte into the evidence bundle, acquires q0–q3, measures fresh A/A/neutral/control legs, solves calibration, and sends all five controls through the candidate dispatcher. The prior v8 result remains historical evidence in `data/autokernel_controls_3pct_20260805/`; it is not silently reused as v9 calibration. |
+| `execution/physical_bounds.py` | **RVP-C6-4.** Immutable per-shape work lower bounds plus hardware peak upper bounds. The time floor is `max(compute, memory)` and the equivalent throughput ceiling is `min(compute, memory)`; every sample above it is refused before ranking. The envelope binds the registered delivered unit and an exact recipe/model/parameter-frame digest; serialized derived values are re-derived rather than trusted. |
+| `execution/reward_hack_scan.py` | **RVP-C6-6/C6-9 plus static parts of C6-2/C6-3.** Versioned added-line detectors over the committed candidate diff for protected-frame edits, pointer memoization, structured-input/known-shape short circuits, environment/timing probes, stream creation, and thread/async creation. Missing detector ids make empty findings `COULD_NOT_CHECK`. The checked-in broad corpus states 10/10 planted sensitivity, 15/15 clean specificity, and 0/15 FPR for this named source taxonomy—never arbitrary-program coverage. Runtime stream synchronization and thread-set assertions live in `microbench.py`. |
+| `execution/live_controls.py` | **AK3 live calibration.** Dry-run-default CPU producer that predeclares a fresh v9/hardened campaign and an exact RVP-C6-4 envelope for every control leg, copies the reviewed measurement binary and its build-local DSOs byte-for-byte into the evidence bundle, acquires q0–q3, measures fresh A/A/neutral/control legs, solves calibration, and sends all five controls through the candidate dispatcher. The prior v8 result remains historical evidence in `data/autokernel_controls_3pct_20260805/`; it is not silently reused as v9 calibration. |
 | `controller/hypotheses.py` | The operator hypothesis store and falsifier-before-claim gate used by `campaign.py --hypothesis`. |
 | `controller/do_not_repeat.py` | The receipt-bearing negative/constraint ledger required before a hypothesis can spend a claim. |
 | `controller/shared.py` | The small shared vocabulary needed by the two surviving controller-memory modules. |
 | `controller/authoring_contract.py` | **AK-PL-1 / AK-LE-4 / AK-LE-5 (off campaign path).** The only reviewed fully-rendered authoring-prompt seam; sealed-evaluator leak scan with compliant control, priced never-bulk-read context, reversible compaction headers with exact git recovery, and typed external numeric priors. It calls no model and selects no work. |
+| `controller/reward_monitor.py` | **C6 sabotage/sandbagging monitor contract (off campaign path).** Compiles the named threat model with monitor-awareness and reasoning visibility mandatory, binds every reasoning trace to its campaign/candidate plus the whole journal tree, reduces a declaration-bound complete model×sample panel as mean-of-mean@k, and reports sensitivity, specificity, and false-positive rate against a predeclared budget. It calls no model and cannot stamp correctness. |
 | `prior_art.py` | The deterministic four-way prior-art gate, expected-absence override, pinned source catalogue, and cumulative wall-share pruning. |
 | `substrate.py` | Validates the checked-in MI210 compute/bandwidth/PCIe/NUMA facts, preserves measured and datasheet bases separately, re-derives both roofline ridges, and builds exact-quant diagnostic surfaces. Cross-vendor cells are spec-basis; a missing exact CUDA anchor is `COULD_NOT_CHECK`, never a pooled or borrowed target. |
 | `lanes.py` | The lane registry, historical 4/8/16/32/48-way CPU shapes, isolation checks, change-class-specific rank calibration, and full-instance verification rule. |
@@ -701,8 +714,8 @@ python3 -m unittest scripts.kernel_rnd.autokernel.release.test_release_integrati
 python3 scripts/kernel_rnd/autokernel/test_integration.py
 ```
 
-Expected: **4456 tests, OK (expected failures=1)** as of the 2026-08-03 hardening
-pass (4066 before it). The one `expectedFailure` is
+Expected: **3773 tests, OK (expected failures=1)** as of the 2026-08-11 C6
+hardening pass. The one `expectedFailure` is
 `test_preflight.RealKernelLockEncodingTest.test_KNOWN_HOLE_unlinking_a_held_lock_
 file_hides_its_live_holder` — a real, documented hole (unlinking a held lock file
 hides its live holder from the `/proc/locks` witness), deliberately left visible
@@ -734,7 +747,38 @@ future cross-suite fixture reuse.
 
 ---
 
-## What is NOT implemented
+## Current completion boundary (2026-08-11)
+
+The lean campaign path is implemented through a terminal bank/refuse result. The
+current C6 tranche adds a full-device-synchronized ranked twin, exact thread-set
+escape checks, per-shape physical ceilings, a stated 10-planted/15-clean detector
+corpus, ranked anti-short-circuit units, and an observe-only sabotage/sandbagging
+monitor contract. A terminal journal entry now exports the durable dashboard
+contract; implementation activity is presentation context and cannot make an absent
+runtime producer look live.
+
+What remains is not another hidden static plane:
+
+- A real v9 CPU candidate campaign has not run. It requires an explicitly authorized
+  inference window. Until it runs there is no real proposal archive, banked candidate,
+  champion, or empirical input for AK-WM-2/AP-WM-1b.
+- The independent C2 property/reference oracle is owned by the ROCm verify/profile
+  backend. AutoKernel consumes its evidence but does not manufacture a sibling
+  implementation and call that independent.
+- The release and speech-adapter planes were deliberately removed on 2026-08-04 and
+  remain recoverable from `autokernel-preserve-20260804`. Restore the narrow release
+  slice only for a real champion/freeze request, and restore the speech slice only
+  when a speech campaign is scheduled.
+- Real restart/crash/resource-preemption/tamper campaign rehearsal and every freeze,
+  re-anchor, and watch-window row remain empirical work; fixture and fault-injection
+  tests do not substitute for those runs.
+
+## Historical pre-pruning audit (superseded as current status)
+
+The sections below preserve the 2026-08-03 red-team inventory. They are useful as
+design history, but many named planes were deleted or narrowed by the operator's
+2026-08-04 lean-loop decision. The current boundary above and `FOOTPRINT.md` are
+authoritative for what is live now.
 
 ### Remaining in AK1
 

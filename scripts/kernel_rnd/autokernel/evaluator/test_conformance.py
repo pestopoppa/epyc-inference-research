@@ -1306,6 +1306,7 @@ class TestCorrectnessPrecedence(unittest.TestCase):
         for builder, kwargs in (
                 (CO.OpSuiteEvidence, dict(
                     suite_id="test-backend-ops", suite_source_sha256=sha("cand-source"),
+                    suite_seed=4711,
                     ops_exercised=("MUL_MAT",), ops_failed=(),
                     cases_by_op=(("MUL_MAT", 10, 10),), shapes_ref="s",
                     receipt_ref="r", produced_by="candidate")),

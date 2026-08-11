@@ -388,6 +388,7 @@ _ELF_MAGIC = b"\x7fELF"
 _SHT_SYMTAB = 2
 _SHT_STRTAB = 3
 _SHT_DYNSYM = 11
+_SHT_GNU_VERSYM = 0x6FFFFFFF
 _SHN_UNDEF = 0
 _SHN_XINDEX = 0xFFFF
 
@@ -594,7 +595,31 @@ def extract_elf_symbols(path: Any, *, label: str,
             raise ElfFormatError(f"{p}: section {index} extends past end of file")
         return blob[sh_offset:sh_offset + sh_size]
 
+    # GNU symbol version indices are parallel to the linked .dynsym.  We do not
+    # need to decode imported dependency names to prove the exported surface:
+    # an exported definition with index 0/1 is unversioned, while any index >1
+    # is a real version node and remains a named coverage gap until verdef names
+    # are decoded.  This closes the previous unconditional gap for libraries
+    # whose only versioned symbols are undefined imports (the ggml case).
+    versym_by_dynsym: dict[int, tuple[int, ...]] = {}
+    for index, hdr in enumerate(headers):
+        if hdr[1] != _SHT_GNU_VERSYM:
+            continue
+        linked = hdr[6]
+        if linked >= len(headers) or headers[linked][1] != _SHT_DYNSYM:
+            raise ElfFormatError(
+                f"{p}: GNU versym section {index} links to non-dynsym section {linked}")
+        if linked in versym_by_dynsym:
+            raise ElfFormatError(f"{p}: multiple GNU versym sections link to dynsym {linked}")
+        data = section_bytes(index)
+        if len(data) % 2:
+            raise ElfFormatError(f"{p}: GNU versym size {len(data)} is not a multiple of 2")
+        versym_by_dynsym[linked] = tuple(
+            _u(endian + "H", data, off, "GNU versym entry")[0]
+            for off in range(0, len(data), 2))
+
     symbols: list = []
+    versioned_export_names: list[str] = []
     found_tables: set = set()
     sym_entsize = 24 if is64 else 16
     for index, hdr in enumerate(headers):
@@ -613,6 +638,12 @@ def extract_elf_symbols(path: Any, *, label: str,
         if len(data) % sym_entsize:
             raise ElfFormatError(
                 f"{p}: {table_name} size {len(data)} is not a multiple of {sym_entsize}")
+        versions = versym_by_dynsym.get(index)
+        entry_count = len(data) // sym_entsize
+        if versions is not None and len(versions) != entry_count:
+            raise ElfFormatError(
+                f"{p}: GNU versym has {len(versions)} entries but linked dynsym has "
+                f"{entry_count}")
         found_tables.add(table_name)
         for off in range(0, len(data), sym_entsize):
             if is64:
@@ -625,9 +656,14 @@ def extract_elf_symbols(path: Any, *, label: str,
             bind = _BIND_NAMES.get(st_info >> 4, f"BIND_{st_info >> 4}")
             styp = _TYPE_NAMES.get(st_info & 0xF, f"TYPE_{st_info & 0xF}")
             vis = _VIS_NAMES.get(st_other & 0x3, f"VIS_{st_other & 0x3}")
-            symbols.append(ElfSymbol(
+            symbol = ElfSymbol(
                 name=name, table=table_name, bind=bind, type=styp, visibility=vis,
-                defined=st_shndx != _SHN_UNDEF, size=st_size, section_index=st_shndx))
+                defined=st_shndx != _SHN_UNDEF, size=st_size, section_index=st_shndx)
+            symbols.append(symbol)
+            if table_name == "dynsym" and symbol.exported and versions is not None:
+                version_index = versions[off // sym_entsize] & 0x7FFF
+                if version_index > 1:
+                    versioned_export_names.append(name)
 
     if not found_tables:
         raise ElfFormatError(
@@ -635,11 +671,14 @@ def extract_elf_symbols(path: Any, *, label: str,
             "cannot evidence symbol preservation")
 
     preferred = "dynsym" if "dynsym" in found_tables else "symtab"
-    notes = [
-        f"{F_SYMBOL_VERSIONS_NOT_EXTRACTED}: symbol versions (.gnu.version / "
-        "'name@@VER') are not decoded by this extractor, so a version-node change "
-        "on an otherwise-identical name is not detected here",
-    ]
+    notes = []
+    if versioned_export_names:
+        notes.append(
+            f"{F_SYMBOL_VERSIONS_NOT_EXTRACTED}: {len(versioned_export_names)} exported "
+            "definition(s) carry GNU version indices >1, whose version-definition names "
+            "are not decoded: "
+            f"{sorted(versioned_export_names)[:20]}"
+            f"{' ...' if len(versioned_export_names) > 20 else ''}")
     if preferred == "symtab":
         notes.append(
             "exported surface taken from .symtab because the binary has no .dynsym; "
@@ -647,7 +686,7 @@ def extract_elf_symbols(path: Any, *, label: str,
     return ElfSymbolTable(
         label=label, source_path=str(p), file_sha256=file_sha,
         elf_class=64 if is64 else 32, symbols=tuple(symbols), preferred=preferred,
-        extractor_id="autokernel.evaluator.integrity.elf/v1",
+        extractor_id="autokernel.evaluator.integrity.elf/v2",
         coverage_notes=tuple(notes))
 
 

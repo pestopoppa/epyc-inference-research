@@ -459,6 +459,11 @@ class AnchorRequiredTest(unittest.TestCase):
             self._emit(req, window(), eff=effect())
         self.assertIn("CLAIMED but is malformed", str(caught.exception))
 
+    def test_event_binds_the_t0_suite_seed_into_search_discipline(self):
+        event = self._emit(request(suite_seed=4711), window(), eff=effect())
+        self.assertEqual(event["performance"]["search_discipline"]["suite_seed"],
+                         4711)
+
     def test_a_placeholder_anchor_digest_is_refused_at_emission(self):
         """`0`*64 is not "no anchor recorded"; it is a claim that one WAS."""
         for field, filler in (("binary_sha256", "0" * 64),

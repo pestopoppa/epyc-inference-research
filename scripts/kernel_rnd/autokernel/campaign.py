@@ -105,32 +105,32 @@ THE ACCEPT RULE
      campaign that never runs a control cannot distinguish "this kernel is 4%
      faster" from "this kernel ran first"*. It costs no extra claim time: the
      anchor blocks the run already produced ARE that A/A.
-  5. **KEEP iff `min(delta) > 0` AND `median(relative) > drift_bound`.**
+  5. **KEEP iff `min(delta) > 0` AND `median(relative) > contribution_floor`.**
+     The floor and minimum block count come from the accepted, cell-local live
+     calibration; they are not copied from a different phase or metric.
   6. Otherwise REVERT.
 
 Why those two conjuncts and no more, from the A/A rather than from theory:
 
   * `min(delta) > 0` — every pair must favour the candidate. Under a null the
-    sign of each pair is a coin flip, so P(all 5 positive) = 1/32 = 3.1%. It
+    sign of each pair is a coin flip; the current bundle supplies the minimum
+    admissible N before any observations exist. It
     also has the property the median alone does not: one adverse block sinks
     the candidate, which is the right posture when the alternative is spending
     a claim window confirming something the instrument cannot resolve.
-  * `median(relative) > drift_bound` — the sign test alone is still fooled by
-    *systematic* drift, which is exactly what the A/A found. `DRIFT_BOUND_BY_METRIC`
-    is derived (at import, from the numbers, not typed) as the largest
-    single-step relative change between ADJACENT A/A runs: 3.08% for pp512,
-    2.13% for tg128. A candidate whose median relative gain does not exceed the
-    step the instrument itself takes between two runs of identical code has not
-    been shown to be faster than nothing.
+  * `median(relative) > contribution_floor` — the current identity-bound
+    five-control bundle supplies the floor and B_min. The historical v8 3% /
+    B_min=12 result and earlier 2.131% decode step are not v9 ranking authority.
+    `DRIFT_BOUND_BY_METRIC` remains a separate neutral/instrument-movement
+    control derived from the adjacent A/A readings.
   * N is PRE-COMMITTED on the spec and `decide()` refuses any other count, so
     there is no optional stopping, no multiplicity, and no e-process to make
     inert. This closes, by construction, the one open manufacture-a-crossing
     hole in `execution/README.md` §6.5 (re-run a declared round until it
     crosses): there is no round to re-run.
 
-The rule is deliberately conservative. It cannot rank a +2% win on decode. That
-is the honest reading of a host whose own A/A spread is 4.3%, and the remedy is
-a quieter host or a bigger effect — not a looser rule.
+The rule is deliberately conservative and cell-local. It cannot rank a +2% win,
+and it refuses live ranking entirely for a recipe without accepted calibration.
 
 EVERY EXIT PATH RELEASES
 ------------------------
@@ -166,7 +166,7 @@ from . import schemas, storage
 from .controller import do_not_repeat, hypotheses
 from .evaluator import api, correctness, devices, recipes
 from .execution import (chain, cpu_region_claim, instrument_integrity, microbench,
-                        sandbox, t0_provider, worktree)
+                        physical_bounds, sandbox, t0_provider, worktree)
 from .resource import claim_witness, device_claim, preflight
 
 __all__ = [
@@ -194,6 +194,9 @@ __all__ = [
     "HypothesisBindingError",
     "campaign_purpose",
     "authorize_for",
+    "RANKED_UNITS_SCHEMA", "RANKED_UNIT_NORMAL",
+    "RANKED_UNIT_ANTI_SHORT_CIRCUIT", "RankedUnitSpec",
+    "ranked_units_from_mapping",
     "CampaignSpec",
     "PRODUCTION_REPO", "PRODUCTION_BRANCH", "PRODUCTION_COMMIT",
     "MEASUREMENT_REPO", "MEASUREMENT_BRANCH", "MEASUREMENT_COMMIT",
@@ -254,6 +257,9 @@ MODULES_THE_DRIVER_USES: Mapping[str, str] = {
                                   "co-tenant because we held no claim",
     "execution.microbench": "paired ALTERNATING blocks — the measured monotone drift makes "
                             "any sequential design charge the second arm ~4%",
+    "execution.physical_bounds": "RVP-C6-4 refuses a live throughput sample that exceeds "
+                                 "the predeclared compute-or-memory speed of light; the "
+                                 "candidate cannot author its own work denominator",
     "execution.sandbox": "C6: code authored by the loop executes under Landlock, seccomp, "
                          "non-root finite rlimits and an owned cgroup whose empty teardown "
                          "is verified; an agent tool allowlist does not constrain a binary",
@@ -314,8 +320,48 @@ MODULES_DELIBERATELY_NOT_USED: Mapping[str, str] = {
 AA_PP512_RUNS: tuple = (899.95, 894.70, 867.16, 886.16)
 AA_TG128_RUNS: tuple = (52.76, 52.31, 51.62, 50.52)
 
-#: Where the numbers above live. A campaign that cites them cites a path in git.
+#: Where the legacy exploratory numbers above live. They remain the independent
+#: anchor-movement control; they are no longer the candidate contribution floor.
 AA_EVIDENCE_REF = "data/autokernel_aa_20260804/README.md"
+
+#: Historical v8 control evidence.  These constants are regression fixtures,
+#: never v9 ranking authority.  A live campaign consumes a current bundle via
+#: ``--calibration-bundle`` and verifies both source identities first.
+HISTORICAL_CALIBRATION_EVIDENCE_REF = "data/autokernel_controls_3pct_20260805/"
+HISTORICAL_CALIBRATED_RECIPE_ID = "t1b.llama_cpu.llama_bench_prefill.v1"
+HISTORICAL_CONTRIBUTION_FLOOR = 0.03
+HISTORICAL_B_MIN_BLOCKS = 12
+HISTORICAL_MAX_BLOCKS = 20
+HISTORICAL_NOISE_FLOOR_PHI = 0.049206882811302755
+HISTORICAL_MDE = 0.027408174371940427
+
+
+@dataclass(frozen=True)
+class LeanCalibration:
+    """Accepted outputs the session-driven rule is licensed to consume."""
+
+    recipe_id: str
+    contribution_floor: float
+    b_min_blocks: int
+    max_blocks: int
+    noise_floor_phi: float
+    mde: float
+    production_commit: str
+    measurement_commit: str
+    evidence_ref: str
+
+    def to_dict(self) -> dict:
+        return {
+            "recipe_id": self.recipe_id,
+            "contribution_floor": self.contribution_floor,
+            "b_min_blocks": self.b_min_blocks,
+            "max_blocks": self.max_blocks,
+            "noise_floor_phi": self.noise_floor_phi,
+            "mde": self.mde,
+            "production_commit": self.production_commit,
+            "measurement_commit": self.measurement_commit,
+            "evidence_ref": self.evidence_ref,
+        }
 
 
 def adjacent_relative_steps(series: Sequence[float]) -> tuple:
@@ -635,6 +681,8 @@ class AcceptDecision:
     blocks: int
     min_delta: Optional[float] = None
     median_relative: Optional[float] = None
+    contribution_floor: Optional[float] = None
+    calibration_evidence_ref: Optional[str] = None
     drift_bound: Optional[float] = None
     anchor_drift: Optional[float] = None
     deltas: tuple = ()
@@ -645,13 +693,16 @@ class AcceptDecision:
     def to_dict(self) -> dict:
         return {"keep": self.keep, "reason": self.reason, "blocks": self.blocks,
                 "min_delta": self.min_delta, "median_relative": self.median_relative,
+                "contribution_floor": self.contribution_floor,
+                "calibration_evidence_ref": self.calibration_evidence_ref,
                 "drift_bound": self.drift_bound, "anchor_drift": self.anchor_drift,
                 "deltas": list(self.deltas), "relatives": list(self.relatives),
                 "anchors": list(self.anchors), "orders": list(self.orders)}
 
 
 def decide(pairs: Sequence[Pair], *, t0: T0Outcome, blocks_precommitted: int,
-           drift_bound: float) -> AcceptDecision:
+           drift_bound: float, contribution_floor: Optional[float] = None,
+           calibration_evidence_ref: Optional[str] = None) -> AcceptDecision:
     """The accept rule. Thirty lines, justified from the A/A in the module docstring.
 
     Raises `AcceptRuleMisuse` — never returns a decision — when:
@@ -691,6 +742,18 @@ def decide(pairs: Sequence[Pair], *, t0: T0Outcome, blocks_precommitted: int,
     if isinstance(drift_bound, bool) or not isinstance(drift_bound, (int, float)) \
             or drift_bound <= 0:
         raise ValueError("drift_bound must be a positive fraction, e.g. 0.0213 for tg128")
+    if contribution_floor is None:
+        # Compatibility for arithmetic/unit callers that exercise the original
+        # rule directly.  The executing campaign always supplies its accepted,
+        # cell-local calibration below.
+        contribution_floor = float(drift_bound)
+    if calibration_evidence_ref is None:
+        calibration_evidence_ref = "direct arithmetic caller (no live authority)"
+    if not isinstance(calibration_evidence_ref, str) or not calibration_evidence_ref.strip():
+        raise ValueError("calibration_evidence_ref must be a non-empty string")
+    if isinstance(contribution_floor, bool) or not isinstance(
+            contribution_floor, (int, float)) or contribution_floor <= 0:
+        raise ValueError("contribution_floor must be a positive fraction")
 
     ordered = sorted(items, key=lambda p: p.block_index)
     orders = tuple(p.order for p in ordered)
@@ -701,7 +764,10 @@ def decide(pairs: Sequence[Pair], *, t0: T0Outcome, blocks_precommitted: int,
     median_relative = float(median(relatives))
     moved = anchor_drift(ordered)
     common = {"blocks": len(items), "min_delta": min_delta,
-              "median_relative": median_relative, "drift_bound": float(drift_bound),
+              "median_relative": median_relative,
+              "contribution_floor": float(contribution_floor),
+              "calibration_evidence_ref": calibration_evidence_ref,
+              "drift_bound": float(drift_bound),
               "anchor_drift": moved, "deltas": deltas, "relatives": relatives,
               "anchors": anchors, "orders": orders}
 
@@ -765,22 +831,21 @@ def decide(pairs: Sequence[Pair], *, t0: T0Outcome, blocks_precommitted: int,
                     f"each pair is a coin flip, so all-{len(items)} is a 1-in-"
                     f"{2 ** len(items)} event."),
             **common)
-    if median_relative <= drift_bound:
+    if median_relative <= contribution_floor:
         return AcceptDecision(
             keep=False,
             reason=(f"REVERT: median relative gain {median_relative:+.4%} does not exceed "
-                    f"the drift bound {drift_bound:.4%} — the largest single-step move this "
-                    f"host produced between two consecutive runs of IDENTICAL code "
-                    f"({AA_EVIDENCE_REF}). Every pair favoured the candidate, which a "
-                    "systematic drift also produces; the sign test alone cannot tell them "
-                    "apart and this conjunct is what does."),
+                    f"the predeclared contribution floor {contribution_floor:.4%} "
+                    f"({calibration_evidence_ref}). Every pair favoured the candidate, "
+                    "but a gain below the campaign's calibrated target is not a KEEP."),
             **common)
     return AcceptDecision(
         keep=True,
         reason=(f"KEEP: all {len(items)} pre-committed paired blocks favoured the candidate "
                 f"(worst delta {min_delta:+.4f}) and the median relative gain "
-                f"{median_relative:+.4%} exceeds the measured drift bound "
-                f"{drift_bound:.4%} ({AA_EVIDENCE_REF})."),
+                f"{median_relative:+.4%} exceeds the predeclared contribution floor "
+                f"{contribution_floor:.4%} ({calibration_evidence_ref}); anchor movement "
+                f"also stayed within {drift_bound:.4%} ({AA_EVIDENCE_REF})."),
         **common)
 
 
@@ -921,9 +986,11 @@ BACKEND_CPU = "llama_cpu"
 BACKEND_GPU = "llama_gpu"
 BACKENDS = (BACKEND_CPU, BACKEND_GPU)
 
-#: The default cell, per backend: the ratified canonical llama-bench decode slice.
+#: CPU defaults to the one cell with accepted live calibration.  Decode and GPU
+#: remain valid dry-run targets, but live ranking refuses until each has its own
+#: calibration rather than borrowing the prefill result.
 DEFAULT_RECIPE_BY_BACKEND = {
-    BACKEND_CPU: "t1b.llama_cpu.llama_bench_decode.v1",
+    BACKEND_CPU: HISTORICAL_CALIBRATED_RECIPE_ID,
     BACKEND_GPU: "t1b.llama_gpu.llama_bench_decode.v1",
 }
 
@@ -944,8 +1011,168 @@ MEASUREMENT_COMMIT = "0492c2319a79e9bcc4edaa1bfb6af5a096276ab7"
 MEASUREMENT_BUILD_ROOT = os.path.join(MEASUREMENT_REPO, "build-v9-cpu")
 
 
+def load_calibration_bundle(path: os.PathLike[str] | str) -> LeanCalibration:
+    """Load accepted live controls bound to the exact production/instrument pair.
+
+    The v8 bundle is intentionally rejected on v9.  Calibration is local to an
+    era, recipe and measurement instrument; a numerically valid old bundle is
+    evidence, but it is not authority to rank a current candidate.
+    """
+    root = Path(path).resolve()
+
+    def read(name: str) -> Mapping[str, Any]:
+        try:
+            value = json.loads((root / name).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(f"calibration bundle {name}: {exc}") from exc
+        if not isinstance(value, Mapping):
+            raise ValueError(f"calibration bundle {name} must contain a JSON object")
+        return value
+
+    declaration = read("campaign_declaration.json")
+    source = read("runtime-source-label.json")
+    summary = read("summary.json")
+    if declaration.get("schema") != "epyc.autokernel.live_control_campaign_declaration.v1":
+        raise ValueError("calibration bundle declaration has the wrong schema")
+    if source.get("schema") != "epyc.autokernel.runtime_source_label.v1":
+        raise ValueError("calibration bundle runtime source label has the wrong schema")
+    source_body = dict(source)
+    source_sha = source_body.pop("source_sha256", None)
+    if source_sha != schemas.content_hash(source_body):
+        raise ValueError("calibration bundle runtime source label hash does not verify")
+    if declaration.get("source_sha256") != source_sha:
+        raise ValueError("calibration declaration is not bound to its runtime source label")
+    if source.get("production_source_commit") != PRODUCTION_COMMIT:
+        raise ValueError(
+            "calibration production commit is stale: "
+            f"{source.get('production_source_commit')!r} != {PRODUCTION_COMMIT!r}")
+    if source.get("measurement_instrument_commit") != MEASUREMENT_COMMIT:
+        raise ValueError(
+            "calibration measurement instrument is stale or absent: "
+            f"{source.get('measurement_instrument_commit')!r} != {MEASUREMENT_COMMIT!r}")
+    if not source.get("binary_copy_exact"):
+        raise ValueError("calibration measurement binary copy was not exact")
+    if summary.get("production_source_commit") != PRODUCTION_COMMIT:
+        raise ValueError("calibration summary names a different production commit")
+    if summary.get("campaign_id") != declaration.get("campaign_id"):
+        raise ValueError("calibration summary and declaration name different campaigns")
+    if summary.get("state") != "controls_complete" or not summary.get("may_rank"):
+        raise ValueError("calibration controls are not complete and rank-authorizing")
+    if not summary.get("binary_copy_exact"):
+        raise ValueError("calibration summary does not attest an exact binary copy")
+    calibration = summary.get("calibration")
+    if not isinstance(calibration, Mapping):
+        raise ValueError("calibration summary has no calibration record")
+    outputs = calibration.get("outputs")
+    attempts = calibration.get("attempts")
+    if not isinstance(outputs, Mapping) or not outputs.get("accepted"):
+        raise ValueError("calibration outputs are absent or unaccepted")
+    if not isinstance(attempts, list):
+        raise ValueError("calibration attempts are absent")
+    accepted_attempts = [a for a in attempts
+                         if isinstance(a, Mapping) and a.get("accepted")]
+    if len(accepted_attempts) != 1:
+        raise ValueError("calibration must carry exactly one accepted solve attempt")
+    mde = accepted_attempts[0].get("mde")
+    if not isinstance(mde, Mapping) or not mde.get("found"):
+        raise ValueError("accepted calibration has no solved MDE")
+    recipe_id = declaration.get("recipe_id")
+    values = {
+        "contribution_floor": declaration.get("contribution_floor"),
+        "b_min_blocks": outputs.get("b_min_blocks"),
+        "max_blocks": declaration.get("max_blocks_per_candidate"),
+        "noise_floor_phi": outputs.get("noise_floor_phi"),
+        "mde": mde.get("value"),
+    }
+    if not isinstance(recipe_id, str) or recipe_id not in recipes.RECIPE_IDS:
+        raise ValueError("calibration declaration names an unknown recipe")
+    for name, value in values.items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+            raise ValueError(f"calibration {name} must be positive")
+    if int(values["b_min_blocks"]) > int(values["max_blocks"]):
+        raise ValueError("calibration B_min exceeds the declared candidate ceiling")
+    if float(values["mde"]) > float(values["contribution_floor"]):
+        raise ValueError("calibration MDE exceeds the declared contribution floor")
+    return LeanCalibration(
+        recipe_id=recipe_id,
+        contribution_floor=float(values["contribution_floor"]),
+        b_min_blocks=int(values["b_min_blocks"]),
+        max_blocks=int(values["max_blocks"]),
+        noise_floor_phi=float(values["noise_floor_phi"]),
+        mde=float(values["mde"]),
+        production_commit=PRODUCTION_COMMIT,
+        measurement_commit=MEASUREMENT_COMMIT,
+        evidence_ref=str(root),
+    )
+
+RANKED_UNITS_SCHEMA = "epyc.autokernel.ranked-units.v1"
+RANKED_UNIT_NORMAL = "normal"
+RANKED_UNIT_ANTI_SHORT_CIRCUIT = "anti_short_circuit"
+RANKED_UNIT_KINDS = (RANKED_UNIT_NORMAL, RANKED_UNIT_ANTI_SHORT_CIRCUIT)
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
+
+
+@dataclass(frozen=True)
+class RankedUnitSpec:
+    """One real recipe variant that receives blocks in the ranked stream."""
+
+    unit_id: str
+    kind: str
+    params: Mapping[str, Any]
+    physical_envelope: physical_bounds.PhysicalEnvelope
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.unit_id, str) or not self.unit_id.strip():
+            raise ValueError("ranked unit_id must be a non-empty string")
+        if self.kind not in RANKED_UNIT_KINDS:
+            raise ValueError(
+                f"ranked unit kind {self.kind!r} must be one of {list(RANKED_UNIT_KINDS)}")
+        if not isinstance(self.params, Mapping):
+            raise TypeError("ranked unit params must be a mapping")
+        object.__setattr__(self, "params", json.loads(schemas.canonical_json(self.params)))
+        if not isinstance(self.physical_envelope, physical_bounds.PhysicalEnvelope):
+            raise TypeError("ranked unit physical_envelope must be a PhysicalEnvelope")
+        if self.physical_envelope.shape_id != self.unit_id:
+            raise ValueError(
+                f"ranked unit {self.unit_id!r} carries physical shape "
+                f"{self.physical_envelope.shape_id!r}; they must be identical")
+
+    def to_dict(self) -> dict:
+        return {"unit_id": self.unit_id, "kind": self.kind,
+                "params": dict(self.params),
+                "physical_envelope": self.physical_envelope.to_dict()}
+
+
+def ranked_units_from_mapping(payload: Mapping[str, Any]) -> tuple[RankedUnitSpec, ...]:
+    """Parse the strict C6-10 ranked-unit manifest without executing anything."""
+    if not isinstance(payload, Mapping):
+        raise ValueError("ranked-unit manifest must be a JSON object")
+    unknown = sorted(set(payload) - {"schema", "units"})
+    if unknown:
+        raise ValueError(f"ranked-unit manifest has unknown fields {unknown}")
+    if payload.get("schema") != RANKED_UNITS_SCHEMA:
+        raise ValueError(f"ranked-unit manifest schema must be {RANKED_UNITS_SCHEMA!r}")
+    units = payload.get("units")
+    if not isinstance(units, list) or not units:
+        raise ValueError("ranked-unit manifest units must be a non-empty list")
+    parsed = []
+    required = {"unit_id", "kind", "params", "physical_envelope"}
+    for index, item in enumerate(units):
+        if not isinstance(item, Mapping):
+            raise ValueError(f"ranked-unit manifest units[{index}] must be an object")
+        missing = sorted(required - set(item))
+        extra = sorted(set(item) - required)
+        if missing or extra:
+            raise ValueError(
+                f"ranked-unit manifest units[{index}] missing={missing}, extra={extra}")
+        parsed.append(RankedUnitSpec(
+            unit_id=item["unit_id"], kind=item["kind"], params=item["params"],
+            physical_envelope=physical_bounds.PhysicalEnvelope.from_mapping(
+                item["physical_envelope"])))
+    return tuple(parsed)
 
 
 @dataclass(frozen=True)
@@ -985,6 +1212,17 @@ class CampaignSpec:
     #: Validated proposal.v3 record. Optional for composition-only legacy dry
     #: runs; mandatory on the executing CLI before any claim or mutation.
     proposal: Optional[Mapping[str, Any]] = None
+    #: Accepted, identity-bound live calibration.  Supplied by the CLI bundle
+    #: loader; absent means composition-only and carries no ranking authority.
+    calibration: Optional[LeanCalibration] = None
+    #: Predeclared RVP-C6-4 envelope for this exact measurement-material unit.
+    #: Optional only for a composition-only dry run; the CLI refuses live work
+    #: without it before a claim, mutation, build, or subprocess exists.
+    physical_envelope: Optional[physical_bounds.PhysicalEnvelope] = None
+    #: Optional multi-unit C6-10 ranked set. When present it replaces the single
+    #: physical_envelope and must include both a normal control and at least one
+    #: actual anti-short-circuit recipe variant.
+    ranked_units: tuple[RankedUnitSpec, ...] = ()
     #: The `hypotheses.ClaimAuthorization` this campaign's claim will be spent
     #: through, or `None` for an EXPLORATORY campaign. It is on the SPEC and not
     #: on the ops object for the same reason `blocks` is: it must be fixed before
@@ -1032,6 +1270,21 @@ class CampaignSpec:
                     f"campaign {self.campaign_id!r}"
                 )
             object.__setattr__(self, "proposal", proposal)
+            self._validate_arm_parameter_surface(proposal)
+        if self.calibration is not None and not isinstance(
+                self.calibration, LeanCalibration):
+            raise TypeError("calibration must be a LeanCalibration or None")
+        if self.physical_envelope is not None and not isinstance(
+                self.physical_envelope, physical_bounds.PhysicalEnvelope):
+            raise TypeError("physical_envelope must be a PhysicalEnvelope or None")
+        if not isinstance(self.ranked_units, tuple):
+            raise TypeError("ranked_units must be a tuple")
+        if any(not isinstance(unit, RankedUnitSpec) for unit in self.ranked_units):
+            raise TypeError("ranked_units must contain RankedUnitSpec values")
+        if self.ranked_units and self.physical_envelope is not None:
+            raise ValueError(
+                "physical_envelope and ranked_units are mutually exclusive; every "
+                "ranked unit carries its own exact envelope")
         object.__setattr__(self, "t0_ops", require_op_suite_covers_moe_dispatch(self.t0_ops))
         if self.recipe_id is None:
             object.__setattr__(self, "recipe_id", DEFAULT_RECIPE_BY_BACKEND[self.backend])
@@ -1039,6 +1292,14 @@ class CampaignSpec:
         if spec.backend != self.backend:
             raise ValueError(f"recipe {self.recipe_id!r} is a {spec.backend!r} recipe but "
                              f"the campaign declares backend {self.backend!r}")
+        if self.calibration is not None:
+            if self.calibration.recipe_id != self.recipe_id:
+                raise ValueError(
+                    f"calibration recipe {self.calibration.recipe_id!r} does not match "
+                    f"campaign recipe {self.recipe_id!r}")
+            if self.calibration.production_commit != PRODUCTION_COMMIT \
+                    or self.calibration.measurement_commit != MEASUREMENT_COMMIT:
+                raise ValueError("calibration identities do not match the live anchors")
         if self.backend == BACKEND_GPU:
             if not self.devices:
                 raise ValueError(
@@ -1069,6 +1330,94 @@ class CampaignSpec:
         # failure an hour into a claim window into a refusal at argument-parse
         # time (feedback_bench_max_opt_and_config_probe_first).
         render_bench_commands(self)
+        if self.physical_envelope is not None \
+                and self.physical_envelope.shape_id != self.measurement_unit_id:
+            raise ValueError(
+                f"physical envelope shape_id {self.physical_envelope.shape_id!r} does "
+                f"not match campaign unit {self.measurement_unit_id!r}")
+        if self.physical_envelope is not None:
+            self._check_physical_envelope_frame(
+                self.measurement_unit_id, self.physical_envelope, self.bench_params)
+        if self.ranked_units:
+            unit_ids = tuple(unit.unit_id for unit in self.ranked_units)
+            if len(set(unit_ids)) != len(unit_ids):
+                raise ValueError("ranked_units must have unique unit_id values")
+            kinds = {unit.kind for unit in self.ranked_units}
+            if kinds != set(RANKED_UNIT_KINDS):
+                raise ValueError(
+                    "ranked_units must include at least one normal control and at least "
+                    "one anti_short_circuit unit")
+            if self.blocks < len(self.ranked_units):
+                raise ValueError(
+                    f"blocks={self.blocks} cannot rank all {len(self.ranked_units)} units")
+            declared_params = set(self.recipe.param_map)
+            normal_frames = {
+                schemas.canonical_json(unit.params) for unit in self.ranked_units
+                if unit.kind == RANKED_UNIT_NORMAL}
+            for unit in self.ranked_units:
+                unknown = sorted(set(unit.params) - declared_params)
+                if unknown:
+                    raise ValueError(
+                        f"ranked unit {unit.unit_id!r} contains recipe-unknown params "
+                        f"{unknown}")
+                render_bench_commands(
+                    self, params={**self.bench_params, **dict(unit.params)})
+                self._check_physical_envelope_frame(
+                    unit.unit_id, unit.physical_envelope,
+                    {**self.bench_params, **dict(unit.params)})
+                if (unit.kind == RANKED_UNIT_ANTI_SHORT_CIRCUIT
+                        and schemas.canonical_json(unit.params) in normal_frames):
+                    raise ValueError(
+                        f"anti-short-circuit unit {unit.unit_id!r} has the same recipe "
+                        "params as a normal control; relabelling one command does not "
+                        "price the hard case")
+
+    def _check_physical_envelope_frame(
+            self, unit_id: str, envelope: physical_bounds.PhysicalEnvelope,
+            params: Mapping[str, Any]) -> None:
+        if envelope.delivered_unit != "token":
+            raise ValueError(
+                f"physical envelope for {unit_id!r} is expressed in "
+                f"{envelope.delivered_unit!r}/s, but the registered llama-bench "
+                "campaign recipes emit token/s")
+        derived = physical_bounds.measurement_frame_sha256(self.recipe_id, params)
+        if envelope.measurement_frame_sha256 != derived:
+            raise ValueError(
+                f"physical envelope for {unit_id!r} is bound to measurement frame "
+                f"{envelope.measurement_frame_sha256}, but the exact recipe, model, and "
+                f"parameters derive {derived}")
+
+    @staticmethod
+    def _validate_arm_parameter_surface(proposal: Mapping[str, Any]) -> None:
+        """Validate the one recipe-declared arm-local parameter comparison.
+
+        ``MicrobenchPlan`` already carries candidate/anchor overrides and limits
+        them to ``ggml_iqk``. The campaign must project the proposal into that
+        existing seam rather than constructing both arms from the same mapping.
+        """
+        if proposal["change_class"] != "parameter":
+            return
+        surface = proposal["change"]["parameter_surface"]
+        if set(surface) != {"candidate", "anchor"}:
+            raise ValueError(
+                "a parameter proposal must declare parameter_surface with exactly "
+                "candidate and anchor mappings")
+        for arm in ("candidate", "anchor"):
+            values = surface[arm]
+            if not isinstance(values, Mapping):
+                raise ValueError(f"parameter_surface.{arm} must be a mapping")
+            unknown = sorted(set(values) - {"ggml_iqk"})
+            if unknown:
+                raise ValueError(
+                    f"parameter_surface.{arm} contains {unknown}; the recipe registry "
+                    "licenses only the GGML_IQK arm-local variant")
+            if set(values) != {"ggml_iqk"} or values["ggml_iqk"] not in ("0", "1"):
+                raise ValueError(
+                    f"parameter_surface.{arm} must declare ggml_iqk as '0' or '1'")
+        if surface["candidate"] == surface["anchor"]:
+            raise ValueError(
+                "a parameter proposal gives candidate and anchor the same GGML_IQK "
+                "value; it declares no comparison")
 
     # -- derived -----------------------------------------------------------
 
@@ -1085,6 +1434,10 @@ class CampaignSpec:
         return drift_bound_for_metric(self.metric)
 
     @property
+    def contribution_floor(self) -> Optional[float]:
+        return None if self.calibration is None else self.calibration.contribution_floor
+
+    @property
     def hypothesis_id(self) -> Optional[str]:
         """The question this campaign is bound to, or None. Read off the TOKEN.
 
@@ -1097,6 +1450,61 @@ class CampaignSpec:
     @property
     def proposal_id(self) -> Optional[str]:
         return None if self.proposal is None else self.proposal["proposal_id"]
+
+    @property
+    def measurement_unit_id(self) -> str:
+        return f"{self.recipe_id}:{self.model or 'declared-model'}"
+
+    @property
+    def ranked_unit_ids(self) -> tuple[str, ...]:
+        return (tuple(unit.unit_id for unit in self.ranked_units)
+                if self.ranked_units else (self.measurement_unit_id,))
+
+    @property
+    def ranked_unit_param_overrides(self) -> dict:
+        return ({unit.unit_id: dict(unit.params) for unit in self.ranked_units}
+                if self.ranked_units else {})
+
+    @property
+    def anti_short_circuit_units(self) -> tuple[str, ...]:
+        return tuple(unit.unit_id for unit in self.ranked_units
+                     if unit.kind == RANKED_UNIT_ANTI_SHORT_CIRCUIT)
+
+    @property
+    def candidate_param_overrides(self) -> dict:
+        if self.proposal is None or self.proposal["change_class"] != "parameter":
+            return {}
+        return dict(self.proposal["change"]["parameter_surface"]["candidate"])
+
+    @property
+    def anchor_param_overrides(self) -> dict:
+        if self.proposal is None or self.proposal["change_class"] != "parameter":
+            return {}
+        return dict(self.proposal["change"]["parameter_surface"]["anchor"])
+
+    def params_for_arm(self, arm: str, *, params: Optional[Mapping[str, Any]] = None
+                       ) -> dict:
+        if arm not in ("candidate", "anchor"):
+            raise ValueError(f"arm must be candidate or anchor, got {arm!r}")
+        merged = dict(self.bench_params if params is None else params)
+        merged.update(self.candidate_param_overrides if arm == "candidate"
+                      else self.anchor_param_overrides)
+        return merged
+
+    def t0_parameter_env_for_arm(self, arm: str) -> tuple:
+        """Project the validated recipe parameter into T0's closed env registry."""
+        if arm not in ("candidate", "anchor"):
+            raise ValueError(f"arm must be candidate or anchor, got {arm!r}")
+        overrides = (self.candidate_param_overrides if arm == "candidate"
+                     else self.anchor_param_overrides)
+        return (() if not overrides else (("GGML_IQK", overrides["ggml_iqk"]),))
+
+    @property
+    def physical_envelopes(self) -> dict:
+        if self.ranked_units:
+            return {unit.unit_id: unit.physical_envelope for unit in self.ranked_units}
+        return ({} if self.physical_envelope is None
+                else {self.measurement_unit_id: self.physical_envelope})
 
     @property
     def claim_purpose(self) -> str:
@@ -1193,6 +1601,12 @@ class CampaignSpec:
             params["n_gpu_layers"] = self.n_gpu_layers
         return params
 
+    @property
+    def suite_seed(self) -> int:
+        """Deterministic T0 tensor seed fixed by the campaign identity."""
+        material = f"t0-suite\0{self.campaign_id}\0{self.candidate_id}\0{self.recipe_id}"
+        return int.from_bytes(hashlib.sha256(material.encode("utf-8")).digest()[:8], "big")
+
     def to_dict(self) -> dict:
         return {
             "campaign_id": self.campaign_id, "candidate_id": self.candidate_id,
@@ -1200,8 +1614,17 @@ class CampaignSpec:
             "blocks_precommitted": self.blocks, "recipe_id": self.recipe_id,
             "metric": self.metric, "drift_bound": self.drift_bound,
             "drift_bound_evidence": AA_EVIDENCE_REF,
+            "calibration": None if self.calibration is None else {
+                "contribution_floor": self.calibration.contribution_floor,
+                "b_min_blocks": self.calibration.b_min_blocks,
+                "max_blocks": self.calibration.max_blocks,
+                "noise_floor_phi": self.calibration.noise_floor_phi,
+                "mde": self.calibration.mde,
+                "evidence_ref": self.calibration.evidence_ref,
+            },
             "model": self.model, "reps": self.reps, "n_gen": self.n_gen,
             "n_prompt": self.n_prompt,
+            "suite_seed": self.suite_seed,
             "t0_ops": list(self.t0_ops), "devices": list(self.devices),
             "device_names": list(self.device_names),
             "cpu_list": self.cpu_list, "worktree": self.worktree_path,
@@ -1214,6 +1637,10 @@ class CampaignSpec:
                     "representation_contract"
                 ]["frame_sha256"],
             },
+            "physical_envelope": (
+                None if self.physical_envelope is None
+                else self.physical_envelope.to_dict()),
+            "ranked_units": [unit.to_dict() for unit in self.ranked_units],
             "hypothesis": self.hypothesis_record,
             "claim_purpose": self.claim_purpose,
             "anchor": {"repo": PRODUCTION_REPO, "branch": PRODUCTION_BRANCH,
@@ -1577,7 +2004,8 @@ class DryRunOps:
         return None
 
 
-def render_bench_commands(spec: CampaignSpec) -> dict:
+def render_bench_commands(spec: CampaignSpec, *,
+                          params: Optional[Mapping[str, Any]] = None) -> dict:
     """Both arms' argv and env, from the HASHED constructor. Executes nothing.
 
     `recipes.dry_run` is not a mode that suppresses an execution path — that
@@ -1601,7 +2029,8 @@ def render_bench_commands(spec: CampaignSpec) -> dict:
         binding = recipes.ToolBinding(binary=os.path.join(bindir, tool),
                                       source_root=root, library_path=bindir)
         payload = recipes.dry_run(spec.recipe_id, binding=binding,
-                                  params=spec.bench_params, arm=arm,
+                                  params=spec.params_for_arm(arm, params=params),
+                                  arm=arm,
                                   verify_inputs=False)
         out[arm] = {"argv": list(payload["argv"]), "env": dict(payload["env"]),
                     # The footprint DERIVED from this argv's own `taskset -c`,
@@ -1628,15 +2057,12 @@ class HostOps:
 
     Two deliberate limits, stated rather than hidden:
 
-      * **T0's richer evidence surfaces are supplied, not derived here.** The
-        symbol diff, the diff policy and the change surface each need the
-        PROPOSAL's own declarations (declared surface files, declared symbol
-        deltas, registration patterns) and their producers live in
-        `chain.symbol_evidence` / `chain.diff_policy_evidence` /
-        `chain.change_surface_from`. Pass `t0_evidence=` to wire them; the
-        reference wiring is `ChainLeg.t0_evidence_inputs`. Omitted, those gates
-        read COULD_NOT_CHECK, which is true, rather than PASS, which would not
-        be.
+      * **Source-changing proposals still supply their richer T0 evidence.** The
+        built-in IQK parameter adapter derives its empty diff, registered
+        dispatch surface, symbol tables and reference applicability. A source
+        mutation has proposal-specific files, symbols and registration patterns;
+        pass `t0_evidence=` for that path. `unimplemented_seams()` refuses a
+        source campaign before the claim when it is absent.
       * **The op suite must cover `MUL_MAT_ID`** — enforced on the spec, not
         here, so it cannot be bypassed by constructing ops at this layer.
     """
@@ -1653,11 +2079,6 @@ class HostOps:
             "the candidate mutation. worktree.GitRepo carries no content-mutating git "
             "verb by construction; a campaign supplies the change the way a proposal "
             "does. Reference wiring: execution/test_execution_chain.py::ChainLeg",
-        "_anchor_identity_for_bench":
-            "the T1 anchor identity, MEASURED off the anchor `llama-bench` "
-            "(chain.bind_anchor(capture, tool='llama-bench')). api.AnchorIdentity."
-            "binary_sha256 is single-valued and llama-cli != llama-bench, so T0's "
-            "triple cannot name both",
         "t0_evidence":
             "the anchor capture and the richer T0 surfaces, which need the PROPOSAL's "
             "own declarations. Pass HostOps(t0_evidence=...); the reference wiring is "
@@ -1671,7 +2092,7 @@ class HostOps:
             "boost ceiling and is NOT a valid all-core reference",
     }
 
-    def unimplemented_seams(self) -> tuple:
+    def unimplemented_seams(self, spec: Optional[CampaignSpec] = None) -> tuple:
         """Which required seams are still unsupplied. Empty means runnable.
 
         Checked BEFORE the claim, in `main`, because the alternative is what the
@@ -1680,13 +2101,17 @@ class HostOps:
         first line that needed a value nobody supplied. Probe the config before
         the long run (`feedback_bench_max_opt_and_config_probe_first`).
 
-        Derived from what is actually bound — an overridden method and a
-        supplied `t0_evidence` each clear their own entry — rather than from a
-        flag someone has to remember to flip.
+        Derived from what is actually bound and from the proposal class rather
+        than from a flag someone has to remember to flip.
         """
-        missing = [name for name in ("apply_candidate", "_anchor_identity_for_bench")
-                   if getattr(type(self), name, None) is getattr(HostOps, name, None)]
-        if self._t0_evidence is None:
+        missing = []
+        parameter_only = bool(
+            spec is not None and spec.proposal is not None
+            and spec.proposal.get("change_class") == "parameter")
+        if (getattr(type(self), "apply_candidate", None) is HostOps.apply_candidate
+                and not parameter_only):
+            missing.append("apply_candidate")
+        if self._t0_evidence is None and not parameter_only:
             missing.append("t0_evidence")
         if self._nominal_khz is None:
             missing.append("nominal_khz")
@@ -1702,6 +2127,21 @@ class HostOps:
         self._device_claims: list = []
         self._build_state: dict = {}
         self._fingerprints: dict = {}
+        self._t0_anchor_binding: Optional[Any] = None
+
+    def calibration_gate(self, spec: CampaignSpec) -> schemas.Check:
+        """Refuse live ranking outside the accepted cell-local calibration."""
+        calibration = spec.calibration
+        if calibration is None:
+            return schemas.Check(schemas.FAIL, (
+                f"recipe {spec.recipe_id!r} has no accepted cell-local live calibration; "
+                "a calibration from another phase or recipe cannot license ranking",))
+        if not calibration.b_min_blocks <= spec.blocks <= calibration.max_blocks:
+            return schemas.Check(schemas.FAIL, (
+                f"blocks={spec.blocks} is outside the accepted calibration range "
+                f"[{calibration.b_min_blocks}, {calibration.max_blocks}] from "
+                f"{calibration.evidence_ref}",))
+        return schemas.Check(schemas.PASS, ())
 
     # -- 0. preflight ------------------------------------------------------
 
@@ -1963,13 +2403,30 @@ class HostOps:
         return tree
 
     def apply_candidate(self, spec: CampaignSpec, tree: Any) -> Any:
-        """Apply the candidate change into the worktree, pathspec-limited.
+        """Apply a candidate, with a built-in path only for no-source parameters.
 
-        NOT implemented as a generic patch applier: `worktree.GitRepo` carries
-        no content-mutating verb by construction, and inventing one here would
-        put a write path on the class whose whole point is that it has none.
-        A campaign supplies the mutation the same way a proposal does.
+        The first campaign is the registered ``ggml_iqk`` parameter comparison.
+        Its candidate and anchor are the same reviewed source and differ only in
+        the arm-local environment projected by ``recipes``.  Treating that as a
+        patch would create a fake commit.  The adapter instead proves the fresh
+        worktree has an empty source diff and records the validated parameter
+        surface.  Source mutations remain campaign-specific and fail closed.
         """
+        if spec.proposal is not None and spec.proposal.get("change_class") == "parameter":
+            diff_text = tree.unified_diff_from_source()
+            if not isinstance(diff_text, str):
+                raise TypeError("campaign worktree unified_diff_from_source() must return str")
+            if diff_text.strip():
+                raise RuntimeError(
+                    "a parameter-only proposal reached a worktree with a source diff; the "
+                    "comparison is no longer one-factor and will not be relabelled parameter")
+            return {
+                "change_class": "parameter",
+                "source_diff_sha256": schemas.content_hash({"diff": diff_text}),
+                "candidate": dict(spec.candidate_param_overrides),
+                "anchor": dict(spec.anchor_param_overrides),
+                "source_mutated": False,
+            }
         raise NotImplementedError(
             f"apply_candidate({spec.candidate_ref!r}): the candidate mutation is the "
             "proposal's, not the driver's. Wire it by subclassing HostOps and overriding "
@@ -1985,6 +2442,7 @@ class HostOps:
             actor_worktree=tree.path,
             parallelism=worktree.BuildParallelism(jobs=64, load_average_cap=8.0),
             targets=("llama-cli", "llama-bench", "test-backend-ops"),
+            cmake_defines=(("LLAMA_FATAL_WARNINGS", "ON"),),
             cmake="/usr/bin/cmake")
         log_path = os.path.join(spec.build_root, spec.campaign_id,
                                 f"{spec.candidate_id}.log")
@@ -1993,6 +2451,87 @@ class HostOps:
         return result
 
     # -- 4. T0 -------------------------------------------------------------
+
+    @staticmethod
+    def _t0_tools() -> t0_provider.ToolPaths:
+        return t0_provider.ToolPaths(
+            bash="/bin/bash",
+            verify_ggml_linkage_sh=str(
+                recipes.REPO_ROOT / "scripts" / "utils" / "verify_ggml_linkage.sh"),
+            cmake="/usr/bin/cmake")
+
+    @staticmethod
+    def _measurement_anchor_build(tool: str) -> t0_provider.AnchorBuild:
+        bindir = os.path.join(MEASUREMENT_BUILD_ROOT, "bin")
+        return t0_provider.AnchorBuild(
+            worktree=MEASUREMENT_REPO, source_commit=MEASUREMENT_COMMIT,
+            binary=os.path.join(bindir, tool), library_path=bindir)
+
+    def _parameter_t0_evidence(self, spec: CampaignSpec, *, identity: Any,
+                               build_evidence: Any) -> dict:
+        """Derive every non-behavioural T0 surface for a no-source IQK arm."""
+        if spec.proposal is None or spec.proposal.get("change_class") != "parameter":
+            raise RuntimeError("the built-in T0 evidence adapter only licenses parameter proposals")
+        tree = self._build_state["tree"]
+        plan = self._build_state["plan"]
+        diff_text = tree.unified_diff_from_source()
+        if diff_text.strip():
+            raise RuntimeError("parameter T0 evidence refuses a non-empty source diff")
+        if self._t0_anchor_binding is None:
+            raise RuntimeError("parameter T0 evidence requires the measured llama-cli anchor")
+
+        anchor_lib_capture = t0_provider.capture_anchor_identity(
+            anchor=self._measurement_anchor_build("libggml.so.0"),
+            tools=self._t0_tools(), runner=t0_provider.SubprocessRunner(),
+            base_env=tuple(sorted(self._construct(spec, arm="anchor").env.items())),
+            parameter_env=spec.t0_parameter_env_for_arm("anchor"))
+        anchor_lib = chain.bind_anchor(anchor_lib_capture, tool="libggml.so.0")
+        one_build = chain.check_anchor_build_is_one_build(
+            (self._t0_anchor_binding, anchor_lib))
+        if one_build.outcome != schemas.PASS:
+            raise chain.AnchorNotOneAnchor("; ".join(one_build.reasons))
+
+        symbols = chain.iqk_parameter_symbol_evidence(
+            anchor_binary=self._measurement_anchor_build("libggml.so.0").binary,
+            candidate_binary=os.path.join(plan.build_dir.path, "bin", "libggml.so.0"),
+            anchor=anchor_lib, proposal=spec.proposal,
+            anchor_root=MEASUREMENT_REPO, candidate_root=tree.path.path)
+
+        diff = chain.diff_policy_evidence(
+            diff_text=diff_text, worktree_root=tree.path.path,
+            declared_surface_files=(),
+            envelope=correctness.ChangeClassEnvelope(
+                change_class="parameter", max_changed_lines=1, max_files_touched=1),
+            branch_name=tree.branch.name, commit_argv=(),
+            record_schema_violations=())
+
+        declared_ops = tuple(spec.proposal["change"].get("predicted_affected_surface", ()))
+        derivation_ref = (
+            "autokernel.parameter-registry/ggml_iqk/v1:"
+            + schemas.content_hash({
+                "parameter_surface": spec.proposal["change"]["parameter_surface"],
+                "t0_ops": list(spec.t0_ops),
+            })[:32])
+        surface = correctness.ChangeSurface(
+            derived_touches_memory=False,
+            derived_touches_threading=False,
+            derived_touches_dispatch=True,
+            derived_touches_persistent_state=False,
+            derived_ops=tuple(spec.t0_ops), derived_files=(),
+            declared_touches_memory=False, declared_touches_threading=False,
+            declared_ops=declared_ops, touches_shared_core_header=False,
+            derivation_ref=derivation_ref)
+        surface_evidence = chain.ChangeSurfaceEvidence(
+            surface=surface,
+            affected={"registered_parameter": "ggml_iqk", "source_diff": "empty"},
+            checks=(("registered_parameter_surface", schemas.Check(
+                schemas.PASS, (
+                    "the validated ggml_iqk registry projects dispatch=true and "
+                    "memory/threading/persistent-state=false",))),),
+            realized_edit={"change_class": "parameter", "source_mutated": False})
+
+        return chain.t0_plan_evidence(
+            symbols=symbols, diff=diff, change_surface=surface_evidence)
 
     def run_t0(self, spec: CampaignSpec, build: Any) -> T0Outcome:
         """T0 first, and its failure ENDS the campaign — see `run_campaign`.
@@ -2048,33 +2587,65 @@ class HostOps:
                 tuple(artifact_check.reasons)),))
         anchor_capture = extra.pop("anchor_capture", None)
         if anchor_capture is None:
-            raise NotImplementedError(
-                "run_t0 needs the anchor capture for this tool. Supply it (with the "
-                "richer T0 surfaces) through HostOps(t0_evidence=...); the reference "
-                "wiring is execution/test_execution_chain.ChainLeg.bind_anchor. "
-                "t0_provider.capture_anchor MEASURES it — it is never typed.")
+            anchor_plan = t0_provider.T0ExecutionPlan(
+                candidate=candidate,
+                tools=self._t0_tools(),
+                op_suite=t0_provider.OpSuitePlan(
+                    backend_filter="CPU" if spec.backend == BACKEND_CPU
+                    else recipes.GPU_VISIBLE_DEVICE_NAME,
+                    ops=spec.t0_ops, suite_id="test-backend-ops/v1",
+                    suite_source_sha256=identity.snapshot_sha256,
+                    suite_seed=spec.suite_seed),
+                dispatch=t0_provider.DispatchTracePlan(derived_surface=spec.t0_ops),
+                anchor=self._measurement_anchor_build("llama-cli"),
+                generation=t0_provider.GenerationPlan(
+                    prompt="The capital of France is", prompt_ref="ak-prompt-001",
+                    n_predict=32, seed=42),
+                backend=spec.backend,
+                base_env=tuple(sorted(self._construct(spec, arm="anchor").env.items())),
+                parameter_env=spec.t0_parameter_env_for_arm("anchor"))
+            anchor_capture = t0_provider.capture_anchor(
+                plan=anchor_plan,
+                runner=t0_provider.SubprocessRunner(
+                    sandbox_policy=self._candidate_sandbox_policy(spec)),
+                claim=self._claim_binding.t0_claim,
+                generation_seeds=(42, 42),
+                oracle_ids=(f"oracle://{MEASUREMENT_BRANCH}",))
         t0_anchor = chain.bind_anchor(anchor_capture, tool="llama-cli")  # seam 3
+        self._t0_anchor_binding = t0_anchor
+        if spec.proposal is not None and spec.proposal.get("change_class") == "parameter":
+            derived = self._parameter_t0_evidence(
+                spec, identity=identity, build_evidence=build_ev)
+            for name, value in derived.items():
+                extra.setdefault(name, value)
 
         t0_plan = t0_provider.T0ExecutionPlan(
             candidate=candidate,
-            tools=t0_provider.ToolPaths(
-                bash="/bin/bash",
-                verify_ggml_linkage_sh=str(recipes.REPO_ROOT / "scripts" / "utils"
-                                           / "verify_ggml_linkage.sh"),
-                cmake="/usr/bin/cmake"),
+            tools=self._t0_tools(),
             op_suite=t0_provider.OpSuitePlan(
                 backend_filter="CPU" if spec.backend == BACKEND_CPU
                 else recipes.GPU_VISIBLE_DEVICE_NAME,
                 ops=spec.t0_ops,
                 suite_id="test-backend-ops/v1",
-                suite_source_sha256=identity.snapshot_sha256),
+                suite_source_sha256=identity.snapshot_sha256,
+                suite_seed=spec.suite_seed),
             dispatch=t0_provider.DispatchTracePlan(derived_surface=spec.t0_ops),
             generation=t0_provider.GenerationPlan(
                 prompt="The capital of France is", prompt_ref="ak-prompt-001",
                 n_predict=32, seed=42),
+            holdout=(t0_provider.HoldoutPlan(
+                unseen_case_filter="type_a=(q4_K|iq4_xs)",
+                boundary_case_filter="n=1",
+                selection_rule_id="ak.iqk-heldout/v1",
+                selection_seed=f"{spec.campaign_id}/{spec.suite_seed}",
+                visible_to_planner=False)
+                if spec.proposal is not None
+                and spec.proposal.get("change_class") == "parameter" else None),
             determinism_runs=2, cache_state="cold", state_safety_probe=False,
             candidate_diff_text=tree.unified_diff_from_source(),
-            oracle_ids=(f"oracle://{PRODUCTION_BRANCH}",),
+            oracle_ids=(f"oracle://{MEASUREMENT_BRANCH}",),
+            base_env=tuple(sorted(self._construct(spec, arm="candidate").env.items())),
+            parameter_env=spec.t0_parameter_env_for_arm("candidate"),
             build=build_ev.provenance,
             **extra)
         provider = t0_provider.ExecutedT0EvidenceProvider(
@@ -2127,7 +2698,8 @@ class HostOps:
             change_class=("parameter" if spec.proposal is None
                           else spec.proposal["change_class"]),
             anchor_tier="T0", transfer_ratio_to=(), created_at=spec.created_at,
-            campaign_controls=None, calibration=None, device_state=device_state)
+            campaign_controls=None, calibration=None, device_state=device_state,
+            suite_seed=spec.suite_seed)
 
     def _construct(self, spec: CampaignSpec, *, arm: str) -> Any:
         plan = self._build_state["plan"]
@@ -2139,7 +2711,7 @@ class HostOps:
         binding = recipes.ToolBinding(binary=os.path.join(bindir, tool),
                                       source_root=root, library_path=bindir)
         return recipes.construct(spec.recipe_id, binding=binding,
-                                 params=spec.bench_params, arm=arm)
+                                 params=spec.params_for_arm(arm), arm=arm)
 
     # -- 5. the paired blocks ---------------------------------------------
 
@@ -2168,8 +2740,13 @@ class HostOps:
             candidate_instrument_root=self._build_state["tree"].path.path,
             anchor_instrument_root=MEASUREMENT_REPO,
             params=spec.bench_params,
+            candidate_param_overrides=spec.candidate_param_overrides,
+            anchor_param_overrides=spec.anchor_param_overrides,
+            unit_param_overrides=spec.ranked_unit_param_overrides,
+            anti_short_circuit_units=spec.anti_short_circuit_units,
             base_blocks=spec.blocks, pairs_per_block=1,
-            unit_ids=(f"{spec.recipe_id}:{spec.model or 'declared-model'}",),
+            unit_ids=spec.ranked_unit_ids,
+            physical_envelopes=spec.physical_envelopes,
             stratum=api.STRATUM_SELECTION)
         # The schedule is a per-block coin flip and a 5-0 draw is inadmissible
         # (see `decide`). It is knowable from the plan alone, so it is checked
@@ -2236,12 +2813,21 @@ class HostOps:
             campaign_id=spec.campaign_id)
 
     def _anchor_identity_for_bench(self, spec: CampaignSpec) -> api.AnchorIdentity:
-        raise NotImplementedError(
-            "the T1 anchor identity must be MEASURED off the anchor `llama-bench` "
-            "(chain.bind_anchor(capture, tool='llama-bench')), and tied to T0's anchor by "
-            "chain.check_anchor_build_is_one_build. api.AnchorIdentity.binary_sha256 is "
-            "single-valued and llama-cli and llama-bench are different files, so one "
-            "triple cannot name both. Supply it by overriding this method.")
+        capture = t0_provider.capture_anchor_identity(
+            anchor=self._measurement_anchor_build("llama-bench"),
+            tools=self._t0_tools(),
+            runner=t0_provider.SubprocessRunner(),
+            base_env=tuple(sorted(self._construct(spec, arm="anchor").env.items())),
+            parameter_env=spec.t0_parameter_env_for_arm("anchor"))
+        binding = chain.bind_anchor(capture, tool="llama-bench")
+        if self._t0_anchor_binding is None:
+            raise RuntimeError(
+                "the T1 anchor was requested before T0 captured its llama-cli anchor")
+        same_build = chain.check_anchor_build_is_one_build(
+            (self._t0_anchor_binding, binding))
+        if same_build.outcome != schemas.PASS:
+            raise chain.AnchorNotOneAnchor("; ".join(same_build.reasons))
+        return binding.identity
 
     # -- 6. teardown -------------------------------------------------------
 
@@ -2453,6 +3039,16 @@ def run_campaign(spec: CampaignSpec, ops: Any) -> CampaignResult:
     tree = None
 
     try:
+        calibration_gate = getattr(ops, "calibration_gate", None)
+        if executes and callable(calibration_gate):
+            pre = calibration_gate(spec)
+            if pre.outcome != schemas.PASS:
+                state = STATE_PREFLIGHT_REFUSED
+                error = "; ".join(pre.reasons)
+                return _finish(
+                    spec, ops, ledger, state=state, t0=t0, decision=decision,
+                    pairs=pairs, pre=pre, error=error, tree=tree,
+                )
         if spec.proposal is not None:
             ops.record_proposal(spec)
         pre = ops.preflight(spec)
@@ -2498,8 +3094,13 @@ def run_campaign(spec: CampaignSpec, ops: Any) -> CampaignResult:
                            pairs=(), pre=pre, error=None, tree=tree)
 
         pairs = tuple(observed)
-        decision = decide(pairs, t0=t0, blocks_precommitted=spec.blocks,
-                          drift_bound=spec.drift_bound)
+        decision = decide(
+            pairs, t0=t0, blocks_precommitted=spec.blocks,
+            drift_bound=spec.drift_bound,
+            contribution_floor=spec.contribution_floor,
+            calibration_evidence_ref=(
+                None if spec.calibration is None else spec.calibration.evidence_ref),
+        )
         state = STATE_DECIDED
         return _finish(spec, ops, ledger, state=state, t0=t0, decision=decision,
                        pairs=pairs, pre=pre, error=None, tree=tree)
@@ -2595,10 +3196,34 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="validated proposal.v3 JSON. Required by --execute and fsynced before host work",
     )
+    parser.add_argument(
+        "--calibration-bundle",
+        default=None,
+        metavar="DIR",
+        help="accepted live-control bundle for the exact production commit, measurement "
+             "instrument and recipe. Required by --execute; stale-era bundles refuse",
+    )
+    physical_group = parser.add_mutually_exclusive_group()
+    physical_group.add_argument(
+        "--physical-envelope",
+        default=None,
+        metavar="PATH",
+        help="predeclared RVP-C6-4 physical-envelope JSON for the exact measured "
+             "unit. Required by --execute and checked on every emitted sample",
+    )
+    physical_group.add_argument(
+        "--ranked-units",
+        default=None,
+        metavar="PATH",
+        help="strict epyc.autokernel.ranked-units.v1 JSON: normal and anti-short-"
+             "circuit recipe variants, each with its exact physical envelope. "
+             "Replaces --physical-envelope and puts every unit in the ranked stream",
+    )
     parser.add_argument("--backend", choices=BACKENDS, default=BACKEND_CPU)
-    parser.add_argument("--blocks", type=int, default=DEFAULT_BLOCKS,
+    parser.add_argument("--blocks", type=int, default=None,
                         help=f"the PRE-COMMITTED number of paired blocks "
-                             f"(default: {DEFAULT_BLOCKS}). Fixed before the run: the "
+                             f"(default: accepted B_min for a calibrated recipe, otherwise "
+                             f"{DEFAULT_BLOCKS}). Fixed before the run: the "
                              f"accept rule refuses any other count, which is what makes "
                              f"optional stopping impossible rather than discouraged.")
     parser.add_argument("--recipe", dest="recipe_id", default=None,
@@ -2681,30 +3306,110 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
         )
         return 2
 
+    selected_calibration = None
+    if args.calibration_bundle is not None:
+        try:
+            selected_calibration = load_calibration_bundle(args.calibration_bundle)
+        except (ValueError, TypeError) as exc:
+            print(f"refusing to start: --calibration-bundle: {exc}", file=sys.stderr)
+            return 2
+    if not args.dry_run and selected_calibration is None:
+        print(
+            "refusing to --execute: --calibration-bundle is required; historical or "
+            "cross-cell constants carry no live ranking authority",
+            file=sys.stderr,
+        )
+        return 2
+
+    physical_envelope = None
+    ranked_units: tuple[RankedUnitSpec, ...] = ()
+    if args.physical_envelope is not None:
+        try:
+            physical_payload = json.loads(
+                Path(args.physical_envelope).read_text(encoding="utf-8"))
+            physical_envelope = physical_bounds.PhysicalEnvelope.from_mapping(
+                physical_payload)
+        except (OSError, json.JSONDecodeError,
+                physical_bounds.PhysicalBoundError) as exc:
+            print(f"refusing to start: --physical-envelope: {exc}", file=sys.stderr)
+            return 2
+    if args.ranked_units is not None:
+        try:
+            ranked_payload = json.loads(
+                Path(args.ranked_units).read_text(encoding="utf-8"))
+            ranked_units = ranked_units_from_mapping(ranked_payload)
+        except (OSError, json.JSONDecodeError, ValueError, TypeError,
+                physical_bounds.PhysicalBoundError) as exc:
+            print(f"refusing to start: --ranked-units: {exc}", file=sys.stderr)
+            return 2
+    if not args.dry_run and physical_envelope is None and not ranked_units:
+        print(
+            "refusing to --execute: --physical-envelope or --ranked-units is required "
+            "before any claim, mutation, build, or benchmark",
+            file=sys.stderr,
+        )
+        return 2
+
+    resolved_recipe_id = (
+        args.recipe_id
+        if args.recipe_id is not None
+        else (selected_calibration.recipe_id if selected_calibration is not None
+              else DEFAULT_RECIPE_BY_BACKEND[args.backend])
+    )
+    resolved_blocks = (
+        args.blocks
+        if args.blocks is not None
+        else (selected_calibration.b_min_blocks
+              if selected_calibration is not None else DEFAULT_BLOCKS)
+    )
+
     try:
         spec = CampaignSpec(
             campaign_id=args.campaign_id, candidate_id=args.candidate_id,
-            candidate_ref=args.candidate_ref, backend=args.backend, blocks=args.blocks,
-            recipe_id=args.recipe_id, model=args.model, reps=args.reps,
+            candidate_ref=args.candidate_ref, backend=args.backend, blocks=resolved_blocks,
+            recipe_id=resolved_recipe_id, model=args.model, reps=args.reps,
             devices=tuple(args.device), device_names=tuple(args.device_name),
-            journal_root=args.journal_root, proposal=proposal)
+            journal_root=args.journal_root, proposal=proposal,
+            calibration=selected_calibration,
+            physical_envelope=physical_envelope, ranked_units=ranked_units)
     except (ValueError, TypeError, storage.StorageError, recipes.RecipeError) as exc:
         print(f"refusing to start: {exc}", file=sys.stderr)
         return 2
+
+    # Ranking authority is cell-local.  The five-control bundle calibrated the
+    # CPU prefill cell only; silently applying it to decode or GPU is the exact
+    # cross-cell transfer that calibration exists to prevent.  This refusal is
+    # before HostOps construction, host reads, a claim, mutation, or subprocess.
+    if not args.dry_run:
+        calibration = spec.calibration
+        if calibration is None:
+            print(
+                f"refusing to --execute: recipe {spec.recipe_id!r} has no accepted "
+                "cell-local live calibration; run or select a calibrated recipe first",
+                file=sys.stderr,
+            )
+            return 2
+        if not calibration.b_min_blocks <= spec.blocks <= calibration.max_blocks:
+            print(
+                f"refusing to --execute: --blocks {spec.blocks} is outside the accepted "
+                f"range [{calibration.b_min_blocks}, {calibration.max_blocks}] from "
+                f"{calibration.evidence_ref}",
+                file=sys.stderr,
+            )
+            return 2
 
     if ops is None:
         ops = (DryRunOps(out=stream) if args.dry_run
                else HostOps(nominal_khz=args.nominal_khz))
 
-    # BEFORE the claim, and before the banner: `HostOps` is written and has
-    # never been run, and four of its seams still need a value only the
-    # campaign can supply. Each raises where it is REACHED — after the region
-    # claim, after the worktree, after the build — so the cost of discovering
-    # it is the claim window. Refusing here costs argv-parse time. A run that
+    # BEFORE the claim, and before the banner: source-changing campaigns still
+    # have proposal-specific seams; the IQK
+    # parameter campaign has a built-in adapter. Check before any host work.
+    # Refusing here costs argv-parse time. A run that
     # never started must not print a line saying EXECUTING either.
     unimplemented = getattr(ops, "unimplemented_seams", None)
     if not args.dry_run and callable(unimplemented):
-        pending = unimplemented()
+        pending = unimplemented(spec)
         if pending:
             print("refusing to --execute: this ops object cannot complete a run. The "
                   "following seams still need a value the campaign must supply:",
@@ -2743,9 +3448,17 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
              else "EXPLORATORY (no --hypothesis; this run resolves no question)"),
           file=stream)
     print(f"  cell        {spec.recipe_id}  metric={spec.metric}", file=stream)
-    print(f"  accept      min(delta) > 0 over {spec.blocks} pre-committed pairs AND "
-          f"median(relative) > {spec.drift_bound:.4%}", file=stream)
-    print(f"  drift bound measured, not assumed: {AA_EVIDENCE_REF}", file=stream)
+    if spec.calibration is None:
+        print(f"  accept      UNCALIBRATED CELL — dry-run composition only; live ranking "
+              "will refuse", file=stream)
+    else:
+        print(f"  accept      min(delta) > 0 over {spec.blocks} pre-committed pairs AND "
+              f"median(relative) > {spec.contribution_floor:.4%}", file=stream)
+        print(f"  calibration B_min={spec.calibration.b_min_blocks}, "
+              f"MDE={spec.calibration.mde:.4%}: "
+              f"{spec.calibration.evidence_ref}", file=stream)
+    print(f"  anchor movement bound: {spec.drift_bound:.4%} from {AA_EVIDENCE_REF}",
+          file=stream)
     print("", file=stream)
 
     result = run_campaign(spec, ops)

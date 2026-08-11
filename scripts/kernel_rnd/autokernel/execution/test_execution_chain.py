@@ -1188,6 +1188,14 @@ def scaled_bench(*, factor: float, build_commit: str | None = None) -> str:
                 for index in range(reps)),
             "autokernel_output_hashes": ",".join(
                 f"{index + 101:016x}/{index + 101:016x}" for index in range(reps)),
+            "autokernel_hybrid_ab_complete": True,
+            "autokernel_unsynchronized_samples_ns": ",".join(
+                str(value) for value in row["samples_ns"]),
+            "autokernel_thread_set_stable": True,
+            "autokernel_escape_checks_complete": True,
+            "autokernel_thread_set_hashes": ",".join(
+                "/".join([f"{index + 201:016x}"] * 4) for index in range(reps)),
+            "autokernel_device_sync_mode": "cpu_not_applicable",
         })
     return json.dumps(rows)
 
@@ -1628,7 +1636,7 @@ class TestTheChainFits(_ChainCase):
         self.assertEqual(len(report.gates), len(correctness.T0_GATE_IDS))
         self.assertEqual(sorted(report.failed), [])
 
-    def test_exactly_six_t0_surfaces_are_explicitly_unevaluated(self):
+    def test_exactly_five_t0_surfaces_are_explicitly_unevaluated(self):
         """The number `execution/README.md` tells tomorrow's session to expect.
 
         Not a vanity assertion: the runbook tells the session what a healthy
@@ -1642,11 +1650,15 @@ class TestTheChainFits(_ChainCase):
         `chain.anchor_toolchain_from_build_log` and `chain.change_surface_from`
         were wired into the leg above. On 2026-08-10 the projection-side refusal
         channel stopped evaporating, revealing two more honestly unevaluated
-        gates. The six are all named findings, not surfaces nobody got to:
+        gates. On 2026-08-11 exported-symbol version coverage became conditional:
+        an unversioned exported surface is complete, while a genuinely versioned
+        export still reports the named gap. The five are all named findings,
+        not surfaces nobody got to:
 
-          * `exact_reference_comparison` — `test-backend-ops` prints its error
-            metric only on FAILURE, so a passing case yields no observed ULP.
-            Needs an exact-reference harness (t0_provider.SEAMS[0]).
+          * `exact_reference_comparison` — this historical recorded fixture
+            predates the current instrument's `AK_REF_V1` positive receipt. A
+            current-instrument run projects the observed comparator metric and
+            tolerance; an old capture remains honestly uncovered.
           * `sanitizer.asan` / `sanitizer.ubsan` — the derivation determined
             neither memory nor threading for THIS candidate, and the behavioural
             classifier can only answer True or undetermined. A candidate that
@@ -1655,9 +1667,6 @@ class TestTheChainFits(_ChainCase):
           * `state_rollback_teardown_race` — no rollback probe exists, so no
             state-safety measurement can pass at all
             (`t0_provider.STATE_SAFETY_CANNOT_PASS`).
-          * `symbol_and_registration_preservation` — the fixture's ELF extractor
-            cannot decode symbol-version nodes, so a clean name diff is not a
-            complete ABI proof.
           * `affected_surface_reconciliation` — the pure source classifier can
             widen memory/thread/state touches but cannot prove their absence.
         """
@@ -1669,13 +1678,12 @@ class TestTheChainFits(_ChainCase):
             correctness.GID_ASAN,
             correctness.GID_EXACT_REFERENCE,
             correctness.GID_STATE_SAFETY,
-            correctness.GID_SYMBOLS,
             correctness.GID_UBSAN,
         ]), "the set of T0 surfaces with no producer has changed — update "
            "execution/README.md §3 and §6.1, which tell tomorrow's session what "
            "a healthy report looks like")
         passed = [g.gate_id for g in report.gates if g.check.outcome == schemas.PASS]
-        self.assertEqual(len(passed), 11, sorted(passed))
+        self.assertEqual(len(passed), 12, sorted(passed))
 
     def test_the_wired_surfaces_are_gates_and_not_assertions(self):
         """Each outcome below is a comparison, including projection refusals.
@@ -1690,9 +1698,9 @@ class TestTheChainFits(_ChainCase):
                         correctness.GID_BOUNDARY_SHAPES):
             self.assertEqual(report.outcome(gate_id), schemas.PASS,
                              report.gate(gate_id).check.reasons)
+        self.assertEqual(report.outcome(correctness.GID_SYMBOLS), schemas.PASS)
         for gate_id, finding in (
-                (correctness.GID_SYMBOLS, "SYMBOL_VERSIONS_NOT_EXTRACTED"),
-                (correctness.GID_SURFACE_RECONCILIATION, "projection change_surface.")):
+                (correctness.GID_SURFACE_RECONCILIATION, "projection change_surface."),):
             self.assertEqual(report.outcome(gate_id), schemas.COULD_NOT_CHECK)
             self.assertTrue(any(finding in reason
                                 for reason in report.gate(gate_id).check.reasons),
@@ -2821,6 +2829,43 @@ class TestTheWiredProducersRefuseCleanShapedNothing(_ChainCase):
                 anchor_dispatch_predicates=a_pred, candidate_dispatch_predicates=None)
         self.assertIn("never run", str(ctx.exception))
 
+    def test_iqk_parameter_adapter_scans_both_real_source_roots(self):
+        hooks = (
+            "if (ggml_iqk_try_mul_mat(params, dst)) return;\n"
+            "if (ggml_iqk_try_mul_mat_id(params, dst)) return;\n")
+        predicates = (
+            "switch (type) { case GGML_TYPE_Q4_K: break; "
+            "case GGML_TYPE_IQ4_XS: break; }\n")
+        for root in (self.leg.anchor_paths["root"], self.leg.worktree.path.path):
+            cpu = Path(root, "ggml", "src", "ggml-cpu")
+            (cpu / "iqk").mkdir(parents=True)
+            (cpu / "ggml-cpu.c").write_text(hooks, encoding="utf-8")
+            (cpu / "iqk" / "iqk_dispatch.cpp").write_text(
+                predicates, encoding="utf-8")
+        evidence = chain.iqk_parameter_symbol_evidence(
+            anchor_binary=self.leg.anchor_paths["libggml.so.0"],
+            candidate_binary=self.leg.artifacts["libggml.so.0"],
+            anchor=self.leg.libggml_anchor,
+            proposal={"declared_symbol_deltas": {
+                "added": [], "removed": [], "arity_changed": []}},
+            anchor_root=self.leg.anchor_paths["root"],
+            candidate_root=self.leg.worktree.path.path)
+        self.assertTrue(evidence.op_registration_diff.anchor_count)
+        self.assertEqual(evidence.op_registration_diff.anchor_count, 2)
+        self.assertEqual(evidence.dispatch_predicate_diff.anchor_count, 2)
+        self.assertEqual(self._gate(evidence).check.outcome, schemas.PASS)
+
+    def test_iqk_parameter_adapter_refuses_a_missing_ggml_source_universe(self):
+        with self.assertRaisesRegex(chain.EmptyAnchorSurface, "source root is missing"):
+            chain.iqk_parameter_symbol_evidence(
+                anchor_binary=self.leg.anchor_paths["libggml.so.0"],
+                candidate_binary=self.leg.artifacts["libggml.so.0"],
+                anchor=self.leg.libggml_anchor,
+                proposal={"declared_symbol_deltas": {
+                    "added": [], "removed": [], "arity_changed": []}},
+                anchor_root=self.leg.anchor_paths["root"],
+                candidate_root=self.leg.worktree.path.path)
+
     def test_a_dispatch_table_diffed_as_an_op_table_is_refused(self):
         (a_ops, a_pred), (_c_ops, c_pred) = self._tables()
         with self.assertRaises(ValueError) as ctx:
@@ -2890,6 +2935,16 @@ class TestTheWiredProducersRefuseCleanShapedNothing(_ChainCase):
             _t0_policy())
         self.assertEqual(gate.check.outcome, schemas.FAIL)
         self.assertTrue(any("pathspec-limited" in r for r in gate.check.reasons))
+
+    def test_empty_parameter_diff_needs_no_fabricated_commit(self):
+        evidence = self._diff(
+            diff_text="", declared_surface_files=(), commit_argv=(),
+            envelope=correctness.ChangeClassEnvelope(
+                change_class="parameter", max_changed_lines=1, max_files_touched=1))
+        self.assertTrue(evidence.policy.commit_was_pathspec_limited)
+        self.assertEqual(evidence.policy.changed_lines, 0)
+        self.assertEqual(evidence.policy.files_touched, ())
+        self.assertIn("no source commit exists", " ".join(evidence.notes))
 
     def test_dash_a_defeats_a_pathspec_and_is_read_as_such(self):
         for argv in (("git", "commit", "-a", "-m", "x", "--", "ggml/src/ggml-cpu.c"),

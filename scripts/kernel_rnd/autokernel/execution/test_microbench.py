@@ -31,6 +31,7 @@ from .. import journal as J
 from .. import schemas
 from ..evaluator import api, recipes, statistics
 from . import microbench as M
+from . import physical_bounds as P
 
 TESTDATA = Path(__file__).resolve().parent / "testdata"
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -75,6 +76,14 @@ def read_fixture(path: Path) -> str:
                 for index in range(reps)),
             "autokernel_output_hashes": ",".join(
                 f"{index + 101:016x}/{index + 101:016x}" for index in range(reps)),
+            "autokernel_hybrid_ab_complete": True,
+            "autokernel_unsynchronized_samples_ns": ",".join(
+                str(value) for value in row["samples_ns"]),
+            "autokernel_thread_set_stable": True,
+            "autokernel_escape_checks_complete": True,
+            "autokernel_thread_set_hashes": ",".join(
+                "/".join([f"{index + 201:016x}"] * 4) for index in range(reps)),
+            "autokernel_device_sync_mode": "cpu_not_applicable",
         })
     return json.dumps(rows)
 
@@ -751,6 +760,7 @@ class TestOutputIsCheckedAgainstTheRecipe(unittest.TestCase):
 
     def test_the_expectation_is_read_out_of_argv(self):
         self.assertEqual(self.expect.n_threads, 96)
+        self.assertEqual(self.expect.n_gpu_layers, -1)
         self.assertTrue(self.expect.flash_attn)
         self.assertEqual(self.expect.n_gen, FIXTURE_N_GEN)
         self.assertEqual(self.expect.reps, FIXTURE_REPS)
@@ -797,6 +807,70 @@ class TestOutputIsCheckedAgainstTheRecipe(unittest.TestCase):
         check = self.expect.check_row(row)
         self.assertEqual(check.outcome, schemas.FAIL)
         self.assertIn("output changed", " ".join(check.reasons))
+
+    def test_missing_thread_stability_attestation_is_refused(self):
+        rows = json.loads(read_fixture(CANONICAL))
+        rows[0]["autokernel_thread_set_stable"] = False
+        row = M.parse_llama_bench_json(json.dumps(rows))[0]
+        check = self.expect.check_row(row)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("thread set was stable", " ".join(check.reasons))
+
+    def test_incomplete_escape_checks_are_refused(self):
+        rows = json.loads(read_fixture(CANONICAL))
+        rows[0]["autokernel_escape_checks_complete"] = False
+        row = M.parse_llama_bench_json(json.dumps(rows))[0]
+        check = self.expect.check_row(row)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("escape checks", " ".join(check.reasons))
+
+    def test_missing_hybrid_ab_attestation_is_refused(self):
+        rows = json.loads(read_fixture(CANONICAL))
+        rows[0]["autokernel_hybrid_ab_complete"] = False
+        row = M.parse_llama_bench_json(json.dumps(rows))[0]
+        check = self.expect.check_row(row)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("hybrid A/B", " ".join(check.reasons))
+
+    def test_thread_set_change_across_timed_region_is_refused(self):
+        rows = json.loads(read_fixture(CANONICAL))
+        pairs = rows[0]["autokernel_thread_set_hashes"].split(",")
+        pairs[0] = "/".join(("00000000000000aa", "00000000000000aa",
+                             "00000000000000bb", "00000000000000bb"))
+        rows[0]["autokernel_thread_set_hashes"] = ",".join(pairs)
+        row = M.parse_llama_bench_json(json.dumps(rows))[0]
+        check = self.expect.check_row(row)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("thread set changed", " ".join(check.reasons))
+
+    def test_large_gpu_sync_divergence_is_an_integrity_failure(self):
+        rows = json.loads(read_fixture(CANONICAL))
+        rows[0]["n_gpu_layers"] = 99
+        rows[0]["autokernel_device_sync_mode"] = "hip_full_device"
+        rows[0]["autokernel_unsynchronized_samples_ns"] = ",".join(
+            str(max(1, value // 2)) for value in rows[0]["samples_ns"])
+        row = M.parse_llama_bench_json(json.dumps(rows))[0]
+        gpu_expectation = replace(self.expect, n_gpu_layers=99)
+        check = gpu_expectation.check_row(row)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("integrity flag", " ".join(check.reasons))
+
+    def test_gpu_row_without_full_device_sync_is_refused(self):
+        rows = json.loads(read_fixture(CANONICAL))
+        rows[0]["n_gpu_layers"] = 99
+        row = M.parse_llama_bench_json(json.dumps(rows))[0]
+        gpu_expectation = replace(self.expect, n_gpu_layers=99)
+        check = gpu_expectation.check_row(row)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("hip_full_device", " ".join(check.reasons))
+
+    def test_gpu_row_with_full_device_sync_is_admissible(self):
+        rows = json.loads(read_fixture(CANONICAL))
+        rows[0]["n_gpu_layers"] = 99
+        rows[0]["autokernel_device_sync_mode"] = "hip_full_device"
+        row = M.parse_llama_bench_json(json.dumps(rows))[0]
+        gpu_expectation = replace(self.expect, n_gpu_layers=99)
+        self.assertEqual(gpu_expectation.check_row(row).outcome, schemas.PASS)
 
     def test_real_output_with_flash_attention_off_is_refused(self):
         """Real recorded output, flash_attn=false, against an `-fa 1` recipe."""
@@ -1104,13 +1178,14 @@ def make_plan(binding: BindingFixture, *, blocks: int = 4, pairs: int = 1,
               anchor: api.AnchorIdentity | None = None,
               **kwargs) -> M.MicrobenchPlan:
     params = kwargs.pop("params", default_params())
+    unit_ids = kwargs.pop("unit_ids", ("unit-0",))
     return M.MicrobenchPlan(
         recipe_id=RECIPE_ID, candidate_id="cand-alpha",
         campaign_seed="campaign-seed-2026-08-03",
         candidate_binding=binding.candidate, anchor_binding=binding.anchor,
         anchor=anchor or anchor_identity(binding),
         params=params, base_blocks=blocks, pairs_per_block=pairs,
-        unit_ids=("unit-0",), **kwargs)
+        unit_ids=unit_ids, **kwargs)
 
 
 def arm_aware_spawner(*, candidate_stdout: str, anchor_stdout: str) -> M.RecordedSpawner:
@@ -1135,6 +1210,18 @@ class TestRunnerEndToEnd(unittest.TestCase):
                                                  anchor_stdout=self.anchor_out),
             host_state=HostStateStub(states or [healthy_state()]))
 
+    @staticmethod
+    def _physical_envelope(*, peak=1e12, shape_id="unit-0", params=None):
+        frame_params = default_params() if params is None else params
+        return P.PhysicalEnvelope(
+            shape_id=shape_id, delivered_unit="token",
+            flops_per_unit=1, bytes_per_unit=1,
+            peak_compute_flops_s=peak, peak_memory_bytes_s=peak,
+            measurement_frame_sha256=P.measurement_frame_sha256(
+                RECIPE_ID, frame_params),
+            work_derivation_ref="fixture-shape/v1",
+            hardware_peak_ref="fixture-hardware/v1")
+
     def test_a_healthy_run_completes_and_yields_paired_blocks(self):
         run = self._runner().run(make_plan(self.binding, blocks=4))
         self.assertTrue(run.complete, run.refusals)
@@ -1143,6 +1230,119 @@ class TestRunnerEndToEnd(unittest.TestCase):
         for block in blocks:
             self.assertEqual(len(block.anchor_samples), FIXTURE_REPS)
             self.assertEqual(len(block.candidate_samples), FIXTURE_REPS)
+
+    def test_a_predeclared_physical_envelope_checks_every_sample(self):
+        plan = make_plan(
+            self.binding, blocks=2,
+            physical_envelopes={"unit-0": self._physical_envelope()})
+        run = self._runner().run(plan)
+        self.assertTrue(run.complete, run.refusals)
+        checks = [check for block in run.blocks for inv in block.invocations
+                  for name, check in inv.checks if name == "physical_speed_of_light"]
+        self.assertEqual(len(checks), 4)
+        self.assertTrue(all(check.outcome == schemas.PASS for check in checks))
+
+    def test_a_physically_impossible_sample_refuses_the_run(self):
+        plan = make_plan(
+            self.binding, blocks=1,
+            physical_envelopes={"unit-0": self._physical_envelope(peak=1)})
+        run = self._runner().run(plan)
+        self.assertFalse(run.complete)
+        self.assertIn("physical ceiling", " ".join(run.refusals))
+
+    def test_a_partial_multiunit_physical_screen_is_not_constructible(self):
+        with self.assertRaisesRegex(ValueError, "physical_envelopes is partial"):
+            make_plan(
+                self.binding, unit_ids=("unit-0", "hard-case"),
+                physical_envelopes={"unit-0": self._physical_envelope()})
+
+    def test_an_envelope_for_another_shape_cannot_grade_this_unit(self):
+        with self.assertRaisesRegex(ValueError, "envelope key and measured unit"):
+            make_plan(
+                self.binding,
+                physical_envelopes={
+                    "unit-0": self._physical_envelope(shape_id="easier-unit")})
+
+    def test_an_envelope_in_another_unit_cannot_grade_tokens_per_second(self):
+        wrong_unit = replace(self._physical_envelope(), delivered_unit="output_row")
+        with self.assertRaisesRegex(ValueError, "emits.*token"):
+            make_plan(
+                self.binding,
+                physical_envelopes={"unit-0": wrong_unit})
+
+    def test_an_envelope_for_another_recipe_frame_cannot_grade_this_run(self):
+        wrong_frame = replace(
+            self._physical_envelope(),
+            measurement_frame_sha256=P.measurement_frame_sha256(
+                RECIPE_ID, {**default_params(), "n_gen": 64}))
+        with self.assertRaisesRegex(ValueError, "exact recipe, model, and parameters"):
+            make_plan(
+                self.binding,
+                physical_envelopes={"unit-0": wrong_frame})
+
+    def test_anti_short_circuit_units_are_real_ranked_commands(self):
+        class RankedSpawner:
+            def __init__(inner_self):
+                inner_self.calls = []
+
+            def run(inner_self, argv, env, *, timeout_s):
+                arm = (M.ARM_CANDIDATE
+                       if self.binding.candidate.binary in argv else M.ARM_ANCHOR)
+                n_gen = int(argv[argv.index("-n") + 1])
+                source = self.candidate_out if arm == M.ARM_CANDIDATE else self.anchor_out
+                rows = json.loads(source)
+                for row in rows:
+                    row["n_gen"] = n_gen
+                inner_self.calls.append((arm, n_gen))
+                return M.SpawnResult(
+                    argv=tuple(argv), returncode=0, stdout=json.dumps(rows),
+                    stderr_tail="", pid=None, duration_s=0.01)
+
+        plan = make_plan(
+            self.binding, blocks=4, unit_ids=("normal", "structured-hard"),
+            unit_param_overrides={
+                "normal": {"n_gen": 128},
+                "structured-hard": {"n_gen": 127},
+            },
+            anti_short_circuit_units=("structured-hard",))
+        spawner = RankedSpawner()
+        run = self._runner(spawner=spawner).run(plan)
+        self.assertTrue(run.complete, run.refusals)
+        self.assertEqual({block.plan.unit_id for block in run.blocks},
+                         {"normal", "structured-hard"})
+        observed = {
+            block.plan.unit_id: {
+                invocation.receipt.params["n_gen"]
+                for invocation in block.invocations}
+            for block in run.blocks
+        }
+        self.assertEqual(observed["normal"], {128})
+        self.assertEqual(observed["structured-hard"], {127})
+        self.assertEqual(len(run.unit_receipts), 2)
+
+    def test_anti_short_circuit_labels_cannot_be_gate_only_or_relabelled(self):
+        with self.assertRaisesRegex(ValueError, "unit_param_overrides is missing"):
+            make_plan(
+                self.binding, blocks=2, unit_ids=("normal", "hard"),
+                anti_short_circuit_units=("hard",))
+        with self.assertRaisesRegex(ValueError, "same recipe parameters"):
+            make_plan(
+                self.binding, blocks=2, unit_ids=("normal", "hard"),
+                unit_param_overrides={
+                    "normal": {"n_gen": 128}, "hard": {"n_gen": 128}},
+                anti_short_circuit_units=("hard",))
+
+    def test_a_live_runner_without_a_physical_screen_refuses_before_spawn(self):
+        class LiveFixtureSpawner(M.RecordedSpawner):
+            spawner_id = "subprocess/v1"
+
+        spawner = LiveFixtureSpawner({
+            M.ARM_CANDIDATE: self.candidate_out,
+            M.ARM_ANCHOR: self.anchor_out})
+        run = self._runner(spawner=spawner).run(make_plan(self.binding, blocks=1))
+        self.assertFalse(run.complete)
+        self.assertEqual(spawner.calls, [])
+        self.assertIn("physical speed-of-light screen", " ".join(run.refusals))
 
     def test_the_registered_iqk_variant_can_differ_by_arm(self):
         """The recipe promises one GGML_IQK value per arm; the runner must carry it."""

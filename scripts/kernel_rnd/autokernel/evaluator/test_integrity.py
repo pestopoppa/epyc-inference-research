@@ -246,10 +246,10 @@ class TestElfReader(unittest.TestCase):
         with self.assertRaises(I.TreeReadError):
             I.extract_elf_symbols(self.tmp / "nope.so", label="anchor")
 
-    def test_symbol_versions_are_declared_as_not_extracted(self):
+    def test_an_unversioned_export_has_no_version_coverage_gap(self):
         table = elf_table(self.tmp, "v.so", [fn("a")], "anchor")
-        self.assertTrue(any(I.F_SYMBOL_VERSIONS_NOT_EXTRACTED in n
-                            for n in table.coverage_notes))
+        self.assertFalse(any(I.F_SYMBOL_VERSIONS_NOT_EXTRACTED in n
+                             for n in table.coverage_notes))
 
 
 class TestElfReaderAgainstRealBinary(unittest.TestCase):
@@ -294,6 +294,11 @@ class TestElfReaderAgainstRealBinary(unittest.TestCase):
         # The rate is asserted, not assumed: a regression that silently stopped
         # parsing would otherwise turn every arity finding into "signature_changed".
         self.assertGreater(len(parsed) / len(mangled), 0.80)
+
+    def test_real_versioned_exports_remain_an_explicit_coverage_gap(self):
+        table = I.extract_elf_symbols(self.real_library(), label="anchor")
+        self.assertTrue(any(I.F_SYMBOL_VERSIONS_NOT_EXTRACTED in n
+                            for n in table.coverage_notes))
 
 
 # ---------------------------------------------------------------------------
