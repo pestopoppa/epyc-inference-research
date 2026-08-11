@@ -77,6 +77,8 @@ TARGET_OFFLOAD_LAYER_COUNT = 66
 DRAFTER_OFFLOAD_LAYER_COUNT = 6
 TARGET_POSITIVE_KV_BUFFER_COUNT = 1
 DRAFTER_POSITIVE_KV_BUFFER_COUNT = 1
+DFLASH_LINEUP_ACCEPTANCE_FLOOR = 0.60
+DFLASH_LINEUP_PROMPT_RATIO_FLOOR = 1.00
 SOURCE_UNTRACKED_ALLOWLIST = {
     ".gitnexusignore": "local GitNexus configuration; not a llama.cpp build input",
     "tools/math-tools/": "operator-owned unrelated tool subtree; not linked into llama-server",
@@ -1338,6 +1340,71 @@ def matrix_cardinality_valid(results: list[dict[str, Any]], reps: int) -> tuple[
     return True, "ok"
 
 
+def dflash_lineup_decision(results: list[dict[str, Any]], cardinality_valid: bool) -> dict[str, Any]:
+    """Apply ratified P-DFLASH-LINEUP-1 to the complete lane evidence."""
+    dflash_records = [
+        record
+        for result in results
+        if result.get("arm") == DFLASH_ARM.name and result.get("status") == "ok"
+        for record in result.get("records", [])
+    ]
+    draft_n = sum(strict_int(record.get("draft_n"), "draft_n") for record in dflash_records)
+    accepted = sum(strict_int(record.get("draft_n_accepted"), "draft_n_accepted") for record in dflash_records)
+    acceptance = (accepted / draft_n) if draft_n else None
+
+    prompt_rows: list[dict[str, Any]] = []
+    for prompt_id, _ in PROMPT_SPECS:
+        arms: dict[str, dict[str, Any]] = {}
+        for arm in ARMS:
+            records = [
+                record
+                for result in results
+                if result.get("arm") == arm.name and result.get("status") == "ok"
+                for record in result.get("records", [])
+                if record.get("prompt_id") == prompt_id
+            ]
+            completion_tokens = sum(strict_int(record.get("completion_tokens"), "completion_tokens") for record in records)
+            decode_ms = sum(strict_real(record.get("decode_ms"), "decode_ms") for record in records)
+            arms[arm.name] = {
+                "records": len(records),
+                "completion_tokens": completion_tokens,
+                "decode_ms": decode_ms,
+                "decode_tps": (completion_tokens / (decode_ms / 1000.0)) if decode_ms > 0 else None,
+            }
+        base_tps = arms[BASE_ARM.name]["decode_tps"]
+        dflash_tps = arms[DFLASH_ARM.name]["decode_tps"]
+        ratio = (dflash_tps / base_tps) if base_tps and dflash_tps else None
+        prompt_rows.append({
+            "prompt_id": prompt_id,
+            "base": arms[BASE_ARM.name],
+            "dflash": arms[DFLASH_ARM.name],
+            "dflash_over_base_ratio": ratio,
+            "ratio_floor": DFLASH_LINEUP_PROMPT_RATIO_FLOOR,
+            "meets_ratio_floor": ratio is not None and ratio >= DFLASH_LINEUP_PROMPT_RATIO_FLOOR,
+        })
+
+    blockers: list[str] = []
+    if not cardinality_valid:
+        blockers.append("incomplete_or_invalid_matrix")
+    if acceptance is None or acceptance < DFLASH_LINEUP_ACCEPTANCE_FLOOR:
+        blockers.append("pooled_acceptance_below_floor")
+    if not all(row["meets_ratio_floor"] for row in prompt_rows):
+        blockers.append("per_prompt_decode_ratio_below_floor")
+    return {
+        "protocol": "P-DFLASH-LINEUP-1",
+        "eligible": not blockers,
+        "blockers": blockers,
+        "pooled_acceptance": {
+            "draft_n": draft_n,
+            "draft_n_accepted": accepted,
+            "rate": acceptance,
+            "floor": DFLASH_LINEUP_ACCEPTANCE_FLOOR,
+            "meets_floor": acceptance is not None and acceptance >= DFLASH_LINEUP_ACCEPTANCE_FLOOR,
+        },
+        "per_prompt_decode": prompt_rows,
+    }
+
+
 def candidate_smoke_projection(
     results: list[dict[str, Any]],
     *,
@@ -1713,7 +1780,8 @@ def execute(args: argparse.Namespace, output_dir: Path, plan: dict[str, Any]) ->
     per_replicate_bindings_valid = len(replicate_binding_checks) == len(plan["cells"]) and all(check["valid"] for check in replicate_binding_checks)
     execution_binding_valid = binding_unchanged and final_identity["valid"] and per_replicate_bindings_valid
     final_guard_valid = final_clean and final_vram_settled and execution_binding_valid
-    status = "ok" if cardinality_valid and all(summary["all_ok"] for summary in summaries.values()) and final_guard_valid else "failed"
+    lineup_decision = dflash_lineup_decision(results, cardinality_valid)
+    status = "ok" if cardinality_valid and all(summary["all_ok"] for summary in summaries.values()) and final_guard_valid and lineup_decision["eligible"] else "failed"
     candidate_smoke = candidate_smoke_projection(
         results,
         initial_rocm=initial_rocm,
@@ -1722,7 +1790,7 @@ def execute(args: argparse.Namespace, output_dir: Path, plan: dict[str, Any]) ->
         final_port=int(plan["cells"][-1]["port"]) if plan["cells"] else None,
     )
     write_json(output_dir / "candidate_smoke_summary.json", candidate_smoke)
-    return {"schema": "epyc.qwen36_27b_q8_dflash_pgpu1.summary.v1", "created_at": utc_now(), "status": status, "production_named_kernel": True, "required_branch": EXPECTED_BRANCH, "attestation_ref": str(args.attestation_ref), "attestation_sha256": attestation["sha256"], "n": args.reps, "rep_policy": plan["rep_policy"], "median": True, "mad": True, "arm_order": plan["arm_order"], "results": results, "matrix_cardinality_valid": cardinality_valid, "matrix_cardinality_reason": cardinality_reason, "arm_summaries": summaries, "base_vs_dflash": {"decode_tps_ratio": ratio, "direction": "higher_better"}, "cross_arm_hash_observation": {"contract": "distribution-lossless, not byte-exact greedy", "decision_gating": False, "quality_equivalence_claimed": False, "rows": hash_observations}, "warmup_discard_policy": PGPU1_WARMUP_POLICY, "cpu_interference_policy": CPU_INTERFERENCE_POLICY, "hardware_state": hardware_state, "target_kv_quant": {"k": TARGET_CACHE_K, "v": TARGET_CACHE_V}, "drafter_kv_quant": {"k": DRAFTER_CACHE_K, "v": DRAFTER_CACHE_V}, "replicate_binding_checks": replicate_binding_checks, "per_replicate_bindings_valid": per_replicate_bindings_valid, "execution_binding_valid": execution_binding_valid, "post_execution_identity": post_identity, "final_process_guard": final_processes, "final_rocm": final_rocm, "final_clean": final_clean, "final_reason": final_reason, "final_vram_settled": final_vram_settled, "final_guard_valid": final_guard_valid, "post_cleanup_vram_sample": "after_cleanup ROCm snapshots in every replicate", "candidate_smoke_projection": {"path": "candidate_smoke_summary.json", "schema": CANDIDATE_SMOKE_SCHEMA, "non_gating": True}}
+    return {"schema": "epyc.qwen36_27b_q8_dflash_pgpu1.summary.v1", "created_at": utc_now(), "status": status, "production_named_kernel": True, "required_branch": EXPECTED_BRANCH, "attestation_ref": str(args.attestation_ref), "attestation_sha256": attestation["sha256"], "n": args.reps, "rep_policy": plan["rep_policy"], "median": True, "mad": True, "arm_order": plan["arm_order"], "results": results, "matrix_cardinality_valid": cardinality_valid, "matrix_cardinality_reason": cardinality_reason, "arm_summaries": summaries, "base_vs_dflash": {"decode_tps_ratio": ratio, "direction": "higher_better"}, "lineup_decision": lineup_decision, "cross_arm_hash_observation": {"contract": "distribution-lossless, not byte-exact greedy", "decision_gating": False, "quality_equivalence_claimed": False, "rows": hash_observations}, "warmup_discard_policy": PGPU1_WARMUP_POLICY, "cpu_interference_policy": CPU_INTERFERENCE_POLICY, "hardware_state": hardware_state, "target_kv_quant": {"k": TARGET_CACHE_K, "v": TARGET_CACHE_V}, "drafter_kv_quant": {"k": DRAFTER_CACHE_K, "v": DRAFTER_CACHE_V}, "replicate_binding_checks": replicate_binding_checks, "per_replicate_bindings_valid": per_replicate_bindings_valid, "execution_binding_valid": execution_binding_valid, "post_execution_identity": post_identity, "final_process_guard": final_processes, "final_rocm": final_rocm, "final_clean": final_clean, "final_reason": final_reason, "final_vram_settled": final_vram_settled, "final_guard_valid": final_guard_valid, "post_cleanup_vram_sample": "after_cleanup ROCm snapshots in every replicate", "candidate_smoke_projection": {"path": "candidate_smoke_summary.json", "schema": CANDIDATE_SMOKE_SCHEMA, "non_gating": True}}
 
 
 def run_audit(output_dir: Path) -> dict[str, Any]:

@@ -947,6 +947,9 @@ def test_execute_requires_complete_matrix_and_final_clean_state(monkeypatch) -> 
         assert summary["matrix_cardinality_valid"] is True
         assert summary["final_guard_valid"] is True
         assert summary["execution_binding_valid"] is True
+        assert summary["lineup_decision"]["eligible"] is True
+        assert summary["lineup_decision"]["pooled_acceptance"]["rate"] == pytest.approx(0.6)
+        assert all(row["dflash_over_base_ratio"] == pytest.approx(1.0) for row in summary["lineup_decision"]["per_prompt_decode"])
         smoke = json.loads((output / "candidate_smoke_summary.json").read_text(encoding="utf-8"))
         assert smoke["schema"] == runner.CANDIDATE_SMOKE_SCHEMA
         assert smoke["status"] == "ok"
@@ -963,6 +966,25 @@ def test_execute_requires_complete_matrix_and_final_clean_state(monkeypatch) -> 
         summary = runner.execute(args, output, runner.build_plan(args, args.target_identity))
         assert summary["status"] == "failed"
         assert summary["final_guard_valid"] is False
+
+
+def test_dflash_lineup_decision_enforces_acceptance_and_per_prompt_ratio() -> None:
+    results = [_result(arm, rep) for rep in range(1, runner.DEFAULT_REPS + 1) for arm in runner.ARMS]
+    decision = runner.dflash_lineup_decision(results, True)
+    assert decision["eligible"] is True
+
+    results[1]["records"][0]["draft_n_accepted"] = 0
+    decision = runner.dflash_lineup_decision(results, True)
+    assert decision["eligible"] is False
+    assert "pooled_acceptance_below_floor" in decision["blockers"]
+
+    results = [_result(arm, rep) for rep in range(1, runner.DEFAULT_REPS + 1) for arm in runner.ARMS]
+    for result in results:
+        if result["arm"] == "dflash":
+            result["records"][0]["decode_ms"] = 250.0
+    decision = runner.dflash_lineup_decision(results, True)
+    assert decision["eligible"] is False
+    assert "per_prompt_decode_ratio_below_floor" in decision["blockers"]
 
 
 def test_execute_rejects_transient_library_swap_before_it_is_restored(monkeypatch) -> None:
