@@ -552,9 +552,9 @@ def external_artifact_requirements() -> tuple[ExternalArtifactRequirement, ...]:
     return (
         ExternalArtifactRequirement(
             "c3_apex_case_mapping", "attention_and_moe_trace_preflight",
-            "reviewed c3_apex_case_mapping.v1 binding both exact k228/k175 C5 "
-            "artifacts to selected Apex registry entries and hash-bound semantic "
-            "equivalence evidence; name similarity is insufficient"),
+            "resolve the hash-bound c3_apex_mapping_audit.v1 structural blockers, "
+            "then provide reviewed c3_apex_case_mapping.v1 binding both exact "
+            "k228/k175 C5 artifacts; name similarity is insufficient"),
         ExternalArtifactRequirement(
             "candidate_integration_receipt", "whole_model_exit",
             f"Apex at {PINNED_APEX_REVISION} plus a hash-bound integration receipt "

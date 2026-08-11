@@ -36,12 +36,21 @@ from . import c3_epyc_suite as c3
 
 
 MAPPING_SCHEMA = "epyc.autokernel.c3_apex_case_mapping.v1"
+MAPPING_AUDIT_SCHEMA = "epyc.autokernel.c3_apex_mapping_audit.v1"
 MODEL_MANIFEST_SCHEMA = "epyc.autokernel.model_identity.v1"
 PLAN_SCHEMA = "epyc.autokernel.c3_apex_trace_plan.v1"
 CAPTURE_SCHEMA = "epyc.autokernel.c3_apex_capture.v1"
 
 PINNED_APEX_REVISION = c3.PINNED_APEX_REVISION
 PINNED_MAGPIE_REVISION = "2a9263833f71755df2a93b466cdd3a9f803fc625"
+PINNED_AITER_REVISION = "7890e4be789ac362d3033437d09920ddd5f2891a"
+PINNED_APEX_REGISTRY_SHA256 = (
+    "72d6529ca945a860abd2ba22dd26bb8dbf8d9c33797327c0e5ce9e11d8047a61"
+)
+PINNED_AITER_HSA_INVENTORY_SHA256 = (
+    "e0503ea08e860b1af7c5f5d0f235ec53310dcdf23932d1b201881533e1cb02dc"
+)
+PINNED_AITER_HSA_FILE_COUNT = 2867
 PINNED_TORCH_VERSION = "2.5.1+rocm6.2"
 PINNED_TRITON_VERSION = "3.1.0"
 PINNED_HIP_PREFIX = "6.2"
@@ -50,6 +59,7 @@ TARGET_ARCH = "gfx90a"
 APEX_REGISTRY_RELATIVE = Path("pipeline/kernel_tracing/supported_kernels.yaml")
 APEX_RUNNER_ENTRYPOINT = "pipeline.kernel_tracing.runner.run_trace_kernel"
 MISSING_MAPPING_ARTIFACT = "c3_apex_case_mapping.v1.json"
+DEFAULT_MAPPING_AUDIT = Path(__file__).with_name("c3_apex_mapping_audit.v1.json")
 REQUIRED_CAPTURE_OUTPUTS = (
     "trace_result.json",
     "workload_ranges.json",
@@ -101,6 +111,19 @@ class ApexPreflightRefusal(ValueError):
 
 class MissingCaseMapping(ApexPreflightRefusal):
     """No reviewed exact C5-to-Apex mapping artifact exists."""
+
+
+class StructuralMappingMismatch(MissingCaseMapping):
+    """The pinned sources prove that an exact case mapping is not executable."""
+
+    def __init__(self, case_id: str, missing_components: tuple[tuple[str, str], ...]):
+        self.case_id = case_id
+        self.missing_components = missing_components
+        rendered = "; ".join(f"{name}: {detail}"
+                             for name, detail in missing_components)
+        super().__init__(
+            f"{case_id} has a reviewed structural mismatch against pinned "
+            f"Apex/AITER on {TARGET_ARCH}: {rendered}")
 
 
 def _text(value: Any, label: str) -> str:
@@ -165,6 +188,137 @@ def _checked_file(path: Path, expected_sha256: str, label: str) -> Path:
         raise ApexPreflightRefusal(
             f"{label} hash mismatch: expected {expected_sha256}, observed {observed}")
     return path
+
+
+@dataclass(frozen=True)
+class MappingAuditCase:
+    case_id: str
+    c5_ref: str
+    c5_artifact_path: str
+    c5_artifact_sha256: str
+    disposition: str
+    closest_registry_entries: tuple[str, ...]
+    component_graph: tuple[str, ...]
+    missing_components: tuple[tuple[str, str], ...]
+    evidence: tuple[tuple[str, str], ...]
+
+    def refuse(self) -> None:
+        raise StructuralMappingMismatch(self.case_id, self.missing_components)
+
+
+@dataclass(frozen=True)
+class MappingAudit:
+    artifact_path: Path
+    artifact_sha256: str
+    cases: tuple[MappingAuditCase, ...]
+
+    def select(self, case_id: str) -> MappingAuditCase:
+        matches = [case for case in self.cases if case.case_id == case_id]
+        if len(matches) != 1:
+            raise ApexPreflightRefusal(
+                f"mapping audit does not contain exactly one {case_id} row")
+        return matches[0]
+
+
+def _text_list(value: Any, label: str) -> tuple[str, ...]:
+    if not isinstance(value, list) or not value:
+        raise ApexPreflightRefusal(f"{label} must be a non-empty list")
+    return tuple(_text(item, f"{label}[{index}]")
+                 for index, item in enumerate(value))
+
+
+def load_mapping_audit(path: Path = DEFAULT_MAPPING_AUDIT) -> MappingAudit:
+    """Load the hash-bound source audit that explains current mapping refusals."""
+    path = Path(path)
+    document = _read_json(path, "C3 Apex mapping audit")
+    _exact_keys(document, {"schema", "audit_date", "authority", "pins", "cases"},
+                "mapping audit")
+    if document["schema"] != MAPPING_AUDIT_SCHEMA:
+        raise ApexPreflightRefusal("unsupported C3 Apex mapping-audit schema")
+    _text(document["audit_date"], "mapping audit.audit_date")
+    if document["authority"] != (
+            "static_source_audit_only_no_runtime_equivalence_or_inference"):
+        raise ApexPreflightRefusal("mapping audit overstates its authority")
+    pins = _mapping(document["pins"], "mapping audit.pins")
+    _exact_keys(pins, {
+        "apex_revision", "magpie_revision", "aiter_revision", "registry_sha256",
+        "target_architecture", "aiter_hsa_architectures", "aiter_hsa_file_count",
+        "aiter_hsa_inventory_sha256",
+    }, "mapping audit.pins")
+    if pins["apex_revision"] != PINNED_APEX_REVISION \
+            or pins["magpie_revision"] != PINNED_MAGPIE_REVISION:
+        raise ApexPreflightRefusal("mapping audit names the wrong Apex/Magpie pins")
+    if pins["aiter_revision"] != PINNED_AITER_REVISION:
+        raise ApexPreflightRefusal("mapping audit names the wrong AITER pin")
+    if pins["registry_sha256"] != PINNED_APEX_REGISTRY_SHA256:
+        raise ApexPreflightRefusal("mapping audit names the wrong Apex registry hash")
+    if pins["aiter_hsa_inventory_sha256"] != PINNED_AITER_HSA_INVENTORY_SHA256:
+        raise ApexPreflightRefusal("mapping audit names the wrong AITER HSA inventory hash")
+    if pins["target_architecture"] != TARGET_ARCH:
+        raise ApexPreflightRefusal("mapping audit names the wrong target architecture")
+    if pins["aiter_hsa_architectures"] != ["gfx942", "gfx950"]:
+        raise ApexPreflightRefusal("mapping audit AITER HSA architecture inventory drifted")
+    if pins["aiter_hsa_file_count"] != PINNED_AITER_HSA_FILE_COUNT:
+        raise ApexPreflightRefusal("mapping audit AITER HSA file count drifted")
+    rows = document["cases"]
+    if not isinstance(rows, list):
+        raise ApexPreflightRefusal("mapping audit cases must be a list")
+    cases = []
+    for index, raw in enumerate(rows):
+        label = f"mapping audit.cases[{index}]"
+        row = _mapping(raw, label)
+        _exact_keys(row, {
+            "case_id", "c5_ref", "c5_artifact_path", "c5_artifact_sha256",
+            "disposition", "closest_registry_entries", "component_graph",
+            "missing_components", "evidence",
+        }, label)
+        case_id = _text(row["case_id"], f"{label}.case_id")
+        expected = CASE_REQUIREMENTS.get(case_id)
+        if expected is None or row["c5_ref"] != expected["c5_ref"] \
+                or row["c5_artifact_sha256"] != expected["c5_artifact_sha256"]:
+            raise ApexPreflightRefusal(f"{label} does not bind the exact C5 artifact")
+        if row["disposition"] != "structural_mismatch":
+            raise ApexPreflightRefusal(f"{label} overstates mapping executability")
+        missing_raw = row["missing_components"]
+        if not isinstance(missing_raw, list) or not missing_raw:
+            raise ApexPreflightRefusal(f"{label}.missing_components must be non-empty")
+        missing = []
+        for missing_index, missing_value in enumerate(missing_raw):
+            missing_label = f"{label}.missing_components[{missing_index}]"
+            component = _mapping(missing_value, missing_label)
+            _exact_keys(component, {"id", "detail"}, missing_label)
+            missing.append((_text(component["id"], f"{missing_label}.id"),
+                            _text(component["detail"], f"{missing_label}.detail")))
+        if len({item[0] for item in missing}) != len(missing):
+            raise ApexPreflightRefusal(f"{label} repeats a missing-component ID")
+        evidence_raw = row["evidence"]
+        if not isinstance(evidence_raw, list) or not evidence_raw:
+            raise ApexPreflightRefusal(f"{label}.evidence must be non-empty")
+        evidence = []
+        for evidence_index, evidence_value in enumerate(evidence_raw):
+            evidence_label = f"{label}.evidence[{evidence_index}]"
+            item = _mapping(evidence_value, evidence_label)
+            _exact_keys(item, {"path", "sha256"}, evidence_label)
+            evidence.append((_text(item["path"], f"{evidence_label}.path"),
+                             _sha(item["sha256"], f"{evidence_label}.sha256")))
+        cases.append(MappingAuditCase(
+            case_id=case_id,
+            c5_ref=_text(row["c5_ref"], f"{label}.c5_ref"),
+            c5_artifact_path=_text(
+                row["c5_artifact_path"], f"{label}.c5_artifact_path"),
+            c5_artifact_sha256=_sha(
+                row["c5_artifact_sha256"], f"{label}.c5_artifact_sha256"),
+            disposition=row["disposition"],
+            closest_registry_entries=_text_list(
+                row["closest_registry_entries"], f"{label}.closest_registry_entries"),
+            component_graph=_text_list(
+                row["component_graph"], f"{label}.component_graph"),
+            missing_components=tuple(missing), evidence=tuple(evidence),
+        ))
+    if {case.case_id for case in cases} != set(CASE_REQUIREMENTS) \
+            or len(cases) != len(CASE_REQUIREMENTS):
+        raise ApexPreflightRefusal("mapping audit must cover exactly k228 and k175")
+    return MappingAudit(path.resolve(), _sha256_file(path), tuple(cases))
 
 
 @dataclass(frozen=True)
@@ -244,10 +398,13 @@ class CaseMappingSet:
         return matches[0]
 
 
-def load_case_mapping(path: Path) -> CaseMappingSet:
+def load_case_mapping(path: Path, *, case_id: str | None = None,
+                      audit_path: Path = DEFAULT_MAPPING_AUDIT) -> CaseMappingSet:
     """Load the separately reviewed mapping; absence is a typed refusal."""
     path = Path(path)
     if not path.is_file():
+        if case_id in CASE_REQUIREMENTS:
+            load_mapping_audit(audit_path).select(case_id).refuse()
         raise MissingCaseMapping(
             f"missing {MISSING_MAPPING_ARTIFACT}: it must bind both exact C5 records "
             "to Apex registry rows with a hash-bound semantic-equivalence artifact; "
@@ -616,7 +773,7 @@ def prepare_trace_plan(*, case_id: str, mapping_path: Path, apex_root: Path,
                        workload: WorkloadBinding,
                        environment: EnvironmentIdentity | None = None) -> ApexTracePlan:
     """Compile a trace plan after all identity and artifact checks pass."""
-    mappings = load_case_mapping(mapping_path)
+    mappings = load_case_mapping(mapping_path, case_id=case_id)
     case = mappings.select(case_id)
     validate_pinned_runner_interface(apex_root)
     entry = select_registry_entry(apex_root=apex_root, mappings=mappings, case=case)
@@ -786,13 +943,18 @@ def bind_capture_outputs(plan: ApexTracePlan) -> dict[str, Any]:
 
 __all__ = [
     "APEX_RUNNER_ENTRYPOINT", "CAPTURE_SCHEMA", "CASE_REQUIREMENTS",
-    "MAPPING_SCHEMA", "MISSING_MAPPING_ARTIFACT", "MODEL_MANIFEST_SCHEMA",
+    "DEFAULT_MAPPING_AUDIT", "MAPPING_AUDIT_SCHEMA", "MAPPING_SCHEMA",
+    "MISSING_MAPPING_ARTIFACT", "MODEL_MANIFEST_SCHEMA",
+    "PINNED_AITER_HSA_FILE_COUNT", "PINNED_AITER_HSA_INVENTORY_SHA256",
+    "PINNED_AITER_REVISION", "PINNED_APEX_REGISTRY_SHA256",
     "PINNED_APEX_REVISION", "PINNED_HIP_PREFIX", "PINNED_MAGPIE_REVISION",
     "PINNED_TORCH_VERSION", "PINNED_TRITON_VERSION", "PLAN_SCHEMA",
     "REQUIRED_CAPTURE_OUTPUTS", "ApexPreflightRefusal", "ApexTracePlan",
-    "CaseMapping", "CaseMappingSet", "EnvironmentIdentity", "MissingCaseMapping",
-    "RepositoryIdentity", "SelectedRegistryEntry", "ToolchainIdentity",
+    "CaseMapping", "CaseMappingSet", "EnvironmentIdentity", "MappingAudit",
+    "MappingAuditCase", "MissingCaseMapping", "RepositoryIdentity",
+    "SelectedRegistryEntry", "StructuralMappingMismatch", "ToolchainIdentity",
     "WorkloadBinding", "bind_capture_outputs", "execute_trace", "load_case_mapping",
-    "prepare_trace_plan", "probe_environment", "select_registry_entry",
+    "load_mapping_audit", "prepare_trace_plan", "probe_environment",
+    "select_registry_entry",
     "validate_pinned_runner_interface",
 ]
