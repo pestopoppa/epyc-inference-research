@@ -31,8 +31,8 @@ a module it never looked at.
 | | non-test lines |
 |---|---:|
 | **ON THE CAMPAIGN PATH** | **63,782** |
-| **DEFERRED** (provably unreachable) | **13,993** |
-| **TOTAL** | **77,775** |
+| **DEFERRED** (provably unreachable) | **14,032** |
+| **TOTAL** | **77,814** |
 
 **There is no deferred half.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -180,7 +180,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `controller/arena_cell_runner.py` | 711 | no | INF-03 concrete governed runner: re-audits every task/controller identity, runs independent fresh 2h/8h/32h cells under one sampled MI210 claim at a time, delegates compile/correctness/timing to the pinned Arena evaluator, safely tears down captured worker groups, and emits hash-bound non-promotional belief receipts |
 | `controller/arena_upstream_common.py` | 509 | no | INF-03 shared licensed-controller substrate: bounded read-only text-model calls and centralized Arena evaluation stay outside campaign mutation and carry no ranking or promotion authority |
 | `controller/k_search_arena.py` | 281 | no | INF-03 licensed K-Search world-model/tree port: injects the centralized Arena evaluator into the exact pinned upstream Task seam without entering campaign mutation or scoring |
-| `controller/geak_v1_arena.py` | 305 | no | INF-03 licensed GEAK-v1 OptimAgent port: maps its ROCm dataset and reflection loop onto centralized Arena evidence without entering campaign mutation or scoring |
+| `controller/geak_v1_arena.py` | 344 | no | INF-03 licensed GEAK-v1 OptimAgent port: maps its ROCm dataset and reflection loop onto centralized Arena evidence without entering campaign mutation or scoring |
 | `controller/xe_forge_arena.py` | 593 | no | INF-03 licensed Xe-Forge gfx90a port: retains the pinned DSPyEngine linear-CoVeR analysis/planning loop, replaces process-global device prompts with scoped AMD MI210 guidance, uses a no-shape executor gate, and routes initialized KernelBench execution through Arena |
 | `controller/kernelfoundry_arena.py` | 481 | no | INF-03 licensed KernelFoundry gfx90a port: retains inherited Controller.run_single MAP-Elites/island branching, strictly activates pinned Triton feature patterns, binds measured parent transitions to upstream QD tracking, and routes evaluation through Arena |
 | `controller/arena_roundtrip.py` | 203 | no | EVL-47 SC20/SC21 prospective GEAK/Arena receipt producer; emits only observed correctness/timing rates and retains preflight as non-ordinal dependency evidence, with no launch, mutation, or verdict authority |

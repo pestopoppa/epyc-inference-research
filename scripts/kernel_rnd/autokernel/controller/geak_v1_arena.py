@@ -4,6 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import importlib.abc
+import importlib.machinery
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -37,7 +40,8 @@ PINNED_MODEL_IDS = common.PINNED_MODEL_IDS
 REQUIRED_CLIS = common.REQUIRED_CLIS
 _SAFE_RUNTIME_ROOT = re.compile(r"[A-Za-z0-9_./-]+")
 _GEAK_TOP_LEVEL_PACKAGES = (
-    "agents", "dataloaders", "memories", "prompts", "utils")
+    "agents", "dataloaders", "memories", "models", "prompts", "retrievers",
+    "utils")
 
 
 class GeakArenaError(common.UpstreamControllerError):
@@ -153,6 +157,35 @@ def _is_geak_top_level_module(name: str) -> bool:
                for prefix in _GEAK_TOP_LEVEL_PACKAGES)
 
 
+class _GeakSourceFinder(importlib.abc.MetaPathFinder):
+    """Resolve GEAK's PEP-420 packages before Arena's regular ``agents``."""
+
+    def __init__(self, source_root: Path):
+        self.source_root = (source_root / "src").resolve()
+
+    def find_spec(self, fullname: str, path: Any = None,
+                  target: Any = None) -> Any:
+        del path, target
+        if not _is_geak_top_level_module(fullname):
+            return None
+        relative = Path(*fullname.split("."))
+        package = self.source_root / relative
+        module = package.with_suffix(".py")
+        if module.is_file():
+            return importlib.util.spec_from_file_location(fullname, module)
+        if not package.is_dir():
+            return None
+        initializer = package / "__init__.py"
+        if initializer.is_file():
+            return importlib.util.spec_from_file_location(
+                fullname, initializer,
+                submodule_search_locations=[str(package)])
+        spec = importlib.machinery.ModuleSpec(
+            fullname, loader=None, is_package=True)
+        spec.submodule_search_locations = [str(package)]
+        return spec
+
+
 def _import_optim_agent_isolated(source_root: Path) -> Any:
     """Load GEAK's generic packages without poisoning Arena's namespaces.
 
@@ -169,6 +202,8 @@ def _import_optim_agent_isolated(source_root: Path) -> Any:
     }
     for name in saved:
         sys.modules.pop(name, None)
+    finder = _GeakSourceFinder(source_root)
+    sys.meta_path.insert(0, finder)
     sys.path.insert(0, source_path)
     try:
         from agents.OptimAgent_ROCm import OptimAgent  # type: ignore[import-not-found]
@@ -179,6 +214,10 @@ def _import_optim_agent_isolated(source_root: Path) -> Any:
             if _is_geak_top_level_module(name):
                 sys.modules.pop(name, None)
         sys.modules.update(saved)
+        try:
+            sys.meta_path.remove(finder)
+        except ValueError:
+            pass
         try:
             sys.path.remove(source_path)
         except ValueError:

@@ -113,7 +113,6 @@ class GeakArenaTest(unittest.TestCase):
         source = self.root / "namespace-fixture"
         agents = source / "src" / "agents"
         agents.mkdir(parents=True)
-        (agents / "__init__.py").write_text("", encoding="utf-8")
         (agents / "helper.py").write_text("TOKEN = 'geak'\n", encoding="utf-8")
         (agents / "OptimAgent_ROCm.py").write_text(
             "from agents.helper import TOKEN\n"
