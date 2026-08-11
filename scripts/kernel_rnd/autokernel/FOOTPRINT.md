@@ -31,8 +31,8 @@ a module it never looked at.
 | | non-test lines |
 |---|---:|
 | **ON THE CAMPAIGN PATH** | **63,782** |
-| **DEFERRED** (provably unreachable) | **11,493** |
-| **TOTAL** | **75,275** |
+| **DEFERRED** (provably unreachable) | **12,232** |
+| **TOTAL** | **76,014** |
 
 **There is no deferred half.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -178,6 +178,8 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `controller/claude_codex_actor_critic.py` | 601 | no | INF-03 bounded Claude-planner/critic + Codex-actor controller: exact three-argument Arena launcher, explicit model/effort pins, checkpoint process-group termination, single-candidate workspace confinement, and transcript/artifact hashing; its preflight invokes neither CLI |
 | `controller/arena_campaign.py` | 718 | no | INF-03 matched-panel audit and injected-runner seam: binds the baseline plus seven controller arms to equal tasks and checkpoints, admits the in-tree actor/critic arm only with both CLI/source/model pins, refuses incomplete panels before execution, and remains outside live campaign mutation and scoring |
 | `controller/arena_cell_runner.py` | 697 | no | INF-03 concrete governed runner: re-audits every task/controller identity, runs independent fresh 2h/8h/32h cells under one sampled MI210 claim at a time, delegates compile/correctness/timing to the pinned Arena evaluator, safely tears down captured worker groups, and emits hash-bound non-promotional belief receipts |
+| `controller/arena_upstream_common.py` | 458 | no | INF-03 shared licensed-controller substrate: bounded read-only text-model calls and centralized Arena evaluation stay outside campaign mutation and carry no ranking or promotion authority |
+| `controller/k_search_arena.py` | 281 | no | INF-03 licensed K-Search world-model/tree port: injects the centralized Arena evaluator into the exact pinned upstream Task seam without entering campaign mutation or scoring |
 | `controller/arena_roundtrip.py` | 203 | no | EVL-47 SC20/SC21 prospective GEAK/Arena receipt producer; emits only observed correctness/timing rates and retains preflight as non-ordinal dependency evidence, with no launch, mutation, or verdict authority |
 | `controller/authoring_contract.py` | 468 | no | AK-PL-1/AK-LE-4/AK-LE-5 pre-proposal adapter: fully rendered prompt leak refusal, priced never-bulk-read context, reversible compaction, and structured external numbers; it calls no model and must not gain mutation/build authority |
 | `controller/reward_monitor.py` | 453 | no | C6 monitor adapter: binds campaign/candidate traces and the whole journal tree to a predeclared monitor panel, requires awareness plus reasoning visibility, and reports sensitivity/specificity/FPR without calling a model |
