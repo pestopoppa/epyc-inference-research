@@ -276,6 +276,18 @@ class ArenaCellRunnerTest(unittest.TestCase):
         self.assertEqual(argv[argv.index("--checkpoint-hours") + 1], "2")
         self.assertEqual(argv[argv.index("--timeout-seconds") + 1], "7200")
 
+    def test_worker_subprocess_uses_the_pinned_rocm_evaluator_python(self):
+        cell = self.root / "cells" / "001"
+        output = cell / "worker-result.json"
+        command = R._worker_command(cell, output)
+        self.assertEqual(command[0], str(R.EVALUATOR_PYTHON))
+        identity = R._evaluator_python_identity()
+        self.assertEqual(identity["sha256"], R.EVALUATOR_PYTHON_SHA256)
+        self.assertEqual(identity["packages"], R.EVALUATOR_PACKAGE_VERSIONS)
+        with mock.patch.object(R.sys, "executable", "/usr/bin/false"):
+            with self.assertRaisesRegex(R.ArenaCellRunnerError, "must run under"):
+                R._assert_worker_evaluator_identity({"evaluator_python": identity})
+
     def test_worker_uses_fresh_copy_and_centralized_vendor_evaluator(self):
         cell_root = self.root / "cells" / "001-fixture"
         cell_root.mkdir(parents=True)
@@ -319,6 +331,7 @@ class ArenaCellRunnerTest(unittest.TestCase):
             "baseline": False,
             "checkpoint_hours": 2.0,
             "visible_device": "0",
+            "evaluator_python": R._evaluator_python_identity(),
         }
         with (
             mock.patch.dict(sys.modules, {
@@ -326,6 +339,9 @@ class ArenaCellRunnerTest(unittest.TestCase):
                 "src.prompt_builder": prompt_builder,
             }),
             mock.patch.object(R.arena_adapter, "launch", return_value="controller receipt"),
+            mock.patch.object(
+                R, "_assert_worker_evaluator_identity",
+                return_value=R._evaluator_python_identity()),
         ):
             receipt = R.run_worker(request)
         self.assertTrue(receipt["evaluation"]["pass_correctness"])
@@ -333,6 +349,9 @@ class ArenaCellRunnerTest(unittest.TestCase):
         self.assertTrue((cell_root / "workspace" / "task_result.yaml").is_file())
         self.assertTrue((cell_root / "controller.stdout").is_file())
         evaluator.evaluate_kernel.assert_called_once()
+        self.assertEqual(
+            receipt["constraints"]["evaluator_python"]["sha256"],
+            R.EVALUATOR_PYTHON_SHA256)
 
     def test_exact_group_teardown_kills_a_planted_descendant(self):
         child_pid_path = self.root / "descendant.pid"
