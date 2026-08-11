@@ -122,7 +122,7 @@ class KernelFoundryArenaTest(unittest.TestCase):
                 [str(K.RUNTIME_PYTHON), "-m", "unittest",
                  f"{__name__}.{type(self).__name__}."
                  "test_pinned_upstream_retains_map_elites_and_qd_transitions"],
-                cwd=Path(__file__).resolve().parents[4], env=env,
+                cwd=Path(__file__).resolve().parents[2], env=env,
                 text=True, capture_output=True, check=False)
             self.assertEqual(completed.returncode, 0,
                              msg=completed.stdout + "\n" + completed.stderr)
