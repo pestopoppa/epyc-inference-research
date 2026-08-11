@@ -111,8 +111,10 @@ arm alike:
   `v0.3.0` (`4dcb5080b0f56d0b655ec8c8c9509b8e3ba0382c`) are Apache-2.0
   upstream implementations and can receive explicit gfx90a evaluator ports;
 - GEAK-v1 `v1.0.0` (`4ffba15a55f250816598b4e27eb56ca40a699cea`)
-  is Apache-2.0 and its real `OptimAgent_ROCm` controller can run against the
-  licensed Arena task. That controller A/B is separate from reproducing the
+  is a governed executable arm using its real `OptimAgent_ROCm.run`, BM25
+  corpus, and reflection memory. The adapter confines upstream cleanup to a
+  task-local safe root and routes its dataset evaluation through Arena. That
+  controller A/B is separate from reproducing the
   paper's GEAK-eval score; GEAK-eval has no project-level licence and remains a
   corpus/reproduction gate;
 - EvoEngineer's repository contains only a release-soon notice and no licence;

@@ -14,6 +14,7 @@ from unittest import mock
 
 from . import arena_campaign as C
 from . import claude_codex_actor_critic as AC
+from . import geak_v1_arena as GEAK
 from . import k_search_arena as KS
 
 
@@ -48,6 +49,10 @@ class ArenaCampaignTest(unittest.TestCase):
         self.k_search_entrypoint.parent.mkdir(parents=True, exist_ok=True)
         self.k_search_entrypoint.write_text(
             "raise SystemExit(0)\n# k-search fixture\n", encoding="utf-8")
+        self.geak_entrypoint = self.source / GEAK.ENTRYPOINT_RELATIVE
+        self.geak_entrypoint.parent.mkdir(parents=True, exist_ok=True)
+        self.geak_entrypoint.write_text(
+            "raise SystemExit(0)\n# geak fixture\n", encoding="utf-8")
         for command in (
             ("git", "init", "-q"),
             ("git", "add", "."),
@@ -65,12 +70,14 @@ class ArenaCampaignTest(unittest.TestCase):
         for arm_id in C.PRIMARY_PANEL_IDS:
             is_actor_critic = arm_id == AC.CONTROLLER_ID
             is_k_search = arm_id == KS.CONTROLLER_ID
+            is_geak = arm_id == GEAK.CONTROLLER_ID
             argv = (() if arm_id == C.BASELINE_ARM_ID else
                     (AC.campaign_argv(sys.executable) if is_actor_critic else
                      (KS.campaign_argv(sys.executable) if is_k_search else
-                      (sys.executable, "-c", "pass"))))
-            entrypoint = (self.k_search_entrypoint if is_k_search
-                          else self.entrypoint)
+                      (GEAK.campaign_argv(sys.executable) if is_geak else
+                       (sys.executable, "-c", "pass")))))
+            entrypoint = (self.k_search_entrypoint if is_k_search else
+                          (self.geak_entrypoint if is_geak else self.entrypoint))
             arms.append(C.ArmImplementation(
                 arm_id=arm_id,
                 availability="ready",
@@ -78,7 +85,9 @@ class ArenaCampaignTest(unittest.TestCase):
                               else ("agentkernelarena_three_arg_v1"
                                     if is_actor_critic else
                                     ("k_search_world_model_arena_v1"
-                                     if is_k_search else "stdin_workspace_v1"))),
+                                     if is_k_search else
+                                     ("geak_v1_optimagent_arena_v1"
+                                      if is_geak else "stdin_workspace_v1")))),
                 missing_artifacts=(),
                 argv=argv,
                 source_root=(None if arm_id == C.BASELINE_ARM_ID else str(self.source)),
@@ -86,26 +95,37 @@ class ArenaCampaignTest(unittest.TestCase):
                                else self.source_commit),
                 entrypoint_path=(None if arm_id == C.BASELINE_ARM_ID
                                  else (KS.ENTRYPOINT_RELATIVE if is_k_search
-                                       else AC.ENTRYPOINT_RELATIVE)),
+                                       else (GEAK.ENTRYPOINT_RELATIVE if is_geak
+                                             else AC.ENTRYPOINT_RELATIVE))),
                 entrypoint_sha256=(None if arm_id == C.BASELINE_ARM_ID
                                    else sha(entrypoint)),
                 model_ids=(() if arm_id == C.BASELINE_ARM_ID else
                            (AC.PINNED_MODEL_IDS if is_actor_critic else
                             (KS.PINNED_MODEL_IDS if is_k_search else
-                             ("fixture-model",)))),
+                             (GEAK.PINNED_MODEL_IDS if is_geak else
+                              ("fixture-model",))))),
                 required_clis=(AC.REQUIRED_CLIS if is_actor_critic else
-                               (KS.REQUIRED_CLIS if is_k_search else ())),
-                upstream_source_root=("vendor://k-search" if is_k_search else None),
-                upstream_source_commit=(KS.SOURCE_COMMIT if is_k_search else None),
+                               (KS.REQUIRED_CLIS if is_k_search else
+                                (GEAK.REQUIRED_CLIS if is_geak else ()))),
+                upstream_source_root=("vendor://k-search" if is_k_search else
+                                      ("vendor://geak-v1" if is_geak else None)),
+                upstream_source_commit=(KS.SOURCE_COMMIT if is_k_search else
+                                        (GEAK.SOURCE_COMMIT if is_geak else None)),
                 upstream_entrypoint_path=(
-                    KS.UPSTREAM_ENTRYPOINT if is_k_search else None),
+                    KS.UPSTREAM_ENTRYPOINT if is_k_search else
+                    (GEAK.UPSTREAM_ENTRYPOINT if is_geak else None)),
                 upstream_entrypoint_sha256=(
                     "022a9381cd31e8429e2d4fa0486fd94fc806ca5a331e710991f84e6d82b79723"
-                    if is_k_search else None),
-                upstream_license_path=("LICENSE" if is_k_search else None),
+                    if is_k_search else
+                    ("ff742e9ecb5195114c96600e1a1daeedaac1d1769484f60287716e5ea254d2c1"
+                     if is_geak else None)),
+                upstream_license_path=("LICENSE" if is_k_search else
+                                       ("LICENSE.md" if is_geak else None)),
                 upstream_license_sha256=(
                     "4eb338364aa80d8a3a0a226e78643960271f4181ad32e91403b686720d086b1e"
-                    if is_k_search else None),
+                    if is_k_search else
+                    ("51f22193d2056db3ec1b578e0b94568b5641807b90c0f3e75e1878c435b03709"
+                     if is_geak else None)),
             ))
         return C.CampaignSpec(
             config_path=str(self.config_source.resolve()),
@@ -182,15 +202,22 @@ class ArenaCampaignTest(unittest.TestCase):
         self.assertEqual(k_search.required_clis, KS.REQUIRED_CLIS)
         self.assertEqual(k_search.upstream_source_commit, KS.SOURCE_COMMIT)
         self.assertEqual(k_search.missing_artifacts, ())
+        geak = next(arm for arm in spec.arms if arm.arm_id == GEAK.CONTROLLER_ID)
+        self.assertEqual(geak.availability, "ready")
+        self.assertEqual(geak.adapter_kind, "geak_v1_optimagent_arena_v1")
+        self.assertEqual(geak.argv, GEAK.campaign_argv())
+        self.assertEqual(geak.source_root, C.IN_TREE_SOURCE_ROOT)
+        self.assertEqual(geak.entrypoint_path, GEAK.ENTRYPOINT_RELATIVE)
+        self.assertEqual(geak.model_ids, GEAK.PINNED_MODEL_IDS)
+        self.assertEqual(geak.required_clis, GEAK.REQUIRED_CLIS)
+        self.assertEqual(geak.upstream_source_commit, GEAK.SOURCE_COMMIT)
+        self.assertEqual(geak.missing_artifacts, ())
         for arm in spec.arms[2:]:
-            if arm.arm_id == KS.CONTROLLER_ID:
+            if arm.arm_id in {KS.CONTROLLER_ID, GEAK.CONTROLLER_ID}:
                 continue
             self.assertEqual(arm.availability, "missing")
             self.assertFalse(arm.argv)
             self.assertGreaterEqual(len(arm.missing_artifacts), 3)
-        geak = next(arm for arm in spec.arms if arm.arm_id == "geak_v1")
-        self.assertIn("TB-eval-smol", " ".join(geak.missing_artifacts))
-        self.assertIn("dvue-aoai-001-gpt-4.1", " ".join(geak.missing_artifacts))
         argus = spec.arms[-1]
         self.assertIn("licensed", " ".join(argus.missing_artifacts))
         self.assertIn("gfx90a", " ".join(argus.missing_artifacts))
@@ -287,10 +314,11 @@ class ArenaCampaignTest(unittest.TestCase):
         self.assertTrue(all(row["source_identity"]["clean"] for row in controller_rows))
         self.assertEqual(controller_rows[0]["model_ids"], list(AC.PINNED_MODEL_IDS))
         self.assertEqual(controller_rows[3]["model_ids"], list(KS.PINNED_MODEL_IDS))
+        self.assertEqual(controller_rows[5]["model_ids"], list(GEAK.PINNED_MODEL_IDS))
         self.assertEqual(
             [row["model_ids"] for index, row in enumerate(controller_rows[1:], 1)
-             if index != 3],
-            [["fixture-model"]] * 5,
+             if index not in {3, 5}],
+            [["fixture-model"]] * 4,
         )
         self.assertEqual(
             [row["name"] for row in controller_rows[0]["required_cli_identities"]],

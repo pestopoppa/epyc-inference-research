@@ -141,13 +141,48 @@
     },
     {
       "arm_id": "geak_v1",
-      "availability": "missing",
-      "adapter_kind": "stdin_workspace_v1",
-      "missing_artifacts": [
-        "a licensed GEAK-eval task corpus matching GEAK-v1 (TB-eval-smol is absent from the pinned checkout)",
-        "a GEAK-v1 stdin/workspace launcher compatible with AgentKernelArena",
-        "a reachable model/provider pin replacing the checkout's empty api_key and private dvue-aoai-001-gpt-4.1 endpoint"
-      ]
+      "availability": "ready",
+      "adapter_kind": "geak_v1_optimagent_arena_v1",
+      "missing_artifacts": [],
+      "argv": [
+        "/mnt/raid0/llm/tools/geak-v1-rocm62-py312/bin/python",
+        "-m",
+        "scripts.kernel_rnd.autokernel.controller.geak_v1_arena",
+        "--model",
+        "gpt-5.6-sol",
+        "--effort",
+        "high",
+        "--checkpoint-hours",
+        "32",
+        "--timeout-seconds",
+        "115200",
+        "--max-iterations",
+        "64",
+        "--ancestor-num",
+        "2",
+        "--workspace",
+        ".",
+        "--arena-root",
+        "/mnt/raid0/llm/autokernel/vendor/agent-kernel-arena",
+        "--source-root",
+        "/mnt/raid0/llm/autokernel/vendor/arena-controllers/geak-v1"
+      ],
+      "source_root": "repository://.",
+      "source_commit": "38b8e07eb08874e98d83a7675bd78768bdc87b25",
+      "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/geak_v1_arena.py",
+      "entrypoint_sha256": "133fb03a1a25c839cf5db597becbb1f1da474471a3bc3cce32121904aafcc8e1",
+      "model_ids": [
+        "gpt-5.6-sol:high:upstream-controller"
+      ],
+      "required_clis": [
+        "codex"
+      ],
+      "upstream_source_root": "vendor://geak-v1",
+      "upstream_source_commit": "4ffba15a55f250816598b4e27eb56ca40a699cea",
+      "upstream_entrypoint_path": "src/agents/OptimAgent_ROCm.py",
+      "upstream_entrypoint_sha256": "ff742e9ecb5195114c96600e1a1daeedaac1d1769484f60287716e5ea254d2c1",
+      "upstream_license_path": "LICENSE.md",
+      "upstream_license_sha256": "51f22193d2056db3ec1b578e0b94568b5641807b90c0f3e75e1878c435b03709"
     },
     {
       "arm_id": "argus",

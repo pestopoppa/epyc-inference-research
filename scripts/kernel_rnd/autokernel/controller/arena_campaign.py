@@ -14,10 +14,10 @@ gap for the prospective MI210 comparison:
 * execution is all-or-nothing.  A missing implementation produces a durable
   refusal receipt before any controller or GPU command can start.
 
-The repository carries ``claude_codex_actor_critic`` plus a governed adapter for
-the pinned upstream K-Search implementation. The other five controller names
-remain exact refusals; a similarly named command does not count as their
-implementation.
+The repository carries ``claude_codex_actor_critic`` plus governed adapters for
+the pinned upstream K-Search and GEAK-v1 implementations. The other four
+controller names remain exact refusals; a similarly named command does not
+count as their implementation.
 """
 
 from __future__ import annotations
@@ -34,7 +34,12 @@ import shutil
 import subprocess
 from typing import Any, Callable, Mapping, Sequence
 
-from . import arena_adapter, claude_codex_actor_critic, k_search_arena
+from . import (
+    arena_adapter,
+    claude_codex_actor_critic,
+    geak_v1_arena,
+    k_search_arena,
+)
 from ..evaluator import rebench_scoring
 
 
@@ -230,6 +235,24 @@ class ArmImplementation:
                 raise ArenaCampaignError("k_search requires the Codex CLI")
             if self.upstream_source_commit != k_search_arena.SOURCE_COMMIT:
                 raise ArenaCampaignError("k_search upstream source pin drifted")
+        if self.availability == "ready" and self.arm_id == geak_v1_arena.CONTROLLER_ID:
+            expected_tail = geak_v1_arena.campaign_argv("python3")[1:]
+            if self.adapter_kind != "geak_v1_optimagent_arena_v1":
+                raise ArenaCampaignError(
+                    "geak_v1 requires its OptimAgent Arena adapter")
+            if len(self.argv) < 2 or self.argv[1:] != expected_tail:
+                raise ArenaCampaignError(
+                    "geak_v1 argv differs from its pinned executable")
+            if self.entrypoint_path != geak_v1_arena.ENTRYPOINT_RELATIVE:
+                raise ArenaCampaignError(
+                    "geak_v1 entrypoint differs from its implementation")
+            if self.model_ids != geak_v1_arena.PINNED_MODEL_IDS:
+                raise ArenaCampaignError(
+                    "geak_v1 model_ids differ from exact model/effort pins")
+            if self.required_clis != geak_v1_arena.REQUIRED_CLIS:
+                raise ArenaCampaignError("geak_v1 requires the Codex CLI")
+            if self.upstream_source_commit != geak_v1_arena.SOURCE_COMMIT:
+                raise ArenaCampaignError("geak_v1 upstream source pin drifted")
 
 
 @dataclass(frozen=True)
