@@ -143,6 +143,16 @@ class ArenaAdapterTest(unittest.TestCase):
             A.prepare_task(self.task(
                 c4_report_path=str(report), c4_report_sha256="f" * 64))
 
+    def test_c5_reference_seed_is_bound_into_the_priced_task_context(self):
+        prepared = A.prepare_task(self.task(c5_seed_ids=("k175", "k225")))
+        self.assertIn("hyra-c5://", prepared.prompt)
+        self.assertIn("hyra-sol-execbench/k175", prepared.prompt)
+        self.assertIn("hyra-sol-execbench/k225", prepared.prompt)
+        self.assertIn("re_author_and_re_attest", prepared.prompt)
+        self.assertNotIn("sol_score", prepared.prompt)
+        with self.assertRaisesRegex(Exception, "unknown C5 seed"):
+            A.prepare_task(self.task(c5_seed_ids=("k999",)))
+
     def test_vendor_source_identity_is_exact_and_clean(self):
         pin = A.VendorPin("fixture", "a" * 40, "LICENSE", ("required.py",))
         (self.root / "LICENSE").write_text("Apache-2.0", encoding="utf-8")

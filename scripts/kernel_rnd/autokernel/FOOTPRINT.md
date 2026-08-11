@@ -31,8 +31,8 @@ a module it never looked at.
 | | non-test lines |
 |---|---:|
 | **ON THE CAMPAIGN PATH** | **63,763** |
-| **DEFERRED** (provably unreachable) | **6,370** |
-| **TOTAL** | **70,133** |
+| **DEFERRED** (provably unreachable) | **6,815** |
+| **TOTAL** | **70,578** |
 
 **There is no deferred half.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -132,6 +132,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `profile_report.py` | 542 | no | RVP-1–7 deterministic offline C4 report; it consumes completed paired traces and has no mutation, build, profiler-launch or ranking authority |
 | `profile_context.py` | 287 | no | C4 hash-bound discovery/evaluator projection; it exposes diagnostic context to authoring without gaining verdict or ranking authority |
 | `hipkittens_lds.py` | 430 | no | INF-03 deterministic offline gfx90a LDS topology reducer; it consumes completed counter captures and gives authoring diagnostic context without profiler-launch or ranking authority |
+| `c5_seed_corpus.py` | 309 | no | C5 static HyRA task registry; it contributes hash-bound, non-numeric gfx90a authoring context and must never gain campaign mutation, scoring, or NVIDIA-to-MI210 claim-transfer authority |
 | `substrate.py` | 340 | no | validated planning facts; it reads checked-in measured/datasheet receipts before proposal construction and never joins the mutation/build path |
 | `lanes.py` | 314 | no | screening declarations and rank-transfer calibration; without measured calibration campaign #1 stays on the full verified path |
 | `artifact_diff.py` | 200 | yes | AK-TR-6 must veto an unconfirmed GPU claim before the behavioral T0 provider can launch |
@@ -146,6 +147,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `evaluator/sensitivity.py` | 333 | no | RVP-C2-7/C2-11/C5-2 standalone two-axis reducer; missing or insensitive seed/transform populations are unscoreable rather than campaign passes |
 | `evaluator/oracle_integrity.py` | 145 | no | RVP-C2-8/C2-9 standalone reducers: hostile distributions and checker isolation are correctness prerequisites, not campaign-path ranking authority |
 | `evaluator/historical_tasks.py` | 194 | no | RVP-C5-R/C3-2 sealed historical-task descriptor and expert-ceiling reducer; no terminal candidate means `COULD_NOT_CHECK` |
+| `evaluator/rebench_scoring.py` | 120 | no | AK-RB-1 offline reference-normalized scoring and matched-budget curve reducer; it consumes completed behavior checks and timings but has no campaign mutation, execution, or verdict authority |
 | `evaluator/statistics.py` | 3,669 | yes | **calibration constants and `median` only.** Its e-process made the gate unpassable: threshold 10 against a sign-martingale that tops out at 5.5687, at every effect size. Fenced by `TestNoOptionalStopping` |
 | `evaluator/integrity.py` | 3,661 | yes | **provenance primitives only** — `sha256_file`, `hash_source_tree`, `EMPTY_TREE_SHA256`, the clean-build snapshot check. Its §8.5.1 gate runner is fenced off |
 | `evaluator/surface.py` | 3,195 | yes | **change-class constants only** — `AffectedSurface`, the core/shared-header fanout classes. `SurfaceGateRunner` is fenced off |
@@ -167,7 +169,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `resource/preflight.py` | 1,788 | yes | INC-20260731: a name-pattern kill took out another agent's `llama-server` twice, and `earlyoom`, whose argv names what it guards |
 | `resource/claim_witness.py` | 325 | yes | invariant 9 — idle sensing is never a claim, and the witness is what tells the two apart |
 | `controller/__init__.py` | 81 | yes | binds every surviving controller module, so importing one reaches both — which is why `controller.do_not_repeat` is on the path whether or not the driver names it, and why `CONTROLLER_ALLOWED` lists this file rather than leaving the edge unexplained |
-| `controller/arena_adapter.py` | 473 | no | INF-03 paper-pin GEAK/AgentKernelArena integration: validates clean vendor sources and physical gfx90a identity, binds C4 into a hygienic priced prompt, and launches registered whole-agent task adapters without entering campaign mutation or scoring |
+| `controller/arena_adapter.py` | 489 | no | INF-03 paper-pin GEAK/AgentKernelArena integration: validates clean vendor sources and physical gfx90a identity, binds C4 into a hygienic priced prompt, and launches registered whole-agent task adapters without entering campaign mutation or scoring |
 | `controller/authoring_contract.py` | 468 | no | AK-PL-1/AK-LE-4/AK-LE-5 pre-proposal adapter: fully rendered prompt leak refusal, priced never-bulk-read context, reversible compaction, and structured external numbers; it calls no model and must not gain mutation/build authority |
 | `controller/reward_monitor.py` | 453 | no | C6 monitor adapter: binds campaign/candidate traces and the whole journal tree to a predeclared monitor panel, requires awareness plus reasoning visibility, and reports sensitivity/specificity/FPR without calling a model |
 | `controller/hypotheses.py` | 4,493 | yes | `claim_for_hypothesis` — the falsifier-before-compute gate `campaign.py --hypothesis` acquires its region claim through. It calls itself the ONLY route from a hypothesis to a resource claim and had ZERO non-test callers until 2026-08-04, because this boundary put it on the far side of the line: the driver is what SPENDS the claim |
