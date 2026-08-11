@@ -32,6 +32,10 @@ from scripts.benchmark.capture_autokernel_c4_profile import (
     artifact_inventory,
     assert_source_identity,
 )
+from scripts.benchmark.autokernel_claimed_sampling import (
+    error_payload,
+    stop_sampler_and_release,
+)
 from scripts.benchmark.run_autokernel_gpu_factorial import (
     sha256_file,
     terminate_owned,
@@ -327,6 +331,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     started = time.monotonic()
     preflight_duration = 0.0
     profile_duration = 0.0
+    teardown_errors: tuple[BaseException, ...] = ()
     try:
         sampler = device_sampler.RocmSmiSampler(
             device_index=0, interval_s=0.250).start()
@@ -340,22 +345,26 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             profile_command, env=env, timeout_s=args.profile_timeout_s)
         if rc != 0:
             raise RuntimeError(f"Omniperf exited {rc}")
-        profile = summarize_profile(
-            output_dir / "pmc_perf.csv", quant_type=args.quant_type)
     except BaseException as exc:
         captured_error = exc
     finally:
-        if sampler is not None:
-            sampling_receipt = sampler.stop()
-        released = claim.release().to_dict()
+        sampling_receipt, released_receipt, teardown_errors = stop_sampler_and_release(
+            sampler=sampler, claim=claim)
+        released = released_receipt.to_dict() if released_receipt is not None else None
 
     output_dir.mkdir(parents=True, exist_ok=True)
     write_text(output_dir / "preflight.stdout.csv", preflight_stdout)
     write_text(output_dir / "preflight.stderr.txt", preflight_stderr)
     write_text(output_dir / "omniperf.stdout.txt", profile_stdout)
     write_text(output_dir / "omniperf.stderr.txt", profile_stderr)
-    if sampling_receipt is None:
-        raise RuntimeError("Omniperf fallback completed without device sampling")
+    if teardown_errors and captured_error is None:
+        captured_error = teardown_errors[0]
+    if captured_error is None:
+        try:
+            profile = summarize_profile(
+                output_dir / "pmc_perf.csv", quant_type=args.quant_type)
+        except BaseException as exc:
+            captured_error = exc
     payload = {
         "schema": SCHEMA,
         "status": "failed" if captured_error is not None else "passed",
@@ -380,7 +389,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "profile_duration_s": profile_duration,
         "device_claim_open": opened,
         "device_claim_released": released,
-        "device_sampling": sampling_receipt.to_dict(),
+        "device_sampling": sampling_receipt.to_dict() if sampling_receipt is not None else None,
+        "teardown_errors": error_payload(teardown_errors),
         "error": None if captured_error is None else {
             "type": type(captured_error).__name__,
             "message": str(captured_error),

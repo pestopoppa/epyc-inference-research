@@ -22,6 +22,10 @@ from scripts.benchmark.run_autokernel_gpu_factorial import (
     write_json_atomic,
 )
 from scripts.kernel_rnd.autokernel import prior_art, profile_report, storage
+from scripts.benchmark.autokernel_claimed_sampling import (
+    error_payload,
+    stop_sampler_and_release,
+)
 from scripts.kernel_rnd.autokernel.execution import device_sampler
 from scripts.kernel_rnd.autokernel.resource import device_claim
 
@@ -357,6 +361,7 @@ def run(args: argparse.Namespace) -> dict:
     captured_error: BaseException | None = None
     mapping = None
     formal = None
+    teardown_errors: tuple[BaseException, ...] = ()
     started_at = utc_now()
     started_mono = time.monotonic()
     try:
@@ -370,11 +375,11 @@ def run(args: argparse.Namespace) -> dict:
     except BaseException as exc:
         captured_error = exc
     finally:
-        if sampler is not None:
-            sampling_receipt = sampler.stop()
-        released = claim.release().to_dict()
-    if sampling_receipt is None:
-        raise RuntimeError("C4 capture completed without device sampling")
+        sampling_receipt, released_receipt, teardown_errors = stop_sampler_and_release(
+            sampler=sampler, claim=claim)
+        released = released_receipt.to_dict() if released_receipt is not None else None
+    if teardown_errors and captured_error is None:
+        captured_error = teardown_errors[0]
     if captured_error is not None:
         receipt_path = output_dir / "receipt.json"
         failure = {
@@ -400,7 +405,8 @@ def run(args: argparse.Namespace) -> dict:
             "artifacts": artifact_inventory(output_dir),
             "device_claim_open": opened,
             "device_claim_released": released,
-            "device_sampling": sampling_receipt.to_dict(),
+            "device_sampling": sampling_receipt.to_dict() if sampling_receipt is not None else None,
+            "teardown_errors": error_payload(teardown_errors),
         }
         write_json_atomic(receipt_path, failure)
         raise RuntimeError(
@@ -436,7 +442,8 @@ def run(args: argparse.Namespace) -> dict:
         "report_sha256": sha256_file(output_dir / "report.json"),
         "device_claim_open": opened,
         "device_claim_released": released,
-        "device_sampling": sampling_receipt.to_dict(),
+        "device_sampling": sampling_receipt.to_dict() if sampling_receipt is not None else None,
+        "teardown_errors": error_payload(teardown_errors),
     }
     write_json_atomic(output_dir / "receipt.json", payload)
     return payload
