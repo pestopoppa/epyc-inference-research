@@ -22,6 +22,8 @@ from scripts.kernel_rnd.autokernel.execution import cpu_region_claim
 
 SCHEMA = "epyc.inf37.iq2_fancy_simd_ab.v1"
 CPU_LIST = "0-191"
+RUN_CPU_LIST = "72"
+RUN_MEMORY_NODE = "3"
 EXPECTED_CELLS = ((1, 4096, 14336), (512, 4096, 14336))
 SOURCE_FILE = "ggml/src/ggml-cpu/iqk/iqk_gemm_iquants.cpp"
 
@@ -239,7 +241,8 @@ def run(args: argparse.Namespace) -> dict:
                     raise RuntimeError(
                         f"CPU claim failed before block {block}/{arm}: {held}")
                 command = (
-                    "taskset", "-c", CPU_LIST, "numactl", "--interleave=all",
+                    "taskset", "-c", RUN_CPU_LIST, "numactl",
+                    f"--membind={RUN_MEMORY_NODE}",
                     str(binaries[arm]), *command_tail)
                 env = os.environ.copy()
                 env["GGML_IQK"] = "1"
@@ -285,6 +288,8 @@ def run(args: argparse.Namespace) -> dict:
         "source_identity": identity,
         "binary_identity": binary_identity,
         "cpu_list": CPU_LIST,
+        "run_cpu_list": RUN_CPU_LIST,
+        "run_memory_node": RUN_MEMORY_NODE,
         "blocks": args.blocks,
         "orders": [list(row) for row in balanced_orders(args.blocks)],
         "device_claim_open": opened,
