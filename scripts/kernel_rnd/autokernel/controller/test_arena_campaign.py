@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest import mock
 
 from . import arena_campaign as C
+from . import claude_codex_actor_critic as AC
 
 
 HERE = Path(__file__).resolve().parent
@@ -39,11 +40,12 @@ class ArenaCampaignTest(unittest.TestCase):
         self.config_source.write_text('{"fixture":true}\n', encoding="utf-8")
         self.source = self.root / "controller-source"
         self.source.mkdir()
-        self.entrypoint = self.source / "entrypoint.py"
+        self.entrypoint = self.source / AC.ENTRYPOINT_RELATIVE
+        self.entrypoint.parent.mkdir(parents=True)
         self.entrypoint.write_text("raise SystemExit(0)\n", encoding="utf-8")
         for command in (
             ("git", "init", "-q"),
-            ("git", "add", "entrypoint.py"),
+            ("git", "add", "."),
             ("git", "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid",
              "commit", "-qm", "fixture"),
         ):
@@ -56,22 +58,29 @@ class ArenaCampaignTest(unittest.TestCase):
         task_path = self.arena / "tasks" / "one" / "config.yaml"
         arms = []
         for arm_id in C.PRIMARY_PANEL_IDS:
-            argv = () if arm_id == C.BASELINE_ARM_ID else (sys.executable, "-c", "pass")
+            is_actor_critic = arm_id == AC.CONTROLLER_ID
+            argv = (() if arm_id == C.BASELINE_ARM_ID else
+                    (AC.campaign_argv(sys.executable) if is_actor_critic else
+                     (sys.executable, "-c", "pass")))
             arms.append(C.ArmImplementation(
                 arm_id=arm_id,
                 availability="ready",
                 adapter_kind=("arena_measure_baseline" if arm_id == C.BASELINE_ARM_ID
-                              else "stdin_workspace_v1"),
+                              else ("agentkernelarena_three_arg_v1"
+                                    if is_actor_critic else "stdin_workspace_v1")),
                 missing_artifacts=(),
                 argv=argv,
                 source_root=(None if arm_id == C.BASELINE_ARM_ID else str(self.source)),
                 source_commit=(None if arm_id == C.BASELINE_ARM_ID
                                else self.source_commit),
                 entrypoint_path=(None if arm_id == C.BASELINE_ARM_ID
-                                 else "entrypoint.py"),
+                                 else AC.ENTRYPOINT_RELATIVE),
                 entrypoint_sha256=(None if arm_id == C.BASELINE_ARM_ID
                                    else sha(self.entrypoint)),
-                model_ids=(() if arm_id == C.BASELINE_ARM_ID else ("fixture-model",)),
+                model_ids=(() if arm_id == C.BASELINE_ARM_ID else
+                           (AC.PINNED_MODEL_IDS if is_actor_critic else
+                            ("fixture-model",))),
+                required_clis=(AC.REQUIRED_CLIS if is_actor_critic else ()),
             ))
         return C.CampaignSpec(
             config_path=str(self.config_source.resolve()),
@@ -162,8 +171,15 @@ class ArenaCampaignTest(unittest.TestCase):
         controller_rows = receipt["panel"]["arms"][1:]
         self.assertTrue(all(row["executable_sha256"] for row in controller_rows))
         self.assertTrue(all(row["source_identity"]["clean"] for row in controller_rows))
-        self.assertTrue(all(row["model_ids"] == ["fixture-model"]
-                            for row in controller_rows))
+        self.assertEqual(controller_rows[0]["model_ids"], list(AC.PINNED_MODEL_IDS))
+        self.assertEqual(
+            [row["model_ids"] for row in controller_rows[1:]],
+            [["fixture-model"]] * 6,
+        )
+        self.assertEqual(
+            [row["name"] for row in controller_rows[0]["required_cli_identities"]],
+            list(AC.REQUIRED_CLIS),
+        )
         self.assertFalse(receipt["constraints"]["controller_or_gpu_command_executed"])
         self.assertEqual(
             [row["name"] for row in receipt["host_cli_inventory"]],
