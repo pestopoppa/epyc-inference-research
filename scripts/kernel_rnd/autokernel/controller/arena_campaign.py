@@ -47,6 +47,8 @@ from ..evaluator import rebench_scoring
 
 CAMPAIGN_SCHEMA = "epyc.autokernel.arena_controller_campaign.v1"
 AUDIT_SCHEMA = "epyc.autokernel.arena_controller_campaign_audit.v1"
+AVAILABLE_SOURCE_AUDIT_SCHEMA = (
+    "epyc.autokernel.arena_available_source_campaign_audit.v1")
 BASELINE_ARM_ID = "starting_state_baseline"
 PRIMARY_CONTROLLER_IDS = (
     "claude_codex_actor_critic",
@@ -58,6 +60,10 @@ PRIMARY_CONTROLLER_IDS = (
     "argus",
 )
 PRIMARY_PANEL_IDS = (BASELINE_ARM_ID, *PRIMARY_CONTROLLER_IDS)
+AVAILABLE_SOURCE_PANEL_IDS = (
+    BASELINE_ARM_ID, "claude_codex_actor_critic", "kernelfoundry",
+    "k_search", "xe_forge", "geak_v1")
+AVAILABLE_SOURCE_EXCLUDED_IDS = ("evoengineer", "argus")
 DISCOVERY_ONLY_CONTROLLER_IDS: tuple[str, ...] = ()
 MATCHED_BUDGET_HOURS = rebench_scoring.DEFAULT_BUDGET_HOURS
 IMPLEMENTATION_MODULE = Path(__file__).resolve()
@@ -767,6 +773,82 @@ def audit_campaign(
     return receipt
 
 
+def audit_available_source_campaign(
+    spec: CampaignSpec, *, arena_root: str | Path, geak_root: str | Path,
+    enumerator: str = "/opt/rocm/bin/rocm_agent_enumerator",
+    inspect_hardware: bool = True,
+) -> dict[str, Any]:
+    """Audit a separately labelled six-arm available-source diagnostic panel."""
+    full = audit_campaign(
+        spec, arena_root=arena_root, geak_root=geak_root,
+        enumerator=enumerator, inspect_hardware=inspect_hardware)
+    arm_rows = {row["arm_id"]: row for row in full["panel"]["arms"]}
+    selected = [arm_rows[arm_id] for arm_id in AVAILABLE_SOURCE_PANEL_IDS]
+    excluded = [arm_rows[arm_id] for arm_id in AVAILABLE_SOURCE_EXCLUDED_IDS]
+    failures: list[str] = []
+    if tuple(arm_rows) != PRIMARY_PANEL_IDS:
+        failures.append("parent eight-arm ordering drifted")
+    if not all(row["executable"] for row in selected):
+        failures.append("one or more available-source arms are not executable")
+    if any(row["executable"] for row in excluded):
+        failures.append(
+            "an externally excluded arm became executable; refresh the panel")
+    expected_full_refusals = {
+        (f"primary panel implementation coverage is "
+         f"{len(AVAILABLE_SOURCE_PANEL_IDS)}/{len(PRIMARY_PANEL_IDS)}; "
+         "partial panels are forbidden")}
+    for row in excluded:
+        expected_full_refusals.update(
+            f"{row['arm_id']}: {item}" for item in row["missing_artifacts"])
+    unexpected = sorted(
+        set(full["refusal_reasons"]) - expected_full_refusals)
+    absent = sorted(
+        expected_full_refusals - set(full["refusal_reasons"]))
+    if unexpected:
+        failures.extend(f"parent audit: {item}" for item in unexpected)
+    if absent:
+        failures.extend(f"expected parent refusal absent: {item}" for item in absent)
+    campaign_id = f"{spec.campaign_id}-available-source-six-arm-v1"
+    receipt: dict[str, Any] = {
+        "schema": AVAILABLE_SOURCE_AUDIT_SCHEMA,
+        "campaign_id": campaign_id,
+        "status": "ready" if not failures else "refused",
+        "authority": "availability_conditioned_diagnostic_only",
+        "parent_eight_arm_campaign": {
+            "campaign_id": spec.campaign_id,
+            "audit_status": full["status"],
+            "audit_receipt_sha256": full["receipt_sha256"],
+            "full_panel_claim_permitted": False,
+        },
+        "execution_identity": full["execution_identity"],
+        "target": full["target"],
+        "matched_budget": full["matched_budget"],
+        "panel": {
+            "arm_count": len(AVAILABLE_SOURCE_PANEL_IDS),
+            "baseline_arm_id": BASELINE_ARM_ID,
+            "primary_arm_ids": list(AVAILABLE_SOURCE_PANEL_IDS),
+            "executable_arm_count": sum(
+                bool(row["executable"]) for row in selected),
+            "arms": selected,
+            "externally_excluded_arms": excluded,
+        },
+        "tasks": full["tasks"],
+        "sources": full["sources"],
+        "hardware": full["hardware"],
+        "host_cli_inventory": full["host_cli_inventory"],
+        "refusal_reasons": failures,
+        "constraints": {
+            "availability_conditioned_only": True,
+            "full_eight_arm_result_implied": False,
+            "partial_full_panel_results_rankable": False,
+            "controller_or_gpu_command_executed": False,
+            "promotion_authority": False,
+        },
+    }
+    receipt["receipt_sha256"] = _receipt_hash(receipt)
+    return receipt
+
+
 def write_receipt(path: str | Path, receipt: Mapping[str, Any]) -> Path:
     output = Path(path).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -859,6 +941,41 @@ def execute_campaign(
     return results
 
 
+def execute_available_source_campaign(
+    spec: CampaignSpec, audit: Mapping[str, Any], *,
+    run_cell: Callable[["CampaignCellRequest"], Any],
+) -> list[Any]:
+    """Execute only the explicitly labelled available-source six-arm panel."""
+    expected_id = f"{spec.campaign_id}-available-source-six-arm-v1"
+    if (audit.get("schema") != AVAILABLE_SOURCE_AUDIT_SCHEMA
+            or audit.get("campaign_id") != expected_id):
+        raise ArenaCampaignError("audit does not bind the available-source panel")
+    if audit.get("status") != "ready":
+        raise ArenaCampaignError(
+            "available-source campaign audit refused; no cell may execute")
+    identity = audit.get("execution_identity")
+    if not isinstance(identity, Mapping):
+        raise ArenaCampaignError("available-source audit lacks execution identity")
+    if (_sha256_file(Path(spec.config_path)) != spec.config_sha256
+            or identity.get("config_sha256") != spec.config_sha256
+            or identity.get("implementation_module_sha256")
+            != _sha256_file(IMPLEMENTATION_MODULE)):
+        raise ArenaCampaignError(
+            "available-source execution identity changed after audit")
+    arms = {arm.arm_id: arm for arm in spec.arms}
+    results = []
+    for task in spec.tasks:
+        for arm_id in AVAILABLE_SOURCE_PANEL_IDS:
+            arm = arms[arm_id]
+            baseline = arm_id == BASELINE_ARM_ID
+            results.append(run_cell(CampaignCellRequest(
+                arm=arm, task=task, is_starting_state_baseline=baseline,
+                checkpoint_hours=() if baseline else spec.budget_hours,
+                maximum_wall_hours=(0.0 if baseline
+                                    else spec.budget_hours[-1]))))
+    return results
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
@@ -891,11 +1008,15 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 __all__ = [
-    "AUDIT_SCHEMA", "BASELINE_ARM_ID", "CAMPAIGN_SCHEMA",
+    "AUDIT_SCHEMA", "AVAILABLE_SOURCE_AUDIT_SCHEMA",
+    "AVAILABLE_SOURCE_EXCLUDED_IDS", "AVAILABLE_SOURCE_PANEL_IDS",
+    "BASELINE_ARM_ID", "CAMPAIGN_SCHEMA",
     "DISCOVERY_ONLY_CONTROLLER_IDS", "MATCHED_BUDGET_HOURS",
     "PRIMARY_CONTROLLER_IDS", "PRIMARY_PANEL_IDS", "ArenaCampaignError",
     "ArmImplementation", "CampaignCellRequest", "CampaignSpec", "TaskArtifact",
-    "audit_campaign", "execute_campaign", "load_spec", "write_receipt",
+    "audit_available_source_campaign", "audit_campaign",
+    "execute_available_source_campaign", "execute_campaign", "load_spec",
+    "write_receipt",
 ]
 
 

@@ -98,6 +98,24 @@ python3 -m scripts.kernel_rnd.autokernel.controller.arena_cell_runner \
 If any arm remains unavailable, this command writes the refusal audit and exits
 before a device claim, model, compiler, or GPU command is started.
 
+The separately labelled available-source diagnostic uses the same pinned task,
+identities, evaluator, and matched budgets, but selects only the baseline plus
+the five executable controller arms:
+
+```bash
+python3 -m scripts.kernel_rnd.autokernel.controller.arena_cell_runner \
+  --available-source \
+  --config scripts/kernel_rnd/autokernel/controller/arena_campaign_v1.json \
+  --arena-root /path/to/AgentKernelArena-at-2dbbf1d3 \
+  --geak-root /path/to/GEAK-at-4ffba15a \
+  --preflight /path/to/preflight-receipt.json \
+  --output-root /new/write-once/available-source-campaign-directory
+```
+
+This produces an availability-conditioned diagnostic only. It records
+EvoEngineer and ARGUS as external exclusions, binds the refused parent
+eight-arm audit, and cannot imply an eight-arm result or promotion verdict.
+
 ## Controller source availability — 2026-08-11
 
 The source gate is split by controller rather than treating every unavailable
@@ -109,9 +127,13 @@ arm alike:
   evaluator, with GPT-5.6 Sol/high fixed as the text-model dependency;
 - Xe-Forge `v0.3.0` (`4dcb5080b0f56d0b655ec8c8c9509b8e3ba0382c`) has an explicit
   gfx90a port that retains `DSPyEngine.optimize` and linear CoVeR while routing
-  all compilation, correctness, and timing through Arena. KernelFoundry `v0.3.0`
-  (`1c053e02383d12937f144923bcc1faa82fa7788f`) is Apache-2.0 and remains the
-  one licensed upstream implementation still needing its evaluator port;
+  all compilation, correctness, and timing through Arena;
+- KernelFoundry `v0.3.0`
+  (`1c053e02383d12937f144923bcc1faa82fa7788f`) is a governed executable arm.
+  Its inherited `Controller.run_single` retains MAP-Elites/island branching;
+  the adapter activates the upstream Triton feature patterns, records measured
+  parent transitions through upstream QD tracking, and sends every evaluation
+  through Arena;
 - GEAK-v1 `v1.0.0` (`4ffba15a55f250816598b4e27eb56ca40a699cea`)
   is a governed executable arm using its real `OptimAgent_ROCm.run`, BM25
   corpus, and reflection memory. The adapter confines upstream cleanup to a
@@ -128,15 +150,15 @@ file. The default root is
 `/mnt/raid0/llm/autokernel/vendor/arena-controllers`; an operator may relocate
 the clean exact checkouts with `AUTOKERNEL_ARENA_CONTROLLER_ROOT`.
 
-On 2026-08-11 the physical-gfx90a audit correctly refused before inference at
-**1/8 executable arms**. The starting-state baseline, pinned task, pinned vendor
-sources, and MI210 identity are ready. The seven controller blockers are recorded
-verbatim in the receipt. Claude Code 2.1.227 and Codex CLI 0.147.0 are visible on
-the host; Cursor and a `geak` CLI are not. CLI presence explicitly implies no
-controller-family coverage. Most importantly, an `argv` can no longer be labelled
-EvoEngineer, KernelFoundry, K-Search, Xe-Forge, GEAK, or ARGUS and treated as coverage
-without a clean source commit, entrypoint digest, executable digest, and explicit
-model identity.
+On 2026-08-11 the clean physical-gfx90a audit correctly refused before inference
+at **6/8 executable arms**. Its receipt is
+`/mnt/raid0/llm/autokernel/probes/inf03-six-arm-audit-20260811-MRKZLV/receipt.json`
+(receipt SHA-256 `500e355991b4c33ae0547891d120a9648186acf06aa4e5992f5add3ba5b119a7`;
+file SHA-256 `7de9fbc9a70a879badf3a2acecc163c555f6fb2a934854cf24fd7d41e12bf8fe`).
+Only EvoEngineer and ARGUS remain external source/port/launcher refusals. The
+receipt records that no controller or GPU command executed. CLI presence still
+implies no controller-family coverage: every ready arm binds a clean source
+commit, entrypoint digest, executable digest, and explicit model identity.
 
 An arena-side launcher should:
 

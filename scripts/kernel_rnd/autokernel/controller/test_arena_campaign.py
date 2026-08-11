@@ -487,6 +487,51 @@ class ArenaCampaignTest(unittest.TestCase):
             self.assertEqual(request.checkpoint_hours, (2.0, 8.0, 32.0))
             self.assertEqual(request.maximum_wall_hours, 32.0)
 
+    def test_available_source_panel_is_separate_six_arm_diagnostic(self):
+        spec = self.ready_spec()
+        arms = list(spec.arms)
+        for index, arm_id in ((2, "evoengineer"), (7, "argus")):
+            arms[index] = C.ArmImplementation(
+                arm_id, "missing", "external_source_unavailable_v1",
+                ("licensed source artifact", "gfx90a evaluator port",
+                 "hash-bound Arena launcher"))
+        available_spec = C.CampaignSpec(
+            **{**spec.__dict__, "arms": tuple(arms)})
+        with (
+            mock.patch.object(
+                C.arena_adapter, "inspect_vendor_source",
+                side_effect=(self.source_receipt("arena"),
+                             self.source_receipt("geak"))),
+            mock.patch.object(
+                C.arena_adapter, "detect_gfx_arch",
+                return_value={"target_gpu_model": "MI210",
+                              "target_gfx_arch": "gfx90a"}),
+            mock.patch.object(
+                C, "_upstream_source_audit",
+                return_value=({"clean": True, "root": "fixture"}, [])),
+        ):
+            receipt = C.audit_available_source_campaign(
+                available_spec, arena_root=self.arena,
+                geak_root=self.geak)
+        self.assertEqual(receipt["status"], "ready")
+        self.assertEqual(receipt["schema"], C.AVAILABLE_SOURCE_AUDIT_SCHEMA)
+        self.assertEqual(receipt["panel"]["executable_arm_count"], 6)
+        self.assertEqual(receipt["panel"]["primary_arm_ids"],
+                         list(C.AVAILABLE_SOURCE_PANEL_IDS))
+        self.assertEqual(
+            [row["arm_id"] for row in
+             receipt["panel"]["externally_excluded_arms"]],
+            list(C.AVAILABLE_SOURCE_EXCLUDED_IDS))
+        self.assertFalse(receipt["parent_eight_arm_campaign"]
+                         ["full_panel_claim_permitted"])
+        calls = []
+        result = C.execute_available_source_campaign(
+            available_spec, receipt,
+            run_cell=lambda request: calls.append(request) or request.arm.arm_id)
+        self.assertEqual(result, list(C.AVAILABLE_SOURCE_PANEL_IDS))
+        self.assertEqual([row.arm.arm_id for row in calls],
+                         list(C.AVAILABLE_SOURCE_PANEL_IDS))
+
     def test_ready_audit_cannot_replay_after_config_or_driver_identity_changes(self):
         spec = self.ready_spec()
         receipt = self.audit(spec)
