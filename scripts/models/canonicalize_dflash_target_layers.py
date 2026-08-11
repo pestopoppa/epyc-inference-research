@@ -21,6 +21,7 @@ TENSOR_RENAMES = {
     "dflash.fc.weight": "fc.weight",
     "dflash.hidden_norm.weight": "enc.output_norm.weight",
 }
+OMIT_TARGET_OWNED_TENSORS = {"token_embd.weight", "output.weight"}
 
 
 def parse_args() -> argparse.Namespace:
@@ -87,8 +88,13 @@ def main() -> int:
             "legacy tensor grammar is incomplete or ambiguous: "
             f"missing={missing_legacy_tensors}, collisions={canonical_collisions}"
         )
+    missing_target_owned_tensors = sorted(OMIT_TARGET_OWNED_TENSORS - source_tensor_names)
+    if missing_target_owned_tensors:
+        raise RuntimeError(f"legacy artifact lacks expected target-owned tensors: {missing_target_owned_tensors}")
 
     for tensor in reader.tensors:
+        if tensor.name in OMIT_TARGET_OWNED_TENSORS:
+            continue
         writer.add_tensor_info(
             TENSOR_RENAMES.get(tensor.name, tensor.name),
             tensor.data.shape,
@@ -100,6 +106,8 @@ def main() -> int:
     writer.write_kv_data_to_file()
     writer.write_ti_data_to_file()
     for tensor in reader.tensors:
+        if tensor.name in OMIT_TARGET_OWNED_TENSORS:
+            continue
         writer.write_tensor_data(tensor.data, tensor_endianess=reader.endianess)
     writer.close()
 
@@ -108,6 +116,7 @@ def main() -> int:
     print(f"created {args.output} ({args.output.stat().st_size} bytes)")
     print(f"added {CANONICAL_KEY}={target_layers}")
     print(f"renamed tensors: {TENSOR_RENAMES}")
+    print(f"omitted target-owned tensors: {sorted(OMIT_TARGET_OWNED_TENSORS)}")
     return 0
 
 
