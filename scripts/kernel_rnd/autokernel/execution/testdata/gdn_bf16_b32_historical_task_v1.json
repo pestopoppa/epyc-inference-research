@@ -1,0 +1,35 @@
+{
+  "schema": "epyc.autokernel.historical_task.v1",
+  "task_id": "gdn-bf16-b32-v1",
+  "source_repo": "/mnt/raid0/llm/llama.cpp-experimental",
+  "parent_commit": "7c28056b78d939f7b34c2a4350ea26a88442d08c",
+  "expert_commit": "496e2f098a332d3f40fe9b5e7ff56f9efc1d52b6",
+  "expert_authored_at": "2026-07-04T23:46:28Z",
+  "holdout_mode": "sealed_local_holdout",
+  "actor_source_commit": "7c28056b78d939f7b34c2a4350ea26a88442d08c",
+  "expert_visibility": "sealed_until_terminal",
+  "model_path": "/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf",
+  "model_sha256": "9408dcb356cc061a05c139e5647cbde0698ff980c6a69f7fc214e9989f86cfa8",
+  "benchmark_argv": [
+    "llama-batched-bench",
+    "-m", "{model}",
+    "-c", "8192",
+    "-b", "2048",
+    "-ub", "512",
+    "-ngl", "99",
+    "-fa", "0",
+    "-npp", "128",
+    "-ntg", "128",
+    "-npl", "32",
+    "--output-format", "jsonl"
+  ],
+  "metric_id": "speed_tg",
+  "metric_direction": "higher_is_better",
+  "minimum_repeats": 5,
+  "evidence_refs": [
+    "git://llama.cpp-experimental/496e2f098a332d3f40fe9b5e7ff56f9efc1d52b6",
+    "root://progress/2026-07/2026-07-03-mi210-qwen36-27b-speed-campaign.md",
+    "root://progress/2026-07/2026-07-05-mi210-capability-kernel-rnd.md"
+  ],
+  "historical_command_recovered": false
+}
