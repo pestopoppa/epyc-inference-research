@@ -255,7 +255,6 @@ def proc_fd_owners(target: str | None = None, listener_only: bool = False) -> di
 
 
 def exact_process_owners(names: tuple[str, ...]) -> dict[str, Any]:
-    commands = {name: run_capture(["pgrep", "-ax", name], timeout=10) for name in names}
     owners: list[dict[str, Any]] = []
     try:
         for proc_dir in Path("/proc").iterdir():
@@ -269,15 +268,52 @@ def exact_process_owners(names: tuple[str, ...]) -> dict[str, Any]:
                     owners.append({"pid": int(proc_dir.name), "comm": comm, "exe": exe, "exe_path": exe_link, "exe_resolved": str(Path(exe_link).resolve())})
             except (FileNotFoundError, PermissionError, ProcessLookupError):
                 continue
+        commands = {
+            name: {
+                "argv": ["/proc", "exact-comm-or-exe", name],
+                "returncode": 0 if any(owner["comm"] == name or owner["exe"] == name for owner in owners) else 1,
+                "stdout": "\n".join(
+                    f"{owner['pid']} {owner['exe_path']}"
+                    for owner in owners
+                    if owner["comm"] == name or owner["exe"] == name
+                ),
+                "stderr": "",
+            }
+            for name in names
+        }
         return {"commands": commands, "proc_owners": owners, "returncode": 0}
     except OSError as exc:
-        return {"commands": commands, "proc_owners": [], "returncode": None, "exec_error": repr(exc)}
+        return {"commands": {}, "proc_owners": [], "returncode": None, "exec_error": repr(exc)}
+
+
+def cmdline_process_owners(marker: str) -> dict[str, Any]:
+    """Return exact /proc cmdline owners without invoking a pattern process tool."""
+    owners: list[dict[str, Any]] = []
+    try:
+        for proc_dir in Path("/proc").iterdir():
+            if not proc_dir.name.isdigit():
+                continue
+            try:
+                argv = [part.decode("utf-8", errors="replace") for part in (proc_dir / "cmdline").read_bytes().split(b"\0") if part]
+                if any(marker in argument for argument in argv):
+                    owners.append({"pid": int(proc_dir.name), "argv": argv})
+            except (FileNotFoundError, PermissionError, ProcessLookupError):
+                continue
+        return {
+            "argv": ["/proc", "cmdline-marker", marker],
+            "returncode": 0 if owners else 1,
+            "stdout": "\n".join(f"{owner['pid']} {' '.join(owner['argv'])}" for owner in owners),
+            "stderr": "",
+            "owners": owners,
+        }
+    except OSError as exc:
+        return {"argv": ["/proc", "cmdline-marker", marker], "returncode": None, "stdout": "", "stderr": "", "owners": [], "exec_error": repr(exc)}
 
 
 def process_snapshot() -> dict[str, Any]:
     return {
         "model_binaries": exact_process_owners(("llama-server", "llama-cli", "llama-bench")),
-        "autopilot": run_capture(["pgrep", "-af", "autopilot"], timeout=10),
+        "autopilot": cmdline_process_owners("autopilot"),
         "listeners_lsof": run_capture(["lsof", "-nP", "-iTCP", "-sTCP:LISTEN"], timeout=10),
         "listeners_proc": proc_fd_owners(listener_only=True),
         "kfd_lsof": run_capture(["lsof", "-nP", "/dev/kfd"], timeout=10),
