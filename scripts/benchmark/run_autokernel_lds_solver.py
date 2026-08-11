@@ -123,7 +123,7 @@ def select_counter_csv(raw_dir: Path) -> Path:
     return matches[0]
 
 
-def profile(binary: Path, *, kind: str, value: int, repetitions: int,
+def profile(binary: Path, *, kind: str, probe_args: Sequence[str],
             output_dir: Path, timeout_s: float
             ) -> tuple[Path, tuple[lds.CounterSample, ...], list[str], float]:
     raw_dir = output_dir / f"{kind}.raw"
@@ -134,7 +134,7 @@ def profile(binary: Path, *, kind: str, value: int, repetitions: int,
     command = [
         str(PROFILER), "-i", str(counters), "--plugin", "file",
         "--plugin-version", "2", "-d", str(raw_dir), "-o", kind,
-        str(binary), kind, str(value), str(repetitions),
+        str(binary), kind, *probe_args,
     ]
     duration = run_command(
         command, env=profiler_environment(binary),
@@ -182,19 +182,24 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             device_index=0, interval_s=0.250).start()
         binary, build_command, build_duration = build_probe(
             output_dir, timeout_s=args.build_timeout_s)
-        bank_csv, bank_samples, bank_command, bank_duration = profile(
-            binary, kind="bank", value=args.max_bank,
-            repetitions=args.bank_repetitions, output_dir=output_dir,
-            timeout_s=args.profile_timeout_s)
-        bank_plan = lds.bank_cases(
-            max_bank=args.max_bank, repetitions=args.bank_repetitions)
-        bank_solution = lds.solve_bank_count(bank_plan, bank_samples)
         phase_csv, phase_samples, phase_command, phase_duration = profile(
-            binary, kind="phase", value=bank_solution.bank_count,
-            repetitions=args.phase_repetitions, output_dir=output_dir,
+            binary, kind="phase", probe_args=(str(args.phase_repetitions),),
+            output_dir=output_dir,
             timeout_s=args.profile_timeout_s)
         phase_plan = lds.phase_cases(repetitions=args.phase_repetitions)
         phase_solution = lds.solve_phases(phase_plan, phase_samples)
+        same_phase = next((row for row in phase_solution.groups if len(row) >= 2), None)
+        if same_phase is None:
+            raise RuntimeError("phase topology has no same-phase lane pair")
+        bank_lanes = same_phase[:2]
+        bank_csv, bank_samples, bank_command, bank_duration = profile(
+            binary, kind="bank", probe_args=(
+                str(args.max_bank), str(args.bank_repetitions),
+                str(bank_lanes[0] + 1), str(bank_lanes[1] + 1)),
+            output_dir=output_dir, timeout_s=args.profile_timeout_s)
+        bank_plan = lds.bank_cases(
+            max_bank=args.max_bank, repetitions=args.bank_repetitions)
+        bank_solution = lds.solve_bank_count(bank_plan, bank_samples)
         matches_cdna3 = (
             bank_solution.bank_count == 64
             and len(phase_solution.groups) == 2
@@ -241,6 +246,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             },
             "bank_solution": {
                 "bank_count": bank_solution.bank_count,
+                "same_phase_probe_lanes": list(bank_lanes),
                 "tested_bases": list(bank_solution.tested_bases),
                 "conflict_bases": list(bank_solution.conflict_bases),
                 "candidate_mismatches": {

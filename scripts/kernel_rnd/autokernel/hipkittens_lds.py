@@ -158,12 +158,15 @@ def phase_cases(*, repetitions: int = 1) -> tuple[ProbeCase, ...]:
 
 
 def expected_bank_conflict(bank_base: int, bank_count: int) -> bool:
-    """Whether two four-bank accesses overlap after LDS-bank wraparound."""
+    """Whether ds_read_b128 starting banks alias after LDS-bank wraparound.
+
+    The vector's component banks issue in phases.  gfx90a's conflict counter
+    reports the starting-bank alias, not arbitrary overlap between the two
+    four-bank address intervals; the live control pattern is N, 2N, 3N.
+    """
     if bank_base < ACCESS_BANKS or bank_count < 2 * ACCESS_BANKS:
         raise LdsSolverError("invalid bank geometry")
-    fixed = set(range(ACCESS_BANKS))
-    moving = {(bank_base + lane) % bank_count for lane in range(ACCESS_BANKS)}
-    return bool(fixed & moving)
+    return bank_base % bank_count == 0
 
 
 def _median_conflict(samples: Iterable[CounterSample]) -> bool:

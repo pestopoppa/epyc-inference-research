@@ -222,13 +222,14 @@ claim, samples device state, and captures `SQ_INSTS_LDS` plus
 `SQ_LDS_BANK_CONFLICT` with the side-loaded ROCm 6.2 profiler. The probe contains
 no HipKittens headers or Torch dependency.
 
-The upstream script equates the first conflict offset with the bank count. That
-is not valid for `ds_read_b128`: each lane spans four banks, so an access starting
-at bank `N-3` already overlaps bank zero. The local reducer instead fits every
-measured offset against the exact modular-overlap pattern for 16/32/64/128-bank
-candidates and requires one unique exact fit. It then measures all 2,016 lane
-pairs and requires the same-phase relation to form cliques before emitting a
-result. Repeated samples use a median conflict predicate.
+The runner first measures all 2,016 lane pairs at an identical address and
+requires the same-phase relation to form cliques. It then chooses a measured
+same-phase pair for the bank sweep. For `ds_read_b128`, component banks issue in
+phases: the gfx90a counter reports repeating *starting-bank* aliases rather than
+arbitrary overlap between the two four-bank intervals. The reducer fits every
+measured offset against the exact repeating pattern for 16/32/64/128-bank
+candidates and requires one unique exact fit. Repeated samples use a median
+conflict predicate.
 
 Run from a clean, committed research checkout and place evidence outside scratch:
 

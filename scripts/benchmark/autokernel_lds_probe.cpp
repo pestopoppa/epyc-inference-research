@@ -60,7 +60,8 @@ int main(int argc, char **argv) {
     if (argc < 2 || (std::strcmp(argv[1], "bank") != 0 &&
                      std::strcmp(argv[1], "phase") != 0)) {
         std::fprintf(stderr,
-            "usage: %s bank <max-bank> <repetitions> | phase <bank-count> <repetitions>\n",
+            "usage: %s bank <max-bank> <repetitions> <thread-a> <thread-b> | "
+            "phase <repetitions>\n",
             argv[0]);
         return 64;
     }
@@ -77,26 +78,30 @@ int main(int argc, char **argv) {
         hipFuncAttributeMaxDynamicSharedMemorySize, 65536));
 
     if (std::strcmp(argv[1], "bank") == 0) {
-        if (argc != 4) return 64;
+        if (argc != 6) return 64;
         const int max_bank = parse_positive(argv[2], "max-bank");
         const int repetitions = parse_positive(argv[3], "repetitions");
+        const int thread_a = parse_positive(argv[4], "thread-a-plus-one") - 1;
+        const int thread_b = parse_positive(argv[5], "thread-b-plus-one") - 1;
+        if (thread_a < 0 || thread_a >= 64 || thread_b < 0 || thread_b >= 64 ||
+            thread_a == thread_b) return 64;
         for (int bank = 4; bank <= max_bank; ++bank) {
             for (int repetition = 0; repetition < repetitions; ++repetition) {
-                int status = launch(0, 1, 0, static_cast<uint32_t>(bank * 4));
+                int status = launch(
+                    static_cast<uint32_t>(thread_a), static_cast<uint32_t>(thread_b),
+                    0, static_cast<uint32_t>(bank * 4));
                 if (status != 0) return status;
             }
         }
     } else {
-        if (argc != 4) return 64;
-        const int bank_count = parse_positive(argv[2], "bank-count");
-        const int repetitions = parse_positive(argv[3], "repetitions");
+        if (argc != 3) return 64;
+        const int repetitions = parse_positive(argv[2], "repetitions");
         for (int a = 0; a < 64; ++a) {
             for (int b = a + 1; b < 64; ++b) {
                 for (int repetition = 0; repetition < repetitions; ++repetition) {
                     int status = launch(
                         static_cast<uint32_t>(a), static_cast<uint32_t>(b),
-                        static_cast<uint32_t>(a * bank_count * 4),
-                        static_cast<uint32_t>(b * bank_count * 4));
+                        0, 0);
                     if (status != 0) return status;
                 }
             }

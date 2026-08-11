@@ -19,17 +19,14 @@ def sample(dispatch_id: int, conflict: bool) -> H.CounterSample:
 
 
 class BankSolverTest(unittest.TestCase):
-    def test_solves_64_banks_from_access_overlap_not_first_conflict(self):
+    def test_solves_64_banks_from_repeating_start_bank_alias(self):
         cases = H.bank_cases(max_bank=127, repetitions=3)
         samples = tuple(sample(
             index, H.expected_bank_conflict(case.bank_base, 64))
             for index, case in enumerate(cases))
         result = H.solve_bank_count(cases, samples)
         self.assertEqual(result.bank_count, 64)
-        # Four-bank vector accesses first overlap three banks before wrap.  The
-        # upstream script called this first conflict the bank count; our model
-        # deliberately does not repeat that inference bug.
-        self.assertEqual(result.conflict_bases[0], 61)
+        self.assertEqual(result.conflict_bases[0], 64)
         self.assertEqual(result.candidate_mismatches[64], 0)
         self.assertGreater(result.candidate_mismatches[32], 0)
 
@@ -38,7 +35,7 @@ class BankSolverTest(unittest.TestCase):
         samples = []
         for index, case in enumerate(cases):
             expected = H.expected_bank_conflict(case.bank_base, 32)
-            if case.bank_base == 29 and case.repetition == 0:
+            if case.bank_base == 32 and case.repetition == 0:
                 expected = not expected
             samples.append(sample(index, expected))
         self.assertEqual(H.solve_bank_count(cases, samples).bank_count, 32)
