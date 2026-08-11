@@ -277,6 +277,10 @@ MODELS = {
         # Qwen_Qwen3.6-35B-A3B-Q8_0.gguf E1 file cannot self-draft).
         "model_path": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
         "quant": "Q8_0",
+        # Stated, not defaulted (A11): absence used to mean "whatever the
+        # server does", which is arch-dependent. "auto" IS today's behaviour for
+        # this model — this records it, it does not change it.
+        "reasoning": "auto",
         "architecture": "qwen35moe",
         "port_base": 19080,
         "configs": ("C1", "C1b", "C2", "C3"),
@@ -288,6 +292,10 @@ MODELS = {
     "qwen36_27b_q8": {
         "model_path": "/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf",
         "quant": "Q8_0",
+        # Stated, not defaulted (A11): absence used to mean "whatever the
+        # server does", which is arch-dependent. "auto" IS today's behaviour for
+        # this model — this records it, it does not change it.
+        "reasoning": "auto",
         "architecture": "qwen35",
         "port_base": 19180,
         "configs": ("C1", "C1b", "C2", "C3"),
@@ -309,6 +317,10 @@ MODELS = {
             "Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf"
         ),
         "quant": "Q4_K_M",
+        # Stated, not defaulted (A11): absence used to mean "whatever the
+        # server does", which is arch-dependent. "auto" IS today's behaviour for
+        # this model — this records it, it does not change it.
+        "reasoning": "auto",
         "architecture": "ssm_moe_hybrid",
         "port_base": 19280,
         "configs": ("C1", "C1b", "C3"),
@@ -328,6 +340,15 @@ MODELS = {
         # registry/live-production path is authoritative here (M29 top recipe).
         "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
         "quant": "Q4_K_M",
+        # Server-side reasoning mode, stated rather than defaulted. gemma4 has a
+        # native reasoning template, so llama-server's `--reasoning auto` default
+        # is ON for this arch while both model registries record 'off' — the gap
+        # that spent the whole 256-token Stage-B budget inside the reasoning
+        # channel (41/43 response_capture_missing_answer_text on the 2026-07-29 W2
+        # smoke, and the same signature behind W0's 430/430). Fixed on the
+        # ARTIFACTS in 5d6a17f2 but never here, so a regeneration silently dropped
+        # it again; see A11.
+        "reasoning": "off",
         "architecture": "gemma4",
         "port_base": 19380,
         "configs": ("C1", "C3"),
@@ -565,6 +586,10 @@ def make_cell(
         "model_path": model["model_path"],
         "quant": model["quant"],
         "architecture": model["architecture"],
+        # ALWAYS emitted, never omitted. A field carried on 10% of a corpus is a
+        # field whose meaning is carried by its absence, and absence is
+        # indistinguishable from a writer that forgot.
+        "reasoning": model.get("reasoning") or "auto",
         "config_id": config_id,
         "instances": instances,
         "np": np,

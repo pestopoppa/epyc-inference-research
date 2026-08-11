@@ -1997,6 +1997,43 @@ def test_reasoning_flag_emitted_from_manifest():
     assert cmd[cmd.index("--reasoning") + 1] == "off"
 
 
+def test_reasoning_is_stated_on_the_row_and_the_command_is_unchanged_for_auto():
+    """A11: absence must stop carrying meaning, WITHOUT changing any launch.
+
+    `reasoning` was present on 19 of 191 manifests. Absence meant the flag was
+    never emitted, so the server fell to `--reasoning auto` — which for gemma4 is
+    ON, against what both registries record. That gap cost 41/43 captures on the
+    2026-07-29 W2 smoke and is the signature behind W0's 430/430.
+
+    Manifests now always state it. The launched command must NOT change: passing
+    `--reasoning auto` should equal omitting it, but should-equal is not
+    verified-equal and this lane runs zero cells, so `auto` still omits the flag.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        auto_cell = load_cell(Path(tmp), make_manifest(reasoning="auto"))
+        off_cell = load_cell(Path(tmp), make_manifest(reasoning="off"))
+        bare_cell = load_cell(Path(tmp), make_manifest())
+
+    # Resolution: a bare manifest and an explicit "auto" mean the same thing.
+    assert sns.effective_reasoning(auto_cell) == "auto"
+    assert sns.effective_reasoning(bare_cell) == "auto"
+    assert sns.effective_reasoning(off_cell) == "off"
+
+    def cmd_for(cell):
+        return sns.build_instance_command(
+            binary=Path("/fake/llama-server"), cell=cell, inst=cell.instances[0]
+        )
+
+    # Byte-identical for auto vs absent — no banked cell's recipe moves.
+    assert cmd_for(auto_cell) == cmd_for(bare_cell)
+    assert "--reasoning" not in cmd_for(auto_cell)
+    # And a non-default value is still emitted, or the fix that closed the
+    # capture failure would be silently reverted.
+    off_cmd = cmd_for(off_cell)
+    assert "--reasoning" in off_cmd
+    assert off_cmd[off_cmd.index("--reasoning") + 1] == "off"
+
+
 def test_reasoning_flag_absent_when_manifest_omits_it():
     # Back-compat: a manifest without the key keeps the previous command shape
     # exactly, so no already-run cell's recipe silently changes underneath it.

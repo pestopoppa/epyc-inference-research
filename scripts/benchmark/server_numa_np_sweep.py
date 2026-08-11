@@ -413,6 +413,22 @@ def load_pinned_prompts(pool_path: Path, cell: Cell) -> list[PromptSpec]:
 # ---------------------------------------------------------------------------
 
 
+
+def effective_reasoning(cell: "Cell") -> str:
+    """The reasoning mode this cell runs under, as a STATED value.
+
+    Absence used to mean "whatever llama-server defaults to", which is
+    arch-dependent: for gemma4 the `auto` default is ON while both model
+    registries record 'off'. That gap cost 41/43 captures on the 2026-07-29 W2
+    smoke and is the signature behind W0's 430/430. A field carried on 10% of a
+    corpus is a field whose meaning lives in its absence, and absence is
+    indistinguishable from a writer that forgot — so this resolves it to a value
+    and the row records it.
+    """
+    value = cell.manifest.get("reasoning")
+    return value if isinstance(value, str) and value else "auto"
+
+
 def build_instance_command(*, binary: Path, cell: Cell, inst: Instance) -> list[str]:
     """Per-instance launch command: taskset pinning + per-instance numactl policy.
 
@@ -461,8 +477,15 @@ def build_instance_command(*, binary: Path, cell: Cell, inst: Instance) -> list[
     # response_capture_missing_answer_text on the 2026-07-29 W2 smoke, and the
     # same signature behind W0's 430/430. Server-side and template-independent,
     # unlike chat_template_kwargs.enable_thinking, which some templates ignore.
-    reasoning = cell.manifest.get("reasoning")
-    if isinstance(reasoning, str) and reasoning:
+    # A11: manifests now ALWAYS state `reasoning` rather than relying on absence,
+    # so "auto" appears explicitly where it used to be a missing key. Passing
+    # `--reasoning auto` is expected to be identical to omitting the flag, but
+    # "expected" is not "verified" and this lane runs zero cells — so the flag is
+    # still emitted only for a NON-default value. The manifest gains the
+    # provenance; the launched command is byte-identical to before for every
+    # banked cell.
+    reasoning = effective_reasoning(cell)
+    if reasoning and reasoning != "auto":
         cmd += ["--reasoning", reasoning]
     if cell.manifest.get("mlock", True):
         cmd.append("--mlock")
@@ -1545,6 +1568,10 @@ def summarize_cell(
         "affinity_artifact": affinity.get("artifact_path"),
         "live_affinity_verified": affinity.get("live_affinity_verified"),
         "sampling": resolve_sampling(cell),
+        # A11: the executed reasoning mode, so a banked row can answer "was this
+        # measured with reasoning on or off?" without resolving a manifest path
+        # that may since have been regenerated.
+        "reasoning": effective_reasoning(cell),
         "stage_b_families": cell.manifest.get("stage_b_families"),
         "host_health_warnings_at_cell": list(cell_host_warnings or []),
         "throttle_check": throttle_check,
@@ -1974,6 +2001,10 @@ def build_run_manifest(
                 "decision_grade_intent": cell.decision_grade_intent,
                 "kv_unified": bool(cell.kv.get("kv_unified")),
                 "sampling": resolve_sampling(cell),
+        # A11: the executed reasoning mode, so a banked row can answer "was this
+        # measured with reasoning on or off?" without resolving a manifest path
+        # that may since have been regenerated.
+        "reasoning": effective_reasoning(cell),
             }
             for cell in cells
         ],
