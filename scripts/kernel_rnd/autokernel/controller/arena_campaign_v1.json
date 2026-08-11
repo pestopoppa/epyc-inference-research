@@ -1,0 +1,102 @@
+{
+  "schema": "epyc.autokernel.arena_controller_campaign.v1",
+  "campaign_id": "inf03-mi210-controller-ab-v1",
+  "target_gpu_model": "MI210",
+  "target_gfx_arch": "gfx90a",
+  "budget": {
+    "match_axis": "elapsed_wall_time",
+    "checkpoint_hours": [2.0, 8.0, 32.0],
+    "maximum_wall_hours_per_controller_task": 32.0,
+    "concurrent_gpu_cells": 1
+  },
+  "tasks": [
+    {
+      "task_id": "instruction2triton.rocmbench.test_add_kernel",
+      "relative_root": "tasks/instruction2triton/rocmbench/test_add_kernel",
+      "file_sha256": {
+        "config.yaml": "1762a6311a1f23dc827dcbe626c286a242577235a9d9fd56b97119439511c04e",
+        "performance_utils_pytest.py": "fb8709f766736aff7e1047e13f601af2f30ff98342ade7f7083f450d87917b88",
+        "test_add_kernel.py": "7b6e63cc81f6ec18e311700f7eb3d2048b194ca2a16f07b97ff33ce25f755745"
+      }
+    }
+  ],
+  "arms": [
+    {
+      "arm_id": "starting_state_baseline",
+      "availability": "ready",
+      "adapter_kind": "arena_measure_baseline",
+      "missing_artifacts": []
+    },
+    {
+      "arm_id": "claude_codex_actor_critic",
+      "availability": "missing",
+      "adapter_kind": "stdin_workspace_v1",
+      "missing_artifacts": [
+        "a callable Claude-planner/Codex-actor implementation (the deleted AutoKernel strategy plane is not an implementation)",
+        "a hash-bound three-argument AgentKernelArena launcher for that implementation",
+        "an explicit Claude model/effort pin and Codex model pin with wall-time termination"
+      ]
+    },
+    {
+      "arm_id": "evoengineer",
+      "availability": "missing",
+      "adapter_kind": "stdin_workspace_v1",
+      "missing_artifacts": [
+        "a licensed, commit-pinned EvoEngineer source checkout",
+        "the EvoEngineer CUDA evaluator replaced by the shared gfx90a Arena evaluator",
+        "a hash-bound three-argument AgentKernelArena launcher"
+      ]
+    },
+    {
+      "arm_id": "kernelfoundry",
+      "availability": "missing",
+      "adapter_kind": "stdin_workspace_v1",
+      "missing_artifacts": [
+        "a licensed, commit-pinned KernelFoundry source checkout",
+        "a gfx90a MAP-Elites/profiler-gradient controller entry point",
+        "a hash-bound three-argument AgentKernelArena launcher"
+      ]
+    },
+    {
+      "arm_id": "k_search",
+      "availability": "missing",
+      "adapter_kind": "stdin_workspace_v1",
+      "missing_artifacts": [
+        "a licensed, commit-pinned K-Search source checkout",
+        "a callable world-model-tree controller using the shared gfx90a evaluator",
+        "a hash-bound three-argument AgentKernelArena launcher"
+      ]
+    },
+    {
+      "arm_id": "xe_forge",
+      "availability": "missing",
+      "adapter_kind": "stdin_workspace_v1",
+      "missing_artifacts": [
+        "a licensed, commit-pinned Xe-Forge source checkout",
+        "a callable linear-CoVeR controller using the shared gfx90a evaluator",
+        "a hash-bound three-argument AgentKernelArena launcher"
+      ]
+    },
+    {
+      "arm_id": "geak_v1",
+      "availability": "missing",
+      "adapter_kind": "stdin_workspace_v1",
+      "missing_artifacts": [
+        "a licensed GEAK-eval task corpus matching GEAK-v1 (TB-eval-smol is absent from the pinned checkout)",
+        "a GEAK-v1 stdin/workspace launcher compatible with AgentKernelArena",
+        "a reachable model/provider pin replacing the checkout's empty api_key and private dvue-aoai-001-gpt-4.1 endpoint"
+      ]
+    },
+    {
+      "arm_id": "argus",
+      "availability": "missing",
+      "adapter_kind": "stdin_workspace_v1",
+      "missing_artifacts": [
+        "a publicly available, licensed, commit-pinned ARGUS source artifact",
+        "a demonstrated or implemented gfx90a controller path instead of transferring MI300X/gfx942 results",
+        "a hash-bound three-argument AgentKernelArena launcher with explicit model pins"
+      ]
+    }
+  ],
+  "out_of_panel_registered": []
+}

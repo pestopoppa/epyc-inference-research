@@ -67,6 +67,7 @@ AGENT_KERNEL_ARENA_PIN = VendorPin(
         "src/module_registration.py",
         "agents/codex/launch_agent.py",
         "agents/geak_v3_triton/launch_agent.py",
+        "src/evaluator.py",
         "src/prompts/cheatsheet/default_cheatsheet.yaml",
     ),
 )

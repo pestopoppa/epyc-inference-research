@@ -26,6 +26,55 @@ The registered controller IDs are `claude_codex_actor_critic`, `evoengineer`,
 means the same adapter contract can launch them and compare whole-agent task
 results. It does not imply that an unexecuted controller has an MI210 result.
 
+That last distinction is now machine-enforced by `arena_campaign.py`.
+`CONTROLLERS` is discovery metadata; it is not implementation coverage. The
+primary INF-03 comparison is exactly eight arms:
+
+1. the Arena-measured starting state (the score-zero baseline, with no authoring);
+2. Claude-planner + Codex-actor/critic;
+3. EvoEngineer;
+4. KernelFoundry;
+5. K-Search;
+6. Xe-Forge; and
+7. GEAK-v1; and
+8. ARGUS.
+
+ARGUS is unavailable, not omitted: its arm names the missing public licensed
+source, gfx90a controller path, and hash-bound Arena wrapper/model pins. No
+MI300X/gfx942 result transfers into this prospective MI210 comparison.
+
+`arena_campaign_v1.json` fixes the comparison task, file digests, one-at-a-time
+MI210 use, and the adopted RE-Bench elapsed-wall-time checkpoints of exactly 2,
+8, and 32 hours per controller/task. A ready controller must bind a clean source
+commit, entrypoint digest, executable digest, explicit model IDs, and argv. The
+campaign refuses the entire matrix if any arm, task, source, or hardware identity
+is missing; a partial panel is never rankable. Each non-baseline executor call
+receives a typed cell request carrying the complete `(2.0, 8.0, 32.0)` checkpoint
+tuple and the 32-hour ceiling. The baseline request instead carries an empty
+checkpoint tuple and zero authoring budget. The audit also binds the exact config
+file and campaign-driver module SHA-256 values, and execution rechecks both to
+prevent a ready receipt from being replayed after either input changes.
+
+The no-execution audit command is:
+
+```bash
+python3 -m scripts.kernel_rnd.autokernel.controller.arena_campaign \
+  --config scripts/kernel_rnd/autokernel/controller/arena_campaign_v1.json \
+  --arena-root /path/to/AgentKernelArena-at-2dbbf1d3 \
+  --geak-root /path/to/GEAK-at-4ffba15a \
+  --output /path/to/audit-receipt.json
+```
+
+On 2026-08-11 the physical-gfx90a audit correctly refused before inference at
+**1/8 executable arms**. The starting-state baseline, pinned task, pinned vendor
+sources, and MI210 identity are ready. The seven controller blockers are recorded
+verbatim in the receipt. Claude Code 2.1.227 and Codex CLI 0.147.0 are visible on
+the host; Cursor and a `geak` CLI are not. CLI presence explicitly implies no
+controller-family coverage. Most importantly, an `argv` can no longer be labelled
+EvoEngineer, KernelFoundry, K-Search, Xe-Forge, GEAK, or ARGUS and treated as coverage
+without a clean source commit, entrypoint digest, executable digest, and explicit
+model identity.
+
 An arena-side launcher should:
 
 1. import `register_agentkernelarena_adapter()` in a tiny
@@ -64,3 +113,12 @@ The diagnostic receipt is
 This closes compile/correctness/timing compatibility for one baseline Arena
 task. It does not reproduce a GEAK-authored candidate, rank a controller, or
 transfer any MI300 result to MI210.
+
+The controller-coverage audit is
+`/mnt/raid0/llm/autokernel/probes/inf03-controller-ab-audit-20260811/receipt.json`
+(file SHA-256
+`3152e2fa97b52d9f0b91fb43449375adec66128189fddf253b0772fadfcf59c4`;
+internal payload SHA-256
+`3533ee0955ecbdfd61be58d45f69f15030de9dbf1a1238148a220b14b8bfd138`).
+Its `status=refused` is the intended safe outcome: no controller or GPU command
+ran, and no incomplete comparison was reported.
