@@ -147,12 +147,56 @@ def derive_kernel_era(at: Any, eras: list[dict[str, Any]] | None = None) -> str:
     """
     rows = _scoped(eras if eras is not None else load_registry(), SCOPE_CPU_KERNEL)
     instant = _instant(at, field="at")
+
+    # ── Absence must not be the only discriminator ──────────────────────────
+    # Selecting on "has a binary_version" alone infers KIND from ABSENCE, and
+    # absence cannot distinguish "this row is not a kernel cutover"
+    # (E8-cpu-bench-throttle-scope) from "this row IS a cutover whose binary we
+    # never recorded" (E5-cpu-kernel). Today that difference is harmless because
+    # the only unwitnessed cutover is E5 and nothing queries that window. It stops
+    # being harmless the moment someone appends an E10-cpu-kernel row and forgets
+    # the field: the row would be silently read as "not a cutover", derivation
+    # would quietly keep returning E9, and that is precisely the silent staleness
+    # this module exists to remove — reintroduced by its own discriminator.
+    #
+    # So check the contradiction explicitly. A row that NAMES itself a kernel
+    # cutover and carries no binary is an error to report, never a row to skip.
+    # (Origin: the 2026-08-11 absence-inference rider on the autopilot journal,
+    # where the era label is inferred from a missing question ledger on ~61% of
+    # 1372 rows. Same shape, different store.)
+    unwitnessed = [
+        row
+        for row in rows
+        if row.get("from") is not None
+        and str(row["id"]).endswith("-cpu-kernel")
+        and row.get("binary_version") is None
+        and _instant(row["from"], field="from", era_id=row["id"]) <= instant
+    ]
     witnessed = [
         (_instant(row["from"], field="from", era_id=row["id"]), row["id"])
         for row in rows
         if row.get("from") is not None and row.get("binary_version") is not None
     ]
     live = [(start, era_id) for start, era_id in witnessed if start <= instant]
+    if unwitnessed:
+        newest_unwitnessed = max(
+            unwitnessed, key=lambda row: _instant(row["from"], field="from", era_id=row["id"])
+        )
+        newest_start = _instant(
+            newest_unwitnessed["from"], field="from", era_id=newest_unwitnessed["id"]
+        )
+        # Only a contradiction if it is the row that WOULD have been selected —
+        # an older unwitnessed cutover superseded by a witnessed one is fine.
+        if not live or newest_start > max(live)[0]:
+            raise EraDerivationError(
+                f"era {newest_unwitnessed['id']!r} names itself a kernel cutover, is in "
+                f"force at {instant.isoformat()}, and records NO binary_version. It is "
+                f"the row that should answer this query. REFUSING rather than skipping "
+                f"it and returning an older era — silently falling back is how a kernel "
+                f"cutover goes unnoticed, which is the defect this derivation exists to "
+                f"prevent. Either record its binary_version via an operator-signed "
+                f"registry amendment, or the instant genuinely has no witnessed kernel."
+            )
     if not live:
         earliest = min(witnessed)[0].isoformat() if witnessed else "never"
         raise EraDerivationError(

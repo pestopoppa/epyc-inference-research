@@ -885,5 +885,50 @@ def test_an_invented_era_id_is_rejected_even_without_generated_at():
     assert any("cpu_kernel" in p for p in problems), problems
 
 
+def test_an_unwitnessed_kernel_cutover_contradicts_instead_of_vanishing():
+    """A11: absence must not be the only discriminator.
+
+    derive_kernel_era selects rows that HAVE a binary_version, which infers KIND
+    from ABSENCE — and absence cannot tell "not a kernel cutover"
+    (E8-cpu-bench-throttle-scope) apart from "IS a cutover whose binary nobody
+    recorded" (E5-cpu-kernel). Harmless today; not harmless the moment someone
+    appends a cutover row and forgets the field, because the row would read as
+    "not a cutover" and derivation would quietly keep returning the previous era.
+    That is the silent staleness this module exists to remove, reintroduced by its
+    own discriminator.
+
+    Shape borrowed from the 2026-08-11 rider on the autopilot journal, where the
+    era label is inferred from a MISSING question ledger on ~61% of 1372 rows.
+    """
+    import copy
+
+    import instrument_era as ie
+
+    eras = ie.load_registry()
+    future = copy.deepcopy(eras)
+    future.append(
+        {
+            "id": "E10-cpu-kernel",
+            "from": "2026-09-01T00:00:00Z",
+            "scope": "cpu_bench",
+            "note": "v10 cutover with binary_version forgotten",
+        }
+    )
+    try:
+        resolved = ie.derive_kernel_era("2026-09-15T00:00:00Z", future)
+    except ie.EraDerivationError as exc:
+        assert "E10-cpu-kernel" in str(exc), "the refusal must name the offending row"
+        assert "REFUSING" in str(exc)
+    else:
+        raise AssertionError(
+            f"a cutover row with no binary_version was silently skipped and "
+            f"derivation returned {resolved!r} — that is the staleness this prevents"
+        )
+    # Must not over-fire: an OLDER unwitnessed cutover superseded by a witnessed
+    # one is not a contradiction, or E5-cpu-kernel would break every query.
+    assert ie.derive_kernel_era("2026-08-11T23:00:00Z", future) == "E9-cpu-kernel"
+    assert ie.derive_kernel_era("2026-07-29T15:47:29Z", eras) == "E8-cpu-kernel"
+
+
 if __name__ == "__main__":
     raise SystemExit(_run_all())
