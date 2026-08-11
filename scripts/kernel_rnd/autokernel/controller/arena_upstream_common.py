@@ -21,6 +21,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 from types import SimpleNamespace
 from typing import Any, Mapping
@@ -336,6 +337,11 @@ class ArenaWorkspaceEvaluator:
         self.best_score = 1.0
         self.last_record: EvaluationRecord | None = None
         self.evaluation_count = 0
+        # Upstream controllers may generate candidates concurrently, but the
+        # Arena evaluator owns one mutable copied workspace and one physical
+        # GPU. Serialize the materialize/evaluate/restore transaction while
+        # leaving proposal generation under the upstream controller's policy.
+        self._evaluation_lock = threading.Lock()
 
     def _discover_source_paths(self) -> tuple[str, ...]:
         declared = self.config.get("source_file_path")
@@ -408,6 +414,10 @@ class ArenaWorkspaceEvaluator:
                     temporary.unlink()
 
     def evaluate(self, files: Mapping[str, str]) -> EvaluationRecord:
+        with self._evaluation_lock:
+            return self._evaluate_serialized(files)
+
+    def _evaluate_serialized(self, files: Mapping[str, str]) -> EvaluationRecord:
         if set(files) != set(self.source_paths):
             raise UpstreamControllerError(
                 f"candidate files must be exactly {list(self.source_paths)}")

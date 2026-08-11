@@ -3,10 +3,13 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import os
 from pathlib import Path
 import subprocess
 import tempfile
+import threading
+import time
 import unittest
 
 from . import arena_upstream_common as common
@@ -84,6 +87,57 @@ class FixtureEvaluator:
 
 
 class KernelFoundryArenaTest(unittest.TestCase):
+    def test_shared_arena_workspace_serializes_parallel_branch_evaluation(self):
+        class Vendor:
+            def __init__(self):
+                self.active = 0
+                self.max_active = 0
+                self.lock = threading.Lock()
+
+            def evaluate_kernel(self, workspace, config, baseline, logger, device):
+                del config, baseline, logger, device
+                with self.lock:
+                    self.active += 1
+                    self.max_active = max(self.max_active, self.active)
+                try:
+                    time.sleep(0.03)
+                    (workspace / "kernel.py").read_text()
+                    return {
+                        "pass_compilation": True,
+                        "pass_correctness": True,
+                        "valid_optimized_cases": 1,
+                        "best_optimized_execution_time": 1.0,
+                        "average_speedup": 0.5,
+                    }
+                finally:
+                    with self.lock:
+                        self.active -= 1
+
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            (workspace / "kernel.py").write_text("starting\n")
+            evaluator = object.__new__(common.ArenaWorkspaceEvaluator)
+            evaluator.workspace = workspace
+            evaluator.source_paths = ("kernel.py",)
+            evaluator.vendor = Vendor()
+            evaluator.config = {}
+            evaluator.baseline_cases = {}
+            evaluator.logger = None
+            evaluator.best_files = {"kernel.py": b"starting\n"}
+            evaluator.best_score = 1.0
+            evaluator.last_record = None
+            evaluator.evaluation_count = 0
+            evaluator._evaluation_lock = threading.Lock()
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                results = list(executor.map(
+                    evaluator.evaluate,
+                    ({"kernel.py": "branch-a\n"}, {"kernel.py": "branch-b\n"}),
+                ))
+            self.assertTrue(all(result.passed for result in results))
+            self.assertEqual(evaluator.evaluation_count, 2)
+            self.assertEqual(evaluator.vendor.max_active, 1)
+            self.assertEqual((workspace / "kernel.py").read_text(), "starting\n")
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
