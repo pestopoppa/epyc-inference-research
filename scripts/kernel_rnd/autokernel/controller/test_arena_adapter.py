@@ -153,6 +153,16 @@ class ArenaAdapterTest(unittest.TestCase):
         with self.assertRaisesRegex(Exception, "unknown C5 seed"):
             A.prepare_task(self.task(c5_seed_ids=("k999",)))
 
+    def test_fp8_datatype_target_is_bound_without_claim_transfer(self):
+        prepared = A.prepare_task(self.task(
+            datatype_target_ids=("fp8_weight_bf16_compute_gfx90a",)))
+        self.assertIn("datatype-targets://", prepared.prompt)
+        self.assertIn("software_decode_and_upcast_to_bf16", prepared.prompt)
+        self.assertIn('"native_fp8_mfma":false', prepared.prompt)
+        self.assertNotIn("speedup", prepared.prompt)
+        with self.assertRaisesRegex(Exception, "unknown datatype target"):
+            A.prepare_task(self.task(datatype_target_ids=("fp3",)))
+
     def test_vendor_source_identity_is_exact_and_clean(self):
         pin = A.VendorPin("fixture", "a" * 40, "LICENSE", ("required.py",))
         (self.root / "LICENSE").write_text("Apache-2.0", encoding="utf-8")

@@ -128,6 +128,7 @@ class ArenaTask:
     c4_report_path: str | None = None
     c4_report_sha256: str | None = None
     c5_seed_ids: tuple[str, ...] = ()
+    datatype_target_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         for label in ("task_id", "task_prompt", "round_id"):
@@ -148,6 +149,11 @@ class ArenaTask:
                 or any(not isinstance(seed_id, str) or not seed_id
                        for seed_id in self.c5_seed_ids)):
             raise ArenaAdapterError("C5 seed ids must be a tuple of non-empty strings")
+        if (not isinstance(self.datatype_target_ids, tuple)
+                or any(not isinstance(target_id, str) or not target_id
+                       for target_id in self.datatype_target_ids)):
+            raise ArenaAdapterError(
+                "datatype target ids must be a tuple of non-empty strings")
 
 
 @dataclass(frozen=True)
@@ -315,12 +321,16 @@ def prepare_task(task: ArenaTask, *, base_environment: Mapping[str, str] | None 
         from .. import c5_seed_corpus
 
         items.append(c5_seed_corpus.seed_context_item(task.c5_seed_ids))
+    if task.datatype_target_ids:
+        from .. import datatype_targets
+
+        items.append(datatype_targets.target_context_item(task.datatype_target_ids))
     priced = authoring_contract.price_context(
         round_id=task.round_id,
         budget=authoring_contract.ContextBudget(
             max_total_tokens=max_context_tokens,
             max_item_tokens=max_context_tokens,
-            max_items=3,
+            max_items=4,
         ),
         items=items,
     )
@@ -394,6 +404,12 @@ def register_agentkernelarena_adapter(
                        for seed_id in seed_ids)):
             raise ArenaAdapterError(
                 "epyc_autokernel.c5_seed_ids must be non-empty strings")
+        datatype_target_ids = config.get("datatype_target_ids", ())
+        if (not isinstance(datatype_target_ids, (list, tuple))
+                or any(not isinstance(target_id, str) or not target_id
+                       for target_id in datatype_target_ids)):
+            raise ArenaAdapterError(
+                "epyc_autokernel.datatype_target_ids must be non-empty strings")
         hardware = detect_gfx_arch(str(config.get(
             "enumerator", "/opt/rocm/bin/rocm_agent_enumerator")))
         task = ArenaTask(
@@ -406,6 +422,7 @@ def register_agentkernelarena_adapter(
             c4_report_path=config.get("c4_report_path"),
             c4_report_sha256=config.get("c4_report_sha256"),
             c5_seed_ids=tuple(seed_ids),
+            datatype_target_ids=tuple(datatype_target_ids),
         )
         return launch(prepare_task(task), tuple(argv), timeout_seconds=timeout)
 
