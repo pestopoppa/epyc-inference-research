@@ -105,6 +105,7 @@ than borrowing BF16's target or converting a relative speedup into a roofline.
 | What blocks a first result | [`execution/README.md` §6](execution/README.md) — the honest list |
 | The research programme | [`program.md`](program.md) |
 | What is on the path and what is not | [`FOOTPRINT.md`](FOOTPRINT.md) |
+| GEAK / AgentKernelArena on MI210 | [`controller/ARENA_INTEGRATION.md`](controller/ARENA_INTEGRATION.md) |
 
 ### Representation-bound proposal comparisons (AK-WM-1)
 
