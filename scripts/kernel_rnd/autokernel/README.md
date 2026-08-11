@@ -184,13 +184,22 @@ calibration exists. Source-changing campaigns additionally require their own
 | `controller/shared.py` | The small shared vocabulary needed by the two surviving controller-memory modules. |
 | `controller/authoring_contract.py` | **AK-PL-1 / AK-LE-4 / AK-LE-5 (off campaign path).** The only reviewed fully-rendered authoring-prompt seam; sealed-evaluator leak scan with compliant control, priced never-bulk-read context, reversible compaction headers with exact git recovery, and typed external numeric priors. It calls no model and selects no work. |
 | `controller/reward_monitor.py` | **C6 sabotage/sandbagging monitor contract (off campaign path).** Compiles the named threat model with monitor-awareness and reasoning visibility mandatory, binds every reasoning trace to its campaign/candidate plus the whole journal tree, reduces a declaration-bound complete model×sample panel as mean-of-mean@k, and reports sensitivity, specificity, and false-positive rate against a predeclared budget. It calls no model and cannot stamp correctness. |
-| `prior_art.py` | The deterministic four-way prior-art gate, expected-absence override, pinned source catalogue, and cumulative wall-share pruning. |
+| `prior_art.py` | The deterministic four-way prior-art gate, explicit any/all trace-keyword matching, expected-absence override, v9-pinned source catalogue, cumulative wall-share pruning, and hash-bound offline `rocprofv2` reducer used by AK-DEL-1. |
 | `substrate.py` | Validates the checked-in MI210 compute/bandwidth/PCIe/NUMA facts, preserves measured and datasheet bases separately, re-derives both roofline ridges, and builds exact-quant diagnostic surfaces. Cross-vendor cells are spec-basis; a missing exact CUDA anchor is `COULD_NOT_CHECK`, never a pooled or borrowed target. |
 | `lanes.py` | The lane registry, historical 4/8/16/32/48-way CPU shapes, isolation checks, change-class-specific rank calibration, and full-instance verification rule. |
 | `artifact_diff.py` | The compile-only VGPR/SGPR/scratch/instruction-mix comparison that vetoes an unconfirmed GPU claim before behavioral T0 can launch. |
 | `offline_least_commitment.py` | The observe-only AK-WM-2/AP-WM-1 diagnostic over matched completed-proposal archives; it has no live selection authority. |
 | `turn_productivity.py` | **AK-PT-1 / AK-X-6.** Immutable per-refine-turn `(turn, task, correct?, speedup)` records, mechanically derived rescued/persistent classes, and a campaign-calibration-derived e-process rule. It may label a turn repair-only and withhold search advancement; it has no ranking, retention, promotion, or deployment authority. |
 | `dashboard.py` | **AK6.** The compact `/kernel` contract-v2 producer retained by the campaign path after the old `surface/` plane was deleted. It projects only the already-fsynced terminal `STOP_STATE`: campaign and backend standing are observed; champion, headroom and release package are explicitly `not_reported`; journal time drives freshness; and the atomic export is refused under scratch, a production tree, or any checkout. |
+
+AK-DEL-1 is replayable from
+`data/autokernel/prior_art/ak-del-1-k25-q8-mmvq-n1-20260717/`. The checked-in
+raw MI210 profile is content-hashed before parsing; start/end timestamps are
+aggregated by stable kernel family, the 1% floor is applied, and both count and
+duration bucket splits are emitted. The bounded K25 corpus resolves 3/3
+admitted families to existing paths and therefore recommends catalogue work
+before a novel-kernel proposal generator. That is a scope decision over this
+corpus, not a claim about unprofiled workloads.
 
 ### AK6 — the operator surface
 

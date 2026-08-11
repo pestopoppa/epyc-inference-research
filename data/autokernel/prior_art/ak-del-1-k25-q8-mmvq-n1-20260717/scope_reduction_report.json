@@ -1,0 +1,67 @@
+{
+  "admitted_duration_ns": 57442,
+  "bucket_counts": {
+    "existing_path_disabled_unsupported_or_regressed": 0,
+    "existing_path_should_apply": 3,
+    "genuinely_new_no_catalogue_match": 0,
+    "upstream_mainline_or_open_missing_locally": 0
+  },
+  "bucket_duration_ns": {
+    "existing_path_disabled_unsupported_or_regressed": 0,
+    "existing_path_should_apply": 57442,
+    "genuinely_new_no_catalogue_match": 0,
+    "upstream_mainline_or_open_missing_locally": 0
+  },
+  "captured_dispatches": 9,
+  "captured_duration_ns": 57442,
+  "catalogue_sha256": "b95bfa24c7c87acb9d93fa82e11958483e22061b17ad54f53ac2cfd87f6db448",
+  "cumulative_floor": 0.01,
+  "existing_or_port_dominates": true,
+  "findings": [
+    {
+      "bucket": "existing_path_should_apply",
+      "captured_time_share": 0.2506876501514571,
+      "dispatches": 3,
+      "duration_ns": 14400,
+      "exit_action": "config_or_dispatch_fix",
+      "finding_id": "ak-del-1-k25-q8-mmvq-n1-20260717:__amd_rocclr_fillBufferAligned",
+      "kernel_family": "__amd_rocclr_fillBufferAligned",
+      "matched_pattern": "ROCm runtime buffer fill",
+      "reason": "attribute the dispatch to runtime housekeeping and profile its caller before proposing source work",
+      "source_commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
+    },
+    {
+      "bucket": "existing_path_should_apply",
+      "captured_time_share": 0.487483026357021,
+      "dispatches": 3,
+      "duration_ns": 28002,
+      "exit_action": "config_or_dispatch_fix",
+      "finding_id": "ak-del-1-k25-q8-mmvq-n1-20260717:mul_mat_vec_q",
+      "kernel_family": "mul_mat_vec_q",
+      "matched_pattern": "Q8 quantized GEMV",
+      "reason": "the current MMVQ path is active; a replacement proposal must name the deficiency and distinct mechanism",
+      "source_commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
+    },
+    {
+      "bucket": "existing_path_should_apply",
+      "captured_time_share": 0.2618293234915219,
+      "dispatches": 3,
+      "duration_ns": 15040,
+      "exit_action": "config_or_dispatch_fix",
+      "finding_id": "ak-del-1-k25-q8-mmvq-n1-20260717:quantize_q8_1",
+      "kernel_family": "quantize_q8_1",
+      "matched_pattern": "Q8 activation requantization",
+      "reason": "the current requantization kernel is active; a fusion or caching hypothesis must name a distinct mechanism",
+      "source_commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
+    }
+  ],
+  "receipt": {
+    "corpus_id": "ak-del-1-k25-q8-mmvq-n1-20260717",
+    "profile_path": "data/autokernel/prior_art/ak-del-1-k25-q8-mmvq-n1-20260717/rocprof_normalized.csv",
+    "profile_sha256": "3ad4800931477e44e1d60529e02771e6d03a5a0d89df4d4baa21779603d9ada8",
+    "source_commit": "3dee86a5a",
+    "workload_id": "test-backend-ops-rocm0-q8_0-f32-m16-n1-k256"
+  },
+  "recommendation": "expand_catalogue_before_novel_generator",
+  "schema": "epyc.autokernel.scope_reduction_report.v1"
+}

@@ -1,10 +1,13 @@
 {
   "schema": "epyc.autokernel.prior_art_catalogue.v1",
-  "scanned_at": "2026-08-10T20:00:00Z",
+  "scanned_at": "2026-08-11T06:44:11Z",
   "scan_commands": [
     "git -C /mnt/raid0/llm/llama.cpp rev-parse HEAD",
-    "git -C /mnt/raid0/llm/llama.cpp-experimental rev-parse HEAD",
-    "rg -n 'shared.expert|sampling|quant.*copy|rms.*rope|argmax' src ggml tools"
+    "git -C /mnt/raid0/llm/llama.cpp cherry HEAD e1a1abb78",
+    "git -C /mnt/raid0/llm/llama.cpp cherry HEAD dd1ea5243",
+    "git -C /mnt/raid0/llm/llama.cpp cherry HEAD 69bf64379",
+    "git -C /mnt/raid0/llm/llama.cpp cherry HEAD 687e77892",
+    "rg -n 'shared.expert|sampling|quant.*copy|rms.*rope|argmax|mul_mat_vec_q|quantize_q8_1' src ggml tools"
   ],
   "searched_trees": [
     "model:src/models",
@@ -29,10 +32,13 @@
     {"flag": "GGML_EP_WORKER_DRONE", "state": "off", "trace_effect": "EP drone waits and transport kernels are expected absent"}
   ],
   "rows": [
-    {"pattern": "transpose-free shared-expert GEMV", "trace_keywords": ["rocblas_gemv", "shared expert gate"], "primary_code": ["ggml_backend_rocblas_mul_mat"], "existing_path": "llama.cpp PR #26171", "reader_should_conclude": "forward-port audit; this is upstream prior art, not a novel kernel proposal", "upstream_state": "mainline", "local_state": "absent", "source_project": "llama.cpp", "source_commit": "67a433bf45a8a091d83b4ea0b32ff0735fd51800"},
-    {"pattern": "backend sampling multi-output", "trace_keywords": ["sampling", "top_k", "top_p"], "primary_code": ["ggml_backend_sched_graph_compute_async"], "existing_path": "llama.cpp PR #25532", "reader_should_conclude": "forward-port only after token and acceptance parity", "upstream_state": "mainline", "local_state": "absent", "source_project": "llama.cpp", "source_commit": "67a433bf45a8a091d83b4ea0b32ff0735fd51800"},
-    {"pattern": "quantized copy launch reduction", "trace_keywords": ["cpy", "copy"], "primary_code": ["ggml_cuda_cpy"], "existing_path": "llama.cpp PR #26731", "reader_should_conclude": "context-shift port only when profiling shows material copy wall share", "upstream_state": "mainline", "local_state": "absent", "source_project": "llama.cpp", "source_commit": "67a433bf45a8a091d83b4ea0b32ff0735fd51800"},
-    {"pattern": "RMSNorm MUL RoPE fusion", "trace_keywords": ["rms_norm", "rope", "mul"], "primary_code": ["ggml_rope", "ggml_rms_norm"], "existing_path": "llama.cpp PR #26767", "reader_should_conclude": "HIP portability/dispatch audit, not greenfield fusion research", "upstream_state": "mainline", "local_state": "absent", "source_project": "llama.cpp", "source_commit": "67a433bf45a8a091d83b4ea0b32ff0735fd51800"},
-    {"pattern": "split-block argmax", "trace_keywords": ["argmax"], "primary_code": ["ggml_argmax"], "existing_path": "llama.cpp PR #26812", "reader_should_conclude": "monitor upstream; do not spend a campaign until merged and wall share clears the floor", "upstream_state": "in_flight", "local_state": "absent", "source_project": "llama.cpp", "source_commit": "67a433bf45a8a091d83b4ea0b32ff0735fd51800"}
+    {"pattern": "transpose-free shared-expert GEMV", "trace_keywords": ["rocblas_gemv", "shared expert gate"], "trace_match": "all", "primary_code": ["ggml_backend_rocblas_mul_mat"], "existing_path": "llama.cpp PR #26171", "reader_should_conclude": "forward-port audit; this is upstream prior art, not a novel kernel proposal", "upstream_state": "mainline", "local_state": "absent", "source_project": "llama.cpp", "source_commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c"},
+    {"pattern": "backend sampling multi-output", "trace_keywords": ["sampling", "top_k", "top_p"], "primary_code": ["ggml_backend_sched_graph_compute_async"], "existing_path": "llama.cpp PR #25532", "reader_should_conclude": "forward-port only after token and acceptance parity", "upstream_state": "mainline", "local_state": "absent", "source_project": "llama.cpp", "source_commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c"},
+    {"pattern": "quantized copy launch reduction", "trace_keywords": ["cpy", "copy"], "primary_code": ["ggml_cuda_cpy"], "existing_path": "llama.cpp PR #26731", "reader_should_conclude": "context-shift port only when profiling shows material copy wall share", "upstream_state": "mainline", "local_state": "absent", "source_project": "llama.cpp", "source_commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c"},
+    {"pattern": "RMSNorm MUL RoPE fusion", "trace_keywords": ["rms_norm", "rope", "mul"], "trace_match": "all", "primary_code": ["ggml_rope", "ggml_rms_norm"], "existing_path": "llama.cpp PR #26767", "reader_should_conclude": "HIP portability/dispatch audit, not greenfield fusion research", "upstream_state": "mainline", "local_state": "absent", "source_project": "llama.cpp", "source_commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c"},
+    {"pattern": "split-block argmax", "trace_keywords": ["argmax"], "primary_code": ["ggml_argmax"], "existing_path": "llama.cpp PR #26812", "reader_should_conclude": "monitor upstream; do not spend a campaign until merged and wall share clears the floor", "upstream_state": "in_flight", "local_state": "absent", "source_project": "llama.cpp", "source_commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c"},
+    {"pattern": "ROCm runtime buffer fill", "trace_keywords": ["__amd_rocclr_fillBufferAligned"], "primary_code": ["hipMemsetAsync"], "existing_path": "ROCm runtime fill path", "reader_should_conclude": "attribute the dispatch to runtime housekeeping and profile its caller before proposing source work", "upstream_state": "mainline", "local_state": "present", "source_project": "llama.cpp", "source_commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c"},
+    {"pattern": "Q8 activation requantization", "trace_keywords": ["quantize_q8_1"], "primary_code": ["quantize_q8_1"], "existing_path": "ggml/src/ggml-cuda/quantize.cu", "reader_should_conclude": "the current requantization kernel is active; a fusion or caching hypothesis must name a distinct mechanism", "upstream_state": "mainline", "local_state": "present", "source_project": "llama.cpp", "source_commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c"},
+    {"pattern": "Q8 quantized GEMV", "trace_keywords": ["mul_mat_vec_q"], "primary_code": ["ggml_cuda_mul_mat_vec_q"], "existing_path": "ggml/src/ggml-cuda/mmvq.cu", "reader_should_conclude": "the current MMVQ path is active; a replacement proposal must name the deficiency and distinct mechanism", "upstream_state": "mainline", "local_state": "present", "source_project": "llama.cpp", "source_commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c"}
   ]
 }

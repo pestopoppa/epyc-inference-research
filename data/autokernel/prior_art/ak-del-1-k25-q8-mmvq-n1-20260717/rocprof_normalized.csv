@@ -1,0 +1,10 @@
+Dispatch_ID,Kernel_Name,Start_Timestamp,End_Timestamp
+0,"__amd_rocclr_fillBufferAligned.kd",0,4960
+1,"quantize_q8_1(float const*, void*, long, long, long, long, long, unsigned int, HIP_vector_type<unsigned int, 3u>) (.kd)",44529295,44534575
+2,"void mul_mat_vec_q<(ggml_type)8, 1, false, true>(void const*, void const*, int const*, ggml_cuda_mm_fusion_args_device, float*, unsigned int, HIP_vector_type<unsigned int, 3u>, unsigned int, unsigned int, unsigned int, HIP_vector_type<unsigned int, 3u>, unsigned int, unsigned int, unsigned int, HIP_vector_type<unsigned int, 3u>, unsigned int, unsigned int, unsigned int, unsigned int) (.kd)",52462926,52472207
+3,"__amd_rocclr_fillBufferAligned.kd",52970769,52975729
+4,"quantize_q8_1(float const*, void*, long, long, long, long, long, unsigned int, HIP_vector_type<unsigned int, 3u>) (.kd)",90524444,90529404
+5,"void mul_mat_vec_q<(ggml_type)8, 1, false, true>(void const*, void const*, int const*, ggml_cuda_mm_fusion_args_device, float*, unsigned int, HIP_vector_type<unsigned int, 3u>, unsigned int, unsigned int, unsigned int, HIP_vector_type<unsigned int, 3u>, unsigned int, unsigned int, unsigned int, HIP_vector_type<unsigned int, 3u>, unsigned int, unsigned int, unsigned int, unsigned int) (.kd)",90564124,90573884
+6,"__amd_rocclr_fillBufferAligned.kd",90866525,90871005
+7,"quantize_q8_1(float const*, void*, long, long, long, long, long, unsigned int, HIP_vector_type<unsigned int, 3u>) (.kd)",127594038,127598838
+8,"void mul_mat_vec_q<(ggml_type)8, 1, false, true>(void const*, void const*, int const*, ggml_cuda_mm_fusion_args_device, float*, unsigned int, HIP_vector_type<unsigned int, 3u>, unsigned int, unsigned int, unsigned int, HIP_vector_type<unsigned int, 3u>, unsigned int, unsigned int, unsigned int, HIP_vector_type<unsigned int, 3u>, unsigned int, unsigned int, unsigned int, unsigned int) (.kd)",127631478,127640439

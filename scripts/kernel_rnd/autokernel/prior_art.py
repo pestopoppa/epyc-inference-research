@@ -8,9 +8,14 @@ planner.  The catalogue is data; this file owns validation and reduction only.
 """
 from __future__ import annotations
 
+import argparse
+import csv
+import hashlib
 import json
 import math
 import re
+import sys
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -37,16 +42,28 @@ EXIT_BY_BUCKET = {
 
 UPSTREAM_STATES = frozenset({"mainline", "in_flight", "local_only"})
 LOCAL_STATES = frozenset({"present", "disabled", "unsupported", "regressed", "absent"})
+TRACE_MATCH_MODES = frozenset({"any", "all"})
 _COMMIT_RE = re.compile(r"^[0-9a-f]{7,64}$")
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 class CatalogueError(ValueError):
     pass
 
 
+class ProfileError(ValueError):
+    """A profile cannot support a receipted prior-art classification."""
+
+
 def _text(value: Any, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise CatalogueError(f"{label} must be a non-empty string")
+    return value.strip()
+
+
+def _profile_text(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ProfileError(f"{label} must be a non-empty string")
     return value.strip()
 
 
@@ -61,6 +78,7 @@ class CatalogueRow:
     local_state: str
     source_project: str
     source_commit: str
+    trace_match: str = "any"
 
     @classmethod
     def from_dict(cls, row: Mapping[str, Any]) -> "CatalogueRow":
@@ -77,10 +95,13 @@ class CatalogueRow:
         upstream = _text(row.get("upstream_state"), "upstream_state")
         local = _text(row.get("local_state"), "local_state")
         commit = _text(row.get("source_commit"), "source_commit")
+        trace_match = _text(row.get("trace_match", "any"), "trace_match")
         if upstream not in UPSTREAM_STATES:
             raise CatalogueError(f"unknown upstream_state {upstream!r}")
         if local not in LOCAL_STATES:
             raise CatalogueError(f"unknown local_state {local!r}")
+        if trace_match not in TRACE_MATCH_MODES:
+            raise CatalogueError(f"unknown trace_match {trace_match!r}")
         if not _COMMIT_RE.fullmatch(commit):
             raise CatalogueError("source_commit must be a pinned hexadecimal commit")
         return cls(
@@ -94,6 +115,7 @@ class CatalogueRow:
             local_state=local,
             source_project=_text(row.get("source_project"), "source_project"),
             source_commit=commit,
+            trace_match=trace_match,
         )
 
 
@@ -184,7 +206,10 @@ class Classification:
 def _matches(finding: Finding, row: CatalogueRow) -> bool:
     trace = finding.trace_text.casefold()
     symbols = {symbol.casefold() for symbol in finding.symbols}
-    return (any(keyword.casefold() in trace for keyword in row.trace_keywords)
+    keyword_hits = tuple(keyword.casefold() in trace for keyword in row.trace_keywords)
+    trace_match = (all(keyword_hits) if row.trace_match == "all"
+                   else any(keyword_hits))
+    return (trace_match
             or any(code.casefold() in symbols for code in row.primary_code))
 
 
@@ -247,3 +272,294 @@ def load_catalogue(path: str | Path | None = None) -> Catalogue:
         "prior_art_catalogue.json")
     return Catalogue.from_dict(json.loads(source.read_text(encoding="utf-8")))
 
+
+@dataclass(frozen=True)
+class ProfileReceipt:
+    """Identity and provenance for one already-recorded profiler capture."""
+
+    corpus_id: str
+    workload_id: str
+    profile_path: str
+    profile_sha256: str
+    source_commit: str
+
+    def __post_init__(self) -> None:
+        _profile_text(self.corpus_id, "corpus_id")
+        _profile_text(self.workload_id, "workload_id")
+        _profile_text(self.profile_path, "profile_path")
+        profile_sha256 = _profile_text(self.profile_sha256, "profile_sha256")
+        source_commit = _profile_text(self.source_commit, "source_commit")
+        if not _SHA256_RE.fullmatch(profile_sha256):
+            raise ProfileError("profile_sha256 must be 64 lowercase hexadecimal digits")
+        if not _COMMIT_RE.fullmatch(source_commit):
+            raise ProfileError("source_commit must be a pinned hexadecimal commit")
+
+
+@dataclass(frozen=True)
+class ProfileFinding:
+    """One duration-aggregated kernel family from a receipted profile."""
+
+    finding: Finding
+    kernel_family: str
+    dispatches: int
+    duration_ns: int
+
+
+@dataclass(frozen=True)
+class ScopeReductionReport:
+    """AK-DEL-1's durable four-bucket result over real profiler findings."""
+
+    receipt: ProfileReceipt
+    catalogue_sha256: str
+    cumulative_floor: float
+    captured_dispatches: int
+    captured_duration_ns: int
+    admitted_duration_ns: int
+    bucket_counts: Mapping[str, int]
+    bucket_duration_ns: Mapping[str, int]
+    existing_or_port_dominates: bool
+    recommendation: str
+    findings: tuple[Mapping[str, Any], ...]
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "schema": "epyc.autokernel.scope_reduction_report.v1",
+            "receipt": {
+                "corpus_id": self.receipt.corpus_id,
+                "workload_id": self.receipt.workload_id,
+                "profile_path": self.receipt.profile_path,
+                "profile_sha256": self.receipt.profile_sha256,
+                "source_commit": self.receipt.source_commit,
+            },
+            "catalogue_sha256": self.catalogue_sha256,
+            "cumulative_floor": self.cumulative_floor,
+            "captured_dispatches": self.captured_dispatches,
+            "captured_duration_ns": self.captured_duration_ns,
+            "admitted_duration_ns": self.admitted_duration_ns,
+            "bucket_counts": dict(self.bucket_counts),
+            "bucket_duration_ns": dict(self.bucket_duration_ns),
+            "existing_or_port_dominates": self.existing_or_port_dominates,
+            "recommendation": self.recommendation,
+            "findings": [dict(row) for row in self.findings],
+        }
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _kernel_family(kernel_name: str) -> str:
+    """Reduce a demangled rocprof kernel to its stable callable family."""
+    name = _profile_text(kernel_name, "Kernel_Name")
+    if name.endswith(" (.kd)"):
+        name = name[:-6]
+    if name.endswith(".kd"):
+        name = name[:-3]
+    if name.startswith("void "):
+        name = name[5:]
+    cut = len(name)
+    for marker in ("<", "("):
+        position = name.find(marker)
+        if position >= 0:
+            cut = min(cut, position)
+    family = name[:cut].strip()
+    if not family:
+        raise ProfileError(f"could not derive a kernel family from {kernel_name!r}")
+    return family
+
+
+def load_rocprof_findings(path: str | Path, receipt: ProfileReceipt, *,
+                          active_flags: Mapping[str, str] | None = None,
+                          symbol_aliases: Mapping[str, Sequence[str]] | None = None
+                          ) -> tuple[ProfileFinding, ...]:
+    """Parse and aggregate a rocprofv2 CSV after verifying its content hash.
+
+    This consumes a completed capture.  It launches nothing and deliberately
+    treats timestamps as the only timing authority; hardware counter values are
+    not substituted for dispatch duration.
+    """
+    source = Path(path)
+    if not source.is_file():
+        raise ProfileError(f"profile does not exist: {source}")
+    observed_hash = _sha256(source)
+    if observed_hash != receipt.profile_sha256:
+        raise ProfileError(
+            f"profile sha256 mismatch: expected {receipt.profile_sha256}, got {observed_hash}")
+    flags = dict(active_flags or {})
+    aliases = dict(symbol_aliases or {})
+    durations: dict[str, int] = defaultdict(int)
+    dispatches: dict[str, int] = defaultdict(int)
+    names: dict[str, set[str]] = defaultdict(set)
+    seen_ids: set[str] = set()
+    required = {"Dispatch_ID", "Kernel_Name", "Start_Timestamp", "End_Timestamp"}
+    with source.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(line for line in handle if line.strip())
+        if reader.fieldnames is None or not required.issubset(reader.fieldnames):
+            missing = sorted(required - set(reader.fieldnames or ()))
+            raise ProfileError(f"rocprof CSV is missing required columns: {missing}")
+        for row_number, row in enumerate(reader, 2):
+            dispatch_id = _profile_text(
+                row.get("Dispatch_ID"), f"row {row_number} Dispatch_ID")
+            if dispatch_id in seen_ids:
+                raise ProfileError(f"duplicate Dispatch_ID {dispatch_id!r}")
+            seen_ids.add(dispatch_id)
+            try:
+                start = int(_profile_text(row.get("Start_Timestamp"),
+                                          f"row {row_number} Start_Timestamp"))
+                end = int(_profile_text(row.get("End_Timestamp"),
+                                        f"row {row_number} End_Timestamp"))
+            except ValueError as exc:
+                raise ProfileError(f"row {row_number} has a non-integer timestamp") from exc
+            if end <= start:
+                raise ProfileError(
+                    f"row {row_number} has non-positive dispatch duration: {start}..{end}")
+            kernel_name = _profile_text(
+                row.get("Kernel_Name"), f"row {row_number} Kernel_Name")
+            family = _kernel_family(kernel_name)
+            durations[family] += end - start
+            dispatches[family] += 1
+            names[family].add(kernel_name)
+    total = sum(durations.values())
+    if not seen_ids or total <= 0:
+        raise ProfileError("rocprof CSV contains no positive-duration dispatches")
+    findings = []
+    for family in sorted(durations):
+        trace_text = " | ".join(sorted(names[family]))
+        finding = Finding(
+            finding_id=f"{receipt.corpus_id}:{family}",
+            trace_text=trace_text,
+            symbols=tuple(aliases.get(family, ())),
+            active_flags=flags,
+            gpu_time_share=durations[family] / total,
+        )
+        findings.append(ProfileFinding(
+            finding=finding,
+            kernel_family=family,
+            dispatches=dispatches[family],
+            duration_ns=durations[family],
+        ))
+    return tuple(findings)
+
+
+def run_scope_reduction(profile_path: str | Path, receipt: ProfileReceipt,
+                        catalogue_path: str | Path | None = None, *,
+                        cumulative_floor: float = 0.01,
+                        active_flags: Mapping[str, str] | None = None,
+                        symbol_aliases: Mapping[str, Sequence[str]] | None = None,
+                        catalogue: Catalogue | None = None) -> ScopeReductionReport:
+    """Execute AK-DEL-1 over a completed profile and the reviewed catalogue."""
+    if not 0 <= cumulative_floor <= 1:
+        raise ValueError("cumulative_floor must be in [0,1]")
+    catalogue_file = (Path(catalogue_path) if catalogue_path is not None
+                      else Path(__file__).with_name("prior_art_catalogue.json"))
+    if catalogue is None:
+        catalogue = load_catalogue(catalogue_file)
+        catalogue_hash = _sha256(catalogue_file)
+    else:
+        canonical = json.dumps({
+            "rows": [row.__dict__ for row in catalogue.rows],
+            "expected_absence": [row.__dict__ for row in catalogue.expected_absence],
+            "scanned_at": catalogue.scanned_at,
+            "scan_commands": catalogue.scan_commands,
+            "searched_trees": catalogue.searched_trees,
+        }, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        catalogue_hash = hashlib.sha256(canonical).hexdigest()
+    parsed = load_rocprof_findings(
+        profile_path, receipt, active_flags=active_flags, symbol_aliases=symbol_aliases)
+    admitted_ids = {
+        row.finding_id for row in proposal_space(
+            tuple(row.finding for row in parsed), catalogue,
+            cumulative_floor=cumulative_floor)
+    }
+    admitted = tuple(row for row in parsed if row.finding.finding_id in admitted_ids)
+    if not admitted:
+        raise ProfileError("no kernel family clears the cumulative wall-share floor")
+    counts = {bucket: 0 for bucket in BUCKETS}
+    duration_by_bucket = {bucket: 0 for bucket in BUCKETS}
+    rendered = []
+    for row in admitted:
+        result = classify(row.finding, catalogue)
+        counts[result.bucket] += 1
+        duration_by_bucket[result.bucket] += row.duration_ns
+        rendered.append({
+            "finding_id": result.finding_id,
+            "kernel_family": row.kernel_family,
+            "dispatches": row.dispatches,
+            "duration_ns": row.duration_ns,
+            "captured_time_share": row.finding.gpu_time_share,
+            "bucket": result.bucket,
+            "exit_action": result.exit_action,
+            "matched_pattern": result.matched_pattern,
+            "reason": result.reason,
+            "source_commit": result.source_commit,
+        })
+    existing_count = sum(counts[bucket] for bucket in BUCKETS[:-1])
+    novel_count = counts[BUCKET_NOVEL]
+    dominates = existing_count > novel_count
+    recommendation = (
+        "expand_catalogue_before_novel_generator"
+        if dominates else "retain_novel_generator_scope"
+    )
+    return ScopeReductionReport(
+        receipt=receipt,
+        catalogue_sha256=catalogue_hash,
+        cumulative_floor=cumulative_floor,
+        captured_dispatches=sum(row.dispatches for row in parsed),
+        captured_duration_ns=sum(row.duration_ns for row in parsed),
+        admitted_duration_ns=sum(row.duration_ns for row in admitted),
+        bucket_counts=counts,
+        bucket_duration_ns=duration_by_bucket,
+        existing_or_port_dominates=dominates,
+        recommendation=recommendation,
+        findings=tuple(rendered),
+    )
+
+
+def _parse_flag(value: str) -> tuple[str, str]:
+    name, separator, state = value.partition("=")
+    if not separator or not name.strip() or not state.strip():
+        raise argparse.ArgumentTypeError("active flags use NAME=STATE")
+    return name.strip(), state.strip()
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Run AK-DEL-1 over an already-recorded rocprofv2 CSV")
+    parser.add_argument("--profile", required=True)
+    parser.add_argument("--profile-sha256", required=True)
+    parser.add_argument("--source-commit", required=True)
+    parser.add_argument("--corpus-id", required=True)
+    parser.add_argument("--workload-id", required=True)
+    parser.add_argument("--catalogue", default=str(
+        Path(__file__).with_name("prior_art_catalogue.json")))
+    parser.add_argument("--cumulative-floor", type=float, default=0.01)
+    parser.add_argument("--active-flag", action="append", type=_parse_flag, default=[])
+    parser.add_argument("--output")
+    args = parser.parse_args(argv)
+    receipt = ProfileReceipt(
+        corpus_id=args.corpus_id,
+        workload_id=args.workload_id,
+        profile_path=args.profile,
+        profile_sha256=args.profile_sha256,
+        source_commit=args.source_commit,
+    )
+    report = run_scope_reduction(
+        args.profile, receipt, args.catalogue,
+        cumulative_floor=args.cumulative_floor,
+        active_flags=dict(args.active_flag))
+    encoded = json.dumps(report.as_dict(), indent=2, sort_keys=True) + "\n"
+    if args.output:
+        output = Path(args.output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(encoded, encoding="utf-8")
+    else:
+        sys.stdout.write(encoded)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
