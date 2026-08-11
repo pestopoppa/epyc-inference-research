@@ -15,8 +15,8 @@ gap for the prospective MI210 comparison:
   refusal receipt before any controller or GPU command can start.
 
 The repository carries ``claude_codex_actor_critic`` plus governed adapters for
-the pinned upstream K-Search, Xe-Forge, and GEAK-v1 implementations. The other
-three controller names remain exact refusals; a similarly named command does
+the pinned upstream KernelFoundry, K-Search, Xe-Forge, and GEAK-v1
+implementations. The other two controller names remain exact refusals; a similarly named command does
 not count as their implementation.
 """
 
@@ -38,6 +38,7 @@ from . import (
     arena_adapter,
     claude_codex_actor_critic,
     geak_v1_arena,
+    kernelfoundry_arena,
     k_search_arena,
     xe_forge_arena,
 )
@@ -236,6 +237,26 @@ class ArmImplementation:
                 raise ArenaCampaignError("k_search requires the Codex CLI")
             if self.upstream_source_commit != k_search_arena.SOURCE_COMMIT:
                 raise ArenaCampaignError("k_search upstream source pin drifted")
+        if (self.availability == "ready"
+                and self.arm_id == kernelfoundry_arena.CONTROLLER_ID):
+            expected_tail = kernelfoundry_arena.campaign_argv("python3")[1:]
+            if self.adapter_kind != "kernelfoundry_map_elites_arena_v1":
+                raise ArenaCampaignError(
+                    "kernelfoundry requires its MAP-Elites Arena adapter")
+            if len(self.argv) < 2 or self.argv[1:] != expected_tail:
+                raise ArenaCampaignError(
+                    "kernelfoundry argv differs from its pinned executable")
+            if self.entrypoint_path != kernelfoundry_arena.ENTRYPOINT_RELATIVE:
+                raise ArenaCampaignError(
+                    "kernelfoundry entrypoint differs from its implementation")
+            if self.model_ids != kernelfoundry_arena.PINNED_MODEL_IDS:
+                raise ArenaCampaignError(
+                    "kernelfoundry model_ids differ from exact model/effort pins")
+            if self.required_clis != kernelfoundry_arena.REQUIRED_CLIS:
+                raise ArenaCampaignError("kernelfoundry requires the Codex CLI")
+            if self.upstream_source_commit != kernelfoundry_arena.SOURCE_COMMIT:
+                raise ArenaCampaignError(
+                    "kernelfoundry upstream source pin drifted")
         if self.availability == "ready" and self.arm_id == geak_v1_arena.CONTROLLER_ID:
             expected_tail = geak_v1_arena.campaign_argv("python3")[1:]
             if self.adapter_kind != "geak_v1_optimagent_arena_v1":

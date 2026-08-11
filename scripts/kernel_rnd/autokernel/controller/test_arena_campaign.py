@@ -15,6 +15,7 @@ from unittest import mock
 from . import arena_campaign as C
 from . import claude_codex_actor_critic as AC
 from . import geak_v1_arena as GEAK
+from . import kernelfoundry_arena as KF
 from . import k_search_arena as KS
 from . import xe_forge_arena as XF
 
@@ -58,6 +59,10 @@ class ArenaCampaignTest(unittest.TestCase):
         self.xe_forge_entrypoint.parent.mkdir(parents=True, exist_ok=True)
         self.xe_forge_entrypoint.write_text(
             "raise SystemExit(0)\n# xe-forge fixture\n", encoding="utf-8")
+        self.kernelfoundry_entrypoint = self.source / KF.ENTRYPOINT_RELATIVE
+        self.kernelfoundry_entrypoint.parent.mkdir(parents=True, exist_ok=True)
+        self.kernelfoundry_entrypoint.write_text(
+            "raise SystemExit(0)\n# kernelfoundry fixture\n", encoding="utf-8")
         for command in (
             ("git", "init", "-q"),
             ("git", "add", "."),
@@ -77,16 +82,20 @@ class ArenaCampaignTest(unittest.TestCase):
             is_k_search = arm_id == KS.CONTROLLER_ID
             is_geak = arm_id == GEAK.CONTROLLER_ID
             is_xe_forge = arm_id == "xe_forge"
+            is_kernelfoundry = arm_id == KF.CONTROLLER_ID
             argv = (() if arm_id == C.BASELINE_ARM_ID else
                     (AC.campaign_argv(sys.executable) if is_actor_critic else
                      (KS.campaign_argv(sys.executable) if is_k_search else
                       (GEAK.campaign_argv(sys.executable) if is_geak else
                        (XF.campaign_argv(sys.executable) if is_xe_forge else
-                        (sys.executable, "-c", "pass"))))))
+                        (KF.campaign_argv(sys.executable)
+                         if is_kernelfoundry else
+                         (sys.executable, "-c", "pass")))))))
             entrypoint = (self.k_search_entrypoint if is_k_search else
                           (self.geak_entrypoint if is_geak else
-                           (self.xe_forge_entrypoint if is_xe_forge
-                            else self.entrypoint)))
+                           (self.xe_forge_entrypoint if is_xe_forge else
+                            (self.kernelfoundry_entrypoint
+                             if is_kernelfoundry else self.entrypoint))))
             arms.append(C.ArmImplementation(
                 arm_id=arm_id,
                 availability="ready",
@@ -99,7 +108,9 @@ class ArenaCampaignTest(unittest.TestCase):
                                       if is_geak else
                                       ("xe_forge_linear_cover_arena_v1"
                                        if is_xe_forge else
-                                       "stdin_workspace_v1"))))),
+                                       ("kernelfoundry_map_elites_arena_v1"
+                                        if is_kernelfoundry else
+                                        "stdin_workspace_v1")))))),
                 missing_artifacts=(),
                 argv=argv,
                 source_root=(None if arm_id == C.BASELINE_ARM_ID else str(self.source)),
@@ -110,7 +121,9 @@ class ArenaCampaignTest(unittest.TestCase):
                                        else (GEAK.ENTRYPOINT_RELATIVE if is_geak
                                              else (XF.ENTRYPOINT_RELATIVE
                                                    if is_xe_forge else
-                                                   AC.ENTRYPOINT_RELATIVE)))),
+                                                   (KF.ENTRYPOINT_RELATIVE
+                                                    if is_kernelfoundry else
+                                                    AC.ENTRYPOINT_RELATIVE))))),
                 entrypoint_sha256=(None if arm_id == C.BASELINE_ARM_ID
                                    else sha(entrypoint)),
                 model_ids=(() if arm_id == C.BASELINE_ARM_ID else
@@ -118,40 +131,52 @@ class ArenaCampaignTest(unittest.TestCase):
                             (KS.PINNED_MODEL_IDS if is_k_search else
                              (GEAK.PINNED_MODEL_IDS if is_geak else
                               (XF.PINNED_MODEL_IDS if is_xe_forge else
-                               ("fixture-model",)))))),
+                               (KF.PINNED_MODEL_IDS if is_kernelfoundry else
+                                ("fixture-model",))))))),
                 required_clis=(AC.REQUIRED_CLIS if is_actor_critic else
                                (KS.REQUIRED_CLIS if is_k_search else
                                 (GEAK.REQUIRED_CLIS if is_geak else
-                                 (XF.REQUIRED_CLIS if is_xe_forge else ())))),
+                                 (XF.REQUIRED_CLIS if is_xe_forge else
+                                  (KF.REQUIRED_CLIS
+                                   if is_kernelfoundry else ()))))),
                 upstream_source_root=("vendor://k-search" if is_k_search else
                                       ("vendor://geak-v1" if is_geak else
-                                       ("vendor://xe-forge" if is_xe_forge
-                                        else None))),
+                                       ("vendor://xe-forge" if is_xe_forge else
+                                        ("vendor://kernelfoundry"
+                                         if is_kernelfoundry else None)))),
                 upstream_source_commit=(KS.SOURCE_COMMIT if is_k_search else
                                         (GEAK.SOURCE_COMMIT if is_geak else
-                                         (XF.SOURCE_COMMIT if is_xe_forge
-                                          else None))),
+                                         (XF.SOURCE_COMMIT if is_xe_forge else
+                                          (KF.SOURCE_COMMIT
+                                           if is_kernelfoundry else None)))),
                 upstream_entrypoint_path=(
                     KS.UPSTREAM_ENTRYPOINT if is_k_search else
                     (GEAK.UPSTREAM_ENTRYPOINT if is_geak else
-                     (XF.UPSTREAM_ENTRYPOINT if is_xe_forge else None))),
+                     (XF.UPSTREAM_ENTRYPOINT if is_xe_forge else
+                      (KF.UPSTREAM_ENTRYPOINT if is_kernelfoundry else None)))),
                 upstream_entrypoint_sha256=(
                     "022a9381cd31e8429e2d4fa0486fd94fc806ca5a331e710991f84e6d82b79723"
                     if is_k_search else
                     ("ff742e9ecb5195114c96600e1a1daeedaac1d1769484f60287716e5ea254d2c1"
                      if is_geak else
                      ("8ec39507d909fa3a442dad5b13fa9c4518ba440d3429f6205fdb746ff74b3631"
-                      if is_xe_forge else None))),
+                      if is_xe_forge else
+                      ("c8e5bc70526325f8b33bbf7a7623d3ffad978c2ba4ce8b8561ab04f7c46cadcf"
+                       if is_kernelfoundry else None)))),
                 upstream_license_path=("LICENSE" if is_k_search else
                                        ("LICENSE.md" if is_geak else
-                                        ("LICENSE" if is_xe_forge else None))),
+                                        ("LICENSE" if is_xe_forge else
+                                         ("LICENSE" if is_kernelfoundry
+                                          else None)))),
                 upstream_license_sha256=(
                     "4eb338364aa80d8a3a0a226e78643960271f4181ad32e91403b686720d086b1e"
                     if is_k_search else
                     ("51f22193d2056db3ec1b578e0b94568b5641807b90c0f3e75e1878c435b03709"
                      if is_geak else
                      ("c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
-                      if is_xe_forge else None))),
+                      if is_xe_forge else
+                      ("cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+                       if is_kernelfoundry else None)))),
             ))
         return C.CampaignSpec(
             config_path=str(self.config_source.resolve()),
@@ -249,9 +274,24 @@ class ArenaCampaignTest(unittest.TestCase):
         self.assertEqual(xe_forge.required_clis, XF.REQUIRED_CLIS)
         self.assertEqual(xe_forge.upstream_source_commit, XF.SOURCE_COMMIT)
         self.assertEqual(xe_forge.missing_artifacts, ())
+        kernelfoundry = next(
+            arm for arm in spec.arms if arm.arm_id == KF.CONTROLLER_ID)
+        self.assertEqual(kernelfoundry.availability, "ready")
+        self.assertEqual(kernelfoundry.adapter_kind,
+                         "kernelfoundry_map_elites_arena_v1")
+        self.assertEqual(kernelfoundry.argv, KF.campaign_argv())
+        self.assertEqual(kernelfoundry.source_root, C.IN_TREE_SOURCE_ROOT)
+        self.assertEqual(kernelfoundry.entrypoint_path,
+                         KF.ENTRYPOINT_RELATIVE)
+        self.assertEqual(kernelfoundry.model_ids, KF.PINNED_MODEL_IDS)
+        self.assertEqual(kernelfoundry.required_clis, KF.REQUIRED_CLIS)
+        self.assertEqual(kernelfoundry.upstream_source_commit,
+                         KF.SOURCE_COMMIT)
+        self.assertEqual(kernelfoundry.missing_artifacts, ())
         for arm in spec.arms[2:]:
             if arm.arm_id in {
-                    KS.CONTROLLER_ID, GEAK.CONTROLLER_ID, "xe_forge"}:
+                    KF.CONTROLLER_ID, KS.CONTROLLER_ID,
+                    GEAK.CONTROLLER_ID, "xe_forge"}:
                 continue
             self.assertEqual(arm.availability, "missing")
             self.assertFalse(arm.argv)
@@ -351,13 +391,14 @@ class ArenaCampaignTest(unittest.TestCase):
         self.assertTrue(all(row["executable_sha256"] for row in controller_rows))
         self.assertTrue(all(row["source_identity"]["clean"] for row in controller_rows))
         self.assertEqual(controller_rows[0]["model_ids"], list(AC.PINNED_MODEL_IDS))
+        self.assertEqual(controller_rows[2]["model_ids"], list(KF.PINNED_MODEL_IDS))
         self.assertEqual(controller_rows[3]["model_ids"], list(KS.PINNED_MODEL_IDS))
         self.assertEqual(controller_rows[4]["model_ids"], list(XF.PINNED_MODEL_IDS))
         self.assertEqual(controller_rows[5]["model_ids"], list(GEAK.PINNED_MODEL_IDS))
         self.assertEqual(
             [row["model_ids"] for index, row in enumerate(controller_rows[1:], 1)
-             if index not in {3, 4, 5}],
-            [["fixture-model"]] * 3,
+             if index not in {2, 3, 4, 5}],
+            [["fixture-model"]] * 2,
         )
         self.assertEqual(
             [row["name"] for row in controller_rows[0]["required_cli_identities"]],

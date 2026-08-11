@@ -78,13 +78,48 @@
     },
     {
       "arm_id": "kernelfoundry",
-      "availability": "missing",
-      "adapter_kind": "stdin_workspace_v1",
-      "missing_artifacts": [
-        "a licensed, commit-pinned KernelFoundry source checkout",
-        "a gfx90a MAP-Elites/profiler-gradient controller entry point",
-        "a hash-bound three-argument AgentKernelArena launcher"
-      ]
+      "availability": "ready",
+      "adapter_kind": "kernelfoundry_map_elites_arena_v1",
+      "missing_artifacts": [],
+      "argv": [
+        "/mnt/raid0/llm/tools/geak-v1-rocm62-py312/bin/python",
+        "-m",
+        "scripts.kernel_rnd.autokernel.controller.kernelfoundry_arena",
+        "--model",
+        "gpt-5.6-sol",
+        "--effort",
+        "high",
+        "--checkpoint-hours",
+        "32",
+        "--timeout-seconds",
+        "115200",
+        "--max-iterations",
+        "16",
+        "--branches-per-iteration",
+        "4",
+        "--workspace",
+        ".",
+        "--arena-root",
+        "/mnt/raid0/llm/autokernel/vendor/agent-kernel-arena",
+        "--source-root",
+        "/mnt/raid0/llm/autokernel/vendor/arena-controllers/kernelfoundry"
+      ],
+      "source_root": "repository://.",
+      "source_commit": "7654383ca79bcd1d9694dec17d21ebf7bc71ebcf",
+      "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/kernelfoundry_arena.py",
+      "entrypoint_sha256": "2f04cbc60891d898b4d294d2b52d3e7b77e61e77cf4e38e42c77e0341e217084",
+      "model_ids": [
+        "gpt-5.6-sol:high:upstream-controller"
+      ],
+      "required_clis": [
+        "codex"
+      ],
+      "upstream_source_root": "vendor://kernelfoundry",
+      "upstream_source_commit": "1c053e02383d12937f144923bcc1faa82fa7788f",
+      "upstream_entrypoint_path": "kernelfoundry/algorithm/controller.py",
+      "upstream_entrypoint_sha256": "c8e5bc70526325f8b33bbf7a7623d3ffad978c2ba4ce8b8561ab04f7c46cadcf",
+      "upstream_license_path": "LICENSE",
+      "upstream_license_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
     },
     {
       "arm_id": "k_search",
@@ -156,9 +191,9 @@
         "/mnt/raid0/llm/autokernel/vendor/arena-controllers/xe-forge"
       ],
       "source_root": "repository://.",
-      "source_commit": "d76fe4b9e1d34c0a4eee8560160c01c1e893fae8",
+      "source_commit": "1bd5ec75003a5d2048414e5d9969b9afb503f1ee",
       "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/xe_forge_arena.py",
-      "entrypoint_sha256": "18bfcbab3c15d9ff249baa4ba4a7e5dc29ee7d7f1abcafc96a151f0e6a108228",
+      "entrypoint_sha256": "78cbfa81e8ef864e4dd20f35eea04b83e1dbdaec5ecc060d2721405d2815eca2",
       "model_ids": [
         "gpt-5.6-sol:high:upstream-controller"
       ],
