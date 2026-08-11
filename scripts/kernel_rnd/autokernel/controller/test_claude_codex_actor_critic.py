@@ -182,6 +182,28 @@ class ActorCriticControllerTest(unittest.TestCase):
                 environment=self.environment(),
                 runner=FakeRunner(escape_workspace, planner_path="../outside.py"))
 
+    def test_claude_result_accepts_only_an_exact_single_json_fence(self):
+        workspace = self.workspace("fenced")
+        proposal = {
+            "schema": A.PROPOSAL_SCHEMA,
+            "proposal_id": "proposal-fenced",
+            "candidate_path": "kernel.py",
+            "actor_instruction": "Implement the bounded candidate.",
+        }
+        fenced = json.dumps({
+            "result": f"```json\n{json.dumps(proposal)}\n```",
+        })
+        parsed = A.parse_proposal(fenced, workspace)
+        self.assertEqual(parsed["proposal_id"], "proposal-fenced")
+        with self.assertRaisesRegex(A.ActorCriticError, "malformed JSON"):
+            A.parse_proposal(json.dumps({
+                "result": f"preface\n```json\n{json.dumps(proposal)}\n```",
+            }), workspace)
+        with self.assertRaisesRegex(A.ActorCriticError, "malformed JSON"):
+            A.parse_proposal(json.dumps({
+                "result": "```json\n{}\n```\n```json\n{}\n```",
+            }), workspace)
+
     def test_actor_cannot_change_a_second_workspace_path(self):
         workspace = self.workspace()
         with self.assertRaisesRegex(A.ActorCriticError, "outside its candidate"):

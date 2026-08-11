@@ -47,6 +47,8 @@ ENTRYPOINT_RELATIVE = (
 EXECUTABLE_MODULE = (
     "scripts.kernel_rnd.autokernel.controller.claude_codex_actor_critic")
 _ID_RE = re.compile(r"[a-z][a-z0-9_.-]{2,95}")
+_JSON_FENCE_RE = re.compile(
+    r"\A\s*```(?:json)?\s*\n(?P<body>.*?)\n```\s*\Z", re.DOTALL)
 
 
 class ActorCriticError(ValueError):
@@ -273,10 +275,19 @@ def _parse_json_object(raw: str, label: str) -> dict[str, Any]:
     # Claude's --output-format json wraps the text result.  Tests and alternate
     # compatible launchers may provide the inner object directly.
     if set(payload) >= {"result"} and isinstance(payload["result"], str):
+        inner = payload["result"]
         try:
-            payload = json.loads(payload["result"])
-        except json.JSONDecodeError as exc:
-            raise ActorCriticError(f"{label}.result emitted malformed JSON") from exc
+            payload = json.loads(inner)
+        except json.JSONDecodeError as direct_error:
+            fenced = _JSON_FENCE_RE.fullmatch(inner)
+            if fenced is None:
+                raise ActorCriticError(
+                    f"{label}.result emitted malformed JSON") from direct_error
+            try:
+                payload = json.loads(fenced.group("body"))
+            except json.JSONDecodeError as fenced_error:
+                raise ActorCriticError(
+                    f"{label}.result emitted malformed JSON") from fenced_error
         if not isinstance(payload, dict):
             raise ActorCriticError(f"{label}.result must be one JSON object")
     return payload
