@@ -131,13 +131,46 @@
     },
     {
       "arm_id": "xe_forge",
-      "availability": "missing",
-      "adapter_kind": "stdin_workspace_v1",
-      "missing_artifacts": [
-        "a licensed, commit-pinned Xe-Forge source checkout",
-        "a callable linear-CoVeR controller using the shared gfx90a evaluator",
-        "a hash-bound three-argument AgentKernelArena launcher"
-      ]
+      "availability": "ready",
+      "adapter_kind": "xe_forge_linear_cover_arena_v1",
+      "missing_artifacts": [],
+      "argv": [
+        "/mnt/raid0/llm/tools/geak-v1-rocm62-py312/bin/python",
+        "-m",
+        "scripts.kernel_rnd.autokernel.controller.xe_forge_arena",
+        "--model",
+        "gpt-5.6-sol",
+        "--effort",
+        "high",
+        "--checkpoint-hours",
+        "32",
+        "--timeout-seconds",
+        "115200",
+        "--max-iterations",
+        "64",
+        "--workspace",
+        ".",
+        "--arena-root",
+        "/mnt/raid0/llm/autokernel/vendor/agent-kernel-arena",
+        "--source-root",
+        "/mnt/raid0/llm/autokernel/vendor/arena-controllers/xe-forge"
+      ],
+      "source_root": "repository://.",
+      "source_commit": "d76fe4b9e1d34c0a4eee8560160c01c1e893fae8",
+      "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/xe_forge_arena.py",
+      "entrypoint_sha256": "18bfcbab3c15d9ff249baa4ba4a7e5dc29ee7d7f1abcafc96a151f0e6a108228",
+      "model_ids": [
+        "gpt-5.6-sol:high:upstream-controller"
+      ],
+      "required_clis": [
+        "codex"
+      ],
+      "upstream_source_root": "vendor://xe-forge",
+      "upstream_source_commit": "4dcb5080b0f56d0b655ec8c8c9509b8e3ba0382c",
+      "upstream_entrypoint_path": "src/xe_forge/engines/dspy_engine.py",
+      "upstream_entrypoint_sha256": "8ec39507d909fa3a442dad5b13fa9c4518ba440d3429f6205fdb746ff74b3631",
+      "upstream_license_path": "LICENSE",
+      "upstream_license_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
     },
     {
       "arm_id": "geak_v1",

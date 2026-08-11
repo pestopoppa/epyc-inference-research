@@ -15,9 +15,9 @@ gap for the prospective MI210 comparison:
   refusal receipt before any controller or GPU command can start.
 
 The repository carries ``claude_codex_actor_critic`` plus governed adapters for
-the pinned upstream K-Search and GEAK-v1 implementations. The other four
-controller names remain exact refusals; a similarly named command does not
-count as their implementation.
+the pinned upstream K-Search, Xe-Forge, and GEAK-v1 implementations. The other
+three controller names remain exact refusals; a similarly named command does
+not count as their implementation.
 """
 
 from __future__ import annotations
@@ -39,6 +39,7 @@ from . import (
     claude_codex_actor_critic,
     geak_v1_arena,
     k_search_arena,
+    xe_forge_arena,
 )
 from ..evaluator import rebench_scoring
 
@@ -253,6 +254,24 @@ class ArmImplementation:
                 raise ArenaCampaignError("geak_v1 requires the Codex CLI")
             if self.upstream_source_commit != geak_v1_arena.SOURCE_COMMIT:
                 raise ArenaCampaignError("geak_v1 upstream source pin drifted")
+        if self.availability == "ready" and self.arm_id == "xe_forge":
+            expected_tail = xe_forge_arena.campaign_argv("python3")[1:]
+            if self.adapter_kind != "xe_forge_linear_cover_arena_v1":
+                raise ArenaCampaignError(
+                    "xe_forge requires its linear-CoVeR Arena adapter")
+            if len(self.argv) < 2 or self.argv[1:] != expected_tail:
+                raise ArenaCampaignError(
+                    "xe_forge argv differs from its pinned executable")
+            if self.entrypoint_path != xe_forge_arena.ENTRYPOINT_RELATIVE:
+                raise ArenaCampaignError(
+                    "xe_forge entrypoint differs from its implementation")
+            if self.model_ids != xe_forge_arena.PINNED_MODEL_IDS:
+                raise ArenaCampaignError(
+                    "xe_forge model_ids differ from exact model/effort pins")
+            if self.required_clis != xe_forge_arena.REQUIRED_CLIS:
+                raise ArenaCampaignError("xe_forge requires the Codex CLI")
+            if self.upstream_source_commit != xe_forge_arena.SOURCE_COMMIT:
+                raise ArenaCampaignError("xe_forge upstream source pin drifted")
 
 
 @dataclass(frozen=True)
