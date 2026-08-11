@@ -36,11 +36,36 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def source_commit(source_root: Path) -> str:
+def git_output(source_root: Path, *args: str) -> str:
     result = subprocess.run(
-        ("git", "rev-parse", "HEAD"), cwd=source_root, check=True,
+        ("git", *args), cwd=source_root, check=True,
         text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     return result.stdout.strip()
+
+
+def assert_source_identity(source_root: Path, expected_commit: str | None) -> str:
+    """Return the exact clean source commit or refuse the capture.
+
+    A binary hash identifies what ran, but C4 also maps kernels back to source.
+    Publishing a clean-looking HEAD beside an uncommitted tree would make that
+    mapping non-replayable and could feed the authoring loop the wrong code.
+    AutoKernel candidate worktrees are committed before evaluation, so a dirty
+    tree is an input error rather than a supported candidate state.
+    """
+    root = Path(git_output(source_root, "rev-parse", "--show-toplevel")).resolve()
+    if root != source_root:
+        raise RuntimeError(
+            f"--source-root must be the git toplevel: expected {root}, got {source_root}")
+    observed = git_output(source_root, "rev-parse", "HEAD")
+    if expected_commit is not None and observed != expected_commit:
+        raise RuntimeError(
+            f"source commit mismatch: expected {expected_commit}, observed {observed}")
+    dirty = git_output(
+        source_root, "status", "--porcelain=v1", "--untracked-files=all")
+    if dirty:
+        preview = "; ".join(dirty.splitlines()[:8])
+        raise RuntimeError(f"C4 source tree is dirty: {preview}")
+    return observed
 
 
 def profiler_environment(binary: Path, *, graphs_disabled: bool) -> dict[str, str]:
@@ -311,8 +336,7 @@ def run(args: argparse.Namespace) -> dict:
     for path, label in required_paths:
         if not path.is_file():
             raise RuntimeError(f"C4 {label} does not exist: {path}")
-    if args.source_commit is None:
-        args.source_commit = source_commit(source_root)
+    args.source_commit = assert_source_identity(source_root, args.source_commit)
     if args.stage is None:
         args.stage = (
             "decode" if args.workload_kind in ("q4k-op", "quant-op")

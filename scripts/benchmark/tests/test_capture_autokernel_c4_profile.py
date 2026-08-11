@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -82,6 +83,46 @@ class CaptureAutokernelC4ProfileTest(unittest.TestCase):
         self.assertEqual([row["path"] for row in rows], ["capture.txt"])
         self.assertEqual(rows[0]["bytes"], 6)
         self.assertEqual(len(rows[0]["sha256"]), 64)
+
+    def test_source_identity_requires_toplevel_clean_exact_commit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(("git", "init", "-q"), cwd=root, check=True)
+            subprocess.run(("git", "config", "user.email", "c4@test.invalid"),
+                           cwd=root, check=True)
+            subprocess.run(("git", "config", "user.name", "C4 Test"),
+                           cwd=root, check=True)
+            tracked = root / "tracked.txt"
+            tracked.write_text("clean\n", encoding="utf-8")
+            subprocess.run(("git", "add", "--", "tracked.txt"), cwd=root, check=True)
+            subprocess.run(("git", "commit", "-qm", "fixture", "--", "tracked.txt"),
+                           cwd=root, check=True)
+            head = subprocess.run(
+                ("git", "rev-parse", "HEAD"), cwd=root, check=True, text=True,
+                stdout=subprocess.PIPE).stdout.strip()
+            self.assertEqual(C.assert_source_identity(root, head), head)
+            with self.assertRaisesRegex(RuntimeError, "commit mismatch"):
+                C.assert_source_identity(root, "0" * 40)
+            (root / "untracked.txt").write_text("dirty\n", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "source tree is dirty"):
+                C.assert_source_identity(root, head)
+
+    def test_source_identity_refuses_nested_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            nested = root / "nested"
+            nested.mkdir()
+            subprocess.run(("git", "init", "-q"), cwd=root, check=True)
+            subprocess.run(("git", "config", "user.email", "c4@test.invalid"),
+                           cwd=root, check=True)
+            subprocess.run(("git", "config", "user.name", "C4 Test"),
+                           cwd=root, check=True)
+            (root / "tracked.txt").write_text("clean\n", encoding="utf-8")
+            subprocess.run(("git", "add", "--", "tracked.txt"), cwd=root, check=True)
+            subprocess.run(("git", "commit", "-qm", "fixture", "--", "tracked.txt"),
+                           cwd=root, check=True)
+            with self.assertRaisesRegex(RuntimeError, "git toplevel"):
+                C.assert_source_identity(nested, None)
 
 
 if __name__ == "__main__":
