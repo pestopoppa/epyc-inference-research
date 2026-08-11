@@ -205,6 +205,7 @@ calibration exists. Source-changing campaigns additionally require their own
 | `c5_seed_corpus.py` | **C5 static seed registry.** Pins the eight intake-884 HyRA SOL-ExecBench artifacts and their NVIDIA/Hopper-only attestations, separates direct Triton references from CUDA-bound re-authoring targets, and emits non-numeric gfx90a task context. No upstream latency or SOL score is admitted as an MI210 target. |
 | `evaluator/c3_epyc_suite.py` | **INF-48 C3/C5 exit contract.** Selects hash-bound attention and MoE C5 cases plus an explicitly EPYC-native Q4_K dequant case; requires exact captured-tensor surfaces, vendor rather than eager baselines, correctness-first `fast_p`, and a matched whole-model re-bench through the case's declared integration. Missing evidence is `COULD_NOT_CHECK`, and the reducer has no release or promotion authority. |
 | `evaluator/c3_epyc_compiler.py` | **INF-48 controller/backend JSON seam.** Emits a source-hash-bound three-case plan and compiles only hash-bound vendor, candidate, correctness, integrity, capture, integration, and whole-model observations. Unavailable evidence withholds `fast_p` and whole-model speedup; the CLI and direct-call backend execute no workload. |
+| `evaluator/c3_apex_runner.py` | **INF-48 selected-entry Apex seam.** Requires a reviewed two-case C5→Apex mapping before resolving one registry row, pins Apex/Magpie/Torch/ROCm/Triton/physical gfx90a/source/config/model, bypasses Apex's unrelated-registry-file validation bug, and hash-binds the three capture outputs. It cannot author a candidate, and trace execution requires an explicit inference authorization argument. |
 | `datatype_targets.py` | **INF-03 FP8 authoring target.** Declares FP8-weight/software-upcast-to-bf16 as an experimental gfx90a task, not a native capability; forces independent decoding, upcast-cost attribution, exact-shape baselines and whole-model confirmation, and mechanically defers NVFP4 until FP8 has a terminal result. |
 | `substrate.py` | Validates the checked-in MI210 compute/bandwidth/PCIe/NUMA facts, preserves measured and datasheet bases separately, re-derives both roofline ridges, and builds exact-quant diagnostic surfaces. Cross-vendor cells are spec-basis; a missing exact CUDA anchor is `COULD_NOT_CHECK`, never a pooled or borrowed target. |
 | `lanes.py` | The lane registry, historical 4/8/16/32/48-way CPU shapes, isolation checks, change-class-specific rank calibration, and full-instance verification rule. |
@@ -298,15 +299,32 @@ python3 -m scripts.kernel_rnd.autokernel.evaluator.c3_epyc_compiler receipt \
   --input /path/to/hash-bound-observations.json
 ```
 
-The audited Apex pin is `e06b5d1cd58996a82c5e2897164f760c3b3f87ac`.
-Its capture path is `workload_optimizer.py trace-kernel` →
-`pipeline.kernel_tracing.runner.run_trace_kernel`; its Python/Triton hot-patch
-path is `integrate` → `_reinject_kernel`, followed by `benchmark-final` →
-`_run_final_benchmark`. The pin explicitly excludes system C/C++ libraries and
-monolithic binaries from hot-patching. Consequently the attention and MoE
-cases use the Apex overlay binding, while the llama.cpp Q4_K dequant case uses
-an immutable experimental binary through the codified llama-bench recipe. The
-compiler refuses those runner identities if they are swapped.
+The audited Apex pin is `e06b5d1cd58996a82c5e2897164f760c3b3f87ac`,
+paired with Magpie `2a9263833f71755df2a93b466cdd3a9f803fc625` and the
+Torch 2.5.1 + ROCm 6.2 / Triton 3.1 environment. Apex's CLI currently calls
+`find_supported_kernel(validate_files=True)`, which validates every registry
+row: on the audited checkout, selecting a present AITER row still refuses on
+the absent unrelated SGLang tree. `c3_apex_runner.py` instead validates the
+pinned registry plus only the selected row and calls the pinned downstream
+`pipeline.kernel_tracing.runner.run_trace_kernel` interface directly.
+
+No honest k228/k175 mapping is checked in yet. The C5 artifacts identify only
+their own `kernel.py::run` solutions; Apex has semantically adjacent MLA and MoE
+rows but no row bound to either C5 identity, and k175 spans routing, scatter,
+expert GEMMs, shared-expert work, and undispatch rather than one named registry
+kernel. The adapter will not make k175 runnable by forcing one component's
+`kernel_id` into the single-entry seam: k175 requires either a separately
+reviewed component-graph/multi-trace extension or an audited registry entry
+that implements the whole composite. The adapter therefore requires a reviewed
+`c3_apex_case_mapping.v1.json` that binds **both** exact C5 hashes to selected
+source commits/files plus separate hash-bound semantic-equivalence evidence.
+Until that artifact exists, planning raises `MissingCaseMapping` before any
+toolchain/device probe or workload. Name similarity cannot satisfy the seam.
+Once it does exist, the adapter also pins the benchmark configuration, model
+manifest, physical gfx90a identity, and `trace_result.json`,
+`workload_ranges.json`, and `patched_files/patch_manifest.json`. Trace execution
+still requires `authorize_inference=True`. The llama.cpp Q4_K case remains on
+the immutable experimental-binary/codified llama-bench path.
 
 ### AK6 — the operator surface
 

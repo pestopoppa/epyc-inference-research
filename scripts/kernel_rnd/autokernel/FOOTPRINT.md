@@ -31,8 +31,8 @@ a module it never looked at.
 | | non-test lines |
 |---|---:|
 | **ON THE CAMPAIGN PATH** | **63,782** |
-| **DEFERRED** (provably unreachable) | **8,936** |
-| **TOTAL** | **72,718** |
+| **DEFERRED** (provably unreachable) | **9,744** |
+| **TOTAL** | **73,526** |
 
 **There is no deferred half.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -145,8 +145,9 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `evaluator/devices.py` | 813 | yes | a GPU cell must not be satisfied by `Device 0: CPU` |
 | `evaluator/controls.py` | 2,406 | yes | the A/A control plane — 2026-08-04 measured 1.62% / 1.88% between-run CV over four identical runs |
 | `evaluator/baseline_honesty.py` | 129 | no | AK-BH-4 exact-surface strongest-provider selector; it rejects AUTO and cross-surface transfer before a campaign can claim an honest floor |
-| `evaluator/c3_epyc_suite.py` | 607 | no | INF-48 offline C3/C5 contract reducer; it binds EPYC op cases to exact vendor evidence and a captured-workload whole-model exit without launch, mutation, release, or promotion authority |
-| `evaluator/c3_epyc_compiler.py` | 471 | no | INF-48 offline JSON plan/receipt compiler; it is the callable controller/backend seam but cannot launch captures, benchmarks, builds, patches, inference, or promotion |
+| `evaluator/c3_epyc_suite.py` | 612 | no | INF-48 offline C3/C5 contract reducer; it binds EPYC op cases to exact vendor evidence and a captured-workload whole-model exit without launch, mutation, release, or promotion authority |
+| `evaluator/c3_epyc_compiler.py` | 476 | no | INF-48 offline JSON plan/receipt compiler; it is the callable controller/backend seam but cannot launch captures, benchmarks, builds, patches, inference, or promotion |
+| `evaluator/c3_apex_runner.py` | 798 | no | INF-48 selected-entry Apex seam: avoids the pinned CLI's unrelated-registry-file refusal, requires exact C5 mapping and environment/source/workload identities, and stays outside campaign mutation and candidate authoring |
 | `evaluator/sensitivity.py` | 333 | no | RVP-C2-7/C2-11/C5-2 standalone two-axis reducer; missing or insensitive seed/transform populations are unscoreable rather than campaign passes |
 | `evaluator/oracle_integrity.py` | 145 | no | RVP-C2-8/C2-9 standalone reducers: hostile distributions and checker isolation are correctness prerequisites, not campaign-path ranking authority |
 | `evaluator/historical_tasks.py` | 194 | no | RVP-C5-R/C3-2 sealed historical-task descriptor and expert-ceiling reducer; no terminal candidate means `COULD_NOT_CHECK` |
