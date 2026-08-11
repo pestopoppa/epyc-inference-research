@@ -723,8 +723,8 @@ python3 -m unittest scripts.kernel_rnd.autokernel.release.test_release_integrati
 python3 scripts/kernel_rnd/autokernel/test_integration.py
 ```
 
-Expected: **3773 tests, OK (expected failures=1)** as of the 2026-08-11 C6
-hardening pass. The one `expectedFailure` is
+Expected: **3818 tests, OK (expected failures=1)** as of the 2026-08-11 AK-DEL-1
+scope-gate closure. The one `expectedFailure` is
 `test_preflight.RealKernelLockEncodingTest.test_KNOWN_HOLE_unlinking_a_held_lock_
 file_hides_its_live_holder` — a real, documented hole (unlinking a held lock file
 hides its live holder from the `/proc/locks` witness), deliberately left visible
