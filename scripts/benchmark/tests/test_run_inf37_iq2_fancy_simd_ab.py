@@ -31,6 +31,14 @@ def test_balanced_orders_are_exact() -> None:
         runner.balanced_orders(3)
 
 
+def test_git_status_preserves_porcelain_index_column(tmp_path, monkeypatch) -> None:
+    class Result:
+        stdout = " M ggml/src/ggml-cpu/iqk/iqk_gemm_iquants.cpp\n"
+
+    monkeypatch.setattr(runner.subprocess, "run", lambda *args, **kwargs: Result())
+    assert runner.git_status(tmp_path).startswith(" M ")
+
+
 def test_parse_sql_rows_requires_exact_cells() -> None:
     rows = runner.parse_sql_rows(sql([(1, 100.0, 10), (512, 200.0, 5)]))
     assert [row["n"] for row in rows] == [1, 512]

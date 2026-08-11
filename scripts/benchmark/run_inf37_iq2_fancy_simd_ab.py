@@ -49,6 +49,14 @@ def git_output(root: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
+def git_status(root: Path) -> str:
+    result = subprocess.run(
+        ("git", "status", "--porcelain=v1", "--untracked-files=all"),
+        cwd=root, check=True, text=True, stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE)
+    return result.stdout.rstrip("\n")
+
+
 def assert_sources(baseline: Path, candidate: Path, *, commit: str,
                    candidate_diff_sha256: str) -> dict:
     for root, label in ((baseline, "baseline"), (candidate, "candidate")):
@@ -56,12 +64,10 @@ def assert_sources(baseline: Path, candidate: Path, *, commit: str,
             raise RuntimeError(f"{label} source root is not its git toplevel")
         if git_output(root, "rev-parse", "HEAD") != commit:
             raise RuntimeError(f"{label} source is not at {commit}")
-    baseline_status = git_output(
-        baseline, "status", "--porcelain=v1", "--untracked-files=all")
+    baseline_status = git_status(baseline)
     if baseline_status:
         raise RuntimeError(f"baseline source is dirty: {baseline_status}")
-    candidate_status = git_output(
-        candidate, "status", "--porcelain=v1", "--untracked-files=all")
+    candidate_status = git_status(candidate)
     if candidate_status != f" M {SOURCE_FILE}":
         raise RuntimeError(
             f"candidate must modify only {SOURCE_FILE}: {candidate_status!r}")
@@ -311,6 +317,18 @@ def main() -> int:
     try:
         payload = run(args)
     except Exception as exc:
+        output = Path(args.output_dir)
+        receipt = output / "receipt.json"
+        if output.is_dir() and not receipt.exists():
+            write_json_atomic(receipt, {
+                "schema": SCHEMA,
+                "campaign_id": args.campaign_id,
+                "created_at": utc_now(),
+                "status": "failed_preclaim",
+                "runner": str(Path(__file__).resolve()),
+                "runner_sha256": sha256_file(Path(__file__).resolve()),
+                "error": {"type": type(exc).__name__, "message": str(exc)},
+            })
         print(f"INF-37 A/B REFUSED: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 1
     print(json.dumps({
