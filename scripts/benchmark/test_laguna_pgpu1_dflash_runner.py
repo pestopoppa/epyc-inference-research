@@ -258,7 +258,7 @@ def test_fixed_protocol_and_execute_requires_provisional_promotion_identity(monk
         runner.parse_args(["--reps", "4"])
     assert runner.parse_args(["--reps", "7"]).reps == 7
     with pytest.raises(SystemExit):
-        runner.parse_args(["--target-model", "/tmp/not-laguna.gguf"])
+        runner.parse_args(["--target-model", "/tmp/not-qwen36.gguf"])
     with pytest.raises(SystemExit):
         runner.parse_args(["--execute", "--attestation-ref", "attest"])
     with tempfile.TemporaryDirectory() as tmp:
@@ -288,8 +288,8 @@ def test_exact_arm_contract_kv_quant_and_operator_script() -> None:
         "-dev": "ROCm0",
         "-ot": "token_embd.weight=ROCm0",
         "-fa": "on",
-        "--cache-type-k": "f16",
-        "--cache-type-v": "f16",
+        "--cache-type-k": "q8_0",
+        "--cache-type-v": "q8_0",
         "--reasoning": "off",
         "--reasoning-budget": "0",
     }
@@ -304,9 +304,9 @@ def test_exact_arm_contract_kv_quant_and_operator_script() -> None:
     assert dflash[dflash.index("--spec-draft-type-k") + 1] == "q8_0"
     assert dflash[dflash.index("--spec-draft-type-v") + 1] == "q8_0"
     script = runner.render_operator_run_script(args)
-    assert "LAGUNA_PGPU1_PROVISIONAL_ATTESTATION_REF" in script
-    assert "LAGUNA_PGPU1_PROMOTED_HEAD" in script
-    assert "LAGUNA_PGPU1_PROMOTED_SERVER_SHA256" in script
+    assert "QWEN36_PGPU1_PROVISIONAL_ATTESTATION_REF" in script
+    assert "QWEN36_PGPU1_PROMOTED_HEAD" in script
+    assert "QWEN36_PGPU1_PROMOTED_SERVER_SHA256" in script
     assert "--expected-production-head" in script
     assert "--expected-server-sha256" in script
     assert "exec /usr/bin/env -i" in script
@@ -321,7 +321,7 @@ def test_plan_is_exact_and_records_provisional_promotion_requirements() -> None:
     assert [(cell["rep"], cell["arm"]) for cell in plan["cells"][:4]] == [(1, "base"), (1, "dflash"), (2, "dflash"), (2, "base")]
     assert all(cell["prompt_count"] == len(runner.PROMPT_SPECS) for cell in plan["cells"])
     assert plan["fixed_prompt_pack"] == [{"id": prompt_id, "text": text} for prompt_id, text in runner.PROMPT_SPECS]
-    assert plan["target_kv_quant"] == {"k": "f16", "v": "f16"}
+    assert plan["target_kv_quant"] == {"k": "q8_0", "v": "q8_0"}
     assert plan["drafter_kv_quant"] == {"k": "q8_0", "v": "q8_0"}
     assert "n >= 10" in plan["rep_policy"]
     assert plan["provisional_promotion_identity"]["expected_head"] == "execute_required"
@@ -652,33 +652,31 @@ def _log_line(seconds: str, function: str, message: str, module: str = "") -> st
 
 def _residency_log(*, speculative: bool = True) -> str:
     text = _log_line("100", "load_model", f"loading model '{runner.DEFAULT_TARGET_MODEL}'", "srv")
-    text += _log_line("200", "load_tensors", "offloaded 49/49 layers to GPU")
+    text += _log_line("200", "load_tensors", f"offloaded {runner.TARGET_LAYER_COUNT}/{runner.TARGET_LAYER_COUNT} layers to GPU")
     text += _log_line("201", "load_tensors", "       ROCm0 model buffer size = 35538.61 MiB")
     for offset, size in enumerate((102.0, 192.0), 300):
         text += _log_line(str(offset), "llama_kv_cache", f"     ROCm0 KV buffer size = {size:.2f} MiB")
-        text += _log_line(str(offset + 1), "llama_kv_cache", f"size = {size:.2f} MiB ( 4096 cells), K (f16): {size / 2:.2f} MiB, V (f16): {size / 2:.2f} MiB")
+        text += _log_line(str(offset + 1), "llama_kv_cache", f"size = {size:.2f} MiB ( 4096 cells), K (q8_0): {size / 2:.2f} MiB, V (q8_0): {size / 2:.2f} MiB")
     if speculative:
         text += _log_line("500", "common_speculative_init_result", f"loading draft model '{runner.DEFAULT_DRAFTER_MODEL}'")
-        text += _log_line("600", "load_tensors", "offloaded 7/7 layers to GPU")
+        text += _log_line("600", "load_tensors", f"offloaded {runner.DRAFTER_LAYER_COUNT}/{runner.DRAFTER_LAYER_COUNT} layers to GPU")
         text += _log_line("601", "load_tensors", "       ROCm0 model buffer size = 2126.77 MiB")
         text += _log_line("700", "llama_kv_cache", "     ROCm0 KV buffer size = 51.00 MiB")
         text += _log_line("701", "llama_kv_cache", "size = 51.00 MiB ( 4096 cells), K (q8_0): 25.50 MiB, V (q8_0): 25.50 MiB")
     return text
 
 
-def test_log_residency_requires_anchored_target_f16_and_drafter_q8_kv_lines() -> None:
+def test_log_residency_requires_anchored_target_and_drafter_q8_kv_lines() -> None:
     base = runner.parse_log_residency(_residency_log(speculative=False), runner.BASE_ARM)
     dflash = runner.parse_log_residency(_residency_log(), runner.DFLASH_ARM)
     assert base["passed"] and base["target_positive_rocm0_model_buffers_mib"] == [35538.61]
     assert dflash["passed"] and dflash["drafter_positive_rocm0_model_buffers_mib"] == [2126.77]
-    assert len(dflash["target_positive_f16_kv_buffers"]) == 2
+    assert len(dflash["target_positive_kv_buffers"]) == 2
     assert len(dflash["drafter_positive_q8_kv_buffers"]) == 1
     assert not runner.parse_log_residency(_residency_log().replace("2126.77 MiB", "0.00 MiB"), runner.DFLASH_ARM)["passed"]
-    assert not runner.parse_log_residency(_residency_log().replace("K (f16)", "K (q8_0)", 1), runner.DFLASH_ARM)["passed"]
-    assert not runner.parse_log_residency(_residency_log().replace("V (f16)", "V (q8_0)", 1), runner.DFLASH_ARM)["passed"]
     assert not runner.parse_log_residency(_residency_log().replace("K (q8_0)", "K (f16)", 1), runner.DFLASH_ARM)["passed"]
     assert not runner.parse_log_residency(_residency_log().replace("V (q8_0)", "V (f16)", 1), runner.DFLASH_ARM)["passed"]
-    assert not runner.parse_log_residency("noise offloaded 49/49 layers to GPU\nnoise ROCm0 model buffer size = 1 MiB\n", runner.BASE_ARM)["passed"]
+    assert not runner.parse_log_residency(f"noise offloaded {runner.TARGET_LAYER_COUNT}/{runner.TARGET_LAYER_COUNT} layers to GPU\nnoise ROCm0 model buffer size = 1 MiB\n", runner.BASE_ARM)["passed"]
 
 
 def _response() -> dict:

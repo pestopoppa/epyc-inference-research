@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Production-only P-GPU-1 Laguna IQ2 DFlash base-vs-spec runner.
+"""Production-only P-GPU-1 Qwen3.6-27B Q8 DFlash base-vs-spec runner.
 
 Dry-run is the default.  ``--execute`` is intentionally guarded: it requires a
 clean production-consolidated-v9 HIP tree, then runs five fresh-server
@@ -33,9 +33,9 @@ from typing import Any
 RESEARCH_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_BINARY = Path("/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server")
 DEFAULT_SOURCE_ROOT = Path("/mnt/raid0/llm/llama.cpp")
-DEFAULT_TARGET_MODEL = Path("/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/Laguna-S-2.1-UD-IQ2_M.gguf")
-DEFAULT_DRAFTER_MODEL = Path("/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/laguna-s-2.1-DFlash-BF16.gguf")
-DEFAULT_OUTPUT_DIR = RESEARCH_ROOT / "data/gpu-mi210/laguna-iq2-dflash-pgpu1"
+DEFAULT_TARGET_MODEL = Path("/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf")
+DEFAULT_DRAFTER_MODEL = Path("/mnt/raid0/llm/models/dflash/Qwen3.6-27B-DFlash/Qwen3.6-27B-DFlash-f16.gguf")
+DEFAULT_OUTPUT_DIR = RESEARCH_ROOT / "data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9"
 DEFAULT_REPS = 5
 DEFAULT_PORT_BASE = 19880
 DEFAULT_CONTEXT = 4096
@@ -45,8 +45,8 @@ MIN_EXPLANATION_WORDS = 8
 DEFAULT_SEED = 424242
 DEFAULT_STARTUP_TIMEOUT_S = 600
 DEFAULT_REQUEST_TIMEOUT_S = 900
-TARGET_CACHE_K = "f16"
-TARGET_CACHE_V = "f16"
+TARGET_CACHE_K = "q8_0"
+TARGET_CACHE_V = "q8_0"
 DRAFTER_CACHE_K = "q8_0"
 DRAFTER_CACHE_V = "q8_0"
 PROMPT_SPECS = (
@@ -60,7 +60,7 @@ CPU_INTERFERENCE_POLICY = "CPU production stack quiesced and verified before the
 EXPECTED_BRANCH = "production-consolidated-v9"
 ROLLBACK_BRANCH = "production-consolidated-v8"
 PROMOTION_ATTESTATION_SCHEMA = "epyc.kernel_promotion_attestation.v1"
-CANDIDATE_SMOKE_SCHEMA = "epyc.laguna_iq2_dflash_candidate_smoke.v2"
+CANDIDATE_SMOKE_SCHEMA = "epyc.qwen36_27b_q8_dflash_candidate_smoke.v1"
 SAFE_PATH = "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 BASE_ENVIRONMENT = {"PATH": SAFE_PATH, "LANG": "C", "LC_ALL": "C"}
 PINNED_VISIBLE_DEVICE_ENVIRONMENT = {"HIP_VISIBLE_DEVICES": "0", "ROCR_VISIBLE_DEVICES": "0"}
@@ -69,10 +69,12 @@ SCRUBBED_ENV_NAMES = ("LD_PRELOAD",)
 GOVERNANCE_REPO = Path("/mnt/raid0/llm/epyc-root")
 PROMOTION_ATTESTATION_RELATIVE_PATH = Path("handoffs/active/v9-kernel-promotion-attestation.json")
 PROMOTION_ATTESTATION_PATH = GOVERNANCE_REPO / PROMOTION_ATTESTATION_RELATIVE_PATH
-TARGET_MODEL_BYTES = 37_268_665_376
-TARGET_MODEL_SHA256 = "1a0d44795f71044de1a9671bf70def4655f4ab7294b002263dfc8046820bfd2c"
-DRAFTER_MODEL_BYTES = 2_233_764_000
-DRAFTER_MODEL_SHA256 = "24614292a4477f3ae5203c3875edcde0bc219f02616a9c9f65791e29b18a67ee"
+TARGET_MODEL_BYTES = 29_047_084_160
+TARGET_MODEL_SHA256 = "9408dcb356cc061a05c139e5647cbde0698ff980c6a69f7fc214e9989f86cfa8"
+DRAFTER_MODEL_BYTES = 8_558_077_216
+DRAFTER_MODEL_SHA256 = "7d6f97cc3c77f69c466da15f050dc5d1fc8b0641ba748b3803cc3ddcac8ba1ee"
+TARGET_LAYER_COUNT = 65
+DRAFTER_LAYER_COUNT = 5
 SOURCE_UNTRACKED_ALLOWLIST = {
     ".gitnexusignore": "local GitNexus configuration; not a llama.cpp build input",
     "tools/math-tools/": "operator-owned unrelated tool subtree; not linked into llama-server",
@@ -635,9 +637,9 @@ def production_identity_valid(identity: dict[str, Any], expected_head: str, expe
 
 def model_identities_valid(target: dict[str, Any], drafter: dict[str, Any]) -> tuple[bool, str]:
     if Path(str(target.get("path") or "")).resolve() != DEFAULT_TARGET_MODEL.resolve() or target.get("bytes") != TARGET_MODEL_BYTES or target.get("sha256") != TARGET_MODEL_SHA256:
-        return False, "Laguna IQ2 target size/SHA256 mismatch"
+        return False, "Qwen3.6-27B Q8 target size/SHA256 mismatch"
     if Path(str(drafter.get("path") or "")).resolve() != DEFAULT_DRAFTER_MODEL.resolve() or drafter.get("bytes") != DRAFTER_MODEL_BYTES or drafter.get("sha256") != DRAFTER_MODEL_SHA256:
-        return False, "Laguna DFlash BF16 size/SHA256 mismatch"
+        return False, "Qwen3.6-27B DFlash F16 size/SHA256 mismatch"
     return True, "ok"
 
 
@@ -1079,11 +1081,11 @@ def parse_log_residency(log_text: str, arm: Arm) -> dict[str, Any]:
     split_at = draft_load.start() if draft_load is not None else len(log_text)
     target_section = log_text[:split_at]
     draft_section = log_text[split_at:] if draft_load is not None else ""
-    target_models = _positive_model_buffers(target_section, 49)
+    target_models = _positive_model_buffers(target_section, TARGET_LAYER_COUNT)
     target_kv = _positive_kv_buffers(
         target_section, cache_k=TARGET_CACHE_K, cache_v=TARGET_CACHE_V
     )
-    draft_models = _positive_model_buffers(draft_section, 7)
+    draft_models = _positive_model_buffers(draft_section, DRAFTER_LAYER_COUNT)
     draft_kv = _positive_kv_buffers(
         draft_section, cache_k=DRAFTER_CACHE_K, cache_v=DRAFTER_CACHE_V
     )
@@ -1097,7 +1099,7 @@ def parse_log_residency(log_text: str, arm: Arm) -> dict[str, Any]:
         "passed": target_valid and draft_valid,
         "target_model_load_exact": target_load is not None,
         "target_positive_rocm0_model_buffers_mib": target_models,
-        "target_positive_f16_kv_buffers": target_kv,
+        "target_positive_kv_buffers": target_kv,
         "target_valid": target_valid,
         "drafter_model_load_exact": draft_load is not None,
         "drafter_positive_rocm0_model_buffers_mib": draft_models,
@@ -1105,7 +1107,7 @@ def parse_log_residency(log_text: str, arm: Arm) -> dict[str, Any]:
         "drafter_valid": draft_valid,
         "proof_contract": (
             "anchored exact layer offload plus positive ROCm0 model/KV buffers; "
-            "target K/V=f16 and DFlash drafter K/V=q8_0 are independently required"
+            "target and DFlash drafter K/V=q8_0 are independently required"
         ),
     }
 
@@ -1393,7 +1395,7 @@ def build_plan(args: argparse.Namespace, model_identity: dict[str, Any] | None =
         for arm in ordered_arms:
             cells.append({"arm": arm.name, "rep": rep, "port": args.port_base + len(cells), "prompt_count": len(PROMPTS)})
     return {
-        "schema": "epyc.laguna_iq2_dflash_pgpu1.plan.v2", "created_at": utc_now(), "execute": args.execute,
+        "schema": "epyc.qwen36_27b_q8_dflash_pgpu1.plan.v1", "created_at": utc_now(), "execute": args.execute,
         "production_named_kernel_required": True, "required_branch": EXPECTED_BRANCH, "reps_per_arm": args.reps,
         "arm_order": "paired by rep; base-first on odd reps and dflash-first on even reps",
         "rep_policy": "n >= 5 per arm; n >= 10 is required before making any <=2% claim; this runner does not make a <=2% claim",
@@ -1680,7 +1682,7 @@ def execute(args: argparse.Namespace, output_dir: Path, plan: dict[str, Any]) ->
         final_port=int(plan["cells"][-1]["port"]) if plan["cells"] else None,
     )
     write_json(output_dir / "candidate_smoke_summary.json", candidate_smoke)
-    return {"schema": "epyc.laguna_iq2_dflash_pgpu1.summary.v2", "created_at": utc_now(), "status": status, "production_named_kernel": True, "required_branch": EXPECTED_BRANCH, "attestation_ref": str(args.attestation_ref), "attestation_sha256": attestation["sha256"], "n": args.reps, "rep_policy": plan["rep_policy"], "median": True, "mad": True, "arm_order": plan["arm_order"], "results": results, "matrix_cardinality_valid": cardinality_valid, "matrix_cardinality_reason": cardinality_reason, "arm_summaries": summaries, "base_vs_dflash": {"decode_tps_ratio": ratio, "direction": "higher_better"}, "cross_arm_hash_observation": {"contract": "distribution-lossless, not byte-exact greedy", "decision_gating": False, "quality_equivalence_claimed": False, "rows": hash_observations}, "warmup_discard_policy": PGPU1_WARMUP_POLICY, "cpu_interference_policy": CPU_INTERFERENCE_POLICY, "hardware_state": hardware_state, "target_kv_quant": {"k": TARGET_CACHE_K, "v": TARGET_CACHE_V}, "drafter_kv_quant": {"k": DRAFTER_CACHE_K, "v": DRAFTER_CACHE_V}, "replicate_binding_checks": replicate_binding_checks, "per_replicate_bindings_valid": per_replicate_bindings_valid, "execution_binding_valid": execution_binding_valid, "post_execution_identity": post_identity, "final_process_guard": final_processes, "final_rocm": final_rocm, "final_clean": final_clean, "final_reason": final_reason, "final_vram_settled": final_vram_settled, "final_guard_valid": final_guard_valid, "post_cleanup_vram_sample": "after_cleanup ROCm snapshots in every replicate", "candidate_smoke_projection": {"path": "candidate_smoke_summary.json", "schema": CANDIDATE_SMOKE_SCHEMA, "non_gating": True}}
+    return {"schema": "epyc.qwen36_27b_q8_dflash_pgpu1.summary.v1", "created_at": utc_now(), "status": status, "production_named_kernel": True, "required_branch": EXPECTED_BRANCH, "attestation_ref": str(args.attestation_ref), "attestation_sha256": attestation["sha256"], "n": args.reps, "rep_policy": plan["rep_policy"], "median": True, "mad": True, "arm_order": plan["arm_order"], "results": results, "matrix_cardinality_valid": cardinality_valid, "matrix_cardinality_reason": cardinality_reason, "arm_summaries": summaries, "base_vs_dflash": {"decode_tps_ratio": ratio, "direction": "higher_better"}, "cross_arm_hash_observation": {"contract": "distribution-lossless, not byte-exact greedy", "decision_gating": False, "quality_equivalence_claimed": False, "rows": hash_observations}, "warmup_discard_policy": PGPU1_WARMUP_POLICY, "cpu_interference_policy": CPU_INTERFERENCE_POLICY, "hardware_state": hardware_state, "target_kv_quant": {"k": TARGET_CACHE_K, "v": TARGET_CACHE_V}, "drafter_kv_quant": {"k": DRAFTER_CACHE_K, "v": DRAFTER_CACHE_V}, "replicate_binding_checks": replicate_binding_checks, "per_replicate_bindings_valid": per_replicate_bindings_valid, "execution_binding_valid": execution_binding_valid, "post_execution_identity": post_identity, "final_process_guard": final_processes, "final_rocm": final_rocm, "final_clean": final_clean, "final_reason": final_reason, "final_vram_settled": final_vram_settled, "final_guard_valid": final_guard_valid, "post_cleanup_vram_sample": "after_cleanup ROCm snapshots in every replicate", "candidate_smoke_projection": {"path": "candidate_smoke_summary.json", "schema": CANDIDATE_SMOKE_SCHEMA, "non_gating": True}}
 
 
 def run_audit(output_dir: Path) -> dict[str, Any]:
@@ -1695,10 +1697,10 @@ def render_operator_run_script(args: argparse.Namespace) -> str:
     return "\n".join([
         "#!/usr/bin/env bash",
         "set -euo pipefail",
-        "# Execute only in the approved P-GPU-1 quiet window using the provisional v8 promotion record.",
-        ': "${LAGUNA_PGPU1_PROVISIONAL_ATTESTATION_REF:?set provisional promotion attestation reference}"',
-        ': "${LAGUNA_PGPU1_PROMOTED_HEAD:?set promoted 40-hex production HEAD}"',
-        ': "${LAGUNA_PGPU1_PROMOTED_SERVER_SHA256:?set promoted 64-hex llama-server SHA256}"',
+        "# Execute only in the approved P-GPU-1 quiet window using the provisional v9 promotion record.",
+        ': "${QWEN36_PGPU1_PROVISIONAL_ATTESTATION_REF:?set provisional promotion attestation reference}"',
+        ': "${QWEN36_PGPU1_PROMOTED_HEAD:?set promoted 40-hex production HEAD}"',
+        ': "${QWEN36_PGPU1_PROMOTED_SERVER_SHA256:?set promoted 64-hex llama-server SHA256}"',
         "cd " + str(RESEARCH_ROOT),
         "exec " + " ".join([
             "/usr/bin/env", "-i",
@@ -1709,9 +1711,9 @@ def render_operator_run_script(args: argparse.Namespace) -> str:
             "--source-root", shlex_quote(str(args.source_root)), "--reps", str(args.reps),
             "--context", str(args.context), "--max-tokens", str(args.max_tokens),
             "--min-completion-tokens", str(args.min_completion_tokens), "--seed", str(args.seed),
-            "--attestation-ref", '"$LAGUNA_PGPU1_PROVISIONAL_ATTESTATION_REF"',
-            "--expected-production-head", '"$LAGUNA_PGPU1_PROMOTED_HEAD"',
-            "--expected-server-sha256", '"$LAGUNA_PGPU1_PROMOTED_SERVER_SHA256"',
+            "--attestation-ref", '"$QWEN36_PGPU1_PROVISIONAL_ATTESTATION_REF"',
+            "--expected-production-head", '"$QWEN36_PGPU1_PROMOTED_HEAD"',
+            "--expected-server-sha256", '"$QWEN36_PGPU1_PROMOTED_SERVER_SHA256"',
         ]),
         "",
     ])
@@ -1744,9 +1746,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     if args.reps < DEFAULT_REPS:
         parser.error("P-GPU-1 requires --reps >= 5 per arm")
     if args.target_model != DEFAULT_TARGET_MODEL or args.drafter_model != DEFAULT_DRAFTER_MODEL:
-        parser.error("Laguna P-GPU-1 runner uses fixed target and DFlash model paths")
+        parser.error("Qwen3.6-27B P-GPU-1 runner uses fixed target and DFlash model paths")
     if args.binary != DEFAULT_BINARY or args.source_root != DEFAULT_SOURCE_ROOT:
-        parser.error("Laguna P-GPU-1 runner uses the canonical production HIP binary and source root")
+        parser.error("Qwen3.6-27B P-GPU-1 runner uses the canonical production HIP binary and source root")
     if (args.context, args.max_tokens, args.min_completion_tokens, args.seed) != (DEFAULT_CONTEXT, DEFAULT_MAX_TOKENS, DEFAULT_MIN_COMPLETION_TOKENS, DEFAULT_SEED):
         parser.error("context, max tokens, completion floor, and seed are fixed protocol constants")
     if args.execute and args.attestation_ref is None:
@@ -1778,7 +1780,7 @@ def main(argv: list[str] | None = None) -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     if args.execute:
         if not args.target_model.is_file() or not args.drafter_model.is_file():
-            failure = {"schema": "epyc.laguna_iq2_dflash_pgpu1.summary.v2", "status": "failed", "production_named_kernel_required": True, "error": "required target or drafter model file is absent"}
+            failure = {"schema": "epyc.qwen36_27b_q8_dflash_pgpu1.summary.v1", "status": "failed", "production_named_kernel_required": True, "error": "required target or drafter model file is absent"}
             write_json(args.output_dir / "summary.json", failure)
             return 1
         args.target_identity = immutable_model_identity(args.target_model)
@@ -1789,13 +1791,13 @@ def main(argv: list[str] | None = None) -> int:
     operator_script.write_text(render_operator_run_script(args), encoding="utf-8")
     operator_script.chmod(0o755)
     if not args.execute:
-        write_json(args.output_dir / "summary.json", {"schema": "epyc.laguna_iq2_dflash_pgpu1.summary.v2", "status": "prepared_no_inference", "production_named_kernel_required": True, "n": args.reps, "median": True, "mad": True, "warmup_discard_policy": PGPU1_WARMUP_POLICY, "cpu_interference_policy": CPU_INTERFERENCE_POLICY, "draft_n_accepted": 0, "post_cleanup_vram_sample": "required on execute", "harness": harness_identity()})
+        write_json(args.output_dir / "summary.json", {"schema": "epyc.qwen36_27b_q8_dflash_pgpu1.summary.v1", "status": "prepared_no_inference", "production_named_kernel_required": True, "n": args.reps, "median": True, "mad": True, "warmup_discard_policy": PGPU1_WARMUP_POLICY, "cpu_interference_policy": CPU_INTERFERENCE_POLICY, "draft_n_accepted": 0, "post_cleanup_vram_sample": "required on execute", "harness": harness_identity()})
         print(f"prepared: {args.output_dir}")
         return 0
     try:
         summary = execute(args, args.output_dir, plan)
     except Exception as exc:  # noqa: BLE001 - failed gates must leave a durable summary
-        summary = {"schema": "epyc.laguna_iq2_dflash_pgpu1.summary.v2", "status": "failed", "production_named_kernel_required": True, "attestation_ref": str(args.attestation_ref), "error": repr(exc), "harness": harness_identity()}
+        summary = {"schema": "epyc.qwen36_27b_q8_dflash_pgpu1.summary.v1", "status": "failed", "production_named_kernel_required": True, "attestation_ref": str(args.attestation_ref), "error": repr(exc), "harness": harness_identity()}
     write_json(args.output_dir / "summary.json", summary)
     audit = run_audit(args.output_dir)
     if summary["status"] != "ok" or audit["status"] != "complete":
