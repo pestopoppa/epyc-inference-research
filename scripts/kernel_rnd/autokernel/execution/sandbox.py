@@ -53,6 +53,24 @@ BROKER_FD_ENV = "EPYC_AUTOKERNEL_BROKER_FD"
 CGROUP_ROOT_ENV = "EPYC_AUTOKERNEL_CGROUP_ROOT"
 HOST_CGROUP_ROOT = "/sys/fs/cgroup/autokernel"
 
+# The pinned Claude CLI embeds Bun and reads these kernel/runtime facts before
+# its first request. They are fixed here rather than accepted as arbitrary
+# caller input. The /proc/self rows bind to the sandboxed process when Landlock
+# installs them; resolving them in the evaluator would bind the wrong PID.
+# /dev/urandom is granted READ_FILE only, never device write access.
+CONTROLLER_RUNTIME_READ_FILES = (
+    "/proc/sys/vm/overcommit_memory",
+    "/sys/kernel/mm/transparent_hugepage/enabled",
+    "/proc/self/maps",
+    "/proc/sys/vm/mmap_min_addr",
+    "/sys/devices/system/cpu/online",
+    "/proc/stat",
+    "/proc/self/cgroup",
+    "/proc/self/stat",
+    "/usr/share/zoneinfo/UTC",
+    "/dev/urandom",
+)
+
 
 class SandboxError(RuntimeError):
     """A required containment control was unavailable or contradicted itself."""
@@ -473,8 +491,26 @@ class SandboxPolicy:
         _blocked, _deny_unix, network_profile = _network_policy(self.profile)
         normalized_roots = tuple(
             str(Path(path).resolve(strict=True)) for path in self.readable_roots)
-        normalized_files = tuple(
-            str(Path(path).resolve(strict=True)) for path in self.readable_files)
+        normalized_file_rows: list[str] = []
+        for raw_path in self.readable_files:
+            literal = os.fspath(raw_path)
+            if (self.profile == CONTROLLER_PROFILE
+                    and literal in CONTROLLER_RUNTIME_READ_FILES):
+                # Keep /proc/self literal: resolving it in the evaluator would
+                # authorize the evaluator PID, not the eventual controller.
+                mode = os.stat(literal).st_mode
+                if literal == "/dev/urandom":
+                    if not stat.S_ISCHR(mode):
+                        raise SandboxError(
+                            "controller random source is not a character device")
+                elif not stat.S_ISREG(mode):
+                    raise SandboxError(
+                        f"controller runtime read is not a regular file: {literal}")
+                normalized_file_rows.append(literal)
+            else:
+                normalized_file_rows.append(
+                    str(Path(literal).resolve(strict=True)))
+        normalized_files = tuple(normalized_file_rows)
         normalized_executables = tuple(
             str(Path(path).resolve(strict=True)) for path in self.executable_files)
         if len(normalized_roots) != len(set(normalized_roots)):
@@ -492,12 +528,12 @@ class SandboxPolicy:
                     f"readable root would expose host devices: {path}")
         for path in normalized_files:
             mode = os.stat(path).st_mode
-            evaluator_random = (
-                self.profile == EVALUATOR_PROFILE
-                and path == "/dev/urandom" and stat.S_ISCHR(mode))
-            if not stat.S_ISREG(mode) and not evaluator_random:
+            random_source = (
+                path == "/dev/urandom" and stat.S_ISCHR(mode)
+                and self.profile in {CONTROLLER_PROFILE, EVALUATOR_PROFILE})
+            if not stat.S_ISREG(mode) and not random_source:
                 raise SandboxError(f"readable file is not regular: {path}")
-            if path.startswith("/dev/") and not evaluator_random:
+            if path.startswith("/dev/") and not random_source:
                 raise SandboxError(
                     f"readable device is not the evaluator random source: {path}")
         for path in normalized_executables:
@@ -982,6 +1018,7 @@ def verify_receipt(document: Mapping[str, Any], *, policy: SandboxPolicy,
 
 __all__ = [
     "BROKER_FD_ENV", "CGROUP_ROOT_ENV", "CONTROLLER_PROFILE",
+    "CONTROLLER_RUNTIME_READ_FILES",
     "EVALUATOR_PROFILE",
     "DEFAULT_PROFILE", "HOST_CGROUP_ROOT", "NETWORK_DENY_ALL",
     "NETWORK_OUTBOUND_CLIENT", "RECEIPT_SCHEMA", "ResourceLimits",

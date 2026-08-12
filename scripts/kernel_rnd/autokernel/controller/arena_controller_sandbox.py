@@ -141,6 +141,47 @@ def _unique_exact(paths: Iterable[str | Path], *, directory: bool,
     return tuple(result)
 
 
+def _controller_runtime_read_files(
+    paths: Iterable[str | Path], *, workspace: Path,
+    forbidden_roots: Sequence[Path],
+) -> tuple[str, ...]:
+    """Validate only the fixed self/kernel reads required by the pinned CLI."""
+    result: list[str] = []
+    for raw in paths:
+        literal = os.fspath(raw)
+        if literal not in sandbox.CONTROLLER_RUNTIME_READ_FILES:
+            raise ControllerSandboxError(
+                f"undeclared controller runtime read file: {literal}")
+        if literal in result:
+            raise ControllerSandboxError(
+                f"duplicate controller runtime read file: {literal}")
+        # Do not resolve /proc/self here. Landlock must bind it after the
+        # wrapper has become the controller process.
+        path = Path(literal)
+        if not path.is_absolute() or ".." in path.parts:
+            raise ControllerSandboxError(
+                f"controller runtime read must be an exact absolute path: {literal}")
+        try:
+            mode = os.stat(literal).st_mode
+        except OSError as exc:
+            raise ControllerSandboxError(
+                f"controller runtime read is unavailable: {literal}: {exc}") from exc
+        if literal == "/dev/urandom":
+            if not stat.S_ISCHR(mode):
+                raise ControllerSandboxError(
+                    "controller random source is not a character device")
+        elif not stat.S_ISREG(mode):
+            raise ControllerSandboxError(
+                f"controller runtime read is not a regular file: {literal}")
+        # The literals are fixed outside mutable task/campaign state, but keep
+        # the overlap assertion explicit for future additions.
+        if literal != "/dev/urandom":
+            _admit_path(path.resolve(strict=True), workspace=workspace,
+                        forbidden_roots=forbidden_roots)
+        result.append(literal)
+    return tuple(result)
+
+
 def _process_start_ticks(pid: int) -> int:
     try:
         text = Path(f"/proc/{pid}/stat").read_text(encoding="ascii")
@@ -244,6 +285,8 @@ def discover_runtime_allowlist(
     codex_auth: str | Path, ca_files: Sequence[str | Path],
     additional_cli_executables: Sequence[str | Path] = (),
     additional_cli_read_files: Sequence[str | Path] = (),
+    additional_cli_identity_files: Sequence[str | Path] = (),
+    additional_cli_runtime_read_files: Sequence[str | Path] = (),
     additional_cli_package_roots: Sequence[str | Path] = (),
     forbidden_roots: Sequence[str | Path] = (),
 ) -> RuntimeAllowlist:
@@ -251,10 +294,10 @@ def discover_runtime_allowlist(
 
     Callers must pass real, non-symlink paths.  Python reports its own versioned
     stdlib/site roots.  Codex contributes only its package root, exact Node
-    runtime, auth file and CA file(s).  Another declared CLI contributes only
-    its exact executable, library closure, explicitly named read files, and
-    explicitly named package roots.  No HOME or arbitrary environment prefix
-    is admitted.
+    runtime, auth file and CA file(s). Another declared CLI contributes only
+    its exact executable, library closure, explicitly named read files,
+    identity-only staging inputs, fixed volatile runtime reads, and explicitly
+    named package roots. No HOME or arbitrary environment prefix is admitted.
     """
     work = _exact_path(workspace, directory=True)
     forbidden = tuple(_exact_path(path, directory=True) for path in forbidden_roots)
@@ -339,6 +382,12 @@ def discover_runtime_allowlist(
     extra_read_files = _unique_exact(
         additional_cli_read_files, directory=False, workspace=work,
         forbidden_roots=forbidden)
+    identity_only_files = _unique_exact(
+        additional_cli_identity_files, directory=False, workspace=work,
+        forbidden_roots=forbidden)
+    runtime_read_files = _controller_runtime_read_files(
+        additional_cli_runtime_read_files, workspace=work,
+        forbidden_roots=forbidden)
     files_raw: list[str | Path] = [
         auth, *extra_read_files, *ca_paths, *network_config]
     loader_cache = Path("/etc/ld.so.cache")
@@ -351,8 +400,10 @@ def discover_runtime_allowlist(
         files_raw, directory=False, workspace=work, forbidden_roots=forbidden)
     # A file already covered by a root is redundant authority, not harmless
     # discoverability.  Keep its identity but remove it from the Landlock rows.
-    readable_files = tuple(
-        path for path in files if not any(path.is_relative_to(root) for root in roots))
+    ordinary_readable_files = tuple(
+        path for path in files
+        if not any(path.is_relative_to(root) for root in roots))
+    readable_files = tuple(map(str, ordinary_readable_files)) + runtime_read_files
     executable_files = tuple(
         path for path in executables
         if not any(path.is_relative_to(root) for root in roots))
@@ -362,13 +413,14 @@ def discover_runtime_allowlist(
         str(path): _sha256_file(path)
         for path in dict.fromkeys((
             python, node, *declared_clis, entrypoint, auth, *extra_read_files,
+            *identity_only_files,
             *ca_paths, *network_config,
             *python_extensions,
-            *shebang_executables, *readable_files, *executable_files))
+            *shebang_executables, *ordinary_readable_files, *executable_files))
     }
     return RuntimeAllowlist(
         readable_roots=tuple(map(str, roots)),
-        readable_files=tuple(map(str, readable_files)),
+        readable_files=readable_files,
         executable_files=tuple(map(str, executable_files)),
         identities=MappingProxyType(identities))
 
@@ -510,14 +562,23 @@ def prepare_controller_sandbox(
     checked_roots = _unique_exact(
         runtime.readable_roots, directory=True, workspace=work,
         forbidden_roots=())
+    ordinary_files = tuple(
+        path for path in runtime.readable_files
+        if path not in sandbox.CONTROLLER_RUNTIME_READ_FILES)
+    runtime_files = tuple(
+        path for path in runtime.readable_files
+        if path in sandbox.CONTROLLER_RUNTIME_READ_FILES)
     checked_files = _unique_exact(
-        runtime.readable_files, directory=False, workspace=work,
+        ordinary_files, directory=False, workspace=work,
         forbidden_roots=())
+    checked_runtime_files = _controller_runtime_read_files(
+        runtime_files, workspace=work, forbidden_roots=())
     checked_executables = _unique_exact(
         runtime.executable_files, directory=False, workspace=work,
         forbidden_roots=())
     if (tuple(map(str, checked_roots)) != runtime.readable_roots
-            or tuple(map(str, checked_files)) != runtime.readable_files
+            or (tuple(map(str, checked_files)) + checked_runtime_files)
+            != runtime.readable_files
             or tuple(map(str, checked_executables)) != runtime.executable_files):
         raise ControllerSandboxError("runtime allowlist changed during admission")
     for executable_path in checked_executables:

@@ -1394,6 +1394,37 @@ def _staged_controller_codex_home(workspace: Path):
             shutil.rmtree(target)
 
 
+@contextmanager
+def _staged_controller_claude_config(
+    workspace: Path, *, enabled: bool,
+    source_root: Path = Path("/home/node/.claude"),
+):
+    """Provide writable, scrubbed Claude state without exposing host history."""
+    if not enabled:
+        yield None
+        return
+    target = workspace / ".autokernel-controller-claude-config"
+    if target.exists() or target.is_symlink():
+        raise ArenaCellRunnerError("controller Claude config must be new")
+    target.mkdir(mode=0o700)
+    try:
+        for name in (".credentials.json", ".claude.json"):
+            source = source_root / name
+            if source.is_symlink() or not source.is_file():
+                raise ArenaCellRunnerError(
+                    f"controller Claude credential input is absent or unsafe: {name}")
+            destination = target / name
+            with destination.open("xb") as handle:
+                handle.write(source.read_bytes())
+            destination.chmod(0o600)
+        yield target
+    finally:
+        if target.is_symlink():
+            target.unlink()
+        elif target.exists():
+            shutil.rmtree(target)
+
+
 def _declared_task_sources(
     config: Mapping[str, Any], workspace: Path,
 ) -> tuple[str, ...]:
@@ -1836,16 +1867,19 @@ def _controller_runtime_allowlist(
     codex_config = Path("/home/node/.codex/config.toml")
     ca_file = Path("/etc/ssl/certs/ca-certificates.crt")
     exact_read_files = [codex_config]
+    identity_only_files: tuple[Path, ...] = ()
+    runtime_read_files: tuple[str, ...] = ()
     git_raw = shutil.which("git")
     if git_raw is None:
         raise ArenaCellRunnerError("controller runtime lacks Git source verifier")
     extra_clis: list[Path] = [Path(git_raw).resolve(strict=True)]
     if "claude" in cli:
         extra_clis.append(cli["claude"])
-        exact_read_files.extend((
+        identity_only_files = (
             Path("/home/node/.claude/.credentials.json"),
             Path("/home/node/.claude/.claude.json"),
-        ))
+        )
+        runtime_read_files = sandbox.CONTROLLER_RUNTIME_READ_FILES
     upstream = audit.get("upstream_source_identity")
     source_roots = [scripts_root, arena_root]
     if upstream is not None:
@@ -1878,6 +1912,8 @@ def _controller_runtime_allowlist(
         codex_auth=codex_auth, ca_files=(ca_file,),
         additional_cli_executables=tuple(extra_clis),
         additional_cli_read_files=tuple(exact_read_files),
+        additional_cli_identity_files=identity_only_files,
+        additional_cli_runtime_read_files=runtime_read_files,
         forbidden_roots=(cell_root.parent.parent,),
     )
 
@@ -2419,7 +2455,6 @@ def _run_worker_impl(
             "CUDA_VISIBLE_DEVICES": "",
             "PYTHONPATH": _controller_pythonpath(arm, repository_root),
             "SSL_CERT_FILE": "/etc/ssl/certs/ca-certificates.crt",
-            "CLAUDE_CONFIG_DIR": "/home/node/.claude",
         })
         source_paths = _declared_task_sources(task_config, workspace)
 
@@ -2471,8 +2506,19 @@ def _run_worker_impl(
             request=request, workspace=workspace, cell_root=cell_root,
             source_paths=source_paths, evaluate=broker_evaluate,
             baseline_receipt_sha256=baseline_window["receipt_sha256"])
-        with _staged_controller_codex_home(workspace) as codex_home:
+        arm_audit = request.get("arm_audit")
+        cli_rows = (
+            arm_audit.get("required_cli_identities", ())
+            if isinstance(arm_audit, Mapping) else ())
+        claude_enabled = any(
+            isinstance(row, Mapping) and row.get("name") == "claude"
+            for row in cli_rows)
+        with _staged_controller_codex_home(workspace) as codex_home, \
+                _staged_controller_claude_config(
+                    workspace, enabled=claude_enabled) as claude_config:
             controller_environment["CODEX_HOME"] = str(codex_home)
+            if claude_config is not None:
+                controller_environment["CLAUDE_CONFIG_DIR"] = str(claude_config)
             prepared = arena_adapter.prepare_task(arena_adapter.ArenaTask(
                 task_id=task_id,
                 task_prompt=raw_prompt,
@@ -3124,7 +3170,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--claim-timeout-seconds", type=float, default=0.0)
     parser.add_argument(
         "--available-source", action="store_true",
-        help=("run the separately labelled six-arm available-source panel; "
+        help=("run the separately labelled seven-arm available-source panel; "
               "never implies completion of the fixed eight-arm campaign"))
     args = parser.parse_args(argv)
     if args.validate_only:

@@ -553,6 +553,39 @@ measured only by a fresh governed campaign.
 The returned arena score remains `whole_agent_task_only`; C4 input remains
 `diagnostic_only`. Neither is an AutoKernel promotion verdict.
 
+## Claude controller runtime confinement repair — 2026-08-12
+
+The first fresh 7/7 campaign attempt (`inf03-available-source-seven-arm-r5-20260812`)
+completed its starting-state baseline and then stopped in the first
+Claude+Codex actor-critic cell. The pinned Claude planner exited by `SIGSEGV`
+before stdout or stderr. This partial campaign has no comparative, ranking,
+belief-update, or promotion authority.
+
+Differential reproduction proved that the controller seccomp profile was not
+the cause: the same pinned request completed under seccomp alone and failed
+under the campaign's exact Landlock read allowlist. File-open tracing found the
+fixed Bun/Claude startup surface: self process maps/stat/cgroup, four bounded
+kernel/CPU facts, UTC zoneinfo, and `/dev/urandom`. The controller sandbox now
+admits only those declared literals for Claude-bearing arms. `/proc/self/*`
+binds after the wrapper becomes the controller PID, volatile values are not
+misrepresented as content identities, and `/dev/urandom` receives read—not
+write—authority. Claude's two credential/settings inputs are copied into a
+minimal workspace-local config directory and scrubbed after the controller;
+host history, projects, plugins, cache, and the rest of the home directory stay
+outside the read boundary.
+
+The governed live probe is
+`/mnt/raid0/llm/autokernel/probes/inf03-claude-sandbox-runtime-20260812-r1/`.
+Its activation, result, and teardown file SHA-256 values are respectively
+`c84232f3b8ca6514e5b221bc3ac3d2c4d07154ebf39cb468a2a196d9494b0795`,
+`3322e81aac1f68a3490875cbfcdcaf81a3496e2fe041e87946e9de2e4a1bd384`, and
+`e15ca322f2835ef581e06b3940ba3670671db50289674f5bf86cc3900d80df61`.
+The real pinned `claude-opus-5/high` request returned structured output with
+zero stderr; the exact cgroup was empty and removed, and ephemeral Claude state
+was absent after exit. This proves runtime compatibility only. A fresh
+campaign ID is still required because the r5 source manifest predates this
+repair.
+
 ## On-box substrate reproduction — 2026-08-11
 
 An isolated Python 3.12 environment at

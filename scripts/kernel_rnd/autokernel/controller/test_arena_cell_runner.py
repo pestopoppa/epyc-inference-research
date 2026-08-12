@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import signal
 import socket
+import stat
 import struct
 import subprocess
 import sys
@@ -259,6 +260,38 @@ class ArenaCellRunnerTest(unittest.TestCase):
             file_sha256={"config.yaml": hashlib.sha256(
                 (task / "config.yaml").read_bytes()).hexdigest()},
         )
+
+    def test_staged_claude_config_is_minimal_writable_and_scrubbed(self):
+        workspace = self.root / "claude-workspace"
+        workspace.mkdir()
+        source = self.root / "host-claude"
+        source.mkdir()
+        (source / ".credentials.json").write_text(
+            '{"token":"fixture"}\n', encoding="utf-8")
+        (source / ".claude.json").write_text(
+            '{"setting":true}\n', encoding="utf-8")
+        (source / "history.jsonl").write_text(
+            "must-not-copy\n", encoding="utf-8")
+        with R._staged_controller_claude_config(
+                workspace, enabled=True, source_root=source) as staged:
+            self.assertIsNotNone(staged)
+            assert staged is not None
+            self.assertEqual(
+                sorted(path.name for path in staged.iterdir()),
+                [".claude.json", ".credentials.json"])
+            self.assertTrue(all(
+                stat.S_IMODE(path.stat().st_mode) == 0o600
+                for path in staged.iterdir()))
+            (staged / ".claude.json").write_text(
+                '{"setting":false}\n', encoding="utf-8")
+        self.assertFalse(
+            (workspace / ".autokernel-controller-claude-config").exists())
+        self.assertEqual(
+            (source / ".claude.json").read_text(encoding="utf-8"),
+            '{"setting":true}\n')
+        with R._staged_controller_claude_config(
+                workspace, enabled=False, source_root=source) as staged:
+            self.assertIsNone(staged)
 
     def arm(self, arm_id: str) -> C.ArmImplementation:
         if arm_id == C.BASELINE_ARM_ID:

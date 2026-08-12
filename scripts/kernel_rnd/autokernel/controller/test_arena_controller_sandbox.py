@@ -135,6 +135,42 @@ class ControllerSandboxContractTest(unittest.TestCase):
                 C.discover_runtime_allowlist(
                     **dict(base, controller_source_roots=(campaign,)))
 
+    def test_runtime_allowlist_binds_only_declared_pinned_cli_kernel_reads(self):
+        baseline = self.runtime()
+        identity_only = self.root / "staged-cli-input.json"
+        identity_only.write_text('{"fixture":true}\n', encoding="utf-8")
+        runtime = C.discover_runtime_allowlist(
+            workspace=self.workspace, python_executable=self.python,
+            controller_source_roots=(self.module_root,),
+            controller_entrypoint=Path(__file__).resolve(),
+            repository_module_roots=(), codex_cli=self.fake_codex,
+            node_executable=self.fake_node, codex_auth=self.auth,
+            ca_files=(self.ca,), forbidden_roots=(self.forbidden,),
+            additional_cli_identity_files=(identity_only,),
+            additional_cli_runtime_read_files=
+            sandbox.CONTROLLER_RUNTIME_READ_FILES,
+        )
+        self.assertEqual(
+            runtime.readable_files[-len(sandbox.CONTROLLER_RUNTIME_READ_FILES):],
+            sandbox.CONTROLLER_RUNTIME_READ_FILES)
+        self.assertTrue(all(
+            path not in runtime.identities
+            for path in sandbox.CONTROLLER_RUNTIME_READ_FILES))
+        self.assertIn(str(identity_only), runtime.identities)
+        self.assertNotIn(str(identity_only), runtime.readable_files)
+        self.assertNotEqual(runtime.sha256, baseline.sha256)
+        with self.assertRaisesRegex(
+                C.ControllerSandboxError, "undeclared controller runtime read"):
+            C.discover_runtime_allowlist(
+                workspace=self.workspace, python_executable=self.python,
+                controller_source_roots=(self.module_root,),
+                controller_entrypoint=Path(__file__).resolve(),
+                repository_module_roots=(), codex_cli=self.fake_codex,
+                node_executable=self.fake_node, codex_auth=self.auth,
+                ca_files=(self.ca,), forbidden_roots=(self.forbidden,),
+                additional_cli_runtime_read_files=("/proc/meminfo",),
+            )
+
     def test_copy_workspace_rejects_symlink_and_binds_regular_files(self):
         self.assertEqual(self.copy_receipt["files"], {
             "task.py": C._sha256_file(self.source_workspace / "task.py")})
