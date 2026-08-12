@@ -1361,17 +1361,37 @@ def _copy_task(source: Path, destination: Path) -> None:
     shutil.copytree(source, destination)
 
 
-def _declared_task_sources(config: Mapping[str, Any]) -> tuple[str, ...]:
+def _declared_task_sources(
+    config: Mapping[str, Any], workspace: Path,
+) -> tuple[str, ...]:
     declared = config.get("source_file_path")
     rows = ([declared] if isinstance(declared, str)
             else declared if isinstance(declared, list) else [])
-    if (not rows or any(not isinstance(row, str) or not row.strip()
-                        for row in rows)):
-        raise ArenaCellRunnerError(
-            "brokered Arena tasks must declare source_file_path")
-    paths = tuple(sorted(row.strip() for row in rows))
+    rows = [row.strip() for row in rows
+            if isinstance(row, str) and row.strip()]
+    if not rows:
+        targets = config.get("target_kernel_functions")
+        names = ([str(value) for value in targets]
+                 if isinstance(targets, list) else [str(targets or "")])
+        candidates = []
+        for path in sorted(workspace.glob("*.py")):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            if names and all(re.search(
+                    rf"\bdef\s+{re.escape(name)}\s*\(", text)
+                    for name in names if name):
+                candidates.append(path.name)
+        if len(candidates) != 1:
+            raise ArenaCellRunnerError(
+                "could not uniquely discover brokered Arena source file: "
+                f"{candidates}")
+        rows = candidates
+    paths = tuple(sorted(rows))
     if any(Path(row).is_absolute() or ".." in Path(row).parts for row in paths):
         raise ArenaCellRunnerError("brokered Arena source path is unsafe")
+    for row in paths:
+        path = _assert_contained(workspace / row, workspace, "Arena source file")
+        if path.is_symlink() or not path.is_file():
+            raise ArenaCellRunnerError("brokered Arena source file is absent or unsafe")
     return paths
 
 
@@ -2343,7 +2363,7 @@ def _run_worker_impl(
             "CODEX_HOME": "/home/node/.codex",
             "CLAUDE_CONFIG_DIR": "/home/node/.claude",
         })
-        source_paths = _declared_task_sources(task_config)
+        source_paths = _declared_task_sources(task_config, workspace)
 
         def broker_evaluate(
             ordinal: int, evaluation_root: Path, cancel_event: threading.Event,

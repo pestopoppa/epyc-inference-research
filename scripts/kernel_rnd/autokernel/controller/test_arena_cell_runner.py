@@ -486,6 +486,32 @@ class ArenaCellRunnerTest(unittest.TestCase):
                 arm=self.arm("k_search"), task=self.task,
                 controller_argv=tuple(argv))
 
+    def test_instruction_task_source_is_uniquely_discovered_from_kernel_target(self):
+        workspace = self.root / "instruction-workspace"
+        workspace.mkdir()
+        (workspace / "helper.py").write_text("def helper(): pass\n", encoding="utf-8")
+        (workspace / "kernel.py").write_text(
+            "def add_kernel(x):\n    return x\n", encoding="utf-8")
+        self.assertEqual(
+            R._declared_task_sources({
+                "source_file_path": [],
+                "target_kernel_functions": ["add_kernel"],
+            }, workspace),
+            ("kernel.py",))
+
+    def test_instruction_task_source_discovery_refuses_ambiguity(self):
+        workspace = self.root / "ambiguous-instruction-workspace"
+        workspace.mkdir()
+        for name in ("one.py", "two.py"):
+            (workspace / name).write_text(
+                "def add_kernel(x):\n    return x\n", encoding="utf-8")
+        with self.assertRaisesRegex(
+                R.ArenaCellRunnerError, "uniquely discover"):
+            R._declared_task_sources({
+                "source_file_path": [],
+                "target_kernel_functions": ["add_kernel"],
+            }, workspace)
+
     def test_identity_drift_refuses_before_claim_or_worker(self):
         acquire = mock.Mock()
         worker = mock.Mock()
