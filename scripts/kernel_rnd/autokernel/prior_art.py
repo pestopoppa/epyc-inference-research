@@ -45,6 +45,53 @@ LOCAL_STATES = frozenset({"present", "disabled", "unsupported", "regressed", "ab
 TRACE_MATCH_MODES = frozenset({"any", "all"})
 _COMMIT_RE = re.compile(r"^[0-9a-f]{7,64}$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_GGML_TYPE_RE = re.compile(r"\(ggml_type\)\s*(\d+)")
+
+# Numeric ggml_type template arguments are source-ABI facts, not stable names.
+# This table was transcribed from ggml/include/ggml.h at the exact frozen v9
+# source revision below.  Its enum block hashes to GGML_TYPE_ENUM_SHA256.  A
+# trace from any other (including abbreviated) revision remains numeric rather
+# than borrowing names from this revision.
+GGML_TYPE_ENUM_SOURCE_COMMIT = (
+    "0db32c06e3e550065b78311a6031ef3dd2c4f27c")
+GGML_TYPE_ENUM_SOURCE_PATH = "ggml/include/ggml.h"
+GGML_TYPE_ENUM_SHA256 = (
+    "c9f2351a01af698a2e011d306747d49989030e45230ca6a515b6bb3e1c95c59d")
+GGML_TYPE_NAMES = {
+    0: "GGML_TYPE_F32", 1: "GGML_TYPE_F16",
+    2: "GGML_TYPE_Q4_0", 3: "GGML_TYPE_Q4_1",
+    6: "GGML_TYPE_Q5_0", 7: "GGML_TYPE_Q5_1",
+    8: "GGML_TYPE_Q8_0", 9: "GGML_TYPE_Q8_1",
+    10: "GGML_TYPE_Q2_K", 11: "GGML_TYPE_Q3_K",
+    12: "GGML_TYPE_Q4_K", 13: "GGML_TYPE_Q5_K",
+    14: "GGML_TYPE_Q6_K", 15: "GGML_TYPE_Q8_K",
+    16: "GGML_TYPE_IQ2_XXS", 17: "GGML_TYPE_IQ2_XS",
+    18: "GGML_TYPE_IQ3_XXS", 19: "GGML_TYPE_IQ1_S",
+    20: "GGML_TYPE_IQ4_NL", 21: "GGML_TYPE_IQ3_S",
+    22: "GGML_TYPE_IQ2_S", 23: "GGML_TYPE_IQ4_XS",
+    24: "GGML_TYPE_I8", 25: "GGML_TYPE_I16",
+    26: "GGML_TYPE_I32", 27: "GGML_TYPE_I64",
+    28: "GGML_TYPE_F64", 29: "GGML_TYPE_IQ1_M",
+    30: "GGML_TYPE_BF16", 34: "GGML_TYPE_TQ1_0",
+    35: "GGML_TYPE_TQ2_0", 39: "GGML_TYPE_MXFP4",
+    40: "GGML_TYPE_NVFP4", 41: "GGML_TYPE_Q1_0",
+    42: "GGML_TYPE_Q2_0",
+}
+
+ROCPROF_SCHEMAS = {
+    "rocprofv2": {
+        "dispatch": "Dispatch_ID",
+        "kernel": "Kernel_Name",
+        "start": "Start_Timestamp",
+        "end": "End_Timestamp",
+    },
+    "rocprof_v1": {
+        "dispatch": "Index",
+        "kernel": "KernelName",
+        "start": "BeginNs",
+        "end": "EndNs",
+    },
+}
 
 
 class CatalogueError(ValueError):
@@ -307,13 +354,15 @@ class ProfileFinding:
 
 @dataclass(frozen=True)
 class ProfileDispatch:
-    """One ordered dispatch from a hash-bound rocprofv2 capture."""
+    """One ordered dispatch from a hash-bound rocprof capture."""
 
     dispatch_id: str
     kernel_name: str
     kernel_family: str
     start_ns: int
     end_ns: int
+    profiler_schema: str = "rocprofv2"
+    ggml_types: tuple[str, ...] = ()
 
     @property
     def duration_ns(self) -> int:
@@ -387,9 +436,54 @@ def _kernel_family(kernel_name: str) -> str:
     return family
 
 
+def _rocprof_schema(fieldnames: Sequence[str] | None) -> tuple[str, Mapping[str, str]]:
+    """Select one complete profiler schema; never mix aliases across versions."""
+    fields = set(fieldnames or ())
+    matches = [
+        (name, columns) for name, columns in ROCPROF_SCHEMAS.items()
+        if set(columns.values()).issubset(fields)
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise ProfileError(
+            f"rocprof CSV ambiguously matches profiler schemas: "
+            f"{[name for name, _ in matches]}")
+    alternatives = {
+        name: sorted(set(columns.values()) - fields)
+        for name, columns in ROCPROF_SCHEMAS.items()
+    }
+    raise ProfileError(
+        f"rocprof CSV is missing required columns for every supported schema: "
+        f"{alternatives}")
+
+
+def _ggml_type_names(kernel_name: str, source_commit: str) -> tuple[str, ...]:
+    """Name numeric template arguments only for the exact audited enum revision."""
+    numbers = tuple(dict.fromkeys(
+        int(value) for value in _GGML_TYPE_RE.findall(kernel_name)))
+    if not numbers or source_commit != GGML_TYPE_ENUM_SOURCE_COMMIT:
+        return ()
+    unknown = [value for value in numbers if value not in GGML_TYPE_NAMES]
+    if unknown:
+        raise ProfileError(
+            f"kernel names ggml_type values absent from the pinned enum: {unknown}")
+    return tuple(GGML_TYPE_NAMES[value] for value in numbers)
+
+
+def _source_bound_kernel_family(kernel_name: str, source_commit: str) -> tuple[
+        str, tuple[str, ...]]:
+    """Keep ABI-distinct template variants separate when their enum is known."""
+    family = _kernel_family(kernel_name)
+    ggml_types = _ggml_type_names(kernel_name, source_commit)
+    if ggml_types:
+        family = f"{family}[{','.join(ggml_types)}]"
+    return family, ggml_types
+
+
 def load_rocprof_dispatches(path: str | Path,
                             receipt: ProfileReceipt) -> tuple[ProfileDispatch, ...]:
-    """Parse ordered rocprofv2 dispatches after verifying the capture hash."""
+    """Parse ordered rocprof-v1 or rocprofv2 dispatches after hash verification."""
     source = Path(path)
     if not source.is_file():
         raise ProfileError(f"profile does not exist: {source}")
@@ -398,37 +492,43 @@ def load_rocprof_dispatches(path: str | Path,
         raise ProfileError(
             f"profile sha256 mismatch: expected {receipt.profile_sha256}, got {observed_hash}")
     seen_ids: set[str] = set()
-    required = {"Dispatch_ID", "Kernel_Name", "Start_Timestamp", "End_Timestamp"}
     dispatches = []
     with source.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(line for line in handle if line.strip())
-        if reader.fieldnames is None or not required.issubset(reader.fieldnames):
-            missing = sorted(required - set(reader.fieldnames or ()))
-            raise ProfileError(f"rocprof CSV is missing required columns: {missing}")
+        profiler_schema, columns = _rocprof_schema(reader.fieldnames)
         for row_number, row in enumerate(reader, 2):
             dispatch_id = _profile_text(
-                row.get("Dispatch_ID"), f"row {row_number} Dispatch_ID")
+                row.get(columns["dispatch"]),
+                f"row {row_number} {columns['dispatch']}")
             if dispatch_id in seen_ids:
-                raise ProfileError(f"duplicate Dispatch_ID {dispatch_id!r}")
+                raise ProfileError(
+                    f"duplicate {columns['dispatch']} {dispatch_id!r}")
             seen_ids.add(dispatch_id)
             try:
-                start = int(_profile_text(row.get("Start_Timestamp"),
-                                          f"row {row_number} Start_Timestamp"))
-                end = int(_profile_text(row.get("End_Timestamp"),
-                                        f"row {row_number} End_Timestamp"))
+                start = int(_profile_text(
+                    row.get(columns["start"]),
+                    f"row {row_number} {columns['start']}"))
+                end = int(_profile_text(
+                    row.get(columns["end"]),
+                    f"row {row_number} {columns['end']}"))
             except ValueError as exc:
                 raise ProfileError(f"row {row_number} has a non-integer timestamp") from exc
             if end <= start:
                 raise ProfileError(
                     f"row {row_number} has non-positive dispatch duration: {start}..{end}")
             kernel_name = _profile_text(
-                row.get("Kernel_Name"), f"row {row_number} Kernel_Name")
+                row.get(columns["kernel"]),
+                f"row {row_number} {columns['kernel']}")
+            kernel_family, ggml_types = _source_bound_kernel_family(
+                kernel_name, receipt.source_commit)
             dispatches.append(ProfileDispatch(
                 dispatch_id=dispatch_id,
                 kernel_name=kernel_name,
-                kernel_family=_kernel_family(kernel_name),
+                kernel_family=kernel_family,
                 start_ns=start,
                 end_ns=end,
+                profiler_schema=profiler_schema,
+                ggml_types=ggml_types,
             ))
     if not dispatches:
         raise ProfileError("rocprof CSV contains no positive-duration dispatches")
@@ -450,17 +550,21 @@ def load_rocprof_findings(path: str | Path, receipt: ProfileReceipt, *,
     durations: dict[str, int] = defaultdict(int)
     dispatches: dict[str, int] = defaultdict(int)
     names: dict[str, set[str]] = defaultdict(set)
+    ggml_types: dict[str, set[str]] = defaultdict(set)
     ordered = load_rocprof_dispatches(path, receipt)
     for row in ordered:
         durations[row.kernel_family] += row.duration_ns
         dispatches[row.kernel_family] += 1
         names[row.kernel_family].add(row.kernel_name)
+        ggml_types[row.kernel_family].update(row.ggml_types)
     total = sum(durations.values())
     if total <= 0:
         raise ProfileError("rocprof CSV contains no positive-duration dispatches")
     findings = []
     for family in sorted(durations):
-        trace_text = " | ".join(sorted(names[family]))
+        type_context = " ".join(sorted(ggml_types[family]))
+        trace_text = " | ".join(filter(None, (
+            " | ".join(sorted(names[family])), type_context)))
         finding = Finding(
             finding_id=f"{receipt.corpus_id}:{family}",
             trace_text=trace_text,
@@ -560,7 +664,7 @@ def _parse_flag(value: str) -> tuple[str, str]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Run AK-DEL-1 over an already-recorded rocprofv2 CSV")
+        description="Run AK-DEL-1 over an already-recorded rocprof-v1/v2 CSV")
     parser.add_argument("--profile", required=True)
     parser.add_argument("--profile-sha256", required=True)
     parser.add_argument("--source-commit", required=True)

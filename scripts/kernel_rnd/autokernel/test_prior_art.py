@@ -39,7 +39,7 @@ class PriorArtGateTest(unittest.TestCase):
     def test_multi_keyword_pattern_does_not_match_one_generic_token(self):
         result = P.classify(self.finding(
             trace_text="void mul_mat_vec_q<(ggml_type)8>", symbols=()), self.catalogue)
-        self.assertEqual(result.matched_pattern, "Q8 quantized GEMV")
+        self.assertEqual(result.matched_pattern, "quantized GEMV (MMVQ)")
         self.assertNotEqual(result.matched_pattern, "RMSNorm MUL RoPE fusion")
 
     def test_hip_top_k_limitation_wins_over_generic_sampling_port(self):
@@ -124,6 +124,83 @@ class ScopeReductionTest(unittest.TestCase):
         self.assertEqual([row.dispatches for row in rows], [1, 2])
         self.assertEqual([row.duration_ns for row in rows], [60, 50])
         self.assertAlmostEqual(sum(row.finding.gpu_time_share for row in rows), 1.0)
+
+    def test_rocprof_v1_schema_uses_device_begin_end_and_pinned_enum_names(self):
+        profile = Path(self.tmp.name) / "rocprof-v1.csv"
+        profile.write_text(
+            "Index,KernelName,DispatchNs,BeginNs,EndNs,CompleteNs\n"
+            "0,\"void mul_mat_vec_q<(ggml_type)16>(void const*) [clone .kd]\",1,10,40,99\n"
+            "1,\"void mul_mat_vec_q<(ggml_type)18>(void const*) [clone .kd]\",2,50,90,199\n",
+            encoding="utf-8")
+        receipt = P.ProfileReceipt(
+            corpus_id="rocprof-v1-real",
+            workload_id="qwen35-122b-iq2-decode",
+            profile_path="rocprof-v1.csv",
+            profile_sha256=hashlib.sha256(profile.read_bytes()).hexdigest(),
+            source_commit=P.GGML_TYPE_ENUM_SOURCE_COMMIT,
+        )
+        dispatches = P.load_rocprof_dispatches(profile, receipt)
+        self.assertEqual([row.profiler_schema for row in dispatches],
+                         ["rocprof_v1", "rocprof_v1"])
+        self.assertEqual([row.duration_ns for row in dispatches], [30, 40])
+        self.assertEqual([row.kernel_family for row in dispatches],
+                         ["mul_mat_vec_q[GGML_TYPE_IQ2_XXS]",
+                          "mul_mat_vec_q[GGML_TYPE_IQ3_XXS]"])
+        self.assertEqual([row.ggml_types for row in dispatches], [
+            ("GGML_TYPE_IQ2_XXS",), ("GGML_TYPE_IQ3_XXS",),
+        ])
+        findings = P.load_rocprof_findings(profile, receipt)
+        self.assertEqual([row.duration_ns for row in findings], [30, 40])
+        self.assertIn("GGML_TYPE_IQ2_XXS", findings[0].finding.trace_text)
+        self.assertIn("GGML_TYPE_IQ3_XXS", findings[1].finding.trace_text)
+
+    def test_numeric_ggml_type_is_not_named_for_an_unpinned_revision(self):
+        profile = Path(self.tmp.name) / "other-source.csv"
+        profile.write_text(
+            "Index,KernelName,BeginNs,EndNs\n"
+            "0,\"void mul_mat_vec_q<(ggml_type)16>() [clone .kd]\",10,40\n",
+            encoding="utf-8")
+        receipt = P.ProfileReceipt(
+            corpus_id="other-source", workload_id="decode",
+            profile_path="other-source.csv",
+            profile_sha256=hashlib.sha256(profile.read_bytes()).hexdigest(),
+            source_commit="abcdef0123456789",
+        )
+        dispatch = P.load_rocprof_dispatches(profile, receipt)[0]
+        self.assertEqual(dispatch.ggml_types, ())
+        self.assertNotIn(
+            "GGML_TYPE_IQ2_XXS",
+            P.load_rocprof_findings(profile, receipt)[0].finding.trace_text)
+
+    def test_schema_detection_refuses_hybrid_profiler_columns(self):
+        profile = Path(self.tmp.name) / "hybrid.csv"
+        profile.write_text(
+            "Dispatch_ID,Kernel_Name,Start_Timestamp,End_Timestamp,"
+            "Index,KernelName,BeginNs,EndNs\n"
+            "0,k,10,20,0,k,10,20\n", encoding="utf-8")
+        receipt = P.ProfileReceipt(
+            corpus_id="hybrid", workload_id="decode",
+            profile_path="hybrid.csv",
+            profile_sha256=hashlib.sha256(profile.read_bytes()).hexdigest(),
+            source_commit=P.GGML_TYPE_ENUM_SOURCE_COMMIT,
+        )
+        with self.assertRaisesRegex(P.ProfileError, "ambiguously matches"):
+            P.load_rocprof_dispatches(profile, receipt)
+
+    def test_pinned_enum_map_matches_frozen_v9_values_used_by_live_trace(self):
+        self.assertEqual(P.GGML_TYPE_ENUM_SOURCE_COMMIT,
+                         "0db32c06e3e550065b78311a6031ef3dd2c4f27c")
+        self.assertEqual(P.GGML_TYPE_ENUM_SOURCE_PATH, "ggml/include/ggml.h")
+        self.assertEqual(P.GGML_TYPE_ENUM_SHA256,
+                         "c9f2351a01af698a2e011d306747d49989030e45230ca6a515b6bb3e1c95c59d")
+        self.assertEqual({value: P.GGML_TYPE_NAMES[value]
+                          for value in (1, 8, 12, 13, 14, 16, 18, 22, 23)}, {
+            1: "GGML_TYPE_F16", 8: "GGML_TYPE_Q8_0",
+            12: "GGML_TYPE_Q4_K", 13: "GGML_TYPE_Q5_K",
+            14: "GGML_TYPE_Q6_K", 16: "GGML_TYPE_IQ2_XXS",
+            18: "GGML_TYPE_IQ3_XXS", 22: "GGML_TYPE_IQ2_S",
+            23: "GGML_TYPE_IQ4_XS",
+        })
 
     def test_profile_hash_mismatch_refuses_classification(self):
         wrong = P.ProfileReceipt(
