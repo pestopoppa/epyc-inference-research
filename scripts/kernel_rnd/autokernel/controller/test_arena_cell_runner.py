@@ -1315,6 +1315,109 @@ class ArenaCellRunnerTest(unittest.TestCase):
         self.assertEqual(
             broker.model_receipt_sha256s, [receipt["receipt_sha256"]])
 
+    def test_direct_model_call_replaces_ambient_host_temp_and_cleans_it(self):
+        workspace = self.root / "model-temp" / "workspace"
+        cell = workspace.parent
+        workspace.mkdir(parents=True)
+        ambient = self.root / "host-scratch"
+        ambient.mkdir()
+        observed = {}
+
+        class FakeProcess:
+            pid = os.getpid()
+            returncode = 0
+
+            def communicate(self, *, input, timeout):
+                observed["prompt"] = input
+                observed["timeout"] = timeout
+                temp = Path(observed["environment"]["TMPDIR"])
+                self.assertions = (
+                    temp.is_relative_to(workspace),
+                    temp.is_dir(),
+                    stat.S_IMODE(temp.stat().st_mode),
+                )
+                (temp / "claude-1000").mkdir()
+                return "{}\n", ""
+
+        process = FakeProcess()
+
+        def fake_popen(command, *, cwd, env, **kwargs):
+            observed["command"] = tuple(command)
+            observed["cwd"] = cwd
+            observed["environment"] = dict(env)
+            return process
+
+        invocation = types.SimpleNamespace(
+            command_prefix=(), environment_overrides={}, pid=os.getpid(),
+            policy=types.SimpleNamespace(policy_sha256="p" * 64),
+            process_started=mock.Mock(),
+            verify_and_teardown=mock.Mock(return_value={
+                "teardown": {"verified_empty": True, "removed": True}}))
+        executable = str(Path(sys.executable).resolve())
+        runtime = types.SimpleNamespace(
+            identities={executable: "a" * 64}, sha256="r" * 64)
+        with (
+            mock.patch.object(
+                R.arena_controller_sandbox, "prepare_model_sandbox",
+                return_value=invocation),
+            mock.patch.object(R.subprocess, "Popen", side_effect=fake_popen),
+            mock.patch.object(R.sandbox, "read_receipt", return_value={}),
+        ):
+            result = R._run_brokered_model(
+                ordinal=1, kind="claude_json",
+                argv=(executable, "--json-schema", "{}"), prompt="plan",
+                timeout_seconds=60, workspace=workspace, cell_root=cell,
+                environment={"TMPDIR": str(ambient), "TMP": str(ambient),
+                             "TEMP": str(ambient)}, runtime=runtime)
+
+        self.assertEqual(result["returncode"], 0)
+        self.assertEqual(process.assertions, (True, True, 0o700))
+        self.assertEqual(observed["cwd"], workspace)
+        temp_values = {
+            observed["environment"][name]
+            for name in ("TMPDIR", "TMP", "TEMP", "XDG_RUNTIME_DIR")}
+        self.assertEqual(len(temp_values), 1)
+        self.assertNotEqual(next(iter(temp_values)), str(ambient))
+        self.assertFalse(Path(next(iter(temp_values))).exists())
+        execution = result["execution"]
+        self.assertFalse(
+            execution["runtime_environment"]["ambient_host_temp_inherited"])
+        invocation.process_started.assert_called_once_with(os.getpid())
+        invocation.verify_and_teardown.assert_called_once()
+
+    def test_direct_model_temp_is_cleaned_when_cli_cannot_start(self):
+        workspace = self.root / "failed-model-temp" / "workspace"
+        cell = workspace.parent
+        workspace.mkdir(parents=True)
+        observed = {}
+
+        def fail_popen(command, *, cwd, env, **kwargs):
+            observed["temp"] = env["TMPDIR"]
+            raise OSError("fixture launch failure")
+
+        invocation = types.SimpleNamespace(
+            command_prefix=(), environment_overrides={}, pid=None,
+            policy=types.SimpleNamespace(policy_sha256="p" * 64),
+            process_started=mock.Mock(), verify_and_teardown=mock.Mock())
+        executable = str(Path(sys.executable).resolve())
+        runtime = types.SimpleNamespace(
+            identities={executable: "a" * 64}, sha256="r" * 64)
+        with (
+            mock.patch.object(
+                R.arena_controller_sandbox, "prepare_model_sandbox",
+                return_value=invocation),
+            mock.patch.object(R.subprocess, "Popen", side_effect=fail_popen),
+            self.assertRaisesRegex(OSError, "fixture launch failure"),
+        ):
+            R._run_brokered_model(
+                ordinal=1, kind="claude_json",
+                argv=(executable, "--json-schema", "{}"), prompt="plan",
+                timeout_seconds=60, workspace=workspace, cell_root=cell,
+                environment={}, runtime=runtime)
+        self.assertFalse(Path(observed["temp"]).exists())
+        invocation.process_started.assert_not_called()
+        invocation.verify_and_teardown.assert_not_called()
+
     def test_candidate_evaluation_failure_releases_short_claim(self):
         claim = FakeClaim()
         cell = self.root / "cells" / "failed-candidate"
