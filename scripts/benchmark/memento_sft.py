@@ -132,6 +132,13 @@ class MementoTrainingConfig:
     max_train_samples: Optional[int] = None  # None = use all 228K
     max_eval_samples: Optional[int] = 200
 
+    # --- Embedding training ---
+    # True adds embed_tokens/lm_head to modules_to_save so the 4 new memento
+    # special tokens learn their own vectors. Costs ~155M trainable params on
+    # a 0.6B model (tied embeddings) and produces an adapter that
+    # convert_lora_to_gguf.py cannot express. Off for smoke runs.
+    train_embeddings: bool = False
+
     # --- Memento attention masking (Stage 2 only) ---
     # In Stage 2, the attention mask is modified so that tokens after a
     # block_end can only attend to the summary tokens (not the block tokens).
@@ -150,23 +157,43 @@ def load_parquet_dataset(data_dir: Path, max_samples: Optional[int] = None):
     Each record has: source, domain, difficulty, problem, response.
     """
     import pandas as pd
+    import pyarrow as pa
 
     shards = sorted(data_dir.glob("train-*.parquet"))
     if not shards:
         raise FileNotFoundError(f"No parquet files found in {data_dir}")
 
     frames = []
-    for shard in shards:
-        df = pq.read_table(str(shard)).to_pandas()
-        frames.append(df)
-        if max_samples and sum(len(f) for f in frames) >= max_samples:
-            break
+    if max_samples:
+        # Draw the subset ACROSS all shards, not from the first shard(s).
+        # OpenMementos shards are domain-clustered: the first 100 rows of
+        # shard 0 are 100% `code`, so a head()-based subset is not a sample
+        # of the 54% math / 27% science / 19% code corpus. Reading one small
+        # record batch per shard costs no more I/O than the old head().
+        per_shard = -(-max_samples // len(shards))  # ceil division
+        for shard in shards:
+            batch = next(pq.ParquetFile(str(shard)).iter_batches(batch_size=per_shard), None)
+            if batch is None:
+                continue
+            frames.append(pa.Table.from_batches([batch]).to_pandas())
+        n_read = len(frames)
+    else:
+        for shard in shards:
+            frames.append(pq.read_table(str(shard)).to_pandas())
+        n_read = len(frames)
 
     combined = pd.concat(frames, ignore_index=True)
     if max_samples:
-        combined = combined.head(max_samples)
+        # Draw the final subset at random, not with head(): after the
+        # per-shard concat the rows are still ordered shard-0-first, so
+        # head(4) of a 20-shard read returns 4 rows from shards 0-3 only.
+        # Fixed seed keeps the subset reproducible.
+        combined = (
+            combined.sample(n=min(max_samples, len(combined)), random_state=42)
+            .reset_index(drop=True)
+        )
 
-    print(f"Loaded {len(combined)} examples from {len(shards)} shards")
+    print(f"Loaded {len(combined)} examples from {n_read} shards")
     print(f"  Domains: {dict(combined['domain'].value_counts())}")
     return combined.to_dict("records")
 
@@ -402,14 +429,43 @@ class MementoDataCollator:
         self.summary_start_id = tokenizer.convert_tokens_to_ids("<|summary_start|>")
         self.summary_end_id = tokenizer.convert_tokens_to_ids("<|summary_end|>")
 
+    def prompt_length(self, example: dict) -> int:
+        """Token length of the user turn plus the assistant generation prompt.
+
+        This is the boundary at which assistant content starts, so labels
+        before it must be -100 (train on the completion only).
+        """
+        prompt_ids = self.tokenizer.apply_chat_template(
+            [{"role": "user", "content": example["problem"]}],
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+        )["input_ids"]
+        return len(prompt_ids)
+
+    def completion_token_count(self, example: dict) -> int:
+        """How many supervised (non -100) tokens survive truncation.
+
+        Zero means the problem statement alone fills max_seq_len, so every
+        label is -100. torch's cross_entropy over an all-ignored target
+        returns nan (with a zero gradient), which poisons the reported epoch
+        loss while contributing nothing to training.
+        """
+        full = self.tokenizer.apply_chat_template(
+            format_as_chat(example),
+            tokenize=True,
+            max_length=self.max_seq_len,
+            truncation=True,
+            return_dict=True,
+            add_generation_prompt=False,
+        )["input_ids"]
+        seq_len = len(full)
+        return max(0, seq_len - min(self.prompt_length(example), seq_len))
+
     def __call__(self, examples: list[dict]) -> dict:
         """Collate a batch of examples into model inputs.
 
-        TODO: Implement full collation. Skeleton below shows the structure.
-        The actual implementation depends on whether we use trl.SFTTrainer
-        (which handles chat formatting internally) or a manual training loop.
-
-        For manual loop, each example should be:
+        Per example:
         1. Formatted as chat messages
         2. Applied through tokenizer.apply_chat_template()
         3. Truncated to max_seq_len
@@ -421,12 +477,12 @@ class MementoDataCollator:
         batch_input_ids = []
         batch_attention_mask = []
         batch_labels = []
+        encoded_lens = []
 
+        rows = []
         for example in examples:
             messages = format_as_chat(example)
 
-            # Tokenize with chat template
-            # TODO: Verify Qwen3 chat template includes <think> handling
             encoded = self.tokenizer.apply_chat_template(
                 messages,
                 tokenize=True,
@@ -436,27 +492,36 @@ class MementoDataCollator:
                 add_generation_prompt=False,
             )
 
-            input_ids = encoded["input_ids"]
+            input_ids = list(encoded["input_ids"])
             seq_len = len(input_ids)
 
-            # Build labels: -100 for user tokens, actual IDs for assistant
-            # TODO: Find the boundary between user and assistant tokens
-            # For now, use all tokens as labels (SFT on full sequence)
-            labels = list(input_ids)
+            # Labels: -100 over the user turn + generation prompt, real ids
+            # over the assistant response. Training on the prompt teaches the
+            # model to generate problem statements, which is not the objective.
+            n_prompt = min(self.prompt_length(example), seq_len)
+            labels = [-100] * n_prompt + input_ids[n_prompt:]
 
-            # Pad to max_seq_len
-            padding_len = self.max_seq_len - seq_len
-            input_ids = input_ids + [self.tokenizer.pad_token_id] * padding_len
-            labels = labels + [-100] * padding_len
+            rows.append((input_ids, labels, seq_len))
+            encoded_lens.append(seq_len)
+
+        # Dynamic padding: pad to the longest sequence in THIS batch, not to
+        # max_seq_len. Padding every short sample out to 4096 wastes the bulk
+        # of a CPU step on positions whose labels are all -100.
+        pad_to = max(encoded_lens)
+
+        for input_ids, labels, seq_len in rows:
+            padding_len = pad_to - seq_len
+            padded_ids = input_ids + [self.tokenizer.pad_token_id] * padding_len
+            padded_labels = labels + [-100] * padding_len
             attn_mask = [1] * seq_len + [0] * padding_len
 
-            batch_input_ids.append(input_ids)
-            batch_labels.append(labels)
+            batch_input_ids.append(padded_ids)
+            batch_labels.append(padded_labels)
 
             if self.use_memento_attention:
                 # Stage 2: custom block-masking attention
                 memento_mask = build_memento_attention_mask(
-                    input_ids[:seq_len],
+                    input_ids,
                     self.tokenizer,
                     self.block_start_id,
                     self.block_end_id,
@@ -464,10 +529,11 @@ class MementoDataCollator:
                     self.summary_end_id,
                 )
                 # Pad the 2D mask
-                padded_mask = [[0] * self.max_seq_len for _ in range(self.max_seq_len)]
+                padded_mask = [[0] * pad_to for _ in range(pad_to)]
                 for r in range(seq_len):
+                    row = memento_mask[r]
                     for c in range(seq_len):
-                        padded_mask[r][c] = memento_mask[r][c]
+                        padded_mask[r][c] = row[c]
                 batch_attention_mask.append(padded_mask)
             else:
                 batch_attention_mask.append(attn_mask)
@@ -495,9 +561,7 @@ class MementoDataCollator:
 # ---------------------------------------------------------------------------
 
 def setup_model_and_lora(config: MementoTrainingConfig, tokenizer, num_added_tokens: int):
-    """Load base model and apply LoRA adapter.
-
-    TODO: Requires `peft` package. Install with: pip install peft
+    """Load base model and apply the LoRA adapter.
 
     For CPU training:
       - Load model in BF16 (if AVX-512 BF16 available) or FP32
@@ -511,6 +575,7 @@ def setup_model_and_lora(config: MementoTrainingConfig, tokenizer, num_added_tok
     """
     import torch
     from transformers import AutoModelForCausalLM
+    from peft import LoraConfig, get_peft_model, TaskType
 
     dtype_map = {
         "bfloat16": torch.bfloat16,
@@ -530,35 +595,66 @@ def setup_model_and_lora(config: MementoTrainingConfig, tokenizer, num_added_tok
         trust_remote_code=True,
     )
 
-    # Resize embeddings if we added special tokens
-    if num_added_tokens > 0:
+    # Resize embeddings ONLY if the tokenizer outgrew the embedding matrix.
+    # Qwen3 ships vocab_size=151936 with reserved slots while the tokenizer is
+    # 151669 long, so the 4 memento tokens land at 151669..151672 — still
+    # inside the existing matrix. Calling resize_token_embeddings(len(tokenizer))
+    # unconditionally SHRINKS 151936 -> 151673, destroying 263 rows of the
+    # embedding and (tie_word_embeddings=True) of the output head with it.
+    n_embed_rows = model.get_input_embeddings().weight.shape[0]
+    if num_added_tokens > 0 and len(tokenizer) > n_embed_rows:
         model.resize_token_embeddings(len(tokenizer))
-        print(f"Resized embeddings to {len(tokenizer)}")
+        print(f"Resized embeddings {n_embed_rows} -> {len(tokenizer)}")
+    elif num_added_tokens > 0:
+        print(
+            f"Embedding matrix already covers the new tokens "
+            f"({n_embed_rows} rows >= {len(tokenizer)} tokenizer entries) — no resize"
+        )
 
-    # Enable gradient checkpointing (critical for CPU memory)
+    # Enable gradient checkpointing (critical for CPU memory).
+    # `use_reentrant=False` is the non-deprecated torch path.
+    # `enable_input_require_grads()` is defensive, NOT a fix for an observed
+    # bug: measured 2026-08-12 on torch 2.13 / transformers 5.15 / peft 0.20,
+    # LoRA gradients arrive non-None and non-zero in all four combinations of
+    # {reentrant, non-reentrant} x {input grads forced, not forced}. It is kept
+    # so the call order here stops mattering — under reentrant checkpointing on
+    # older stacks, frozen-base inputs do sever the graph.
     if config.gradient_checkpointing:
-        model.gradient_checkpointing_enable()
-        print("Gradient checkpointing: enabled")
+        model.gradient_checkpointing_enable(
+            gradient_checkpointing_kwargs={"use_reentrant": False}
+        )
+        model.enable_input_require_grads()
+        print("Gradient checkpointing: enabled (non-reentrant, input grads forced)")
 
     # Apply LoRA
-    # TODO: Uncomment when peft is installed
-    # from peft import LoraConfig, get_peft_model, TaskType
-    #
-    # lora_config = LoraConfig(
-    #     r=config.lora_rank,
-    #     lora_alpha=config.lora_alpha,
-    #     lora_dropout=config.lora_dropout,
-    #     target_modules=config.lora_target_modules,
-    #     task_type=TaskType.CAUSAL_LM,
-    #     bias="none",
-    #     # For Stage 2 with memento attention, modules_to_save could include
-    #     # the embedding layer (since we added special tokens)
-    #     modules_to_save=["embed_tokens", "lm_head"] if num_added_tokens > 0 else None,
-    # )
-    # model = get_peft_model(model, lora_config)
-    # model.print_trainable_parameters()
+    lora_config = LoraConfig(
+        r=config.lora_rank,
+        lora_alpha=config.lora_alpha,
+        lora_dropout=config.lora_dropout,
+        target_modules=config.lora_target_modules,
+        task_type=TaskType.CAUSAL_LM,
+        bias="none",
+        # Training the embedding/head is what teaches the 4 NEW special tokens
+        # their own vectors, but it makes ~155M params trainable on a 0.6B
+        # model (tied embed_tokens) and the resulting adapter is not
+        # convert_lora_to_gguf-friendly. Off by default; on for real runs.
+        modules_to_save=(
+            ["embed_tokens", "lm_head"]
+            if (num_added_tokens > 0 and config.train_embeddings)
+            else None
+        ),
+    )
+    # Trainable params must stay fp32: AdamW updates at lr=2e-4 fall below the
+    # ~3-decimal-digit resolution of bf16 for weights of typical magnitude.
+    # peft does this itself via autocast_adapter_dtype=True (the default) —
+    # verified 2026-08-12 — so do NOT pass autocast_adapter_dtype=False here.
+    model = get_peft_model(model, lora_config)
 
-    print(f"Model loaded. Parameters: {sum(p.numel() for p in model.parameters()) / 1e6:.1f}M")
+    adapter_dtypes = {p.dtype for p in model.parameters() if p.requires_grad}
+    if adapter_dtypes != {torch.float32}:
+        print(f"  [WARN] trainable params are {adapter_dtypes}, expected float32")
+
+    model.print_trainable_parameters()
     return model
 
 
@@ -611,6 +707,24 @@ def train_stage(
         max_seq_len=max_seq_len,
         use_memento_attention=use_memento,
     )
+
+    # Drop records that carry no supervision at this max_seq_len: when the
+    # problem statement alone fills the window, every label is -100 and the
+    # sample costs a full forward+backward while contributing a nan loss and a
+    # zero gradient. Measured 2026-08-12: 3/128 records at max_seq_len=1024.
+    n_before = len(train_data)
+    train_data = [r for r in train_data if collator.completion_token_count(r) > 0]
+    n_dropped = n_before - len(train_data)
+    if n_dropped:
+        print(
+            f"  Dropped {n_dropped}/{n_before} records with no completion tokens "
+            f"at max_seq_len={max_seq_len} (prompt fills the window)"
+        )
+    if not train_data:
+        raise ValueError(
+            f"every training record is prompt-only at max_seq_len={max_seq_len}; "
+            "raise --max-seq-len"
+        )
 
     # --- Option A: trl.SFTTrainer (Stage 1 only) ---
     # TODO: Uncomment when trl is installed
@@ -666,11 +780,17 @@ def train_stage(
         optimizer, start_factor=0.1, total_iters=max(1, warmup_steps)
     )
 
+    trainable = [p for p in model.parameters() if p.requires_grad]
+
     model.train()
     global_step = 0
+    n_nonfinite = 0
+    loss_history: list[float] = []
+    t_start = time.time()
     for epoch in range(epochs):
         epoch_loss = 0.0
         n_batches = 0
+        pending = 0
         for step, batch_start in enumerate(range(0, len(train_data), config.per_device_batch_size)):
             batch = train_data[batch_start:batch_start + config.per_device_batch_size]
             inputs = collator(batch)
@@ -678,30 +798,84 @@ def train_stage(
 
             outputs = model(**inputs)
             loss = outputs.loss / config.gradient_accumulation_steps
+
+            # A non-finite loss must never reach backward(): one nan gradient
+            # propagates through clip_grad_norm_ into every LoRA weight and
+            # silently kills the run. The prompt-only filter above removes the
+            # known cause; this catches anything else.
+            if not torch.isfinite(loss):
+                n_nonfinite += 1
+                print(f"  [WARN] non-finite loss at step {step}; sample skipped")
+                continue
+
             loss.backward()
             epoch_loss += loss.item()
+            loss_history.append(loss.item() * config.gradient_accumulation_steps)
             n_batches += 1
+            pending += 1
 
-            if (step + 1) % config.gradient_accumulation_steps == 0:
-                torch.nn.utils.clip_grad_norm_(
-                    model.parameters(), config.max_grad_norm
-                )
+            if pending == config.gradient_accumulation_steps:
+                torch.nn.utils.clip_grad_norm_(trainable, config.max_grad_norm)
                 optimizer.step()
                 scheduler.step()
                 optimizer.zero_grad()
                 global_step += 1
+                pending = 0
 
             if step % max(1, config.logging_steps) == 0:
-                print(f"  Epoch {epoch+1}/{epochs}, Step {step}, Loss: {loss.item() * config.gradient_accumulation_steps:.4f}")
+                print(
+                    f"  Epoch {epoch+1}/{epochs}, Step {step}, "
+                    f"seq {inputs['input_ids'].shape[1]}, "
+                    f"Loss: {loss.item() * config.gradient_accumulation_steps:.4f}, "
+                    f"{time.time() - t_start:.1f}s",
+                    flush=True,
+                )
+
+        # Flush a partial accumulation window. Without this the gradients from
+        # the tail of the epoch are discarded by the next zero_grad().
+        if pending:
+            torch.nn.utils.clip_grad_norm_(trainable, config.max_grad_norm)
+            optimizer.step()
+            scheduler.step()
+            optimizer.zero_grad()
+            global_step += 1
 
         avg_loss = epoch_loss / max(n_batches, 1)
         print(f"  Epoch {epoch+1} avg loss: {avg_loss * config.gradient_accumulation_steps:.4f}")
 
-        # Save checkpoint after each epoch
+        # Save adapter checkpoint after each epoch
         epoch_dir = output_dir / f"epoch-{epoch+1}"
         epoch_dir.mkdir(parents=True, exist_ok=True)
         model.save_pretrained(str(epoch_dir))
+        tokenizer.save_pretrained(str(epoch_dir))
         print(f"  Saved checkpoint: {epoch_dir}")
+
+    elapsed = time.time() - t_start
+    metrics = {
+        "stage": stage,
+        "optimizer_steps": global_step,
+        "samples_seen": len(train_data) * epochs,
+        "records_dropped_prompt_only": n_dropped,
+        "samples_skipped_nonfinite": n_nonfinite,
+        "max_seq_len": max_seq_len,
+        "elapsed_s": round(elapsed, 1),
+        "s_per_sample": round(elapsed / max(1, len(train_data) * epochs), 2),
+        "loss_first": loss_history[0] if loss_history else None,
+        "loss_last": loss_history[-1] if loss_history else None,
+        "loss_mean_first_quarter": (
+            sum(loss_history[: max(1, len(loss_history) // 4)])
+            / max(1, len(loss_history) // 4)
+            if loss_history else None
+        ),
+        "loss_mean_last_quarter": (
+            sum(loss_history[-max(1, len(loss_history) // 4):])
+            / max(1, len(loss_history) // 4)
+            if loss_history else None
+        ),
+        "loss_history": loss_history,
+    }
+    (output_dir / f"stage{stage}_metrics.json").write_text(json.dumps(metrics, indent=2))
+    print(f"  Metrics: {output_dir / f'stage{stage}_metrics.json'}")
 
     return model
 
@@ -764,6 +938,45 @@ def evaluate_math500(
         }
 
     return check_format
+
+
+# ---------------------------------------------------------------------------
+# LoRA parameter accounting
+# ---------------------------------------------------------------------------
+
+def lora_param_count(
+    model_name: str, rank: int, targets: list[str]
+) -> Optional[int]:
+    """Exact trainable-parameter count for a rank-`rank` LoRA over `targets`.
+
+    A rank-r adapter on a d_in x d_out projection is r*(d_in + d_out) params,
+    and that repeats for EVERY transformer layer. The estimate this replaces
+    was `hidden * rank * 2 * len(targets)`, which omitted num_hidden_layers and
+    assumed every projection was hidden x hidden: it reported 196,608 for
+    Qwen3-0.6B where peft actually builds 8,257,536 (42x low). The handoff's
+    model-ladder "197K / 393K / 786K / 983K params" column carries the same
+    error and should be multiplied by the layer count.
+
+    Returns None if the model config cannot be read.
+    """
+    try:
+        from transformers import AutoConfig
+        cfg = AutoConfig.from_pretrained(model_name, trust_remote_code=True)
+    except Exception:
+        return None
+
+    h = cfg.hidden_size
+    inter = cfg.intermediate_size
+    head_dim = getattr(cfg, "head_dim", None) or h // cfg.num_attention_heads
+    q_out = cfg.num_attention_heads * head_dim
+    kv_out = getattr(cfg, "num_key_value_heads", cfg.num_attention_heads) * head_dim
+    shapes = {
+        "q_proj": (h, q_out), "k_proj": (h, kv_out), "v_proj": (h, kv_out),
+        "o_proj": (q_out, h), "gate_proj": (h, inter), "up_proj": (h, inter),
+        "down_proj": (inter, h),
+    }
+    per_layer = sum(rank * (shapes[t][0] + shapes[t][1]) for t in targets if t in shapes)
+    return per_layer * cfg.num_hidden_layers
 
 
 # ---------------------------------------------------------------------------
@@ -881,7 +1094,12 @@ def dry_run(config: MementoTrainingConfig):
         params_b, hidden = model_sizes[config.model_name_or_path]
         bf16_gb = params_b * 2
         fp32_gb = params_b * 4
-        lora_params = hidden * config.lora_rank * 2 * len(config.lora_target_modules)
+        lora_params = lora_param_count(
+            config.model_name_or_path, config.lora_rank, config.lora_target_modules
+        )
+        if lora_params is None:
+            lora_params = hidden * config.lora_rank * 2 * len(config.lora_target_modules)
+            print("  [WARN] could not read model config; LoRA estimate is a crude fallback")
         lora_mb = lora_params * 4 / 1e6
         print(f"  Base model (BF16): {bf16_gb:.1f} GB")
         print(f"  Base model (FP32): {fp32_gb:.1f} GB")
@@ -891,26 +1109,31 @@ def dry_run(config: MementoTrainingConfig):
 
     # Prerequisite check
     print(f"\n  --- Prerequisites ---")
-    prereqs = {
-        "peft": False,
-        "trl": False,
-        "bitsandbytes": False,
-    }
-    for pkg in prereqs:
+    # bitsandbytes is only needed for GPU QLoRA (4-bit NF4). CPU training does
+    # not import it, so a missing bitsandbytes must not gate a CPU run.
+    required = {"peft": False, "trl": False}
+    optional = {"bitsandbytes": "GPU QLoRA only — not needed for CPU training"}
+
+    for pkg in required:
         try:
             __import__(pkg)
-            prereqs[pkg] = True
+            required[pkg] = True
         except ImportError:
             pass
-    for pkg, installed in prereqs.items():
-        status = "OK" if installed else "MISSING (pip install {})".format(pkg)
-        print(f"  {pkg}: {status}")
+    for pkg, installed in required.items():
+        print(f"  {pkg}: {'OK' if installed else f'MISSING (pip install {pkg})'}")
+    for pkg, note in optional.items():
+        try:
+            __import__(pkg)
+            print(f"  {pkg}: OK")
+        except ImportError:
+            print(f"  {pkg}: absent — {note}")
 
     print(f"\n{'='*60}")
-    if all(prereqs.values()):
+    if all(required.values()):
         print("DRY RUN PASSED — ready to train")
     else:
-        missing = [k for k, v in prereqs.items() if not v]
+        missing = [k for k, v in required.items() if not v]
         print(f"DRY RUN PARTIAL — install missing packages: pip install {' '.join(missing)}")
     print(f"{'='*60}")
 
@@ -996,6 +1219,20 @@ def main():
         "--output-dir", type=str, default=None,
         help="Output directory (default: auto-generated)",
     )
+    parser.add_argument(
+        "--max-seq-len", type=int, default=None,
+        help="Override max sequence length for both stages (smoke runs)",
+    )
+    parser.add_argument(
+        "--epochs", type=int, default=None,
+        help="Override epoch count for the selected stage(s) (smoke runs)",
+    )
+    parser.add_argument(
+        "--train-embeddings", action="store_true",
+        help="Add embed_tokens/lm_head to modules_to_save so the new memento "
+             "special tokens learn their own vectors (~155M trainable params "
+             "on 0.6B; adapter is no longer GGUF-convertible)",
+    )
 
     args = parser.parse_args()
 
@@ -1005,7 +1242,14 @@ def main():
         lora_rank=args.lora_rank,
         lora_alpha=args.lora_rank * 2,
         max_train_samples=args.max_samples,
+        train_embeddings=args.train_embeddings,
     )
+    if args.max_seq_len is not None:
+        config.stage1_max_seq_len = args.max_seq_len
+        config.stage2_max_seq_len = args.max_seq_len
+    if args.epochs is not None:
+        config.stage1_epochs = args.epochs
+        config.stage2_epochs = args.epochs
 
     if args.dry_run:
         dry_run(config)
@@ -1054,9 +1298,9 @@ def main():
     # Save final adapter
     final_dir = output_dir / "memento-final"
     final_dir.mkdir(parents=True, exist_ok=True)
-    # TODO: model.save_pretrained(str(final_dir))
-    # TODO: tokenizer.save_pretrained(str(final_dir))
-    print(f"\n[STUB] Final adapter would be saved to: {final_dir}")
+    model.save_pretrained(str(final_dir))
+    tokenizer.save_pretrained(str(final_dir))
+    print(f"\nFinal adapter saved to: {final_dir}")
 
     # Export hint
     print("\nTo convert adapter to GGUF for llama.cpp inference:")
