@@ -826,9 +826,12 @@ class WorkloadBinding:
             Path(self.tensor_capture_receipt), self.tensor_capture_receipt_sha256,
             "EPYC tensor capture receipt")
         try:
-            capture = tensor_capture.load_capture_receipt(capture_path)
+            capture_window = tensor_capture.load_capture_window_receipt(capture_path)
+            capture = tensor_capture.load_capture_receipt(
+                Path(capture_window["tensor_capture_receipt"]))
         except tensor_capture.TensorCaptureRefusal as exc:
-            raise ApexPreflightRefusal(f"EPYC tensor capture receipt refused: {exc}") from exc
+            raise ApexPreflightRefusal(
+                f"EPYC tensor capture window receipt refused: {exc}") from exc
         if capture["model_sha256"] != model_sha256:
             raise ApexPreflightRefusal(
                 "tensor capture receipt and benchmark config name different models")
