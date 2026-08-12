@@ -285,7 +285,7 @@ class ArenaCampaignTest(unittest.TestCase):
         k_search = next(arm for arm in spec.arms if arm.arm_id == KS.CONTROLLER_ID)
         self.assertEqual(k_search.availability, "ready")
         self.assertEqual(k_search.adapter_kind, "k_search_world_model_arena_v1")
-        self.assertEqual(k_search.argv, KS.campaign_argv("python3"))
+        self.assertEqual(k_search.argv, KS.campaign_argv())
         self.assertEqual(k_search.source_root, C.IN_TREE_SOURCE_ROOT)
         self.assertEqual(k_search.entrypoint_path, KS.ENTRYPOINT_RELATIVE)
         self.assertEqual(k_search.model_ids, KS.PINNED_MODEL_IDS)
@@ -327,6 +327,10 @@ class ArenaCampaignTest(unittest.TestCase):
         self.assertEqual(kernelfoundry.upstream_source_commit,
                          KF.SOURCE_COMMIT)
         self.assertEqual(kernelfoundry.missing_artifacts, ())
+        k_search = next(
+            arm for arm in spec.arms if arm.arm_id == KS.CONTROLLER_ID)
+        self.assertEqual(k_search.argv, KS.campaign_argv())
+        self.assertEqual(k_search.required_clis, KS.REQUIRED_CLIS)
         for arm in spec.arms[2:]:
             if arm.arm_id in {
                     EVO.CONTROLLER_ID, KF.CONTROLLER_ID, KS.CONTROLLER_ID,
