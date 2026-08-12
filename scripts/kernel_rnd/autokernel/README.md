@@ -129,6 +129,22 @@ one-factor receipts must agree on representation, empirical-demand, candidate,
 regime, surface, and metric-direction frames. A preflight refusal or synthetic
 fixture therefore cannot be relabelled as an empirical archive row.
 
+`least_commitment_receipts.py` is the governed producer for those three receipt
+schemas. Its offline CLI accepts a projection plan whose values are JSON-pointer
+bindings into explicitly SHA-256-pinned proposal, candidate, evaluation, or
+terminal-result records; the plan cannot carry an empirical literal. It requires
+at least two distinct clean completed campaigns, derives the matched pair's sole
+changed factor from the two journal-bound factor maps, rejects explicit fixture,
+synthetic, and dry-run evidence, then feeds its files through the unchanged
+archive builder before publishing the manifest. Current campaign records do not
+contain every AP-WM-1 diagnostic and outcome, so an IQK result by itself is an
+intentional missing-pointer refusal rather than a synthetic first archive.
+
+```bash
+python3 -m scripts.kernel_rnd.autokernel.least_commitment_receipts \
+  projection-plan.json --output-dir /absolute/new/output-directory
+```
+
 For the CPU known-win diagnostic, a `change_class: "parameter"` proposal must
 declare `change.parameter_surface` with exact `candidate` and `anchor` mappings.
 The only arm-local key currently licensed by the recipe registry is
@@ -231,6 +247,7 @@ calibration exists. Source-changing campaigns additionally require their own
 | `artifact_diff.py` | The compile-only VGPR/SGPR/scratch/instruction-mix comparison that vetoes an unconfirmed GPU claim before behavioral T0 can launch. |
 | `offline_least_commitment.py` | The observe-only AK-WM-2/AP-WM-1 diagnostic over matched completed-proposal archives; it has no live selection authority. |
 | `least_commitment_archive_builder.py` | The AK-WM-2a real-record join: resolves proposal-v3 and clean terminal journal events, verifies hash-bound diagnostic/outcome/matched-one-factor receipts, and emits only protocol-valid observe-only archives. |
+| `least_commitment_receipts.py` | The AK-WM-2a governed receipt producer: projects only SHA-pinned journal fields from distinct clean completed campaigns, proves the sole matched intervention factor, rejects non-real evidence, and validates its output through the archive builder. |
 | `turn_productivity.py` | **AK-PT-1 / AK-X-6.** Immutable per-refine-turn `(turn, task, correct?, speedup)` records, mechanically derived rescued/persistent classes, and a campaign-calibration-derived e-process rule. It may label a turn repair-only and withhold search advancement; it has no ranking, retention, promotion, or deployment authority. |
 | `dashboard.py` | **AK6.** The compact `/kernel` contract-v2 producer retained by the campaign path after the old `surface/` plane was deleted. It projects only the already-fsynced terminal `STOP_STATE`: campaign and backend standing are observed; champion, headroom and release package are explicitly `not_reported`; journal time drives freshness; and the atomic export is refused under scratch, a production tree, or any checkout. |
 
