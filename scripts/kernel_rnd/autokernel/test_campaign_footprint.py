@@ -130,6 +130,9 @@ ENTRYPOINT_MODULE = f"{ROOT_PKG}.campaign"
 CAMPAIGN_ROOTS = {
     f"{ROOT_PKG}.artifact_diff":
         "AK-TR-6 must veto an unconfirmed GPU claim before behavioral T0 can launch",
+    f"{ROOT_PKG}.candidate_record":
+        "every executed candidate must be fsynced from the exact built snapshot and "
+        "evaluation event identities before terminal STOP",
     f"{ROOT_PKG}.dashboard":
         "the terminal result was fsynced but the only dashboard exporter had been deleted, "
         "so active AutoKernel work remained permanently absent from the operator surface",
@@ -140,6 +143,9 @@ CAMPAIGN_ROOTS = {
     f"{ROOT_PKG}.storage":
         "the 2026-07-04 async-prefetch win was written to /mnt/raid0/llm/tmp/ and that "
         "directory no longer exists",
+    f"{ROOT_PKG}.source_candidate":
+        "source-changing proposals consume one immutable embedded patch bundle through "
+        "the guarded worktree mutation boundary",
     f"{ROOT_PKG}.evaluator.api":
         "a Verdict is constructible only via compute_verdict(); it cannot be stamped",
     f"{ROOT_PKG}.evaluator.correctness":

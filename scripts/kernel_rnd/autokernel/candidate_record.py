@@ -51,6 +51,7 @@ def build_candidate_record(*, proposal: Mapping[str, Any], candidate_id: str,
                            protocol_ids: Sequence[str] = ("P-AK-SEARCH-1/v1",),
                            same_seed_repeat_runs: int = 0,
                            banking_verdict: Optional[Mapping[str, Any]] = None,
+                           derived_verdicts: Optional[Mapping[str, Any]] = None,
                            created_at: str) -> dict:
     """Build a candidate record solely from measured/validated inputs.
 
@@ -96,6 +97,8 @@ def build_candidate_record(*, proposal: Mapping[str, Any], candidate_id: str,
                 or identity_worktree.get("source_commit") != source_commit:
             raise CandidateRecordError(
                 "candidate actor/worktree must be the detached snapshot that actually built")
+        if identity_worktree.get("branch") is None:
+            identity_worktree["branch"] = "ak/detached-candidate"
         blocks["source_snapshot"]["patch_bundle_sha256"] = patch_sha
         if "linkage_sha256" not in blocks["artifacts"]:
             raise CandidateRecordError(
@@ -204,7 +207,8 @@ def build_candidate_record(*, proposal: Mapping[str, Any], candidate_id: str,
             "durability_class": "hash_and_provenance_only",
         },
         "evaluation_event_ids": _sorted_strings(evaluation_event_ids),
-        "derived_verdicts": {"campaign_status": status},
+        "derived_verdicts": ({"campaign_status": status}
+                              if derived_verdicts is None else dict(derived_verdicts)),
         "controller": {
             "provider": proposal["controller"]["provider"],
             "model_id": proposal["controller"]["model_id"],
