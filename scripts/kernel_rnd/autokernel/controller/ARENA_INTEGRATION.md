@@ -666,6 +666,25 @@ is explicitly binding revision context, so a rejected mechanism may be repeated
 only when the planner names a materially different mechanism. A fresh campaign
 must prove this revision memory changes live search behavior.
 
+R12 supplied that live proof. Iteration one compiled and passed correctness but
+measured `0.9967805649x`; its critic returned `revise`. Iteration two's planner
+then cited that exact measured rejection, explicitly forbade the rejected
+unmasked-fastpath mechanism, corrected an infeasible autotune suggestion from
+the pinned launcher contract, and proposed a distinct shared-offset/vectorized
+streaming mechanism. The second candidate compiled, passed correctness, measured
+`1.0059084616x` (inside noise), and the critic accepted the simpler non-regressing
+form. Thus measured critique now changes live search behavior; neither small
+ratio is a performance claim.
+
+R12 remained partial/non-rankable because final receipt construction tried to
+re-hash `/usr/bin/docker` inside the confined controller after all six model
+calls and three brokered evaluations had completed. Host actor-runtime identity
+already belongs to the parent worker's self-hashed model-inference receipts, so
+the controller now records that parent-owned authority instead of reopening the
+host executable. The campaign validator also consumes the producer's actual flat
+`model-inference-windows/*-result.json` layout rather than the erroneous nested
+glob. A fresh attempt is still required for a terminal, validated campaign.
+
 ## On-box substrate reproduction — 2026-08-11
 
 An isolated Python 3.12 environment at

@@ -219,6 +219,19 @@ class ActorCriticControllerTest(unittest.TestCase):
             json.loads((artifacts / "receipt.json").read_text(encoding="utf-8")),
             receipt)
 
+    def test_brokered_receipt_defers_host_runtime_identity_to_parent_chain(self):
+        environment = {A.sandbox.BROKER_FD_ENV: "99"}
+        with mock.patch.object(
+                A.codex_container_actor, "runtime_identity",
+                side_effect=AssertionError("controller reopened host runtime")):
+            constraint = A._actor_runtime_constraint(
+                environment, {"path": str(self.bin / "codex")})
+        self.assertEqual(constraint, {
+            "kind": "parent_model_broker_receipt_chain",
+            "authority": "parent_worker_only",
+            "host_runtime_reopened_by_controller": False,
+        })
+
     def test_revision_feedback_is_bound_and_supplied_to_the_next_planner(self):
         workspace = self.workspace("feedback")
         runner = FakeRunner(

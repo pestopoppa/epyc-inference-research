@@ -3100,8 +3100,7 @@ def _validate_broker_chain(
                 "measurement_windows", [{}])[0].get("receipt_sha256")):
         raise ArenaCellRunnerError("broker chain terminal or selection is invalid")
     model_hashes = chain.get("model_inference_receipt_sha256s")
-    model_paths = sorted((
-        cell_root / "model-inference-windows").glob("*/result.json"))
+    model_paths = _model_inference_receipt_paths(cell_root)
     if model_hashes is None and not model_paths:
         return  # historical controller receipts predate brokered model evidence
     if (not isinstance(model_hashes, list) or not model_hashes
@@ -3149,6 +3148,12 @@ def _validate_broker_chain(
         observed_model_hashes.append(str(model["receipt_sha256"]))
     if observed_model_hashes != model_hashes:
         raise ArenaCellRunnerError("model inference evidence hash chain drifted")
+
+
+def _model_inference_receipt_paths(cell_root: Path) -> list[Path]:
+    """Return the flat, ordinal model receipts emitted by the parent broker."""
+    return sorted((
+        cell_root / "model-inference-windows").glob("*-result.json"))
 
 
 def validate_campaign_receipts(output_root: str | Path) -> dict[str, Any]:

@@ -1311,6 +1311,7 @@ class ArenaCellRunnerTest(unittest.TestCase):
         receipt_path = cell / "model-inference-windows" / "0001-result.json"
         receipt = json.loads(receipt_path.read_text())
         R._verify_self_hash(receipt, "model broker fixture")
+        self.assertEqual(R._model_inference_receipt_paths(cell), [receipt_path])
         self.assertEqual(
             broker.model_receipt_sha256s, [receipt["receipt_sha256"]])
 

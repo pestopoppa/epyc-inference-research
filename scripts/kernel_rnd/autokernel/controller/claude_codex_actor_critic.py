@@ -497,6 +497,28 @@ def _codex_argv(identity: Mapping[str, str], config: ControllerConfig,
     )
 
 
+def _actor_runtime_constraint(
+    environment: Mapping[str, str], codex_identity: Mapping[str, str],
+) -> dict[str, object]:
+    """Describe who owns the actor-runtime attestation at this boundary.
+
+    A brokered controller is intentionally unable to reopen host executables.
+    The parent worker hashes Docker and the staged Codex runtime after every
+    actor call, persists that self-hashed model-inference receipt, and validates
+    the complete receipt chain.  Re-reading ``/usr/bin/docker`` here both
+    duplicates that authority and violates the controller's Landlock profile.
+    Standalone controller probes retain their local, exact runtime identity.
+    """
+    if environment.get(sandbox.BROKER_FD_ENV):
+        return {
+            "kind": "parent_model_broker_receipt_chain",
+            "authority": "parent_worker_only",
+            "host_runtime_reopened_by_controller": False,
+        }
+    return codex_container_actor.runtime_identity(
+        Path(str(codex_identity["path"])))
+
+
 def campaign_argv(executable: str = "python3") -> tuple[str, ...]:
     """Return the exact maximum-checkpoint stdin executable bound by INF-03."""
     if not isinstance(executable, str) or not executable:
@@ -704,8 +726,7 @@ def run_controller(
             "workspace_only": True,
             "planner_critic_write_access": False,
             "actor_sandbox": "docker_workspace_bind_only",
-            "actor_runtime": codex_container_actor.runtime_identity(
-                Path(cli["codex"]["path"])),
+            "actor_runtime": _actor_runtime_constraint(env, cli["codex"]),
             "promotion_authority": False,
             "model_or_kernel_invoked_by_preflight": False,
         },
