@@ -37,6 +37,7 @@ from typing import Any, Callable, Mapping, Sequence
 from . import (
     arena_adapter,
     claude_codex_actor_critic,
+    evoengineer_arena,
     geak_v1_arena,
     kernelfoundry_arena,
     k_search_arena,
@@ -208,6 +209,22 @@ class ArmImplementation:
                     f"{self.arm_id}.upstream_entrypoint_sha256")
             _sha256(self.upstream_license_sha256,
                     f"{self.arm_id}.upstream_license_sha256")
+        if (self.availability == "missing"
+                and self.arm_id == evoengineer_arena.CONTROLLER_ID
+                and any(value is not None for value in upstream_values)):
+            if self.adapter_kind != evoengineer_arena.PENDING_ADAPTER_KIND:
+                raise ArenaCampaignError(
+                    "the pending EvoEngineer arm must name its admitted policy seam")
+            expected_upstream = (
+                "vendor://evotoolkit", evoengineer_arena.SOURCE_COMMIT,
+                evoengineer_arena.UPSTREAM_ENTRYPOINT,
+                evoengineer_arena.EXPECTED_SOURCE_SHA256[
+                    evoengineer_arena.UPSTREAM_ENTRYPOINT],
+                "LICENSE", evoengineer_arena.EXPECTED_SOURCE_SHA256["LICENSE"],
+            )
+            if tuple(upstream_values) != expected_upstream:
+                raise ArenaCampaignError(
+                    "the pending EvoEngineer arm must bind the exact paper-era source")
         if self.availability == "ready" and self.arm_id == claude_codex_actor_critic.CONTROLLER_ID:
             expected_tail = claude_codex_actor_critic.campaign_argv("python3")[1:]
             if self.adapter_kind != "agentkernelarena_three_arg_v1":

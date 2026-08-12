@@ -1,4 +1,4 @@
-# GEAK / AgentKernelArena on MI210
+# Licensed Arena controllers on MI210
 
 `arena_adapter.py` is the narrow integration seam between AutoKernel and the
 paper-era AMD agent frameworks. It does not vendor either project, score a
@@ -9,7 +9,9 @@ The source inputs are fixed to:
 - AgentKernelArena `2dbbf1d3f676b948c04c339de50516fe80ed4ab9`
   (Apache-2.0);
 - GEAK v1 `4ffba15a55f250816598b4e27eb56ca40a699cea`
-  (Apache-2.0).
+  (Apache-2.0);
+- EvoToolkit/EvoEngineer paper release `data-v1.0.0`, exact commit
+  `1649715a975b9022c84b5279c88aaef0b73b28dc` (MIT).
 
 The preflight refuses a moved or dirty checkout, hashes the license and adapter
 surface, exercises AgentKernelArena's `@register_agent` decorator, and proves
@@ -39,11 +41,13 @@ primary INF-03 comparison is exactly eight arms:
 7. GEAK-v1; and
 8. ARGUS.
 
-EvoEngineer and ARGUS are unavailable, not omitted: their public repositories
-do not yet provide licensed controller implementations that can honestly occupy
-those named arms. A controller reconstructed from either paper would be
-``*-inspired``, not the published system. No MI300X/gfx942 result transfers into
-this prospective MI210 comparison.
+EvoEngineer and ARGUS are unavailable, not omitted. EvoEngineer now has an
+admitted exact source and a pending policy adapter, but remains non-executable
+until claim-scoped intermediate Arena feedback and its campaign launcher are
+integrated. ARGUS still has no official licensed source artifact. A controller
+reconstructed from the ARGUS paper would be ``ARGUS-inspired``, not the
+published system. No MI300X/gfx942 result transfers into this prospective MI210
+comparison.
 
 `arena_campaign_v1.json` fixes the comparison task, file digests, one-at-a-time
 MI210 use, and the adopted RE-Bench elapsed-wall-time checkpoints of exactly 2,
@@ -135,8 +139,9 @@ python3 -m scripts.kernel_rnd.autokernel.controller.arena_cell_runner \
 ```
 
 This produces an availability-conditioned diagnostic only. It records
-EvoEngineer and ARGUS as external exclusions, binds the refused parent
-eight-arm audit, and cannot imply an eight-arm result or promotion verdict.
+EvoEngineer as source-admitted/runtime-pending and ARGUS as an external source
+exclusion, binds the refused parent eight-arm audit, and cannot imply an
+eight-arm result or promotion verdict.
 
 ## Controller source availability — 2026-08-11
 
@@ -163,9 +168,18 @@ arm alike:
   controller A/B is separate from reproducing the
   paper's GEAK-eval score; GEAK-eval has no project-level licence and remains a
   corpus/reproduction gate;
-- EvoEngineer's repository contains only a release-soon notice and no licence;
-  ARGUS has no official source artifact. Those two are external publication
-  gates and keep the fixed eight-arm campaign safely refused.
+- EvoEngineer-Full is source-admitted from `pgg3/evotoolkit` at
+  `1649715a975b9022c84b5279c88aaef0b73b28dc`. The release's CUDA tutorial cites
+  the exact EvoEngineer paper; the controller, Full interface, 91-task release
+  asset, and paper environment agree. The licence SHA-256 is
+  `3a18133891b736252655b83391edfef51bd52aa317198fcc4374eb5f16e99de3`
+  and controller SHA-256 is
+  `28c56fbeb8663c9084734c8682dea39df4a539e1680eee782a8553046963e50d`.
+  Current EvoToolkit `master` is not substituted because its later refactor
+  removed the paper-specific CUDA task surface. The arm remains runtime-pending;
+- ARGUS has no official source artifact and remains an external publication
+  gate. Together with EvoEngineer's runtime dependencies, this keeps the fixed
+  eight-arm campaign safely refused.
 
 External checkouts may be addressed as `vendor://<checkout>` in the campaign
 file. The default root is
@@ -189,8 +203,9 @@ Both receipts bind config SHA-256
 and driver SHA-256 `b839a35cb79627bb27c7f1be6902e91365a1ce8beb0fc26edff58bae5d003866`,
 and record that no controller or GPU command executed. The 6/6 receipt has
 availability-conditioned diagnostic authority only: it cannot imply an 8-arm
-result, rank partial full-panel evidence, or authorize promotion. Only
-EvoEngineer and ARGUS remain external source/port/launcher refusals. CLI presence
+result, rank partial full-panel evidence, or authorize promotion. At the time of
+that receipt, EvoEngineer and ARGUS were both recorded as external
+source/port/launcher refusals. CLI presence
 still implies no controller-family coverage: every ready arm binds a clean
 source commit, entrypoint digest, executable digest, and explicit model identity.
 
@@ -310,7 +325,7 @@ full-panel receipt is
 `4a13f7d0ba91c2610efae4e51bcf7e0be8661d07657f74fecf9a5ee0a4dab3af`;
 file SHA-256
 `199e4e129daf561f42d59750a1c2e157da340f433c0fec3abf19cf7c1bd91195`)
-and still refuses at 6/8 solely for EvoEngineer and ARGUS. The current
+and still refuses at 6/8 solely for EvoEngineer and ARGUS. That historical
 available-source receipt is
 `/mnt/raid0/llm/autokernel/probes/inf03-final-audits-v2-20260811-v6/available-source-six-arm.json`
 (receipt SHA-256
@@ -323,6 +338,31 @@ Both bind config SHA-256
 and driver SHA-256
 `b839a35cb79627bb27c7f1be6902e91365a1ce8beb0fc26edff58bae5d003866`;
 neither audit executed a controller or GPU command.
+
+## EvoEngineer source admission and integration order — 2026-08-12
+
+`evoengineer_arena.py` binds the historical source release rather than the later
+generic EvoToolkit `master`. It declares `EvoEngineer-Full` explicitly—Free and
+Insight are distinct upstream variants—and pins the paper-matched population 4,
+10 generations, 45 samples, four samplers, and four evaluators. The adapter
+retains upstream `EvoEngineer.run`, rank-probability parent selection, operators
+`init(0)`, `crossover(2)`, `mutation(1)`, elite trimming, and random sampling of
+up to three prior thoughts. Only the task, AMD prompt, model, and evaluator
+boundaries are translated.
+
+The module intentionally exposes no CLI or `campaign_argv`. Integration order is:
+
+1. materialize a clean `vendor://evotoolkit` checkout at the exact admitted
+   commit and revalidate all policy-bearing file digests;
+2. merge the parent-worker AF_UNIX evaluation broker behind the existing
+   `ArenaWorkspaceEvaluator.evaluate(files)` protocol;
+3. add the hash-bound launcher, enforce controller device isolation with no
+   controller-side vendor measure/evaluate path, and validate nested windows;
+4. change the arm to `ready` only after fake-policy tests and a no-inference
+   source/campaign audit pass, then use a fresh campaign identity.
+
+Until all four occur, `arena_campaign_v1.json` keeps the arm `missing`, the
+available-source diagnostic remains six arms, and no EvoEngineer result exists.
 
 An arena-side launcher should:
 

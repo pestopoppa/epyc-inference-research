@@ -94,12 +94,25 @@
     {
       "arm_id": "evoengineer",
       "availability": "missing",
-      "adapter_kind": "stdin_workspace_v1",
+      "adapter_kind": "evoengineer_full_arena_pending_v1",
       "missing_artifacts": [
-        "a licensed, commit-pinned EvoEngineer source checkout",
-        "the EvoEngineer CUDA evaluator replaced by the shared gfx90a Arena evaluator",
-        "a hash-bound three-argument AgentKernelArena launcher"
-      ]
+        "an exact clean pgg3/evotoolkit checkout at 1649715a975b9022c84b5279c88aaef0b73b28dc under the vendor controller root",
+        "a parent-worker AF_UNIX evaluation broker behind ArenaWorkspaceEvaluator.evaluate(files)",
+        "launcher-enforced device isolation with no controller-side vendor measure/evaluate path",
+        "a hash-bound EvoEngineer-Full campaign launcher and receipt integration validated after the evaluation broker lands"
+      ],
+      "model_ids": [
+        "gpt-5.6-sol:high:upstream-controller"
+      ],
+      "required_clis": [
+        "codex"
+      ],
+      "upstream_source_root": "vendor://evotoolkit",
+      "upstream_source_commit": "1649715a975b9022c84b5279c88aaef0b73b28dc",
+      "upstream_entrypoint_path": "src/evotoolkit/evo_method/evoengineer/evoengineer.py",
+      "upstream_entrypoint_sha256": "28c56fbeb8663c9084734c8682dea39df4a539e1680eee782a8553046963e50d",
+      "upstream_license_path": "LICENSE",
+      "upstream_license_sha256": "3a18133891b736252655b83391edfef51bd52aa317198fcc4374eb5f16e99de3"
     },
     {
       "arm_id": "kernelfoundry",
