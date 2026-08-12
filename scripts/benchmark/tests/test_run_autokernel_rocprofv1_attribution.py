@@ -58,6 +58,16 @@ class RocprofV1AttributionTest(unittest.TestCase):
         self.assertEqual(R.workload_phase(0), "prefill")
         self.assertEqual(R.workload_phase(128), "prefill+decode")
 
+    def test_belief_claim_is_derived_from_bound_model_and_phase(self):
+        digest = "ab" * 32
+        claim = R.attribution_claim(
+            model=Path("/models/Qwen3.5-122B-A10B-UD-IQ2_M.gguf"),
+            model_sha256=digest, prompt_tokens=2048, gen_tokens=128, share=0.125)
+        self.assertIn("Qwen3.5-122B-A10B-UD-IQ2_M.gguf", claim)
+        self.assertIn(f"SHA-256 {digest}", claim)
+        self.assertIn("p2048/tg128 prefill+decode", claim)
+        self.assertNotIn("Qwen3.6-35B-A3B Q8", claim)
+
     def test_receipt_workload_binds_generation_tokens_and_phase(self):
         text = Path(R.__file__).read_text(encoding="utf-8")
         self.assertIn('"gen_tokens": args.gen_tokens', text)
@@ -124,6 +134,8 @@ class RocprofV1AttributionTest(unittest.TestCase):
         self.assertIn('"belief_measurements": belief_measurements', text)
         self.assertIn('"metric_direction": "lower_better"', text)
         self.assertIn('"reps_basis": "scored:llama-bench prompt repetitions"', text)
+        self.assertIn('"model_sha256": tool_identity["model_sha256"]', text)
+        self.assertIn('"phase": workload_phase(args.gen_tokens)', text)
 
 
 def json_line(value):

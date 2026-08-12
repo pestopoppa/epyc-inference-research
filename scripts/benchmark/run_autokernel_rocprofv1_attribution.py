@@ -69,6 +69,20 @@ def workload_phase(gen_tokens: int) -> str:
     return "prefill" if gen_tokens == 0 else "prefill+decode"
 
 
+def attribution_claim(*, model: Path, model_sha256: str, prompt_tokens: int,
+                      gen_tokens: int, share: float) -> str:
+    """Render the human claim from the same bound identity as the receipt.
+
+    This producer is intentionally reusable across models.  A fixed model name
+    here would let the native receipt identify one artifact while its projected
+    human claim named another.
+    """
+    return (
+        f"{model.name} (SHA-256 {model_sha256}) gfx90a "
+        f"p{prompt_tokens}/tg{gen_tokens} {workload_phase(gen_tokens)} "
+        f"gated-delta-net summed kernel-time share is {share:.12f}")
+
+
 def bench_command(binary: Path, model: Path, *, tokens: int,
                   repetitions: int, gen_tokens: int = 0) -> tuple[str, ...]:
     workload_phase(gen_tokens)
@@ -365,10 +379,16 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "category": "BASELINE",
                 "reps": args.repetitions,
                 "reps_basis": "scored:llama-bench prompt repetitions",
-                "claim": (
-                    f"Qwen3.6-35B-A3B Q8 gfx90a p{tokens} gated-delta-net "
-                    f"summed kernel-time share is {share:.12f}"),
-                "extra": {"prompt_tokens": tokens},
+                "claim": attribution_claim(
+                    model=model, model_sha256=tool_identity["model_sha256"],
+                    prompt_tokens=tokens, gen_tokens=args.gen_tokens, share=share),
+                "extra": {
+                    "model_file": model.name,
+                    "model_sha256": tool_identity["model_sha256"],
+                    "prompt_tokens": tokens,
+                    "gen_tokens": args.gen_tokens,
+                    "phase": workload_phase(args.gen_tokens),
+                },
             })
     payload = {
         "schema": SCHEMA,
