@@ -285,6 +285,23 @@ def discover_runtime_allowlist(
         python_roots = tuple(dict.fromkeys(json.loads(probe.stdout).values()))
     except (json.JSONDecodeError, AttributeError) as exc:
         raise ControllerSandboxError("pinned Python emitted invalid runtime roots") from exc
+    extension_probe = subprocess.run(
+        (str(python), "-I", "-c",
+         "import importlib,json; names=('_ctypes','_ssl','_hashlib'); "
+         "print(json.dumps([getattr(importlib.import_module(n),'__file__',None) "
+         "for n in names]))"),
+        capture_output=True, text=True, check=False, timeout=15)
+    if extension_probe.returncode != 0:
+        raise ControllerSandboxError(
+            "pinned Python extension discovery failed: "
+            f"{extension_probe.stderr.strip()}")
+    try:
+        python_extensions = tuple(
+            _exact_path(path, directory=False)
+            for path in json.loads(extension_probe.stdout) if path)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise ControllerSandboxError(
+            "pinned Python emitted invalid extension paths") from exc
     codex_package = codex.parent.parent
     additional_packages = _unique_exact(
         additional_cli_package_roots, directory=True, workspace=work,
@@ -305,7 +322,7 @@ def discover_runtime_allowlist(
     all_runtime_executables = tuple(dict.fromkeys(
         (python, node, *declared_clis, *shebang_executables)))
     library_closure = tuple(dict.fromkeys(
-        path for executable in all_runtime_executables
+        path for executable in (*all_runtime_executables, *python_extensions)
         for path in _shared_libraries(executable)))
     elf_interpreters = tuple(dict.fromkeys(
         path for executable in all_runtime_executables
@@ -344,6 +361,7 @@ def discover_runtime_allowlist(
         for path in dict.fromkeys((
             python, node, *declared_clis, entrypoint, auth, *extra_read_files,
             *ca_paths, *network_config,
+            *python_extensions,
             *shebang_executables, *readable_files, *executable_files))
     }
     return RuntimeAllowlist(

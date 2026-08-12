@@ -87,6 +87,11 @@ class ControllerSandboxContractTest(unittest.TestCase):
         self.assertNotIn(str(self.fake_node_sibling), runtime.executable_files)
         self.assertEqual(runtime.identities[str(self.fake_codex)],
                          C._sha256_file(self.fake_codex))
+        import _ctypes
+        if getattr(_ctypes, "__file__", None) is not None:
+            self.assertTrue(any(
+                Path(path).name.startswith("libffi.so")
+                for path in runtime.readable_files))
 
         symlink = self.root / "python-link"
         symlink.symlink_to(self.python)
