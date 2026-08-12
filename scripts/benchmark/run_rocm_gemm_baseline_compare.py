@@ -19,6 +19,7 @@ if str(REPO_ROOT) not in sys.path:
 from scripts.kernel_rnd.autokernel import storage
 from scripts.kernel_rnd.autokernel.execution import device_sampler
 from scripts.kernel_rnd.autokernel.resource import device_claim
+from scripts.benchmark import autokernel_rocm_diagnostic_beliefs as beliefs
 
 
 SCHEMA = "epyc.ak_bh_1_gemm_baseline_compare.v1"
@@ -163,6 +164,7 @@ def run(args: argparse.Namespace) -> dict:
         "device_sampling": sampling_receipt.to_dict(),
         "stderr_tail": stderr_tail,
     }
+    payload = beliefs.attach_beliefs(payload, producer_path=Path(__file__).resolve())
     write_json_atomic(output_dir / "receipt.json", payload)
     return payload
 
