@@ -3214,6 +3214,35 @@ class HostOps:
             gates=((gate_id, check.outcome, tuple(check.reasons)),),
             report_ref=gate.evidence_ref, gate_results=(gate,))
 
+    @staticmethod
+    def _require_t0_artifacts(plan: worktree.BuildPlan) -> dict:
+        """Return the exact candidate T0 paths only when they are usable.
+
+        A successful `cmake --build --target …` exit does not attest that every
+        target the T0 composition consumes was emitted.  Checking this before
+        `build_identity()` is deliberate: missing output is a build failure,
+        not an artifact-hashing or T0 failure, and must spend neither evidence
+        collection nor a correctness run.
+        """
+        bindir = os.path.join(plan.build_dir.path, "bin")
+        artifacts = {
+            "llama-cli": os.path.join(bindir, "llama-cli"),
+            "test-backend-ops": os.path.join(bindir, "test-backend-ops"),
+            "libggml.so.0": os.path.join(bindir, "libggml.so.0"),
+            "libggml-base.so.0": os.path.join(bindir, "libggml-base.so.0"),
+        }
+        invalid = []
+        for name, path in artifacts.items():
+            if not os.path.isfile(path):
+                invalid.append(f"{name}: missing or not a regular file ({path})")
+            elif name in {"llama-cli", "test-backend-ops"} and not os.access(path, os.X_OK):
+                invalid.append(f"{name}: not executable ({path})")
+        if invalid:
+            raise RuntimeError(
+                "run_t0 refuses missing/unusable required build artifacts before "
+                "artifact hashing: " + "; ".join(invalid))
+        return artifacts
+
     def run_t0(self, spec: CampaignSpec, build: Any) -> T0Outcome:
         """T0 first, and its failure ENDS the campaign — see `run_campaign`.
 
@@ -3239,21 +3268,20 @@ class HostOps:
             raise RuntimeError(
                 "run_t0 refuses a failed build before artifact hashing "
                 f"(exit_code={result.exit_code!r})")
+        artifacts = self._require_t0_artifacts(plan)
 
         snapshot = _source_tree_digest(tree.path.path)
         identity = worktree.build_identity(
             result, candidate_id=spec.candidate_id, campaign_id=spec.campaign_id,
             worktree=tree, snapshot=snapshot,
-            output_binary=os.path.join(plan.build_dir.path, "bin", "llama-cli"),
+            output_binary=artifacts["llama-cli"],
             toolchain="cmake + GNU make",
-            libraries={"libggml.so.0":
-                       os.path.join(plan.build_dir.path, "bin", "libggml.so.0"),
-                       "libggml-base.so.0":
-                       os.path.join(plan.build_dir.path, "bin", "libggml-base.so.0")})
+            libraries={name: artifacts[name] for name in
+                       ("libggml.so.0", "libggml-base.so.0")})
         candidate_capture = t0_provider.capture_anchor_identity(
             anchor=t0_provider.AnchorBuild(
                 worktree=tree.path.path, source_commit=tree.head_commit(),
-                binary=os.path.join(plan.build_dir.path, "bin", "llama-cli"),
+                binary=artifacts["llama-cli"],
                 library_path=os.path.join(plan.build_dir.path, "bin")),
             tools=self._t0_tools(), runner=t0_provider.SubprocessRunner(),
             base_env=tuple(sorted(self._construct(spec, arm="candidate").env.items())),

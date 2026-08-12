@@ -1516,6 +1516,24 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
                                         "failed build before artifact hashing.*exit_code=2"):
                 ops.run_t0(spec(), failed)
 
+    def test_successful_build_without_t0_artifacts_is_refused_before_hashing(self):
+        """THE BITE: a zero exit alone cannot license absent CMake outputs."""
+        succeeded = mock.Mock(spec=campaign.worktree.BuildResult)
+        succeeded.succeeded = True
+        plan = mock.Mock()
+        plan.build_dir.path = str(Path(self.tempdir.name) / "empty-build")
+        ops = campaign.HostOps(nominal_khz=2_900_000)
+        ops._claim_binding = object()
+        ops._build_state = {"result": succeeded, "tree": object(), "plan": plan}
+
+        with mock.patch.object(
+                campaign, "_source_tree_digest",
+                side_effect=AssertionError("artifact hashing must not start")):
+            with self.assertRaisesRegex(
+                    RuntimeError,
+                    "missing/unusable required build artifacts before artifact hashing.*llama-cli"):
+                ops.run_t0(spec(), succeeded)
+
     def test_parameter_t0_adapter_derives_the_nonbehavioural_gate_surfaces(self):
         built = spec(proposal=iqk_parameter_proposal())
         tree = mock.Mock()
