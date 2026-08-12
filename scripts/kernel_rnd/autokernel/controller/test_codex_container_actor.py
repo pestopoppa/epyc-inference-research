@@ -33,6 +33,20 @@ class CodexContainerActorTest(unittest.TestCase):
         self.assertEqual(sum("dst=/workspace" in item for item in argv), 1)
         self.assertIn("danger-full-access", argv)
 
+    def test_same_model_experiment_allowlist_has_both_reviewed_codex_cells(self):
+        self.assertEqual(C.SUPPORTED_MODELS, ("gpt-5.6-sol", "gpt-5.6-terra"))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            workspace, assets = root / "workspace", root / "assets"
+            workspace.mkdir()
+            assets.mkdir()
+            for model in C.SUPPORTED_MODELS:
+                argv = C.build_docker_argv(
+                    workspace=workspace, assets=assets, uid=1000, gid=1000,
+                    model=model, effort=C.SUPPORTED_EFFORT,
+                    container_name=f"autokernel-codex-{model[-5:]}")
+                self.assertIn(model, argv)
+
     def test_unpinned_model_or_unsafe_mount_path_refuses(self):
         with tempfile.TemporaryDirectory(prefix="unsafe,path-") as temporary:
             root = Path(temporary)

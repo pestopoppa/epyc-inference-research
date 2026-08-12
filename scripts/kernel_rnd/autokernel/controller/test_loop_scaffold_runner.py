@@ -8,8 +8,10 @@ import stat
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 from . import authoring_contract as A
+from . import codex_container_actor as C
 from . import loop_experiments as L
 from . import loop_scaffold_runner as R
 
@@ -54,15 +56,15 @@ def contract(ctx: A.PricedContext) -> L.ExperimentContract:
     planners = tuple(L.PlannerArm(
         f"plan-{model}-{effort}-{mode}", model, "native", effort,
         L.TARGET_ABSENT if mode == "control" else L.TARGET_RENDERED)
-        for model in ("model-a", "model-b") for effort in ("high", "xhigh")
+        for model in C.SUPPORTED_MODELS for effort in ("high", "xhigh")
         for mode in ("control", "target"))
     predictions = tuple(L.DirectionPrediction(
         model, "native", "higher_effort_increases_search_persistence", "fixed")
-        for model in ("model-a", "model-b"))
-    scaffolds = tuple(arm for model in ("model-a", "model-b") for arm in (
-        L.ScaffoldArm(f"scaffold-{model}-direct", model, "native", "high",
+        for model in C.SUPPORTED_MODELS)
+    scaffolds = tuple(arm for model in C.SUPPORTED_MODELS for arm in (
+        L.ScaffoldArm(f"scaffold-{model}-direct", model, "provider-native", "high",
                       L.SCAFFOLD_DIRECT, (role("implement", 4),)),
-        L.ScaffoldArm(f"scaffold-{model}-split", model, "native", "high",
+        L.ScaffoldArm(f"scaffold-{model}-split", model, "provider-native", "high",
                       L.SCAFFOLD_SPLIT,
                       (role("implement", 2), role("exploit", 2))),
     ))
@@ -90,31 +92,34 @@ class Fixture(unittest.TestCase):
             str(self.source_repo), self.source_commit,
             R._tree_digest(self.source_repo, self.source_commit))
 
-        self.arena = self.root / "arena"
-        self.arena.mkdir()
-        git(self.arena, "init", "-q")
-        (self.arena / "src").mkdir()
-        (self.arena / "src" / "evaluator.py").write_text("# exact evaluator\n", encoding="utf-8")
-        task = self.arena / "tasks" / "fixed"
-        task.mkdir(parents=True)
-        (task / "config.yaml").write_text("task: fixed\n", encoding="utf-8")
-        self.arena_commit = commit_all(self.arena)
-        python = Path("/usr/bin/python3")
+        self.arena = Path(
+            "/mnt/raid0/llm/tmp/inf03-vendor-inspect-UqTLqw/AgentKernelArena")
+        task_relative = "tasks/hip2hip/gpumode/SimpleMatmulModule"
+        task = self.arena / task_relative
+        expected_python = R.arena_cell_runner._evaluator_python_identity()
+        python = Path(expected_python["path"])
         self.evaluator = R.ArenaEvaluatorPin(
-            str(self.arena), self.arena_commit, "src/evaluator.py",
+            str(self.arena), R.arena_adapter.AGENT_KERNEL_ARENA_PIN.commit,
+            "src/evaluator.py",
             sha((self.arena / "src" / "evaluator.py").read_bytes()),
-            "tasks/fixed", R._digest(R._tree_state(task)),
+            task_relative, R._digest(R._tree_state(task)),
             sha((task / "config.yaml").read_bytes()), str(python),
-            sha(python.read_bytes()), sha("pytest=x;torch=y;triton=z"))
+            expected_python["sha256"], R._digest(expected_python["packages"]),
+            str(R.REPOSITORY_ROOT), sha(R.EVALUATOR_BRIDGE.read_bytes()))
 
-        self.bin = self.root / "actor"
-        self.bin.write_text("#!/bin/sh\nexit 99\n", encoding="utf-8")
-        self.bin.chmod(self.bin.stat().st_mode | stat.S_IXUSR)
+        self.wrapper = Path(subprocess.run(
+            ("bash", "-lc", "command -v codex"), capture_output=True,
+            text=True, check=True).stdout.strip()).resolve()
+        runtime = C.runtime_identity(self.wrapper)
+        actor_python = python.resolve()
         self.ctx = context()
         self.spec = contract(self.ctx)
         self.actors = tuple(R.ActorPin(
-            model, "native", "high", str(self.bin), sha(self.bin.read_bytes()),
-            sha(f"runtime:{model}")) for model in ("model-a", "model-b"))
+            model, "provider-native", "high", str(actor_python),
+            sha(actor_python.read_bytes()),
+            str(self.wrapper), sha(self.wrapper.read_bytes()),
+            sha(Path(C.__file__).read_bytes()), R._digest(runtime))
+            for model in C.SUPPORTED_MODELS)
 
     def tearDown(self):
         self.temp.cleanup()
@@ -124,8 +129,42 @@ class Fixture(unittest.TestCase):
             self.spec, context=self.ctx, source=self.source, actors=self.actors,
             evaluator=self.evaluator, allowed_write_paths=("src/kernel.py",))
 
+    def compile_input(self):
+        return {
+            "schema": R.COMPILE_INPUT_SCHEMA,
+            "experiment_contract": self.spec.to_manifest(),
+            "context": {
+                "round_id": self.ctx.round_id,
+                "budget": {
+                    "max_total_tokens": self.ctx.budget.max_total_tokens,
+                    "max_item_tokens": self.ctx.budget.max_item_tokens,
+                    "max_items": self.ctx.budget.max_items,
+                },
+                "items": [{
+                    "source_ref": item.source_ref, "purpose": item.purpose,
+                    "content": item.content, "bulk_read": item.bulk_read,
+                } for item in self.ctx.items],
+            },
+            "source": self.source.to_dict(),
+            "actors": [actor.to_dict() for actor in self.actors],
+            "evaluator": self.evaluator.to_dict(),
+            "allowed_write_paths": ["src/kernel.py"],
+        }
+
 
 class ManifestTest(Fixture):
+    def test_strict_json_compile_input_reproduces_manifest(self):
+        compiled = R.compile_manifest_input(self.compile_input())
+        self.assertEqual(compiled, R.validate_manifest(compiled))
+        self.assertEqual(compiled["experiment_id"], self.spec.experiment_id)
+        self.assertEqual(
+            [cell["cell_id"] for cell in compiled["cells"]],
+            [arm.cell_id for arm in self.spec.scaffold_arms])
+        malformed = self.compile_input()
+        malformed["ignored"] = True
+        with self.assertRaisesRegex(R.ScaffoldRunnerError, "must contain exactly"):
+            R.compile_manifest_input(malformed)
+
     def test_manifest_is_exact_factorial_and_has_no_decision_authority(self):
         manifest = self.manifest()
         self.assertEqual(len(manifest["cells"]), 4)
@@ -146,7 +185,7 @@ class ManifestTest(Fixture):
         self.assertEqual(pins["context_sha256"], L.context_sha256(self.ctx))
         self.assertEqual(pins["source"], self.source.to_dict())
         self.assertEqual(pins["evaluator"], self.evaluator.to_dict())
-        self.assertTrue(all(cell["actor"]["boundary"] == R.ACTOR_BOUNDARY
+        self.assertTrue(all(cell["actor"]["boundary"] == R.REQUIRED_ACTOR_BOUNDARY
                             for cell in manifest["cells"]))
 
     def test_tampering_or_missing_model_cell_refuses(self):
@@ -180,6 +219,8 @@ class FakeActor:
 
     def __call__(self, argv, cwd, environment, prompt, timeout):
         self.ordinal += 1
+        if environment.get("PYTHONPATH") != str(R.REPOSITORY_ROOT):
+            raise AssertionError("actor import root was not pinned")
         target = cwd / ("outside.txt" if self.unauthorized else "src/kernel.py")
         target.write_text(
             target.read_text(encoding="utf-8") + f"# role {self.ordinal}\n"
@@ -213,13 +254,15 @@ class ExecutionTest(Fixture):
         output = self.root / "output"
         panel = R.run_manifest(
             self.manifest(), output_root=output, actor_runner=FakeActor(),
-            evaluator_runner=fake_evaluator)
+            evaluator_runner=fake_evaluator, fixture_mode=True)
         self.assertEqual(panel["status"], "complete")
         self.assertEqual(len(panel["cells"]), 4)
         for cell in panel["cells"]:
             root = next((output / "cells").glob(f"*-{cell['cell_id']}"))
-            self.assertEqual(git(root / "baseline-worktree", "status", "--porcelain=v1"), "")
-            self.assertNotEqual(git(root / "candidate-worktree", "status", "--porcelain=v1"), "")
+            self.assertFalse((root / "baseline-worktree").exists())
+            self.assertFalse((root / "candidate-worktree").exists())
+            cleanup = json.loads((root / "worktree-cleanup.json").read_text())
+            self.assertTrue(cleanup["all_removed"])
             self.assertTrue((root / "arena-evaluation.json").is_file())
             for checkpoint in cell["checkpoints"]:
                 self.assertTrue(checkpoint["write_scope_passed"])
@@ -233,10 +276,13 @@ class ExecutionTest(Fixture):
             R.run_manifest(
                 self.manifest(), output_root=output,
                 actor_runner=FakeActor(unauthorized=True),
-                evaluator_runner=fake_evaluator)
+                evaluator_runner=fake_evaluator, fixture_mode=True)
         terminal = json.loads((output / "panel.json").read_text())
         self.assertEqual(terminal["status"], "failed")
         self.assertFalse(terminal["constraints"]["rankable"])
+        cell_root = next((output / "cells").iterdir())
+        self.assertTrue(json.loads(
+            (cell_root / "worktree-cleanup.json").read_text())["all_removed"])
 
     def test_captured_process_records_exact_pid_group_and_reaps(self):
         executable = self.root / "short.py"
@@ -253,8 +299,62 @@ class ExecutionTest(Fixture):
     def test_external_prerequisite_is_explicit_not_fake_observation(self):
         manifest = self.manifest()
         self.assertEqual(manifest["external_prerequisite"], R.EXTERNAL_PREREQUISITE)
-        self.assertIn("No such multi-model actor-launcher set", R.EXTERNAL_PREREQUISITE)
+        self.assertIn("explicitly forbidden to run model inference", R.EXTERNAL_PREREQUISITE)
         self.assertNotIn("observations", manifest)
+
+    def test_injected_runner_without_fixture_label_refuses_before_output(self):
+        output = self.root / "not-fixture"
+        with self.assertRaisesRegex(R.ScaffoldRunnerError, "explicit fixture_mode"):
+            R.run_manifest(
+                self.manifest(), output_root=output, actor_runner=FakeActor(),
+                evaluator_runner=fake_evaluator)
+        self.assertFalse(output.exists())
+
+    def test_real_boundary_requires_device_claim_before_creating_output(self):
+        output = self.root / "no-claim"
+        with self.assertRaisesRegex(R.ScaffoldRunnerError, "device claim journal"):
+            R.run_manifest(self.manifest(), output_root=output)
+        self.assertFalse(output.exists())
+
+    def test_evaluator_bridge_pins_clean_pythonpath_and_module_digest(self):
+        cell = self.root / "eval-cell"
+        cell.mkdir()
+        request = {
+            "evaluator": self.evaluator.to_dict(), "cell_id": "scaffold-test",
+        }
+        observed = {}
+
+        def captured(argv, cwd, environment, prompt, timeout):
+            observed.update({"argv": argv, "cwd": cwd, "env": environment})
+            (cell / "arena-evaluator-result.json").write_text(json.dumps({
+                "schema": R.EVALUATION_SCHEMA, "authority": R.AUTHORITY,
+                "cell_id": "scaffold-test"}), encoding="utf-8")
+            return R.ProcessCapture(
+                tuple(argv), 88, 88, 0, "", "", False, "start", "end", 1, (88,), ())
+
+        with mock.patch.object(R, "_run_process", side_effect=captured):
+            _, result = R._default_evaluator_runner(
+                request, cell, {"PYTHONPATH": "/attacker"}, 10)
+        self.assertEqual(observed["cwd"], R.REPOSITORY_ROOT)
+        self.assertEqual(observed["env"]["PYTHONPATH"], str(R.REPOSITORY_ROOT))
+        self.assertEqual(observed["env"]["HIP_VISIBLE_DEVICES"], "0")
+        self.assertIn("scripts.kernel_rnd.autokernel.controller.arena_scaffold_evaluator",
+                      observed["argv"])
+        self.assertEqual(result["cell_id"], "scaffold-test")
+        mutated = dict(self.evaluator.to_dict())
+        mutated["bridge_sha256"] = "0" * 64
+        with self.assertRaisesRegex(R.ScaffoldRunnerError, "bridge module identity"):
+            R.ArenaEvaluatorPin(**mutated)
+
+    def test_arbitrary_actor_launcher_or_model_cannot_self_attest_confinement(self):
+        trusted = self.actors[0].to_dict()
+        trusted["model_id"] = "unreviewed-model"
+        with self.assertRaisesRegex(R.ScaffoldRunnerError, "reviewed Codex cell"):
+            R.ActorPin(**trusted)
+        trusted = self.actors[0].to_dict()
+        trusted["launcher_sha256"] = "0" * 64
+        with self.assertRaisesRegex(R.ScaffoldRunnerError, "module identity"):
+            R.ActorPin(**trusted)
 
 
 if __name__ == "__main__":

@@ -7,7 +7,6 @@ from pathlib import Path
 import stat
 import tempfile
 import unittest
-from unittest import mock
 
 from . import authoring_contract as A
 from . import loop_experiment_runner as R
@@ -338,14 +337,9 @@ else:
                 evidence_sha256=sha("prefilter evidence"), provider="codex")
 
     def test_scaffold_execution_routes_to_the_governed_writer_seam(self):
-        with mock.patch(
-                "scripts.kernel_rnd.autokernel.controller.loop_scaffold_runner.run_manifest",
-                return_value={"status": "complete"}) as delegated:
-            result = R.run_scaffold_manifest(
-                {"manifest": "bound"}, output_root="/disposable/output")
-        self.assertEqual(result, {"status": "complete"})
-        delegated.assert_called_once_with(
-            {"manifest": "bound"}, output_root="/disposable/output")
+        with self.assertRaisesRegex(Exception, "manifest SHA-256"):
+            R.run_scaffold_manifest(
+                {"manifest": "unbound"}, output_root="/disposable/output")
         self.assertIn("loop_scaffold_runner", R.SCAFFOLD_GAP)
 
 
