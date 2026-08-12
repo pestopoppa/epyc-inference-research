@@ -32,11 +32,11 @@ a module it never looked at.
 |---|---:|
 | **ON THE CAMPAIGN PATH** | **70,045** |
 <<<<<<< HEAD
-| **DEFERRED** (provably unreachable) | **53,718** |
-| **TOTAL** | **123,763** |
+| **DEFERRED** (provably unreachable) | **54,725** |
+| **TOTAL** | **124,770** |
 =======
-| **DEFERRED** (provably unreachable) | **53,718** |
-| **TOTAL** | **123,763** |
+| **DEFERRED** (provably unreachable) | **54,725** |
+| **TOTAL** | **124,770** |
 >>>>>>> cf89cb24 (autokernel: govern C3 EPYC capture mappings)
 
 **The deferred plane is explicit.** The compact modules deliberately off the
@@ -177,8 +177,9 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `evaluator/baseline_honesty.py` | 186 | no | AK-BH-4 exact-surface strongest-provider selector; it rejects AUTO and cross-surface transfer before a campaign can claim an honest floor |
 | `evaluator/c3_epyc_suite.py` | 754 | no | INF-48 offline C3/C5 contract reducer; it binds EPYC op cases to exact vendor evidence and a captured-workload whole-model exit without launch, mutation, release, or promotion authority |
 | `evaluator/c3_epyc_compiler.py` | 519 | no | INF-48 offline JSON plan/receipt compiler; it is the callable controller/backend seam but cannot launch captures, benchmarks, builds, patches, inference, or promotion |
-| `evaluator/c3_epyc_tensor_capture.py` | 599 | no | INF-48 governed real-model tensor-capture producer; only its explicitly authorized execution seam may invoke a workload, while its receipts carry tensor identity and no correctness, timing, ranking, or promotion authority |
-| `evaluator/c3_apex_runner.py` | 1,219 | no | INF-48 exact Apex mapping seam: binds one reviewed gfx90a k228 trace or the ordered branch-aware k175 composite plus governed tensor/source/model/toolchain identities, and remains outside campaign mutation and candidate authoring |
+| `evaluator/c3_epyc_tensor_capture.py` | 1,425 | no | INF-48 live inventory/request compiler and governed real-model producer; dual authorization, canonical unexpired claims, descendant KFD/device sampling, bounded teardown, immutable journal slice, and released-claim window gate Apex without promotion authority |
+| `evaluator/c3_epyc_capture_provider.py` | 178 | no | INF-48 tracked real-model provider protocol; admits only clean, hash-bound exact-case/model hooks returning ordered ROCm tensors and emits a typed missing-hook refusal rather than substituting HyRA references or synthetic tensors |
+| `evaluator/c3_apex_runner.py` | 1,222 | no | INF-48 exact Apex mapping seam: binds one reviewed gfx90a k228 trace or the ordered branch-aware k175 composite plus governed tensor/source/model/toolchain identities, and remains outside campaign mutation and candidate authoring |
 | `evaluator/sensitivity.py` | 333 | yes | RVP-C2-7/C2-11/C5-2 offline two-axis reducer; its report has no live authority until `source_candidate_authority.py` binds exact candidate/evaluator/evidence provenance, and missing or insensitive populations remain unscoreable |
 | `evaluator/oracle_integrity.py` | 145 | yes | RVP-C2-8/C2-9 offline reducers; hostile/checker results gain T0 authority only through the exact provenance bridge and never independently rank a candidate |
 | `evaluator/source_candidate_authority.py` | 87 | yes | fail-closed bridge from offline sensitivity/hostile/checker outputs to live T0: binds source, evaluator bundle, suite, capture mode and evidence hashes without launching or mutating anything |

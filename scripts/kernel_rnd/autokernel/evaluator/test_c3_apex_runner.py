@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import yaml
 
@@ -30,6 +31,17 @@ class C3ApexRunnerTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
+        executable = Path(sys.executable).resolve()
+        self.device_identity = {
+            "host": "fixture-host", "logical_device_id": "mi210_0",
+            "visible_ordinal": 0, "pci_bdf": "0000:41:00.0",
+            "architecture": "gfx90a", "sysfs_device": str(self.root / "sysfs"),
+            "sysfs_uevent_sha256": hashlib.sha256(b"uevent").hexdigest(),
+            "rocm_smi": str(executable), "rocm_smi_sha256": sha(executable),
+            "rocminfo": str(executable), "rocminfo_sha256": sha(executable)}
+        self.inventory_probe = mock.patch.object(
+            T, "_probe_device_identity", return_value=self.device_identity)
+        self.inventory_probe.start()
         self.apex = self.root / "Apex"
         self.magpie = self.root / "Magpie"
         (self.magpie / "Magpie").mkdir(parents=True)
@@ -185,6 +197,7 @@ class C3ApexRunnerTest(unittest.TestCase):
             physical_agents=("gfx000", "gfx90a"))
 
     def tearDown(self) -> None:
+        self.inventory_probe.stop()
         self.tmp.cleanup()
 
     def write_mapping(self) -> None:
@@ -225,7 +238,73 @@ class C3ApexRunnerTest(unittest.TestCase):
         receipt["receipt_sha256"] = hashlib.sha256(canonical(receipt).encode()).hexdigest()
         receipt_path = root / "receipt.json"
         receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
-        return receipt_path
+        journal = root / "claims.jsonl"
+        claim_journal = T.cpu_region_claim.RegionClaimJournal(journal)
+        common = {"purpose": "Apex fixture capture", "campaign_id": "apex-fixture",
+                  "journal": claim_journal, "timeout_s": 0,
+                  "lock_root": root / "locks"}
+        cpu = T.cpu_region_claim.acquire_cpu_region_claim(
+            T.cpu_region_claim.gpu_host_cpu_list(), role="autokernel", **common)
+        gpu = T.device_claim.acquire_device_claim("mi210_0", **common)
+        open_cpu = cpu.receipt().to_dict()
+        open_gpu = gpu.receipt().to_dict()
+        released_gpu = gpu.release().to_dict()
+        released_cpu = cpu.release().to_dict()
+        claim_ids = sorted((open_cpu["claim_id"], open_gpu["claim_id"]))
+        claim_slice = {"schema": "epyc.autokernel.claim_window_slice.v1",
+                       "claim_ids": claim_ids,
+                       "records": claim_journal.read_all()}
+        claim_slice["sha256"] = hashlib.sha256(canonical(claim_slice).encode()).hexdigest()
+        claim_window = root / "resource-claim-window.json"
+        claim_window.write_text(json.dumps(claim_slice), encoding="utf-8")
+        inventory = root / "device-inventory.json"
+        inventory_document = {"schema": T.DEVICE_INVENTORY_SCHEMA,
+                              "producer_id": T.DEVICE_INVENTORY_PRODUCER,
+                              **self.device_identity}
+        inventory_document["receipt_sha256"] = hashlib.sha256(
+            canonical(inventory_document).encode()).hexdigest()
+        inventory.write_text(json.dumps(inventory_document), encoding="utf-8")
+        sample = {"offset_s": 0.1, "sclk_mhz": 1000.0, "mclk_mhz": 800.0,
+                  "power_w": 100.0, "temperature_c": 55.0,
+                  "under_measurement_load": True}
+        sampling = {
+            "schema": "epyc.autokernel.device_sampling_receipt.v1",
+            "sampler_id": "autokernel.execution.device_sampler/v1",
+            "device_id": "ROCm0", "source": "fixture",
+            "started_at": "2026-08-12T00:00:00Z",
+            "ended_at": "2026-08-12T00:00:01Z", "interval_s": 0.25,
+            "duration_s": 0.5,
+            "command": ["/opt/rocm/bin/rocm-smi"], "sample_count": 1,
+            "max_gap_s": 0.0, "samples": [sample]}
+        sampling["sha256"] = hashlib.sha256(canonical(sampling).encode()).hexdigest()
+        window = {
+            "schema": T.WINDOW_SCHEMA, "authority": T.AUTHORITY,
+            "plan_sha256": manifest["plan_sha256"],
+            "tensor_capture_receipt": str(receipt_path.resolve()),
+            "tensor_capture_receipt_sha256": sha(receipt_path),
+            "open_cpu_claim": open_cpu, "open_device_claim": open_gpu,
+            "released_cpu_claim": released_cpu,
+            "released_device_claim": released_gpu, "device_sampling": sampling,
+            "kfd_residency": {
+                "schema": "epyc.autokernel.kfd_process_group_witness.v1",
+                "producer_pid": 123, "producer_start_ticks": 456,
+                "process_group_id": 123, "started_at": "2026-08-12T00:00:00Z",
+                "ended_at": "2026-08-12T00:00:01Z",
+                "samples": [{"offset_s": 0.1, "kfd_users": [{
+                    "pid": 123, "ancestry": [{"pid": 123, "start_ticks": 456}]}]}],
+                "overlap_observed": True},
+            "claim_window": str(claim_window.resolve()),
+            "claim_window_sha256": sha(claim_window),
+            "device_inventory": str(inventory.resolve()),
+            "device_inventory_sha256": sha(inventory),
+            "runtime_environment": {"LD_LIBRARY_PATH": "/usr/lib",
+                                    "ROCM_PATH": "/opt/rocm"}}
+        window["kfd_residency"]["sha256"] = hashlib.sha256(
+            canonical(window["kfd_residency"]).encode()).hexdigest()
+        window["receipt_sha256"] = hashlib.sha256(canonical(window).encode()).hexdigest()
+        window_path = root / "window-receipt.json"
+        window_path.write_text(json.dumps(window), encoding="utf-8")
+        return window_path
 
     def make_workload(self, case_id: str, *, receipt: Path | None = None) -> A.WorkloadBinding:
         receipt = self.tensor_receipts[case_id] if receipt is None else receipt
@@ -331,7 +410,14 @@ class C3ApexRunnerTest(unittest.TestCase):
         source.write_text("def run():\n    return 'mla_paged_prefill'\n", encoding="utf-8")
         receipt = self.tensor_receipts["epyc.attention.mla_paged_prefill.k228"]
         document = json.loads(receipt.read_text(encoding="utf-8"))
-        document["model_sha256"] = hashlib.sha256(b"other-model").hexdigest()
+        tensor_path = Path(document["tensor_capture_receipt"])
+        tensor_document = json.loads(tensor_path.read_text(encoding="utf-8"))
+        tensor_document["model_sha256"] = hashlib.sha256(b"other-model").hexdigest()
+        tensor_document["receipt_sha256"] = hashlib.sha256(canonical({
+            key: value for key, value in tensor_document.items()
+            if key != "receipt_sha256"}).encode()).hexdigest()
+        tensor_path.write_text(json.dumps(tensor_document), encoding="utf-8")
+        document["tensor_capture_receipt_sha256"] = sha(tensor_path)
         document["receipt_sha256"] = hashlib.sha256(canonical({
             key: value for key, value in document.items() if key != "receipt_sha256"
         }).encode()).hexdigest()
