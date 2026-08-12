@@ -1,0 +1,142 @@
+{
+  "a7_source_cell": "qwen36_27b_q8-C3-np1-e1parity",
+  "a7_source_config": "C3",
+  "a7_source_shape": "quarters(retired)",
+  "architecture": "qwen35",
+  "cell_id": "qwen36_27b_q8-C1b-np1-e1parity-a7half",
+  "chat_template_kwargs": {},
+  "config_id": "C1b",
+  "ctx": 8192,
+  "decision_grade_intent": false,
+  "env_expectation": {
+    "ggml_iqk": "1",
+    "kmp_blocktime": "10",
+    "omp_source": "scripts/lib/canonical_recipe.CANONICAL_OMP_ENV"
+  },
+  "era": {
+    "cpu_kernel": "E6-cpu-kernel",
+    "eval_instrument": "E7-eval-instrument",
+    "source": "epyc-orchestrator/orchestration/instrument_eras.yaml"
+  },
+  "instances": [
+    {
+      "cpu_list": "0-47,96-143",
+      "numactl_policy": "none",
+      "port": 19180,
+      "threads": 96
+    },
+    {
+      "cpu_list": "48-95,144-191",
+      "numactl_policy": "none",
+      "port": 19181,
+      "threads": 96
+    }
+  ],
+  "jinja": true,
+  "kv": {
+    "flash_attn": true,
+    "kv_unified": false,
+    "type_k": "q8_0",
+    "type_v": "q8_0"
+  },
+  "mlock": true,
+  "model_key": "qwen36_27b_q8",
+  "model_path": "/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf",
+  "model_path_present": true,
+  "notes": "dense control; NEXTN self-draft recipe mirrored from the 35B arm (dm=4, ps=0) on the MTP-variant GGUF; E1-parity twin (temperature 0, operator-decided regime 2026-07-23): continuity read against the E1 ladder only \u2014 excluded from R1/R2/R4 via the e1_parity_anchor variant tag A7/T3 P-BENCH-PLACEMENT-1 REGENERATION 2026-08-12: source cell ran on retired QUARTER arms with placement inherited. Re-emitted on the ratified 1-full + 2-half grid with placement DECLARED per instance. Not comparable to the source cell's numbers.",
+  "np": 1,
+  "per_stream_ctx": 2048,
+  "placement_declared": true,
+  "placement_protocol": "P-BENCH-PLACEMENT-1",
+  "prompt_batch": {
+    "limit": 43,
+    "pinned_from": "data/batched_decode/e1-pbench3-clean-20260703T1912Z/selected_prompts.jsonl",
+    "qids": [
+      "debugbench_fizz-buzz_python",
+      "bcb_BigCodeBench/819",
+      "simpleqa_general_02785",
+      "simpleqa_general_01165",
+      "gsm8k_01291",
+      "mmlu_miscellaneous_07724",
+      "debugbench_final-prices-with-a-special-discount-in-a-shop_java",
+      "hellaswag_34416",
+      "debugbench_plus-one_cpp",
+      "hellaswag_45409",
+      "hellaswag_04688",
+      "bcb_BigCodeBench/1041",
+      "bcb_BigCodeBench/976",
+      "debugbench_transpose-matrix_java",
+      "gsm8k_01141",
+      "simpleqa_general_00501",
+      "hellaswag_24725",
+      "hellaswag_48346",
+      "bcb_BigCodeBench/869",
+      "hellaswag_38109",
+      "gsm8k_00492",
+      "hellaswag_34292",
+      "hellaswag_04032",
+      "gsm8k_01200",
+      "hellaswag_11520",
+      "hellaswag_45031",
+      "simpleqa_general_02940",
+      "bcb_BigCodeBench/212",
+      "ifeval_1592",
+      "hellaswag_04893",
+      "hellaswag_16769",
+      "simpleqa_general_02925",
+      "mmlu_us_foreign_policy_13684",
+      "gsm8k_01032",
+      "hellaswag_15114",
+      "debugbench_increasing-decreasing-string_java",
+      "debugbench_maximum-number-of-balloons_java",
+      "hellaswag_38184",
+      "debugbench_remove-palindromic-subsequences_java",
+      "hellaswag_27524",
+      "hellaswag_18832",
+      "hellaswag_48793",
+      "simpleqa_general_02228"
+    ],
+    "seed": 42,
+    "selection": "pinned_qids",
+    "source": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/question_pool.jsonl",
+    "tier": 1
+  },
+  "prompt_caps": {
+    "max_prompt_chars": 4096,
+    "max_total_in_flight": 43,
+    "n_predict": 256
+  },
+  "protocol_id": "P-BENCH-3",
+  "quant": "Q8_0",
+  "request_endpoint": "completion",
+  "sampling": {
+    "regime": "e1_parity_greedy",
+    "seed": 42,
+    "temperature": 0.0
+  },
+  "schema_version": "e5-cell-manifest/1",
+  "spec_dec": {
+    "device_draft": "none",
+    "disabled_reason": null,
+    "draft_max": 4,
+    "draft_min": null,
+    "draft_model_path": null,
+    "draft_p_min": null,
+    "draft_p_split": 0,
+    "enabled": true,
+    "ngram_mod": null,
+    "record_accept_rate": true,
+    "spec_type": "draft-mtp",
+    "threads_draft": null
+  },
+  "stage_b_families": [
+    "anchor_C3",
+    "e1_parity_anchor"
+  ],
+  "ubatch_size": 512,
+  "warmup": {
+    "n_predict": 32,
+    "prompts": 1
+  },
+  "window": "W3"
+}
