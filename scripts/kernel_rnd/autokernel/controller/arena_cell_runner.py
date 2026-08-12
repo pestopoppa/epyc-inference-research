@@ -2069,54 +2069,87 @@ def _run_brokered_model(
             arena_upstream_common.BROKER_OWNER_PID_ENV,
             "AUTOKERNEL_CONTROLLER_WORKSPACE", "AUTOKERNEL_ARENA_ROOT"):
         child_environment.pop(key, None)
-    process = subprocess.Popen(
-        command, cwd=workspace, env=child_environment,
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        text=True, start_new_session=True)
+    # A campaign launcher may carry an ambient TMPDIR outside the model's one
+    # writable Landlock root.  Claude in particular lazily creates a
+    # ``claude-<uid>`` directory there.  r13 proved this made success depend on
+    # undeclared host state even though r12 had completed the same call shape.
+    # Direct model CLIs get fresh, call-scoped temp
+    # state inside the already-governed workspace; never inherit host scratch.
+    runtime_temp: Path | None = None
     if invocation is not None:
-        invocation.process_started(process.pid)
-    timed_out = False
-    launch_error: BaseException | None = None
-    stdout = ""
-    stderr = ""
-    try:
-        stdout, stderr = process.communicate(
-            input=prompt, timeout=timeout_seconds)
-    except subprocess.TimeoutExpired as exc:
-        timed_out = True
-        stdout = (exc.stdout.decode(errors="replace")
-                  if isinstance(exc.stdout, bytes) else exc.stdout or "")
-        stderr = (exc.stderr.decode(errors="replace")
-                  if isinstance(exc.stderr, bytes) else exc.stderr or "")
-        _terminate_captured_process_group(process.pid)
-        process.wait()
-    except BaseException as exc:
-        launch_error = exc
-        _terminate_captured_process_group(process.pid)
-        process.wait()
-    execution: Mapping[str, Any]
-    if invocation is None:
-        execution = {
-            "schema": "epyc.autokernel.codex_actor_container_boundary.v1",
-            "launcher_sha256": _sha256_file(
-                Path(codex_container_actor.__file__).resolve()),
-            "container": codex_container_actor.runtime_identity(
-                Path(str(argv[argv.index("--codex-wrapper") + 1]))),
-        }
-    else:
-        teardown = invocation.verify_and_teardown(evidence_root / "teardown.json")
-        execution = _self_hash({
-            "schema": "epyc.autokernel.arena_model_sandbox_execution.v1",
-            "pid": invocation.pid,
-            "policy_sha256": invocation.policy.policy_sha256,
-            "runtime_allowlist_sha256": runtime.sha256,
-            "activation_receipt": sandbox.read_receipt(
-                evidence_root / "activation.json"),
-            "teardown_receipt": teardown,
+        runtime_temp = Path(tempfile.mkdtemp(
+            prefix=f".autokernel-model-{ordinal:04d}-", dir=workspace))
+        runtime_temp.chmod(0o700)
+        child_environment.update({
+            "TMPDIR": str(runtime_temp),
+            "TMP": str(runtime_temp),
+            "TEMP": str(runtime_temp),
+            "XDG_RUNTIME_DIR": str(runtime_temp),
         })
-        _atomic_json(evidence_root / "execution.json", execution)
-    if launch_error is not None:
-        raise launch_error
+    try:
+        process = subprocess.Popen(
+            command, cwd=workspace, env=child_environment,
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, start_new_session=True)
+        if invocation is not None:
+            invocation.process_started(process.pid)
+        timed_out = False
+        launch_error: BaseException | None = None
+        stdout = ""
+        stderr = ""
+        try:
+            stdout, stderr = process.communicate(
+                input=prompt, timeout=timeout_seconds)
+        except subprocess.TimeoutExpired as exc:
+            timed_out = True
+            stdout = (exc.stdout.decode(errors="replace")
+                      if isinstance(exc.stdout, bytes) else exc.stdout or "")
+            stderr = (exc.stderr.decode(errors="replace")
+                      if isinstance(exc.stderr, bytes) else exc.stderr or "")
+            _terminate_captured_process_group(process.pid)
+            process.wait()
+        except BaseException as exc:
+            launch_error = exc
+            _terminate_captured_process_group(process.pid)
+            process.wait()
+        execution: Mapping[str, Any]
+        if invocation is None:
+            execution = {
+                "schema": "epyc.autokernel.codex_actor_container_boundary.v1",
+                "launcher_sha256": _sha256_file(
+                    Path(codex_container_actor.__file__).resolve()),
+                "container": codex_container_actor.runtime_identity(
+                    Path(str(argv[argv.index("--codex-wrapper") + 1]))),
+            }
+        else:
+            teardown = invocation.verify_and_teardown(evidence_root / "teardown.json")
+            assert runtime_temp is not None
+            execution = _self_hash({
+                "schema": "epyc.autokernel.arena_model_sandbox_execution.v1",
+                "pid": invocation.pid,
+                "policy_sha256": invocation.policy.policy_sha256,
+                "runtime_allowlist_sha256": runtime.sha256,
+                "runtime_environment": {
+                    "ambient_host_temp_inherited": False,
+                    "temporary_state_relative_path": str(
+                        runtime_temp.relative_to(workspace)),
+                },
+                "activation_receipt": sandbox.read_receipt(
+                    evidence_root / "activation.json"),
+                "teardown_receipt": teardown,
+            })
+            _atomic_json(evidence_root / "execution.json", execution)
+        if launch_error is not None:
+            raise launch_error
+    finally:
+        if runtime_temp is not None:
+            if runtime_temp.is_symlink():
+                runtime_temp.unlink()
+            elif runtime_temp.exists():
+                shutil.rmtree(runtime_temp)
+            if runtime_temp.exists() or runtime_temp.is_symlink():
+                raise ArenaCellRunnerError(
+                    "model temporary runtime state was not removed")
     return {
         "returncode": process.returncode,
         "stdout": stdout,
