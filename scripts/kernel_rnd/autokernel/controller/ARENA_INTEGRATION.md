@@ -62,9 +62,14 @@ prevent a ready receipt from being replayed after either input changes.
 
 `arena_cell_runner.py` is the concrete governed implementation of that typed
 executor seam. It does not patch the pinned Arena checkout. Instead, each cell
-loads Arena's workspace/evaluator modules in an isolated child process while
-the parent holds AutoKernel's cross-process `mi210_0` claim and 250 ms device
-sampler. The baseline runs once without authoring. Every controller runs three
+loads Arena's workspace/evaluator modules in an isolated child process. The
+child acquires AutoKernel's cross-process `mi210_0` claim and 250 ms device
+sampler separately around Arena's starting-state baseline measurement and its
+final centralized evaluation. It releases the first claim and hides the GPU
+before launching the controller, so remote model deliberation does not reserve
+an idle accelerator and another governed tenant can use it. Each measurement
+window has its own atomic, self-hashed open/release/sampling receipt. The
+baseline runs once without authoring. Every controller runs three
 independent fresh workspaces at 2 h, 8 h, and 32 h; the runner rewrites only the
 two declared budget flags and refuses an adapter that does not expose them.
 Task and controller identities are re-audited before every claim. Arena alone
@@ -78,7 +83,7 @@ invocation writes an immutable, self-hashed campaign manifest binding the audit,
 config, preflight, source/controller identities, runner digest, task order, arm
 order, and checkpoint order. Repeating the exact command with the same output
 root re-audits those inputs, verifies every durable checkpoint receipt, artifact
-digest, belief receipt, and released device claim, then skips only checkpoints
+digest, belief receipt, and both released measurement-window claims, then skips only checkpoints
 whose complete evidence still matches. A directory left in flight without its
 atomic checkpoint receipt is preserved under `execution/abandoned/` and rerun
 from a fresh workspace; a completed-but-tampered receipt refuses the resume

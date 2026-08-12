@@ -4,8 +4,9 @@
 The campaign driver deliberately stops at a typed ``run_cell`` seam.  This
 module supplies the concrete implementation without patching either pinned
 vendor checkout.  Each non-baseline campaign cell becomes three independent
-2 h / 8 h / 32 h runs from the same hash-bound task, and every GPU subprocess
-runs beneath AutoKernel's cross-process MI210 claim.
+2 h / 8 h / 32 h runs from the same hash-bound task.  The MI210 is claimed only
+for the two centralized vendor measurement windows.  It is deliberately free
+during remote controller/model deliberation.
 
 Importing this module performs no model, compiler, evaluator, or GPU work.
 """
@@ -36,10 +37,11 @@ from ..execution import device_sampler
 from ..resource import device_claim
 
 
-RUNNER_SCHEMA = "epyc.autokernel.arena_cell_runner.v2"
-CHECKPOINT_SCHEMA = "epyc.autokernel.arena_checkpoint.v1"
+RUNNER_SCHEMA = "epyc.autokernel.arena_cell_runner.v3"
+CHECKPOINT_SCHEMA = "epyc.autokernel.arena_checkpoint.v2"
 AGGREGATE_SCHEMA = "epyc.autokernel.arena_campaign_execution.v2"
 RUN_MANIFEST_SCHEMA = "epyc.autokernel.arena_campaign_run_manifest.v1"
+MEASUREMENT_WINDOW_SCHEMA = "epyc.autokernel.arena_gpu_measurement_window.v1"
 IMPLEMENTATION_MODULE = Path(__file__).resolve()
 REPOSITORY_ROOT = IMPLEMENTATION_MODULE.parents[4]
 DEFAULT_CLAIM_JOURNAL = "/mnt/raid0/llm/ak-claims/device.jsonl"
@@ -314,6 +316,124 @@ def _defer_campaign_signals():
         signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
 
 
+@contextmanager
+def _gpu_visibility(visible_device: str):
+    """Expose the MI210 only for one already-claimed measurement call."""
+    keys = ("HIP_VISIBLE_DEVICES", "ROCR_VISIBLE_DEVICES", "CUDA_VISIBLE_DEVICES")
+    previous = {key: os.environ.get(key) for key in keys}
+    try:
+        for key in keys:
+            os.environ[key] = visible_device
+        yield
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+def _run_gpu_measurement_window(
+    *, request: Mapping[str, Any], cell_root: Path, ordinal: int, phase: str,
+    action: Callable[[], Any],
+    claim_acquirer: Callable[..., Any] = device_claim.acquire_device_claim,
+    sampler_factory: Callable[..., Any] = device_sampler.RocmSmiSampler,
+) -> tuple[Any, dict[str, Any]]:
+    """Run one vendor measurement under an exact, durable claim window.
+
+    Acquisition, sampling, GPU visibility, action, release, and receipt
+    publication are one signal-safe unit.  In particular, callers cannot carry
+    this claim across controller/model deliberation.
+    """
+    if phase not in {"vendor_baseline", "centralized_final_evaluation"}:
+        raise ArenaCellRunnerError(f"unsupported GPU measurement phase: {phase}")
+    campaign_id = _safe_id(str(request.get("campaign_id")), "campaign_id")
+    arm = request.get("arm")
+    task = request.get("task")
+    if not isinstance(arm, Mapping) or not isinstance(task, Mapping):
+        raise ArenaCellRunnerError("measurement window lacks task or arm identity")
+    arm_id = _safe_id(str(arm.get("arm_id")), "arm_id")
+    task_id = _safe_id(str(task.get("task_id")), "task_id")
+    visible_device = str(request.get("visible_device"))
+    claim_journal = str(request.get("claim_journal"))
+    claim_timeout = request.get("claim_timeout_seconds")
+    if (isinstance(claim_timeout, bool)
+            or not isinstance(claim_timeout, (int, float))
+            or not math.isfinite(claim_timeout) or claim_timeout < 0):
+        raise ArenaCellRunnerError("worker claim timeout is invalid")
+
+    window_root = cell_root / "measurement-windows"
+    window_path = window_root / f"{ordinal:02d}-{phase}.json"
+    if window_path.exists():
+        raise ArenaCellRunnerError(f"measurement window receipt already exists: {window_path}")
+    started_at = _utc_now()
+    claim = None
+    sampler = None
+    opened = None
+    released = None
+    sampling = None
+    result: Any = None
+    failure: BaseException | None = None
+    failure_traceback = None
+    try:
+        with _defer_campaign_signals():
+            claim = claim_acquirer(
+                DEFAULT_DEVICE_ID,
+                purpose=f"INF-03 {phase} {arm_id} {task_id}",
+                campaign_id=campaign_id,
+                journal=device_claim.ClaimJournal(claim_journal),
+                holder_label="arena_cell_runner.py:measurement-window",
+                timeout_s=float(claim_timeout),
+                max_hold_s=EVALUATION_RESERVE_SECONDS + 120.0,
+            )
+        opened = claim.receipt().to_dict()
+        sampler = sampler_factory(
+            device_index=int(visible_device), interval_s=0.250).start()
+        with _gpu_visibility(visible_device):
+            result = action()
+    except BaseException as exc:
+        failure = exc
+        failure_traceback = exc.__traceback__
+    try:
+        if sampler is not None:
+            sampling = sampler.stop().to_dict()
+    except BaseException as exc:
+        if failure is None:
+            failure = exc
+            failure_traceback = exc.__traceback__
+    try:
+        if claim is not None:
+            released = claim.release().to_dict()
+    except BaseException as exc:
+        if failure is None:
+            failure = exc
+            failure_traceback = exc.__traceback__
+
+    receipt = _self_hash({
+        "schema": MEASUREMENT_WINDOW_SCHEMA,
+        "campaign_id": campaign_id,
+        "task_id": task_id,
+        "arm_id": arm_id,
+        "phase": phase,
+        "ordinal": ordinal,
+        "status": "complete" if failure is None else "failed",
+        "started_at": started_at,
+        "ended_at": _utc_now(),
+        "device_claim_open": opened,
+        "device_claim_released": released,
+        "device_sampling": sampling,
+        "gpu_action_executed_only_while_claim_held": True,
+        "failure": None if failure is None else {
+            "type": type(failure).__name__, "message": str(failure)},
+    })
+    _atomic_json(window_path, receipt)
+    if failure is not None:
+        raise failure.with_traceback(failure_traceback)
+    if opened is None or released is None or sampling is None:
+        raise ArenaCellRunnerError("GPU measurement window lacks complete claim evidence")
+    return result, receipt
+
+
 def _load_preflight(path: str | Path) -> tuple[dict[str, Any], str]:
     source = Path(path).resolve()
     try:
@@ -456,9 +576,7 @@ WorkerRunner = Callable[[Mapping[str, Any], float], Mapping[str, Any]]
 class GovernedArenaCellRunner:
     """Callable concrete implementation of ``arena_campaign.run_cell``."""
 
-    def __init__(self, config: RunnerConfig, *, worker: WorkerRunner | None = None,
-                 claim_acquirer: Callable[..., Any] = device_claim.acquire_device_claim,
-                 sampler_factory: Callable[..., Any] = device_sampler.RocmSmiSampler):
+    def __init__(self, config: RunnerConfig, *, worker: WorkerRunner | None = None):
         if not isinstance(config, RunnerConfig):
             raise TypeError("config must be a RunnerConfig")
         self.config = config
@@ -473,8 +591,6 @@ class GovernedArenaCellRunner:
             config.expected_campaign_module_sha256
             or _sha256_file(arena_campaign.IMPLEMENTATION_MODULE))
         self._worker = worker or self._run_worker_subprocess
-        self._claim_acquirer = claim_acquirer
-        self._sampler_factory = sampler_factory
         self._ordinal = 0
         self._cell_ordinal = 0
         self.resumed_checkpoints = 0
@@ -501,7 +617,8 @@ class GovernedArenaCellRunner:
             "runs": runs,
             "constraints": {
                 "independent_checkpoint_workspaces": True,
-                "one_mi210_cell_at_a_time": True,
+                "mi210_claimed_only_for_measurement_windows": True,
+                "controller_deliberation_holds_no_gpu_claim": True,
                 "dot_free_collision_bound_cell_paths": True,
                 "post_worker_sibling_manifest_verified": True,
                 "promotion_authority": False,
@@ -560,51 +677,23 @@ class GovernedArenaCellRunner:
         outside_before = _outside_cell_manifest(cell_root)
         max_runtime = ((checkpoint_hours or 0.0) * 3600
                        + EVALUATION_RESERVE_SECONDS)
-        claim = None
-        opened = None
-        sampler = None
-        sampling = None
         worker_result: Mapping[str, Any] | None = None
         try:
-            with _defer_campaign_signals():
-                claim = self._claim_acquirer(
-                    self.config.device_id,
-                    purpose=(
-                        f"INF-03 Arena {request.arm.arm_id} {request.task.task_id} "
-                        f"{checkpoint_name}"),
-                    campaign_id=self.config.campaign_id,
-                    journal=device_claim.ClaimJournal(self.config.claim_journal),
-                    holder_label="arena_cell_runner.py",
-                    timeout_s=float(self.config.claim_timeout_seconds),
-                    max_hold_s=max_runtime + 120.0,
-                )
-            opened = claim.receipt().to_dict()
-            sampler = self._sampler_factory(
-                device_index=int(self.config.visible_device), interval_s=0.250).start()
-            try:
-                worker_result = self._worker(worker_request, max_runtime)
-            finally:
-                _assert_worker_tree_contained(cell_root)
-                outside_after = _outside_cell_manifest(cell_root)
-                if outside_after != outside_before:
-                    added = sorted(outside_after.keys() - outside_before.keys())
-                    removed = sorted(outside_before.keys() - outside_after.keys())
-                    changed = sorted(
-                        key for key in outside_before.keys() & outside_after.keys()
-                        if outside_before[key] != outside_after[key])
-                    raise ArenaCellRunnerError(
-                        "Arena worker wrote outside its exact cell root; "
-                        f"added={added}, removed={removed}, changed={changed}")
+            worker_result = self._worker(worker_request, max_runtime)
         finally:
-            try:
-                if sampler is not None:
-                    sampling = sampler.stop().to_dict()
-            finally:
-                released = claim.release().to_dict() if claim is not None else None
-        if worker_result is None or sampling is None:
-            raise ArenaCellRunnerError("Arena worker completed without durable result or sampling")
-        if opened is None or released is None:
-            raise ArenaCellRunnerError("Arena checkpoint lacked a complete device claim")
+            _assert_worker_tree_contained(cell_root)
+            outside_after = _outside_cell_manifest(cell_root)
+            if outside_after != outside_before:
+                added = sorted(outside_after.keys() - outside_before.keys())
+                removed = sorted(outside_before.keys() - outside_after.keys())
+                changed = sorted(
+                    key for key in outside_before.keys() & outside_after.keys()
+                    if outside_before[key] != outside_after[key])
+                raise ArenaCellRunnerError(
+                    "Arena worker wrote outside its exact cell root; "
+                    f"added={added}, removed={removed}, changed={changed}")
+        if worker_result is None:
+            raise ArenaCellRunnerError("Arena worker completed without a durable result")
         self._assert_static_identities()
         completed_task_audit = arena_campaign._task_audit(self.arena_root, request.task)
         completed_arm_audit = arena_campaign._implementation_audit(request.arm)
@@ -616,6 +705,8 @@ class GovernedArenaCellRunner:
         artifact_map = worker_result.get("artifacts")
         if not isinstance(artifact_map, Mapping) or not artifact_map:
             raise ArenaCellRunnerError("Arena worker returned no hash-bound artifacts")
+        self._verify_measurement_windows(
+            worker_result.get("measurement_windows"), cell_root=cell_root)
         belief_receipt = None
         if not request.is_starting_state_baseline:
             evaluation = worker_result.get("evaluation")
@@ -654,9 +745,6 @@ class GovernedArenaCellRunner:
             **dict(worker_result),
             "started_at": started_at,
             "ended_at": _utc_now(),
-            "device_claim_open": opened,
-            "device_claim_released": released,
-            "device_sampling": sampling,
             "preflight": {
                 "path": str(Path(self.config.preflight_path).resolve()),
                 "file_sha256": self.preflight_file_sha256,
@@ -739,7 +827,8 @@ class GovernedArenaCellRunner:
         }
         if receipt.get("preflight") != expected_preflight:
             raise ArenaCellRunnerError("checkpoint preflight identity drifted")
-        self._verify_released_claim(receipt)
+        self._verify_measurement_windows(
+            receipt.get("measurement_windows"), cell_root=cell_root)
         worker_request = _load_json_object(
             cell_root / "worker-request.json", "worker request")
         expected_request = self._worker_request(
@@ -777,6 +866,7 @@ class GovernedArenaCellRunner:
         return receipt
 
     def _verify_released_claim(self, receipt: Mapping[str, Any]) -> None:
+        """Verify the claim pair embedded in one measurement-window receipt."""
         opened = receipt.get("device_claim_open")
         released = receipt.get("device_claim_released")
         if not isinstance(opened, Mapping) or not isinstance(released, Mapping):
@@ -798,6 +888,36 @@ class GovernedArenaCellRunner:
                 or not released_receipt.released_at
                 or opened_receipt.released_at is not None):
             raise ArenaCellRunnerError("checkpoint device claim was not cleanly released")
+
+    def _verify_measurement_windows(self, windows: object, *, cell_root: Path) -> None:
+        if not isinstance(windows, list) or len(windows) != 2:
+            raise ArenaCellRunnerError(
+                "checkpoint must carry exactly two GPU measurement windows")
+        phases = ("vendor_baseline", "centralized_final_evaluation")
+        claim_ids: list[str] = []
+        for ordinal, (window, phase) in enumerate(zip(windows, phases), start=1):
+            if not isinstance(window, Mapping):
+                raise ArenaCellRunnerError("GPU measurement window is malformed")
+            _verify_self_hash(window, "GPU measurement window")
+            if (window.get("schema") != MEASUREMENT_WINDOW_SCHEMA
+                    or window.get("phase") != phase
+                    or window.get("ordinal") != ordinal
+                    or window.get("status") != "complete"
+                    or window.get("gpu_action_executed_only_while_claim_held") is not True
+                    or not isinstance(window.get("device_sampling"), Mapping)):
+                raise ArenaCellRunnerError(
+                    "GPU measurement window identity or evidence is incomplete")
+            self._verify_released_claim(window)
+            claim_ids.append(str(window["device_claim_open"]["claim_id"]))
+            persisted = _load_json_object(
+                cell_root / "measurement-windows" / f"{ordinal:02d}-{phase}.json",
+                "persisted GPU measurement window")
+            if persisted != window:
+                raise ArenaCellRunnerError(
+                    "persisted GPU measurement window receipt drifted")
+        if len(set(claim_ids)) != 2:
+            raise ArenaCellRunnerError(
+                "baseline and final evaluation must use distinct device claims")
 
     def _abandon_partial_checkpoint(self, cell_root: Path) -> None:
         abandoned = self.output_root / "abandoned"
@@ -827,6 +947,8 @@ class GovernedArenaCellRunner:
             "baseline": request.is_starting_state_baseline,
             "checkpoint_hours": checkpoint_hours,
             "visible_device": self.config.visible_device,
+            "claim_journal": str(Path(self.config.claim_journal).resolve()),
+            "claim_timeout_seconds": float(self.config.claim_timeout_seconds),
             "evaluator_python": self.evaluator_python,
         }
 
@@ -938,8 +1060,12 @@ def _artifact_hashes(root: Path) -> dict[str, str]:
     return rows
 
 
-def run_worker(request: Mapping[str, Any]) -> dict[str, Any]:
-    """Execute one already-claimed baseline or controller checkpoint."""
+def run_worker(
+    request: Mapping[str, Any], *,
+    claim_acquirer: Callable[..., Any] = device_claim.acquire_device_claim,
+    sampler_factory: Callable[..., Any] = device_sampler.RocmSmiSampler,
+) -> dict[str, Any]:
+    """Execute one checkpoint, claiming only its two GPU measurements."""
     if request.get("schema") != CHECKPOINT_SCHEMA:
         raise ArenaCellRunnerError("worker request has the wrong schema")
     evaluator_python = _assert_worker_evaluator_identity(request)
@@ -997,8 +1123,12 @@ def run_worker(request: Mapping[str, Any]) -> dict[str, Any]:
         workspace, task_config, logger, None)
     if not pass_compilation:
         raise ArenaCellRunnerError(f"starting task does not compile: {compile_error}")
-    baseline_cases = vendor_evaluator.measure_baseline(
-        workspace, task_config, logger, None)
+    baseline_cases, baseline_window = _run_gpu_measurement_window(
+        request=request, cell_root=cell_root, ordinal=1,
+        phase="vendor_baseline",
+        action=lambda: vendor_evaluator.measure_baseline(
+            workspace, task_config, logger, None),
+        claim_acquirer=claim_acquirer, sampler_factory=sampler_factory)
     baseline = bool(request.get("baseline"))
     controller_stdout_sha256 = None
     if not baseline:
@@ -1009,6 +1139,12 @@ def run_worker(request: Mapping[str, Any]) -> dict[str, Any]:
         raw_prompt = vendor_prompt.prompt_builder(
             str(config_path), workspace,
             {"target_gpu_model": arena_adapter.TARGET_GPU_MODEL}, logger)
+        controller_environment = dict(environment)
+        controller_environment.update({
+            "HIP_VISIBLE_DEVICES": "",
+            "ROCR_VISIBLE_DEVICES": "",
+            "CUDA_VISIBLE_DEVICES": "",
+        })
         prepared = arena_adapter.prepare_task(arena_adapter.ArenaTask(
             task_id=task_id,
             task_prompt=raw_prompt,
@@ -1016,7 +1152,10 @@ def run_worker(request: Mapping[str, Any]) -> dict[str, Any]:
             controller_id=arm_id,
             round_id=f"{campaign_id}-{checkpoint:g}h",
             actual_gfx_arch=arena_adapter.TARGET_GFX_ARCH,
-        ), base_environment=environment)
+        ), base_environment=controller_environment)
+        # This is the deliberately unclaimed gap.  The controller receives a
+        # GPU-blind environment and may spend its remote-model budget while
+        # another host tenant uses the MI210.
         stdout = arena_adapter.launch(
             prepared, _controller_argv(arm, float(checkpoint)),
             timeout_seconds=int(float(checkpoint) * 3600))
@@ -1026,8 +1165,12 @@ def run_worker(request: Mapping[str, Any]) -> dict[str, Any]:
     elif request.get("checkpoint_hours") is not None:
         raise ArenaCellRunnerError("starting-state baseline cannot have a checkpoint budget")
 
-    evaluation = vendor_evaluator.evaluate_kernel(
-        workspace, task_config, baseline_cases, logger, None)
+    evaluation, evaluation_window = _run_gpu_measurement_window(
+        request=request, cell_root=cell_root, ordinal=2,
+        phase="centralized_final_evaluation",
+        action=lambda: vendor_evaluator.evaluate_kernel(
+            workspace, task_config, baseline_cases, logger, None),
+        claim_acquirer=claim_acquirer, sampler_factory=sampler_factory)
     vendor_evaluator.write_task_result(
         workspace, evaluation, baseline_cases, task_id, arm_id, logger,
         create_plots=False)
@@ -1048,12 +1191,15 @@ def run_worker(request: Mapping[str, Any]) -> dict[str, Any]:
             "average_speedup": float(evaluation.get("average_speedup", 0.0)),
         },
         "controller_stdout_sha256": controller_stdout_sha256,
+        "measurement_windows": [baseline_window, evaluation_window],
         "artifacts": artifacts,
         "constraints": {
             "starting_state_copied_fresh": True,
             "centralized_vendor_evaluator": True,
             "evaluator_python": evaluator_python,
             "agent_reported_performance_admitted": False,
+            "controller_deliberation_holds_no_gpu_claim": True,
+            "controller_environment_gpu_blind": True,
             "promotion_authority": False,
         },
     }
@@ -1106,6 +1252,9 @@ def _run_manifest(
             "dot_free_collision_bound_cell_paths": True,
             "post_worker_sibling_manifest_required": True,
             "sigterm_sigint_unwind_claims": True,
+            "mi210_claimed_only_for_vendor_measurements": True,
+            "controller_deliberation_holds_no_gpu_claim": True,
+            "controller_environment_gpu_blind": True,
             "partial_results_rankable": False,
             "aggregate_atomic_after_complete_matrix_only": True,
             "promotion_authority": False,
@@ -1255,7 +1404,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if request_path.parent != declared_cell or output_path.parent != declared_cell:
             raise ArenaCellRunnerError(
                 "worker request and output must stay in the declared cell root")
-        result = run_worker(request)
+        with _graceful_campaign_signals():
+            result = run_worker(request)
         _atomic_json(output_path, result)
         return 0
     required = ("config", "arena_root", "geak_root", "preflight", "output_root")
@@ -1272,7 +1422,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 __all__ = [
-    "AGGREGATE_SCHEMA", "CHECKPOINT_SCHEMA", "RUNNER_SCHEMA",
+    "AGGREGATE_SCHEMA", "CHECKPOINT_SCHEMA", "MEASUREMENT_WINDOW_SCHEMA",
+    "RUNNER_SCHEMA",
     "RUN_MANIFEST_SCHEMA",
     "ArenaCampaignInterrupted", "ArenaCellRunnerError",
     "GovernedArenaCellRunner", "RunnerConfig",

@@ -27,13 +27,14 @@ def canonical_sha(payload: object) -> str:
 
 
 class FakeReceipt:
-    def __init__(self, phase: str):
+    def __init__(self, phase: str, claim_id: str = "akd-fixture0000001"):
         self.phase = phase
+        self.claim_id = claim_id
 
     def to_dict(self):
         row = {
             "schema": "epyc.autokernel.device_claim_receipt.v1",
-            "claim_id": "akd-fixture0000001",
+            "claim_id": self.claim_id,
             "device_id": "mi210_0",
             "lock_path": "/tmp/gpu_device.mi210_0.lock",
             "state": "held",
@@ -55,15 +56,16 @@ class FakeReceipt:
 
 
 class FakeClaim:
-    def __init__(self):
+    def __init__(self, claim_id: str = "akd-fixture0000001"):
         self.released = False
+        self.claim_id = claim_id
 
     def receipt(self):
-        return FakeReceipt("opened")
+        return FakeReceipt("opened", self.claim_id)
 
     def release(self):
         self.released = True
-        return FakeReceipt("released")
+        return FakeReceipt("released", self.claim_id)
 
 
 class FakeSampling:
@@ -143,11 +145,48 @@ class ArenaCellRunnerTest(unittest.TestCase):
             claim_journal=str((self.root / "claim.jsonl").resolve()),
         )
 
+    def window_request(self, cell_root: Path) -> dict:
+        return {
+            "campaign_id": "fixture-campaign-v1",
+            "task": {"task_id": "fixture.task"},
+            "arm": {"arm_id": "k_search"},
+            "visible_device": "0",
+            "claim_journal": str((self.root / "claim.jsonl").resolve()),
+            "claim_timeout_seconds": 0.0,
+            "cell_root": str(cell_root),
+        }
+
     @staticmethod
     def worker(request, timeout):
         cell_root = Path(request["cell_root"])
         artifact = cell_root / "fixture.txt"
         artifact.write_text("evidence\n", encoding="utf-8")
+        windows = []
+        for ordinal, phase in enumerate(
+            ("vendor_baseline", "centralized_final_evaluation"), start=1,
+        ):
+            claim_id = f"akd-fixture000000{ordinal}"
+            window = {
+                "schema": R.MEASUREMENT_WINDOW_SCHEMA,
+                "campaign_id": request["campaign_id"],
+                "task_id": request["task"]["task_id"],
+                "arm_id": request["arm"]["arm_id"],
+                "phase": phase,
+                "ordinal": ordinal,
+                "status": "complete",
+                "started_at": "2026-08-11T00:00:00Z",
+                "ended_at": "2026-08-11T00:00:01Z",
+                "device_claim_open": FakeReceipt("opened", claim_id).to_dict(),
+                "device_claim_released": FakeReceipt("released", claim_id).to_dict(),
+                "device_sampling": FakeSampling().to_dict(),
+                "gpu_action_executed_only_while_claim_held": True,
+                "failure": None,
+            }
+            window["receipt_sha256"] = canonical_sha(window)
+            path = cell_root / "measurement-windows" / f"{ordinal:02d}-{phase}.json"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(window), encoding="utf-8")
+            windows.append(window)
         return {
             "schema": R.CHECKPOINT_SCHEMA,
             "authority": "whole_agent_task_only",
@@ -161,19 +200,16 @@ class ArenaCellRunnerTest(unittest.TestCase):
                 "valid_baseline_cases": 3, "valid_optimized_cases": 3,
                 "average_speedup": 1.1,
             },
+            "measurement_windows": windows,
             "artifacts": {"fixture.txt": hashlib.sha256(
                 artifact.read_bytes()).hexdigest()},
         }
 
-    def runner(self, *, claim_acquirer=None, sampler_factory=FakeSampler):
-        kwargs = {"worker": self.worker, "sampler_factory": sampler_factory}
-        if claim_acquirer is not None:
-            kwargs["claim_acquirer"] = claim_acquirer
-        return R.GovernedArenaCellRunner(self.config(), **kwargs)
+    def runner(self):
+        return R.GovernedArenaCellRunner(self.config(), worker=self.worker)
 
     def test_baseline_runs_once_without_a_budget_or_belief_measurement(self):
-        claim = FakeClaim()
-        runner = self.runner(claim_acquirer=lambda *args, **kwargs: claim)
+        runner = self.runner()
         request = C.CampaignCellRequest(
             arm=self.arm(C.BASELINE_ARM_ID), task=self.task,
             is_starting_state_baseline=True, checkpoint_hours=(),
@@ -182,17 +218,10 @@ class ArenaCellRunnerTest(unittest.TestCase):
         self.assertEqual(receipt["checkpoint_hours"], [])
         self.assertEqual(len(receipt["runs"]), 1)
         self.assertIsNone(receipt["runs"][0]["belief_receipt"])
-        self.assertTrue(claim.released)
+        self.assertEqual(len(receipt["runs"][0]["measurement_windows"]), 2)
 
     def test_controller_runs_three_fresh_matched_checkpoints_and_emits_beliefs(self):
-        claims = []
-
-        def acquire(*args, **kwargs):
-            claim = FakeClaim()
-            claims.append((claim, kwargs))
-            return claim
-
-        runner = self.runner(claim_acquirer=acquire)
+        runner = self.runner()
         request = C.CampaignCellRequest(
             arm=self.arm("k_search"), task=self.task,
             is_starting_state_baseline=False,
@@ -206,9 +235,8 @@ class ArenaCellRunnerTest(unittest.TestCase):
         self.assertEqual(
             [row["checkpoint_hours"] for row in receipt["runs"]],
             [2.0, 8.0, 32.0])
-        self.assertEqual(len(claims), 3)
-        self.assertTrue(all(claim.released for claim, _ in claims))
         for run in receipt["runs"]:
+            self.assertEqual(len(run["measurement_windows"]), 2)
             belief = run["belief_receipt"]
             self.assertEqual(belief["status"], "pass")
             self.assertEqual(len(belief["belief_measurements"]), 2)
@@ -229,9 +257,7 @@ class ArenaCellRunnerTest(unittest.TestCase):
     def test_identity_drift_refuses_before_claim_or_worker(self):
         acquire = mock.Mock()
         worker = mock.Mock()
-        runner = R.GovernedArenaCellRunner(
-            self.config(), worker=worker, claim_acquirer=acquire,
-            sampler_factory=FakeSampler)
+        runner = R.GovernedArenaCellRunner(self.config(), worker=worker)
         request = C.CampaignCellRequest(
             arm=self.arm("k_search"), task=self.task,
             is_starting_state_baseline=False,
@@ -245,7 +271,6 @@ class ArenaCellRunnerTest(unittest.TestCase):
             self.assertRaisesRegex(R.ArenaCellRunnerError, "identity drifted"),
         ):
             runner(request)
-        acquire.assert_not_called()
         worker.assert_not_called()
 
     def test_sampler_failure_still_releases_the_device_claim(self):
@@ -255,40 +280,39 @@ class ArenaCellRunnerTest(unittest.TestCase):
             def stop(self):
                 raise RuntimeError("sampler failed")
 
-        runner = self.runner(
-            claim_acquirer=lambda *args, **kwargs: claim,
-            sampler_factory=BrokenSampler)
-        request = C.CampaignCellRequest(
-            arm=self.arm(C.BASELINE_ARM_ID), task=self.task,
-            is_starting_state_baseline=True, checkpoint_hours=(),
-            maximum_wall_hours=0.0)
+        cell = self.root / "cells" / "window"
+        cell.mkdir(parents=True)
         with self.assertRaisesRegex(RuntimeError, "sampler failed"):
-            runner(request)
+            R._run_gpu_measurement_window(
+                request=self.window_request(cell), cell_root=cell, ordinal=1,
+                phase="vendor_baseline", action=lambda: "measured",
+                claim_acquirer=lambda *args, **kwargs: claim,
+                sampler_factory=BrokenSampler)
         self.assertTrue(claim.released)
+        persisted = json.loads(next((cell / "measurement-windows").glob("*.json")).read_text())
+        self.assertEqual(persisted["status"], "failed")
 
     def test_sigterm_unwinds_worker_and_journals_claim_release_boundary(self):
         claim = FakeClaim()
 
-        def interrupted_worker(request, timeout):
+        def interrupted_action():
             os.kill(os.getpid(), signal.SIGTERM)
-            self.fail("SIGTERM handler did not interrupt the worker")
+            self.fail("SIGTERM handler did not interrupt the measurement")
 
-        runner = R.GovernedArenaCellRunner(
-            self.config(), worker=interrupted_worker,
-            claim_acquirer=lambda *args, **kwargs: claim,
-            sampler_factory=FakeSampler)
-        request = C.CampaignCellRequest(
-            arm=self.arm(C.BASELINE_ARM_ID), task=self.task,
-            is_starting_state_baseline=True, checkpoint_hours=(),
-            maximum_wall_hours=0.0)
+        cell = self.root / "cells" / "window"
+        cell.mkdir(parents=True)
         with (
             R._graceful_campaign_signals(),
             self.assertRaisesRegex(R.ArenaCampaignInterrupted, "SIGTERM"),
         ):
-            runner(request)
+            R._run_gpu_measurement_window(
+                request=self.window_request(cell), cell_root=cell, ordinal=1,
+                phase="vendor_baseline", action=interrupted_action,
+                claim_acquirer=lambda *args, **kwargs: claim,
+                sampler_factory=FakeSampler)
         self.assertTrue(claim.released)
-        self.assertEqual(
-            list(self.output.glob("cells/*/checkpoint-receipt.json")), [])
+        persisted = json.loads(next((cell / "measurement-windows").glob("*.json")).read_text())
+        self.assertIsNotNone(persisted["device_claim_released"]["released_at"])
 
     def test_sigterm_during_claim_acquisition_is_deferred_until_handle_assignment(self):
         claim = FakeClaim()
@@ -297,19 +321,19 @@ class ArenaCellRunnerTest(unittest.TestCase):
             os.kill(os.getpid(), signal.SIGTERM)
             return claim
 
-        runner = self.runner(claim_acquirer=acquire)
-        request = C.CampaignCellRequest(
-            arm=self.arm(C.BASELINE_ARM_ID), task=self.task,
-            is_starting_state_baseline=True, checkpoint_hours=(),
-            maximum_wall_hours=0.0)
+        cell = self.root / "cells" / "window"
+        cell.mkdir(parents=True)
         with (
             R._graceful_campaign_signals(),
             self.assertRaisesRegex(R.ArenaCampaignInterrupted, "SIGTERM"),
         ):
-            runner(request)
+            R._run_gpu_measurement_window(
+                request=self.window_request(cell), cell_root=cell, ordinal=1,
+                phase="vendor_baseline", action=lambda: "unreachable",
+                claim_acquirer=acquire, sampler_factory=FakeSampler)
         self.assertTrue(claim.released)
-        self.assertEqual(
-            list(self.output.glob("cells/*/checkpoint-receipt.json")), [])
+        persisted = json.loads(next((cell / "measurement-windows").glob("*.json")).read_text())
+        self.assertIsNotNone(persisted["device_claim_released"]["released_at"])
 
     def test_dotted_task_id_gets_collision_bound_dot_free_cell_path(self):
         native = "instruction2triton.rocmbench.test_add_kernel"
@@ -334,8 +358,6 @@ class ArenaCellRunnerTest(unittest.TestCase):
         R._assert_worker_tree_contained(cell_root)
 
     def test_sibling_write_is_detected_even_when_worker_raises(self):
-        claim = FakeClaim()
-
         def escaping_worker(request, timeout):
             cell_root = Path(request["cell_root"])
             escaped = cell_root.with_name(cell_root.name + "-escaped")
@@ -344,10 +366,7 @@ class ArenaCellRunnerTest(unittest.TestCase):
                 "escaped\n", encoding="utf-8")
             raise RuntimeError("worker failed after escape")
 
-        runner = R.GovernedArenaCellRunner(
-            self.config(), worker=escaping_worker,
-            claim_acquirer=lambda *args, **kwargs: claim,
-            sampler_factory=FakeSampler)
+        runner = R.GovernedArenaCellRunner(self.config(), worker=escaping_worker)
         request = C.CampaignCellRequest(
             arm=self.arm(C.BASELINE_ARM_ID), task=self.task,
             is_starting_state_baseline=True, checkpoint_hours=(),
@@ -355,7 +374,6 @@ class ArenaCellRunnerTest(unittest.TestCase):
         with self.assertRaisesRegex(
                 R.ArenaCellRunnerError, "wrote outside its exact cell root"):
             runner(request)
-        self.assertTrue(claim.released)
         self.assertTrue(next(self.output.glob("cells/*-escaped")).is_dir())
         self.assertEqual(
             list(self.output.glob("cells/*/checkpoint-receipt.json")), [])
@@ -393,9 +411,7 @@ class ArenaCellRunnerTest(unittest.TestCase):
             checkpoint_hours=C.MATCHED_BUDGET_HOURS,
             maximum_wall_hours=32.0)
         first = R.GovernedArenaCellRunner(
-            self.config(), worker=interrupted_worker,
-            claim_acquirer=lambda *args, **kwargs: FakeClaim(),
-            sampler_factory=FakeSampler)
+            self.config(), worker=interrupted_worker)
         with (
             mock.patch.object(
                 C, "_implementation_audit",
@@ -412,9 +428,7 @@ class ArenaCellRunnerTest(unittest.TestCase):
             return self.worker(worker_request, timeout)
 
         resumed = R.GovernedArenaCellRunner(
-            self.config(), worker=resumed_worker,
-            claim_acquirer=lambda *args, **kwargs: FakeClaim(),
-            sampler_factory=FakeSampler)
+            self.config(), worker=resumed_worker)
         with mock.patch.object(
             C, "_implementation_audit",
             return_value={"executable": True, "missing_artifacts": []},
@@ -435,25 +449,23 @@ class ArenaCellRunnerTest(unittest.TestCase):
             arm=self.arm(C.BASELINE_ARM_ID), task=self.task,
             is_starting_state_baseline=True, checkpoint_hours=(),
             maximum_wall_hours=0.0)
-        first = self.runner(
-            claim_acquirer=lambda *args, **kwargs: FakeClaim())
+        first = self.runner()
         first(request)
         checkpoint = next(self.output.glob("cells/*/checkpoint-receipt.json"))
         payload = json.loads(checkpoint.read_text(encoding="utf-8"))
-        payload["device_claim_released"]["released_at"] = None
+        payload["measurement_windows"][0]["device_claim_released"]["released_at"] = None
+        payload["measurement_windows"][0]["receipt_sha256"] = canonical_sha({
+            key: value for key, value in payload["measurement_windows"][0].items()
+            if key != "receipt_sha256"})
         payload["receipt_sha256"] = canonical_sha({
             key: value for key, value in payload.items()
             if key != "receipt_sha256"})
         checkpoint.write_text(json.dumps(payload), encoding="utf-8")
-        acquire = mock.Mock()
         worker = mock.Mock()
-        resumed = R.GovernedArenaCellRunner(
-            self.config(), worker=worker, claim_acquirer=acquire,
-            sampler_factory=FakeSampler)
+        resumed = R.GovernedArenaCellRunner(self.config(), worker=worker)
         with self.assertRaisesRegex(
                 R.ArenaCellRunnerError, "not cleanly released"):
             resumed(request)
-        acquire.assert_not_called()
         worker.assert_not_called()
 
     def test_artifact_mutation_refuses_instead_of_rerunning_complete_checkpoint(self):
@@ -461,22 +473,16 @@ class ArenaCellRunnerTest(unittest.TestCase):
             arm=self.arm(C.BASELINE_ARM_ID), task=self.task,
             is_starting_state_baseline=True, checkpoint_hours=(),
             maximum_wall_hours=0.0)
-        self.runner(claim_acquirer=lambda *args, **kwargs: FakeClaim())(request)
+        self.runner()(request)
         artifact = next(self.output.glob("cells/*/fixture.txt"))
         artifact.write_text("mutated\n", encoding="utf-8")
-        acquire = mock.Mock()
         worker = mock.Mock()
-        resumed = R.GovernedArenaCellRunner(
-            self.config(), worker=worker, claim_acquirer=acquire,
-            sampler_factory=FakeSampler)
+        resumed = R.GovernedArenaCellRunner(self.config(), worker=worker)
         with self.assertRaisesRegex(R.ArenaCellRunnerError, "artifact digest drifted"):
             resumed(request)
-        acquire.assert_not_called()
         worker.assert_not_called()
 
     def test_source_mutation_during_worker_prevents_completed_receipt(self):
-        claim = FakeClaim()
-
         def mutating_worker(request, timeout):
             result = self.worker(request, timeout)
             (self.arena / "tasks" / "fixture" / "config.yaml").write_text(
@@ -484,9 +490,7 @@ class ArenaCellRunnerTest(unittest.TestCase):
             return result
 
         runner = R.GovernedArenaCellRunner(
-            self.config(), worker=mutating_worker,
-            claim_acquirer=lambda *args, **kwargs: claim,
-            sampler_factory=FakeSampler)
+            self.config(), worker=mutating_worker)
         request = C.CampaignCellRequest(
             arm=self.arm(C.BASELINE_ARM_ID), task=self.task,
             is_starting_state_baseline=True, checkpoint_hours=(),
@@ -494,7 +498,6 @@ class ArenaCellRunnerTest(unittest.TestCase):
         with self.assertRaisesRegex(
                 R.ArenaCellRunnerError, "changed during checkpoint"):
             runner(request)
-        self.assertTrue(claim.released)
         self.assertEqual(
             list(self.output.glob("cells/*/checkpoint-receipt.json")), [])
 
@@ -655,24 +658,60 @@ class ArenaCellRunnerTest(unittest.TestCase):
             "baseline": False,
             "checkpoint_hours": 2.0,
             "visible_device": "0",
+            "claim_journal": str((self.root / "claims.jsonl").resolve()),
+            "claim_timeout_seconds": 0.0,
             "evaluator_python": R._evaluator_python_identity(),
         }
+        claims: list[FakeClaim] = []
+        broker_held = False
+
+        class BrokerClaim(FakeClaim):
+            def release(inner_self):
+                nonlocal broker_held
+                receipt = super().release()
+                broker_held = False
+                return receipt
+
+        def acquire(*args, **kwargs):
+            nonlocal broker_held
+            self.assertFalse(broker_held, "device broker was still held")
+            broker_held = True
+            claim = BrokerClaim(f"akd-fixture000000{len(claims) + 1}")
+            claims.append(claim)
+            return claim
+
+        def controller_launch(prepared, *args, **kwargs):
+            self.assertTrue(claims[0].released)
+            self.assertEqual(prepared.environment["HIP_VISIBLE_DEVICES"], "")
+            self.assertEqual(prepared.environment["ROCR_VISIBLE_DEVICES"], "")
+            # A second tenant can acquire the device during this gap because
+            # AutoKernel holds no claim on behalf of the remote model.
+            gap_claim = acquire(purpose="other governed tenant")
+            gap_claim.release()
+            return "controller receipt"
+
         with (
             mock.patch.dict(sys.modules, {
                 "src": src, "src.evaluator": evaluator,
                 "src.prompt_builder": prompt_builder,
             }),
-            mock.patch.object(R.arena_adapter, "launch", return_value="controller receipt"),
+            mock.patch.object(R.arena_adapter, "launch", side_effect=controller_launch),
             mock.patch.object(
                 R, "_assert_worker_evaluator_identity",
                 return_value=R._evaluator_python_identity()),
         ):
-            receipt = R.run_worker(request)
+            receipt = R.run_worker(
+                request, claim_acquirer=acquire, sampler_factory=FakeSampler)
         self.assertTrue(receipt["evaluation"]["pass_correctness"])
         self.assertEqual(receipt["checkpoint_hours"], 2.0)
         self.assertTrue((cell_root / "workspace" / "task_result.yaml").is_file())
         self.assertTrue((cell_root / "controller.stdout").is_file())
         evaluator.evaluate_kernel.assert_called_once()
+        self.assertEqual(len(claims), 3)
+        self.assertTrue(all(claim.released for claim in claims))
+        self.assertEqual(
+            [window["phase"] for window in receipt["measurement_windows"]],
+            ["vendor_baseline", "centralized_final_evaluation"])
         self.assertEqual(
             receipt["constraints"]["evaluator_python"]["sha256"],
             R.EVALUATOR_PYTHON_SHA256)
