@@ -63,10 +63,18 @@ def prompt_tokens(value: str) -> tuple[int, ...]:
     return parsed
 
 
+def workload_phase(gen_tokens: int) -> str:
+    if gen_tokens < 0:
+        raise ValueError("generation tokens must be non-negative")
+    return "prefill" if gen_tokens == 0 else "prefill+decode"
+
+
 def bench_command(binary: Path, model: Path, *, tokens: int,
-                  repetitions: int) -> tuple[str, ...]:
+                  repetitions: int, gen_tokens: int = 0) -> tuple[str, ...]:
+    workload_phase(gen_tokens)
     return (
-        str(binary), "-m", str(model), "-p", str(tokens), "-n", "0",
+        str(binary), "-m", str(model), "-p", str(tokens),
+        "-n", str(gen_tokens),
         "-r", str(repetitions), "-ngl", "99", "-fa", "on", "-o", "jsonl",
     )
 
@@ -89,12 +97,13 @@ def profiler_environment(binary: Path, args: argparse.Namespace) -> dict[str, st
 
 def profile_command(binary: Path, model: Path, *, tokens: int,
                     repetitions: int, profiler: Path, input_file: Path,
-                    output_file: Path) -> tuple[str, ...]:
+                    output_file: Path, gen_tokens: int = 0) -> tuple[str, ...]:
     return (
         str(profiler), "--tool-version", "1", "--timestamp", "on",
         "--ctx-wait", "on", "--heartbeat", "30", "-i", str(input_file),
         "-o", str(output_file),
-        *bench_command(binary, model, tokens=tokens, repetitions=repetitions),
+        *bench_command(binary, model, tokens=tokens, repetitions=repetitions,
+                       gen_tokens=gen_tokens),
     )
 
 
@@ -307,7 +316,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             raw = output_dir / f"p{tokens}.timestamps.csv"
             command = profile_command(
                 binary, model, tokens=tokens, repetitions=args.repetitions,
-                profiler=profiler, input_file=input_file, output_file=raw)
+                profiler=profiler, input_file=input_file, output_file=raw,
+                gen_tokens=args.gen_tokens)
             rc, stdout, stderr, duration = run_owned(
                 command, env=env, timeout_s=args.timeout_s)
             (output_dir / f"p{tokens}.stdout.jsonl").write_text(stdout, encoding="utf-8")
@@ -371,6 +381,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "identity": tool_identity,
         "workload": {
             "prompt_tokens": list(args.prompt_tokens),
+            "gen_tokens": args.gen_tokens,
+            "phase": workload_phase(args.gen_tokens),
             "preflight_tokens": args.preflight_tokens,
             "repetitions": args.repetitions,
             "graphs_disabled": True,
@@ -405,6 +417,11 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--output-dir", required=True)
     result.add_argument("--campaign-id", default="k28-rocprofv1-attribution-20260811")
     result.add_argument("--prompt-tokens", type=prompt_tokens, default=(2048, 8192, 32768))
+    result.add_argument(
+        "--gen-tokens", type=int, default=0,
+        help="tokens to generate (llama-bench -n). Default 0 = PREFILL ONLY. "
+             "Set >0 to reach the batch-1 decode MMVQ/GEMV path; a decode "
+             "question answered with the default silently measures prefill.")
     result.add_argument("--preflight-tokens", type=int, default=32)
     result.add_argument("--repetitions", type=int, default=1)
     result.add_argument("--profiler-root", default="/mnt/raid0/llm/tools/rocm-profilers-6.2")
@@ -417,8 +434,10 @@ def parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = parser().parse_args()
-    if args.repetitions < 1 or args.preflight_tokens < 1:
-        raise RuntimeError("repetitions and preflight tokens must be positive")
+    if args.repetitions < 1 or args.preflight_tokens < 1 or args.gen_tokens < 0:
+        raise RuntimeError(
+            "repetitions and preflight tokens must be positive; "
+            "generation tokens must be non-negative")
     payload = run(args)
     print(json.dumps({
         "receipt": str(Path(args.output_dir) / "receipt.json"),
