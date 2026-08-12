@@ -1,0 +1,6 @@
+2.23.081.220 I slot print_timing: id  0 | task 2705 |       total time =     250.60 ms /   368 tokens
+2.23.081.221 I slot print_timing: id  0 | task 2705 |    graphs reused =       2106
+2.25.023.059 I slot print_timing: id  0 | task 2709 | prompt eval time =     133.56 ms /    95 tokens (    1.41 ms per token,   711.26 tokens per second)
+2.25.023.066 I slot print_timing: id  0 | task 2709 |        eval time =      14.32 ms /     2 tokens (    7.16 ms per token,   139.62 tokens per second)
+2.25.023.067 I slot print_timing: id  0 | task 2709 |       total time =     147.89 ms /    97 tokens
+2.25.023.076 I slot print_timing: id  0 | task 2709 |    graphs reused =       2106
