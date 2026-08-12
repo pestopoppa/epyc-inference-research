@@ -536,9 +536,9 @@ class SandboxPolicy:
                     or self.broker_peer_start_ticks <= 0):
                 raise SandboxError(
                     "controller profile requires broker_peer_start_ticks")
-            if normalized_devices:
+            if any(path != "/dev/null" for path in normalized_devices):
                 raise SandboxError(
-                    "controller profile cannot admit writable ROCm devices")
+                    "controller profile can admit only the null device")
             if network_profile != NETWORK_OUTBOUND_CLIENT:
                 raise SandboxError("controller profile must use outbound-client network")
         elif self.profile == EVALUATOR_PROFILE:

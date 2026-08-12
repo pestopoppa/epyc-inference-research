@@ -537,6 +537,7 @@ def prepare_controller_sandbox(
         kwargs["cgroup_root"] = str(_exact_path(cgroup_root, directory=True))
     policy = sandbox.SandboxPolicy(
         str(work), profile=sandbox.CONTROLLER_PROFILE,
+        writable_device_paths=("/dev/null",),
         readable_roots=runtime.readable_roots,
         readable_files=runtime.readable_files,
         executable_files=runtime.executable_files,

@@ -180,6 +180,7 @@ class ControllerSandboxContractTest(unittest.TestCase):
             f" 'workspace':read({str(self.workspace / 'task.py')!r}),",
             f" 'campaign_sibling':read({str(self.secret)!r}),",
             f" 'sibling_executable':execute({str(self.fake_node_sibling)!r}),",
+            " 'null':probe_device('/dev/null'),",
             " 'kfd':probe_device('/dev/kfd'),",
             " 'renderD128':probe_device('/dev/dri/renderD128'),",
             " 'broker':broker.recv(32).decode(),",
@@ -240,6 +241,7 @@ class ControllerSandboxContractTest(unittest.TestCase):
         self.assertEqual(result["workspace"], ["allowed", "VALUE = 1\n"])
         self.assertEqual(result["campaign_sibling"], ["denied", errno.EACCES])
         self.assertEqual(result["sibling_executable"], ["denied", errno.EACCES])
+        self.assertEqual(result["null"], [["allowed", None]] * 2)
         self.assertEqual(result["kfd"], [["denied", errno.EACCES]] * 2)
         self.assertEqual(result["renderD128"], [["denied", errno.EACCES]] * 2)
         self.assertEqual(result["broker"], "broker-ok")
