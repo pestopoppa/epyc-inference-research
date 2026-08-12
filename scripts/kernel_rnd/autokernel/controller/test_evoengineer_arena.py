@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CPU-only unit tests for the pending EvoEngineer Arena policy seam."""
+"""CPU-only unit tests for the executable EvoEngineer Arena controller."""
 
 from __future__ import annotations
 
@@ -51,10 +51,19 @@ class FixtureConfig:
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
 
+    @property
+    def task(self):
+        return self.interface.task
+
 
 class FixtureController:
     def __init__(self, config):
         self.config = config
+        self.run_state_dict = type(
+            "RunState", (), {"generation": 3, "tot_sample_nums": 9})()
+
+    def run(self):
+        self.config.task.evaluate_code("candidate")
 
 
 TYPES = E.UpstreamTypes(
@@ -66,10 +75,12 @@ TYPES = E.UpstreamTypes(
 
 
 class FixtureEvaluator:
-    def __init__(self, workspace):
+    def __init__(self, workspace, arena_root=None):
         self.workspace = workspace
+        self.arena_root = arena_root
         self.source_paths = ("kernel.py",)
         self.calls = []
+        self.materialized = False
 
     def definition(self, prompt):
         return f"Arena definition: {prompt}"
@@ -85,14 +96,26 @@ class FixtureEvaluator:
             log_excerpt="fixture Arena feedback",
             raw={"pass_compilation": passed, "pass_correctness": passed})
 
+    def materialize_best(self):
+        self.materialized = True
+
+    def receipt_fields(self):
+        return {"brokered_evaluation_count": len(self.calls)}
+
 
 class FixtureModel:
-    def __init__(self):
+    def __init__(self, workspace=None, budget=None):
+        self.workspace = workspace
+        self.budget = budget
         self.prompts = []
+        self.artifact_root = workspace / common.ARTIFACT_DIRNAME if workspace else None
 
     def call(self, prompt):
         self.prompts.append(prompt)
         return "name: candidate\ncode:\n```triton\ncandidate\n```\nthought: wave64"
+
+    def identity(self):
+        return {"model": common.MODEL_ID, "effort": common.MODEL_EFFORT}
 
 
 class EvoEngineerArenaTest(unittest.TestCase):
@@ -200,13 +223,11 @@ class EvoEngineerArenaTest(unittest.TestCase):
         self.assertEqual(usage["model"], common.MODEL_ID)
         self.assertEqual(len(model.prompts), 1)
 
-    def test_runtime_remains_explicitly_refused(self):
-        with self.assertRaisesRegex(
-                E.EvoEngineerArenaError, "source-admitted but not executable"):
-            E.execution_refusal()
-        self.assertIn(
-            "ArenaWorkspaceEvaluator.evaluate(files)",
-            " ".join(E.PENDING_RUNTIME_DEPENDENCIES))
+    def test_parser_retains_unfenced_code_section_fallback(self):
+        solution = self.interface.parse_response(
+            "name: unfenced\ncode:\ncandidate\nthought: wave64")
+        self.assertEqual(solution.sol_string, "candidate")
+        self.assertEqual(solution.other_info["name"], "unfenced")
 
     def test_builder_assembles_exact_full_parameters_but_does_not_run(self):
         model = FixtureModel()
@@ -223,6 +244,44 @@ class EvoEngineerArenaTest(unittest.TestCase):
         self.assertIsInstance(config.running_llm, E.EvoEngineerTextModel)
         self.assertEqual(self.evaluator.calls, [])
         self.assertEqual(model.prompts, [])
+
+    def test_run_controller_executes_upstream_loop_only_through_evaluator(self):
+        arena_root = self.workspace / "arena"
+        arena_root.mkdir()
+        source_root = self.workspace / "source"
+        source_root.mkdir()
+        entrypoint = source_root / E.UPSTREAM_ENTRYPOINT
+        entrypoint.parent.mkdir(parents=True)
+        entrypoint.write_text("fixture", encoding="utf-8")
+        source_receipt = {
+            "commit": E.SOURCE_COMMIT,
+            "required_file_sha256": dict(E.EXPECTED_SOURCE_SHA256),
+        }
+        with (
+            mock.patch.object(E, "inspect_source", return_value=source_receipt),
+            mock.patch.object(common, "_atomic_json"),
+        ):
+            receipt = E.run_controller(
+                prompt="optimize", workspace=self.workspace,
+                arena_root=arena_root, source_root=source_root,
+                budget=common.ControllerBudget(2, 7200),
+                model_factory=FixtureModel,
+                evaluator_factory=FixtureEvaluator,
+                upstream_loader=lambda unused: TYPES)
+        self.assertEqual(receipt["controller_id"], E.CONTROLLER_ID)
+        self.assertEqual(receipt["source"]["commit"], E.SOURCE_COMMIT)
+        self.assertEqual(receipt["evaluation"]["brokered_evaluation_count"], 1)
+        self.assertEqual(receipt["extra"]["policy"], E.policy_identity())
+        self.assertEqual(receipt["extra"]["generation"], 3)
+        self.assertEqual(receipt["extra"]["sample_count"], 9)
+
+    def test_campaign_argv_is_fully_pinned(self):
+        argv = E.campaign_argv("/fixed/python")
+        self.assertEqual(argv[:3], (
+            "/fixed/python", "-m", E.EXECUTABLE_MODULE))
+        self.assertEqual(argv[argv.index("--model") + 1], common.MODEL_ID)
+        self.assertEqual(argv[argv.index("--effort") + 1], common.MODEL_EFFORT)
+        self.assertEqual(argv[argv.index("--checkpoint-hours") + 1], "32")
 
 
 if __name__ == "__main__":
