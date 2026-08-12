@@ -633,9 +633,14 @@ def run_scope_reduction(profile_path: str | Path, receipt: ProfileReceipt,
             "reason": result.reason,
             "source_commit": result.source_commit,
         })
-    existing_count = sum(counts[bucket] for bucket in BUCKETS[:-1])
-    novel_count = counts[BUCKET_NOVEL]
-    dominates = existing_count > novel_count
+    # Scope reduction is a performance decision, so dominance must follow the
+    # captured GPU-time objective rather than the number of symbol families.
+    # Counting families lets many cheap kernels outvote one expensive kernel
+    # and can route most of the observed wall time away from proposal search.
+    existing_duration_ns = sum(
+        duration_by_bucket[bucket] for bucket in BUCKETS[:-1])
+    novel_duration_ns = duration_by_bucket[BUCKET_NOVEL]
+    dominates = existing_duration_ns > novel_duration_ns
     recommendation = (
         "expand_catalogue_before_novel_generator"
         if dominates else "retain_novel_generator_scope"

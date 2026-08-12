@@ -243,7 +243,7 @@ class ScopeReductionTest(unittest.TestCase):
                          "epyc.autokernel.scope_reduction_report.v1")
         self.assertEqual(json.loads(json.dumps(rendered)), rendered)
 
-    def test_existing_or_port_count_must_strictly_dominate(self):
+    def test_existing_or_port_duration_must_strictly_dominate(self):
         base = P.load_catalogue()
         present = P.CatalogueRow(
             pattern="Q8 activation requantization",
@@ -281,6 +281,55 @@ class ScopeReductionTest(unittest.TestCase):
         self.assertTrue(report.existing_or_port_dominates)
         self.assertEqual(report.recommendation,
                          "expand_catalogue_before_novel_generator")
+
+    def test_many_cheap_existing_families_do_not_outvote_expensive_novel_work(self):
+        profile = Path(self.tmp.name) / "duration-dominance.csv"
+        profile.write_text(
+            "Dispatch_ID,Kernel_Name,Start_Timestamp,End_Timestamp\n"
+            "0,existing_a,0,20\n"
+            "1,existing_b,30,50\n"
+            "2,existing_c,60,80\n"
+            "3,novel_expensive_kernel,90,1090\n",
+            encoding="utf-8",
+        )
+        receipt = P.ProfileReceipt(
+            corpus_id="duration-dominance",
+            workload_id="decode",
+            profile_path=profile.name,
+            profile_sha256=hashlib.sha256(profile.read_bytes()).hexdigest(),
+            source_commit="abcdef0123456789",
+        )
+        base = P.load_catalogue()
+        existing = tuple(P.CatalogueRow(
+            pattern=f"existing {suffix}",
+            trace_keywords=(f"existing_{suffix}",),
+            primary_code=(f"existing_{suffix}",),
+            existing_path=f"kernels/existing_{suffix}",
+            reader_should_conclude="existing path applies",
+            upstream_state="mainline",
+            local_state="present",
+            source_project="llama.cpp",
+            source_commit="abcdef0123456789",
+        ) for suffix in ("a", "b", "c"))
+        catalogue = P.Catalogue(
+            scanned_at=base.scanned_at,
+            scan_commands=base.scan_commands,
+            searched_trees=base.searched_trees,
+            rows=existing,
+            expected_absence=base.expected_absence,
+        )
+        report = P.run_scope_reduction(profile, receipt, catalogue=catalogue)
+        self.assertGreater(
+            report.bucket_counts[P.BUCKET_EXISTING_APPLIES],
+            report.bucket_counts[P.BUCKET_NOVEL],
+        )
+        self.assertLess(
+            report.bucket_duration_ns[P.BUCKET_EXISTING_APPLIES],
+            report.bucket_duration_ns[P.BUCKET_NOVEL],
+        )
+        self.assertFalse(report.existing_or_port_dominates)
+        self.assertEqual(report.recommendation,
+                         "retain_novel_generator_scope")
 
     def test_checked_in_ak_del_1_report_replays_byte_for_byte(self):
         root = Path(P.__file__).resolve().parents[3]
