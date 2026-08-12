@@ -6,9 +6,12 @@ unprivileged process.  It does not call a container runtime and it does not
 pretend that a path check is a sandbox:
 
 * Landlock handles every filesystem write right and grants it only beneath one
-  invocation-owned directory;
-* seccomp denies signalling, ptrace/process-memory writes, networking, mount /
-  namespace changes, kernel-module operations and BPF;
+  invocation-owned directory; the controller profile additionally handles
+  read/execute and grants only exact declared runtime inputs;
+* seccomp denies signalling, ptrace/process-memory writes, mount / namespace
+  changes, kernel-module operations and BPF.  The default profile denies all
+  networking; the controller profile admits outbound INET clients, denies
+  server operations and AF_UNIX creation, and inherits one preconnected broker;
 * the launcher refuses uid 0 and sets finite rlimits before ``execve``;
 * every invocation joins a fresh cgroup-v2 leaf.  The parent verifies that the
   leaf is empty, uses ``cgroup.kill`` on escaped descendants when necessary,
@@ -29,6 +32,7 @@ import json
 import os
 import resource
 import secrets
+import socket
 import stat
 import sys
 import time
@@ -37,7 +41,13 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 
-SANDBOX_ID = "autokernel.execution.sandbox/landlock-seccomp-cgroup-v1"
+SANDBOX_ID = "autokernel.execution.sandbox/landlock-seccomp-cgroup-v2"
+RECEIPT_SCHEMA = "epyc.autokernel.sandbox_receipt.v2"
+DEFAULT_PROFILE = "candidate_default_v1"
+CONTROLLER_PROFILE = "controller_outbound_client_v1"
+NETWORK_DENY_ALL = "deny_all"
+NETWORK_OUTBOUND_CLIENT = "outbound_client"
+BROKER_FD_ENV = "EPYC_AUTOKERNEL_BROKER_FD"
 CGROUP_ROOT_ENV = "EPYC_AUTOKERNEL_CGROUP_ROOT"
 HOST_CGROUP_ROOT = "/sys/fs/cgroup/autokernel"
 
@@ -113,6 +123,12 @@ _LANDLOCK_WRITE_V1 = (
     | _LANDLOCK_ACCESS_FS_MAKE_SYM
 )
 
+_LANDLOCK_READ_EXECUTE = (
+    _LANDLOCK_ACCESS_FS_EXECUTE
+    | _LANDLOCK_ACCESS_FS_READ_FILE
+    | _LANDLOCK_ACCESS_FS_READ_DIR
+)
+
 # Default-deny would break the runtime's thread and GPU ioctl paths.  This is a
 # narrow, explicit denial surface for capabilities a benchmark never needs.
 # The names are carried into the receipt so the policy is auditable without
@@ -145,6 +161,19 @@ _BLOCKED_SYSCALLS: Mapping[str, int] = {
     "bind": 49,
     "listen": 50,
 }
+
+_CONTROLLER_BLOCKED_SYSCALLS: Mapping[str, int] = {
+    name: number for name, number in _BLOCKED_SYSCALLS.items()
+    if name not in {"socket", "connect", "sendto", "sendmsg", "sendmmsg"}
+}
+_CONTROLLER_BLOCKED_SYSCALLS = {
+    **_CONTROLLER_BLOCKED_SYSCALLS,
+    "socketpair": 53,
+}
+
+_SECCOMP_DATA_NR_OFFSET = 0
+_SECCOMP_DATA_ARCH_OFFSET = 4
+_SECCOMP_DATA_ARG0_OFFSET = 16
 
 
 class _LandlockRulesetAttr(ctypes.Structure):
@@ -213,14 +242,19 @@ def _landlock_write_rights(abi: int) -> int:
     return rights
 
 
-def install_landlock(writable_root: str,
-                     writable_device_paths: Sequence[str] = ()) -> tuple[int, int]:
-    """Grant filesystem writes only to scratch plus explicitly audited devices."""
+def install_landlock(
+    writable_root: str, writable_device_paths: Sequence[str] = (), *,
+    restrict_reads: bool = False, readable_roots: Sequence[str] = (),
+    readable_files: Sequence[str] = (),
+) -> tuple[int, int]:
+    """Install write confinement and optional default-deny read/exec policy."""
     root = Path(writable_root).resolve(strict=True)
     if not root.is_dir():
         raise SandboxError(f"sandbox writable root is not a directory: {root}")
     abi = landlock_abi()
     rights = _landlock_write_rights(abi)
+    if restrict_reads:
+        rights |= _LANDLOCK_READ_EXECUTE
     attr = _LandlockRulesetAttr(rights)
     try:
         ruleset_fd = _syscall(
@@ -243,6 +277,23 @@ def install_landlock(writable_root: str,
                 _LANDLOCK_ACCESS_FS_WRITE_FILE, device_fd, 0)
             _syscall(_SYS_LANDLOCK_ADD_RULE, ruleset_fd,
                      _LANDLOCK_RULE_PATH_BENEATH, ctypes.byref(device_attr), 0)
+        if restrict_reads:
+            for raw_path in readable_roots:
+                path_fd = os.open(raw_path, os.O_PATH | os.O_CLOEXEC)
+                path_fds.append(path_fd)
+                read_attr = _LandlockPathBeneathAttr(
+                    _LANDLOCK_READ_EXECUTE, path_fd, 0)
+                _syscall(
+                    _SYS_LANDLOCK_ADD_RULE, ruleset_fd,
+                    _LANDLOCK_RULE_PATH_BENEATH, ctypes.byref(read_attr), 0)
+            for raw_path in readable_files:
+                path_fd = os.open(raw_path, os.O_PATH | os.O_CLOEXEC)
+                path_fds.append(path_fd)
+                read_attr = _LandlockPathBeneathAttr(
+                    _LANDLOCK_ACCESS_FS_READ_FILE, path_fd, 0)
+                _syscall(
+                    _SYS_LANDLOCK_ADD_RULE, ruleset_fd,
+                    _LANDLOCK_RULE_PATH_BENEATH, ctypes.byref(read_attr), 0)
         _prctl(_PR_SET_NO_NEW_PRIVS, 1)
         _syscall(_SYS_LANDLOCK_RESTRICT_SELF, ruleset_fd, 0)
     except OSError as exc:
@@ -262,18 +313,39 @@ def _jump(code: int, k: int, jt: int, jf: int) -> _SockFilter:
     return _SockFilter(code, jt, jf, k)
 
 
-def install_seccomp() -> str:
-    """Install the candidate deny policy and return its content identity."""
+def _network_policy(profile: str) -> tuple[Mapping[str, int], bool, str]:
+    if profile == DEFAULT_PROFILE:
+        return _BLOCKED_SYSCALLS, False, NETWORK_DENY_ALL
+    if profile == CONTROLLER_PROFILE:
+        return _CONTROLLER_BLOCKED_SYSCALLS, True, NETWORK_OUTBOUND_CLIENT
+    raise SandboxError(f"unknown sandbox profile: {profile!r}")
+
+
+def install_seccomp(profile: str = DEFAULT_PROFILE) -> str:
+    """Install the selected deny policy and return its content identity."""
     if os.uname().machine != "x86_64":
         raise SandboxError(
             f"seccomp policy is compiled for x86_64, not {os.uname().machine!r}")
+    blocked, deny_unix_socket, _network = _network_policy(profile)
     filters = [
-        _statement(_BPF_LD_W_ABS, 4),
+        _statement(_BPF_LD_W_ABS, _SECCOMP_DATA_ARCH_OFFSET),
         _jump(_BPF_JMP_JEQ_K, _AUDIT_ARCH_X86_64, 1, 0),
         _statement(_BPF_RET_K, _SECCOMP_RET_KILL_PROCESS),
-        _statement(_BPF_LD_W_ABS, 0),
+        _statement(_BPF_LD_W_ABS, _SECCOMP_DATA_NR_OFFSET),
     ]
-    for number in sorted(set(_BLOCKED_SYSCALLS.values())):
+    if deny_unix_socket:
+        filters.extend((
+            # Permit only INET/INET6 socket creation.  The broker's exact
+            # AF_UNIX stream is connected by the trusted wrapper before this
+            # filter and passed as one inherited descriptor.
+            _jump(_BPF_JMP_JEQ_K, _BLOCKED_SYSCALLS["socket"], 0, 5),
+            _statement(_BPF_LD_W_ABS, _SECCOMP_DATA_ARG0_OFFSET),
+            _jump(_BPF_JMP_JEQ_K, socket.AF_INET, 2, 0),
+            _jump(_BPF_JMP_JEQ_K, socket.AF_INET6, 1, 0),
+            _statement(_BPF_RET_K, _SECCOMP_RET_ERRNO | errno.EPERM),
+            _statement(_BPF_LD_W_ABS, _SECCOMP_DATA_NR_OFFSET),
+        ))
+    for number in sorted(set(blocked.values())):
         filters.extend((
             _jump(_BPF_JMP_JEQ_K, number, 0, 1),
             _statement(_BPF_RET_K, _SECCOMP_RET_ERRNO | errno.EPERM),
@@ -287,12 +359,17 @@ def install_seccomp() -> str:
         _prctl(_PR_SET_SECCOMP, _SECCOMP_MODE_FILTER, ctypes.byref(program))
     except OSError as exc:
         raise SandboxError(f"seccomp activation failed: {exc}") from exc
-    return _seccomp_policy_sha256()
+    return _seccomp_policy_sha256(profile)
 
 
-def _seccomp_policy_sha256() -> str:
+def _seccomp_policy_sha256(profile: str = DEFAULT_PROFILE) -> str:
+    blocked, deny_unix_socket, network = _network_policy(profile)
     return hashlib.sha256(json.dumps(
-        sorted(_BLOCKED_SYSCALLS.items()), separators=(",", ":")
+        {
+            "blocked_syscalls": sorted(blocked.items()),
+            "deny_unix_socket_creation": deny_unix_socket,
+            "network_profile": network,
+        }, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")).hexdigest()
 
 
@@ -344,6 +421,12 @@ class SandboxPolicy:
     limits: ResourceLimits = ResourceLimits()
     token: str = ""
     writable_device_paths: tuple[str, ...] = ()
+    profile: str = DEFAULT_PROFILE
+    readable_roots: tuple[str, ...] = ()
+    readable_files: tuple[str, ...] = ()
+    broker_socket_path: str | None = None
+    broker_peer_pid: int | None = None
+    broker_peer_start_ticks: int | None = None
 
     def __post_init__(self) -> None:
         root = Path(self.writable_root).resolve(strict=True)
@@ -365,6 +448,63 @@ class SandboxPolicy:
             if path not in allowed_devices or not stat.S_ISCHR(os.stat(path).st_mode):
                 raise SandboxError(
                     f"writable device is not an admitted ROCm character device: {path}")
+        _blocked, _deny_unix, network_profile = _network_policy(self.profile)
+        normalized_roots = tuple(
+            str(Path(path).resolve(strict=True)) for path in self.readable_roots)
+        normalized_files = tuple(
+            str(Path(path).resolve(strict=True)) for path in self.readable_files)
+        if len(normalized_roots) != len(set(normalized_roots)):
+            raise SandboxError("readable_roots must be unique")
+        if len(normalized_files) != len(set(normalized_files)):
+            raise SandboxError("readable_files must be unique")
+        for path in normalized_roots:
+            candidate = Path(path)
+            if not candidate.is_dir():
+                raise SandboxError(f"readable root is not a directory: {path}")
+            if candidate == Path("/") or candidate.is_relative_to(Path("/dev")):
+                raise SandboxError(
+                    f"readable root would expose host devices: {path}")
+        for path in normalized_files:
+            mode = os.stat(path).st_mode
+            if not stat.S_ISREG(mode):
+                raise SandboxError(f"readable file is not regular: {path}")
+        broker_path: str | None = None
+        if self.broker_socket_path is not None:
+            broker = Path(self.broker_socket_path).resolve(strict=True)
+            if not stat.S_ISSOCK(os.stat(broker).st_mode):
+                raise SandboxError(f"broker path is not a Unix socket: {broker}")
+            try:
+                broker.relative_to(root)
+            except ValueError:
+                pass
+            else:
+                raise SandboxError(
+                    "broker socket must be outside controller-writable state")
+            broker_path = str(broker)
+        if self.profile == DEFAULT_PROFILE:
+            if normalized_roots or normalized_files or broker_path is not None:
+                raise SandboxError(
+                    "read allowlisting and broker sockets require controller profile")
+        else:
+            if not normalized_roots and not normalized_files:
+                raise SandboxError(
+                    "controller profile requires exact readable roots or files")
+            if broker_path is None:
+                raise SandboxError("controller profile requires an exact broker socket")
+            if (isinstance(self.broker_peer_pid, bool)
+                    or not isinstance(self.broker_peer_pid, int)
+                    or self.broker_peer_pid <= 1):
+                raise SandboxError("controller profile requires broker_peer_pid")
+            if (isinstance(self.broker_peer_start_ticks, bool)
+                    or not isinstance(self.broker_peer_start_ticks, int)
+                    or self.broker_peer_start_ticks <= 0):
+                raise SandboxError(
+                    "controller profile requires broker_peer_start_ticks")
+            if normalized_devices:
+                raise SandboxError(
+                    "controller profile cannot admit writable ROCm devices")
+            if network_profile != NETWORK_OUTBOUND_CLIENT:
+                raise SandboxError("controller profile must use outbound-client network")
         token = self.token or secrets.token_hex(8)
         if not token.isalnum() or len(token) > 64:
             raise ValueError("sandbox token must be 1..64 alphanumeric characters")
@@ -372,12 +512,49 @@ class SandboxPolicy:
         object.__setattr__(self, "cgroup_root", str(cgroup))
         object.__setattr__(self, "token", token)
         object.__setattr__(self, "writable_device_paths", normalized_devices)
+        object.__setattr__(self, "readable_roots", normalized_roots)
+        object.__setattr__(self, "readable_files", normalized_files)
+        object.__setattr__(self, "broker_socket_path", broker_path)
         # Constructor is the fail-closed availability check.  No process is
         # launched merely to discover that containment is impossible.
         landlock_abi()
 
     def cgroup_path(self, pid: int) -> Path:
         return Path(self.cgroup_root, f"autokernel-{pid}-{self.token}")
+
+    @property
+    def network_profile(self) -> str:
+        return _network_policy(self.profile)[2]
+
+    @property
+    def restrict_reads(self) -> bool:
+        return self.profile == CONTROLLER_PROFILE
+
+    def policy_document(self) -> dict[str, Any]:
+        blocked, deny_unix, network = _network_policy(self.profile)
+        return {
+            "sandbox_id": SANDBOX_ID,
+            "profile": self.profile,
+            "writable_root": self.writable_root,
+            "cgroup_root": self.cgroup_root,
+            "writable_device_paths": list(self.writable_device_paths),
+            "readable_roots": list(self.readable_roots),
+            "readable_files": list(self.readable_files),
+            "broker_socket_path": self.broker_socket_path,
+            "broker_peer_pid": self.broker_peer_pid,
+            "broker_peer_start_ticks": self.broker_peer_start_ticks,
+            "read_allowlist_enforced": self.restrict_reads,
+            "network_profile": network,
+            "blocked_syscalls": sorted(blocked),
+            "deny_unix_socket_creation": deny_unix,
+            "resource_limits": self.limits.to_dict(),
+        }
+
+    @property
+    def policy_sha256(self) -> str:
+        return hashlib.sha256(json.dumps(
+            self.policy_document(), sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")).hexdigest()
 
     def encode(self, *, receipt_path: str) -> str:
         receipt = Path(receipt_path).resolve()
@@ -396,6 +573,12 @@ class SandboxPolicy:
             "limits": self.limits.to_dict(),
             "token": self.token,
             "writable_device_paths": list(self.writable_device_paths),
+            "profile": self.profile,
+            "readable_roots": list(self.readable_roots),
+            "readable_files": list(self.readable_files),
+            "broker_socket_path": self.broker_socket_path,
+            "broker_peer_pid": self.broker_peer_pid,
+            "broker_peer_start_ticks": self.broker_peer_start_ticks,
             "receipt_path": str(receipt),
         }
         return base64.urlsafe_b64encode(json.dumps(
@@ -417,7 +600,13 @@ def _decode_policy(encoded: str) -> tuple[SandboxPolicy, Path]:
         policy = SandboxPolicy(
             writable_root=raw["writable_root"], cgroup_root=raw["cgroup_root"],
             limits=limits, token=raw["token"],
-            writable_device_paths=tuple(raw.get("writable_device_paths", ())))
+            writable_device_paths=tuple(raw.get("writable_device_paths", ())),
+            profile=raw.get("profile", DEFAULT_PROFILE),
+            readable_roots=tuple(raw.get("readable_roots", ())),
+            readable_files=tuple(raw.get("readable_files", ())),
+            broker_socket_path=raw.get("broker_socket_path"),
+            broker_peer_pid=raw.get("broker_peer_pid"),
+            broker_peer_start_ticks=raw.get("broker_peer_start_ticks"))
         receipt = Path(raw["receipt_path"]).resolve()
     except (KeyError, TypeError, ValueError, OSError, json.JSONDecodeError) as exc:
         raise SandboxError(f"invalid encoded sandbox policy: {exc}") from exc
@@ -488,40 +677,108 @@ def _process_start_ticks(pid: int | None = None) -> int:
     return value
 
 
+def _connect_broker(policy: SandboxPolicy) -> tuple[int | None, dict[str, int] | None]:
+    """Connect the one admitted UDS before AF_UNIX creation is denied."""
+    if policy.broker_socket_path is None:
+        return None, None
+    broker = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        broker.connect(policy.broker_socket_path)
+        credentials = broker.getsockopt(
+            socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
+        peer_pid = int.from_bytes(credentials[0:4], sys.byteorder, signed=True)
+        peer_uid = int.from_bytes(credentials[4:8], sys.byteorder, signed=True)
+        peer_gid = int.from_bytes(credentials[8:12], sys.byteorder, signed=True)
+        peer_start_ticks = _process_start_ticks(peer_pid)
+        if peer_pid != policy.broker_peer_pid \
+                or peer_start_ticks != policy.broker_peer_start_ticks:
+            raise SandboxError(
+                "evaluation broker peer identity changed before activation")
+        descriptor = broker.detach()
+        os.set_inheritable(descriptor, True)
+        return descriptor, {
+            "pid": peer_pid, "start_ticks": peer_start_ticks,
+            "uid": peer_uid, "gid": peer_gid,
+        }
+    except Exception as exc:
+        broker.close()
+        if isinstance(exc, SandboxError):
+            raise
+        raise SandboxError(
+            f"cannot connect exact evaluation broker {policy.broker_socket_path}: {exc}") \
+            from exc
+
+
 def launch(policy: SandboxPolicy, receipt_path: Path, argv: Sequence[str]) -> None:
     """Install every control, emit the activation receipt, then replace self."""
     if os.geteuid() == 0:
         raise SandboxError("candidate sandbox refuses uid 0")
     receipt_fd = _open_receipt(receipt_path)
+    broker_fd: int | None = None
+    broker_peer: dict[str, int] | None = None
     try:
         cgroup = _join_owned_cgroup(policy)
         install_resource_limits(policy.limits)
+        process_start_ticks = _process_start_ticks()
+        broker_fd, broker_peer = _connect_broker(policy)
         abi, rights = install_landlock(
-            policy.writable_root, policy.writable_device_paths)
-        seccomp_sha256 = install_seccomp()
+            policy.writable_root, policy.writable_device_paths,
+            restrict_reads=policy.restrict_reads,
+            readable_roots=policy.readable_roots,
+            readable_files=policy.readable_files)
+        seccomp_sha256 = install_seccomp(policy.profile)
+        blocked, deny_unix, network_profile = _network_policy(policy.profile)
         receipt = {
-            "schema": "epyc.autokernel.sandbox_receipt.v1",
+            "schema": RECEIPT_SCHEMA,
             "sandbox_id": SANDBOX_ID,
             "pid": os.getpid(),
-            "process_start_ticks": _process_start_ticks(),
+            "process_start_ticks": process_start_ticks,
             "euid": os.geteuid(),
             "landlock_abi": abi,
             "landlock_write_rights": rights,
+            "landlock_handled_rights": rights,
+            "read_allowlist_enforced": policy.restrict_reads,
+            "readable_roots": list(policy.readable_roots),
+            "readable_files": list(policy.readable_files),
             "seccomp_sha256": seccomp_sha256,
-            "blocked_syscalls": sorted(_BLOCKED_SYSCALLS),
+            "blocked_syscalls": sorted(blocked),
+            "profile": policy.profile,
+            "network_profile": network_profile,
+            "outbound_socket_families": (
+                ["AF_INET", "AF_INET6"]
+                if network_profile == NETWORK_OUTBOUND_CLIENT else []),
+            "server_socket_operations_denied": [
+                name for name in ("bind", "listen", "accept", "accept4")
+                if name in blocked],
+            "unix_socket_creation_denied": deny_unix,
+            "broker_socket_path": policy.broker_socket_path,
+            "broker_fd_inherited": broker_fd is not None,
+            "broker_peer": broker_peer,
             "writable_root": policy.writable_root,
             "writable_device_paths": list(policy.writable_device_paths),
             "cgroup_path": str(cgroup),
             "resource_limits": policy.limits.to_dict(),
+            "policy_sha256": policy.policy_sha256,
             "activated_at_unix_ns": time.time_ns(),
             "argv_sha256": hashlib.sha256(json.dumps(
                 list(argv), separators=(",", ":")
             ).encode("utf-8")).hexdigest(),
         }
         _write_receipt(receipt_fd, receipt)
+    except BaseException:
+        if broker_fd is not None:
+            os.close(broker_fd)
+        raise
     finally:
         os.close(receipt_fd)
-    os.execvpe(argv[0], list(argv), dict(os.environ))
+    environment = dict(os.environ)
+    if broker_fd is not None:
+        environment[BROKER_FD_ENV] = str(broker_fd)
+    try:
+        os.execvpe(argv[0], list(argv), environment)
+    finally:
+        if broker_fd is not None:
+            os.close(broker_fd)
 
 
 def cleanup_cgroup(policy: SandboxPolicy, pid: int, *, timeout_s: float = 5.0) -> dict:
@@ -566,11 +823,17 @@ def read_receipt(path: str | Path) -> dict:
         "landlock_write_rights", "seccomp_sha256", "blocked_syscalls",
         "writable_root", "cgroup_path", "resource_limits", "argv_sha256",
         "writable_device_paths",
+        "landlock_handled_rights", "read_allowlist_enforced",
+        "readable_roots", "readable_files", "profile", "network_profile",
+        "outbound_socket_families", "server_socket_operations_denied",
+        "unix_socket_creation_denied", "broker_socket_path",
+        "broker_fd_inherited", "policy_sha256",
+        "broker_peer",
     }
     missing = sorted(required - set(document))
     if missing:
         raise SandboxError(f"sandbox receipt is missing {missing}")
-    if document["schema"] != "epyc.autokernel.sandbox_receipt.v1" \
+    if document["schema"] != RECEIPT_SCHEMA \
             or document["sandbox_id"] != SANDBOX_ID:
         raise SandboxError("sandbox receipt names an unknown schema or implementation")
     if document["euid"] == 0 or document["landlock_abi"] < 1:
@@ -579,7 +842,10 @@ def read_receipt(path: str | Path) -> dict:
             or not isinstance(document["process_start_ticks"], int) \
             or document["process_start_ticks"] <= 0:
         raise SandboxError("sandbox receipt carries an invalid process-start identity")
-    expected = set(_BLOCKED_SYSCALLS)
+    try:
+        expected = set(_network_policy(document["profile"])[0])
+    except SandboxError as exc:
+        raise SandboxError("sandbox receipt names an unknown profile") from exc
     if set(document["blocked_syscalls"]) != expected:
         raise SandboxError("sandbox receipt's syscall surface does not match this evaluator")
     return document
@@ -597,10 +863,18 @@ def verify_receipt(document: Mapping[str, Any], *, policy: SandboxPolicy,
         "pid": pid,
         "writable_root": policy.writable_root,
         "writable_device_paths": list(policy.writable_device_paths),
+        "profile": policy.profile,
+        "read_allowlist_enforced": policy.restrict_reads,
+        "readable_roots": list(policy.readable_roots),
+        "readable_files": list(policy.readable_files),
+        "network_profile": policy.network_profile,
+        "broker_socket_path": policy.broker_socket_path,
+        "broker_fd_inherited": policy.broker_socket_path is not None,
+        "policy_sha256": policy.policy_sha256,
         "cgroup_path": str(policy.cgroup_path(pid)),
         "resource_limits": policy.limits.to_dict(),
         "argv_sha256": expected_argv_sha,
-        "seccomp_sha256": _seccomp_policy_sha256(),
+        "seccomp_sha256": _seccomp_policy_sha256(policy.profile),
     }
     for field, expected in expectations.items():
         if document.get(field) != expected:
@@ -608,8 +882,49 @@ def verify_receipt(document: Mapping[str, Any], *, policy: SandboxPolicy,
                 f"sandbox receipt {field} does not match this invocation: "
                 f"expected {expected!r}, got {document.get(field)!r}")
     abi = document.get("landlock_abi")
-    if document.get("landlock_write_rights") != _landlock_write_rights(abi):
+    expected_rights = _landlock_write_rights(abi)
+    if policy.restrict_reads:
+        expected_rights |= _LANDLOCK_READ_EXECUTE
+    if document.get("landlock_write_rights") != expected_rights \
+            or document.get("landlock_handled_rights") != expected_rights:
         raise SandboxError("sandbox receipt's Landlock rights do not match its ABI")
+    blocked, deny_unix, network = _network_policy(policy.profile)
+    if set(document.get("blocked_syscalls", ())) != set(blocked):
+        raise SandboxError("sandbox receipt's blocked syscalls do not match policy")
+    if document.get("unix_socket_creation_denied") is not deny_unix:
+        raise SandboxError("sandbox receipt's Unix-socket policy does not match")
+    expected_families = (["AF_INET", "AF_INET6"]
+                         if network == NETWORK_OUTBOUND_CLIENT else [])
+    if document.get("outbound_socket_families") != expected_families:
+        raise SandboxError("sandbox receipt's outbound families do not match")
+    expected_server_denials = [
+        name for name in ("bind", "listen", "accept", "accept4")
+        if name in blocked]
+    if document.get("server_socket_operations_denied") != expected_server_denials:
+        raise SandboxError("sandbox receipt's server denials do not match")
+    broker_peer = document.get("broker_peer")
+    if policy.broker_socket_path is None:
+        if broker_peer is not None:
+            raise SandboxError("default sandbox receipt unexpectedly names a broker")
+    elif (not isinstance(broker_peer, Mapping)
+          or broker_peer.get("pid") != policy.broker_peer_pid
+          or broker_peer.get("start_ticks") != policy.broker_peer_start_ticks
+          or isinstance(broker_peer.get("uid"), bool)
+          or not isinstance(broker_peer.get("uid"), int)
+          or isinstance(broker_peer.get("gid"), bool)
+          or not isinstance(broker_peer.get("gid"), int)):
+        raise SandboxError("sandbox receipt's broker peer identity does not match")
+
+
+__all__ = [
+    "BROKER_FD_ENV", "CGROUP_ROOT_ENV", "CONTROLLER_PROFILE",
+    "DEFAULT_PROFILE", "HOST_CGROUP_ROOT", "NETWORK_DENY_ALL",
+    "NETWORK_OUTBOUND_CLIENT", "RECEIPT_SCHEMA", "ResourceLimits",
+    "SANDBOX_ID", "SandboxError", "SandboxPolicy", "cleanup_cgroup",
+    "default_cgroup_root", "install_landlock", "install_resource_limits",
+    "install_seccomp", "landlock_abi", "launch", "read_receipt",
+    "verify_receipt",
+]
 
 
 def _main(argv: Sequence[str] | None = None) -> int:
