@@ -20,33 +20,23 @@ from pathlib import Path
 # Calibration examples from prior scoring runs (qwen35_q4km + reap_246b)
 # These anchor the scoring rubric so scores are consistent across models.
 CALIBRATION_EXAMPLES = """
-## Scoring calibration examples (from prior runs on other models):
+## Scoring calibration anchors:
 
-### Score 3 examples:
-- math/t1_q1_word_problem: "Perfect step-by-step solution: $120 after 20% discount then $129.60 after 8% tax. All three parts correct."
-- coder/t2_q2_debug_complex: "Correctly identifies the race condition: read-yield-write non-atomicity. Fix uses asyncio.Lock correctly."
-- agentic/t1_q3_nested_params: "Perfect JSON tool call with correct nested parameters. Clean output."
-- instruction_precision/t2_q1_resist_elaboration: "Perfect: outputs only the number 4 with nothing else."
-- general/t2_q1_synthesis: "Excellent synthesis balancing all three stakeholder needs. Concise and actionable."
+Generic level anchors only. Per-question calibration examples were STRIPPED
+2026-08-12 (architect-model-selection-bench.md L176): they named specific
+question_ids with the scores they received on OTHER models, priming the judge
+on item identity before it read the answer. Absolute score levels are NOT
+comparable across this boundary (pre-strip runs, e.g. the 2026-08-02
+head-to-head, were scored with the priming); A-vs-B comparisons where both
+arms share one judge version are unaffected.
 
-### Score 2 examples:
-- agentic/t3_q1_competing_constraints: "Structured plan but generic — lacks concrete tool call JSON."
-- coder/t1_q2_refactor: "Speed version correct; memory version truncated."
-- general/t3_q2_system_failure: "Good analysis but hit token cap, monitoring section cut off."
-- instruction_precision/t1_q2_word_limit: "Good description, word count approximately in range but slightly ambiguous."
-- math/t3_q1_analysis: "M-test approach correct but truncated before completion."
-
-### Score 1 examples:
-- coder/t3_q3_algorithmic_hardness: "Weak adversary argument; truncated before parts 2 and 3."
-- general/t2_q3_schedule: "Extensive constraint analysis but never produces a final schedule. Truncated."
-- math/t3_q2_combinatorics: "Involution not constructed — approaches problem but doesn't solve it."
-- thinking/t3_q2_causal_inference: "Correct reasoning in think block but never produces visible final answer."
-
-### Score 0 examples:
-- coder/t1_q1_algorithm: "Entire response trapped in think block. Hit token cap while deliberating. Never produces answer."
-- general/t1_q2_multistep: "HALLUCINATED elephant not in original list." (wait — this scored 3 on Qwen3.5. On REAP-246B it scored 0 for hallucination.)
-- instruction_precision/t3_q2_cascading_constraints: "Multiple retry attempts but none satisfy all constraints. No valid final answer."
-- math/t3_q3_probability_theory: "Entire tokens spent in think block. Never exits to produce visible answer."
+- Score 3: fully correct AND complete; every asked part answered; format
+  constraints met exactly.
+- Score 2: right approach with real progress, but incomplete, truncated, or
+  a secondary part wrong or missing.
+- Score 1: engages the problem but does not solve it; major parts missing or
+  the core answer wrong despite relevant work.
+- Score 0: wrong, absent, hallucinated, or nothing visible outside think tags.
 """
 
 SYSTEM_PROMPT = """You are a benchmark scorer evaluating LLM responses on a 0-3 scale.
