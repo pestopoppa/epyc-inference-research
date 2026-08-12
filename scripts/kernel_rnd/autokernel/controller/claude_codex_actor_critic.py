@@ -31,6 +31,19 @@ CONTROLLER_ID = "claude_codex_actor_critic"
 RECEIPT_SCHEMA = "epyc.autokernel.claude_codex_actor_critic.v1"
 PROPOSAL_SCHEMA = "epyc.autokernel.actor_critic_proposal.v1"
 CRITIQUE_SCHEMA = "epyc.autokernel.actor_critic_critique.v1"
+PROPOSAL_JSON_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "schema": {"const": PROPOSAL_SCHEMA},
+        "proposal_id": {
+            "type": "string", "pattern": r"^[a-z][a-z0-9_.-]{2,95}$",
+        },
+        "candidate_path": {"type": "string", "minLength": 1},
+        "actor_instruction": {"type": "string", "minLength": 1},
+    },
+    "required": ["schema", "proposal_id", "candidate_path", "actor_instruction"],
+}
 CLAUDE_MODEL = "claude-opus-5"
 CLAUDE_EFFORT = "high"
 CODEX_MODEL = "gpt-5.6-sol"
@@ -280,9 +293,12 @@ def _parse_json_object(raw: str, label: str) -> dict[str, Any]:
         raise ActorCriticError(f"{label} emitted malformed JSON") from exc
     if not isinstance(payload, dict):
         raise ActorCriticError(f"{label} must emit one JSON object")
-    # Claude's --output-format json wraps the text result.  Tests and alternate
-    # compatible launchers may provide the inner object directly.
-    if set(payload) >= {"result"} and isinstance(payload["result"], str):
+    # Claude's --json-schema result wrapper carries the provider-validated
+    # object in structured_output. Older captured fixtures and compatible
+    # launchers may carry the exact object in result or provide it directly.
+    if isinstance(payload.get("structured_output"), dict):
+        payload = payload["structured_output"]
+    elif set(payload) >= {"result"} and isinstance(payload["result"], str):
         inner = payload["result"]
         try:
             payload = json.loads(inner)
@@ -383,9 +399,28 @@ class ArtifactJournal:
         return result
 
 
-def _claude_argv(identity: Mapping[str, str], config: ControllerConfig) -> tuple[str, ...]:
+def _critique_json_schema(proposal_id: str) -> dict[str, Any]:
+    """Return the critic schema with the current proposal binding enforced upstream."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "schema": {"const": CRITIQUE_SCHEMA},
+            "proposal_id": {"const": proposal_id},
+            "decision": {"enum": ["accept", "revise", "stop"]},
+            "reason": {"type": "string", "minLength": 1},
+        },
+        "required": ["schema", "proposal_id", "decision", "reason"],
+    }
+
+
+def _claude_argv(identity: Mapping[str, str], config: ControllerConfig,
+                 output_schema: Mapping[str, Any]) -> tuple[str, ...]:
+    schema_text = json.dumps(
+        dict(output_schema), sort_keys=True, separators=(",", ":"))
     return (
         identity["path"], "--print", "--output-format", "json",
+        "--json-schema", schema_text,
         "--model", config.claude_model, "--effort", config.claude_effort,
         "--permission-mode", "plan", "--disallowedTools", "Bash,Edit,Write,NotebookEdit",
     )
@@ -453,7 +488,8 @@ def run_controller(
         )
         before_planner = _workspace_manifest(root)
         capture = runner(
-            _claude_argv(cli["claude"], config), root, env, planner_prompt, remaining)
+            _claude_argv(cli["claude"], config, PROPOSAL_JSON_SCHEMA),
+            root, env, planner_prompt, remaining)
         journal.record("planner", iteration, planner_prompt, capture)
         if _workspace_manifest(root) != before_planner:
             raise ActorCriticError("planner changed the isolated Arena workspace")
@@ -512,7 +548,10 @@ def run_controller(
             stop_reason = "campaign_checkpoint"
             break
         capture = runner(
-            _claude_argv(cli["claude"], config), root, env, critic_prompt, remaining)
+            _claude_argv(
+                cli["claude"], config,
+                _critique_json_schema(proposal["proposal_id"])),
+            root, env, critic_prompt, remaining)
         journal.record("critic", iteration, critic_prompt, capture)
         if _workspace_manifest(root) != after_actor:
             raise ActorCriticError("critic changed the isolated Arena workspace")
@@ -613,7 +652,8 @@ __all__ = [
     "ARTIFACT_DIRNAME", "CAMPAIGN_CHECKPOINT_HOURS", "CLAUDE_EFFORT",
     "CLAUDE_MODEL", "CODEX_EFFORT", "CODEX_MODEL", "CONTROLLER_ID",
     "CRITIQUE_SCHEMA", "ENTRYPOINT_RELATIVE", "EXECUTABLE_MODULE",
-    "PINNED_MODEL_IDS", "PROPOSAL_SCHEMA", "RECEIPT_SCHEMA", "REQUIRED_CLIS",
+    "PINNED_MODEL_IDS", "PROPOSAL_JSON_SCHEMA", "PROPOSAL_SCHEMA",
+    "RECEIPT_SCHEMA", "REQUIRED_CLIS",
     "ActorCriticError", "ControllerConfig", "ProcessCapture", "campaign_argv",
     "parse_critique", "parse_proposal", "register_agentkernelarena_launcher",
     "resolve_cli_identities", "run_controller",
