@@ -45,6 +45,7 @@ SANDBOX_ID = "autokernel.execution.sandbox/landlock-seccomp-cgroup-v2"
 RECEIPT_SCHEMA = "epyc.autokernel.sandbox_receipt.v2"
 DEFAULT_PROFILE = "candidate_default_v1"
 CONTROLLER_PROFILE = "controller_outbound_client_v1"
+EVALUATOR_PROFILE = "candidate_evaluator_gpu_v1"
 NETWORK_DENY_ALL = "deny_all"
 NETWORK_OUTBOUND_CLIENT = "outbound_client"
 BROKER_FD_ENV = "EPYC_AUTOKERNEL_BROKER_FD"
@@ -148,11 +149,17 @@ _BLOCKED_SYSCALLS: Mapping[str, int] = {
     "accept4": 288,
     "rt_tgsigqueueinfo": 297,
     "process_vm_writev": 311,
+    "process_vm_readv": 310,
     "setns": 308,
     "sendmmsg": 307,
     "bpf": 321,
     "userfaultfd": 323,
     "pidfd_send_signal": 424,
+    "io_uring_setup": 425,
+    "io_uring_enter": 426,
+    "io_uring_register": 427,
+    "pidfd_getfd": 438,
+    "process_madvise": 440,
     "socket": 41,
     "connect": 42,
     "accept": 43,
@@ -273,8 +280,10 @@ def install_landlock(
             path_fds.append(device_fd)
             # ROCm needs O_RDWR plus ioctl on these character devices.  It does
             # not need create, remove, rename, or truncate authority there.
-            device_attr = _LandlockPathBeneathAttr(
-                _LANDLOCK_ACCESS_FS_WRITE_FILE, device_fd, 0)
+            device_access = _LANDLOCK_ACCESS_FS_WRITE_FILE
+            if restrict_reads:
+                device_access |= _LANDLOCK_ACCESS_FS_READ_FILE
+            device_attr = _LandlockPathBeneathAttr(device_access, device_fd, 0)
             _syscall(_SYS_LANDLOCK_ADD_RULE, ruleset_fd,
                      _LANDLOCK_RULE_PATH_BENEATH, ctypes.byref(device_attr), 0)
         if restrict_reads:
@@ -323,7 +332,7 @@ def _jump(code: int, k: int, jt: int, jf: int) -> _SockFilter:
 
 
 def _network_policy(profile: str) -> tuple[Mapping[str, int], bool, str]:
-    if profile == DEFAULT_PROFILE:
+    if profile in {DEFAULT_PROFILE, EVALUATOR_PROFILE}:
         return _BLOCKED_SYSCALLS, False, NETWORK_DENY_ALL
     if profile == CONTROLLER_PROFILE:
         return _CONTROLLER_BLOCKED_SYSCALLS, True, NETWORK_OUTBOUND_CLIENT
@@ -505,7 +514,7 @@ class SandboxPolicy:
                     or broker_path is not None):
                 raise SandboxError(
                     "read allowlisting and broker sockets require controller profile")
-        else:
+        elif self.profile == CONTROLLER_PROFILE:
             if not normalized_roots and not normalized_files \
                     and not normalized_executables:
                 raise SandboxError(
@@ -526,6 +535,23 @@ class SandboxPolicy:
                     "controller profile cannot admit writable ROCm devices")
             if network_profile != NETWORK_OUTBOUND_CLIENT:
                 raise SandboxError("controller profile must use outbound-client network")
+        elif self.profile == EVALUATOR_PROFILE:
+            if not normalized_roots and not normalized_files:
+                raise SandboxError(
+                    "evaluator profile requires exact readable roots or files")
+            if broker_path is not None:
+                raise SandboxError("evaluator profile cannot inherit a broker socket")
+            if self.broker_peer_pid is not None \
+                    or self.broker_peer_start_ticks is not None:
+                raise SandboxError("evaluator profile cannot name a broker peer")
+            if (len(normalized_devices) != 2 or set(normalized_devices)
+                    != {"/dev/kfd", "/dev/dri/renderD128"}):
+                raise SandboxError(
+                    "evaluator profile requires the exact MI210 device pair")
+            if network_profile != NETWORK_DENY_ALL:
+                raise SandboxError("evaluator profile must deny all networking")
+        else:
+            raise SandboxError(f"unknown sandbox profile: {self.profile!r}")
         token = self.token or secrets.token_hex(8)
         if not token.isalnum() or len(token) > 64:
             raise ValueError("sandbox token must be 1..64 alphanumeric characters")
@@ -550,7 +576,7 @@ class SandboxPolicy:
 
     @property
     def restrict_reads(self) -> bool:
-        return self.profile == CONTROLLER_PROFILE
+        return self.profile in {CONTROLLER_PROFILE, EVALUATOR_PROFILE}
 
     def policy_document(self) -> dict[str, Any]:
         blocked, deny_unix, network = _network_policy(self.profile)
@@ -947,6 +973,7 @@ def verify_receipt(document: Mapping[str, Any], *, policy: SandboxPolicy,
 
 __all__ = [
     "BROKER_FD_ENV", "CGROUP_ROOT_ENV", "CONTROLLER_PROFILE",
+    "EVALUATOR_PROFILE",
     "DEFAULT_PROFILE", "HOST_CGROUP_ROOT", "NETWORK_DENY_ALL",
     "NETWORK_OUTBOUND_CLIENT", "RECEIPT_SCHEMA", "ResourceLimits",
     "SANDBOX_ID", "SandboxError", "SandboxPolicy", "cleanup_cgroup",

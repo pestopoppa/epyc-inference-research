@@ -384,10 +384,19 @@ def launch(
             process_started(process.pid)
         stdout, stderr = process.communicate(
             input=prepared.prompt, timeout=timeout_seconds)
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    except BaseException as exc:
         if "process" in locals() and process.poll() is None:
-            os.killpg(process.pid, signal.SIGKILL)
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
             process.wait()
+        if "process" in locals():
+            for stream in (process.stdin, process.stdout, process.stderr):
+                if stream is not None:
+                    stream.close()
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
         raise ArenaAdapterError("controller failed to start or finish") from exc
     if process.returncode != 0:
         raise ArenaAdapterError(

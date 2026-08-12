@@ -30,6 +30,7 @@ from types import SimpleNamespace
 from typing import Any, Mapping
 
 from . import arena_adapter
+from ..execution import sandbox
 MODEL_ID = "gpt-5.6-sol"
 MODEL_EFFORT = "high"
 PINNED_MODEL_IDS = (f"{MODEL_ID}:{MODEL_EFFORT}:upstream-controller",)
@@ -200,7 +201,8 @@ class CodexTextModel:
             "HIP_VISIBLE_DEVICES": "", "ROCR_VISIBLE_DEVICES": "",
             "CUDA_VISIBLE_DEVICES": "",
         })
-        for key in (BROKER_SOCKET_ENV, BROKER_TOKEN_ENV, BROKER_OWNER_PID_ENV):
+        for key in (BROKER_SOCKET_ENV, BROKER_TOKEN_ENV, BROKER_OWNER_PID_ENV,
+                    sandbox.BROKER_FD_ENV):
             self.environment.pop(key, None)
         executable = shutil.which("codex", path=self.environment.get("PATH"))
         if executable is None:
@@ -394,6 +396,17 @@ class ArenaWorkspaceEvaluator:
         self.last_record: EvaluationRecord | None = None
         self.evaluation_count = 0
         self.broker_receipts: list[dict[str, Any]] = []
+        inherited_fd = os.environ.get(sandbox.BROKER_FD_ENV)
+        self._broker_stream: socket.socket | None = None
+        if inherited_fd is not None:
+            try:
+                descriptor = int(inherited_fd)
+                self._broker_stream = socket.socket(fileno=os.dup(descriptor))
+            except (OSError, ValueError) as exc:
+                raise UpstreamControllerError(
+                    "Arena evaluator inherited broker descriptor is invalid") from exc
+            finally:
+                os.environ.pop(sandbox.BROKER_FD_ENV, None)
         # Upstream controllers may generate candidates concurrently, but the
         # Arena evaluator owns one mutable copied workspace and one physical
         # GPU. Serialize the materialize/evaluate/restore transaction while
@@ -528,8 +541,16 @@ class ArenaWorkspaceEvaluator:
         if len(encoded) > _MAX_BROKER_MESSAGE_BYTES:
             raise UpstreamControllerError("Arena broker request exceeds its size limit")
         try:
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-                client.connect(str(self.broker_socket))
+            broker_stream = getattr(self, "_broker_stream", None)
+            if broker_stream is None:
+                client_context = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                client_context.connect(str(self.broker_socket))
+                close_after = True
+            else:
+                client_context = broker_stream
+                close_after = False
+            client = client_context
+            try:
                 server_pid, server_uid, _ = struct.unpack(
                     "3i", client.getsockopt(
                         socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
@@ -543,6 +564,9 @@ class ArenaWorkspaceEvaluator:
                     raise UpstreamControllerError(
                         "Arena broker response exceeds its size limit")
                 receipt = json.loads(_recv_exact(client, length))
+            finally:
+                if close_after:
+                    client.close()
         except (OSError, json.JSONDecodeError, struct.error) as exc:
             raise UpstreamControllerError(
                 "Arena evaluation broker IPC failed") from exc
