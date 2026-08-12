@@ -96,16 +96,12 @@ class EvidencePathRehearsalTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             proposal_path = root / "proposal-v4.json"
-            plan_path = root / "least-commitment-capture-plan.json"
             proposal_path.write_text(
                 json.dumps(self.intervention), encoding="utf-8")
-            plan_path.write_text(
-                json.dumps(self.intervention_plan.raw), encoding="utf-8")
             contract = R.verify_campaign_json_contract(MODEL, campaign_args=(
                 "--campaign-id", self.intervention["campaign_id"],
                 "--candidate-id", self.intervention_plan.raw["candidate_id"],
                 "--proposal-manifest", str(proposal_path),
-                "--least-commitment-capture-plan", str(plan_path),
                 "--backend", "llama_cpu",
             ))
         self.assertEqual(contract["stdout"], "exactly_one_json_document")

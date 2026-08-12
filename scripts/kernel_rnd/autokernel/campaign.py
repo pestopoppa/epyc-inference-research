@@ -1728,9 +1728,13 @@ class CampaignSpec:
 
     @property
     def bench_params(self) -> dict:
+        return self.bench_params_for(self.matched_experiment_id)
+
+    def bench_params_for(self, matched_experiment_id: Optional[str]) -> dict:
+        """Derive benchmark parameters for a legacy or declared matched frame."""
         seed_material = (
-            f"matched\0{self.matched_experiment_id}\0{self.recipe_id}"
-            if self.matched_experiment_id is not None else
+            f"matched\0{matched_experiment_id}\0{self.recipe_id}"
+            if matched_experiment_id is not None else
             f"{self.campaign_id}\0{self.candidate_id}\0{self.recipe_id}")
         autokernel_seed = int.from_bytes(
             hashlib.sha256(seed_material.encode("utf-8")).digest()[:8], "big"
@@ -1753,24 +1757,35 @@ class CampaignSpec:
     @property
     def suite_seed(self) -> int:
         """Deterministic T0 tensor seed fixed by campaign or matched identity."""
+        return self.suite_seed_for(self.matched_experiment_id)
+
+    def suite_seed_for(self, matched_experiment_id: Optional[str]) -> int:
         material = (
-            f"t0-suite\0matched\0{self.matched_experiment_id}\0{self.recipe_id}"
-            if self.matched_experiment_id is not None else
+            f"t0-suite\0matched\0{matched_experiment_id}\0{self.recipe_id}"
+            if matched_experiment_id is not None else
             f"t0-suite\0{self.campaign_id}\0{self.candidate_id}\0{self.recipe_id}")
         return int.from_bytes(hashlib.sha256(material.encode("utf-8")).digest()[:8], "big")
 
     @property
     def schedule_seed(self) -> str:
+        return self.schedule_seed_for(self.matched_experiment_id)
+
+    def schedule_seed_for(self, matched_experiment_id: Optional[str]) -> str:
         return (
-            f"ak-schedule/v1:matched:{self.matched_experiment_id}:{self.recipe_id}"
-            if self.matched_experiment_id is not None else
+            f"ak-schedule/v1:matched:{matched_experiment_id}:{self.recipe_id}"
+            if matched_experiment_id is not None else
             f"{self.campaign_id}/{self.created_at}")
 
     @property
     def holdout_selection_seed(self) -> str:
+        return self.holdout_selection_seed_for(self.matched_experiment_id)
+
+    def holdout_selection_seed_for(
+            self, matched_experiment_id: Optional[str]) -> str:
         return (
-            f"ak-holdout/v1:matched:{self.matched_experiment_id}:{self.suite_seed}"
-            if self.matched_experiment_id is not None else
+            f"ak-holdout/v1:matched:{matched_experiment_id}:"
+            f"{self.suite_seed_for(matched_experiment_id)}"
+            if matched_experiment_id is not None else
             f"{self.campaign_id}/{self.suite_seed}")
 
     @property
@@ -1778,6 +1793,14 @@ class CampaignSpec:
         """Derive every execution axis that must match except the intervention."""
         if self.least_commitment_plan is None or self.matched_experiment_id is None:
             raise ValueError("matched factor frame requires a least-commitment plan")
+        return self.matched_factor_frame_for(self.matched_experiment_id)
+
+    def matched_factor_frame_for(self, matched_experiment_id: str) -> dict:
+        """Derive a plan-generation frame without weakening live admission."""
+        if (not isinstance(matched_experiment_id, str)
+                or not matched_experiment_id.startswith("akm-")
+                or "\0" in matched_experiment_id):
+            raise ValueError("matched factor frame requires an akm- identity")
         if not self.model:
             raise ValueError("matched factor frame requires the measured model")
         model_path = storage.assert_not_scratch(self.model, what="matched model")
@@ -1796,7 +1819,7 @@ class CampaignSpec:
             dict(self.proposal["provider_reference"])
             if self.proposal is not None else None)
         return {
-            "matched_experiment_id": self.matched_experiment_id,
+            "matched_experiment_id": matched_experiment_id,
             "backend": self.backend,
             "recipe_id": self.recipe_id,
             "metric": self.metric,
@@ -1813,10 +1836,12 @@ class CampaignSpec:
             "device_index": self.device_index,
             "n_gpu_layers": self.n_gpu_layers,
             "cpu_list": self.cpu_list,
-            "autokernel_seed": self.bench_params["autokernel_seed"],
-            "suite_seed": self.suite_seed,
-            "schedule_seed": self.schedule_seed,
-            "holdout_selection_seed": self.holdout_selection_seed,
+            "autokernel_seed": self.bench_params_for(
+                matched_experiment_id)["autokernel_seed"],
+            "suite_seed": self.suite_seed_for(matched_experiment_id),
+            "schedule_seed": self.schedule_seed_for(matched_experiment_id),
+            "holdout_selection_seed": self.holdout_selection_seed_for(
+                matched_experiment_id),
             "calibration": {
                 "recipe_id": calibration.recipe_id,
                 "contribution_floor": calibration.contribution_floor,

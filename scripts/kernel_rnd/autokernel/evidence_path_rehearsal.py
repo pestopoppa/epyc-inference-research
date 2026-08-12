@@ -69,9 +69,11 @@ def verify_campaign_json_contract(
     """Exercise the current campaign automation surface without inference.
 
     ``campaign_args`` is intentionally accepted here rather than validating only
-    the parser defaults.  Durable rehearsals pass their exact proposal and
-    least-commitment paths, so a proposal-schema migration cannot leave a green
-    rehearsal beside artifacts the live entry point refuses.
+    the parser defaults. Durable rehearsals pass the exact proposal path, so a
+    proposal-schema migration cannot leave a green rehearsal beside artifacts
+    the live entry point refuses. Capture-plan admission is exercised separately
+    because a measured v2 plan also requires calibration, physical-envelope,
+    matched-frame, and held-out measurement inputs.
     """
     machine, trace = io.StringIO(), io.StringIO()
     with contextlib.redirect_stderr(trace):
