@@ -346,6 +346,53 @@ def _score_code_execution(
         return False
 
 
+#: Bug-fix (debugbench) verifier. Ported 2026-08-12 from the CANONICAL copy in
+#: epyc-orchestrator/scripts/benchmark/debug_scorer.py — keep the two in step, and
+#: prefer the orchestrator copy when they disagree (the eval tower loads that one
+#: explicitly by path). Ported rather than skipped because this copy answers an
+#: unknown verifier with a case-insensitive substring match on `expected`, so a
+#: `code_patch` row reaching it would be scored by a DIFFERENT, weaker oracle
+#: without saying so.
+_CODE_WS = re.compile(r"\s+")
+_CODE_FENCE = re.compile(r"```[A-Za-z0-9_+.#-]*[ \t]*\r?\n(.*?)```", re.DOTALL)
+
+
+def _code_key(text: str) -> str:
+    return _CODE_WS.sub("", text)
+
+
+def _code_patch_candidates(answer: str) -> list[str]:
+    blocks = [b for b in _CODE_FENCE.findall(answer) if b.strip()]
+    return blocks or [answer]
+
+
+def _score_code_patch(answer: str, config: dict[str, Any]) -> bool:
+    """Every `required_lines` entry present, no `forbidden_lines` line present.
+
+    The debugbench oracle scores what an answer CHANGED, because the old oracle —
+    a 100-character prefix of the reference solution, scored `substring` — was
+    already contained in the buggy code the model was handed and so passed any
+    model that echoed its input (epyc-root
+    `artifacts/audit/debugbench-oracle-vacuity-20260812.md`). Required lines match
+    as whitespace-free substrings so reformatting is not penalised; forbidden
+    lines match as whole normalised LINES because a buggy `return idx;` is a
+    substring of a correct `return idx + 1;`.
+    """
+    required = [k for k in (_code_key(str(x)) for x in config.get("required_lines") or []) if k]
+    forbidden = [k for k in (_code_key(str(x)) for x in config.get("forbidden_lines") or []) if k]
+    if not required and not forbidden:
+        return False
+    for candidate in _code_patch_candidates(answer):
+        flat = _code_key(candidate)
+        if not all(need in flat for need in required):
+            continue
+        candidate_lines = {_code_key(line) for line in candidate.splitlines()}
+        if any(bad in candidate_lines for bad in forbidden):
+            continue
+        return True
+    return False
+
+
 def _score_programmatic(
     answer: str, expected: str, config: dict[str, Any]
 ) -> bool:
@@ -483,6 +530,8 @@ def _score_programmatic(
         "title_case": lambda: all(
             w[0].isupper() for w in words if w and w[0].isalpha()
         ) if words else False,
+        # Bug-fix (debugbench) verifier — scores the CHANGE, not the reproduction.
+        "code_patch": lambda: _score_code_patch(answer, config),
     }
 
     fn = verifiers.get(verifier)
