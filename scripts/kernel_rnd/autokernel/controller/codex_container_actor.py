@@ -40,6 +40,8 @@ CODEX_NATIVE_RELATIVE = Path(
     "node_modules/@openai/codex-linux-x64/vendor/"
     "x86_64-unknown-linux-musl/bin/codex")
 CODE_MODE_HOST_NAME = "codex-code-mode-host"
+SUPPORTED_MODELS = ("gpt-5.6-sol", "gpt-5.6-terra")
+SUPPORTED_EFFORT = "high"
 
 
 class CodexContainerError(RuntimeError):
@@ -86,8 +88,9 @@ def build_docker_argv(
     for path in (workspace, assets):
         if any(character in str(path) for character in (",", "\n", "\r")):
             raise CodexContainerError("Docker mount paths contain unsafe characters")
-    if model != "gpt-5.6-sol" or effort != "high":
-        raise CodexContainerError("actor model and effort must remain campaign-pinned")
+    if model not in SUPPORTED_MODELS or effort != SUPPORTED_EFFORT:
+        raise CodexContainerError(
+            "actor model and effort must remain pinned to the reviewed AK-LE-3 cells")
     if not container_name.startswith("autokernel-codex-"):
         raise CodexContainerError("actor container name is outside its owned namespace")
     user = f"{uid}:{gid}"

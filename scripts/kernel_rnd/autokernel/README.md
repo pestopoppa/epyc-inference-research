@@ -226,7 +226,7 @@ calibration exists. Source-changing campaigns additionally require their own
 | `controller/authoring_contract.py` | **AK-PL-1 / AK-LE-4 / AK-LE-5 (off campaign path).** The only reviewed fully-rendered authoring-prompt seam; sealed-evaluator leak scan with compliant control, priced never-bulk-read context, reversible compaction headers with exact git recovery, and typed external numeric priors. It calls no model and selects no work. |
 | `controller/loop_experiments.py` | **AK-LE-1/2/3 contracts (off campaign path).** Predeclares matched planner/scaffold cells and reduces either a complete panel or an explicitly planner-only AK-LE-1/2 panel; the partial receipt says scaffold evidence is absent rather than fabricating zero observations. |
 | `controller/loop_experiment_runner.py` | **AK-LE-1/2 capture and AK-LE-3 router (off campaign path).** Executes only the exact predeclared read-only planner CLI cells, seals prompts/process output/timing/parsed observations, and delegates scaffold execution to the separately governed workspace-writing seam. |
-| `controller/loop_scaffold_runner.py` | **AK-LE-3 SAME-MODEL scaffold seam (off campaign path).** Compiles an independently varied model × scaffold factorial with exact selected task/context/champion/source/actor/evaluator pins and equal wall budgets. Execution creates fresh detached baseline/candidate worktrees per cell, gives the reviewed actor launcher only the candidate path, captures and reaps its exact PID/process group, audits every write against declared relative paths, and seals each role diff/checkpoint before a separate AgentKernelArena evaluator subprocess. Its output is diagnostic-only and cannot rank, choose a champion, enter campaign #1, or authorize release. No real observation exists until the manifest names a reviewed launcher implementing the declared single-writable-bind boundary for every selected model cell and the pinned Arena/device prerequisites are available. |
+| `controller/loop_scaffold_runner.py` | **AK-LE-3 SAME-MODEL scaffold seam (off campaign path).** Compiles exactly `gpt-5.6-sol` and `gpt-5.6-terra` at high effort crossed with direct-implement and implement-then-exploit, with exact selected task/context/champion/source/actor/Arena pins and equal wall budgets. Each cell creates fresh detached baseline/candidate worktrees; the digest-pinned `codex_container_actor` exposes only the candidate as one writable container bind. The parent captures and reaps the launcher PID/process group, audits declared relative writes, seals each role diff/checkpoint, holds an exclusive `mi210_0` claim across the separately pinned AgentKernelArena evaluator subprocess, then removes and verifies both disposable worktrees while durable artifacts remain outside them. Injected runners require explicit fixture mode. Outputs are diagnostic-only and cannot rank, choose a champion, enter campaign #1, or authorize release. This implementation session ran no model or GPU; a real observation still requires the selected run inputs, credentials, clean Arena checkout, and device claim. |
 | `controller/arena_scaffold_evaluator.py` | **AK-LE-3 centralized evaluation worker (off campaign path).** Revalidates the exact disposable baseline/candidate worktrees, refuses a modified baseline or unchanged candidate, imports only the manifest-pinned clean AgentKernelArena evaluator/task, and reports its compile/correctness/timing fields without admitting actor-reported performance or gaining campaign/ranking/champion/release authority. |
 | `controller/loop_experiment_prefilter.py` | **AK-LE-1/2 external reduction (off campaign path).** Produces an independently persisted, hash-pinned experiment-only structural prefilter contract before manifest compilation; deterministically rejects exact declared priors and within-cell duplicates; verifies the raw panel and sealed observation bytes; and emits a planner-only receipt or a durable refusal. This filter neither invokes nor replaces the campaign `do_not_repeat` claim gate, requests no model/operator labels, and has no campaign/ranking/champion/release authority. |
 | `controller/loop_experiment_beliefs.py` | **EVL-47 SC29 AK-LE write-side projection (off campaign path).** Wraps the exact source-pinned planner reducer without changing its bytes, re-derives the `loop_experiment_planner_reduction.v1` receipt from its manifest/panel/prefilter sources, and emits four self-hashed search-persistence observations per planner cell. Every row binds the model/quant/effort/target arm, predeclared direction, scored-cell basis, raw/prefilter evidence, both producer identities, and the no-ranking/no-champion authority boundary. |
@@ -257,6 +257,34 @@ calibration exists. Source-changing campaigns additionally require their own
 | `least_commitment_receipts.py` | The AK-WM-2a governed receipt producer: projects only SHA-pinned journal fields from distinct clean completed campaigns, proves the sole matched intervention factor, rejects non-real evidence, and validates its output through the archive builder. |
 | `turn_productivity.py` | **AK-PT-1 / AK-X-6.** Immutable per-refine-turn `(turn, task, correct?, speedup)` records, mechanically derived rescued/persistent classes, and a campaign-calibration-derived e-process rule. It may label a turn repair-only and withhold search advancement; it has no ranking, retention, promotion, or deployment authority. |
 | `dashboard.py` | **AK6.** The compact `/kernel` contract-v2 producer retained by the campaign path after the old `surface/` plane was deleted. It projects only the already-fsynced terminal `STOP_STATE`: campaign and backend standing are observed; champion, headroom and release package are explicitly `not_reported`; journal time drives freshness; and the atomic export is refused under scratch, a production tree, or any checkout. |
+
+AK-LE-3 execution first compiles one strict reviewed JSON input. Its top-level
+fields are exactly `schema` (`epyc.autokernel.ak_le_3_scaffold_compile_input.v1`),
+`experiment_contract`, `context`, `source`, `actors`, `evaluator`, and
+`allowed_write_paths`. The resulting manifest binds the selected source commit/tree,
+selected task/context/champion,
+both reviewed Codex cells (`gpt-5.6-sol` and `gpt-5.6-terra`, `provider-native`,
+high), the local Codex wrapper/container runtime, the clean AgentKernelArena paper
+commit/task, and the pinned ROCm evaluator Python/package identity. Compilation
+invokes no model, compiler, or evaluator. With those inputs reviewed, the exact
+compile-and-run commands are:
+
+```bash
+python3 -m scripts.kernel_rnd.autokernel.controller.loop_scaffold_runner compile \
+  --input /absolute/path/ak-le-3-compile-input.json \
+  --output /absolute/new/path/ak-le-3-manifest.json
+
+python3 -m scripts.kernel_rnd.autokernel.controller.loop_scaffold_runner run \
+  --manifest /absolute/path/ak-le-3-manifest.json \
+  --output-root /absolute/new/path/ak-le-3-output \
+  --claim-journal /absolute/path/device-claims.jsonl
+```
+
+The output root and every cell are write-once. A missing or occupied `mi210_0`
+claim, source/CLI/container/Arena/package/hash drift, actor write outside declared
+paths, surviving process group, evaluator failure, or worktree-cleanup failure
+produces a terminal non-rankable refusal. The command has observation authority
+only; campaign admission, ranking, champion selection, and release remain separate.
 
 ### IQ2_XXS model-confirmation belief finalization
 

@@ -12,6 +12,7 @@ evaluator, GPU, campaign, ranking, champion, or release action.
 
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
@@ -26,23 +27,29 @@ import time
 from typing import Any, Callable, Mapping, Sequence
 
 from . import authoring_contract
+from . import arena_adapter
+from . import arena_cell_runner
+from . import codex_container_actor
 from . import loop_experiments as experiments
+from ..resource import device_claim
 
 
+COMPILE_INPUT_SCHEMA = "epyc.autokernel.ak_le_3_scaffold_compile_input.v1"
 MANIFEST_SCHEMA = "epyc.autokernel.ak_le_3_scaffold_manifest.v1"
 PANEL_SCHEMA = "epyc.autokernel.ak_le_3_scaffold_panel.v1"
 CHECKPOINT_SCHEMA = "epyc.autokernel.ak_le_3_role_checkpoint.v1"
 EVALUATION_SCHEMA = "epyc.autokernel.ak_le_3_arena_evaluation.v1"
 AUTHORITY = "diagnostic_scaffold_observation_only"
-ACTOR_BOUNDARY = "disposable_worktree_single_writable_bind_v1"
+REQUIRED_ACTOR_BOUNDARY = "disposable_worktree_single_writable_bind_v1"
 EVALUATOR_BOUNDARY = "agentkernelarena_centralized_evaluator_v1"
+REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
+EVALUATOR_BRIDGE = Path(__file__).with_name("arena_scaffold_evaluator.py")
 EXTERNAL_PREREQUISITE = (
-    "For every selected model/quant/effort cell, provide an operator-reviewed "
-    "model-capable actor launcher whose exact executable digest implements "
-    f"{ACTOR_BOUNDARY}, plus the clean pinned AgentKernelArena checkout and "
-    "exclusive device claim required by its evaluator. No such multi-model "
-    "actor-launcher set is declared by this repository, so no real AK-LE-3 "
-    "observation is asserted here."
+    "A real observation requires operator-selected exact source/task/context/champion "
+    "inputs, the clean pinned AgentKernelArena checkout, Codex credentials for both "
+    "reviewed model cells, and an exclusive mi210_0 device claim. This implementation "
+    "session was explicitly forbidden to run model inference or GPU evaluation, so it "
+    "produces no real AK-LE-3 observation."
 )
 _SHA256_RE = re.compile(r"[0-9a-f]{64}")
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}")
@@ -200,29 +207,49 @@ class SourcePin:
 
 @dataclass(frozen=True)
 class ActorPin:
-    """Exact model launcher implementing the reviewed writable-bind boundary."""
+    """Exact in-repository Codex single-writable-bind launcher identity."""
 
     model_id: str
     quant_id: str
     effort: str
-    executable: str
-    executable_sha256: str
+    python_executable: str
+    python_sha256: str
+    codex_wrapper: str
+    codex_wrapper_sha256: str
+    launcher_sha256: str
     runtime_identity_sha256: str
-    boundary: str = ACTOR_BOUNDARY
+    boundary: str = REQUIRED_ACTOR_BOUNDARY
 
     def __post_init__(self) -> None:
         for name in ("model_id", "quant_id", "effort"):
             _text(getattr(self, name), f"actor {name}")
-        executable = Path(_text(self.executable, "actor executable"))
-        if not executable.is_absolute() or not executable.is_file() or executable.is_symlink():
-            raise ScaffoldRunnerError("actor executable must be an absolute regular file")
-        if _file_sha(executable) != _sha(
-                self.executable_sha256, "actor executable_sha256"):
-            raise ScaffoldRunnerError("actor executable identity drifted")
-        _sha(self.runtime_identity_sha256, "actor runtime_identity_sha256")
-        if self.boundary != ACTOR_BOUNDARY:
-            raise ScaffoldRunnerError("actor does not declare the governed writable boundary")
-        object.__setattr__(self, "executable", str(executable))
+        if (self.model_id not in codex_container_actor.SUPPORTED_MODELS
+                or self.quant_id != "provider-native"
+                or self.effort != codex_container_actor.SUPPORTED_EFFORT):
+            raise ScaffoldRunnerError("actor model/quant/effort is not a reviewed Codex cell")
+        python = Path(_text(self.python_executable, "actor Python"))
+        wrapper = Path(_text(self.codex_wrapper, "Codex wrapper"))
+        if (not python.is_absolute() or not python.is_file() or python.is_symlink()
+                or _file_sha(python) != _sha(self.python_sha256, "actor Python SHA-256")):
+            raise ScaffoldRunnerError("actor Python identity drifted")
+        if (not wrapper.is_absolute() or not wrapper.is_file() or wrapper.is_symlink()
+                or _file_sha(wrapper) != _sha(
+                    self.codex_wrapper_sha256, "Codex wrapper SHA-256")):
+            raise ScaffoldRunnerError("Codex wrapper identity drifted")
+        launcher = Path(codex_container_actor.__file__).resolve()
+        if _file_sha(launcher) != _sha(self.launcher_sha256, "actor launcher SHA-256"):
+            raise ScaffoldRunnerError("trusted container actor module identity drifted")
+        runtime = codex_container_actor.runtime_identity(wrapper)
+        if _digest(runtime) != _sha(
+                self.runtime_identity_sha256, "actor runtime identity SHA-256"):
+            raise ScaffoldRunnerError("container actor runtime identity drifted")
+        if (runtime.get("kind") != "docker_workspace_bind_only"
+                or runtime.get("writable_host_binds") != ["/workspace"]
+                or runtime.get("image_id") != codex_container_actor.CONTAINER_IMAGE_ID
+                or self.boundary != REQUIRED_ACTOR_BOUNDARY):
+            raise ScaffoldRunnerError("actor runtime does not enforce one writable workspace bind")
+        object.__setattr__(self, "python_executable", str(python))
+        object.__setattr__(self, "codex_wrapper", str(wrapper))
 
     @property
     def cell_key(self) -> tuple[str, str, str]:
@@ -230,8 +257,10 @@ class ActorPin:
 
     def to_dict(self) -> dict[str, str]:
         return {name: getattr(self, name) for name in (
-            "model_id", "quant_id", "effort", "executable",
-            "executable_sha256", "runtime_identity_sha256", "boundary")}
+            "model_id", "quant_id", "effort", "python_executable",
+            "python_sha256", "codex_wrapper",
+            "codex_wrapper_sha256", "launcher_sha256",
+            "runtime_identity_sha256", "boundary")}
 
 
 @dataclass(frozen=True)
@@ -248,6 +277,8 @@ class ArenaEvaluatorPin:
     python_executable: str
     python_sha256: str
     package_identity_sha256: str
+    repository_root: str
+    bridge_sha256: str
     boundary: str = EVALUATOR_BOUNDARY
 
     def __post_init__(self) -> None:
@@ -257,6 +288,8 @@ class ArenaEvaluatorPin:
         if _git(root, "rev-parse", "HEAD") != _commit(
                 self.arena_commit, "Arena commit"):
             raise ScaffoldRunnerError("Arena checkout commit drifted")
+        if self.arena_commit != arena_adapter.AGENT_KERNEL_ARENA_PIN.commit:
+            raise ScaffoldRunnerError("Arena commit is not the reviewed paper pin")
         if _git(root, "status", "--porcelain=v1", "--untracked-files=all"):
             raise ScaffoldRunnerError("Arena checkout must be clean")
         evaluator = root / _safe_relative(
@@ -273,22 +306,36 @@ class ArenaEvaluatorPin:
             raise ScaffoldRunnerError("Arena task tree identity drifted")
         if _file_sha(config) != _sha(self.task_config_sha256, "task config SHA-256"):
             raise ScaffoldRunnerError("Arena task config identity drifted")
+        expected_python = arena_cell_runner._evaluator_python_identity()
         python = Path(_text(self.python_executable, "evaluator Python"))
         if not python.is_absolute() or not python.is_file() or _file_sha(python) != _sha(
                 self.python_sha256, "evaluator Python SHA-256"):
             raise ScaffoldRunnerError("evaluator Python identity drifted")
-        _sha(self.package_identity_sha256, "evaluator package identity SHA-256")
+        if (str(python) != expected_python["path"]
+                or self.python_sha256 != expected_python["sha256"]
+                or _digest(expected_python["packages"]) != _sha(
+                    self.package_identity_sha256,
+                    "evaluator package identity SHA-256")):
+            raise ScaffoldRunnerError("evaluator Python/package pin is not the Arena pin")
+        repository = Path(_text(self.repository_root, "repository root")).resolve()
+        if repository != REPOSITORY_ROOT:
+            raise ScaffoldRunnerError("evaluator repository import root drifted")
+        if _file_sha(EVALUATOR_BRIDGE) != _sha(
+                self.bridge_sha256, "evaluator bridge SHA-256"):
+            raise ScaffoldRunnerError("evaluator bridge module identity drifted")
         if self.boundary != EVALUATOR_BOUNDARY:
             raise ScaffoldRunnerError("evaluation must cross AgentKernelArena")
         object.__setattr__(self, "arena_root", str(root))
         object.__setattr__(self, "python_executable", str(python))
+        object.__setattr__(self, "repository_root", str(repository))
 
     def to_dict(self) -> dict[str, str]:
         return {name: getattr(self, name) for name in (
             "arena_root", "arena_commit", "evaluator_relative_path",
             "evaluator_sha256", "task_relative_root", "task_tree_sha256",
             "task_config_sha256", "python_executable", "python_sha256",
-            "package_identity_sha256", "boundary")}
+            "package_identity_sha256", "repository_root", "bridge_sha256",
+            "boundary")}
 
 
 @dataclass(frozen=True)
@@ -389,9 +436,117 @@ def _run_process(argv: Sequence[str], cwd: Path, environment: Mapping[str, str],
 def _actor_argv(pin: ActorPin, *, workspace: Path, role: str,
                 wall_seconds: float) -> tuple[str, ...]:
     return (
-        pin.executable, "--workspace", str(workspace), "--model", pin.model_id,
-        "--quant", pin.quant_id, "--effort", pin.effort, "--role", role,
-        "--timeout-seconds", f"{wall_seconds:g}", "--boundary", pin.boundary)
+        pin.python_executable, "-m",
+        codex_container_actor.EXECUTABLE_MODULE,
+        "--codex-wrapper", pin.codex_wrapper,
+        "--workspace", str(workspace), "--model", pin.model_id,
+        "--effort", pin.effort)
+
+
+def _exact_mapping(value: object, keys: set[str], label: str) -> dict[str, Any]:
+    if not isinstance(value, Mapping) or set(value) != keys:
+        raise ScaffoldRunnerError(f"{label} must contain exactly {sorted(keys)}")
+    return dict(value)
+
+
+def _contract_from_manifest(value: object) -> experiments.ExperimentContract:
+    row = _exact_mapping(value, {
+        "schema", "experiment_id", "authority", "fixed", "planner_arms",
+        "direction_predictions", "scaffold_arms", "prior_hypothesis_sha256",
+        "prefilter", "constraints", "contract_sha256",
+    }, "experiment contract")
+    fixed_row = _exact_mapping(row["fixed"], {
+        "champion", "retrieval_context_sha256", "propose_prompt",
+        "propose_prompt_sha256", "selected_task",
+    }, "fixed prompt frame")
+    champion = _exact_mapping(fixed_row["champion"], {"ref", "sha256"}, "champion")
+    task = _exact_mapping(
+        fixed_row["selected_task"], {"ref", "task", "task_sha256"},
+        "selected task")
+    planners = tuple(experiments.PlannerArm(**_exact_mapping(item, {
+        "cell_id", "model_id", "quant_id", "effort", "target_context_mode",
+    }, "planner arm")) for item in row["planner_arms"])
+    predictions = tuple(experiments.DirectionPrediction(**_exact_mapping(item, {
+        "model_id", "quant_id", "direction", "rationale",
+    }, "direction prediction")) for item in row["direction_predictions"])
+    scaffolds = []
+    for item in row["scaffold_arms"]:
+        arm = _exact_mapping(item, {
+            "cell_id", "model_id", "quant_id", "effort", "scaffold", "roles",
+            "wall_seconds",
+        }, "scaffold arm")
+        roles = tuple(experiments.RoleBudget(**_exact_mapping(role, {
+            "role", "wall_seconds", "instruction", "instruction_sha256",
+        }, "role budget")) for role in arm.pop("roles"))
+        claimed_wall = arm.pop("wall_seconds")
+        scaffold = experiments.ScaffoldArm(roles=roles, **arm)
+        if scaffold.wall_seconds != claimed_wall:
+            raise ScaffoldRunnerError("scaffold wall_seconds is not derived from its roles")
+        scaffolds.append(scaffold)
+    prefilter = _exact_mapping(row["prefilter"], {"ref", "sha256"}, "prefilter")
+    contract = experiments.ExperimentContract(
+        row["experiment_id"],
+        experiments.FixedPromptFrame(
+            experiments.ArtifactPin(**champion),
+            fixed_row["retrieval_context_sha256"], fixed_row["propose_prompt"],
+            fixed_row["propose_prompt_sha256"],
+            experiments.SelectedTaskArtifact(**task)),
+        planners, predictions, tuple(scaffolds),
+        tuple(row["prior_hypothesis_sha256"]),
+        experiments.ArtifactPin(**prefilter))
+    input_body = dict(row)
+    input_claim = input_body.pop("contract_sha256")
+    if _digest(input_body) != _sha(input_claim, "input contract SHA-256"):
+        raise ScaffoldRunnerError("input experiment contract SHA-256 does not verify")
+    reproduced = contract.to_manifest()
+    reproduced.pop("contract_sha256")
+    if reproduced != input_body:
+        raise ScaffoldRunnerError("experiment contract does not reproduce exactly")
+    return contract
+
+
+def _context_from_input(value: object) -> authoring_contract.PricedContext:
+    row = _exact_mapping(value, {"round_id", "budget", "items"}, "priced context")
+    budget = authoring_contract.ContextBudget(**_exact_mapping(row["budget"], {
+        "max_total_tokens", "max_item_tokens", "max_items",
+    }, "context budget"))
+    items = tuple(authoring_contract.ContextItem(**_exact_mapping(item, {
+        "source_ref", "purpose", "content", "bulk_read",
+    }, "context item")) for item in row["items"])
+    return authoring_contract.price_context(
+        round_id=row["round_id"], budget=budget, items=items)
+
+
+def compile_manifest_input(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Compile one strict reviewed JSON input into the write-once run manifest."""
+    row = _exact_mapping(value, {
+        "schema", "experiment_contract", "context", "source", "actors",
+        "evaluator", "allowed_write_paths",
+    }, "compile input")
+    if row["schema"] != COMPILE_INPUT_SCHEMA:
+        raise ScaffoldRunnerError("compile input schema drifted")
+    if not isinstance(row["actors"], list) or not isinstance(
+            row["allowed_write_paths"], list):
+        raise ScaffoldRunnerError("actors and allowed_write_paths must be JSON lists")
+    return compile_manifest(
+        _contract_from_manifest(row["experiment_contract"]),
+        context=_context_from_input(row["context"]),
+        source=SourcePin(**_exact_mapping(row["source"], {
+            "repository", "base_commit", "base_tree_sha256",
+        }, "source pin")),
+        actors=tuple(ActorPin(**_exact_mapping(actor, {
+            "model_id", "quant_id", "effort", "python_executable",
+            "python_sha256", "codex_wrapper", "codex_wrapper_sha256",
+            "launcher_sha256", "runtime_identity_sha256", "boundary",
+        }, "actor pin")) for actor in row["actors"]),
+        evaluator=ArenaEvaluatorPin(**_exact_mapping(row["evaluator"], {
+            "arena_root", "arena_commit", "evaluator_relative_path",
+            "evaluator_sha256", "task_relative_root", "task_tree_sha256",
+            "task_config_sha256", "python_executable", "python_sha256",
+            "package_identity_sha256", "repository_root", "bridge_sha256",
+            "boundary",
+        }, "evaluator pin")),
+        allowed_write_paths=tuple(row["allowed_write_paths"]))
 
 
 def compile_manifest(
@@ -415,6 +570,9 @@ def compile_manifest(
     expected = {arm.model_quant_effort for arm in contract.scaffold_arms}
     if set(actor_map) != expected:
         raise ScaffoldRunnerError("actor pins must exactly cover scaffold model cells")
+    if {key[0] for key in expected} != set(codex_container_actor.SUPPORTED_MODELS):
+        raise ScaffoldRunnerError(
+            "AK-LE-3 must independently vary exactly the two reviewed Codex models")
     cells = []
     for arm in contract.scaffold_arms:
         pin = actor_map[arm.model_quant_effort]
@@ -452,7 +610,7 @@ def compile_manifest(
             "model_and_scaffold_independently_varied": True,
             "wall_time_matched": True,
             "fresh_baseline_and_candidate_worktrees": True,
-            "actor_write_boundary": ACTOR_BOUNDARY,
+            "actor_write_boundary": REQUIRED_ACTOR_BOUNDARY,
             "evaluation_boundary": EVALUATOR_BOUNDARY,
             "campaign_authority": False, "ranking_authority": False,
             "champion_authority": False, "release_authority": False,
@@ -475,7 +633,7 @@ def validate_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
                  "champion_authority", "release_authority")
     if (not isinstance(constraints, Mapping)
             or any(constraints.get(key) is not False for key in forbidden)
-            or constraints.get("actor_write_boundary") != ACTOR_BOUNDARY
+            or constraints.get("actor_write_boundary") != REQUIRED_ACTOR_BOUNDARY
             or constraints.get("evaluation_boundary") != EVALUATOR_BOUNDARY):
         raise ScaffoldRunnerError("manifest requests forbidden authority or boundary")
     contract = payload.get("experiment_contract")
@@ -547,12 +705,40 @@ def _create_worktree(source: SourcePin, destination: Path) -> dict[str, Any]:
          source.base_commit), capture_output=True, text=True, check=False)
     if result.returncode != 0:
         raise ScaffoldRunnerError(f"could not create disposable worktree: {result.stderr.strip()}")
-    observed = _git(destination, "rev-parse", "HEAD")
-    if observed != source.base_commit or _tree_digest(destination, observed) != source.base_tree_sha256:
-        raise ScaffoldRunnerError("fresh disposable worktree identity drifted")
+    try:
+        observed = _git(destination, "rev-parse", "HEAD")
+        if (observed != source.base_commit
+                or _tree_digest(destination, observed) != source.base_tree_sha256):
+            raise ScaffoldRunnerError("fresh disposable worktree identity drifted")
+    except Exception:
+        subprocess.run(
+            ("git", "-C", str(repo), "worktree", "remove", "--force",
+             str(destination)), capture_output=True, text=True, check=False)
+        raise
     return {"argv": ["git", "-C", str(repo), "worktree", "add", "--detach",
                      str(destination), source.base_commit],
             "commit": observed, "tree_sha256": source.base_tree_sha256}
+
+
+def _remove_worktree(source: SourcePin, destination: Path) -> dict[str, Any]:
+    """Remove exactly one worktree created by this cell and prove it is gone."""
+    destination = destination.resolve()
+    common = Path(_git(destination, "rev-parse", "--git-common-dir")).resolve()
+    expected = Path(source.repository, ".git").resolve()
+    if common != expected:
+        raise ScaffoldRunnerError("refusing to remove a worktree with foreign git identity")
+    argv = ("git", "-C", source.repository, "worktree", "remove", "--force",
+            str(destination))
+    result = subprocess.run(argv, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        raise ScaffoldRunnerError(
+            f"could not remove captured disposable worktree: {result.stderr.strip()}")
+    if destination.exists() or destination.is_symlink():
+        raise ScaffoldRunnerError("captured disposable worktree survived removal")
+    listed = _git(Path(source.repository), "worktree", "list", "--porcelain")
+    if str(destination) in listed:
+        raise ScaffoldRunnerError("removed worktree remains registered")
+    return {"argv": list(argv), "removed": True, "path": str(destination)}
 
 
 def _capture_dict(capture: ProcessCapture) -> dict[str, Any]:
@@ -627,11 +813,22 @@ def _default_evaluator_runner(
     output_path = cell_root / "arena-evaluator-result.json"
     _atomic_json(request_path, request)
     evaluator = request["evaluator"]
+    repository_root = Path(evaluator["repository_root"]).resolve()
+    if (repository_root != REPOSITORY_ROOT
+            or _file_sha(EVALUATOR_BRIDGE) != evaluator["bridge_sha256"]):
+        raise ScaffoldRunnerError("evaluator bridge import identity drifted before launch")
     argv = (
         evaluator["python_executable"], "-m",
         "scripts.kernel_rnd.autokernel.controller.arena_scaffold_evaluator",
         "--request", str(request_path), "--output", str(output_path))
-    capture = _run_process(argv, cell_root, environment, "", timeout_seconds)
+    child_environment = dict(environment)
+    child_environment.update({
+        "PYTHONPATH": str(repository_root),
+        "HIP_VISIBLE_DEVICES": "0", "ROCR_VISIBLE_DEVICES": "0",
+        "CUDA_VISIBLE_DEVICES": "0",
+    })
+    capture = _run_process(
+        argv, repository_root, child_environment, "", timeout_seconds)
     if capture.timed_out or capture.returncode != 0:
         raise ScaffoldRunnerError("AgentKernelArena evaluator process failed")
     try:
@@ -648,10 +845,25 @@ def run_manifest(
     environment: Mapping[str, str] | None = None,
     actor_runner: CommandRunner = _run_process,
     evaluator_runner: EvaluatorRunner = _default_evaluator_runner,
+    fixture_mode: bool = False,
+    claim_journal: str | Path | None = None,
 ) -> dict[str, Any]:
     """Execute and seal the complete scaffold factorial in fresh worktrees."""
     payload = validate_manifest(manifest)
     root = _assert_new_absolute(output_root, "output_root")
+    injected = actor_runner is not _run_process or evaluator_runner is not _default_evaluator_runner
+    if injected and fixture_mode is not True:
+        raise ScaffoldRunnerError("injected runners require explicit fixture_mode")
+    if not injected and fixture_mode:
+        raise ScaffoldRunnerError("fixture_mode cannot label the real execution boundary")
+    journal_path = None
+    if not fixture_mode:
+        if claim_journal is None:
+            raise ScaffoldRunnerError(
+                "real Arena evaluation requires an explicit device claim journal")
+        journal_path = Path(claim_journal)
+        if not journal_path.is_absolute():
+            raise ScaffoldRunnerError("device claim journal must be absolute")
     root.mkdir(parents=True)
     _atomic_json(root / "manifest.json", payload)
     env = dict(os.environ if environment is None else environment)
@@ -664,74 +876,113 @@ def run_manifest(
             cell_root.mkdir(parents=True)
             baseline = cell_root / "baseline-worktree"
             candidate = cell_root / "candidate-worktree"
-            creation = {
-                "baseline": _create_worktree(source, baseline),
-                "candidate": _create_worktree(source, candidate),
-            }
-            _atomic_json(cell_root / "worktree-creation.json", creation)
-            pin = ActorPin(**cell["actor"])
-            checkpoints = []
-            for role_ordinal, role in enumerate(cell["roles"], 1):
-                before = _tree_state(candidate)
-                argv = _actor_argv(
-                    pin, workspace=candidate, role=role["role"],
-                    wall_seconds=float(role["wall_seconds"]))
-                if _file_sha(Path(argv[0])) != pin.executable_sha256:
-                    raise ScaffoldRunnerError("actor executable drifted immediately before role")
-                capture = actor_runner(
-                    argv, candidate, env, role["prompt"], float(role["wall_seconds"]))
-                if capture.argv != argv or capture.pid <= 1 \
-                        or capture.process_group_id <= 1:
-                    raise ScaffoldRunnerError("actor process identity was not captured exactly")
-                after = _tree_state(candidate)
-                checkpoints.append(_seal_checkpoint(
-                    cell_root=cell_root, ordinal=role_ordinal,
-                    cell_id=cell["cell_id"], role=role, capture=capture,
-                    before=before, after=after,
-                    allowed_write_paths=payload["allowed_write_paths"],
-                    workspace=candidate, base_commit=source.base_commit))
-                if _git(baseline, "status", "--porcelain=v1", "--untracked-files=all"):
-                    raise ScaffoldRunnerError("actor modified the isolated baseline worktree")
-            request = {
-                "schema": EVALUATION_SCHEMA, "authority": AUTHORITY,
-                "cell_id": cell["cell_id"], "baseline_workspace": str(baseline),
-                "candidate_workspace": str(candidate), "source": source.to_dict(),
-                "evaluator": evaluator.to_dict(),
-                "constraints": {
-                    "agentkernelarena_is_only_evaluator": True,
-                    "actor_reported_performance_admitted": False,
-                    "campaign_authority": False, "ranking_authority": False,
-                    "champion_authority": False, "release_authority": False,
-                },
-            }
-            evaluation_capture, evaluation = evaluator_runner(
-                request, cell_root, env, max(300.0, float(cell["wall_seconds"])))
-            if (evaluation_capture.pid <= 1 or evaluation_capture.process_group_id <= 1
-                    or evaluation_capture.group_members_after_reap):
-                raise ScaffoldRunnerError("evaluator process group was not captured and reaped")
-            if (evaluation.get("schema") != EVALUATION_SCHEMA
-                    or evaluation.get("authority") != AUTHORITY
-                    or evaluation.get("cell_id") != cell["cell_id"]):
-                raise ScaffoldRunnerError("AgentKernelArena evaluation identity drifted")
-            if any(evaluation.get(key) for key in (
-                    "campaign_authority", "ranking_authority",
-                    "champion_authority", "release_authority")):
-                raise ScaffoldRunnerError("evaluation attempted to acquire forbidden authority")
-            _atomic_json(cell_root / "arena-evaluation.json", dict(evaluation))
-            cell_receipt = {
-                "cell_id": cell["cell_id"], "model_id": cell["model_id"],
-                "quant_id": cell["quant_id"], "effort": cell["effort"],
-                "scaffold": cell["scaffold"], "planned_wall_seconds": cell["wall_seconds"],
-                "observed_actor_wall_seconds": sum(
-                    row["process"]["elapsed_wall_seconds"] for row in checkpoints),
-                "checkpoints": checkpoints,
-                "evaluation_process": _capture_dict(evaluation_capture),
-                "evaluation_sha256": _file_sha(cell_root / "arena-evaluation.json"),
-                "authority": AUTHORITY,
-            }
-            cell_receipt["cell_receipt_sha256"] = _digest(cell_receipt)
-            _atomic_json(cell_root / "cell-receipt.json", cell_receipt)
-            completed.append(cell_receipt)
+            created: list[Path] = []
+            cleanup: dict[str, Any] = {}
+            try:
+                creation = {"baseline": _create_worktree(source, baseline)}
+                created.append(baseline)
+                creation["candidate"] = _create_worktree(source, candidate)
+                created.append(candidate)
+                _atomic_json(cell_root / "worktree-creation.json", creation)
+                pin = ActorPin(**cell["actor"])
+                checkpoints = []
+                for role_ordinal, role in enumerate(cell["roles"], 1):
+                    before = _tree_state(candidate)
+                    argv = _actor_argv(
+                        pin, workspace=candidate, role=role["role"],
+                        wall_seconds=float(role["wall_seconds"]))
+                    if (_file_sha(Path(argv[0])) != pin.python_sha256
+                            or _file_sha(Path(codex_container_actor.__file__))
+                            != pin.launcher_sha256):
+                        raise ScaffoldRunnerError("container actor identity drifted before role")
+                    actor_env = dict(env)
+                    actor_env["PYTHONPATH"] = str(REPOSITORY_ROOT)
+                    capture = actor_runner(
+                        argv, candidate, actor_env, role["prompt"],
+                        float(role["wall_seconds"]))
+                    if capture.argv != argv or capture.pid <= 1 \
+                            or capture.process_group_id <= 1:
+                        raise ScaffoldRunnerError("actor process identity was not captured exactly")
+                    after = _tree_state(candidate)
+                    checkpoints.append(_seal_checkpoint(
+                        cell_root=cell_root, ordinal=role_ordinal,
+                        cell_id=cell["cell_id"], role=role, capture=capture,
+                        before=before, after=after,
+                        allowed_write_paths=payload["allowed_write_paths"],
+                        workspace=candidate, base_commit=source.base_commit))
+                    if _git(baseline, "status", "--porcelain=v1", "--untracked-files=all"):
+                        raise ScaffoldRunnerError("actor modified the isolated baseline worktree")
+                request = {
+                    "schema": EVALUATION_SCHEMA, "authority": AUTHORITY,
+                    "cell_id": cell["cell_id"], "baseline_workspace": str(baseline),
+                    "candidate_workspace": str(candidate), "source": source.to_dict(),
+                    "evaluator": evaluator.to_dict(),
+                    "constraints": {
+                        "agentkernelarena_is_only_evaluator": True,
+                        "actor_reported_performance_admitted": False,
+                        "campaign_authority": False, "ranking_authority": False,
+                        "champion_authority": False, "release_authority": False,
+                    },
+                }
+                claim_open = claim_released = None
+                claim = None
+                try:
+                    if not fixture_mode:
+                        claim = device_claim.acquire_device_claim(
+                            "mi210_0", purpose=f"AK-LE-3 Arena {cell['cell_id']}",
+                            campaign_id=payload["experiment_id"],
+                            journal=device_claim.ClaimJournal(journal_path),
+                            holder_label="loop_scaffold_runner.py", timeout_s=0,
+                            max_hold_s=max(420.0, float(cell["wall_seconds"]) + 120.0))
+                        claim_open = claim.receipt().to_dict()
+                    evaluation_capture, evaluation = evaluator_runner(
+                        request, cell_root, env, max(300.0, float(cell["wall_seconds"])))
+                finally:
+                    if claim is not None:
+                        claim_released = claim.release().to_dict()
+                if (evaluation_capture.pid <= 1 or evaluation_capture.process_group_id <= 1
+                        or evaluation_capture.group_members_after_reap):
+                    raise ScaffoldRunnerError("evaluator process group was not captured and reaped")
+                if (evaluation.get("schema") != EVALUATION_SCHEMA
+                        or evaluation.get("authority") != AUTHORITY
+                        or evaluation.get("cell_id") != cell["cell_id"]):
+                    raise ScaffoldRunnerError("AgentKernelArena evaluation identity drifted")
+                if any(evaluation.get(key) for key in (
+                        "campaign_authority", "ranking_authority",
+                        "champion_authority", "release_authority")):
+                    raise ScaffoldRunnerError("evaluation attempted to acquire forbidden authority")
+                _atomic_json(cell_root / "arena-evaluation.json", dict(evaluation))
+                cell_receipt = {
+                    "cell_id": cell["cell_id"], "model_id": cell["model_id"],
+                    "quant_id": cell["quant_id"], "effort": cell["effort"],
+                    "scaffold": cell["scaffold"],
+                    "capture_mode": "fixture" if fixture_mode else "measured",
+                    "planned_wall_seconds": cell["wall_seconds"],
+                    "observed_actor_wall_seconds": sum(
+                        row["process"]["elapsed_wall_seconds"] for row in checkpoints),
+                    "checkpoints": checkpoints,
+                    "evaluation_process": _capture_dict(evaluation_capture),
+                    "evaluation_sha256": _file_sha(cell_root / "arena-evaluation.json"),
+                    "device_claim_open": claim_open,
+                    "device_claim_released": claim_released,
+                    "authority": AUTHORITY if not fixture_mode else "fixture_only",
+                }
+                cell_receipt["cell_receipt_sha256"] = _digest(cell_receipt)
+                _atomic_json(cell_root / "cell-receipt.json", cell_receipt)
+                completed.append(cell_receipt)
+            finally:
+                cleanup_errors = []
+                for worktree in reversed(created):
+                    try:
+                        cleanup[worktree.name] = _remove_worktree(source, worktree)
+                    except Exception as cleanup_error:
+                        cleanup_errors.append(f"{worktree}: {cleanup_error}")
+                cleanup["all_removed"] = not cleanup_errors
+                cleanup["errors"] = cleanup_errors
+                _atomic_json(cell_root / "worktree-cleanup.json", cleanup)
+                if cleanup_errors:
+                    raise ScaffoldRunnerError(
+                        f"disposable worktree cleanup failed: {cleanup_errors}")
     except Exception as exc:
         failure = {
             "schema": PANEL_SCHEMA, "status": "failed", "authority": AUTHORITY,
@@ -744,13 +995,16 @@ def run_manifest(
         _atomic_json(root / "panel.json", failure)
         raise
     panel = {
-        "schema": PANEL_SCHEMA, "status": "complete", "authority": AUTHORITY,
+        "schema": PANEL_SCHEMA, "status": "complete",
+        "authority": AUTHORITY if not fixture_mode else "fixture_only",
+        "capture_mode": "fixture" if fixture_mode else "measured",
         "experiment_id": payload["experiment_id"],
         "manifest_sha256": payload["manifest_sha256"], "cells": completed,
         "constraints": {
             "same_model_within_scaffold_pair": True,
             "wall_time_matched_by_plan": True,
             "centralized_agentkernelarena_evaluation": True,
+            "empirical_observation": not fixture_mode,
             "campaign_authority": False, "ranking_authority": False,
             "champion_authority": False, "release_authority": False,
         },
@@ -760,10 +1014,59 @@ def run_manifest(
     return panel
 
 
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    compile_parser = commands.add_parser(
+        "compile", help="compile one reviewed JSON input without executing a cell")
+    compile_parser.add_argument("--input", required=True)
+    compile_parser.add_argument("--output", required=True)
+    run_parser = commands.add_parser(
+        "run", help="execute one exact compiled four-cell manifest")
+    run_parser.add_argument("--manifest", required=True)
+    run_parser.add_argument("--output-root", required=True)
+    run_parser.add_argument("--claim-journal", required=True)
+    args = parser.parse_args(argv)
+    input_path = Path(args.input if args.command == "compile" else args.manifest)
+    label = "compile input" if args.command == "compile" else "manifest"
+    if not input_path.is_absolute() or not input_path.is_file():
+        raise ScaffoldRunnerError(f"{label} must be an existing absolute JSON file")
+    try:
+        payload = json.loads(input_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ScaffoldRunnerError(f"{label} is not valid JSON") from exc
+    if not isinstance(payload, Mapping):
+        raise ScaffoldRunnerError(f"{label} must be a JSON object")
+    if args.command == "compile":
+        output = _assert_new_absolute(args.output, "manifest output")
+        manifest = compile_manifest_input(payload)
+        _atomic_json(output, manifest)
+        print(json.dumps({
+            "status": "compiled", "experiment_id": manifest["experiment_id"],
+            "manifest": str(output),
+            "manifest_sha256": manifest["manifest_sha256"],
+        }, sort_keys=True))
+        return 0
+    panel = run_manifest(
+        payload, output_root=args.output_root, claim_journal=args.claim_journal)
+    print(json.dumps({
+        "status": panel["status"], "experiment_id": panel["experiment_id"],
+        "output_root": str(Path(args.output_root).resolve()),
+        "panel_sha256": panel["panel_sha256"],
+    }, sort_keys=True))
+    return 0
+
+
 __all__ = [
-    "ACTOR_BOUNDARY", "AUTHORITY", "CHECKPOINT_SCHEMA", "EVALUATION_SCHEMA",
+    "REQUIRED_ACTOR_BOUNDARY", "AUTHORITY", "CHECKPOINT_SCHEMA", "COMPILE_INPUT_SCHEMA",
+    "EVALUATION_SCHEMA",
     "EVALUATOR_BOUNDARY", "EXTERNAL_PREREQUISITE", "MANIFEST_SCHEMA",
     "PANEL_SCHEMA", "ActorPin", "ArenaEvaluatorPin", "ProcessCapture",
-    "ScaffoldRunnerError", "SourcePin", "compile_manifest", "run_manifest",
-    "validate_manifest",
+    "ScaffoldRunnerError", "SourcePin", "compile_manifest",
+    "compile_manifest_input", "run_manifest",
+    "validate_manifest", "main",
 ]
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
