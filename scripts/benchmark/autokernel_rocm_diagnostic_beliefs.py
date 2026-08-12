@@ -72,7 +72,13 @@ def _claim_identity(receipt: Mapping[str, Any]) -> tuple[dict, str]:
             raise ValueError(f"device_claim_open.{key} must be non-empty text")
         if released.get(key) != opened[key]:
             raise ValueError(f"device claim {key} changed across release")
-    if released.get("state") != "released" or not released.get("released_at"):
+    # ClaimReceipt preserves the state that was held immediately before the
+    # lock was dropped (normally ``held``, or ``draining`` after revocation).
+    # A successful ``Claim.release()`` is represented by ``released_at``; the
+    # claim implementation never synthesizes a ``released`` state.  The runner
+    # only obtains this receipt after the release journal append succeeds.
+    if released.get("state") not in {"held", "draining"} \
+            or not released.get("released_at"):
         raise ValueError("device claim must be durably released before belief capture")
     identity = {"opened": opened, "released": released}
     return identity, schemas.content_hash(identity)

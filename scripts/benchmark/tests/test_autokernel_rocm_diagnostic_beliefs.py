@@ -16,7 +16,9 @@ def _claim(*, released: bool) -> dict:
         "schema": "epyc.autokernel.device_claim_receipt.v1",
         "claim_id": "akd-fixture", "device_id": "mi210_0",
         "campaign_id": "ak-fixture", "acquired_at": "2026-08-12T06:00:00Z",
-        "state": "released" if released else "held",
+        # ClaimReceipt retains the pre-release state; released_at is the
+        # canonical proof that Claim.release() completed and journaled.
+        "state": "held",
         "released_at": "2026-08-12T06:01:00Z" if released else None,
     }
 
@@ -129,6 +131,15 @@ def test_pre_hook_receipt_is_not_mutated_and_capture_is_write_once() -> None:
             "run_rocm_saturation_probe.py"))
     assert source == original
     with pytest.raises(ValueError, match="write-once"):
+        beliefs.attach_beliefs(
+            value, producer_path=Path(beliefs.__file__).with_name(
+                "run_rocm_saturation_probe.py"))
+
+
+def test_claim_without_release_timestamp_refuses() -> None:
+    value = saturation_receipt()
+    value["device_claim_released"]["released_at"] = None
+    with pytest.raises(ValueError, match="durably released"):
         beliefs.attach_beliefs(
             value, producer_path=Path(beliefs.__file__).with_name(
                 "run_rocm_saturation_probe.py"))
