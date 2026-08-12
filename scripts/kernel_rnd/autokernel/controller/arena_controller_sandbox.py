@@ -16,12 +16,11 @@ import re
 import shutil
 import stat
 import subprocess
-import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from ..execution import sandbox
 
@@ -265,6 +264,7 @@ class RuntimeAllowlist:
     readable_files: tuple[str, ...]
     executable_files: tuple[str, ...]
     identities: Mapping[str, str]
+    staged_input_files: tuple[str, ...] = ()
 
     @property
     def sha256(self) -> str:
@@ -273,6 +273,7 @@ class RuntimeAllowlist:
             "readable_files": list(self.readable_files),
             "executable_files": list(self.executable_files),
             "identities": dict(self.identities),
+            "staged_input_files": list(self.staged_input_files),
         })
 
 
@@ -422,7 +423,8 @@ def discover_runtime_allowlist(
         readable_roots=tuple(map(str, roots)),
         readable_files=readable_files,
         executable_files=tuple(map(str, executable_files)),
-        identities=MappingProxyType(identities))
+        identities=MappingProxyType(identities),
+        staged_input_files=tuple(map(str, identity_only_files)))
 
 
 def copy_controller_workspace(source: str | Path,

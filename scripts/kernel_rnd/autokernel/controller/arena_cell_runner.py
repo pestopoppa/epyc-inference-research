@@ -63,6 +63,7 @@ DEFAULT_DEVICE_ID = "mi210_0"
 EVALUATION_RESERVE_SECONDS = 7200
 CONTROLLER_ACTIVATION_RECEIPT = "controller-sandbox-activation.json"
 CONTROLLER_TEARDOWN_RECEIPT = "controller-sandbox-teardown.json"
+CONTROLLER_STAGED_INPUT_RECEIPT = "controller-staged-inputs.json"
 EVALUATOR_PYTHON = Path(
     "/mnt/raid0/llm/tools/geak-v1-rocm62-py312/bin/python")
 CONTROLLER_PACKAGE_ROOT = Path(
@@ -1469,6 +1470,8 @@ def _staged_controller_codex_home(workspace: Path):
 @contextmanager
 def _staged_controller_claude_config(
     workspace: Path, *, enabled: bool,
+    runtime: arena_controller_sandbox.RuntimeAllowlist | None = None,
+    receipt_path: Path | None = None,
     source_root: Path = Path("/home/node/.claude"),
 ):
     """Provide writable, scrubbed Claude state without exposing host history."""
@@ -1480,15 +1483,42 @@ def _staged_controller_claude_config(
         raise ArenaCellRunnerError("controller Claude config must be new")
     target.mkdir(mode=0o700)
     try:
+        if runtime is None or receipt_path is None:
+            raise ArenaCellRunnerError(
+                "controller Claude staging lacks runtime evidence authority")
+        expected_staged = set(runtime.staged_input_files)
+        rows: list[dict[str, str]] = []
         for name in (".credentials.json", ".claude.json"):
             source = source_root / name
             if source.is_symlink() or not source.is_file():
                 raise ArenaCellRunnerError(
                     f"controller Claude credential input is absent or unsafe: {name}")
+            expected_sha256 = runtime.identities.get(str(source))
+            if (str(source) not in expected_staged
+                    or expected_sha256 is None
+                    or _sha256_file(source) != expected_sha256):
+                raise ArenaCellRunnerError(
+                    f"controller Claude staging input identity drifted: {name}")
             destination = target / name
             with destination.open("xb") as handle:
                 handle.write(source.read_bytes())
             destination.chmod(0o600)
+            if _sha256_file(destination) != expected_sha256:
+                raise ArenaCellRunnerError(
+                    f"controller Claude staged copy identity drifted: {name}")
+            rows.append({
+                "source_path": str(source),
+                "source_sha256": expected_sha256,
+                "staged_relative_path": str(destination.relative_to(workspace)),
+                "staged_sha256": expected_sha256,
+            })
+        if {row["source_path"] for row in rows} != expected_staged:
+            raise ArenaCellRunnerError(
+                "controller staged input set differs from runtime authority")
+        _atomic_json(receipt_path, _self_hash({
+            "schema": "epyc.autokernel.controller_staged_inputs.v1",
+            "inputs": rows,
+        }))
         yield target
     finally:
         if target.is_symlink():
@@ -2034,6 +2064,7 @@ def _controller_sandbox_execution(
         "readable_files": list(invocation.runtime.readable_files),
         "executable_files": list(invocation.runtime.executable_files),
         "identities": dict(invocation.runtime.identities),
+        "staged_input_files": list(invocation.runtime.staged_input_files),
         "sha256": invocation.runtime.sha256,
     }
     execution = _self_hash({
@@ -2250,17 +2281,55 @@ def _validate_controller_sandbox_execution(
     assert isinstance(runtime, Mapping)
     runtime_without_hash = {
         key: runtime.get(key) for key in (
-            "readable_roots", "readable_files", "executable_files", "identities")}
+            "readable_roots", "readable_files", "executable_files", "identities",
+            "staged_input_files")}
     if _canonical_sha256(runtime_without_hash) != runtime.get("sha256"):
         raise ArenaCellRunnerError("controller runtime allowlist hash drifted")
     identities = runtime.get("identities")
     if not isinstance(identities, Mapping) or not identities:
         raise ArenaCellRunnerError("controller runtime identities are absent")
+    staged_input_files = runtime.get("staged_input_files")
+    if (not isinstance(staged_input_files, list)
+            or any(not isinstance(path, str) for path in staged_input_files)
+            or len(staged_input_files) != len(set(staged_input_files))):
+        raise ArenaCellRunnerError("controller staged input authority is malformed")
+    staged_rows: dict[str, Mapping[str, Any]] = {}
+    if staged_input_files:
+        staged_receipt = _load_json_object(
+            cell_root / CONTROLLER_STAGED_INPUT_RECEIPT,
+            "controller staged input receipt")
+        _verify_self_hash(staged_receipt, "controller staged input receipt")
+        if staged_receipt.get("schema") != \
+                "epyc.autokernel.controller_staged_inputs.v1":
+            raise ArenaCellRunnerError("controller staged input schema drifted")
+        raw_rows = staged_receipt.get("inputs")
+        if not isinstance(raw_rows, list):
+            raise ArenaCellRunnerError("controller staged input rows are malformed")
+        for row in raw_rows:
+            if (not isinstance(row, Mapping)
+                    or not isinstance(row.get("source_path"), str)):
+                raise ArenaCellRunnerError(
+                    "controller staged input row is malformed")
+            staged_rows[str(row["source_path"])] = row
+        if set(staged_rows) != set(staged_input_files):
+            raise ArenaCellRunnerError(
+                "controller staged input receipt differs from runtime authority")
     for raw_path, expected_sha256 in identities.items():
         if (not isinstance(raw_path, str)
                 or not _SHA256_RE.fullmatch(str(expected_sha256))):
             raise ArenaCellRunnerError("controller runtime identity is malformed")
         path = Path(raw_path)
+        if raw_path in staged_rows:
+            row = staged_rows[raw_path]
+            staged_relative = row.get("staged_relative_path")
+            if (row.get("source_sha256") != expected_sha256
+                    or row.get("staged_sha256") != expected_sha256
+                    or not isinstance(staged_relative, str)
+                    or Path(staged_relative).is_absolute()
+                    or ".." in Path(staged_relative).parts):
+                raise ArenaCellRunnerError(
+                    "controller staged input identity drifted")
+            continue
         if (not path.is_absolute() or path.is_symlink() or not path.is_file()
                 or _sha256_file(path) != expected_sha256):
             raise ArenaCellRunnerError("controller runtime identity drifted")
@@ -2817,7 +2886,10 @@ def _run_worker_impl(
             for row in cli_rows)
         with _staged_controller_codex_home(workspace) as codex_home, \
                 _staged_controller_claude_config(
-                    workspace, enabled=claude_enabled) as claude_config:
+                    workspace, enabled=claude_enabled,
+                    runtime=controller_runtime,
+                    receipt_path=(cell_root / CONTROLLER_STAGED_INPUT_RECEIPT),
+                ) as claude_config:
             controller_environment["CODEX_HOME"] = str(codex_home)
             if claude_config is not None:
                 controller_environment["CLAUDE_CONFIG_DIR"] = str(claude_config)

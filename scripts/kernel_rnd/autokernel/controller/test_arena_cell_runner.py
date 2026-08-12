@@ -110,16 +110,35 @@ def fake_evaluator_execution(
     return execution
 
 
-def fake_controller_sandbox_execution(cell_root: Path) -> dict:
+def fake_controller_sandbox_execution(
+    cell_root: Path, staged_sources: tuple[Path, ...] = (),
+) -> dict:
     workspace = (cell_root / "workspace").resolve()
     readable_roots = [str(Path(sys.executable).resolve().parent)]
+    identities = {str(Path(sys.executable).resolve()):
+                  R._sha256_file(Path(sys.executable).resolve())}
+    identities.update({str(path): R._sha256_file(path) for path in staged_sources})
     runtime = {
         "readable_roots": readable_roots, "readable_files": [],
         "executable_files": [str(Path(sys.executable).resolve())],
-        "identities": {str(Path(sys.executable).resolve()):
-                       R._sha256_file(Path(sys.executable).resolve())},
+        "identities": identities,
+        "staged_input_files": [str(path) for path in staged_sources],
     }
     runtime["sha256"] = canonical_sha(runtime)
+    if staged_sources:
+        staged = {
+            "schema": "epyc.autokernel.controller_staged_inputs.v1",
+            "inputs": [{
+                "source_path": str(path),
+                "source_sha256": identities[str(path)],
+                "staged_relative_path": (
+                    ".autokernel-controller-claude-config/" + path.name),
+                "staged_sha256": identities[str(path)],
+            } for path in staged_sources],
+        }
+        staged["receipt_sha256"] = canonical_sha(staged)
+        (cell_root / R.CONTROLLER_STAGED_INPUT_RECEIPT).write_text(
+            json.dumps(staged), encoding="utf-8")
     policy_sha = "b" * 64
     cgroup = "/sys/fs/cgroup/autokernel-fixture-controller"
     blocked = sorted(R.sandbox._network_policy(
@@ -273,8 +292,16 @@ class ArenaCellRunnerTest(unittest.TestCase):
             '{"setting":true}\n', encoding="utf-8")
         (source / "history.jsonl").write_text(
             "must-not-copy\n", encoding="utf-8")
+        staged_sources = tuple(
+            str(source / name) for name in (".credentials.json", ".claude.json"))
+        runtime = R.arena_controller_sandbox.RuntimeAllowlist(
+            readable_roots=(), readable_files=(), executable_files=(),
+            identities={path: R._sha256_file(Path(path)) for path in staged_sources},
+            staged_input_files=staged_sources)
+        receipt_path = self.root / R.CONTROLLER_STAGED_INPUT_RECEIPT
         with R._staged_controller_claude_config(
-                workspace, enabled=True, source_root=source) as staged:
+                workspace, enabled=True, runtime=runtime,
+                receipt_path=receipt_path, source_root=source) as staged:
             self.assertIsNotNone(staged)
             assert staged is not None
             self.assertEqual(
@@ -290,9 +317,29 @@ class ArenaCellRunnerTest(unittest.TestCase):
         self.assertEqual(
             (source / ".claude.json").read_text(encoding="utf-8"),
             '{"setting":true}\n')
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        R._verify_self_hash(receipt, "staged input fixture")
+        self.assertEqual(
+            {row["source_path"] for row in receipt["inputs"]},
+            set(staged_sources))
         with R._staged_controller_claude_config(
                 workspace, enabled=False, source_root=source) as staged:
             self.assertIsNone(staged)
+
+    def test_staged_host_input_mutation_does_not_invalidate_completed_execution(self):
+        cell_root = self.root / "completed-controller-cell"
+        (cell_root / "workspace").mkdir(parents=True)
+        host_input = self.root / ".claude.json"
+        host_input.write_text('{"before":true}\n', encoding="utf-8")
+        execution = fake_controller_sandbox_execution(
+            cell_root, staged_sources=(host_input,))
+        host_input.write_text('{"after":true}\n', encoding="utf-8")
+        R._validate_controller_sandbox_execution(
+            execution, cell_root=cell_root,
+            expected={"broker_evaluation_chain": {
+                "controller_sandbox_execution_receipt_sha256":
+                    execution["receipt_sha256"],
+            }})
 
     def arm(self, arm_id: str) -> C.ArmImplementation:
         if arm_id == C.BASELINE_ARM_ID:
@@ -547,7 +594,6 @@ class ArenaCellRunnerTest(unittest.TestCase):
             }, workspace)
 
     def test_identity_drift_refuses_before_claim_or_worker(self):
-        acquire = mock.Mock()
         worker = mock.Mock()
         runner = R.GovernedArenaCellRunner(self.config(), worker=worker)
         request = C.CampaignCellRequest(
