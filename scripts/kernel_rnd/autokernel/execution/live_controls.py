@@ -43,7 +43,7 @@ INSTRUMENT_BINARY = Path(os.environ.get(
     "AUTOKERNEL_INSTRUMENT_BINARY",
     str(INSTRUMENT_ROOT / "build-v9-cpu/bin/llama-bench")))
 INSTRUMENT_BRANCH = "experimental-v9-autokernel-t1-hardening-final"
-INSTRUMENT_COMMIT = "b05a1618c3a1acb5253cf1f2c9813a6f43b0376b"
+INSTRUMENT_COMMIT = "974b5fcb3670ee234242ebe5271266373ade7bf2"
 MODEL = Path(
     "/mnt/raid0/llm/models/lmstudio-community/"
     "Qwen2.5-Coder-0.5B-GGUF/Qwen2.5-Coder-0.5B-Q4_K_M.gguf")

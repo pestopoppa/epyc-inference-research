@@ -118,7 +118,7 @@ Something else moved production and every anchor you are about to take is wrong.
 The reward instrument is a separate reviewed source anchor:
 
 ```
-/mnt/raid0/llm/llama.cpp-ak-controls-v9-final  b05a1618c3a1acb5253cf1f2c9813a6f43b0376b  experimental-v9-autokernel-t1-hardening-final
+/mnt/raid0/llm/llama.cpp-ak-controls-v9-final  974b5fcb3670ee234242ebe5271266373ade7bf2  experimental-v9-autokernel-t1-hardening-final
 ```
 
 That commit has exactly one parent, the production v9 commit above. It is an
@@ -257,7 +257,7 @@ from autokernel.execution import worktree as WT
 
 repo = WT.GitRepo("/mnt/raid0/llm/llama.cpp-experimental") # READ-ONLY by construction
 anchor = WT.resolve_anchor(repo, "experimental-v9-autokernel-t1-hardening-final",
-                           expected_commit="b05a1618c3a1acb5253cf1f2c9813a6f43b0376b")
+                           expected_commit="974b5fcb3670ee234242ebe5271266373ade7bf2")
 wt, proof = WT.create_campaign_worktree(anchor, "ak-0001")   # /mnt/raid0/llm/llama.cpp-ak-0001
 assert proof.holds, proof.differences
 ```

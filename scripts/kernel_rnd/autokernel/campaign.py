@@ -1038,7 +1038,7 @@ PRODUCTION_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 #: translation units to remain byte-identical to this commit.
 MEASUREMENT_REPO = "/mnt/raid0/llm/llama.cpp-ak-controls-v9-final"
 MEASUREMENT_BRANCH = "experimental-v9-autokernel-t1-hardening-final"
-MEASUREMENT_COMMIT = "b05a1618c3a1acb5253cf1f2c9813a6f43b0376b"
+MEASUREMENT_COMMIT = "974b5fcb3670ee234242ebe5271266373ade7bf2"
 MEASUREMENT_BUILD_ROOT = os.path.join(MEASUREMENT_REPO, "build-v9-cpu")
 
 
