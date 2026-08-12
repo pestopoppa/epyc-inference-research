@@ -599,7 +599,7 @@ def prepare_controller_sandbox(
     if cgroup_root is not None:
         kwargs["cgroup_root"] = str(_exact_path(cgroup_root, directory=True))
     policy = sandbox.SandboxPolicy(
-        str(work), profile=sandbox.CONTROLLER_PROFILE,
+        str(work), profile=sandbox.CONTROLLER_BROKER_PROFILE,
         writable_device_paths=("/dev/null",),
         readable_roots=runtime.readable_roots,
         readable_files=runtime.readable_files,
@@ -614,9 +614,74 @@ def prepare_controller_sandbox(
         expected_argv=argv, runtime=runtime)
 
 
+def prepare_model_sandbox(
+    *, workspace: str | Path, receipt_path: str | Path,
+    expected_argv: Sequence[str], runtime: RuntimeAllowlist,
+    cgroup_root: str | Path | None = None,
+) -> ControllerSandboxInvocation:
+    """Build one direct model-CLI sandbox bound to the CLI's own PID.
+
+    A model process receives outbound client networking but no evaluation
+    broker descriptor.  In particular, volatile ``/proc/self`` rules are
+    installed only after the wrapper has become the final CLI PID; applying
+    them to a Python controller and inheriting them across ``fork`` binds the
+    wrong procfs inode and is therefore forbidden by construction.
+    """
+    work = _exact_path(workspace, directory=True)
+    receipt = Path(receipt_path).resolve()
+    if receipt.exists() or not receipt.parent.is_dir():
+        raise ControllerSandboxError(
+            "model activation receipt target must be new in an existing directory")
+    checked_roots = _unique_exact(
+        runtime.readable_roots, directory=True, workspace=work,
+        forbidden_roots=())
+    ordinary_files = tuple(
+        path for path in runtime.readable_files
+        if path not in sandbox.CONTROLLER_RUNTIME_READ_FILES)
+    runtime_files = tuple(
+        path for path in runtime.readable_files
+        if path in sandbox.CONTROLLER_RUNTIME_READ_FILES)
+    checked_files = _unique_exact(
+        ordinary_files, directory=False, workspace=work,
+        forbidden_roots=())
+    checked_runtime_files = _controller_runtime_read_files(
+        runtime_files, workspace=work, forbidden_roots=())
+    checked_executables = _unique_exact(
+        runtime.executable_files, directory=False, workspace=work,
+        forbidden_roots=())
+    if (tuple(map(str, checked_roots)) != runtime.readable_roots
+            or (tuple(map(str, checked_files)) + checked_runtime_files)
+            != runtime.readable_files
+            or tuple(map(str, checked_executables)) != runtime.executable_files):
+        raise ControllerSandboxError("model runtime allowlist changed during admission")
+    if not expected_argv or Path(expected_argv[0]).is_symlink():
+        raise ControllerSandboxError("model argv requires an exact non-symlink executable")
+    executable = _exact_path(expected_argv[0], directory=False)
+    argv = (str(executable), *map(str, expected_argv[1:]))
+    admitted_roots = tuple(Path(path) for path in runtime.readable_roots)
+    admitted_executables = {Path(path) for path in runtime.executable_files}
+    if executable not in admitted_executables and not any(
+            executable.is_relative_to(root) for root in admitted_roots):
+        raise ControllerSandboxError("model executable is absent from its allowlist")
+    kwargs: dict[str, Any] = {}
+    if cgroup_root is not None:
+        kwargs["cgroup_root"] = str(_exact_path(cgroup_root, directory=True))
+    policy = sandbox.SandboxPolicy(
+        str(work), profile=sandbox.MODEL_PROFILE,
+        writable_device_paths=("/dev/null",),
+        readable_roots=runtime.readable_roots,
+        readable_files=runtime.readable_files,
+        executable_files=runtime.executable_files,
+        **kwargs,
+    )
+    return ControllerSandboxInvocation(
+        policy=policy, receipt_path=receipt,
+        expected_argv=argv, runtime=runtime)
+
+
 __all__ = [
     "CONTROLLER_ENVIRONMENT", "ControllerSandboxError",
     "ControllerSandboxInvocation", "RuntimeAllowlist",
     "copy_controller_workspace", "discover_runtime_allowlist",
-    "prepare_controller_sandbox",
+    "prepare_controller_sandbox", "prepare_model_sandbox",
 ]

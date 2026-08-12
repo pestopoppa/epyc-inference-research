@@ -46,6 +46,8 @@ SANDBOX_ID = "autokernel.execution.sandbox/landlock-seccomp-cgroup-v2"
 RECEIPT_SCHEMA = "epyc.autokernel.sandbox_receipt.v2"
 DEFAULT_PROFILE = "candidate_default_v1"
 CONTROLLER_PROFILE = "controller_outbound_client_v1"
+CONTROLLER_BROKER_PROFILE = "controller_broker_only_v1"
+MODEL_PROFILE = "model_outbound_client_v1"
 EVALUATOR_PROFILE = "candidate_evaluator_gpu_v1"
 NETWORK_DENY_ALL = "deny_all"
 NETWORK_OUTBOUND_CLIENT = "outbound_client"
@@ -355,8 +357,10 @@ def _jump(code: int, k: int, jt: int, jf: int) -> _SockFilter:
 def _network_policy(profile: str) -> tuple[Mapping[str, int], bool, str]:
     if profile in {DEFAULT_PROFILE, EVALUATOR_PROFILE}:
         return _BLOCKED_SYSCALLS, False, NETWORK_DENY_ALL
-    if profile == CONTROLLER_PROFILE:
+    if profile in {CONTROLLER_PROFILE, MODEL_PROFILE}:
         return _CONTROLLER_BLOCKED_SYSCALLS, True, NETWORK_OUTBOUND_CLIENT
+    if profile == CONTROLLER_BROKER_PROFILE:
+        return _BLOCKED_SYSCALLS, True, NETWORK_DENY_ALL
     raise SandboxError(f"unknown sandbox profile: {profile!r}")
 
 
@@ -494,7 +498,8 @@ class SandboxPolicy:
         normalized_file_rows: list[str] = []
         for raw_path in self.readable_files:
             literal = os.fspath(raw_path)
-            if (self.profile == CONTROLLER_PROFILE
+            if (self.profile in {
+                    CONTROLLER_PROFILE, CONTROLLER_BROKER_PROFILE, MODEL_PROFILE}
                     and literal in CONTROLLER_RUNTIME_READ_FILES):
                 # Keep /proc/self literal: resolving it in the evaluator would
                 # authorize the evaluator PID, not the eventual controller.
@@ -530,7 +535,9 @@ class SandboxPolicy:
             mode = os.stat(path).st_mode
             random_source = (
                 path == "/dev/urandom" and stat.S_ISCHR(mode)
-                and self.profile in {CONTROLLER_PROFILE, EVALUATOR_PROFILE})
+                and self.profile in {
+                    CONTROLLER_PROFILE, CONTROLLER_BROKER_PROFILE,
+                    MODEL_PROFILE, EVALUATOR_PROFILE})
             if not stat.S_ISREG(mode) and not random_source:
                 raise SandboxError(f"readable file is not regular: {path}")
             if path.startswith("/dev/") and not random_source:
@@ -559,27 +566,41 @@ class SandboxPolicy:
                     or broker_path is not None):
                 raise SandboxError(
                     "read allowlisting and broker sockets require controller profile")
-        elif self.profile == CONTROLLER_PROFILE:
+        elif self.profile in {
+                CONTROLLER_PROFILE, CONTROLLER_BROKER_PROFILE, MODEL_PROFILE}:
             if not normalized_roots and not normalized_files \
                     and not normalized_executables:
                 raise SandboxError(
-                    "controller profile requires exact readable roots or files")
-            if broker_path is None:
-                raise SandboxError("controller profile requires an exact broker socket")
-            if (isinstance(self.broker_peer_pid, bool)
-                    or not isinstance(self.broker_peer_pid, int)
-                    or self.broker_peer_pid <= 1):
-                raise SandboxError("controller profile requires broker_peer_pid")
-            if (isinstance(self.broker_peer_start_ticks, bool)
-                    or not isinstance(self.broker_peer_start_ticks, int)
-                    or self.broker_peer_start_ticks <= 0):
+                    "controller/model profile requires exact readable roots or files")
+            broker_required = self.profile in {
+                CONTROLLER_PROFILE, CONTROLLER_BROKER_PROFILE}
+            if broker_required and broker_path is None:
                 raise SandboxError(
-                    "controller profile requires broker_peer_start_ticks")
+                    "controller profile requires an exact broker socket")
+            if not broker_required and broker_path is not None:
+                raise SandboxError("model profile cannot inherit a broker socket")
+            if broker_required:
+                if (isinstance(self.broker_peer_pid, bool)
+                        or not isinstance(self.broker_peer_pid, int)
+                        or self.broker_peer_pid <= 1):
+                    raise SandboxError("controller profile requires broker_peer_pid")
+                if (isinstance(self.broker_peer_start_ticks, bool)
+                        or not isinstance(self.broker_peer_start_ticks, int)
+                        or self.broker_peer_start_ticks <= 0):
+                    raise SandboxError(
+                        "controller profile requires broker_peer_start_ticks")
+            elif self.broker_peer_pid is not None \
+                    or self.broker_peer_start_ticks is not None:
+                raise SandboxError("model profile cannot name a broker peer")
             if any(path != "/dev/null" for path in normalized_devices):
                 raise SandboxError(
-                    "controller profile can admit only the null device")
-            if network_profile != NETWORK_OUTBOUND_CLIENT:
-                raise SandboxError("controller profile must use outbound-client network")
+                    "controller/model profile can admit only the null device")
+            expected_network = (
+                NETWORK_DENY_ALL if self.profile == CONTROLLER_BROKER_PROFILE
+                else NETWORK_OUTBOUND_CLIENT)
+            if network_profile != expected_network:
+                raise SandboxError(
+                    "controller/model profile has the wrong network policy")
         elif self.profile == EVALUATOR_PROFILE:
             if not normalized_roots and not normalized_files:
                 raise SandboxError(
@@ -621,7 +642,9 @@ class SandboxPolicy:
 
     @property
     def restrict_reads(self) -> bool:
-        return self.profile in {CONTROLLER_PROFILE, EVALUATOR_PROFILE}
+        return self.profile in {
+            CONTROLLER_PROFILE, CONTROLLER_BROKER_PROFILE,
+            MODEL_PROFILE, EVALUATOR_PROFILE}
 
     def policy_document(self) -> dict[str, Any]:
         blocked, deny_unix, network = _network_policy(self.profile)
@@ -1018,6 +1041,7 @@ def verify_receipt(document: Mapping[str, Any], *, policy: SandboxPolicy,
 
 __all__ = [
     "BROKER_FD_ENV", "CGROUP_ROOT_ENV", "CONTROLLER_PROFILE",
+    "CONTROLLER_BROKER_PROFILE", "MODEL_PROFILE",
     "CONTROLLER_RUNTIME_READ_FILES",
     "EVALUATOR_PROFILE",
     "DEFAULT_PROFILE", "HOST_CGROUP_ROOT", "NETWORK_DENY_ALL",

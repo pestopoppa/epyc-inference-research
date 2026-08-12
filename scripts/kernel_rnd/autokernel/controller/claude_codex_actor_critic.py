@@ -24,7 +24,8 @@ import threading
 import time
 from typing import Any, Callable, Mapping, Sequence
 
-from . import arena_adapter, codex_container_actor
+from . import arena_adapter, arena_upstream_common, codex_container_actor
+from ..execution import sandbox
 
 
 CONTROLLER_ID = "claude_codex_actor_critic"
@@ -135,6 +136,7 @@ class ProcessCapture:
 
 CommandRunner = Callable[[Sequence[str], Path, Mapping[str, str], str, float],
                          ProcessCapture]
+_MODEL_BROKER_CLIENT: arena_upstream_common.ModelBrokerClient | None = None
 
 
 def _sha256_bytes(content: bytes) -> str:
@@ -174,6 +176,19 @@ def _run_process(argv: Sequence[str], cwd: Path, env: Mapping[str, str],
     if (not argv or any(not isinstance(part, str) or not part for part in argv)
             or not math.isfinite(timeout_seconds) or timeout_seconds <= 0):
         raise ActorCriticError("process argv and timeout must be bounded and non-empty")
+    global _MODEL_BROKER_CLIENT
+    if env.get(sandbox.BROKER_FD_ENV):
+        if _MODEL_BROKER_CLIENT is None:
+            _MODEL_BROKER_CLIENT = arena_upstream_common.ModelBrokerClient(env)
+        kind = "claude_json" if "--json-schema" in argv else "codex_actor"
+        response = _MODEL_BROKER_CLIENT.call(
+            kind=kind, argv=argv, prompt=input_text,
+            timeout_seconds=timeout_seconds)
+        return ProcessCapture(
+            tuple(argv), response.get("returncode"),
+            str(response.get("stdout", "")),
+            str(response.get("stderr", "")),
+            bool(response.get("timed_out")))
     try:
         process = subprocess.Popen(
             list(argv), cwd=cwd, env=dict(env), stdin=subprocess.PIPE,
@@ -474,6 +489,18 @@ def run_controller(
     env = arena_adapter.architecture_environment(
         os.environ if environment is None else environment)
     cli = resolve_cli_identities(env)
+    evaluator = None
+    arena_root = env.get("AUTOKERNEL_ARENA_ROOT")
+    if env.get(sandbox.BROKER_FD_ENV):
+        if not arena_root:
+            raise ActorCriticError("brokered controller lacks its Arena root")
+        evaluator = arena_upstream_common.ArenaWorkspaceEvaluator(
+            workspace=root, arena_root=Path(arena_root))
+        # Bank the starting state through the same broker so selection remains
+        # evidence-backed even when every authored candidate regresses.
+        evaluator.evaluate({
+            path: (root / path).read_text(encoding="utf-8")
+            for path in evaluator.source_paths})
     initial = _workspace_manifest(root)
     journal = ArtifactJournal(root)
     started = monotonic()
@@ -537,17 +564,27 @@ def run_controller(
         if capture.returncode != 0:
             raise ActorCriticError(f"actor CLI exited {capture.returncode}")
         after_sha = _sha256_file(candidate_path)
+        measured = None
+        if evaluator is not None:
+            measured = evaluator.evaluate({
+                path: (root / path).read_text(encoding="utf-8")
+                for path in evaluator.source_paths})
+        before_critic = _workspace_manifest(root)
         candidate_rows.append({
             "iteration": iteration,
             "proposal_id": proposal["proposal_id"],
             "path": proposal["candidate_path"],
             "before_sha256": before_sha,
             "after_sha256": after_sha,
+            **({"arena_evaluation": dict(measured.raw)}
+               if measured is not None else {}),
         })
         critic_prompt = (
             f"{prompt}\n\nYou are the critic. Review proposal "
             f"{proposal['proposal_id']} for {proposal['candidate_path']}. The candidate "
             f"changed from SHA-256 {before_sha} to {after_sha}. Return only JSON with "
+            + (f"Centralized Arena measurement: {json.dumps(measured.raw, sort_keys=True)}. "
+               if measured is not None else "") +
             f"schema {CRITIQUE_SCHEMA}. The object must contain exactly these four "
             "fields and no others: schema, proposal_id (the same value), decision "
             "(accept, revise, or stop), and a non-empty reason. Do not edit files."
@@ -562,7 +599,7 @@ def run_controller(
                 _critique_json_schema(proposal["proposal_id"])),
             root, env, critic_prompt, remaining)
         journal.record("critic", iteration, critic_prompt, capture)
-        if _workspace_manifest(root) != after_actor:
+        if _workspace_manifest(root) != before_critic:
             raise ActorCriticError("critic changed the isolated Arena workspace")
         if capture.timed_out:
             stop_reason = "campaign_checkpoint"
@@ -574,6 +611,8 @@ def run_controller(
             stop_reason = f"critic_{critique['decision']}"
             break
 
+    if evaluator is not None:
+        evaluator.materialize_best()
     final = _workspace_manifest(root)
     receipt = journal.receipt({
         "schema": RECEIPT_SCHEMA,
@@ -596,6 +635,8 @@ def run_controller(
         },
         "proposal_sha256": [_canonical_sha256(row) for row in proposals],
         "candidate_artifacts": candidate_rows,
+        **({"evaluation": evaluator.receipt_fields()}
+           if evaluator is not None else {}),
         "constraints": {
             "workspace_only": True,
             "planner_critic_write_access": False,

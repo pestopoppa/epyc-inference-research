@@ -26,7 +26,7 @@ import sys
 import threading
 import time
 from types import SimpleNamespace
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from . import arena_adapter
 from ..execution import sandbox
@@ -40,6 +40,8 @@ BROKER_TOKEN_ENV = "AUTOKERNEL_ARENA_EVALUATION_BROKER_TOKEN"
 BROKER_OWNER_PID_ENV = "AUTOKERNEL_ARENA_EVALUATION_BROKER_OWNER_PID"
 BROKER_REQUEST_SCHEMA = "epyc.autokernel.arena_controller_evaluation_request.v1"
 BROKER_RESULT_SCHEMA = "epyc.autokernel.arena_controller_evaluation.v1"
+MODEL_BROKER_REQUEST_SCHEMA = "epyc.autokernel.arena_model_request.v1"
+MODEL_BROKER_RESULT_SCHEMA = "epyc.autokernel.arena_model_result.v1"
 _MAX_BROKER_MESSAGE_BYTES = 16 * 1024 * 1024
 _SAFE_FILE = re.compile(r"[A-Za-z_][A-Za-z0-9_./-]{0,255}")
 
@@ -50,6 +52,89 @@ class UpstreamControllerError(RuntimeError):
 
 class ControllerBudgetExpired(UpstreamControllerError):
     """The matched controller wall-time budget has been exhausted."""
+
+
+_MODEL_BROKER_IO_LOCK = threading.Lock()
+
+
+class ModelBrokerClient:
+    """Authenticated model-inference client over the wrapper-inherited stream."""
+
+    def __init__(self, environment: Mapping[str, str]):
+        inherited_fd = environment.get(sandbox.BROKER_FD_ENV)
+        token = environment.get(BROKER_TOKEN_ENV)
+        owner = environment.get(BROKER_OWNER_PID_ENV)
+        workspace = environment.get("AUTOKERNEL_CONTROLLER_WORKSPACE")
+        if not inherited_fd or not token or not owner or not workspace:
+            raise UpstreamControllerError(
+                "controller lacks its inherited model broker identity")
+        try:
+            descriptor = int(inherited_fd)
+            self.stream = socket.socket(fileno=os.dup(descriptor))
+            self.owner_pid = int(owner)
+        except (OSError, ValueError) as exc:
+            raise UpstreamControllerError(
+                "controller inherited model broker descriptor is invalid") from exc
+        self.stream.set_inheritable(False)
+        self.token = token
+        self.workspace = workspace
+        self._ordinal = 0
+
+    def close(self) -> None:
+        self.stream.close()
+
+    def call(
+        self, *, kind: str, argv: Sequence[str], prompt: str,
+        timeout_seconds: float,
+    ) -> dict[str, Any]:
+        if (kind not in {"claude_json", "codex_actor", "codex_text"}
+                or not isinstance(prompt, str) or not prompt.strip()
+                or not math.isfinite(timeout_seconds) or timeout_seconds <= 0
+                or not argv or any(not isinstance(row, str) or not row for row in argv)):
+            raise UpstreamControllerError("model broker request is invalid")
+        self._ordinal += 1
+        request = {
+            "schema": MODEL_BROKER_REQUEST_SCHEMA,
+            "token": self.token,
+            "owner_pid": self.owner_pid,
+            "workspace": self.workspace,
+            "model_call_ordinal": self._ordinal,
+            "kind": kind,
+            "argv": list(argv),
+            "prompt": prompt,
+            "timeout_seconds": float(timeout_seconds),
+        }
+        encoded = json.dumps(
+            request, sort_keys=True, separators=(",", ":")).encode()
+        if len(encoded) > _MAX_BROKER_MESSAGE_BYTES:
+            raise UpstreamControllerError("model broker request exceeds its size limit")
+        with _MODEL_BROKER_IO_LOCK:
+            try:
+                self.stream.sendall(struct.pack("!Q", len(encoded)) + encoded)
+                length = struct.unpack("!Q", _recv_exact(self.stream, 8))[0]
+                if length > _MAX_BROKER_MESSAGE_BYTES:
+                    raise UpstreamControllerError(
+                        "model broker response exceeds its size limit")
+                response = json.loads(_recv_exact(self.stream, length))
+            except (OSError, json.JSONDecodeError, struct.error) as exc:
+                raise UpstreamControllerError("model broker IPC failed") from exc
+        if isinstance(response, Mapping) and response.get("status") == "error":
+            raise UpstreamControllerError(
+                "model broker failed: " + str(response.get("error")))
+        claimed = response.get("receipt_sha256") if isinstance(response, dict) else None
+        without_hash = ({key: value for key, value in response.items()
+                         if key != "receipt_sha256"}
+                        if isinstance(response, dict) else {})
+        if (not isinstance(response, dict)
+                or response.get("schema") != MODEL_BROKER_RESULT_SCHEMA
+                or claimed != _canonical_sha256(without_hash)
+                or response.get("model_call_ordinal") != self._ordinal
+                or response.get("kind") != kind
+                or response.get("workspace") != self.workspace
+                or response.get("prompt_sha256")
+                != hashlib.sha256(prompt.encode()).hexdigest()):
+            raise UpstreamControllerError("model broker response identity is invalid")
+        return response
 
 
 def _sha256_file(path: Path) -> str:
@@ -178,8 +263,11 @@ class CodexTextModel:
     ):
         self.workspace = workspace_root(workspace)
         self.budget = budget
-        self.environment = arena_adapter.architecture_environment(
-            os.environ if environment is None else environment)
+        source_environment = os.environ if environment is None else environment
+        self.environment = arena_adapter.architecture_environment(source_environment)
+        self._model_broker = (
+            ModelBrokerClient(source_environment)
+            if source_environment.get(sandbox.BROKER_FD_ENV) else None)
         self.environment.update({
             "HIP_VISIBLE_DEVICES": "", "ROCR_VISIBLE_DEVICES": "",
             "CUDA_VISIBLE_DEVICES": "",
@@ -232,23 +320,34 @@ class CodexTextModel:
         ordinal = len(self._calls) + 1
         output = self.artifact_root / f"{ordinal:04d}-model-output.txt"
         stderr_path = self.artifact_root / f"{ordinal:04d}-model-stderr.txt"
-        process = subprocess.Popen(
-            self._argv(output), cwd=self.workspace, env=self.environment,
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, start_new_session=True)
-        timed_out = False
-        stdout = ""
-        stderr = ""
-        try:
-            stdout, stderr = process.communicate(input=prompt, timeout=remaining)
-        except subprocess.TimeoutExpired as exc:
-            timed_out = True
-            stdout = _timeout_text(exc.stdout)
-            stderr = _timeout_text(exc.stderr)
-            _defer_timed_out_child(process)
-        except BaseException:
-            _defer_timed_out_child(process)
-            raise
+        model_broker = getattr(self, "_model_broker", None)
+        if model_broker is not None:
+            brokered = model_broker.call(
+                kind="codex_text", argv=self._argv(output), prompt=prompt,
+                timeout_seconds=remaining)
+            returncode = brokered.get("returncode")
+            timed_out = bool(brokered.get("timed_out"))
+            stdout = str(brokered.get("stdout", ""))
+            stderr = str(brokered.get("stderr", ""))
+        else:
+            process = subprocess.Popen(
+                self._argv(output), cwd=self.workspace, env=self.environment,
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True, start_new_session=True)
+            timed_out = False
+            stdout = ""
+            stderr = ""
+            try:
+                stdout, stderr = process.communicate(input=prompt, timeout=remaining)
+            except subprocess.TimeoutExpired as exc:
+                timed_out = True
+                stdout = _timeout_text(exc.stdout)
+                stderr = _timeout_text(exc.stderr)
+                _defer_timed_out_child(process)
+            except BaseException:
+                _defer_timed_out_child(process)
+                raise
+            returncode = process.returncode
         stderr_path.write_text(stderr, encoding="utf-8")
         event = {
             "ordinal": ordinal,
@@ -256,7 +355,7 @@ class CodexTextModel:
             "effort": MODEL_EFFORT,
             "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
             "argv": list(self._argv(output)),
-            "returncode": process.returncode,
+            "returncode": returncode,
             "timed_out": timed_out,
             "stdout_sha256": hashlib.sha256(stdout.encode()).hexdigest(),
             "stderr_sha256": _sha256_file(stderr_path),
@@ -265,9 +364,9 @@ class CodexTextModel:
         _atomic_json(self.artifact_root / "transcript.json", {"calls": self._calls})
         if timed_out:
             raise ControllerBudgetExpired("Codex call reached the campaign checkpoint")
-        if process.returncode != 0:
+        if returncode != 0:
             raise UpstreamControllerError(
-                f"Codex CLI exited {process.returncode}: {stderr[-500:]}")
+                f"Codex CLI exited {returncode}: {stderr[-500:]}")
         if not output.is_file():
             raise UpstreamControllerError("Codex CLI emitted no last-message artifact")
         result = output.read_text(encoding="utf-8").strip()
@@ -519,32 +618,34 @@ class ArenaWorkspaceEvaluator:
         if len(encoded) > _MAX_BROKER_MESSAGE_BYTES:
             raise UpstreamControllerError("Arena broker request exceeds its size limit")
         try:
-            broker_stream = getattr(self, "_broker_stream", None)
-            if broker_stream is None:
-                client_context = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-                client_context.connect(str(self.broker_socket))
-                close_after = True
-            else:
-                client_context = broker_stream
-                close_after = False
-            client = client_context
-            try:
-                server_pid, server_uid, _ = struct.unpack(
-                    "3i", client.getsockopt(
-                        socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
-                if server_pid != self._broker_owner_pid or server_uid != os.getuid():
-                    raise UpstreamControllerError(
-                        "Arena broker server identity is invalid")
-                client.sendall(struct.pack("!Q", len(encoded)) + encoded)
-                header = _recv_exact(client, 8)
-                length = struct.unpack("!Q", header)[0]
-                if length > _MAX_BROKER_MESSAGE_BYTES:
-                    raise UpstreamControllerError(
-                        "Arena broker response exceeds its size limit")
-                receipt = json.loads(_recv_exact(client, length))
-            finally:
-                if close_after:
-                    client.close()
+            with _MODEL_BROKER_IO_LOCK:
+                broker_stream = getattr(self, "_broker_stream", None)
+                if broker_stream is None:
+                    client_context = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                    client_context.connect(str(self.broker_socket))
+                    close_after = True
+                else:
+                    client_context = broker_stream
+                    close_after = False
+                client = client_context
+                try:
+                    server_pid, server_uid, _ = struct.unpack(
+                        "3i", client.getsockopt(
+                            socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+                    if server_pid != self._broker_owner_pid \
+                            or server_uid != os.getuid():
+                        raise UpstreamControllerError(
+                            "Arena broker server identity is invalid")
+                    client.sendall(struct.pack("!Q", len(encoded)) + encoded)
+                    header = _recv_exact(client, 8)
+                    length = struct.unpack("!Q", header)[0]
+                    if length > _MAX_BROKER_MESSAGE_BYTES:
+                        raise UpstreamControllerError(
+                            "Arena broker response exceeds its size limit")
+                    receipt = json.loads(_recv_exact(client, length))
+                finally:
+                    if close_after:
+                        client.close()
         except (OSError, json.JSONDecodeError, struct.error) as exc:
             raise UpstreamControllerError(
                 "Arena evaluation broker IPC failed") from exc
@@ -627,8 +728,10 @@ def build_controller_receipt(
 __all__ = [
     "ARTIFACT_DIRNAME", "BROKER_SOCKET_ENV", "BROKER_TOKEN_ENV",
     "BROKER_OWNER_PID_ENV", "BROKER_REQUEST_SCHEMA", "BROKER_RESULT_SCHEMA",
+    "MODEL_BROKER_REQUEST_SCHEMA", "MODEL_BROKER_RESULT_SCHEMA",
     "MODEL_EFFORT", "MODEL_ID", "PINNED_MODEL_IDS",
     "REQUIRED_CLIS", "ArenaWorkspaceEvaluator", "CodexTextModel",
+    "ModelBrokerClient",
     "ControllerBudget", "ControllerBudgetExpired", "EvaluationRecord",
     "UpstreamControllerError", "build_controller_receipt", "workspace_root",
 ]

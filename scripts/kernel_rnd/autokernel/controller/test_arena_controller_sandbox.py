@@ -346,6 +346,60 @@ class ControllerSandboxContractTest(unittest.TestCase):
         teardown = sandbox.cleanup_cgroup(invocation.policy, invocation.pid)
         self.assertTrue(teardown["verified_empty"])
 
+    def test_model_profile_binds_proc_self_to_the_direct_cli_pid(self):
+        runtime = C.discover_runtime_allowlist(
+            workspace=self.workspace, python_executable=self.python,
+            controller_source_roots=(self.module_root,),
+            controller_entrypoint=Path(__file__).resolve(),
+            repository_module_roots=(), codex_cli=self.fake_codex,
+            node_executable=self.fake_node, codex_auth=self.auth,
+            ca_files=(self.ca,), forbidden_roots=(self.forbidden,),
+            additional_cli_runtime_read_files=("/proc/self/stat",),
+        )
+        code = "\n".join((
+            "import json,os,socket",
+            "parent=open('/proc/self/stat').read().split()[0]",
+            "child=os.fork()",
+            "if child == 0:",
+            "  try: open('/proc/self/stat').read(); value='unexpected'",
+            "  except PermissionError: value='denied'",
+            f"  open({str(self.workspace / 'child.json')!r},'w').write(json.dumps(value))",
+            "  os._exit(0)",
+            "os.waitpid(child,0)",
+            "inet=socket.socket(socket.AF_INET,socket.SOCK_STREAM); inet.close()",
+            "print(json.dumps({'parent':parent,'pid':str(os.getpid())}))",
+        ))
+        argv = (str(self.python), "-c", code)
+        invocation = C.prepare_model_sandbox(
+            workspace=self.workspace,
+            receipt_path=self.evidence / "model-activation.json",
+            expected_argv=argv, runtime=runtime)
+        prepared = arena_adapter.prepare_task(
+            arena_adapter.ArenaTask(
+                task_id="tiny/model", task_prompt="Probe.",
+                workspace=str(self.workspace), controller_id="kernelfoundry",
+                round_id="sandbox-test", actual_gfx_arch="gfx90a"),
+            base_environment={
+                "PATH": os.environ["PATH"], "PYTHONPATH": "",
+                **invocation.environment_overrides})
+        output = arena_adapter.launch(
+            prepared, argv, timeout_seconds=10,
+            command_prefix=invocation.command_prefix,
+            process_started=invocation.process_started)
+        result = json.loads(output)
+        self.assertEqual(result["parent"], result["pid"])
+        self.assertEqual(
+            json.loads((self.workspace / "child.json").read_text()), "denied")
+        teardown = invocation.verify_and_teardown(
+            self.evidence / "model-teardown.json")
+        activation = sandbox.read_receipt(
+            self.evidence / "model-activation.json")
+        self.assertEqual(activation["profile"], sandbox.MODEL_PROFILE)
+        self.assertEqual(
+            activation["network_profile"], sandbox.NETWORK_OUTBOUND_CLIENT)
+        self.assertFalse(activation["broker_fd_inherited"])
+        self.assertTrue(teardown["teardown"]["verified_empty"])
+
 
 if __name__ == "__main__":
     unittest.main()

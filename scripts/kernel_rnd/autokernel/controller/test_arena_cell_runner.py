@@ -123,7 +123,7 @@ def fake_controller_sandbox_execution(cell_root: Path) -> dict:
     policy_sha = "b" * 64
     cgroup = "/sys/fs/cgroup/autokernel-fixture-controller"
     blocked = sorted(R.sandbox._network_policy(
-        R.sandbox.CONTROLLER_PROFILE)[0])
+        R.sandbox.CONTROLLER_BROKER_PROFILE)[0])
     activation = {
         "schema": R.sandbox.RECEIPT_SCHEMA,
         "sandbox_id": R.sandbox.SANDBOX_ID,
@@ -136,10 +136,11 @@ def fake_controller_sandbox_execution(cell_root: Path) -> dict:
         "read_allowlist_enforced": True,
         "readable_roots": readable_roots, "readable_files": [],
         "executable_files": [str(Path(sys.executable).resolve())],
-        "profile": R.sandbox.CONTROLLER_PROFILE,
-        "network_profile": R.sandbox.NETWORK_OUTBOUND_CLIENT,
-        "outbound_socket_families": ["AF_INET", "AF_INET6"],
-        "server_socket_operations_denied": ["listen", "accept", "accept4"],
+        "profile": R.sandbox.CONTROLLER_BROKER_PROFILE,
+        "network_profile": R.sandbox.NETWORK_DENY_ALL,
+        "outbound_socket_families": [],
+        "server_socket_operations_denied": [
+            "bind", "listen", "accept", "accept4"],
         "unix_socket_creation_denied": True,
         "broker_socket_path": "/tmp/fake-broker.sock",
         "broker_fd_inherited": True,
@@ -1033,6 +1034,7 @@ class ArenaCellRunnerTest(unittest.TestCase):
         broker = R._ControllerEvaluationBroker(
             request=request, workspace=workspace, cell_root=cell,
             source_paths=("kernel.hip",), evaluate=evaluate,
+            infer=mock.Mock(),
             baseline_receipt_sha256="b" * 64)
         evaluator = object.__new__(U.ArenaWorkspaceEvaluator)
         evaluator.workspace = workspace
@@ -1097,7 +1099,8 @@ class ArenaCellRunnerTest(unittest.TestCase):
                      "task": {"task_id": "fixture.task"},
                      "arm": {"arm_id": "k_search"}, "checkpoint_hours": 2.0},
             workspace=workspace, cell_root=cell, source_paths=("kernel.hip",),
-            evaluate=evaluated, baseline_receipt_sha256="b" * 64)
+            evaluate=evaluated, infer=mock.Mock(),
+            baseline_receipt_sha256="b" * 64)
         evaluator = object.__new__(U.ArenaWorkspaceEvaluator)
         evaluator.workspace = workspace
         evaluator.broker_receipts = []
@@ -1166,6 +1169,7 @@ class ArenaCellRunnerTest(unittest.TestCase):
         broker = R._ControllerEvaluationBroker(
             request=request, workspace=workspace, cell_root=cell,
             source_paths=("kernel.hip",), evaluate=evaluate,
+            infer=mock.Mock(),
             baseline_receipt_sha256="b" * 64)
 
         def send(stream, ordinal):
@@ -1214,6 +1218,67 @@ class ArenaCellRunnerTest(unittest.TestCase):
         finally:
             thread.join(timeout=2)
             server.close()
+
+    def test_model_and_evaluation_frames_share_one_authenticated_stream(self):
+        cell = self.root / "broker-model"
+        workspace = cell / "workspace"
+        workspace.mkdir(parents=True)
+        (workspace / "config.yaml").write_text("x: y\n", encoding="utf-8")
+        (workspace / "kernel.hip").write_text("// original\n", encoding="utf-8")
+        infer = mock.Mock(return_value={
+            "returncode": 0, "stdout": '{"proposal":"ok"}', "stderr": "",
+            "timed_out": False,
+            "execution": {"schema": "fixture.model.execution.v1"},
+        })
+        evaluate = mock.Mock(return_value=(
+            {"pass_compilation": True, "pass_correctness": True,
+             "valid_optimized_cases": 1, "average_speedup": 1.2},
+            {"receipt_sha256": "c" * 64}))
+        request = {
+            "campaign_id": "fixture-campaign-v1", "attempt_id": "attempt-r1",
+            "claim_campaign_id": "attempt-r1",
+            "task": {"task_id": "fixture.task"},
+            "arm": {"arm_id": "claude_codex_actor_critic"},
+            "checkpoint_hours": 2.0}
+        broker = R._ControllerEvaluationBroker(
+            request=request, workspace=workspace, cell_root=cell,
+            source_paths=("kernel.hip",), evaluate=evaluate, infer=infer,
+            baseline_receipt_sha256="b" * 64)
+        with broker:
+            client_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            client_socket.connect(str(broker.socket_path))
+            broker.register_controller(os.getpid())
+            environment = {
+                R.sandbox.BROKER_FD_ENV: str(client_socket.fileno()),
+                U.BROKER_TOKEN_ENV: broker.token,
+                U.BROKER_OWNER_PID_ENV: str(os.getpid()),
+                "AUTOKERNEL_CONTROLLER_WORKSPACE": str(workspace),
+            }
+            model = U.ModelBrokerClient(environment)
+            response = model.call(
+                kind="claude_json", argv=("/pinned/claude", "--json-schema", "{}"),
+                prompt="propose", timeout_seconds=60)
+            self.assertEqual(response["stdout"], '{"proposal":"ok"}')
+            evaluator = object.__new__(U.ArenaWorkspaceEvaluator)
+            evaluator.workspace = workspace
+            evaluator.broker_receipts = []
+            evaluator.broker_socket = broker.socket_path
+            evaluator._broker_token = broker.token
+            evaluator._broker_owner_pid = os.getpid()
+            evaluator._broker_stream = socket.socket(
+                fileno=os.dup(client_socket.fileno()))
+            measured = evaluator._brokered_evaluation(
+                1, {"kernel.hip": b"// candidate\n"})
+            self.assertEqual(measured["average_speedup"], 1.2)
+            model.close()
+            evaluator._broker_stream.close()
+            client_socket.close()
+        infer.assert_called_once()
+        receipt_path = cell / "model-inference-windows" / "0001-result.json"
+        receipt = json.loads(receipt_path.read_text())
+        R._verify_self_hash(receipt, "model broker fixture")
+        self.assertEqual(
+            broker.model_receipt_sha256s, [receipt["receipt_sha256"]])
 
     def test_candidate_evaluation_failure_releases_short_claim(self):
         claim = FakeClaim()

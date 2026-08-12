@@ -38,7 +38,7 @@ import time
 from typing import Any, Callable, Mapping, Sequence
 
 from . import (arena_adapter, arena_campaign, arena_controller_sandbox,
-               arena_evaluator_child,
+               arena_evaluator_child, codex_container_actor,
                arena_roundtrip, arena_upstream_common)
 from ..execution import device_sampler, sandbox
 from ..resource import device_claim
@@ -2019,6 +2019,113 @@ def _launch_isolated_controller(
     return output, execution
 
 
+def _run_brokered_model(
+    *, ordinal: int, kind: str, argv: Sequence[str], prompt: str,
+    timeout_seconds: float, workspace: Path, cell_root: Path,
+    environment: Mapping[str, str],
+    runtime: arena_controller_sandbox.RuntimeAllowlist,
+) -> dict[str, Any]:
+    """Run one exact model call at the process PID its Landlock rules bind."""
+    evidence_root = cell_root / "model-inference-windows" / f"{ordinal:04d}"
+    evidence_root.mkdir(mode=0o700, parents=True)
+    if kind == "codex_actor":
+        # The actor launcher is trusted repository code; its untrusted model
+        # executes inside the digest-pinned, single-writable-bind Docker
+        # boundary implemented by codex_container_actor.py.
+        if (len(argv) != 11 or argv[1:3] != (
+                "-m", codex_container_actor.EXECUTABLE_MODULE)
+                or str(Path(argv[0]).resolve()) not in runtime.identities
+                or argv[3] != "--codex-wrapper"
+                or str(Path(argv[4]).resolve()) not in runtime.identities
+                or argv[5:7] != ("--workspace", str(workspace))
+                or argv[7:] != (
+                    "--model", "gpt-5.6-sol", "--effort", "high")):
+            raise ArenaCellRunnerError("broker rejected a non-pinned Codex actor")
+        invocation = None
+        command_rows = list(argv)
+        command_rows[2] = command_rows[2].removeprefix("scripts.")
+        command = tuple(command_rows)
+    else:
+        cli_name = "claude" if kind == "claude_json" else "codex"
+        resolved_cli = str(Path(argv[0]).resolve())
+        shape_ok = (
+            "--json-schema" in argv if kind == "claude_json"
+            else len(argv) > 1 and argv[1] == "exec")
+        if resolved_cli not in runtime.identities or not shape_ok:
+            raise ArenaCellRunnerError(
+                f"broker rejected a non-audited {cli_name} executable")
+        invocation = arena_controller_sandbox.prepare_model_sandbox(
+            workspace=workspace,
+            receipt_path=evidence_root / "activation.json",
+            expected_argv=argv, runtime=runtime)
+        command = (*invocation.command_prefix, *argv)
+    child_environment = dict(environment)
+    if invocation is not None:
+        child_environment.update(invocation.environment_overrides)
+    child_environment.pop(sandbox.BROKER_FD_ENV, None)
+    for key in (
+            arena_upstream_common.BROKER_SOCKET_ENV,
+            arena_upstream_common.BROKER_TOKEN_ENV,
+            arena_upstream_common.BROKER_OWNER_PID_ENV,
+            "AUTOKERNEL_CONTROLLER_WORKSPACE", "AUTOKERNEL_ARENA_ROOT"):
+        child_environment.pop(key, None)
+    process = subprocess.Popen(
+        command, cwd=workspace, env=child_environment,
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, start_new_session=True)
+    if invocation is not None:
+        invocation.process_started(process.pid)
+    timed_out = False
+    launch_error: BaseException | None = None
+    stdout = ""
+    stderr = ""
+    try:
+        stdout, stderr = process.communicate(
+            input=prompt, timeout=timeout_seconds)
+    except subprocess.TimeoutExpired as exc:
+        timed_out = True
+        stdout = (exc.stdout.decode(errors="replace")
+                  if isinstance(exc.stdout, bytes) else exc.stdout or "")
+        stderr = (exc.stderr.decode(errors="replace")
+                  if isinstance(exc.stderr, bytes) else exc.stderr or "")
+        _terminate_captured_process_group(process.pid)
+        process.wait()
+    except BaseException as exc:
+        launch_error = exc
+        _terminate_captured_process_group(process.pid)
+        process.wait()
+    execution: Mapping[str, Any]
+    if invocation is None:
+        execution = {
+            "schema": "epyc.autokernel.codex_actor_container_boundary.v1",
+            "launcher_sha256": _sha256_file(
+                Path(codex_container_actor.__file__).resolve()),
+            "container": codex_container_actor.runtime_identity(
+                Path(str(argv[argv.index("--codex-wrapper") + 1]))),
+        }
+    else:
+        teardown = invocation.verify_and_teardown(evidence_root / "teardown.json")
+        execution = _self_hash({
+            "schema": "epyc.autokernel.arena_model_sandbox_execution.v1",
+            "pid": invocation.pid,
+            "policy_sha256": invocation.policy.policy_sha256,
+            "runtime_allowlist_sha256": runtime.sha256,
+            "activation_receipt": sandbox.read_receipt(
+                evidence_root / "activation.json"),
+            "teardown_receipt": teardown,
+        })
+        _atomic_json(evidence_root / "execution.json", execution)
+    if launch_error is not None:
+        raise launch_error
+    return {
+        "returncode": process.returncode,
+        "stdout": stdout,
+        "stderr": stderr,
+        "timed_out": timed_out,
+        "execution": dict(execution),
+    }
+
+
 def _validate_controller_sandbox_execution(
     execution: object, *, cell_root: Path, expected: Mapping[str, Any],
 ) -> None:
@@ -2052,13 +2159,13 @@ def _validate_controller_sandbox_execution(
         if (not path.is_absolute() or path.is_symlink() or not path.is_file()
                 or _sha256_file(path) != expected_sha256):
             raise ArenaCellRunnerError("controller runtime identity drifted")
-    if (activation.get("profile") != sandbox.CONTROLLER_PROFILE
+    if (activation.get("profile") != sandbox.CONTROLLER_BROKER_PROFILE
             or activation.get("writable_device_paths") != ["/dev/null"]
             or activation.get("read_allowlist_enforced") is not True
             or activation.get("broker_socket_path") is None
             or activation.get("broker_fd_inherited") is not True
             or not isinstance(activation.get("broker_peer"), Mapping)
-            or activation.get("network_profile") != sandbox.NETWORK_OUTBOUND_CLIENT
+            or activation.get("network_profile") != sandbox.NETWORK_DENY_ALL
             or Path(str(activation.get("writable_root"))).resolve()
             != (cell_root / "workspace").resolve()
             or activation.get("policy_sha256") != execution.get("policy_sha256")
@@ -2124,6 +2231,7 @@ class _ControllerEvaluationBroker:
         source_paths: Sequence[str],
         evaluate: Callable[[int, Path, threading.Event],
                            tuple[Mapping[str, Any], Mapping[str, Any]]],
+        infer: Callable[[int, str, Sequence[str], str, float], Mapping[str, Any]],
         baseline_receipt_sha256: str,
     ):
         self.request, self.workspace, self.cell_root = request, workspace, cell_root
@@ -2131,6 +2239,7 @@ class _ControllerEvaluationBroker:
         _copy_task(workspace, self.template)
         self.source_paths = tuple(sorted(source_paths))
         self.evaluate = evaluate
+        self.infer = infer
         self.baseline_receipt_sha256 = baseline_receipt_sha256
         self.owner_pid = os.getpid()
         self.token = secrets.token_hex(32)
@@ -2148,6 +2257,8 @@ class _ControllerEvaluationBroker:
         self._server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self._stop = threading.Event()
         self._ordinal = 0
+        self._model_ordinal = 0
+        self.model_receipt_sha256s: list[str] = []
         self._controller_pid: int | None = None
         self._controller_starttime: str | None = None
         self._controller_registered = threading.Event()
@@ -2250,12 +2361,16 @@ class _ControllerEvaluationBroker:
         if length > 16 * 1024 * 1024:
             raise ArenaCellRunnerError("controller broker request is too large")
         payload = json.loads(_recv_exact(peer, length))
-        next_ordinal = self._ordinal + 1
         if (not isinstance(payload, dict)
-                or payload.get("schema") != arena_upstream_common.BROKER_REQUEST_SCHEMA
                 or not secrets.compare_digest(str(payload.get("token")), self.token)
                 or payload.get("owner_pid") != self.owner_pid
-                or payload.get("workspace") != str(self.workspace)
+                or payload.get("workspace") != str(self.workspace)):
+            raise ArenaCellRunnerError("controller broker request identity is invalid")
+        if payload.get("schema") == arena_upstream_common.MODEL_BROKER_REQUEST_SCHEMA:
+            self._handle_model_frame(peer, payload)
+            return
+        next_ordinal = self._ordinal + 1
+        if (payload.get("schema") != arena_upstream_common.BROKER_REQUEST_SCHEMA
                 or payload.get("evaluation_ordinal") != next_ordinal):
             raise ArenaCellRunnerError("controller broker request identity is invalid")
         self._ordinal = next_ordinal
@@ -2335,6 +2450,53 @@ class _ControllerEvaluationBroker:
             self.cell_root / "controller-evaluation-windows"
             / f"{self._ordinal:04d}-result.json", receipt)
         self._previous_receipt_sha256 = str(receipt["receipt_sha256"])
+        self._send(peer, receipt)
+
+    def _handle_model_frame(
+        self, peer: socket.socket, payload: Mapping[str, Any],
+    ) -> None:
+        next_ordinal = self._model_ordinal + 1
+        kind = payload.get("kind")
+        argv = payload.get("argv")
+        prompt = payload.get("prompt")
+        timeout = payload.get("timeout_seconds")
+        if (payload.get("model_call_ordinal") != next_ordinal
+                or kind not in {"claude_json", "codex_actor", "codex_text"}
+                or not isinstance(argv, list) or not argv
+                or any(not isinstance(row, str) or not row for row in argv)
+                or not isinstance(prompt, str) or not prompt.strip()
+                or not isinstance(timeout, (int, float)) or isinstance(timeout, bool)
+                or not math.isfinite(float(timeout)) or float(timeout) <= 0
+                or len(prompt.encode()) > 8 * 1024 * 1024):
+            raise ArenaCellRunnerError("controller model request is invalid")
+        self._model_ordinal = next_ordinal
+        outcome = dict(self.infer(
+            next_ordinal, str(kind), tuple(argv), prompt, float(timeout)))
+        required = {"returncode", "stdout", "stderr", "timed_out", "execution"}
+        if set(outcome) != required:
+            raise ArenaCellRunnerError("model broker outcome is malformed")
+        receipt = _self_hash({
+            "schema": arena_upstream_common.MODEL_BROKER_RESULT_SCHEMA,
+            "campaign_id": self.request["campaign_id"],
+            **({"attempt_id": self.request["attempt_id"]}
+               if self.request.get("attempt_id") is not None else {}),
+            "claim_campaign_id": self.request.get(
+                "claim_campaign_id", self.request["campaign_id"]),
+            "task_id": self.request["task"]["task_id"],
+            "arm_id": self.request["arm"]["arm_id"],
+            "checkpoint_hours": self.request["checkpoint_hours"],
+            "model_call_ordinal": next_ordinal,
+            "workspace": str(self.workspace),
+            "kind": kind,
+            "argv_sha256": _canonical_sha256(list(argv)),
+            "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
+            **outcome,
+            "authority": "controller_model_inference_only",
+        })
+        evidence = self.cell_root / "model-inference-windows"
+        evidence.mkdir(mode=0o700, exist_ok=True)
+        _atomic_json(evidence / f"{next_ordinal:04d}-result.json", receipt)
+        self.model_receipt_sha256s.append(str(receipt["receipt_sha256"]))
         self._send(peer, receipt)
 
 
@@ -2502,9 +2664,22 @@ def _run_worker_impl(
                 / f"{ordinal:04d}-measurement.json", window)
             return evaluation, window
 
+        assert controller_runtime is not None
+
+        def broker_infer(
+            ordinal: int, kind: str, argv: Sequence[str], prompt: str,
+            timeout_seconds: float,
+        ) -> Mapping[str, Any]:
+            return _run_brokered_model(
+                ordinal=ordinal, kind=kind, argv=argv, prompt=prompt,
+                timeout_seconds=timeout_seconds, workspace=workspace,
+                cell_root=cell_root, environment=controller_environment,
+                runtime=controller_runtime)
+
         broker = _ControllerEvaluationBroker(
             request=request, workspace=workspace, cell_root=cell_root,
             source_paths=source_paths, evaluate=broker_evaluate,
+            infer=broker_infer,
             baseline_receipt_sha256=baseline_window["receipt_sha256"])
         arm_audit = request.get("arm_audit")
         cli_rows = (
@@ -2536,7 +2711,6 @@ def _run_worker_impl(
                     executable_path=str(request["arm_audit"]["executable_path"]),
                     diagnostic_pilot_override=request.get(
                         "diagnostic_pilot_controller_argv"))
-                assert controller_runtime is not None
                 invocation = arena_controller_sandbox.prepare_controller_sandbox(
                     workspace=workspace,
                     receipt_path=cell_root / CONTROLLER_ACTIVATION_RECEIPT,
@@ -2547,6 +2721,9 @@ def _run_worker_impl(
                         broker.owner_pid))
                 controller_environment.update(invocation.environment_overrides)
                 controller_environment.update(broker.environment())
+                controller_environment["AUTOKERNEL_CONTROLLER_WORKSPACE"] = \
+                    str(workspace)
+                controller_environment["AUTOKERNEL_ARENA_ROOT"] = str(arena_root)
                 prepared = arena_adapter.prepare_task(
                     prepared.task, base_environment=controller_environment)
                 prepared = arena_adapter.PreparedArenaTask(
@@ -2596,6 +2773,8 @@ def _run_worker_impl(
             "baseline_receipt_sha256": baseline_window["receipt_sha256"],
             "controller_sandbox_execution_receipt_sha256":
                 controller_sandbox_execution["receipt_sha256"],
+            "model_inference_receipt_sha256s":
+                list(broker.model_receipt_sha256s),
         }
 
     result_workspace = workspace
@@ -2917,6 +3096,56 @@ def _validate_broker_chain(
             or chain.get("baseline_receipt_sha256") != checkpoint.get(
                 "measurement_windows", [{}])[0].get("receipt_sha256")):
         raise ArenaCellRunnerError("broker chain terminal or selection is invalid")
+    model_hashes = chain.get("model_inference_receipt_sha256s")
+    model_paths = sorted((
+        cell_root / "model-inference-windows").glob("*/result.json"))
+    if model_hashes is None and not model_paths:
+        return  # historical controller receipts predate brokered model evidence
+    if (not isinstance(model_hashes, list) or not model_hashes
+            or len(model_paths) != len(model_hashes)):
+        raise ArenaCellRunnerError("model inference evidence chain is malformed")
+    observed_model_hashes: list[str] = []
+    for ordinal, model_path in enumerate(model_paths, 1):
+        model = _load_json_object(model_path, "model inference receipt")
+        _verify_self_hash(model, "model inference receipt")
+        execution = model.get("execution")
+        if (model.get("schema") != arena_upstream_common.MODEL_BROKER_RESULT_SCHEMA
+                or model.get("model_call_ordinal") != ordinal
+                or model.get("authority") != "controller_model_inference_only"
+                or any(model.get(key) != checkpoint.get(key) for key in (
+                    "campaign_id", "task_id", "arm_id", "checkpoint_hours"))
+                or model.get("claim_campaign_id") != claim_scope
+                or not isinstance(execution, Mapping)):
+            raise ArenaCellRunnerError("model inference semantic identity drifted")
+        execution_schema = execution.get("schema")
+        if execution_schema == "epyc.autokernel.arena_model_sandbox_execution.v1":
+            _verify_self_hash(execution, "model sandbox execution")
+            activation = execution.get("activation_receipt")
+            teardown = execution.get("teardown_receipt")
+            teardown_state = (
+                teardown.get("teardown") if isinstance(teardown, Mapping) else None)
+            if (not isinstance(activation, Mapping)
+                    or not isinstance(teardown, Mapping)
+                    or not isinstance(teardown_state, Mapping)
+                    or activation.get("profile") != sandbox.MODEL_PROFILE
+                    or activation.get("network_profile")
+                    != sandbox.NETWORK_OUTBOUND_CLIENT
+                    or activation.get("broker_fd_inherited") is not False
+                    or teardown_state.get("verified_empty") is not True
+                    or teardown_state.get("removed") is not True):
+                raise ArenaCellRunnerError("model sandbox lifecycle is invalid")
+        elif execution_schema == "epyc.autokernel.codex_actor_container_boundary.v1":
+            container = execution.get("container")
+            if (not isinstance(container, Mapping)
+                    or container.get("image_id")
+                    != codex_container_actor.CONTAINER_IMAGE_ID
+                    or container.get("writable_host_binds") != ["/workspace"]):
+                raise ArenaCellRunnerError("Codex actor container evidence is invalid")
+        else:
+            raise ArenaCellRunnerError("model inference execution boundary is unknown")
+        observed_model_hashes.append(str(model["receipt_sha256"]))
+    if observed_model_hashes != model_hashes:
+        raise ArenaCellRunnerError("model inference evidence hash chain drifted")
 
 
 def validate_campaign_receipts(output_root: str | Path) -> dict[str, Any]:

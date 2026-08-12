@@ -131,35 +131,39 @@ logical campaign to the run-directory `attempt_id`, so device-claim journals
 cannot conflate repeated logical campaign IDs. Nested measurement-window and
 belief identities are checked semantically against their enclosing checkpoint.
 
-`arena_controller_sandbox.py` now provisions the reusable controller half of
-that OS boundary. It copies one task into a new workspace, discovers a
+`arena_controller_sandbox.py` now provisions the reusable controller and direct
+model halves of that OS boundary. It copies one task into a new workspace, discovers a
 fail-closed runtime allowlist from an exact real Python, licensed controller and
 repository source roots, the exact Codex package/CLI and shebang chain, real
 Node executable, auth and CA files, exact DNS/NSS/hosts/OpenSSL configuration,
 ELF loader, and shared-library closure, and then constructs
-`execution.sandbox.CONTROLLER_PROFILE`. Broad roots, devices, production trees,
+the broker-only controller and outbound-client model profiles. Broad roots, devices, production trees,
 campaign/evidence state, symlinks, and duplicate authority are refused. Exact
 executable files are a distinct Landlock capability: the interpreter and ELF
 loader can execute without granting their sibling directories. The adapter
-returns `command_prefix`, fixed startup environment overrides, the activation
-receipt path/policy, `process_started(pid)`, and strict activation-plus-cgroup
-teardown verification for `arena_adapter.launch`; it never accepts an arbitrary
-environment or command prefix.
+returns fixed startup environments, activation receipts/policies, exact PID
+registration, and strict activation-plus-cgroup teardown verification; it never
+accepts an arbitrary environment or command prefix.
 
-The controller permits unnamed `socketpair` IPC because the pinned Codex
-binary's Tokio signal driver requires it; such a pair has no filesystem or
-external peer. Creating a new AF_UNIX socket is still denied. The pinned Codex
-client also requires client-side `bind` before outbound traffic, while
-`listen`/`accept` remain denied; only the wrapper-created peer-bound broker
-stream is inherited.
+The controller can use only the wrapper-created peer-bound broker stream and
+has networking denied. Direct read-only Claude and Codex invocations receive a
+fresh model profile after the wrapper has become the actual model PID. That
+profile permits outbound INET clients and the unnamed `socketpair` IPC needed by
+the pinned Codex Tokio signal driver, but denies broker inheritance, GPU access,
+new filesystem AF_UNIX sockets, `listen`, and `accept`. Writable Codex actor
+requests keep the existing digest-pinned container boundary with one exact
+writable workspace bind.
 
 The wrapper preconnects its one broker stream before Landlock/seccomp and before
 the launch callback can register its exec-stable PID. A broker therefore queues
 an accepted stream until that exact PID and procfs start time are registered,
-then authenticates `SO_PEERCRED`; ancestry and uid admission are forbidden. A
-live tiny-controller test proves this ordering, inherited broker use, denied
-KFD/render/campaign-sibling and sibling-executable access, and descendant
-cgroup cleanup. It uses a fake local Codex package and no model or GPU work.
+then authenticates `SO_PEERCRED`; ancestry and uid admission are forbidden.
+Model and evaluation requests share that authenticated stream but are serialized
+and receive separate evidence ordinals. Live tiny-controller and tiny-model
+tests prove broker ordering, the absence of broker authority in model children,
+direct model `/proc/self/stat` compatibility, denial to a forked descendant,
+denied GPU/campaign-sibling access, outbound-client admission, and complete
+cgroup teardown. They use fake local CLIs and perform no model or GPU work.
 
 Candidate evaluation isolation is also implemented. Every intermediate and
 final candidate now runs in a fresh restricted-read GPU evaluator subprocess,
@@ -582,9 +586,26 @@ Its activation, result, and teardown file SHA-256 values are respectively
 `e15ca322f2835ef581e06b3940ba3670671db50289674f5bf86cc3900d80df61`.
 The real pinned `claude-opus-5/high` request returned structured output with
 zero stderr; the exact cgroup was empty and removed, and ephemeral Claude state
-was absent after exit. This proves runtime compatibility only. A fresh
-campaign ID is still required because the r5 source manifest predates this
-repair.
+was absent after exit. This proves only that the narrow standalone request was
+runtime compatible. The fresh r6 campaign
+(`inf03-available-source-seven-arm-r6-20260812`) carried all ten fixed runtime
+reads, completed its baseline, and nevertheless reproduced the same first-cell
+Claude `SIGSEGV`; r6 is also partial and non-rankable.
+
+The exact remaining differential was process identity. A direct parent/child
+Landlock probe proved that a `/proc/self/stat` bind created for the sandboxed
+controller PID succeeds in that parent and returns `EACCES` after it forks a
+child. Therefore fixed `/proc/self/*` literals cannot safely be projected from
+a long-lived controller onto model subprocesses. The repair now keeps the
+controller broker-only and executes each direct model CLI inside a fresh
+outbound-client sandbox installed for that model PID. Model requests and
+centralized Arena evaluations traverse the authenticated parent broker; every
+model lifecycle/result is persisted and revalidated. The Claude+Codex arm also
+banks the measured starting state and emits the measured best candidate in its
+controller receipt, so a successful run can materialize downstream proposal
+evidence instead of another unusable archive. A fresh r7 campaign is required
+to establish live end-to-end compatibility and remains without ranking or
+promotion authority until its governed matrix completes.
 
 ## On-box substrate reproduction — 2026-08-11
 
