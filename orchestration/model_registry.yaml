@@ -2670,6 +2670,62 @@ roles:
   # here retroactively so the full-record registry does not silently omit a model that
   # consumed a day of measurement. Register BEFORE benching, not after.
   # =============================================================================
+  lfm25_12b_instruct_q4km:
+    tier: C
+    description: LFM2.5-1.2B-Instruct Q4_K_M — worker_general candidate (non-reasoning variant)
+    model:
+      name: LFM2.5-1.2B-Instruct
+      path: LiquidAI/LFM2.5-1.2B-Instruct-GGUF/LFM2.5-1.2B-Instruct-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 0.73
+      architecture: lfm2
+    artifact_status:
+      download: present
+      observed_date: 2026-08-12
+      local_path: /mnt/raid0/llm/models/LFM2.5-1.2B-Instruct-Q4_K_M.gguf
+      revision: 76022b8bfa64af5862d6bce90a676c3cc9b17b52
+      sha256: b1b3de114215d9507409a662a501a631095a479a419584e8a2ded6304b19b4f5
+      size_bytes: 730895168
+    candidate_roles:
+    - worker_general
+    constraints:
+      forbid:
+      - speculative_decoding
+    notes: >-
+      Registered BEFORE benching (2026-08-12), which is the rule the retired 2.6B rungs broke.
+      Selected per Liquid AI's own guidance to prefer the -Instruct variant where reasoning traces
+      add unnecessary latency: the 2.6B REASONING variant was 2.08x faster per token but ~4.3x
+      slower to a finished answer at 15.2x the token count. UNVERIFIED until WG-LFMI-1: that this
+      variant does not emit a reasoning block must be PROVEN from its chat template and measured
+      token counts before any bench is worth running. Bar to beat is the production incumbent at
+      33 tokens / 2.97 s. Spec-dec forbidden pending vocabulary-identity proof; the 128K lfm2 BPE
+      vocab already rules LFM2.5 out as a drafter for other targets.
+  lfm25_12b_instruct_q8_0:
+    tier: C
+    description: LFM2.5-1.2B-Instruct Q8_0 — worker_general candidate (non-reasoning variant)
+    model:
+      name: LFM2.5-1.2B-Instruct
+      path: LiquidAI/LFM2.5-1.2B-Instruct-GGUF/LFM2.5-1.2B-Instruct-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 1.25
+      architecture: lfm2
+    artifact_status:
+      download: present
+      observed_date: 2026-08-12
+      local_path: /mnt/raid0/llm/models/LFM2.5-1.2B-Instruct-Q8_0.gguf
+      revision: 76022b8bfa64af5862d6bce90a676c3cc9b17b52
+      sha256: f6b981dcb86917fa463f78a362320bd5e2dc45445df147287eedb85e5a30d26a
+      size_bytes: 1246253888
+    candidate_roles:
+    - worker_general
+    constraints:
+      forbid:
+      - speculative_decoding
+    notes: >-
+      GGML_IQK_Q8_0=1 is load-bearing for any Q8_0 CPU arm — without it no `[iqk] ACTIVE` line is
+      logged and decode drops ~58%. Do NOT inherit the Q4-vs-Q8 ordering from CPU evidence: on the
+      retired 2.6B rungs Q4 beat Q8 by 1.60x on CPU but the ordering INVERTED on GPU (Q8 marginally
+      ahead). Re-derive per device.
   lfm25_26b_q4km:
     tier: C
     description: LFM2.5-2.6B Q4_K_M — worker_general candidate, REJECTED (reasoning variant)
