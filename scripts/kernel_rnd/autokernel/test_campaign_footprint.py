@@ -146,6 +146,9 @@ CAMPAIGN_ROOTS = {
     f"{ROOT_PKG}.source_candidate":
         "source-changing proposals consume one immutable embedded patch bundle through "
         "the guarded worktree mutation boundary",
+    f"{ROOT_PKG}.source_prerequisite_package":
+        "source candidates may rank only after archived raw sensitivity, hostile and "
+        "checker CSV bytes are re-reduced and rebound to the exact live build identities",
     f"{ROOT_PKG}.evaluator.api":
         "a Verdict is constructible only via compute_verdict(); it cannot be stamped",
     f"{ROOT_PKG}.evaluator.correctness":

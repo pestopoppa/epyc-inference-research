@@ -162,7 +162,8 @@ from statistics import median
 from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 
 from . import (artifact_diff, candidate_record, dashboard,
-               journal as journal_module, source_candidate)
+               journal as journal_module, source_candidate,
+               source_prerequisite_package)
 from . import schemas, storage
 from .controller import do_not_repeat, hypotheses
 from .evaluator import api, correctness, devices, recipes
@@ -229,6 +230,9 @@ MODULES_THE_DRIVER_USES: Mapping[str, str] = {
                         "built snapshot and evaluation event identities",
     "source_candidate": "source-changing proposals consume one immutable embedded patch "
                         "bundle through the guarded worktree mutation boundary",
+    "source_prerequisite_package": "source candidates may rank only after the archived "
+                                   "raw sensitivity/hostile/checker CSV bytes are re-reduced "
+                                   "and rebound to the exact live source, binary and evaluator",
     "dashboard": "the fsynced terminal campaign result must reach the operator surface; "
                  "the exporter is derived and cannot make an old journal entry fresh",
     "schemas": "one record shape; PASS/FAIL/COULD_NOT_CHECK",
@@ -1247,6 +1251,10 @@ class CampaignSpec:
     proposal: Optional[Mapping[str, Any]] = None
     #: Immutable embedded source artifact, loaded completely before any claim.
     source_patch: Optional[source_candidate.SourcePatchManifest] = None
+    #: Immutable raw correctness archive for a source candidate. It is loaded
+    #: before the claim and identity-bound after the candidate build exists.
+    source_prerequisite_package: Optional[
+        source_prerequisite_package.SourcePrerequisitePackage] = None
     #: Accepted, identity-bound live calibration.  Supplied by the CLI bundle
     #: loader; absent means composition-only and carries no ranking authority.
     calibration: Optional[LeanCalibration] = None
@@ -1297,6 +1305,13 @@ class CampaignSpec:
         if self.source_patch is not None and not isinstance(
                 self.source_patch, source_candidate.SourcePatchManifest):
             raise TypeError("source_patch must be a SourcePatchManifest or None")
+        if self.source_prerequisite_package is not None and not isinstance(
+                self.source_prerequisite_package,
+                source_prerequisite_package.SourcePrerequisitePackage):
+            raise TypeError(
+                "source_prerequisite_package must be a SourcePrerequisitePackage or None")
+        if self.proposal is None and self.source_prerequisite_package is not None:
+            raise ValueError("source prerequisites require a source proposal")
         if self.proposal is not None:
             proposal = json.loads(schemas.canonical_json(self.proposal))
             violations = schemas.validate_proposal_v3(proposal)
@@ -1311,6 +1326,9 @@ class CampaignSpec:
             self._validate_arm_parameter_surface(proposal)
             if proposal["change_class"] == "parameter" and self.source_patch is not None:
                 raise ValueError("parameter campaigns may not carry a source patch")
+            if proposal["change_class"] == "parameter" \
+                    and self.source_prerequisite_package is not None:
+                raise ValueError("parameter campaigns may not carry source prerequisites")
             if proposal["change_class"] != "parameter":
                 if self.source_patch is not None:
                     self.source_patch.bind(
@@ -1318,6 +1336,10 @@ class CampaignSpec:
                         candidate_id=self.candidate_id,
                         production_base_commit=PRODUCTION_COMMIT,
                         instrument_commit=MEASUREMENT_COMMIT)
+                if self.source_prerequisite_package is not None:
+                    self.source_prerequisite_package.bind_campaign(
+                        proposal=proposal, campaign_id=self.campaign_id,
+                        candidate_id=self.candidate_id)
         if self.calibration is not None and not isinstance(
                 self.calibration, LeanCalibration):
             raise TypeError("calibration must be a LeanCalibration or None")
@@ -1686,6 +1708,9 @@ class CampaignSpec:
             },
             "source_patch_bundle_sha256": (
                 None if self.source_patch is None else self.source_patch.patch_bundle_sha256),
+            "source_prerequisite_package_sha256": (
+                None if self.source_prerequisite_package is None
+                else self.source_prerequisite_package.package_sha256),
             "physical_envelope": (
                 None if self.physical_envelope is None
                 else self.physical_envelope.to_dict()),
@@ -2144,6 +2169,10 @@ class HostOps:
             "the anchor capture and the richer T0 surfaces, which need the PROPOSAL's "
             "own declarations. Pass HostOps(t0_evidence=...); the reference wiring is "
             "ChainLeg.t0_evidence_inputs",
+        "source_prerequisites":
+            "a source proposal requires an immutable content-addressed archive containing "
+            "all three raw sensitivity/hostile/checker CSV receipts. Pass "
+            "--source-prerequisite-package; parameter proposals reject it",
         "nominal_khz":
             "the healthy all-core clock for this cell, which only the operator can "
             "supply (--nominal-khz). Without it every frequency reading in the run "
@@ -2174,6 +2203,9 @@ class HostOps:
             missing.append("apply_candidate")
         if self._t0_evidence is None and not parameter_only:
             missing.append("t0_evidence")
+        if (spec is not None and spec.proposal is not None and not parameter_only
+                and spec.source_prerequisite_package is None):
+            missing.append("source_prerequisites")
         if self._nominal_khz is None:
             missing.append("nominal_khz")
         return tuple(sorted(missing))
@@ -2795,7 +2827,7 @@ class HostOps:
             Path(__file__), Path(api.__file__), Path(correctness.__file__),
             Path(schemas.__file__), Path(recipes.__file__),
             Path(control_runner.__file__),
-        )
+        ) + source_prerequisite_package.evaluator_source_files()
         bundle_sha = schemas.content_hash({
             str(path): storage.hash_file(path) for path in sorted(files)
         })
@@ -2870,6 +2902,31 @@ class HostOps:
 
         return chain.t0_plan_evidence(
             symbols=symbols, diff=diff, change_surface=surface_evidence)
+
+    def _source_prerequisites_for_t0(
+            self, spec: CampaignSpec, *, identity: worktree.BuildIdentity,
+            candidate: t0_provider.CandidateBuild,
+            evaluator: api.EvaluatorIdentity
+            ) -> tuple[correctness.SourcePrerequisiteEvidence, ...]:
+        """Re-reduce the preloaded archive against one exact completed build."""
+        if spec.proposal is None or spec.proposal.get("change_class") == "parameter":
+            if spec.source_prerequisite_package is not None:
+                raise source_prerequisite_package.SourcePrerequisitePackageError(
+                    "parameter/no-source campaign carried source prerequisites")
+            return ()
+        package = spec.source_prerequisite_package
+        if package is None:
+            raise source_prerequisite_package.SourcePrerequisitePackageError(
+                "source candidate has no immutable prerequisite package")
+        try:
+            binary_sha256 = storage.hash_file(candidate.test_backend_ops)
+        except (OSError, storage.StorageError) as exc:
+            raise source_prerequisite_package.SourcePrerequisitePackageError(
+                f"cannot hash the live candidate test-backend-ops binary: {exc}") from exc
+        return package.materialize(
+            candidate_source_sha256=identity.snapshot_sha256,
+            candidate_binary_sha256=binary_sha256,
+            evaluator_bundle_sha256=evaluator.bundle_sha256)
 
     def _stop_t0_early(self, request: api.EvaluationRequest, gate_id: str,
                        check: schemas.Check) -> T0Outcome:
@@ -2952,6 +3009,22 @@ class HostOps:
         extra = dict(self._t0_evidence(spec=spec, identity=identity,
                                        build_evidence=build_ev)) if self._t0_evidence \
             else {}
+        if "source_prerequisites" in extra:
+            return self._stop_t0_early(
+                early_request, correctness.GID_OP_UNITS, schemas.Check(
+                    schemas.COULD_NOT_CHECK, (
+                        "t0_evidence attempted to supply source prerequisites outside "
+                        "the immutable campaign package boundary",)))
+        if spec.proposal is not None and spec.proposal.get("change_class") != "parameter":
+            try:
+                extra["source_prerequisites"] = self._source_prerequisites_for_t0(
+                    spec, identity=identity, candidate=candidate,
+                    evaluator=early_request.evaluator)
+            except source_prerequisite_package.SourcePrerequisitePackageError as exc:
+                return self._stop_t0_early(
+                    early_request, correctness.GID_OP_UNITS, schemas.Check(
+                        schemas.COULD_NOT_CHECK,
+                        (f"source prerequisite package refused: {exc}",)))
         # AK-TR-6: keep this before ExecutedT0EvidenceProvider construction.
         # That provider launches op/generation processes while collecting the
         # behavioural evidence, so discovering a compile-only veto later would
@@ -3972,6 +4045,12 @@ def build_parser() -> argparse.ArgumentParser:
              "source-changing --execute campaigns",
     )
     parser.add_argument(
+        "--source-prerequisite-package", default=None, metavar="PATH",
+        help="immutable content-addressed archive/resume package containing all three "
+             "raw source-candidate correctness receipts. Loaded before any claim and "
+             "reduced again against the live build before T0",
+    )
+    parser.add_argument(
         "--calibration-bundle",
         default=None,
         metavar="DIR",
@@ -4090,6 +4169,18 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
             print(f"refusing to start: --source-patch-manifest: {exc}", file=sys.stderr)
             return 2
 
+    source_prerequisites = None
+    if args.source_prerequisite_package is not None:
+        try:
+            source_prerequisites = (
+                source_prerequisite_package.load_source_prerequisite_package(
+                    args.source_prerequisite_package))
+        except (OSError, ValueError, TypeError,
+                source_prerequisite_package.SourcePrerequisitePackageError) as exc:
+            print(f"refusing to start: --source-prerequisite-package: {exc}",
+                  file=sys.stderr)
+            return 2
+
     selected_calibration = None
     if args.calibration_bundle is not None:
         try:
@@ -4155,11 +4246,22 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
             devices=tuple(args.device), device_names=tuple(args.device_name),
             journal_root=args.journal_root, proposal=proposal,
             source_patch=source_patch,
+            source_prerequisite_package=source_prerequisites,
             calibration=selected_calibration,
             physical_envelope=physical_envelope, ranked_units=ranked_units)
     except (ValueError, TypeError, storage.StorageError, recipes.RecipeError,
-            source_candidate.SourceCandidateError) as exc:
+            source_candidate.SourceCandidateError,
+            source_prerequisite_package.SourcePrerequisitePackageError) as exc:
         print(f"refusing to start: {exc}", file=sys.stderr)
+        return 2
+
+    if (not args.dry_run and spec.source_prerequisite_package is not None
+            and spec.source_prerequisite_package.capture_mode != "measured"):
+        print(
+            "refusing to --execute: --source-prerequisite-package was captured in "
+            "dry_run mode; it cannot supply correctness authority",
+            file=sys.stderr,
+        )
         return 2
 
     # Ranking authority is cell-local.  The five-control bundle calibrated the

@@ -37,7 +37,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from . import campaign, journal as journal_module, schemas
+from . import (campaign, journal as journal_module, schemas,
+               source_prerequisite_package)
 from .execution import control_runner, physical_bounds
 from .resource import claim_witness
 from .test_schemas import _proposal as _proposal_fixture
@@ -1438,6 +1439,13 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
         self.assertEqual(campaign.HostOps().unimplemented_seams(built),
                          ("nominal_khz",))
 
+    def test_parameter_proposal_rejects_source_prerequisite_package(self):
+        package = mock.Mock(
+            spec=source_prerequisite_package.SourcePrerequisitePackage)
+        with self.assertRaisesRegex(ValueError, "parameter campaigns"):
+            spec(proposal=iqk_parameter_proposal(),
+                 source_prerequisite_package=package)
+
     def test_host_build_makes_compiler_warnings_fatal(self):
         source = campaign.worktree.SandboxPath.create(
             str(Path(self.tempdir.name) / "source"), production_trees=())
@@ -1523,10 +1531,51 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
                 spec(proposal=iqk_parameter_proposal()), Tree())
 
     def test_source_proposal_still_requires_a_campaign_specific_mutator(self):
-        self.assertIn(
-            "apply_candidate",
-            campaign.HostOps(nominal_khz=2_900_000).unimplemented_seams(
-                spec(proposal=proposal_manifest())))
+        missing = campaign.HostOps(nominal_khz=2_900_000).unimplemented_seams(
+            spec(proposal=proposal_manifest()))
+        self.assertIn("apply_candidate", missing)
+        self.assertIn("source_prerequisites", missing)
+
+    def test_source_proposal_archive_resume_reaches_t0_pass(self):
+        """A real CampaignSpec/build identity can satisfy, not only refuse, the seam."""
+        import sys
+        kernel_rnd = str(Path(__file__).resolve().parent.parent)
+        if kernel_rnd not in sys.path:
+            sys.path.insert(0, kernel_rnd)
+        from autokernel import campaign as live_campaign
+        from autokernel import source_prerequisite_package as live_package
+        from autokernel.evaluator.test_correctness import (
+            evidence as t0_evidence, policy as t0_policy, request as t0_request)
+        from .test_source_prerequisite_package import package as prerequisite_package
+
+        request = t0_request()
+        package_mapping = prerequisite_package()
+        package_mapping["candidate_source_sha256"] = request.artifact.source_sha256
+        package_mapping["candidate_binary_sha256"] = request.artifact.binary_sha256
+        package_mapping["evaluator_bundle_sha256"] = request.evaluator.bundle_sha256
+        package_mapping["package_sha256"] = live_package.package_sha256(package_mapping)
+        archived = live_package.SourcePrerequisitePackage.from_mapping(package_mapping)
+        built_spec = live_campaign.CampaignSpec(
+            campaign_id="ak-test", candidate_id="akc-test",
+            candidate_ref="candidate.patch", model=MODEL,
+            proposal=proposal_manifest(), source_prerequisite_package=archived)
+        identity = mock.Mock(spec=live_campaign.worktree.BuildIdentity)
+        identity.snapshot_sha256 = request.artifact.source_sha256
+        candidate = mock.Mock(spec=live_campaign.t0_provider.CandidateBuild)
+        candidate.test_backend_ops = str(Path(self.tempdir.name) / "test-backend-ops")
+        evaluator = request.evaluator
+
+        with mock.patch.object(
+                live_campaign.storage, "hash_file",
+                return_value=request.artifact.binary_sha256):
+            bound = live_campaign.HostOps()._source_prerequisites_for_t0(
+                built_spec, identity=identity, candidate=candidate, evaluator=evaluator)
+        report = live_campaign.correctness.evaluate_t0(
+            request,
+            t0_evidence(source_candidate=True, source_prerequisites=bound),
+            t0_policy())
+        self.assertEqual(report.failed, ())
+        self.assertEqual(report.unevaluated, ())
 
     def test_a_runnable_ops_is_not_refused(self):
         """CONTROL: the guard must not forbid its own compliant path."""
@@ -1553,6 +1602,32 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
         )
         self.assertEqual(code, 2)
         self.assertEqual(ops.calls, [])
+
+    def test_malformed_prerequisite_package_is_refused_before_ops(self):
+        path = Path(self.tempdir.name) / "bad-prerequisites.json"
+        path.write_text("not json", encoding="utf-8")
+        argv = [*self.argv, "--source-prerequisite-package", str(path)]
+        ops = SpyOps()
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code = campaign.main(argv, out=io.StringIO(), ops=ops)
+        self.assertEqual(code, 2)
+        self.assertEqual(ops.calls, [])
+        self.assertIn("--source-prerequisite-package", err.getvalue())
+
+    def test_dry_run_prerequisite_archive_cannot_enter_execute_mode(self):
+        from .test_source_prerequisite_package import package as package_fixture
+        payload = package_fixture(mode="dry_run")
+        path = Path(self.tempdir.name) / "dry-prerequisites.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        argv = [*self.argv, "--source-prerequisite-package", str(path)]
+        ops = SpyOps()
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code = campaign.main(argv, out=io.StringIO(), ops=ops)
+        self.assertEqual(code, 2)
+        self.assertEqual(ops.calls, [])
+        self.assertIn("dry_run mode", err.getvalue())
 
     def test_execute_without_a_physical_envelope_is_refused_before_ops(self):
         ops = SpyOps()

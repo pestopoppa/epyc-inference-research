@@ -30,9 +30,9 @@ a module it never looked at.
 
 | | non-test lines |
 |---|---:|
-| **ON THE CAMPAIGN PATH** | **66,386** |
-| **DEFERRED** (provably unreachable) | **39,721** |
-| **TOTAL** | **106,107** |
+| **ON THE CAMPAIGN PATH** | **67,467** |
+| **DEFERRED** (provably unreachable) | **39,156** |
+| **TOTAL** | **106,623** |
 
 **The deferred plane is explicit.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -123,7 +123,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 
 | module | lines | campaign #1 | reason |
 |---|---:|:---:|---|
-| `campaign.py` | 4,282 | yes | THE ENTRYPOINT. Before it landed, `grep -rl "__main__|argparse|def main("` over every non-test module returned nothing: 94k lines, 5,695 passing tests, and no way to start it — which is the whole reason this package has produced no result |
+| `campaign.py` | 4,384 | yes | THE ENTRYPOINT. Before it landed, `grep -rl "__main__|argparse|def main("` over every non-test module returned nothing: 94k lines, 5,695 passing tests, and no way to start it — which is the whole reason this package has produced no result |
 | `dashboard.py` | 201 | yes | the terminal result was fsynced but the only dashboard exporter had been deleted, so active AutoKernel work remained permanently absent from the operator surface; this compact projection dates itself from the journal entry and cannot make an old campaign fresh |
 | `__init__.py` | 14 | yes | package docstring; `schemas` is declared here as the single source of record shape |
 | `schemas.py` | 3,598 | yes | one record shape — every module is written against it and none invents its own |
@@ -143,6 +143,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `artifact_diff.py` | 200 | yes | AK-TR-6 must veto an unconfirmed GPU claim before the behavioral T0 provider can launch |
 | `candidate_record.py` | 243 | yes | every executed candidate is fsynced from the exact built snapshot and evaluation event identities before terminal STOP |
 | `source_candidate.py` | 443 | yes | source-changing proposals consume one immutable embedded patch bundle through the guarded worktree mutation boundary |
+| `source_prerequisite_package.py` | 414 | yes | source candidates may rank only after archived raw sensitivity, hostile and checker CSV bytes are re-reduced and rebound to the exact live build identities |
 | `storage.py` | 1,859 | yes | the 2026-07-04 async-prefetch win was written to `/mnt/raid0/llm/tmp/` and that directory no longer exists |
 | `adapters/__init__.py` | 21 | no | AK9 adapter namespace only; campaign #1 remains llama_cpu-only and imports no speech release surface |
 | `adapters/whisper_stt.py` | 1,843 | no | AK9 pure whisper.cpp tree, metric, linkage, protocol-prerequisite and release-binding declarations; no inference, build, mutation or freeze authority |
@@ -164,9 +165,9 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `evaluator/c3_epyc_suite.py` | 689 | no | INF-48 offline C3/C5 contract reducer; it binds EPYC op cases to exact vendor evidence and a captured-workload whole-model exit without launch, mutation, release, or promotion authority |
 | `evaluator/c3_epyc_compiler.py` | 504 | no | INF-48 offline JSON plan/receipt compiler; it is the callable controller/backend seam but cannot launch captures, benchmarks, builds, patches, inference, or promotion |
 | `evaluator/c3_apex_runner.py` | 960 | no | INF-48 selected-entry Apex seam: avoids the pinned CLI's unrelated-registry-file refusal, requires exact C5 mapping and environment/source/workload identities, and stays outside campaign mutation and candidate authoring |
-| `evaluator/sensitivity.py` | 333 | no | RVP-C2-7/C2-11/C5-2 offline two-axis reducer; its report has no live authority until `source_candidate_authority.py` binds exact candidate/evaluator/evidence provenance, and missing or insensitive populations remain unscoreable |
-| `evaluator/oracle_integrity.py` | 145 | no | RVP-C2-8/C2-9 offline reducers; hostile/checker results gain T0 authority only through the exact provenance bridge and never independently rank a candidate |
-| `evaluator/source_candidate_authority.py` | 87 | no | fail-closed bridge from offline sensitivity/hostile/checker outputs to live T0: binds source, evaluator bundle, suite, capture mode and evidence hashes without launching or mutating anything |
+| `evaluator/sensitivity.py` | 333 | yes | RVP-C2-7/C2-11/C5-2 offline two-axis reducer; its report has no live authority until `source_candidate_authority.py` binds exact candidate/evaluator/evidence provenance, and missing or insensitive populations remain unscoreable |
+| `evaluator/oracle_integrity.py` | 145 | yes | RVP-C2-8/C2-9 offline reducers; hostile/checker results gain T0 authority only through the exact provenance bridge and never independently rank a candidate |
+| `evaluator/source_candidate_authority.py` | 87 | yes | fail-closed bridge from offline sensitivity/hostile/checker outputs to live T0: binds source, evaluator bundle, suite, capture mode and evidence hashes without launching or mutating anything |
 | `evaluator/historical_tasks.py` | 194 | no | RVP-C5-R/C3-2 sealed historical-task descriptor and expert-ceiling reducer; no terminal candidate means `COULD_NOT_CHECK` |
 | `evaluator/rebench_scoring.py` | 120 | no | AK-RB-1 offline reference-normalized scoring and matched-budget curve reducer; it consumes completed behavior checks and timings but has no campaign mutation, execution, or verdict authority |
 | `evaluator/statistics.py` | 3,669 | yes | **calibration constants and `median` only.** Its e-process made the gate unpassable: threshold 10 against a sign-martingale that tops out at 5.5687, at every effect size. Fenced by `TestNoOptionalStopping` |
