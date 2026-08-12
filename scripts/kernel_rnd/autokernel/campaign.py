@@ -163,7 +163,7 @@ from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 
 from . import (artifact_diff, candidate_record, dashboard,
                journal as journal_module, source_candidate,
-               source_prerequisite_package)
+               source_prerequisite_package, source_prerequisite_producer)
 from . import schemas, storage
 from .controller import do_not_repeat, hypotheses
 from .evaluator import api, correctness, devices, recipes
@@ -233,6 +233,9 @@ MODULES_THE_DRIVER_USES: Mapping[str, str] = {
     "source_prerequisite_package": "source candidates may rank only after the archived "
                                    "raw sensitivity/hostile/checker CSV bytes are re-reduced "
                                    "and rebound to the exact live source, binary and evaluator",
+    "source_prerequisite_producer": "fresh source receipts reuse the campaign's already-held "
+                                    "claims and built candidate, then enter the identical "
+                                    "content-addressed archive/reducer boundary before T0",
     "dashboard": "the fsynced terminal campaign result must reach the operator surface; "
                  "the exporter is derived and cannot make an old journal entry fresh",
     "schemas": "one record shape; PASS/FAIL/COULD_NOT_CHECK",
@@ -1255,6 +1258,10 @@ class CampaignSpec:
     #: before the claim and identity-bound after the candidate build exists.
     source_prerequisite_package: Optional[
         source_prerequisite_package.SourcePrerequisitePackage] = None
+    #: Predeclared execute-in-this-window producer plan. Mutually exclusive
+    #: with an archive: fresh and resume are two modes, never two authorities.
+    fresh_source_prerequisite_plan: Optional[
+        source_prerequisite_producer.FreshSourcePrerequisitePlan] = None
     #: Accepted, identity-bound live calibration.  Supplied by the CLI bundle
     #: loader; absent means composition-only and carries no ranking authority.
     calibration: Optional[LeanCalibration] = None
@@ -1310,7 +1317,17 @@ class CampaignSpec:
                 source_prerequisite_package.SourcePrerequisitePackage):
             raise TypeError(
                 "source_prerequisite_package must be a SourcePrerequisitePackage or None")
-        if self.proposal is None and self.source_prerequisite_package is not None:
+        if self.fresh_source_prerequisite_plan is not None and not isinstance(
+                self.fresh_source_prerequisite_plan,
+                source_prerequisite_producer.FreshSourcePrerequisitePlan):
+            raise TypeError("fresh_source_prerequisite_plan must be a "
+                            "FreshSourcePrerequisitePlan or None")
+        if (self.source_prerequisite_package is not None
+                and self.fresh_source_prerequisite_plan is not None):
+            raise ValueError("archive/resume and fresh source prerequisite modes are "
+                             "mutually exclusive")
+        if self.proposal is None and (self.source_prerequisite_package is not None
+                                      or self.fresh_source_prerequisite_plan is not None):
             raise ValueError("source prerequisites require a source proposal")
         if self.proposal is not None:
             proposal = json.loads(schemas.canonical_json(self.proposal))
@@ -1329,6 +1346,9 @@ class CampaignSpec:
             if proposal["change_class"] == "parameter" \
                     and self.source_prerequisite_package is not None:
                 raise ValueError("parameter campaigns may not carry source prerequisites")
+            if proposal["change_class"] == "parameter" \
+                    and self.fresh_source_prerequisite_plan is not None:
+                raise ValueError("parameter campaigns may not carry a fresh source plan")
             if proposal["change_class"] != "parameter":
                 if self.source_patch is not None:
                     self.source_patch.bind(
@@ -1338,6 +1358,10 @@ class CampaignSpec:
                         instrument_commit=MEASUREMENT_COMMIT)
                 if self.source_prerequisite_package is not None:
                     self.source_prerequisite_package.bind_campaign(
+                        proposal=proposal, campaign_id=self.campaign_id,
+                        candidate_id=self.candidate_id)
+                if self.fresh_source_prerequisite_plan is not None:
+                    self.fresh_source_prerequisite_plan.bind_campaign(
                         proposal=proposal, campaign_id=self.campaign_id,
                         candidate_id=self.candidate_id)
         if self.calibration is not None and not isinstance(
@@ -1711,6 +1735,9 @@ class CampaignSpec:
             "source_prerequisite_package_sha256": (
                 None if self.source_prerequisite_package is None
                 else self.source_prerequisite_package.package_sha256),
+            "fresh_source_prerequisite_plan_sha256": (
+                None if self.fresh_source_prerequisite_plan is None
+                else self.fresh_source_prerequisite_plan.plan_sha256),
             "physical_envelope": (
                 None if self.physical_envelope is None
                 else self.physical_envelope.to_dict()),
@@ -2170,9 +2197,9 @@ class HostOps:
             "own declarations. Pass HostOps(t0_evidence=...); the reference wiring is "
             "ChainLeg.t0_evidence_inputs",
         "source_prerequisites":
-            "a source proposal requires an immutable content-addressed archive containing "
-            "all three raw sensitivity/hostile/checker CSV receipts. Pass "
-            "--source-prerequisite-package; parameter proposals reject it",
+            "a source proposal requires either an immutable archive or a predeclared "
+            "fresh producer plan. Pass one of --source-prerequisite-package / "
+            "--fresh-source-prerequisite-plan; parameter proposals reject both",
         "nominal_khz":
             "the healthy all-core clock for this cell, which only the operator can "
             "supply (--nominal-khz). Without it every frequency reading in the run "
@@ -2204,7 +2231,8 @@ class HostOps:
         if self._t0_evidence is None and not parameter_only:
             missing.append("t0_evidence")
         if (spec is not None and spec.proposal is not None and not parameter_only
-                and spec.source_prerequisite_package is None):
+                and spec.source_prerequisite_package is None
+                and spec.fresh_source_prerequisite_plan is None):
             missing.append("source_prerequisites")
         if self._nominal_khz is None:
             missing.append("nominal_khz")
@@ -2213,11 +2241,13 @@ class HostOps:
     def __init__(self, *, spawner: Optional[Any] = None,
                  t0_evidence: Optional[Callable[..., Mapping[str, Any]]] = None,
                  nominal_khz: Optional[int] = None,
-                 host_state: Optional[Callable[..., microbench.HostState]] = None) -> None:
+                 host_state: Optional[Callable[..., microbench.HostState]] = None,
+                 source_prerequisite_runner: Optional[Any] = None) -> None:
         self._spawner = spawner
         self._t0_evidence = t0_evidence
         self._nominal_khz = nominal_khz
         self._read_host_state = host_state or microbench.read_host_state
+        self._source_prerequisite_runner = source_prerequisite_runner
         self._claim_binding: Optional[Any] = None
         self._device_claims: list = []
         self._build_state: dict = {}
@@ -2827,6 +2857,7 @@ class HostOps:
             Path(__file__), Path(api.__file__), Path(correctness.__file__),
             Path(schemas.__file__), Path(recipes.__file__),
             Path(control_runner.__file__),
+            Path(source_prerequisite_producer.__file__),
         ) + source_prerequisite_package.evaluator_source_files()
         bundle_sha = schemas.content_hash({
             str(path): storage.hash_file(path) for path in sorted(files)
@@ -2910,14 +2941,38 @@ class HostOps:
             ) -> tuple[correctness.SourcePrerequisiteEvidence, ...]:
         """Re-reduce the preloaded archive against one exact completed build."""
         if spec.proposal is None or spec.proposal.get("change_class") == "parameter":
-            if spec.source_prerequisite_package is not None:
+            if (spec.source_prerequisite_package is not None
+                    or spec.fresh_source_prerequisite_plan is not None):
                 raise source_prerequisite_package.SourcePrerequisitePackageError(
                     "parameter/no-source campaign carried source prerequisites")
             return ()
         package = spec.source_prerequisite_package
+        if package is None and spec.fresh_source_prerequisite_plan is not None:
+            if not spec.journal_root:
+                raise source_prerequisite_package.SourcePrerequisitePackageError(
+                    "fresh source prerequisites require the durable campaign journal")
+            runner = self._source_prerequisite_runner or t0_provider.SubprocessRunner(
+                sandbox_policy=self._candidate_sandbox_policy(spec))
+            try:
+                package = source_prerequisite_producer.FreshSourcePrerequisiteProducer(
+                    runner=runner).produce_or_resume(
+                        plan=spec.fresh_source_prerequisite_plan,
+                        journal_root=spec.journal_root, candidate=candidate,
+                        candidate_source_sha256=identity.snapshot_sha256,
+                        evaluator_bundle_sha256=evaluator.bundle_sha256,
+                        base_env=tuple(sorted(
+                            self._construct(spec, arm="candidate").env.items())),
+                        parameter_env=spec.t0_parameter_env_for_arm("candidate"),
+                        cpu_claim=self._claim_binding.t0_claim,
+                        cpu_list=spec.cpu_list, held_devices=tuple(self._device_claims),
+                        require_device=spec.backend == BACKEND_GPU)
+            except (source_prerequisite_producer.FreshSourcePrerequisiteError,
+                    OSError, storage.StorageError) as exc:
+                raise source_prerequisite_package.SourcePrerequisitePackageError(
+                    f"fresh producer refused: {exc}") from exc
         if package is None:
             raise source_prerequisite_package.SourcePrerequisitePackageError(
-                "source candidate has no immutable prerequisite package")
+                "source candidate has neither an archive nor a fresh producer plan")
         try:
             binary_sha256 = storage.hash_file(candidate.test_backend_ops)
         except (OSError, storage.StorageError) as exc:
@@ -4044,11 +4099,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="immutable source-patch.v1 JSON with embedded bytes; required for "
              "source-changing --execute campaigns",
     )
-    parser.add_argument(
+    source_prerequisite_group = parser.add_mutually_exclusive_group()
+    source_prerequisite_group.add_argument(
         "--source-prerequisite-package", default=None, metavar="PATH",
         help="immutable content-addressed archive/resume package containing all three "
              "raw source-candidate correctness receipts. Loaded before any claim and "
              "reduced again against the live build before T0",
+    )
+    source_prerequisite_group.add_argument(
+        "--fresh-source-prerequisite-plan", default=None, metavar="PATH",
+        help="strict predeclared plan for producing all three raw source-candidate "
+             "receipts after the candidate build, under this campaign's already-held "
+             "CPU/device claims. Loaded before any claim; execute-only",
     )
     parser.add_argument(
         "--calibration-bundle",
@@ -4181,6 +4243,18 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
                   file=sys.stderr)
             return 2
 
+    fresh_source_plan = None
+    if args.fresh_source_prerequisite_plan is not None:
+        try:
+            fresh_source_plan = (
+                source_prerequisite_producer.load_fresh_source_prerequisite_plan(
+                    args.fresh_source_prerequisite_plan))
+        except (OSError, ValueError, TypeError,
+                source_prerequisite_producer.FreshSourcePrerequisiteError) as exc:
+            print(f"refusing to start: --fresh-source-prerequisite-plan: {exc}",
+                  file=sys.stderr)
+            return 2
+
     selected_calibration = None
     if args.calibration_bundle is not None:
         try:
@@ -4247,11 +4321,13 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
             journal_root=args.journal_root, proposal=proposal,
             source_patch=source_patch,
             source_prerequisite_package=source_prerequisites,
+            fresh_source_prerequisite_plan=fresh_source_plan,
             calibration=selected_calibration,
             physical_envelope=physical_envelope, ranked_units=ranked_units)
     except (ValueError, TypeError, storage.StorageError, recipes.RecipeError,
             source_candidate.SourceCandidateError,
-            source_prerequisite_package.SourcePrerequisitePackageError) as exc:
+            source_prerequisite_package.SourcePrerequisitePackageError,
+            source_prerequisite_producer.FreshSourcePrerequisiteError) as exc:
         print(f"refusing to start: {exc}", file=sys.stderr)
         return 2
 
