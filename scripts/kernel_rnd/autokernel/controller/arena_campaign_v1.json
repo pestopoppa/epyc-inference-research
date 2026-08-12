@@ -18,6 +18,31 @@
         "performance_utils_pytest.py": "fb8709f766736aff7e1047e13f601af2f30ff98342ade7f7083f450d87917b88",
         "test_add_kernel.py": "7b6e63cc81f6ec18e311700f7eb3d2048b194ca2a16f07b97ff33ce25f755745"
       }
+    },
+    {
+      "task_id": "instruction2triton.tritonbench.attention_llama",
+      "relative_root": "tasks/instruction2triton/tritonbench/attention_llama",
+      "file_sha256": {
+        "config.yaml": "d336e8053c8ac526540239ed88e5a2d88b7179f17f45f642e7c089a5415e87ea",
+        "python_bindings/tritonbench.py": "c6df727582e3a0d8a2a82c5aa135dccaf63474ddb14f61e561e7e7e55004bb42"
+      }
+    },
+    {
+      "task_id": "instruction2triton.rocmbench.moe_gemm",
+      "relative_root": "tasks/instruction2triton/rocmbench/moe_gemm",
+      "file_sha256": {
+        "config.yaml": "6595b27ab1b23ee3e3981c40e5a8723de394b540f3569b81907313c9a7308122",
+        "moe_gemm.py": "7dc9331749c6fa1f9af2d34491173c5356609eca5ff8a08fe8bdb5421441f1f1",
+        "performance_utils_pytest.py": "fb8709f766736aff7e1047e13f601af2f30ff98342ade7f7083f450d87917b88"
+      }
+    },
+    {
+      "task_id": "instruction2triton.tritonbench.dequantize_matmul",
+      "relative_root": "tasks/instruction2triton/tritonbench/dequantize_matmul",
+      "file_sha256": {
+        "config.yaml": "1a347010dc9b51b32b8d8f3faf133fc342df21ae3e00446604826fc9dd21a9e1",
+        "python_bindings/tritonbench.py": "c6df727582e3a0d8a2a82c5aa135dccaf63474ddb14f61e561e7e7e55004bb42"
+      }
     }
   ],
   "arms": [

@@ -221,6 +221,19 @@ class ArenaCampaignTest(unittest.TestCase):
         self.assertEqual(spec.out_of_panel_registered, ())
         self.assertEqual(spec.arms[-1].arm_id, "argus")
 
+    def test_repository_config_covers_real_epyc_attention_moe_and_dequant_surfaces(self):
+        spec = C.load_spec(CONFIG)
+        self.assertEqual(
+            tuple(task.task_id for task in spec.tasks),
+            (
+                "instruction2triton.rocmbench.test_add_kernel",
+                "instruction2triton.tritonbench.attention_llama",
+                "instruction2triton.rocmbench.moe_gemm",
+                "instruction2triton.tritonbench.dequantize_matmul",
+            ),
+        )
+        self.assertTrue(all(task.file_sha256 for task in spec.tasks))
+
     def test_repository_config_names_missing_implementations_instead_of_argv_aliases(self):
         spec = C.load_spec(CONFIG)
         self.assertEqual(spec.arms[0].availability, "ready")
