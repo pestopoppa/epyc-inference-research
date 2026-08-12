@@ -30,9 +30,9 @@ a module it never looked at.
 
 | | non-test lines |
 |---|---:|
-| **ON THE CAMPAIGN PATH** | **70,045** |
+| **ON THE CAMPAIGN PATH** | **70,396** |
 | **DEFERRED** (provably unreachable) | **54,880** |
-| **TOTAL** | **124,925** |
+| **TOTAL** | **125,276** |
 
 **The deferred plane is explicit.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -185,7 +185,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `evaluator/surface.py` | 3,195 | yes | **change-class constants only** — `AffectedSurface`, the core/shared-header fanout classes. `SurfaceGateRunner` is fenced off |
 | `execution/__init__.py` | 24 | yes | docstring only; states the deny-8 limits every executor inherits |
 | `execution/worktree.py` | 2,883 | yes | no candidate exists without it: production-tip anchoring, campaign worktree, build, build-identity receipt |
-| `execution/provider.py` | 71 | yes | provider-backed proposals must resolve to isolated prefixes outside shared ROCm/system locations and frozen production trees before candidate recording |
+| `execution/provider.py` | 422 | yes | source-available ROCm providers bind a clean exact commit, tracked-file/toolchain/linkage/licence/executable identities and execute only an explicitly authorized prefix-bearing build under no-network write confinement; outputs remain non-bankable until clean llama_gpu integration |
 | `execution/microbench.py` | 4,345 | yes | paired ALTERNATING blocks plus C6-10 ranked hard cases — each hostile unit changes the receipted recipe and contributes blocks to the same rank instead of living only in a correctness gate |
 | `execution/device_sampler.py` | 410 | yes | RVP-C3-4 numeric 250 ms ROCm state producer; it brackets the exact captured benchmark-process lifetime and fails closed on missing fields, failed probes, empty traces, or cadence gaps |
 | `execution/instrument_integrity.py` | 111 | yes | RVP-C6-1: a candidate binary is built from candidate-controlled source, so every live T1 invocation must re-pin its reward-bearing translation unit to the named anchor before it can emit a number |
