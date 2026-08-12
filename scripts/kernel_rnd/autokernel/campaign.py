@@ -161,7 +161,8 @@ from pathlib import Path
 from statistics import median
 from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 
-from . import artifact_diff, dashboard, journal as journal_module
+from . import (artifact_diff, candidate_record, dashboard,
+               journal as journal_module, source_candidate)
 from . import schemas, storage
 from .controller import do_not_repeat, hypotheses
 from .evaluator import api, correctness, devices, recipes
@@ -224,6 +225,10 @@ __all__ = [
 MODULES_THE_DRIVER_USES: Mapping[str, str] = {
     "artifact_diff": "AK-TR-6 compile-only register/scratch/instruction movement vetoes "
                      "a GPU claim before the behavioural T0 provider can launch",
+    "candidate_record": "every executed candidate is durably recorded from the exact "
+                        "built snapshot and evaluation event identities",
+    "source_candidate": "source-changing proposals consume one immutable embedded patch "
+                        "bundle through the guarded worktree mutation boundary",
     "dashboard": "the fsynced terminal campaign result must reach the operator surface; "
                  "the exporter is derived and cannot make an old journal entry fresh",
     "schemas": "one record shape; PASS/FAIL/COULD_NOT_CHECK",
@@ -1240,6 +1245,8 @@ class CampaignSpec:
     #: Validated proposal.v3 record. Optional for composition-only legacy dry
     #: runs; mandatory on the executing CLI before any claim or mutation.
     proposal: Optional[Mapping[str, Any]] = None
+    #: Immutable embedded source artifact, loaded completely before any claim.
+    source_patch: Optional[source_candidate.SourcePatchManifest] = None
     #: Accepted, identity-bound live calibration.  Supplied by the CLI bundle
     #: loader; absent means composition-only and carries no ranking authority.
     calibration: Optional[LeanCalibration] = None
@@ -1287,6 +1294,9 @@ class CampaignSpec:
                     f"{self.authorization.campaign_id!r}, not {self.campaign_id!r}. A "
                     "token that travelled between campaigns would charge this run's "
                     "claim to another run's question")
+        if self.source_patch is not None and not isinstance(
+                self.source_patch, source_candidate.SourcePatchManifest):
+            raise TypeError("source_patch must be a SourcePatchManifest or None")
         if self.proposal is not None:
             proposal = json.loads(schemas.canonical_json(self.proposal))
             violations = schemas.validate_proposal_v3(proposal)
@@ -1299,6 +1309,15 @@ class CampaignSpec:
                 )
             object.__setattr__(self, "proposal", proposal)
             self._validate_arm_parameter_surface(proposal)
+            if proposal["change_class"] == "parameter" and self.source_patch is not None:
+                raise ValueError("parameter campaigns may not carry a source patch")
+            if proposal["change_class"] != "parameter":
+                if self.source_patch is not None:
+                    self.source_patch.bind(
+                        proposal=proposal, campaign_id=self.campaign_id,
+                        candidate_id=self.candidate_id,
+                        production_base_commit=PRODUCTION_COMMIT,
+                        instrument_commit=MEASUREMENT_COMMIT)
         if self.calibration is not None and not isinstance(
                 self.calibration, LeanCalibration):
             raise TypeError("calibration must be a LeanCalibration or None")
@@ -1665,6 +1684,8 @@ class CampaignSpec:
                     "representation_contract"
                 ]["frame_sha256"],
             },
+            "source_patch_bundle_sha256": (
+                None if self.source_patch is None else self.source_patch.patch_bundle_sha256),
             "physical_envelope": (
                 None if self.physical_envelope is None
                 else self.physical_envelope.to_dict()),
@@ -2148,8 +2169,8 @@ class HostOps:
         parameter_only = bool(
             spec is not None and spec.proposal is not None
             and spec.proposal.get("change_class") == "parameter")
-        if (getattr(type(self), "apply_candidate", None) is HostOps.apply_candidate
-                and not parameter_only):
+        if (not parameter_only and (spec is None or spec.source_patch is None)
+                and getattr(type(self), "apply_candidate", None) is HostOps.apply_candidate):
             missing.append("apply_candidate")
         if self._t0_evidence is None and not parameter_only:
             missing.append("t0_evidence")
@@ -2196,6 +2217,11 @@ class HostOps:
         self._evaluator_close_check: Optional[schemas.Check] = None
         self._runtime_close_check: Optional[schemas.Check] = None
         self._recipe_receipts: dict[tuple[str, str], api.RecipeReceipt] = {}
+        self._source_application: Optional[source_candidate.AppliedSourceCandidate] = None
+        self._build_identity: Optional[worktree.BuildIdentity] = None
+        self._build_snapshot: Optional[worktree.Worktree] = None
+        self._cached_evaluation_events: Optional[tuple] = None
+        self._cached_candidate_record: Optional[dict] = None
 
     def calibration_gate(self, spec: CampaignSpec) -> schemas.Check:
         """Refuse live ranking outside the accepted cell-local calibration."""
@@ -2709,17 +2735,28 @@ class HostOps:
                 "anchor": dict(spec.anchor_param_overrides),
                 "source_mutated": False,
             }
-        raise NotImplementedError(
-            f"apply_candidate({spec.candidate_ref!r}): the candidate mutation is the "
-            "proposal's, not the driver's. Wire it by subclassing HostOps and overriding "
-            "this one method, or land the change in the worktree before --execute. "
-            "worktree.GitRepo deliberately carries no content-mutating git verb.")
+        if spec.proposal is None or spec.source_patch is None:
+            raise RuntimeError("source candidate requires proposal and immutable source patch")
+        self._source_application = source_candidate.apply_source_candidate(
+            spec.source_patch, proposal=spec.proposal, actor=tree)
+        return self._source_application
 
     # -- 3. build ----------------------------------------------------------
 
     def build(self, spec: CampaignSpec, tree: Any) -> Any:
+        if isinstance(tree, worktree.Worktree):
+            snapshot_path = worktree.snapshot_worktree_path(
+                spec.campaign_id, spec.candidate_id)
+            snapshot, proof = worktree.create_snapshot_worktree(
+                tree.repo, tree.head_commit(), snapshot_path)
+            if not proof.holds:
+                raise worktree.ProductionMutated(
+                    f"creating build snapshot changed the source tree: {proof.differences}")
+            self._build_snapshot = snapshot
+        else:  # test-double compatibility; executing HostOps always has the typed tree
+            snapshot = tree
         plan = worktree.BuildPlan(
-            source_root=tree.path,
+            source_root=snapshot.path,
             build_dir=worktree.default_build_dir(spec.campaign_id, spec.candidate_id),
             actor_worktree=tree.path,
             parallelism=worktree.BuildParallelism(jobs=64, load_average_cap=8.0),
@@ -2729,7 +2766,8 @@ class HostOps:
         log_path = os.path.join(spec.build_root, spec.campaign_id,
                                 f"{spec.candidate_id}.log")
         result = worktree.run_build(plan, log_path=log_path)
-        self._build_state = {"plan": plan, "result": result, "tree": tree}
+        self._build_state = {"plan": plan, "result": result, "tree": snapshot,
+                             "mutation_tree": tree}
         return result
 
     # -- 4. T0 -------------------------------------------------------------
@@ -2884,6 +2922,8 @@ class HostOps:
             tools=self._t0_tools(), runner=t0_provider.SubprocessRunner(),
             base_env=tuple(sorted(self._construct(spec, arm="candidate").env.items())),
             parameter_env=spec.t0_parameter_env_for_arm("candidate"))
+        identity = replace(identity, linkage_sha256=candidate_capture.linkage_sha256)
+        self._build_identity = identity
         early_anchor_capture = t0_provider.capture_anchor_identity(
             anchor=self._measurement_anchor_build("llama-cli"),
             tools=self._t0_tools(), runner=t0_provider.SubprocessRunner(),
@@ -2979,7 +3019,10 @@ class HostOps:
                 if spec.proposal is not None
                 and spec.proposal.get("change_class") == "parameter" else None),
             determinism_runs=2, cache_state="cold", state_safety_probe=False,
-            candidate_diff_text=tree.unified_diff_from_source(),
+            candidate_diff_text=(
+                self._source_application.diff_text
+                if self._source_application is not None
+                else tree.unified_diff_from_source()),
             oracle_ids=(f"oracle://{MEASUREMENT_BRANCH}",),
             base_env=tuple(sorted(self._construct(spec, arm="candidate").env.items())),
             parameter_env=spec.t0_parameter_env_for_arm("candidate"),
@@ -3245,9 +3288,15 @@ class HostOps:
     # -- 6. teardown -------------------------------------------------------
 
     def teardown_worktree(self, spec: CampaignSpec, tree: Any) -> Any:
+        snapshot_receipt = None
+        if self._build_snapshot is not None:
+            snapshot_receipt = worktree.teardown_worktree(
+                self._build_snapshot, witness_trees=list(worktree.frozen_tree_paths()))
+            self._build_snapshot = None
         receipt = worktree.teardown_worktree(
             tree, witness_trees=list(worktree.frozen_tree_paths()))
-        return receipt.to_dict()
+        return {"snapshot": None if snapshot_receipt is None else snapshot_receipt.to_dict(),
+                "campaign": receipt.to_dict()}
 
     def keep_or_revert(self, spec: CampaignSpec, tree: Any,
                        decision: Optional[AcceptDecision]) -> Any:
@@ -3452,6 +3501,57 @@ class HostOps:
             events.append(event)
         return tuple(events)
 
+    def prepare_durable_records(self, spec: CampaignSpec, *, state: str,
+                                decision: Optional[AcceptDecision]) -> None:
+        """Materialize evaluation and candidate bytes while the built snapshot lives."""
+        if self._cached_evaluation_events is not None:
+            return
+        events = self._evaluation_events(spec)
+        self._cached_evaluation_events = events
+        if self._build_identity is None or self._build_snapshot is None \
+                or self._t0_request is None or spec.proposal is None:
+            return
+        event_ids = tuple(event["event_id"] for event in events)
+        event = events[-1] if events else None
+        evaluator = self._t0_request.evaluator
+        if state == STATE_DECIDED:
+            status = "evaluating" if decision is not None and decision.keep else "rejected"
+        elif state == STATE_T0_FAILED:
+            status = "invalid"
+        else:
+            status = "evaluating"
+        derived_tokens = (
+            tuple(f"file:{path}" for path in self._source_application.actual_files)
+            if self._source_application is not None else ("flag:GGML_IQK",))
+        self._cached_candidate_record = candidate_record.build_candidate_record(
+            proposal=spec.proposal, candidate_id=spec.candidate_id,
+            campaign_id=spec.campaign_id, production_base_commit=PRODUCTION_COMMIT,
+            instrument_commit=MEASUREMENT_COMMIT,
+            source_commit=self._build_snapshot.head_commit(),
+            actor=self._build_snapshot, identity=self._build_identity,
+            build_result=self._build_state.get("result"),
+            source_application=self._source_application, status=status,
+            evaluator_id=evaluator.id,
+            evaluator_bundle_sha256=evaluator.bundle_sha256,
+            evaluator_runtime_source_label_ref=evaluator.runtime_source_label_ref,
+            resource_claim_receipt=(
+                event["resource_claim_receipt"] if event is not None
+                else schemas.content_hash(self._claim_close_receipt or {})),
+            host_receipt=(event["host_receipt"] if event is not None
+                          else schemas.content_hash({"open": str(self._host_open),
+                                                    "close": str(self._host_close)})),
+            evaluation_event_ids=event_ids,
+            derived_surface_tokens=derived_tokens,
+            dispatch_predicates=(),
+            protocol_ids=tuple(sorted({event["claim_grammar"]["protocol_id"]
+                                       for event in events})) or ("P-AK-SEARCH-1/v1",),
+            same_seed_repeat_runs=self._t0_request.determinism.same_seed_repeat_runs,
+            derived_verdicts={
+                "campaign_state": state,
+                "accept_decision": None if decision is None else decision.to_dict(),
+            },
+            created_at=spec.created_at)
+
     def journal_evaluation(self, spec: CampaignSpec, result: Any) -> tuple:
         """Append prospective events idempotently, before terminal STOP_STATE."""
         if not spec.journal_root:
@@ -3460,7 +3560,8 @@ class HostOps:
         book = journal_module.Journal(root, campaign_id=spec.campaign_id)
         book.initialize()
         appended = []
-        events = self._evaluation_events(spec)
+        events = (self._cached_evaluation_events if self._cached_evaluation_events is not None
+                  else self._evaluation_events(spec))
         if self._t0_started and not events and getattr(result, "error", None):
             refusal = {
                 "campaign_id": spec.campaign_id,
@@ -3496,6 +3597,10 @@ class HostOps:
                     continue
                 appended.append(book.append(
                     journal_module.KIND_EVALUATION_EVENT, event).event_id)
+        if self._cached_candidate_record is not None:
+            appended.append(candidate_record.append_candidate_idempotent(
+                book, self._cached_candidate_record,
+                kind=journal_module.KIND_CANDIDATE_RECORDED))
         return tuple(appended)
 
     def journal(self, spec: CampaignSpec, payload: Mapping[str, Any]) -> Any:
@@ -3782,6 +3887,15 @@ def _finish(spec: CampaignSpec, ops: Any, ledger: ResourceLedger, *, state: str,
             error = "; ".join(x for x in (
                 error, f"close_evaluation_window: {type(exc).__name__}: {exc}") if x)
 
+    prepare_records = getattr(ops, "prepare_durable_records", None)
+    if bool(getattr(ops, "executes", True)) and callable(prepare_records):
+        try:
+            prepare_records(spec, state=state, decision=decision)
+        except BaseException as exc:  # noqa: BLE001 - release must still run
+            state = STATE_ERROR
+            error = "; ".join(x for x in (
+                error, f"prepare_durable_records: {type(exc).__name__}: {exc}") if x)
+
     releases = ledger.release_all()
 
     try:
@@ -3851,6 +3965,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help="validated proposal.v3 JSON. Required by --execute and fsynced before host work",
+    )
+    parser.add_argument(
+        "--source-patch-manifest", default=None, metavar="PATH",
+        help="immutable source-patch.v1 JSON with embedded bytes; required for "
+             "source-changing --execute campaigns",
     )
     parser.add_argument(
         "--calibration-bundle",
@@ -3962,6 +4081,15 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
         )
         return 2
 
+    source_patch = None
+    if args.source_patch_manifest is not None:
+        try:
+            source_patch = source_candidate.load_source_patch_manifest(
+                args.source_patch_manifest)
+        except (OSError, ValueError, TypeError, source_candidate.SourceCandidateError) as exc:
+            print(f"refusing to start: --source-patch-manifest: {exc}", file=sys.stderr)
+            return 2
+
     selected_calibration = None
     if args.calibration_bundle is not None:
         try:
@@ -4026,9 +4154,11 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
             recipe_id=resolved_recipe_id, model=args.model, reps=args.reps,
             devices=tuple(args.device), device_names=tuple(args.device_name),
             journal_root=args.journal_root, proposal=proposal,
+            source_patch=source_patch,
             calibration=selected_calibration,
             physical_envelope=physical_envelope, ranked_units=ranked_units)
-    except (ValueError, TypeError, storage.StorageError, recipes.RecipeError) as exc:
+    except (ValueError, TypeError, storage.StorageError, recipes.RecipeError,
+            source_candidate.SourceCandidateError) as exc:
         print(f"refusing to start: {exc}", file=sys.stderr)
         return 2
 
