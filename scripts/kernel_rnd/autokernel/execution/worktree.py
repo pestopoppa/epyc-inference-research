@@ -168,7 +168,8 @@ __all__ = [
     "SandboxPath", "SafeBranch", "Pathspec", "ProcessDisposition",
     # git plane
     "GitRepo", "Worktree", "Anchor", "resolve_anchor",
-    "campaign_worktree_path", "create_campaign_worktree", "create_snapshot_worktree",
+    "campaign_worktree_path", "snapshot_worktree_path",
+    "create_campaign_worktree", "create_snapshot_worktree",
     # immutability proof
     "TreeFingerprint", "fingerprint_tree", "ImmutabilityProof", "prove_unchanged",
     "TeardownReceipt", "teardown_worktree",
@@ -1064,6 +1065,54 @@ def _run_owned(argv: Sequence[str], *, cwd: Optional[str] = None,
     return disposition, text
 
 
+def _run_guarded_patch_input(worktree: "Worktree", patch_bytes: bytes, *,
+                             check_only: bool) -> tuple:
+    """Run the one command allowed to receive child stdin in this module.
+
+    Every other subprocess launched here keeps ``stdin=DEVNULL`` in
+    :func:`_run_owned`.  Patch bytes are already resident and content-addressed;
+    they are supplied directly to ``git apply -`` so no mutable patch path can
+    change between validation and application.  The argv is closed here rather
+    than caller-supplied, and the receiver must be the mutation-capable
+    :class:`Worktree` type.
+    """
+    if not isinstance(worktree, Worktree):
+        raise TypeError("guarded patch input requires a Worktree")
+    if not isinstance(patch_bytes, bytes) or not patch_bytes:
+        raise TypeError("patch_bytes must be non-empty immutable bytes")
+    args = ["git", "-C", worktree.path.path, "apply"]
+    if check_only:
+        args.append("--check")
+    args += ["--whitespace=error-all", "--", "-"]
+    argv = _validate_argv(args)
+    started = time.monotonic()
+    started_at = _utc_now_iso()
+    with subprocess.Popen(
+            argv, env=_sanitized_env(None), stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, stdin=subprocess.PIPE,
+            start_new_session=True, close_fds=True) as proc:
+        pid = proc.pid
+        try:
+            pgid = os.getpgid(pid)
+        except ProcessLookupError:  # pragma: no cover - child already reaped
+            pgid = pid
+        signals_sent: tuple = ()
+        timed_out = False
+        try:
+            captured, _ = proc.communicate(input=patch_bytes, timeout=worktree.timeout_s)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            signals_sent = _terminate_owned(proc, pgid, grace_s=10.0)
+            captured, _ = proc.communicate()
+        exit_code = proc.poll()
+    disposition = ProcessDisposition(
+        argv=argv, pid=pid, pgid=pgid, exit_code=exit_code,
+        timed_out=timed_out, signals_sent=signals_sent,
+        verified_dead=exit_code is not None,
+        duration_s=time.monotonic() - started, started_at=started_at)
+    return disposition, (captured or b"").decode("utf-8", "replace")
+
+
 # =============================================================================
 # The git plane — two classes, one boundary
 # =============================================================================
@@ -1214,6 +1263,18 @@ class GitRepo:
                 f"git rev-list did not return the requested commit {commit!r}: {fields!r}")
         return tuple(_req_commit(parent, "parent commit") for parent in fields[1:])
 
+    def is_ancestor(self, ancestor: str, descendant: str) -> bool:
+        """Prove a commit-graph relationship without mutating either tree."""
+        ancestor = _req_commit(ancestor, "ancestor")
+        descendant = _req_commit(descendant, "descendant")
+        try:
+            self._git("merge-base", "--is-ancestor", ancestor, descendant)
+        except GitCommandFailed as exc:
+            if exc.returncode == 1:
+                return False
+            raise
+        return True
+
     def current_branch(self) -> Optional[str]:
         try:
             return self._git("symbolic-ref", "--short", "--quiet", "HEAD").strip() or None
@@ -1357,6 +1418,10 @@ class Worktree:
     def head_commit(self) -> str:
         return _req_commit(self._git("rev-parse", "HEAD").strip(), "HEAD")
 
+    def is_ancestor(self, ancestor: str, descendant: Optional[str] = None) -> bool:
+        """Read-only ancestry proof scoped to this experimental worktree."""
+        return self.repo.is_ancestor(ancestor, descendant or self.head_commit())
+
     def status_porcelain(self) -> str:
         return self._git("status", "--porcelain")
 
@@ -1375,6 +1440,33 @@ class Worktree:
         return self._git(
             "diff", "--no-ext-diff", "--unified=3",
             f"{self.source_commit}..{self.head_commit()}", "--")
+
+    def apply_patch_bytes(self, patch_bytes: bytes) -> dict:
+        """Check then apply immutable patch bytes through the guarded stdin route.
+
+        A ``GitRepo`` can never reach this method.  Both invocations consume the
+        same in-memory ``bytes`` object; there is no pathname to swap between
+        the check and the mutation.
+        """
+        checked, check_text = _run_guarded_patch_input(
+            self, patch_bytes, check_only=True)
+        if checked.exit_code != 0:
+            raise GitCommandFailed(checked.argv, checked.exit_code or -1, check_text)
+        applied, apply_text = _run_guarded_patch_input(
+            self, patch_bytes, check_only=False)
+        if applied.exit_code != 0:
+            raise GitCommandFailed(applied.argv, applied.exit_code or -1, apply_text)
+        return {
+            "check": checked.to_dict(), "apply": applied.to_dict(),
+            "patch_sha256": hashlib.sha256(patch_bytes).hexdigest(),
+        }
+
+    def commit_argv_for_paths(self, paths: Iterable[Any], message: str) -> tuple:
+        """The exact pathspec-limited commit argv used by ``commit_paths``."""
+        spec = Pathspec.create(paths, self)
+        _req_str(message, "message")
+        return ("git", "-C", self.path.path, "commit", "-m", message,
+                "--", *spec.as_args())
 
     # -- the pathspec-limited commit --------------------------------------
     def commit_paths(self, paths: Iterable[Any], message: str, *,
@@ -1495,6 +1587,22 @@ def campaign_worktree_path(campaign_id: str, *, source_tree: str = "llama.cpp",
     root_path = _real(root, "worktree root")
     return SandboxPath.in_sandbox(os.path.join(root_path, f"{source_tree}-{campaign_id}"),
                                   sandbox_root=root_path, label="campaign worktree")
+
+
+def snapshot_worktree_path(campaign_id: str, candidate_id: str, *,
+                           source_tree: str = "llama.cpp",
+                           root: Any = DEFAULT_WORKTREE_ROOT) -> SandboxPath:
+    """A candidate-specific sibling used only for a detached clean build."""
+    validate_campaign_id(campaign_id)
+    if not isinstance(candidate_id, str) or not _SOURCE_TREE_RE.match(candidate_id) \
+            or not candidate_id.startswith("akc-"):
+        raise ValueError("candidate_id must be an akc- prefixed plain path component")
+    if not _SOURCE_TREE_RE.match(_req_str(source_tree, "source_tree")):
+        raise UnsafePath(f"source_tree {source_tree!r} is not a plain directory name")
+    root_path = _real(root, "worktree root")
+    return SandboxPath.in_sandbox(
+        os.path.join(root_path, f"{source_tree}-{campaign_id}-{candidate_id}-snapshot"),
+        sandbox_root=root_path, label="snapshot worktree")
 
 
 def create_campaign_worktree(anchor: Anchor, campaign_id: str, *,
@@ -2678,7 +2786,7 @@ def audit_no_name_pattern_process_ops(source: Optional[str] = None, *,
     * `SHELL_TRUE` — `shell=True` anywhere; it hands a validated argv back to a
       word-splitter.
     * `SUBPROCESS_OUTSIDE_RUN_OWNED` — a `subprocess.*` call outside
-      `_run_owned`, which would be a second spawn path with none of the above.
+      `_run_owned` or the closed `_run_guarded_patch_input` route.
 
     The denylist is a PARAMETER so a test can pass a shorter one and watch a
     finding disappear; `test_worktree.py` separately asserts the module default
@@ -2738,7 +2846,8 @@ def audit_no_name_pattern_process_ops(source: Optional[str] = None, *,
                     findings.append(f"SHELL_TRUE: shell=True at line {node.lineno}")
 
     for node in ast.walk(tree):
-        if not isinstance(node, ast.FunctionDef) or node.name == "_run_owned":
+        if not isinstance(node, ast.FunctionDef) or node.name in {
+                "_run_owned", "_run_guarded_patch_input"}:
             continue
         for sub in ast.walk(node):
             if isinstance(sub, ast.Call) and _dotted(sub.func).startswith("subprocess."):
@@ -2752,7 +2861,8 @@ def audit_no_name_pattern_process_ops(source: Optional[str] = None, *,
         return schemas.Check(FAIL, reasons=tuple(sorted(set(findings))))
     return schemas.Check(PASS, reasons=(
         "no name-pattern process tool in any argv; every signal targets the process group "
-        "this module created; no shell=True; subprocess is reached only through _run_owned",))
+        "this module created; no shell=True; subprocess is reached only through "
+        "_run_owned or the immutable guarded patch-input route",))
 
 
 def with_parallelism(plan: BuildPlan, parallelism: BuildParallelism) -> BuildPlan:
