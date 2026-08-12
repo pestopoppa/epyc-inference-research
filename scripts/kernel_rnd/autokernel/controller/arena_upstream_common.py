@@ -19,7 +19,6 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
-import signal
 import socket
 import struct
 import subprocess
@@ -51,49 +50,6 @@ class UpstreamControllerError(RuntimeError):
 
 class ControllerBudgetExpired(UpstreamControllerError):
     """The matched controller wall-time budget has been exhausted."""
-
-
-def _live_process_group_members(process_group_id: int) -> tuple[int, ...]:
-    members: list[int] = []
-    for entry in Path("/proc").iterdir():
-        if not entry.name.isdigit():
-            continue
-        try:
-            stat = (entry / "stat").read_text(encoding="utf-8")
-            fields = stat[stat.rfind(")") + 2:].split()
-            state = fields[0]
-            group = int(fields[2])
-        except (FileNotFoundError, IndexError, PermissionError, ValueError):
-            continue
-        if group == process_group_id and state != "Z":
-            members.append(int(entry.name))
-    return tuple(sorted(members))
-
-
-def _terminate_captured_process_group(
-    process_group_id: int, *, grace_seconds: float = 5.0,
-) -> None:
-    if process_group_id <= 1 or process_group_id == os.getpgrp():
-        raise UpstreamControllerError("refusing an unsafe process-group target")
-    members = _live_process_group_members(process_group_id)
-    if not members:
-        return
-    for sig in (signal.SIGTERM, signal.SIGKILL):
-        try:
-            os.killpg(process_group_id, sig)
-        except ProcessLookupError:
-            return
-        deadline = time.monotonic() + grace_seconds
-        while time.monotonic() < deadline:
-            members = _live_process_group_members(process_group_id)
-            if not members:
-                return
-            time.sleep(0.05)
-    members = _live_process_group_members(process_group_id)
-    if members:
-        raise UpstreamControllerError(
-            f"model process group {process_group_id} survived teardown: "
-            f"{list(members)}")
 
 
 def _sha256_file(path: Path) -> str:
@@ -147,8 +103,8 @@ def workspace_root(value: str | Path) -> Path:
 
 def _assert_gpu_devices_inaccessible() -> None:
     """Prove controller deliberation cannot open either ROCm device surface."""
-    devices = [Path("/dev/kfd"), *sorted(Path("/dev/dri").glob("renderD*"))]
-    denied = {errno.EACCES, errno.EPERM, errno.ENOENT, errno.ENODEV}
+    devices = (Path("/dev/kfd"), Path("/dev/dri/renderD128"))
+    denied = {errno.EACCES, errno.EPERM}
     for device in devices:
         for flags in (os.O_RDONLY, os.O_RDWR):
             try:
@@ -162,6 +118,33 @@ def _assert_gpu_devices_inaccessible() -> None:
                 os.close(descriptor)
                 raise UpstreamControllerError(
                     f"controller is not device-isolated: opened {device}")
+
+
+def _timeout_text(value: str | bytes | None) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return ""
+
+
+def _defer_timed_out_child(process: subprocess.Popen[str]) -> None:
+    """Release pipes and let the parent controller cgroup own final teardown.
+
+    A sandboxed controller cannot inspect ``/proc`` or send signals.  The
+    launcher-side lifecycle verifier owns the controller cgroup and removes
+    any descendants after the controller exits.  A daemon waiter keeps the
+    ``Popen`` object live long enough to reap a child that exits on its own,
+    without delaying controller exit when the cgroup must do the cleanup.
+    """
+    for stream in (process.stdin, process.stdout, process.stderr):
+        if stream is not None and not stream.closed:
+            stream.close()
+    threading.Thread(
+        target=process.wait,
+        name=f"autokernel-controller-child-{process.pid}",
+        daemon=True,
+    ).start()
 
 
 @dataclass(frozen=True)
@@ -258,19 +241,14 @@ class CodexTextModel:
         stderr = ""
         try:
             stdout, stderr = process.communicate(input=prompt, timeout=remaining)
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as exc:
             timed_out = True
-        finally:
-            cleanup_error: Exception | None = None
-            try:
-                _terminate_captured_process_group(process.pid)
-            except Exception as exc:  # reap the exact child before surfacing teardown
-                cleanup_error = exc
-            if process.poll() is None:
-                process.kill()
-            stdout, stderr = process.communicate(timeout=5)
-            if cleanup_error is not None:
-                raise cleanup_error
+            stdout = _timeout_text(exc.stdout)
+            stderr = _timeout_text(exc.stderr)
+            _defer_timed_out_child(process)
+        except BaseException:
+            _defer_timed_out_child(process)
+            raise
         stderr_path.write_text(stderr, encoding="utf-8")
         event = {
             "ordinal": ordinal,

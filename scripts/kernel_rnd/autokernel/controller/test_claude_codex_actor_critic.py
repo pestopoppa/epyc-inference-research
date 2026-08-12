@@ -12,6 +12,7 @@ import stat
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 from . import claude_codex_actor_critic as A
 
@@ -302,16 +303,18 @@ class ActorCriticControllerTest(unittest.TestCase):
         event = json.loads(transcript.read_text(encoding="utf-8").strip())
         self.assertTrue(event["timed_out"])
 
-    def test_process_timeout_kills_only_the_captured_fake_process_group(self):
+    def test_process_timeout_defers_to_parent_cgroup_without_signals(self):
         sleeper = self.root / "sleeper"
-        sleeper.write_text("#!/bin/sh\nsleep 30\n", encoding="utf-8")
+        sleeper.write_text("#!/bin/sh\nsleep 0.2\n", encoding="utf-8")
         sleeper.chmod(sleeper.stat().st_mode | stat.S_IXUSR)
         started = time.monotonic()
-        capture = A._run_process(
-            (str(sleeper),), self.root, os.environ, "", 0.05)
-        self.assertLess(time.monotonic() - started, 3)
+        with mock.patch.object(
+                os, "killpg", side_effect=AssertionError("signal attempted")):
+            capture = A._run_process(
+                (str(sleeper),), self.root, os.environ, "", 0.02)
+        self.assertLess(time.monotonic() - started, 1.0)
         self.assertTrue(capture.timed_out)
-        self.assertNotEqual(capture.returncode, 0)
+        self.assertIsNone(capture.returncode)
 
     def test_registered_launcher_has_exact_agentkernelarena_three_arg_shape(self):
         workspace = self.workspace()
