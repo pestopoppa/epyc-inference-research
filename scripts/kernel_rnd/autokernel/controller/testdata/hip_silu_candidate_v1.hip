@@ -28,6 +28,25 @@ torch::Tensor forward(torch::Tensor input) {
     return output;
 }
 
+void forward_out(torch::Tensor input, torch::Tensor output) {
+    TORCH_CHECK(input.is_cuda() && output.is_cuda(),
+                "SiLU HIP tensors must be on the ROCm device");
+    TORCH_CHECK(input.scalar_type() == torch::kFloat32
+                && output.scalar_type() == torch::kFloat32,
+                "SiLU HIP tensors must be float32");
+    TORCH_CHECK(input.is_contiguous() && output.is_contiguous(),
+                "SiLU HIP tensors must be contiguous");
+    TORCH_CHECK(input.sizes() == output.sizes(),
+                "SiLU HIP output shape must match input");
+    const int threads = 256;
+    const int64_t count = input.numel();
+    const int blocks = static_cast<int>((count + threads - 1) / threads);
+    hipLaunchKernelGGL(silu_kernel, dim3(blocks), dim3(threads), 0, 0,
+                       input.data_ptr<float>(), output.data_ptr<float>(), count);
+    TORCH_CHECK(hipGetLastError() == hipSuccess, "SiLU HIP kernel launch failed");
+}
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, module) {
     module.def("forward", &forward, "SiLU forward (HIP)");
+    module.def("forward_out", &forward_out, "SiLU forward into poisoned output (HIP)");
 }
