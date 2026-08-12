@@ -27,6 +27,12 @@ from .execution import physical_bounds
 
 SCHEMA = "epyc.autokernel.iqk_matched_pair_preparation.v1"
 RESULT_SCHEMA = "epyc.autokernel.iqk_matched_pair_preparation_result.v1"
+HYPOTHESIS_STORE_FILENAME = "hypotheses.json"
+HYPOTHESIS_STORE_SCHEMA = "epyc.autokernel.operator_hypotheses.v1"
+HYPOTHESIS_FALSIFIER = (
+    "The accepted paired run fails a required integrity gate or its median "
+    "relative prefill gain does not exceed the predeclared 3% contribution floor."
+)
 
 
 class PreparationError(ValueError):
@@ -231,6 +237,34 @@ def _base_spec(
         calibration=calibration)
 
 
+def _hypothesis_store(*, proposal: Mapping[str, Any], candidate_id: str) -> dict[str, Any]:
+    """Build the campaign-local operator store required by ``--hypothesis``.
+
+    Pair preparation owns fresh candidate identities, so the ordinal in the
+    candidate is the only stable way to bind the corresponding operator entry.
+    The statement remains proposal-owned; preparation supplies only the durable
+    falsifier and the regime used by the v9 IQK campaign.
+    """
+    suffix = candidate_id.rsplit("-", 1)[-1]
+    hypothesis_id = f"akh-iqk-v9-known-real-{suffix}"
+    return {
+        "schema": HYPOTHESIS_STORE_SCHEMA,
+        "hypotheses": [{
+            "author": "operator",
+            "created_at": "2026-08-12T00:00:00+00:00",
+            "falsifier": HYPOTHESIS_FALSIFIER,
+            "hypothesis_id": hypothesis_id,
+            "regime": {
+                "backend": "llama_cpu",
+                "model": "Qwen2.5-Coder-0.5B-Q4_K_M",
+                "recipe_id": "t1b.llama_cpu.llama_bench_prefill.v1",
+                "shape": "pp512",
+            },
+            "statement": proposal["hypothesis"],
+        }],
+    }
+
+
 def prepare(raw: Mapping[str, Any]) -> dict[str, Any]:
     required = {
         "schema", "matched_experiment_id", "model", "calibration_bundle",
@@ -319,6 +353,17 @@ def prepare(raw: Mapping[str, Any]) -> dict[str, Any]:
             path.mkdir(mode=0o700)
         _write_json(staged["intervention"] / "proposal-v4.json", proposal)
         _write_json(staged["control"] / "proposal-v4.json", control)
+        # Both pair roots are independently consumable campaign roots.  Keep a
+        # local copy of the exact operator store so --hypothesis never depends
+        # on an external path that preparation did not publish.
+        for name, selected_proposal, branch in (
+                ("intervention", proposal, intervention),
+                ("control", control, control_branch)):
+            _write_json(
+                staged[name] / HYPOTHESIS_STORE_FILENAME,
+                _hypothesis_store(
+                    proposal=selected_proposal,
+                    candidate_id=str(branch["candidate_id"])))
         plans = {
             "intervention": _build_plan(
                 proposal=proposal, branch=intervention, role="intervention",

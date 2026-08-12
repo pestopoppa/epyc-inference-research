@@ -114,7 +114,15 @@ class MatchedPairPreparationTest(unittest.TestCase):
             self.assertEqual({path.name for path in output.iterdir()}, {
                 "proposal-v4.json", "least-commitment-diagnostic-source.json",
                 "least-commitment-heldout-outcome.json",
-                "least-commitment-capture-plan.json", "physical-envelope.json"})
+                "least-commitment-capture-plan.json", "physical-envelope.json",
+                "hypotheses.json"})
+            hypothesis_store = json.loads((output / "hypotheses.json").read_text())
+            self.assertEqual(hypothesis_store["schema"],
+                             "epyc.autokernel.operator_hypotheses.v1")
+            self.assertEqual(len(hypothesis_store["hypotheses"]), 1)
+            self.assertEqual(
+                hypothesis_store["hypotheses"][0]["statement"],
+                (self.intervention if name == "intervention" else self.control)["hypothesis"])
             raw = json.loads((output / "least-commitment-capture-plan.json").read_text())
             self.assertEqual(raw["schema"], C.SCHEMA)
             frames.append(raw["factors"])
