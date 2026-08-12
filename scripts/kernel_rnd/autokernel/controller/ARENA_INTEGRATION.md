@@ -65,20 +65,35 @@ file and campaign-driver module SHA-256 values, and execution rechecks both to
 prevent a ready receipt from being replayed after either input changes.
 
 `arena_cell_runner.py` is the concrete governed implementation of that typed
-executor seam. It does not patch the pinned Arena checkout. Instead, each cell
-loads Arena's workspace/evaluator modules in an isolated child process. The
-child acquires AutoKernel's cross-process `mi210_0` claim and 250 ms device
-sampler separately around Arena's starting-state baseline measurement and its
-final centralized evaluation. It releases the first claim and hides the GPU
-before launching the controller. Licensed upstream controllers send every
-intermediate candidate to a parent-worker-owned Unix-socket broker: the parent
-materializes complete, bounded candidate bytes in a fresh task copy and owns a
-separate short claim/sampler window around compilation, correctness, and timing
-against the immutable starting-state baseline cases and receipt. The socket
-uses an in-memory nonce, exact `SO_PEERCRED` PID plus
-procfs start-time binding, contiguous ordinals, and a durable hash chain. Model
-subprocesses receive no broker credential. Each measurement window has its own
-atomic, self-hashed open/release/sampling receipt. The
+executor seam. It does not patch the pinned Arena checkout. The parent worker
+loads Arena only for the immutable starting-state compilation/baseline. Every
+candidate compilation, correctness check, and timing pass—intermediate and
+final—runs in a fresh subprocess under the `candidate_evaluator_gpu_v1`
+profile. That profile default-denies read/exec outside the copied task, pinned
+Python/ROCm/Arena inputs, and exact system runtime roots; grants read/write only
+to `/dev/kfd`, `/dev/dri/renderD128`, and the copied task; denies all networking,
+broker inheritance, cross-process memory, io_uring, signals, ptrace, namespaces,
+modules, BPF, and mounts; and owns a fresh process group/session and cgroup.
+The parent alone owns AutoKernel's cross-process `mi210_0` claim and 250 ms
+device sampler around each child lifetime. `/proc` remains absent from the read
+allowlist; the first claim-scoped isolated probe must fail closed if ROCr needs
+a narrower evidenced exception.
+
+Licensed upstream controllers send every intermediate candidate to a
+parent-worker-owned Unix-socket broker. The parent materializes complete,
+bounded candidate bytes in a fresh task copy and serializes all evaluations
+against the immutable, strictly JSON-serialized starting-state baseline cases.
+The socket uses an in-memory nonce, exact `SO_PEERCRED` PID plus procfs
+start-time binding, a persistent descriptor connected before controller sandbox
+activation, contiguous ordinals, and a durable hash chain. A bounded
+pre-registration wait closes the connect-before-`Popen`-callback race. Peer
+disconnect, timeout, signal, or broker teardown cancels the exact child process
+group, drains/removes its cgroup, releases the claim, and emits no result.
+Model subprocesses receive no broker descriptor or credential. Each measurement
+window has its own atomic, self-hashed open/release/sampling receipt and embeds
+the child activation/teardown receipt. Durable validation rehashes the pinned
+Arena evaluator source, child request, serialized baseline, stdout/stderr,
+persisted child result, exact evaluation value, and cgroup lifecycle. The
 baseline runs once without authoring. Every controller runs three
 independent fresh workspaces at 2 h, 8 h, and 32 h; the runner rewrites only the
 two declared budget flags and refuses an adapter that does not expose them.
@@ -114,15 +129,14 @@ logical campaign to the run-directory `attempt_id`, so device-claim journals
 cannot conflate repeated logical campaign IDs. Nested measurement-window and
 belief identities are checked semantically against their enclosing checkpoint.
 
-The broker groundwork is deliberately non-runnable until a reusable OS sandbox
-profile is provisioned. `HIP_VISIBLE_DEVICES=` is not an isolation boundary.
-Execution fails closed unless a transparent-exec controller sandbox is
-configured, and the controller itself proves that read-only and read-write
-opens of `/dev/kfd` and DRM render nodes are denied. The arbitrary prefix is not
-yet an attested production profile, and candidate evaluation still needs to
-move from the broker thread into the existing restricted evaluator subprocess.
-Until both are complete, no INF-03 run may claim GPU-blind deliberation, safe
-concurrency, ranking, aggregate, belief, champion, or release authority.
+Candidate evaluation isolation is implemented, but the campaign remains
+fail-closed until the separate transparent-exec controller sandbox is
+configured and attested. `HIP_VISIBLE_DEVICES=` is not an isolation boundary;
+the controller itself must prove that read-only and read-write opens of
+`/dev/kfd` and DRM render nodes are denied. Until that profile and the first
+claim-scoped evaluator compatibility probe succeed, no INF-03 run may claim
+GPU-blind deliberation, safe concurrency, ranking, aggregate, belief, champion,
+or release authority.
 
 The 2026-08-12 available-source r4 attempt is immutable defect evidence, not a
 valid partial campaign. KernelFoundry performed 64 intermediate vendor
