@@ -1431,6 +1431,11 @@ class ArenaCellRunnerTest(unittest.TestCase):
             self.assertEqual(
                 prepared.environment["PYTHONPATH"],
                 R._controller_pythonpath(request["arm"], R.REPOSITORY_ROOT))
+            codex_home = Path(prepared.environment["CODEX_HOME"])
+            self.assertTrue(codex_home.is_relative_to(
+                Path(prepared.task.workspace)))
+            self.assertTrue((codex_home / "auth.json").is_file())
+            self.assertTrue((codex_home / "config.toml").is_file())
             process_started(os.getpid())
             broker_client = object.__new__(U.ArenaWorkspaceEvaluator)
             broker_client.workspace = Path(prepared.task.workspace)
@@ -1478,6 +1483,9 @@ class ArenaCellRunnerTest(unittest.TestCase):
         self.assertIn(
             "evaluator_execution_receipt",
             receipt["measurement_windows"][1])
+        self.assertFalse(
+            (cell_root / "workspace" /
+             ".autokernel-controller-codex-home").exists())
 
     def test_exact_group_teardown_kills_a_planted_descendant(self):
         child_pid_path = self.root / "descendant.pid"

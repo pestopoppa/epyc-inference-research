@@ -1369,6 +1369,31 @@ def _copy_task(source: Path, destination: Path) -> None:
     shutil.copytree(source, destination)
 
 
+@contextmanager
+def _staged_controller_codex_home(workspace: Path):
+    """Provide writable ephemeral CLI state without mutating host credentials."""
+    target = workspace / ".autokernel-controller-codex-home"
+    if target.exists() or target.is_symlink():
+        raise ArenaCellRunnerError("controller Codex home must be new")
+    target.mkdir(mode=0o700)
+    try:
+        for name in ("auth.json", "config.toml"):
+            source = Path("/home/node/.codex") / name
+            if source.is_symlink() or not source.is_file():
+                raise ArenaCellRunnerError(
+                    f"controller Codex credential input is absent or unsafe: {name}")
+            destination = target / name
+            with destination.open("xb") as handle:
+                handle.write(source.read_bytes())
+            destination.chmod(0o600)
+        yield target
+    finally:
+        if target.is_symlink():
+            target.unlink()
+        elif target.exists():
+            shutil.rmtree(target)
+
+
 def _declared_task_sources(
     config: Mapping[str, Any], workspace: Path,
 ) -> tuple[str, ...]:
@@ -2394,7 +2419,6 @@ def _run_worker_impl(
             "CUDA_VISIBLE_DEVICES": "",
             "PYTHONPATH": _controller_pythonpath(arm, repository_root),
             "SSL_CERT_FILE": "/etc/ssl/certs/ca-certificates.crt",
-            "CODEX_HOME": "/home/node/.codex",
             "CLAUDE_CONFIG_DIR": "/home/node/.claude",
         })
         source_paths = _declared_task_sources(task_config, workspace)
@@ -2447,48 +2471,50 @@ def _run_worker_impl(
             request=request, workspace=workspace, cell_root=cell_root,
             source_paths=source_paths, evaluate=broker_evaluate,
             baseline_receipt_sha256=baseline_window["receipt_sha256"])
-        prepared = arena_adapter.prepare_task(arena_adapter.ArenaTask(
-            task_id=task_id,
-            task_prompt=raw_prompt,
-            workspace=str(workspace),
-            controller_id=arm_id,
-            round_id=f"{claim_campaign_id}-{checkpoint:g}h",
-            actual_gfx_arch=arena_adapter.TARGET_GFX_ARCH,
-        ), base_environment=controller_environment)
-        # This is the deliberately unclaimed gap.  The controller receives a
-        # GPU-blind environment and may spend its remote-model budget while
-        # another host tenant uses the MI210.
-        with broker:
-            argv = _controller_argv(
-                arm, float(checkpoint),
-                executable_path=str(request["arm_audit"]["executable_path"]),
-                diagnostic_pilot_override=request.get(
-                    "diagnostic_pilot_controller_argv"))
-            assert controller_runtime is not None
-            invocation = arena_controller_sandbox.prepare_controller_sandbox(
-                workspace=workspace,
-                receipt_path=cell_root / CONTROLLER_ACTIVATION_RECEIPT,
-                expected_argv=argv, runtime=controller_runtime,
-                broker_socket_path=broker.socket_path,
-                broker_peer_pid=broker.owner_pid,
-                broker_peer_start_ticks=_controller_process_start_ticks(
-                    broker.owner_pid))
-            controller_environment.update(invocation.environment_overrides)
-            controller_environment.update(broker.environment())
-            prepared = arena_adapter.prepare_task(
-                prepared.task, base_environment=controller_environment)
-            prepared = arena_adapter.PreparedArenaTask(
-                task=prepared.task, prompt=prepared.prompt,
-                prompt_sha256=prepared.prompt_sha256,
-                environment={
-                    **prepared.environment,
-                    "PYTHONPATH": _controller_pythonpath(
-                        arm, repository_root),
-                })
-            stdout, controller_sandbox_execution = _launch_isolated_controller(
-                prepared=prepared, argv=argv,
-                timeout_seconds=int(float(checkpoint) * 3600),
-                broker=broker, invocation=invocation, cell_root=cell_root)
+        with _staged_controller_codex_home(workspace) as codex_home:
+            controller_environment["CODEX_HOME"] = str(codex_home)
+            prepared = arena_adapter.prepare_task(arena_adapter.ArenaTask(
+                task_id=task_id,
+                task_prompt=raw_prompt,
+                workspace=str(workspace),
+                controller_id=arm_id,
+                round_id=f"{claim_campaign_id}-{checkpoint:g}h",
+                actual_gfx_arch=arena_adapter.TARGET_GFX_ARCH,
+            ), base_environment=controller_environment)
+            # This is the deliberately unclaimed gap.  The controller receives a
+            # GPU-blind environment and may spend its remote-model budget while
+            # another host tenant uses the MI210.
+            with broker:
+                argv = _controller_argv(
+                    arm, float(checkpoint),
+                    executable_path=str(request["arm_audit"]["executable_path"]),
+                    diagnostic_pilot_override=request.get(
+                        "diagnostic_pilot_controller_argv"))
+                assert controller_runtime is not None
+                invocation = arena_controller_sandbox.prepare_controller_sandbox(
+                    workspace=workspace,
+                    receipt_path=cell_root / CONTROLLER_ACTIVATION_RECEIPT,
+                    expected_argv=argv, runtime=controller_runtime,
+                    broker_socket_path=broker.socket_path,
+                    broker_peer_pid=broker.owner_pid,
+                    broker_peer_start_ticks=_controller_process_start_ticks(
+                        broker.owner_pid))
+                controller_environment.update(invocation.environment_overrides)
+                controller_environment.update(broker.environment())
+                prepared = arena_adapter.prepare_task(
+                    prepared.task, base_environment=controller_environment)
+                prepared = arena_adapter.PreparedArenaTask(
+                    task=prepared.task, prompt=prepared.prompt,
+                    prompt_sha256=prepared.prompt_sha256,
+                    environment={
+                        **prepared.environment,
+                        "PYTHONPATH": _controller_pythonpath(
+                            arm, repository_root),
+                    })
+                stdout, controller_sandbox_execution = _launch_isolated_controller(
+                    prepared=prepared, argv=argv,
+                    timeout_seconds=int(float(checkpoint) * 3600),
+                    broker=broker, invocation=invocation, cell_root=cell_root)
         controller_output = cell_root / "controller.stdout"
         controller_output.write_text(stdout, encoding="utf-8")
         controller_stdout_sha256 = _sha256_file(controller_output)
