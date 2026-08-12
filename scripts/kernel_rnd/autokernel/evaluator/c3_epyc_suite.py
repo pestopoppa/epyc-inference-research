@@ -688,8 +688,9 @@ def external_artifact_requirements() -> tuple[ExternalArtifactRequirement, ...]:
         ExternalArtifactRequirement(
             "c3_apex_case_mapping", "attention_and_moe_trace_preflight",
             "resolve the hash-bound c3_apex_mapping_audit.v1 structural blockers, "
-            "then provide reviewed c3_apex_case_mapping.v1 binding both exact "
-            "k228/k175 C5 artifacts; name similarity is insufficient"),
+            "then provide reviewed c3_apex_case_mapping.v2: one exact gfx90a k228 "
+            "trace and the ordered branch-aware k175 multi-trace component graph; "
+            "name similarity or one component is insufficient"),
         ExternalArtifactRequirement(
             "candidate_integration_receipt", "whole_model_exit",
             "a hash-bound clean experimental llama.cpp/llama_gpu commit, build, "
@@ -697,7 +698,8 @@ def external_artifact_requirements() -> tuple[ExternalArtifactRequirement, ...]:
             "standalone EPYC binaries remain diagnostic providers only"),
         ExternalArtifactRequirement(
             "captured_epyc_tensor_manifests", "operator_and_whole_model_surfaces",
-            "exact attention, MoE-dispatch, and Q4_K dequant workload tensor manifests"),
+            "execute the governed real-model tensor producer, with explicit inference "
+            "authorization, for exact attention, MoE-dispatch, and Q4_K dequant surfaces"),
         ExternalArtifactRequirement(
             "mi210_vendor_and_candidate_timings", "vendor_floor_and_fast_p",
             "matched ROCm vendor and candidate observations on the physical gfx90a device"),

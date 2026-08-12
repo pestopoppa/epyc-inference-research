@@ -6,7 +6,7 @@ entry from a similar-looking name.  A separately reviewed mapping artifact must
 bind both C5 records to exact Apex entries and include a hash-bound semantic
 equivalence artifact before a trace plan can be produced.
 
-The adapter deliberately resolves and validates only the selected registry row.
+The adapter deliberately resolves and validates only the mapped registry rows.
 Apex ``e06b5d1`` calls ``find_supported_kernel(validate_files=True)``, which
 validates every row and refuses an otherwise present AITER entry when unrelated
 vLLM or SGLang source trees are absent.  The pinned registry hash makes global
@@ -33,13 +33,16 @@ from typing import Any, Callable, Mapping, Sequence
 import yaml
 
 from . import c3_epyc_suite as c3
+from . import c3_epyc_tensor_capture as tensor_capture
 
 
-MAPPING_SCHEMA = "epyc.autokernel.c3_apex_case_mapping.v1"
+MAPPING_SCHEMA = "epyc.autokernel.c3_apex_case_mapping.v2"
 MAPPING_AUDIT_SCHEMA = "epyc.autokernel.c3_apex_mapping_audit.v1"
+SEMANTIC_REVIEW_SCHEMA = "epyc.autokernel.c3_apex_semantic_review.v1"
+ARCHITECTURE_REVIEW_SCHEMA = "epyc.autokernel.c3_apex_gfx90a_review.v1"
 MODEL_MANIFEST_SCHEMA = "epyc.autokernel.model_identity.v1"
-PLAN_SCHEMA = "epyc.autokernel.c3_apex_trace_plan.v1"
-CAPTURE_SCHEMA = "epyc.autokernel.c3_apex_capture.v1"
+PLAN_SCHEMA = "epyc.autokernel.c3_apex_trace_plan.v2"
+CAPTURE_SCHEMA = "epyc.autokernel.c3_apex_capture.v2"
 
 PINNED_APEX_REVISION = c3.PINNED_APEX_REVISION
 PINNED_MAGPIE_REVISION = "2a9263833f71755df2a93b466cdd3a9f803fc625"
@@ -58,7 +61,7 @@ TARGET_ARCH = "gfx90a"
 
 APEX_REGISTRY_RELATIVE = Path("pipeline/kernel_tracing/supported_kernels.yaml")
 APEX_RUNNER_ENTRYPOINT = "pipeline.kernel_tracing.runner.run_trace_kernel"
-MISSING_MAPPING_ARTIFACT = "c3_apex_case_mapping.v1.json"
+MISSING_MAPPING_ARTIFACT = "c3_apex_case_mapping.v2.json"
 DEFAULT_MAPPING_AUDIT = Path(__file__).with_name("c3_apex_mapping_audit.v1.json")
 REQUIRED_CAPTURE_OUTPUTS = (
     "trace_result.json",
@@ -77,8 +80,23 @@ _VALID_KERNEL_TYPES = {"triton", "hip"}
 _VALID_TRACE_MODES = {
     "triton-launch", "aiter-compile-ops", "vllm-custom-op", "sglang-custom-op",
 }
-_SINGLE_ENTRY = "single_registry_entry"
-_WHOLE_COMPOSITE_ENTRY = "whole_composite_registry_entry"
+_SINGLE_ENTRY = "gfx90a_single_trace"
+_ORDERED_COMPOSITE = "ordered_multi_trace_composite"
+_COMPONENT_BRANCHES = {"always", "n_le_1350", "n_gt_1350"}
+_COMPONENT_STREAMS = {"main", "shared"}
+_K228_COMPONENT_IDS = ("mla_paged_prefill",)
+_K175_COMPONENT_IDS = (
+    "router_projection", "biased_top8_counts_and_ranks",
+    "dispatch_n_le_1350", "dispatch_n_gt_1350", "routed_experts",
+    "shared_experts", "weighted_undispatch_shared_add", "graph_capture_replay",
+)
+_K175_COMPONENT_BRANCHES = (
+    "always", "always", "n_le_1350", "n_gt_1350", "always", "always",
+    "always", "always",
+)
+_K175_COMPONENT_STREAMS = (
+    "main", "main", "main", "main", "main", "shared", "main", "main",
+)
 _TRACE_CONFIG_FIELDS = {
     "results_dir", "kernel_name", "kernel_file", "kernel_id", "registry_entry",
     "trace_mode", "kernel_type", "patch_strategy", "benchmark_config", "run_cmd",
@@ -322,44 +340,92 @@ def load_mapping_audit(path: Path = DEFAULT_MAPPING_AUDIT) -> MappingAudit:
 
 
 @dataclass(frozen=True)
-class CaseMapping:
-    case_id: str
-    c5_ref: str
-    c5_artifact_sha256: str
+class MappingComponent:
+    component_id: str
+    order: int
+    branch: str
+    stream: str
+    depends_on: tuple[str, ...]
     kernel_id: str
     source_repo: str
     source_commit: str
     source_file: str
     source_file_sha256: str
+    architecture_review_ref: str
+    architecture_review_sha256: str
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any], label: str) -> "MappingComponent":
+        required = {"component_id", "order", "branch", "stream", "depends_on",
+                    "kernel_id", "source_repo", "source_commit", "source_file",
+                    "source_file_sha256", "architecture_review_ref",
+                    "architecture_review_sha256"}
+        _exact_keys(value, required, label)
+        order = value["order"]
+        if isinstance(order, bool) or not isinstance(order, int) or order < 0:
+            raise ApexPreflightRefusal(f"{label}.order must be a non-negative integer")
+        depends_on = value["depends_on"]
+        if not isinstance(depends_on, list) or any(
+                not isinstance(item, str) or not item for item in depends_on):
+            raise ApexPreflightRefusal(f"{label}.depends_on must be a string list")
+        result = cls(
+            component_id=_text(value["component_id"], f"{label}.component_id"),
+            order=order, branch=_text(value["branch"], f"{label}.branch"),
+            stream=_text(value["stream"], f"{label}.stream"),
+            depends_on=tuple(depends_on),
+            kernel_id=_text(value["kernel_id"], f"{label}.kernel_id"),
+            source_repo=_text(value["source_repo"], f"{label}.source_repo"),
+            source_commit=_commit(value["source_commit"], f"{label}.source_commit"),
+            source_file=_text(value["source_file"], f"{label}.source_file"),
+            source_file_sha256=_sha(value["source_file_sha256"],
+                                    f"{label}.source_file_sha256"),
+            architecture_review_ref=_text(
+                value["architecture_review_ref"], f"{label}.architecture_review_ref"),
+            architecture_review_sha256=_sha(
+                value["architecture_review_sha256"],
+                f"{label}.architecture_review_sha256"),
+        )
+        if result.branch not in _COMPONENT_BRANCHES:
+            raise ApexPreflightRefusal(f"{label} names an unsupported branch")
+        if result.stream not in _COMPONENT_STREAMS:
+            raise ApexPreflightRefusal(f"{label} names an unsupported stream")
+        if result.source_repo not in _VALID_REPOS:
+            raise ApexPreflightRefusal(f"{label} names an unsupported Apex source repo")
+        return result
+
+
+@dataclass(frozen=True)
+class CaseMapping:
+    case_id: str
+    c5_ref: str
+    c5_artifact_sha256: str
+    binding_kind: str
     semantic_binding_ref: str
     semantic_binding_sha256: str
-    binding_kind: str
+    components: tuple[MappingComponent, ...]
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any], label: str) -> "CaseMapping":
-        required = {
-            "case_id", "c5_ref", "c5_artifact_sha256", "kernel_id", "source_repo",
-            "source_commit", "source_file", "source_file_sha256",
-            "semantic_binding_ref", "semantic_binding_sha256", "binding_kind",
-        }
+        required = {"case_id", "c5_ref", "c5_artifact_sha256", "binding_kind",
+                    "semantic_binding_ref", "semantic_binding_sha256", "components"}
         _exact_keys(value, required, label)
+        raw_components = value["components"]
+        if not isinstance(raw_components, list) or not raw_components:
+            raise ApexPreflightRefusal(f"{label}.components must be a non-empty list")
         result = cls(
             case_id=_text(value["case_id"], f"{label}.case_id"),
             c5_ref=_text(value["c5_ref"], f"{label}.c5_ref"),
             c5_artifact_sha256=_sha(
                 value["c5_artifact_sha256"], f"{label}.c5_artifact_sha256"),
-            kernel_id=_text(value["kernel_id"], f"{label}.kernel_id"),
-            source_repo=_text(value["source_repo"], f"{label}.source_repo"),
-            source_commit=_commit(value["source_commit"], f"{label}.source_commit"),
-            source_file=_text(value["source_file"], f"{label}.source_file"),
-            source_file_sha256=_sha(
-                value["source_file_sha256"], f"{label}.source_file_sha256"),
+            binding_kind=_text(value["binding_kind"], f"{label}.binding_kind"),
             semantic_binding_ref=_text(
                 value["semantic_binding_ref"], f"{label}.semantic_binding_ref"),
             semantic_binding_sha256=_sha(
-                value["semantic_binding_sha256"],
-                f"{label}.semantic_binding_sha256"),
-            binding_kind=_text(value["binding_kind"], f"{label}.binding_kind"),
+                value["semantic_binding_sha256"], f"{label}.semantic_binding_sha256"),
+            components=tuple(MappingComponent.from_dict(
+                _mapping(item, f"{label}.components[{index}]"),
+                f"{label}.components[{index}]")
+                for index, item in enumerate(raw_components)),
         )
         expected = CASE_REQUIREMENTS.get(result.case_id)
         if expected is None:
@@ -368,19 +434,43 @@ class CaseMapping:
             raise ApexPreflightRefusal(f"{label} names the wrong C5 record")
         if result.c5_artifact_sha256 != expected["c5_artifact_sha256"]:
             raise ApexPreflightRefusal(f"{label} names the wrong C5 artifact")
-        if result.source_repo not in _VALID_REPOS:
-            raise ApexPreflightRefusal(f"{label} names an unsupported Apex source repo")
-        expected_kind = (_WHOLE_COMPOSITE_ENTRY
+        expected_kind = (_ORDERED_COMPOSITE
                          if result.case_id == "epyc.moe.sparse_expert_dispatch.k175"
                          else _SINGLE_ENTRY)
         if result.binding_kind != expected_kind:
-            if result.case_id == "epyc.moe.sparse_expert_dispatch.k175":
-                raise ApexPreflightRefusal(
-                    "k175 is composite: one component kernel_id is insufficient; "
-                    "use a separately reviewed component-graph/multi-trace extension "
-                    "or an audited whole-composite registry entry")
             raise ApexPreflightRefusal(
-                f"{label}.binding_kind must be {expected_kind}")
+                f"{result.case_id} requires binding_kind {expected_kind}; a similar "
+                "single entry cannot stand in for an ordered composite")
+        expected_ids = (_K175_COMPONENT_IDS if expected_kind == _ORDERED_COMPOSITE
+                        else _K228_COMPONENT_IDS)
+        if tuple(item.component_id for item in result.components) != expected_ids \
+                or tuple(item.order for item in result.components) != tuple(range(len(expected_ids))):
+            raise ApexPreflightRefusal(
+                f"{result.case_id} component identity/order differs from the reviewed contract")
+        if expected_kind == _ORDERED_COMPOSITE:
+            if tuple(item.branch for item in result.components) != _K175_COMPONENT_BRANCHES \
+                    or tuple(item.stream for item in result.components) != _K175_COMPONENT_STREAMS:
+                raise ApexPreflightRefusal("k175 branch/stream graph differs from the contract")
+            if result.components[0].depends_on or result.components[1].depends_on != (
+                    "router_projection",):
+                raise ApexPreflightRefusal("k175 graph has invalid router/top8 dependencies")
+            if result.components[2].depends_on != ("biased_top8_counts_and_ranks",) \
+                    or result.components[3].depends_on != ("biased_top8_counts_and_ranks",) \
+                    or result.components[4].depends_on != (
+                        "dispatch_n_le_1350", "dispatch_n_gt_1350") \
+                    or result.components[5].depends_on != (
+                        "biased_top8_counts_and_ranks",) \
+                    or result.components[6].depends_on != (
+                        "routed_experts", "shared_experts") \
+                    or result.components[7].depends_on != (
+                        "weighted_undispatch_shared_add",):
+                raise ApexPreflightRefusal("k175 component dependencies differ from the contract")
+        elif result.components[0].branch != "always" \
+                or result.components[0].stream != "main" \
+                or result.components[0].depends_on:
+            raise ApexPreflightRefusal("k228 must be one unconditional gfx90a trace")
+        if len({item.kernel_id for item in result.components}) != len(result.components):
+            raise ApexPreflightRefusal("mapping repeats a registry kernel_id")
         return result
 
 
@@ -436,6 +526,67 @@ def load_case_mapping(path: Path, *, case_id: str | None = None,
             binding_path = path.parent / binding_path
         _checked_file(binding_path, case.semantic_binding_sha256,
                       f"{case.case_id}.semantic_binding")
+        semantic = _read_json(binding_path, f"{case.case_id} semantic review")
+        _exact_keys(semantic, {"schema", "authority", "review_outcome", "case_id",
+                               "c5_ref", "c5_artifact_sha256", "target_architecture",
+                               "binding_kind", "component_order",
+                               "tensor_manifest_schema"},
+                    f"{case.case_id} semantic review")
+        expected_semantic = {
+            "schema": SEMANTIC_REVIEW_SCHEMA,
+            "authority": "reviewed_static_mapping_only_no_correctness_speedup_or_promotion",
+            "review_outcome": "accepted_for_trace_identity",
+            "case_id": case.case_id, "c5_ref": case.c5_ref,
+            "c5_artifact_sha256": case.c5_artifact_sha256,
+            "target_architecture": TARGET_ARCH, "binding_kind": case.binding_kind,
+            "component_order": [item.component_id for item in case.components],
+            "tensor_manifest_schema": tensor_capture.MANIFEST_SCHEMA,
+        }
+        drift = [key for key, value in expected_semantic.items()
+                 if semantic.get(key) != value]
+        if drift:
+            raise ApexPreflightRefusal(
+                f"{case.case_id} semantic review drifted at {drift}")
+        for component in case.components:
+            review_path = Path(component.architecture_review_ref)
+            if not review_path.is_absolute():
+                review_path = path.parent / review_path
+            _checked_file(review_path, component.architecture_review_sha256,
+                          f"{case.case_id}.{component.component_id}.gfx90a_review")
+            review = _read_json(
+                review_path, f"{case.case_id}.{component.component_id} gfx90a review")
+            _exact_keys(review, {"schema", "authority", "review_outcome", "case_id",
+                                 "component_id", "target_architecture", "kernel_id",
+                                 "source_repo", "source_commit", "source_file",
+                                 "source_file_sha256", "evidence"},
+                        f"{case.case_id}.{component.component_id} gfx90a review")
+            expected_review = {
+                "schema": ARCHITECTURE_REVIEW_SCHEMA,
+                "authority": "source_and_gfx90a_compatibility_only_no_runtime_performance",
+                "review_outcome": "accepted_for_gfx90a_trace",
+                "case_id": case.case_id, "component_id": component.component_id,
+                "target_architecture": TARGET_ARCH, "kernel_id": component.kernel_id,
+                "source_repo": component.source_repo,
+                "source_commit": component.source_commit,
+                "source_file": component.source_file,
+                "source_file_sha256": component.source_file_sha256,
+            }
+            review_drift = [key for key, value in expected_review.items()
+                            if review.get(key) != value]
+            evidence = review.get("evidence")
+            if review_drift or not isinstance(evidence, list) or not evidence:
+                raise ApexPreflightRefusal(
+                    f"{case.case_id}.{component.component_id} gfx90a review is incomplete "
+                    f"or drifted at {review_drift}")
+            for evidence_index, raw in enumerate(evidence):
+                evidence_row = _mapping(
+                    raw, f"{case.case_id}.{component.component_id}.evidence[{evidence_index}]")
+                _exact_keys(evidence_row, {"ref", "sha256"}, "gfx90a review evidence")
+                evidence_path = Path(_text(evidence_row["ref"], "gfx90a evidence.ref"))
+                if not evidence_path.is_absolute():
+                    evidence_path = review_path.parent / evidence_path
+                _checked_file(evidence_path, evidence_row["sha256"],
+                              "gfx90a review evidence")
     return CaseMappingSet(
         artifact_path=path.resolve(), artifact_sha256=_sha256_file(path),
         registry_sha256=_sha(document["registry_sha256"], "registry_sha256"),
@@ -464,7 +615,7 @@ class SelectedRegistryEntry:
 
 
 def select_registry_entry(*, apex_root: Path, mappings: CaseMappingSet,
-                          case: CaseMapping) -> SelectedRegistryEntry:
+                          component: MappingComponent) -> SelectedRegistryEntry:
     """Validate one selected row without checking unrelated registry files."""
     apex_root = Path(apex_root).resolve()
     registry = (apex_root / APEX_REGISTRY_RELATIVE).resolve()
@@ -483,13 +634,13 @@ def select_registry_entry(*, apex_root: Path, mappings: CaseMappingSet,
     if not isinstance(rows, list):
         raise ApexPreflightRefusal("Apex registry kernels must be a list")
     selected = [row for row in rows
-                if isinstance(row, Mapping) and row.get("id") == case.kernel_id]
+                if isinstance(row, Mapping) and row.get("id") == component.kernel_id]
     if len(selected) != 1:
         raise ApexPreflightRefusal(
-            f"Apex registry must contain exactly one {case.kernel_id} row")
+            f"Apex registry must contain exactly one {component.kernel_id} row")
     row = selected[0]
-    _exact_keys(row, _ENTRY_FIELDS, f"Apex registry {case.kernel_id}")
-    normalized = {field: _text(row[field], f"{case.kernel_id}.{field}")
+    _exact_keys(row, _ENTRY_FIELDS, f"Apex registry {component.kernel_id}")
+    normalized = {field: _text(row[field], f"{component.kernel_id}.{field}")
                   for field in _ENTRY_FIELDS}
     if normalized["repo"] not in _VALID_REPOS:
         raise ApexPreflightRefusal("selected Apex row has an unsupported repo")
@@ -499,21 +650,21 @@ def select_registry_entry(*, apex_root: Path, mappings: CaseMappingSet,
         raise ApexPreflightRefusal("selected Apex row has an unsupported trace mode")
     if normalized["patch_strategy"] != "static":
         raise ApexPreflightRefusal("selected Apex row is not statically patchable")
-    if normalized["repo"] != case.source_repo:
+    if normalized["repo"] != component.source_repo:
         raise ApexPreflightRefusal("mapping and selected Apex row name different repos")
-    if normalized["kernel_file"] != case.source_file:
+    if normalized["kernel_file"] != component.source_file:
         raise ApexPreflightRefusal("mapping and selected Apex row name different files")
-    source_commit = _commit(commits.get(case.source_repo),
-                            f"Apex source_commits.{case.source_repo}")
-    if source_commit != case.source_commit:
+    source_commit = _commit(commits.get(component.source_repo),
+                            f"Apex source_commits.{component.source_repo}")
+    if source_commit != component.source_commit:
         raise ApexPreflightRefusal("mapping and Apex registry name different source commits")
     source_path = (apex_root / normalized["kernel_file"]).resolve()
     if not source_path.is_relative_to(apex_root):
         raise ApexPreflightRefusal("selected source file escaped the pinned Apex tree")
-    _checked_file(source_path, case.source_file_sha256, "selected Apex source file")
+    _checked_file(source_path, component.source_file_sha256, "selected Apex source file")
     return SelectedRegistryEntry(
         **normalized, source_commit=source_commit,
-        source_file_sha256=case.source_file_sha256,
+        source_file_sha256=component.source_file_sha256,
     )
 
 
@@ -611,9 +762,11 @@ class WorkloadBinding:
     model_id: str
     model_manifest: Path
     model_manifest_sha256: str
+    tensor_capture_receipt: Path
+    tensor_capture_receipt_sha256: str
     results_dir: Path
 
-    def validate(self) -> tuple[str, str]:
+    def validate(self) -> tuple[str, str, Mapping[str, Any]]:
         config_path = _checked_file(Path(self.benchmark_config), self.benchmark_config_sha256,
                                     "benchmark config")
         manifest_path = _checked_file(Path(self.model_manifest), self.model_manifest_sha256,
@@ -669,18 +822,63 @@ class WorkloadBinding:
                       for relative in sorted(declared)],
         }
         model_sha256 = hashlib.sha256(_canonical(model_material).encode()).hexdigest()
+        capture_path = _checked_file(
+            Path(self.tensor_capture_receipt), self.tensor_capture_receipt_sha256,
+            "EPYC tensor capture receipt")
+        try:
+            capture = tensor_capture.load_capture_receipt(capture_path)
+        except tensor_capture.TensorCaptureRefusal as exc:
+            raise ApexPreflightRefusal(f"EPYC tensor capture receipt refused: {exc}") from exc
+        if capture["model_sha256"] != model_sha256:
+            raise ApexPreflightRefusal(
+                "tensor capture receipt and benchmark config name different models")
         results = Path(self.results_dir)
         if results.exists() and (not results.is_dir() or any(results.iterdir())):
             raise ApexPreflightRefusal("capture results directory must be absent or empty")
-        return framework, model_sha256
+        return framework, model_sha256, capture
+
+
+@dataclass(frozen=True)
+class TraceStep:
+    component: MappingComponent
+    entry: SelectedRegistryEntry
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "component_id": self.component.component_id,
+            "order": self.component.order,
+            "branch": self.component.branch,
+            "stream": self.component.stream,
+            "depends_on": list(self.component.depends_on),
+            "selected_entry": self.entry.as_apex_dict(),
+            "selected_source_commit": self.entry.source_commit,
+            "selected_source_file_sha256": self.entry.source_file_sha256,
+            "architecture_review_sha256": self.component.architecture_review_sha256,
+        }
+
+
+def _trace_step_rows(steps: Sequence[TraceStep]) -> list[dict[str, Any]]:
+    """Project only dependencies that exist in the selected captured branch."""
+    active = {step.component.component_id for step in steps}
+    rows = []
+    seen: set[str] = set()
+    for step in steps:
+        row = step.to_dict()
+        row["depends_on"] = [name for name in row["depends_on"] if name in active]
+        if any(name not in seen for name in row["depends_on"]):
+            raise ApexPreflightRefusal("selected trace graph has a forward or missing dependency")
+        rows.append(row)
+        seen.add(step.component.component_id)
+    return rows
 
 
 @dataclass(frozen=True)
 class ApexTracePlan:
     case: CaseMapping
+    mapping_path: Path
     mapping_sha256: str
     registry_sha256: str
-    entry: SelectedRegistryEntry
+    steps: tuple[TraceStep, ...]
     apex_root: Path
     magpie_root: Path
     python_executable: Path
@@ -690,25 +888,40 @@ class ApexTracePlan:
     plan_sha256: str
     runner_entrypoint: str = APEX_RUNNER_ENTRYPOINT
 
-    def runner_config(self) -> dict[str, Any]:
-        return {
-            # Apex TraceKernelConfig normalizes these fields with Path methods
-            # before doing any work.  Keep them as Paths here; only ``to_dict``
-            # is a JSON projection.
-            "results_dir": Path(self.workload.results_dir),
-            "kernel_name": self.entry.kernel_name,
-            "kernel_file": (self.apex_root / self.entry.kernel_file).resolve(),
-            "kernel_id": self.entry.id,
-            "registry_entry": self.entry.as_apex_dict(),
-            "trace_mode": self.entry.trace_mode,
-            "kernel_type": self.entry.kernel_type,
-            "patch_strategy": self.entry.patch_strategy,
+    @property
+    def entry(self) -> SelectedRegistryEntry:
+        if len(self.steps) != 1:
+            raise ApexPreflightRefusal(
+                "ordered composite has no single entry; use runner_configs")
+        return self.steps[0].entry
+
+    def _step_results_dir(self, step: TraceStep) -> Path:
+        if len(self.steps) == 1:
+            return Path(self.workload.results_dir)
+        return Path(self.workload.results_dir) / (
+            f"{step.component.order:02d}-{step.component.component_id}")
+
+    def runner_configs(self) -> tuple[dict[str, Any], ...]:
+        return tuple({
+            "results_dir": self._step_results_dir(step),
+            "kernel_name": step.entry.kernel_name,
+            "kernel_file": (self.apex_root / step.entry.kernel_file).resolve(),
+            "kernel_id": step.entry.id,
+            "registry_entry": step.entry.as_apex_dict(),
+            "trace_mode": step.entry.trace_mode,
+            "kernel_type": step.entry.kernel_type,
+            "patch_strategy": step.entry.patch_strategy,
             "benchmark_config": str(self.workload.benchmark_config),
-            "run_cmd": "",
-            "framework": self.framework,
-            "repo_root": self.apex_root,
-            "dry_run": False,
-        }
+            "run_cmd": "", "framework": self.framework,
+            "repo_root": self.apex_root, "dry_run": False,
+        } for step in self.steps)
+
+    def runner_config(self) -> dict[str, Any]:
+        """Compatibility accessor for the one-step k228 plan only."""
+        if len(self.steps) != 1:
+            raise ApexPreflightRefusal(
+                "ordered composite has multiple configs; use runner_configs")
+        return self.runner_configs()[0]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -716,14 +929,14 @@ class ApexTracePlan:
             "case_id": self.case.case_id,
             "c5_ref": self.case.c5_ref,
             "c5_artifact_sha256": self.case.c5_artifact_sha256,
+            "mapping_path": str(self.mapping_path),
             "mapping_sha256": self.mapping_sha256,
             "apex_revision": PINNED_APEX_REVISION,
             "magpie_revision": PINNED_MAGPIE_REVISION,
             "registry_sha256": self.registry_sha256,
-            "selected_entry": self.entry.as_apex_dict(),
-            "selected_source_commit": self.entry.source_commit,
-            "selected_source_file_sha256": self.entry.source_file_sha256,
+            "trace_steps": _trace_step_rows(self.steps),
             "binding_kind": self.case.binding_kind,
+            "semantic_binding_sha256": self.case.semantic_binding_sha256,
             "toolchain": {
                 "torch": PINNED_TORCH_VERSION, "hip": PINNED_HIP_PREFIX,
                 "triton": PINNED_TRITON_VERSION,
@@ -735,6 +948,8 @@ class ApexTracePlan:
             "model_manifest": str(self.workload.model_manifest),
             "model_manifest_sha256": self.workload.model_manifest_sha256,
             "model_sha256": self.model_sha256,
+            "tensor_capture_receipt": str(self.workload.tensor_capture_receipt),
+            "tensor_capture_receipt_sha256": self.workload.tensor_capture_receipt_sha256,
             "results_dir": str(self.workload.results_dir),
             "required_capture_outputs": list(REQUIRED_CAPTURE_OUTPUTS),
             "runner_entrypoint": self.runner_entrypoint,
@@ -743,7 +958,7 @@ class ApexTracePlan:
 
 
 def _plan_digest(*, case: CaseMapping, mappings: CaseMappingSet,
-                 entry: SelectedRegistryEntry, workload: WorkloadBinding,
+                 steps: Sequence[TraceStep], workload: WorkloadBinding,
                  framework: str, model_sha256: str, apex_root: Path,
                  magpie_root: Path, python_executable: Path) -> str:
     material = {
@@ -751,12 +966,12 @@ def _plan_digest(*, case: CaseMapping, mappings: CaseMappingSet,
         "binding_kind": case.binding_kind,
         "mapping_sha256": mappings.artifact_sha256,
         "registry_sha256": mappings.registry_sha256,
-        "entry": entry.as_apex_dict(),
-        "source_commit": entry.source_commit,
-        "source_file_sha256": entry.source_file_sha256,
+        "semantic_binding_sha256": case.semantic_binding_sha256,
+        "trace_steps": _trace_step_rows(steps),
         "benchmark_config_sha256": workload.benchmark_config_sha256,
         "model_manifest_sha256": workload.model_manifest_sha256,
         "model_sha256": model_sha256,
+        "tensor_capture_receipt_sha256": workload.tensor_capture_receipt_sha256,
         "framework": framework,
         "results_dir": str(workload.results_dir),
         "apex_root": str(apex_root),
@@ -776,12 +991,19 @@ def prepare_trace_plan(*, case_id: str, mapping_path: Path, apex_root: Path,
     mappings = load_case_mapping(mapping_path, case_id=case_id)
     case = mappings.select(case_id)
     validate_pinned_runner_interface(apex_root)
-    entry = select_registry_entry(apex_root=apex_root, mappings=mappings, case=case)
+    all_entries = tuple(select_registry_entry(
+        apex_root=apex_root, mappings=mappings, component=component)
+        for component in case.components)
+    source_identities = {(entry.repo, entry.source_commit) for entry in all_entries}
+    if len(source_identities) != 1:
+        raise ApexPreflightRefusal(
+            "one trace plan requires all mapped components from one pinned source tree")
+    source_repo, source_commit = next(iter(source_identities))
     if environment is None:
         environment = probe_environment(
             apex_root=apex_root, magpie_root=magpie_root,
-            source_repo=entry.repo, python_executable=python_executable)
-    environment.assert_pinned(entry.source_commit)
+            source_repo=source_repo, python_executable=python_executable)
+    environment.assert_pinned(source_commit)
     magpie_root = Path(magpie_root).resolve()
     if not (magpie_root / "Magpie/__main__.py").is_file():
         raise ApexPreflightRefusal("pinned Magpie package entrypoint is missing")
@@ -791,21 +1013,32 @@ def prepare_trace_plan(*, case_id: str, mapping_path: Path, apex_root: Path,
         model_id=workload.model_id,
         model_manifest=Path(workload.model_manifest).resolve(),
         model_manifest_sha256=workload.model_manifest_sha256,
+        tensor_capture_receipt=Path(workload.tensor_capture_receipt).resolve(),
+        tensor_capture_receipt_sha256=workload.tensor_capture_receipt_sha256,
         results_dir=Path(workload.results_dir).resolve(),
     )
-    framework, model_sha256 = workload.validate()
+    framework, model_sha256, capture = workload.validate()
+    if capture["case_id"] != case_id:
+        raise ApexPreflightRefusal("tensor capture receipt names a different C3 case")
+    active = tuple(
+        TraceStep(component, entry)
+        for component, entry in zip(case.components, all_entries)
+        if component.branch in {"always", capture["dispatch_branch"]})
+    if not active:
+        raise ApexPreflightRefusal("mapping has no trace steps for the captured branch")
     python_executable = Path(python_executable).resolve()
     if not python_executable.is_file():
         raise ApexPreflightRefusal("pinned Python executable does not exist")
     digest = _plan_digest(
-        case=case, mappings=mappings, entry=entry, workload=workload,
+        case=case, mappings=mappings, steps=active, workload=workload,
         framework=framework, model_sha256=model_sha256,
         apex_root=Path(apex_root).resolve(), magpie_root=magpie_root,
         python_executable=python_executable,
     )
     return ApexTracePlan(
-        case=case, mapping_sha256=mappings.artifact_sha256,
-        registry_sha256=mappings.registry_sha256, entry=entry,
+        case=case, mapping_path=mappings.artifact_path,
+        mapping_sha256=mappings.artifact_sha256,
+        registry_sha256=mappings.registry_sha256, steps=active,
         apex_root=Path(apex_root).resolve(), magpie_root=magpie_root,
         python_executable=python_executable, workload=workload,
         framework=framework, model_sha256=model_sha256, plan_sha256=digest,
@@ -864,14 +1097,25 @@ def probe_environment(*, apex_root: Path, magpie_root: Path, source_repo: str,
 
 
 def execute_trace(plan: ApexTracePlan, *, authorize_inference: bool = False,
-                  runner: Callable[[Mapping[str, Any]], Any] | None = None) -> Any:
+                  runner: Callable[[Mapping[str, Any]], Any] | None = None,
+                  runtime_environment: EnvironmentIdentity | None = None) -> Any:
     """Run the pinned trace entrypoint only after explicit inference authorization."""
     if not authorize_inference:
         raise ApexPreflightRefusal("trace execution requires explicit inference authorization")
     if Path(sys.executable).resolve() != plan.python_executable:
         raise ApexPreflightRefusal("current Python differs from the preflighted executable")
+    if runner is not None and runtime_environment is None:
+        raise ApexPreflightRefusal(
+            "an injected runner requires an exact runtime_environment identity")
+    reproduced = prepare_trace_plan(
+        case_id=plan.case.case_id, mapping_path=plan.mapping_path,
+        apex_root=plan.apex_root, magpie_root=plan.magpie_root,
+        python_executable=plan.python_executable, workload=plan.workload,
+        environment=runtime_environment)
+    if reproduced.to_dict() != plan.to_dict():
+        raise ApexPreflightRefusal("trace plan identity changed after preflight")
     if runner is not None:
-        return runner(plan.runner_config())
+        return tuple(runner(config) for config in plan.runner_configs())
     for root in reversed((plan.apex_root, plan.apex_root / "graders",
                           plan.apex_root / "prompts", plan.apex_root / "pipeline")):
         rendered = str(root)
@@ -881,7 +1125,6 @@ def execute_trace(plan: ApexTracePlan, *, authorize_inference: bool = False,
     expected_module = (plan.apex_root / "pipeline/kernel_tracing/runner.py").resolve()
     if Path(module.__file__).resolve() != expected_module:
         raise ApexPreflightRefusal("imported Apex runner did not come from the pinned tree")
-    config = module.TraceKernelConfig(**plan.runner_config())
     old_magpie = os.environ.get("MAGPIE_ROOT")
     old_pythonpath = os.environ.get("PYTHONPATH")
     os.environ["MAGPIE_ROOT"] = str(plan.magpie_root)
@@ -889,7 +1132,11 @@ def execute_trace(plan: ApexTracePlan, *, authorize_inference: bool = False,
         f"{plan.magpie_root}:{old_pythonpath}" if old_pythonpath else str(plan.magpie_root)
     )
     try:
-        return module.run_trace_kernel(config)
+        results = []
+        for runner_config in plan.runner_configs():
+            config = module.TraceKernelConfig(**runner_config)
+            results.append(module.run_trace_kernel(config))
+        return tuple(results)
     finally:
         if old_magpie is None:
             os.environ.pop("MAGPIE_ROOT", None)
@@ -902,39 +1149,49 @@ def execute_trace(plan: ApexTracePlan, *, authorize_inference: bool = False,
 
 
 def bind_capture_outputs(plan: ApexTracePlan) -> dict[str, Any]:
-    """Hash and validate the three capture outputs emitted by pinned Apex."""
-    root = Path(plan.workload.results_dir)
-    paths = {name: root / name for name in REQUIRED_CAPTURE_OUTPUTS}
-    for name, path in paths.items():
-        if not path.is_file():
-            raise ApexPreflightRefusal(f"capture output is missing: {name}")
-    trace = _read_json(paths["trace_result.json"], "trace result")
-    if trace.get("success") is not True or trace.get("kernel_id") != plan.entry.id:
-        raise ApexPreflightRefusal("trace result did not succeed for the selected entry")
-    if trace.get("registry_entry") != plan.entry.as_apex_dict():
-        raise ApexPreflightRefusal("trace result registry entry differs from the plan")
-    ranges = _read_json(paths["workload_ranges.json"], "workload ranges")
-    calls = ranges.get("total_calls")
-    if isinstance(calls, bool) or not isinstance(calls, int) or calls <= 0:
-        raise ApexPreflightRefusal("capture contains no selected-entry calls")
-    patch = _read_json(paths["patched_files/patch_manifest.json"], "patch manifest")
-    patched = patch.get("patched_files")
-    if not isinstance(patched, list) or not any(
-            isinstance(row, Mapping)
-            and Path(str(row.get("source_file", ""))).resolve()
-            == (plan.apex_root / plan.entry.kernel_file).resolve()
-            for row in patched):
-        raise ApexPreflightRefusal("patch manifest does not bind the selected source file")
+    """Hash every ordered trace output emitted by pinned Apex."""
+    captures = []
+    for step in plan.steps:
+        root = plan._step_results_dir(step)
+        paths = {name: root / name for name in REQUIRED_CAPTURE_OUTPUTS}
+        for name, path in paths.items():
+            if not path.is_file():
+                raise ApexPreflightRefusal(
+                    f"capture output is missing for {step.component.component_id}: {name}")
+        trace = _read_json(paths["trace_result.json"], "trace result")
+        if trace.get("success") is not True or trace.get("kernel_id") != step.entry.id:
+            raise ApexPreflightRefusal("trace result did not succeed for the selected entry")
+        if trace.get("registry_entry") != step.entry.as_apex_dict():
+            raise ApexPreflightRefusal("trace result registry entry differs from the plan")
+        ranges = _read_json(paths["workload_ranges.json"], "workload ranges")
+        calls = ranges.get("total_calls")
+        if isinstance(calls, bool) or not isinstance(calls, int) or calls <= 0:
+            raise ApexPreflightRefusal("capture contains no selected-entry calls")
+        patch = _read_json(paths["patched_files/patch_manifest.json"], "patch manifest")
+        patched = patch.get("patched_files")
+        if not isinstance(patched, list) or not any(
+                isinstance(row, Mapping)
+                and Path(str(row.get("source_file", ""))).resolve()
+                == (plan.apex_root / step.entry.kernel_file).resolve()
+                for row in patched):
+            raise ApexPreflightRefusal("patch manifest does not bind the selected source file")
+        captures.append({
+            "component_id": step.component.component_id,
+            "order": step.component.order,
+            "branch": step.component.branch,
+            "stream": step.component.stream,
+            "kernel_id": step.entry.id,
+            "outputs": {name: {"path": str(path), "sha256": _sha256_file(path)}
+                        for name, path in paths.items()},
+            "total_calls": calls,
+        })
     receipt = {
         "schema": CAPTURE_SCHEMA,
         "plan_sha256": plan.plan_sha256,
         "case_id": plan.case.case_id,
-        "kernel_id": plan.entry.id,
-        "outputs": {
-            name: {"path": str(path), "sha256": _sha256_file(path)}
-            for name, path in paths.items()
-        },
-        "total_calls": calls,
+        "binding_kind": plan.case.binding_kind,
+        "tensor_capture_receipt_sha256": plan.workload.tensor_capture_receipt_sha256,
+        "traces": captures,
         "authority": "capture_identity_only_no_correctness_speedup_or_promotion",
     }
     receipt["receipt_sha256"] = hashlib.sha256(_canonical(receipt).encode()).hexdigest()
@@ -942,7 +1199,8 @@ def bind_capture_outputs(plan: ApexTracePlan) -> dict[str, Any]:
 
 
 __all__ = [
-    "APEX_RUNNER_ENTRYPOINT", "CAPTURE_SCHEMA", "CASE_REQUIREMENTS",
+    "APEX_RUNNER_ENTRYPOINT", "ARCHITECTURE_REVIEW_SCHEMA", "CAPTURE_SCHEMA",
+    "CASE_REQUIREMENTS",
     "DEFAULT_MAPPING_AUDIT", "MAPPING_AUDIT_SCHEMA", "MAPPING_SCHEMA",
     "MISSING_MAPPING_ARTIFACT", "MODEL_MANIFEST_SCHEMA",
     "PINNED_AITER_HSA_FILE_COUNT", "PINNED_AITER_HSA_INVENTORY_SHA256",
@@ -952,7 +1210,8 @@ __all__ = [
     "REQUIRED_CAPTURE_OUTPUTS", "ApexPreflightRefusal", "ApexTracePlan",
     "CaseMapping", "CaseMappingSet", "EnvironmentIdentity", "MappingAudit",
     "MappingAuditCase", "MissingCaseMapping", "RepositoryIdentity",
-    "SelectedRegistryEntry", "StructuralMappingMismatch", "ToolchainIdentity",
+    "MappingComponent", "SelectedRegistryEntry", "StructuralMappingMismatch",
+    "SEMANTIC_REVIEW_SCHEMA", "ToolchainIdentity", "TraceStep",
     "WorkloadBinding", "bind_capture_outputs", "execute_trace", "load_case_mapping",
     "load_mapping_audit", "prepare_trace_plan", "probe_environment",
     "select_registry_entry",

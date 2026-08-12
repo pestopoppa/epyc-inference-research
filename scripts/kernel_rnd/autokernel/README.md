@@ -366,7 +366,8 @@ calibration exists. Source-changing campaigns additionally require their own
 | `c5_seed_corpus.py` | **C5 static seed registry.** Pins the eight intake-884 HyRA SOL-ExecBench artifacts and their NVIDIA/Hopper-only attestations, separates direct Triton references from CUDA-bound re-authoring targets, and emits non-numeric gfx90a task context. No upstream latency or SOL score is admitted as an MI210 target. |
 | `evaluator/c3_epyc_suite.py` | **INF-48 C3/C5 exit contract.** Selects hash-bound attention and MoE C5 cases plus an explicitly EPYC-native Q4_K dequant case; requires exact captured-tensor surfaces, vendor rather than eager baselines, correctness-first `fast_p`, and a matched whole-model re-bench through the case's declared integration. Missing evidence is `COULD_NOT_CHECK`, and the reducer has no release or promotion authority. |
 | `evaluator/c3_epyc_compiler.py` | **INF-48 controller/backend JSON seam.** Emits a source-hash-bound three-case plan and compiles only hash-bound vendor, candidate, correctness, integrity, capture, integration, and whole-model observations. Unavailable evidence withholds `fast_p` and whole-model speedup; the CLI and direct-call backend execute no workload. |
-| `evaluator/c3_apex_runner.py` + `evaluator/c3_apex_mapping_audit.v1.json` | **INF-48 selected-entry Apex seam.** Requires a reviewed two-case C5→Apex mapping before resolving one registry row, pins Apex/Magpie/Torch/ROCm/Triton/physical gfx90a/source/config/model, and turns the checked source audit's exact k228/k175 blockers into typed structural refusals. It cannot author a candidate, and trace execution requires explicit inference authorization. |
+| `evaluator/c3_epyc_tensor_capture.py` | **INF-48 governed EPYC tensor producer.** Compiles no-inference capture plans over a clean source commit, complete model inventory, exact toolchain/recipe, physical workload identity, and ordered tensor specifications. Only `execute_capture(..., authorize_inference=True)` may invoke the exact source-pinned producer subprocess; it revalidates mutable identities around execution and publishes an exclusive receipt whose authority is tensor identity only—never correctness, timing, ranking, or promotion. |
+| `evaluator/c3_apex_runner.py` + `evaluator/c3_apex_mapping_audit.v1.json` | **INF-48 exact Apex mapping seam.** Mapping v2 requires one reviewed gfx90a k228 trace or the strict ordered, branch-aware, multi-stream eight-component k175 graph, with per-component source and architecture-review evidence. Plans bind the governed tensor receipt plus Apex/Magpie/Torch/ROCm/Triton/physical gfx90a/source/config/model identities and revalidate them before execution. The checked audit still turns absent real mappings into typed structural refusals; neither planning nor capture has correctness, timing, ranking, or promotion authority. |
 | `datatype_targets.py` | **INF-03 FP8 authoring target.** Declares FP8-weight/software-upcast-to-bf16 as an experimental gfx90a task, not a native capability; forces independent decoding, upcast-cost attribution, exact-shape baselines and whole-model confirmation, and mechanically defers NVFP4 until FP8 has a terminal result. |
 | `substrate.py` | Validates the checked-in MI210 compute/bandwidth/PCIe/NUMA facts, preserves measured and datasheet bases separately, re-derives both roofline ridges, and builds exact-quant diagnostic surfaces. Cross-vendor cells are spec-basis; a missing exact CUDA anchor is `COULD_NOT_CHECK`, never a pooled or borrowed target. |
 | `lanes.py` | The lane registry, historical 4/8/16/32/48-way CPU shapes, isolation checks, change-class-specific rank calibration, and full-instance verification rule. |
@@ -525,7 +526,7 @@ the absent unrelated SGLang tree. `c3_apex_runner.py` instead validates the
 pinned registry plus only the selected row and calls the pinned downstream
 `pipeline.kernel_tracing.runner.run_trace_kernel` interface directly.
 
-No honest k228/k175 mapping is checked in. The hash-bound static audit is
+No filled k228/k175 mapping artifact is checked in. The hash-bound static audit is
 `c3_apex_mapping_audit.v1.json`; its authority explicitly excludes runtime
 equivalence and inference. For k228, `aiter.hip.mla_prefill_asm_fwd` is
 mathematically adjacent after concatenating the 512+64 query/cache components,
@@ -541,18 +542,30 @@ sorting and fused-MoE rows but no whole-composite entry: in particular its
 biased grouped top-k gathers un-biased sigmoid values and emits neither C5
 counts nor ranks, and `moe_sum` is not the inverse-map/weight/shared-add exit.
 The adapter will not force one component's `kernel_id` into the single-entry
-seam. k175 needs an ordered branch-aware multi-trace extension with every
-component bound, or an audited whole-composite registry entry. The checked audit
-names every missing component in its typed refusal.
+seam. Mapping v2 now defines the missing ordered branch-aware multi-trace
+contract: router projection; exact biased top-8/count/rank; both N≤1350 and
+N>1350 dispatch branches; routed and shared expert streams; weighted inverse
+undispatch/shared add; and graph replay. One exact captured workload selects
+exactly one dispatch branch while preserving the reviewed component order. The
+checked audit names every still-missing real component in its typed refusal.
 
-A future `c3_apex_case_mapping.v1.json` must bind **both** exact C5 hashes to
-selected source commits/files plus separate hash-bound semantic-equivalence
-evidence. Name similarity cannot satisfy the seam.
-Once it does exist, the adapter also pins the benchmark configuration, model
-manifest, physical gfx90a identity, and `trace_result.json`,
-`workload_ranges.json`, and `patched_files/patch_manifest.json`. Trace execution
-still requires `authorize_inference=True`. The llama.cpp Q4_K case remains on
-the immutable experimental-binary/codified llama-bench path.
+A future `c3_apex_case_mapping.v2.json` must bind **both** exact C5 hashes to
+selected source commits/files, a reviewed semantic artifact, and hash-bound
+gfx90a compatibility evidence for every component. Name similarity cannot
+satisfy the seam. k228 must be one unconditional `gfx90a_single_trace`; k175
+must be the exact `ordered_multi_trace_composite` graph—no whole-case result can
+be inferred from one adjacent registry row.
+
+Before either mapping may launch, `c3_epyc_tensor_capture.py` must publish a
+real-model (never synthetic) tensor manifest and identity-only receipt. It
+rejects dirty producer source, incomplete/tampered model inventories, toolchain
+or recipe drift, symlinked/multiply-linked tensor files, shape/order/hash/size
+drift, and a dispatch branch inconsistent with the captured token count. Its
+only execution function requires `authorize_inference=True`; planning and
+validation do not run inference. Apex then emits the three pinned outputs in
+each ordered component directory and binds them into one composite capture
+receipt. These receipts are not timings or correctness evidence. The llama.cpp
+Q4_K case remains on the immutable experimental-binary/codified llama-bench path.
 
 ### AK6 — the operator surface
 

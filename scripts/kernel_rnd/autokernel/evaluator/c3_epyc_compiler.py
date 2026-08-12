@@ -34,15 +34,24 @@ RUNNER_BINDINGS = {
             "epyc.moe.sparse_expert_dispatch.k175",
         ],
         "capture": {
-            "cli": "controller direct-call only after reviewed c3_apex_case_mapping.v1",
+            "cli": "controller direct-call only after reviewed c3_apex_case_mapping.v2",
             "python_entrypoint": (
                 "scripts.kernel_rnd.autokernel.evaluator.c3_apex_runner.execute_trace"
             ),
             "pinned_downstream_entrypoint": (
                 "pipeline.kernel_tracing.runner.run_trace_kernel"
             ),
-            "outputs": ["trace_result.json", "workload_ranges.json",
-                        "patched_files/patch_manifest.json"],
+            "outputs": ["ordered per-component trace_result.json",
+                        "ordered per-component workload_ranges.json",
+                        "ordered per-component patched_files/patch_manifest.json"],
+            "tensor_capture": {
+                "python_entrypoint": (
+                    "scripts.kernel_rnd.autokernel.evaluator."
+                    "c3_epyc_tensor_capture.execute_capture"
+                ),
+                "authorization": "explicit authorize_inference=True required",
+                "authority": "tensor identity only; never timing or correctness evidence",
+            },
         },
         "integration": {
             "cli": "python3 workload_optimizer.py integrate",
