@@ -87,6 +87,8 @@ class ControllerSandboxContractTest(unittest.TestCase):
         self.assertNotIn(str(self.fake_node_sibling), runtime.executable_files)
         self.assertEqual(runtime.identities[str(self.fake_codex)],
                          C._sha256_file(self.fake_codex))
+        self.assertEqual(C.CONTROLLER_ENVIRONMENT["GIT_CONFIG_NOSYSTEM"], "1")
+        self.assertEqual(C.CONTROLLER_ENVIRONMENT["GIT_CONFIG_GLOBAL"], "/dev/null")
         import _ctypes
         if getattr(_ctypes, "__file__", None) is not None:
             self.assertTrue(any(

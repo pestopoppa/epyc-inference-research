@@ -29,6 +29,8 @@ from ..execution import sandbox
 SCHEMA = "epyc.autokernel.arena_controller_sandbox.v1"
 TEARDOWN_SCHEMA = "epyc.autokernel.arena_controller_sandbox_teardown.v1"
 CONTROLLER_ENVIRONMENT: Mapping[str, str] = MappingProxyType({
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    "GIT_CONFIG_NOSYSTEM": "1",
     "PYTHONDONTWRITEBYTECODE": "1",
     # CPython otherwise falls back to opening /dev/urandom during early hash
     # initialization after Landlock correctly denies the entire /dev tree.
