@@ -50,6 +50,7 @@ SCHEMA = "epyc.autokernel.rocprofv1_attribution.v1"
 PROFILER_NAME = "rocprof-v1/device-timestamps"
 DEFAULT_CPU_LIST = cpu_region_claim.gpu_host_cpu_list()
 DEFAULT_THREADS = 8
+DEFAULT_GPU_LAYERS = 99
 _PROMPT_RE = re.compile(r"(?:0|[1-9][0-9]*)")
 
 
@@ -65,6 +66,16 @@ def prompt_tokens(value: str) -> tuple[int, ...]:
     parsed = tuple(int(field) for field in fields)
     if len(set(parsed)) != len(parsed):
         raise argparse.ArgumentTypeError("prompt token values must be unique")
+    return parsed
+
+
+def positive_gpu_layers(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("GPU layers must be a positive integer") from exc
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("GPU layers must be a positive integer")
     return parsed
 
 
@@ -86,7 +97,7 @@ def workload_phase(gen_tokens: int, prompt_values: tuple[int, ...] | None = None
 
 
 def attribution_claim(*, model: Path, model_sha256: str, prompt_tokens: int,
-                      gen_tokens: int, share: float) -> str:
+                      gen_tokens: int, gpu_layers: int, share: float) -> str:
     """Render the human claim from the same bound identity as the receipt.
 
     This producer is intentionally reusable across models.  A fixed model name
@@ -95,16 +106,19 @@ def attribution_claim(*, model: Path, model_sha256: str, prompt_tokens: int,
     """
     return (
         f"{model.name} (SHA-256 {model_sha256}) gfx90a "
-        f"p{prompt_tokens}/tg{gen_tokens} "
+        f"p{prompt_tokens}/tg{gen_tokens}/ngl{gpu_layers} "
         f"{workload_phase(gen_tokens, (prompt_tokens,))} "
         f"gated-delta-net summed kernel-time share is {share:.12f}")
 
 
 def bench_command(binary: Path, model: Path, *, tokens: int,
                   repetitions: int, gen_tokens: int = 0,
+                  gpu_layers: int = DEFAULT_GPU_LAYERS,
                   cpu_list: str = DEFAULT_CPU_LIST,
                   threads: int = DEFAULT_THREADS) -> tuple[str, ...]:
     workload_phase(gen_tokens, (tokens,))
+    if gpu_layers < 1:
+        raise ValueError("GPU layers must be positive")
     if cpu_list != DEFAULT_CPU_LIST or threads != DEFAULT_THREADS:
         raise ValueError(
             "rocprof attribution requires the codified 184-191/8-thread host footprint")
@@ -112,7 +126,7 @@ def bench_command(binary: Path, model: Path, *, tokens: int,
         "/usr/bin/taskset", "-c", cpu_list, str(binary),
         "-m", str(model), "-p", str(tokens),
         "-n", str(gen_tokens),
-        "-r", str(repetitions), "-ngl", "99", "-fa", "on",
+        "-r", str(repetitions), "-ngl", str(gpu_layers), "-fa", "on",
         "-t", str(threads), "-o", "jsonl",
     )
 
@@ -136,6 +150,7 @@ def profiler_environment(binary: Path, args: argparse.Namespace) -> dict[str, st
 def profile_command(binary: Path, model: Path, *, tokens: int,
                     repetitions: int, profiler: Path, input_file: Path,
                     output_file: Path, gen_tokens: int = 0,
+                    gpu_layers: int = DEFAULT_GPU_LAYERS,
                     cpu_list: str = DEFAULT_CPU_LIST,
                     threads: int = DEFAULT_THREADS) -> tuple[str, ...]:
     return (
@@ -143,7 +158,8 @@ def profile_command(binary: Path, model: Path, *, tokens: int,
         "--ctx-wait", "on", "--heartbeat", "30", "-i", str(input_file),
         "-o", str(output_file),
         *bench_command(binary, model, tokens=tokens, repetitions=repetitions,
-                       gen_tokens=gen_tokens, cpu_list=cpu_list, threads=threads),
+                       gen_tokens=gen_tokens, gpu_layers=gpu_layers,
+                       cpu_list=cpu_list, threads=threads),
     )
 
 
@@ -163,7 +179,8 @@ def run_owned(command: tuple[str, ...], *, env: dict[str, str],
 
 
 def parse_bench_result(stdout: str, stderr: str, *, tokens: int,
-                       repetitions: int) -> dict[str, Any]:
+                       repetitions: int,
+                       gpu_layers: int = DEFAULT_GPU_LAYERS) -> dict[str, Any]:
     rows = []
     for line in (stdout + "\n" + stderr).splitlines():
         line = line.strip()
@@ -181,8 +198,10 @@ def parse_bench_result(stdout: str, stderr: str, *, tokens: int,
     row = rows[0]
     if row.get("backends") != "ROCm" or row.get("gpu_info") != "AMD Instinct MI210":
         raise RuntimeError("llama-bench did not execute on ROCm / AMD Instinct MI210")
-    if row.get("flash_attn") != 1 or row.get("n_gpu_layers") != 99:
-        raise RuntimeError("llama-bench did not retain full GPU offload and flash-attention=on")
+    if row.get("flash_attn") != 1 or row.get("n_gpu_layers") != gpu_layers:
+        raise RuntimeError(
+            "llama-bench did not retain the requested GPU layer count and "
+            "flash-attention=on")
     if len(row.get("samples_ns", ())) != repetitions:
         raise RuntimeError("llama-bench did not retain every requested repetition")
     return row
@@ -382,16 +401,21 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     try:
         sampler = device_sampler.RocmSmiSampler(
             device_index=0, interval_s=0.250).start()
+        preflight_command = bench_command(
+            binary, model, tokens=args.preflight_tokens, repetitions=1,
+            gpu_layers=args.gpu_layers,
+            cpu_list=args.cpu_list, threads=args.threads)
         rc, stdout, stderr, duration = run_owned(
-            bench_command(
-                binary, model, tokens=args.preflight_tokens, repetitions=1,
-                cpu_list=args.cpu_list, threads=args.threads),
+            preflight_command,
             env=env, timeout_s=args.timeout_s)
         (output_dir / "preflight.stdout.jsonl").write_text(stdout, encoding="utf-8")
         (output_dir / "preflight.stderr.txt").write_text(stderr, encoding="utf-8")
         if rc != 0:
             raise RuntimeError(f"llama-bench preflight exited {rc}")
-        preflight = parse_bench_result(stdout, stderr, tokens=args.preflight_tokens, repetitions=1)
+        preflight = parse_bench_result(
+            stdout, stderr, tokens=args.preflight_tokens, repetitions=1,
+            gpu_layers=args.gpu_layers)
+        preflight["command"] = list(preflight_command)
         preflight["duration_s"] = duration
 
         for tokens in args.prompt_tokens:
@@ -399,7 +423,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             command = profile_command(
                 binary, model, tokens=tokens, repetitions=args.repetitions,
                 profiler=profiler, input_file=input_file, output_file=raw,
-                gen_tokens=args.gen_tokens, cpu_list=args.cpu_list,
+                gen_tokens=args.gen_tokens, gpu_layers=args.gpu_layers,
+                cpu_list=args.cpu_list,
                 threads=args.threads)
             rc, stdout, stderr, duration = run_owned(
                 command, env=env, timeout_s=args.timeout_s)
@@ -408,7 +433,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             if rc != 0:
                 raise RuntimeError(f"rocprof v1 p{tokens} exited {rc}")
             bench = parse_bench_result(
-                stdout, stderr, tokens=tokens, repetitions=args.repetitions)
+                stdout, stderr, tokens=tokens, repetitions=args.repetitions,
+                gpu_layers=args.gpu_layers)
             captured_profiles.append({
                 "prompt_tokens": tokens,
                 "command": list(command),
@@ -455,12 +481,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "reps_basis": "scored:llama-bench prompt repetitions",
                 "claim": attribution_claim(
                     model=model, model_sha256=tool_identity["model_sha256"],
-                    prompt_tokens=tokens, gen_tokens=args.gen_tokens, share=share),
+                    prompt_tokens=tokens, gen_tokens=args.gen_tokens,
+                    gpu_layers=args.gpu_layers, share=share),
                 "extra": {
                     "model_file": model.name,
                     "model_sha256": tool_identity["model_sha256"],
                     "prompt_tokens": tokens,
                     "gen_tokens": args.gen_tokens,
+                    "gpu_layers": args.gpu_layers,
                     "phase": workload_phase(args.gen_tokens, (tokens,)),
                 },
             })
@@ -476,6 +504,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "workload": {
             "prompt_tokens": list(args.prompt_tokens),
             "gen_tokens": args.gen_tokens,
+            "gpu_layers": args.gpu_layers,
             "phase": workload_phase(args.gen_tokens, args.prompt_tokens),
             "preflight_tokens": args.preflight_tokens,
             "repetitions": args.repetitions,
@@ -523,6 +552,10 @@ def parser() -> argparse.ArgumentParser:
         help="tokens to generate (llama-bench -n). Default 0 = PREFILL ONLY. "
              "Set >0 to reach the batch-1 decode MMVQ/GEMV path; a decode "
              "question answered with the default silently measures prefill.")
+    result.add_argument(
+        "--gpu-layers", type=positive_gpu_layers, default=DEFAULT_GPU_LAYERS,
+        help="llama-bench -ngl value; lower this for governed partial offload "
+             "when the model cannot fit in MI210 VRAM (default: 99)")
     result.add_argument("--preflight-tokens", type=int, default=32)
     result.add_argument("--repetitions", type=int, default=1)
     result.add_argument("--cpu-list", default=DEFAULT_CPU_LIST)
