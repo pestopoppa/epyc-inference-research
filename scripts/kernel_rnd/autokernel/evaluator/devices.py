@@ -71,6 +71,118 @@ class DeviceStateParseError(DeviceVocabularyError):
     """A required numeric ROCm state field could not be parsed."""
 
 
+# RVP-C3-5's duration floor is local measurement evidence, not a convention
+# copied from another accelerator.  The 60-second RVP-T0-1 saturation receipt
+# began at 800 MHz and first observed the MI210's nominal 1700 MHz SCLK at this
+# offset.  A shorter ranked timing window can therefore fit wholly inside the
+# startup transition this host actually exhibited.  Round upward to an integer
+# nanosecond so float truncation cannot admit a window just below the observation.
+GFX90A_DURATION_FLOOR_DERIVATION_ID = (
+    "rvp-t0-1-first-observed-nominal-sclk/v1")
+GFX90A_DURATION_FLOOR_EVIDENCE_REF = (
+    "rvp-t0-1-20260811T0906Z/receipt.json@sha256:"
+    "07788e1d488ecec062e8133dd9e11d379e5075afbcc20f80b6da37e345533431"
+    "#device_sampling.samples[1]")
+GFX90A_FIRST_NOMINAL_SCLK_OFFSET_S = 0.25009090290404856
+GFX90A_MIN_RANKED_WINDOW_NS = math.ceil(
+    GFX90A_FIRST_NOMINAL_SCLK_OFFSET_S * 1_000_000_000)
+
+
+@dataclass(frozen=True)
+class RankedDurationWindowAdmission:
+    """Device-local absolute floor for a timing window used in a speed rank.
+
+    This is separate from the relative paired-block noise test.  An arbitrarily
+    repeatable microsecond observation can still measure only gfx90a's clock-ramp
+    transient.  RVP-C3-5 requires both: the complete repetition window must first
+    clear this absolute, locally measured floor; only then may paired statistics
+    compare its constituent repetitions.
+    """
+
+    architecture: str
+    device_id: str
+    min_window_ns: int
+    first_nominal_sclk_offset_s: float
+    evidence_ref: str
+    derivation_id: str = GFX90A_DURATION_FLOOR_DERIVATION_ID
+
+    def __post_init__(self) -> None:
+        for name in ("architecture", "device_id", "evidence_ref"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"ranked duration admission {name} must be non-empty")
+        if isinstance(self.min_window_ns, bool) or not isinstance(
+                self.min_window_ns, int) or self.min_window_ns <= 0:
+            raise ValueError("ranked duration admission min_window_ns must be positive")
+        if isinstance(self.first_nominal_sclk_offset_s, bool) or not isinstance(
+                self.first_nominal_sclk_offset_s, (int, float)) or not math.isfinite(
+                    float(self.first_nominal_sclk_offset_s)) \
+                or self.first_nominal_sclk_offset_s <= 0:
+            raise ValueError(
+                "ranked duration admission first_nominal_sclk_offset_s must be positive")
+        expected = math.ceil(self.first_nominal_sclk_offset_s * 1_000_000_000)
+        if self.min_window_ns != expected:
+            raise ValueError(
+                "ranked duration admission min_window_ns must be the upward-rounded "
+                "first nominal-SCLK observation")
+        if self.derivation_id != GFX90A_DURATION_FLOOR_DERIVATION_ID:
+            raise ValueError(
+                "ranked duration admission derivation_id is not implemented")
+
+    def check(self, observed_ns: Sequence[Any], *, device_id: str) -> schemas.Check:
+        """Refuse a missing, foreign-device, malformed, or sub-floor window."""
+        if device_id != self.device_id:
+            return schemas.Check(schemas.COULD_NOT_CHECK, (
+                f"the ranked duration floor was measured for {self.device_id} "
+                f"({self.architecture}), but the receipt names {device_id!r}; a floor "
+                "from one device may not be imported onto another",))
+        if isinstance(observed_ns, (str, bytes)) or not isinstance(
+                observed_ns, Sequence) or not observed_ns:
+            return schemas.Check(schemas.COULD_NOT_CHECK, (
+                "the ranked GPU cell carries no raw repetition durations; an aggregate "
+                "throughput cannot establish that its complete timing window cleared the "
+                "absolute gfx90a floor",))
+        values = []
+        for index, value in enumerate(observed_ns):
+            if isinstance(value, bool) or not isinstance(value, (int, float)) \
+                    or not math.isfinite(float(value)) or float(value) <= 0:
+                return schemas.Check(schemas.COULD_NOT_CHECK, (
+                    f"ranked GPU duration window {index} is not a finite positive "
+                    f"nanosecond count: {value!r}",))
+            values.append(float(value))
+        total_ns = sum(values)
+        if total_ns < self.min_window_ns:
+            return schemas.Check(schemas.COULD_NOT_CHECK, (
+                f"ranked GPU duration window totals {total_ns:.0f} ns across "
+                f"{len(values)} repetition(s), below the "
+                f"local {self.architecture} floor {self.min_window_ns} ns; the cell is "
+                "inconclusive and receives no speed rank",
+                f"floor derivation {self.derivation_id}: first nominal SCLK observed "
+                f"at {self.first_nominal_sclk_offset_s:.12g}s in {self.evidence_ref}",))
+        return schemas.Check(schemas.PASS, (
+            f"the ranked GPU duration window totals {total_ns:.0f} ns across "
+            f"{len(values)} repetition(s), at or above the local {self.architecture} "
+            f"floor {self.min_window_ns} ns ({self.evidence_ref})",))
+
+    def to_dict(self) -> dict:
+        return {
+            "architecture": self.architecture,
+            "device_id": self.device_id,
+            "min_window_ns": self.min_window_ns,
+            "first_nominal_sclk_offset_s": self.first_nominal_sclk_offset_s,
+            "evidence_ref": self.evidence_ref,
+            "derivation_id": self.derivation_id,
+        }
+
+
+GFX90A_RANKED_DURATION_ADMISSION = RankedDurationWindowAdmission(
+    architecture="gfx90a",
+    device_id="ROCm0",
+    min_window_ns=GFX90A_MIN_RANKED_WINDOW_NS,
+    first_nominal_sclk_offset_s=GFX90A_FIRST_NOMINAL_SCLK_OFFSET_S,
+    evidence_ref=GFX90A_DURATION_FLOOR_EVIDENCE_REF)
+
+
 @dataclass(frozen=True)
 class DeviceStateSample:
     """One parsed ROCm device-state snapshot; no raw text masquerades as data."""

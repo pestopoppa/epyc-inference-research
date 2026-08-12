@@ -1,0 +1,11 @@
+#!/bin/bash
+set -euo pipefail
+
+# v9_architect_general_gpu_native_mtp nominal_context=2048 rep=1
+env LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-v9-hip/bin GGML_IQK=1 ROCR_VISIBLE_DEVICES=0 HIP_VISIBLE_DEVICES=0 CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-v9-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf --host 127.0.0.1 --port 19900 -np 2 -c 6400 -t 24 --metrics --slots -ub 8192 --jinja --reasoning off --device ROCm0 -ngl 999 -ctk q8_0 -ctv q8_0 -fa on --spec-type draft-mtp --no-mmap --spec-draft-n-max 4 --slot-save-path /mnt/raid0/llm/cache/kv_slots/architect_general
+
+# v9_coder_escalation_gpu_request_no_spec nominal_context=2048 rep=1
+env LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-v9-hip/bin GGML_IQK=1 ROCR_VISIBLE_DEVICES=0 HIP_VISIBLE_DEVICES=0 CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-v9-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf --host 127.0.0.1 --port 19901 -np 2 -c 6400 -t 24 --metrics --slots -ub 8192 --jinja --reasoning off --device ROCm0 -ngl 999 -ctk q8_0 -ctv q8_0 -fa on --spec-type draft-mtp --no-mmap --spec-draft-n-max 4 --slot-save-path /mnt/raid0/llm/cache/kv_slots/architect_general
+
+# v9_worker_vision_gpu_no_spec nominal_context=2048 rep=1
+env LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-v9-hip/bin GGML_IQK=1 ROCR_VISIBLE_DEVICES=0 HIP_VISIBLE_DEVICES=0 CUDA_VISIBLE_DEVICES=0 OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-v9-hip/bin/llama-server -m /mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf --host 127.0.0.1 --port 19902 -np 1 -c 3200 -t 24 --metrics --slots --reasoning auto --device ROCm0 -ngl 999 -ctk q8_0 -ctv q8_0 -fa on --spec-type none --mmproj /mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf --image-min-tokens 1024 --cache-ram 0

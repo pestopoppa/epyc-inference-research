@@ -28,6 +28,14 @@ class TestPromptLeakGuard(unittest.TestCase):
         )
         self.assertIn("AUTOKERNEL AUTHORING ROLE", rendered)
 
+    def test_implement_and_exploit_are_explicit_reviewed_roles(self):
+        for role in ("implement", "exploit"):
+            with self.subTest(role=role):
+                rendered = A.assemble_authoring_prompt(
+                    role=role, task="Work only within the selected kernel cell.",
+                    context=context())
+                self.assertIn(f"AUTOKERNEL AUTHORING ROLE: {role}", rendered)
+
     def test_each_sealed_marker_is_rejected_after_assembly(self):
         for marker in A.FORBIDDEN_PROMPT_MARKERS:
             with self.subTest(marker=marker), self.assertRaises(A.PromptLeakError):

@@ -203,6 +203,7 @@ ACCEPTED_SCHEMAS_BY_KIND = {
     KIND_PROPOSAL_RECORDED: frozenset({
         schemas.SCHEMA_PROPOSAL_V2,
         schemas.SCHEMA_PROPOSAL_V3,
+        schemas.SCHEMA_PROPOSAL_V4,
     }),
 }
 
@@ -217,6 +218,12 @@ KIND_VIEW_REBASED = "VIEW_REBASED"
 KIND_PROPOSAL_SKIPPED = "PROPOSAL_SKIPPED"
 KIND_STOP_STATE = "STOP_STATE"
 KIND_MICROBENCH_RUN_COMPLETED = "MICROBENCH_RUN_COMPLETED"
+KIND_T0_REFUSAL = "T0_REFUSAL"
+KIND_COMPOSITION_REQUESTED = "COMPOSITION_REQUESTED"
+KIND_COMPOSITION_FAILED = "COMPOSITION_FAILED"
+KIND_COMPOSITION_REJECTED = "COMPOSITION_REJECTED"
+KIND_OPERATOR_RELEASE_DRY_RUN_REQUESTED = "OPERATOR_RELEASE_DRY_RUN_REQUESTED"
+KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED = "OPERATOR_RELEASE_DRY_RUN_TERMINATED"
 # §3.5 preflight attestation. `resource/preflight.py` builds the verdict and its
 # own docstring instructs the caller to journal `exc.result.to_dict()` verbatim
 # on FAIL and COULD_NOT_CHECK — "a precondition that was checked but not recorded
@@ -242,6 +249,11 @@ NATIVE_KINDS = frozenset({
     KIND_TORN_APPEND_DISCARDED, KIND_OPERATOR_CONTROL_ACK, KIND_VIEW_REBASED,
     KIND_PROPOSAL_SKIPPED, KIND_STOP_STATE, KIND_PREFLIGHT_ATTESTATION,
     KIND_MICROBENCH_RUN_COMPLETED,
+    KIND_T0_REFUSAL,
+    KIND_COMPOSITION_REQUESTED,
+    KIND_COMPOSITION_FAILED, KIND_COMPOSITION_REJECTED,
+    KIND_OPERATOR_RELEASE_DRY_RUN_REQUESTED,
+    KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED,
 }) | BOOTSTRAP_KNOWLEDGE_KINDS
 
 KINDS = frozenset(SCHEMA_BOUND_KINDS) | NATIVE_KINDS
@@ -257,6 +269,11 @@ RECORD_ID_KEY_BY_KIND = {
     KIND_CHAMPION_UPDATED: "branch",
     KIND_RELEASE_PACKAGE_PREPARED: "package_id",
     KIND_OPERATOR_WAIVER_RECORDED: "waiver_id",
+    KIND_COMPOSITION_REQUESTED: "request_sha256",
+    KIND_COMPOSITION_FAILED: "request_sha256",
+    KIND_COMPOSITION_REJECTED: "attempt_sha256",
+    KIND_OPERATOR_RELEASE_DRY_RUN_REQUESTED: "request_id",
+    KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED: "terminal_sha256",
 }
 
 # §5.8 storage classes. Only the expirable class may ever be tombstoned:
@@ -1083,11 +1100,98 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
             else:
                 if run_id != raw_id:
                     out.append("run_id: must be the content hash of raw_vector")
+    elif kind == KIND_T0_REFUSAL:
+        for key, prefix in (("campaign_id", "ak-"), ("candidate_id", "akc-")):
+            value = payload.get(key)
+            if not isinstance(value, str) or not value.startswith(prefix):
+                out.append(f"{key}: required and must start with {prefix!r}")
+        for key in ("stage", "error"):
+            value = payload.get(key)
+            if not isinstance(value, str) or not value.strip():
+                out.append(f"{key}: required and non-empty")
+        if payload.get("rate_measured") is not False:
+            out.append("rate_measured: must be false on a pre-event T0 refusal")
     elif kind == KIND_PROPOSAL_SKIPPED:
         for key in ("proposal_ref", "reason"):
             value = payload.get(key)
             if not isinstance(value, str) or not value.strip():
                 out.append(f"{key}: required and non-empty")
+    elif kind == KIND_COMPOSITION_REQUESTED:
+        for key in ("request_sha256", "combined_candidate_id", "source_tree",
+                    "mode"):
+            value = payload.get(key)
+            if not isinstance(value, str) or not value.strip():
+                out.append(f"{key}: required and non-empty")
+        if not isinstance(payload.get("member_candidates"), list) \
+                or not payload.get("member_candidates"):
+            out.append("member_candidates: required non-empty list")
+        if not isinstance(payload.get("anchor"), Mapping):
+            out.append("anchor: required mapping")
+        if not isinstance(payload.get("evaluator"), Mapping):
+            out.append("evaluator: required mapping")
+        if not isinstance(payload.get("required_t2_cells"), list) \
+                or not payload.get("required_t2_cells"):
+            out.append("required_t2_cells: required non-empty list")
+    elif kind == KIND_COMPOSITION_FAILED:
+        for key in ("request_sha256", "request_event_id", "source_tree",
+                    "failure_class", "failure_detail"):
+            value = payload.get(key)
+            if not isinstance(value, str) or not value.strip():
+                out.append(f"{key}: required and non-empty")
+    elif kind == KIND_COMPOSITION_REJECTED:
+        for key in ("attempt_sha256", "source_tree", "anchor_sha256",
+                    "compatibility_sha256"):
+            value = payload.get(key)
+            if not isinstance(value, str) or not value.strip():
+                out.append(f"{key}: required and non-empty")
+        candidates = payload.get("candidate_ids")
+        conflicts = payload.get("conflicts")
+        if not isinstance(candidates, list) or not candidates:
+            out.append("candidate_ids: required non-empty list")
+        if not isinstance(conflicts, list) or not conflicts:
+            out.append("conflicts: required non-empty list")
+    elif kind == KIND_OPERATOR_RELEASE_DRY_RUN_REQUESTED:
+        for key in ("request_id", "request_sha256", "source_tree", "requested_by",
+                    "requested_at", "champion_event_id", "combined_candidate_id",
+                    "evidence_class"):
+            value = payload.get(key)
+            if not isinstance(value, str) or not value.strip():
+                out.append(f"{key}: required and non-empty")
+        request_id = payload.get("request_id")
+        if isinstance(request_id, str) and not request_id.startswith("akfr-"):
+            out.append("request_id: must start with 'akfr-'")
+        request_sha = payload.get("request_sha256")
+        if isinstance(request_sha, str) and not _SHA256_RE.match(request_sha):
+            out.append("request_sha256: must be a lowercase hex sha256")
+        source_tree = payload.get("source_tree")
+        if isinstance(source_tree, str) and source_tree not in schemas.SOURCE_TREES:
+            out.append(f"source_tree: {source_tree!r} is not a known source tree")
+        candidate_id = payload.get("combined_candidate_id")
+        if isinstance(candidate_id, str) and not candidate_id.startswith("akc-"):
+            out.append("combined_candidate_id: must start with 'akc-'")
+        freeze_request = payload.get("freeze_request")
+        if not isinstance(freeze_request, Mapping):
+            out.append("freeze_request: required mapping")
+        elif freeze_request.get("request_id") != request_id:
+            out.append("freeze_request.request_id: must equal request_id")
+    elif kind == KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED:
+        for key in ("terminal_sha256", "request_sha256", "request_event_id",
+                    "source_tree", "state", "failure_class", "failure_detail"):
+            value = payload.get(key)
+            if not isinstance(value, str) or not value.strip():
+                out.append(f"{key}: required and non-empty")
+        for key in ("terminal_sha256", "request_sha256"):
+            value = payload.get(key)
+            if isinstance(value, str) and not _SHA256_RE.match(value):
+                out.append(f"{key}: must be a lowercase hex sha256")
+        if payload.get("state") not in {
+                "RESOURCE_PREEMPTED", "TAMPER_REFUSED", "FAILED"}:
+            out.append(
+                "state: must be one of ['FAILED', 'RESOURCE_PREEMPTED', "
+                "'TAMPER_REFUSED']")
+        source_tree = payload.get("source_tree")
+        if isinstance(source_tree, str) and source_tree not in schemas.SOURCE_TREES:
+            out.append(f"source_tree: {source_tree!r} is not a known source tree")
     elif kind in BOOTSTRAP_KNOWLEDGE_KINDS:
         if not payload:
             out.append("payload: must not be empty for a bootstrap-knowledge event")
@@ -2170,7 +2274,11 @@ __all__ = [
     "KIND_SUPERSEDED", "KIND_RETRIEVAL_SUPERSEDED", "KIND_TOMBSTONE",
     "KIND_TORN_APPEND_DISCARDED", "KIND_OPERATOR_CONTROL_ACK", "KIND_VIEW_REBASED",
     "KIND_PROPOSAL_SKIPPED", "KIND_STOP_STATE", "KIND_PREFLIGHT_ATTESTATION",
-    "KIND_MICROBENCH_RUN_COMPLETED",
+    "KIND_MICROBENCH_RUN_COMPLETED", "KIND_T0_REFUSAL",
+    "KIND_COMPOSITION_REQUESTED",
+    "KIND_COMPOSITION_FAILED", "KIND_COMPOSITION_REJECTED",
+    "KIND_OPERATOR_RELEASE_DRY_RUN_REQUESTED",
+    "KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED",
     "tombstone_view_key",
     "Journal", "JournalEntry", "JournalDefect", "ShardRef", "TornTail",
     "ReadReport", "Cursor", "Views",

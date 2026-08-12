@@ -26,22 +26,42 @@ import ctypes
 import errno
 import hashlib
 import json
-import math
 import os
 import resource
 import secrets
+import stat
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 
 SANDBOX_ID = "autokernel.execution.sandbox/landlock-seccomp-cgroup-v1"
+CGROUP_ROOT_ENV = "EPYC_AUTOKERNEL_CGROUP_ROOT"
+HOST_CGROUP_ROOT = "/sys/fs/cgroup/autokernel"
 
 
 class SandboxError(RuntimeError):
     """A required containment control was unavailable or contradicted itself."""
+
+
+def default_cgroup_root() -> str:
+    """Return the evaluator-selected cgroup parent without weakening failure.
+
+    The host provisions one narrow, unprivileged delegation for AutoKernel.
+    Older environments that deliberately made the cgroup-v2 mount root
+    writable keep working; an unavailable or non-writable result is rejected
+    by :class:`SandboxPolicy` before a candidate is spawned.
+    """
+    configured = os.environ.get(CGROUP_ROOT_ENV, "").strip()
+    if configured:
+        if not os.path.isabs(configured):
+            raise SandboxError(f"{CGROUP_ROOT_ENV} must name an absolute path")
+        return configured
+    if os.path.isdir(HOST_CGROUP_ROOT):
+        return HOST_CGROUP_ROOT
+    return "/sys/fs/cgroup"
 
 
 # x86_64 syscall numbers.  AutoKernel's production host is x86_64; refusing a
@@ -193,8 +213,9 @@ def _landlock_write_rights(abi: int) -> int:
     return rights
 
 
-def install_landlock(writable_root: str) -> tuple[int, int]:
-    """Handle every write right and grant it only under ``writable_root``."""
+def install_landlock(writable_root: str,
+                     writable_device_paths: Sequence[str] = ()) -> tuple[int, int]:
+    """Grant filesystem writes only to scratch plus explicitly audited devices."""
     root = Path(writable_root).resolve(strict=True)
     if not root.is_dir():
         raise SandboxError(f"sandbox writable root is not a directory: {root}")
@@ -206,18 +227,28 @@ def install_landlock(writable_root: str) -> tuple[int, int]:
             _SYS_LANDLOCK_CREATE_RULESET, ctypes.byref(attr), ctypes.sizeof(attr), 0)
     except OSError as exc:
         raise SandboxError(f"Landlock ruleset creation failed: {exc}") from exc
-    path_fd = -1
+    path_fds: list[int] = []
     try:
-        path_fd = os.open(root, os.O_PATH | os.O_CLOEXEC)
-        path_attr = _LandlockPathBeneathAttr(rights, path_fd, 0)
+        root_fd = os.open(root, os.O_PATH | os.O_CLOEXEC)
+        path_fds.append(root_fd)
+        path_attr = _LandlockPathBeneathAttr(rights, root_fd, 0)
         _syscall(_SYS_LANDLOCK_ADD_RULE, ruleset_fd, _LANDLOCK_RULE_PATH_BENEATH,
                  ctypes.byref(path_attr), 0)
+        for raw_path in writable_device_paths:
+            device_fd = os.open(raw_path, os.O_PATH | os.O_CLOEXEC)
+            path_fds.append(device_fd)
+            # ROCm needs O_RDWR plus ioctl on these character devices.  It does
+            # not need create, remove, rename, or truncate authority there.
+            device_attr = _LandlockPathBeneathAttr(
+                _LANDLOCK_ACCESS_FS_WRITE_FILE, device_fd, 0)
+            _syscall(_SYS_LANDLOCK_ADD_RULE, ruleset_fd,
+                     _LANDLOCK_RULE_PATH_BENEATH, ctypes.byref(device_attr), 0)
         _prctl(_PR_SET_NO_NEW_PRIVS, 1)
         _syscall(_SYS_LANDLOCK_RESTRICT_SELF, ruleset_fd, 0)
     except OSError as exc:
         raise SandboxError(f"Landlock activation failed: {exc}") from exc
     finally:
-        if path_fd >= 0:
+        for path_fd in path_fds:
             os.close(path_fd)
         os.close(ruleset_fd)
     return abi, rights
@@ -309,9 +340,10 @@ def install_resource_limits(limits: ResourceLimits) -> None:
 @dataclass(frozen=True)
 class SandboxPolicy:
     writable_root: str
-    cgroup_root: str = "/sys/fs/cgroup"
+    cgroup_root: str = dataclass_field(default_factory=default_cgroup_root)
     limits: ResourceLimits = ResourceLimits()
     token: str = ""
+    writable_device_paths: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         root = Path(self.writable_root).resolve(strict=True)
@@ -324,12 +356,22 @@ class SandboxPolicy:
             raise SandboxError("candidate sandbox refuses a root execution identity")
         if not isinstance(self.limits, ResourceLimits):
             raise TypeError("limits must be ResourceLimits")
+        allowed_devices = {"/dev/kfd", "/dev/dri/renderD128"}
+        normalized_devices = tuple(str(Path(path).resolve(strict=True))
+                                   for path in self.writable_device_paths)
+        if len(normalized_devices) != len(set(normalized_devices)):
+            raise SandboxError("writable_device_paths must be unique")
+        for path in normalized_devices:
+            if path not in allowed_devices or not stat.S_ISCHR(os.stat(path).st_mode):
+                raise SandboxError(
+                    f"writable device is not an admitted ROCm character device: {path}")
         token = self.token or secrets.token_hex(8)
         if not token.isalnum() or len(token) > 64:
             raise ValueError("sandbox token must be 1..64 alphanumeric characters")
         object.__setattr__(self, "writable_root", str(root))
         object.__setattr__(self, "cgroup_root", str(cgroup))
         object.__setattr__(self, "token", token)
+        object.__setattr__(self, "writable_device_paths", normalized_devices)
         # Constructor is the fail-closed availability check.  No process is
         # launched merely to discover that containment is impossible.
         landlock_abi()
@@ -353,6 +395,7 @@ class SandboxPolicy:
             "cgroup_root": self.cgroup_root,
             "limits": self.limits.to_dict(),
             "token": self.token,
+            "writable_device_paths": list(self.writable_device_paths),
             "receipt_path": str(receipt),
         }
         return base64.urlsafe_b64encode(json.dumps(
@@ -373,7 +416,8 @@ def _decode_policy(encoded: str) -> tuple[SandboxPolicy, Path]:
         limits = ResourceLimits(**raw["limits"])
         policy = SandboxPolicy(
             writable_root=raw["writable_root"], cgroup_root=raw["cgroup_root"],
-            limits=limits, token=raw["token"])
+            limits=limits, token=raw["token"],
+            writable_device_paths=tuple(raw.get("writable_device_paths", ())))
         receipt = Path(raw["receipt_path"]).resolve()
     except (KeyError, TypeError, ValueError, OSError, json.JSONDecodeError) as exc:
         raise SandboxError(f"invalid encoded sandbox policy: {exc}") from exc
@@ -452,7 +496,8 @@ def launch(policy: SandboxPolicy, receipt_path: Path, argv: Sequence[str]) -> No
     try:
         cgroup = _join_owned_cgroup(policy)
         install_resource_limits(policy.limits)
-        abi, rights = install_landlock(policy.writable_root)
+        abi, rights = install_landlock(
+            policy.writable_root, policy.writable_device_paths)
         seccomp_sha256 = install_seccomp()
         receipt = {
             "schema": "epyc.autokernel.sandbox_receipt.v1",
@@ -465,6 +510,7 @@ def launch(policy: SandboxPolicy, receipt_path: Path, argv: Sequence[str]) -> No
             "seccomp_sha256": seccomp_sha256,
             "blocked_syscalls": sorted(_BLOCKED_SYSCALLS),
             "writable_root": policy.writable_root,
+            "writable_device_paths": list(policy.writable_device_paths),
             "cgroup_path": str(cgroup),
             "resource_limits": policy.limits.to_dict(),
             "activated_at_unix_ns": time.time_ns(),
@@ -519,6 +565,7 @@ def read_receipt(path: str | Path) -> dict:
         "schema", "sandbox_id", "pid", "process_start_ticks", "euid", "landlock_abi",
         "landlock_write_rights", "seccomp_sha256", "blocked_syscalls",
         "writable_root", "cgroup_path", "resource_limits", "argv_sha256",
+        "writable_device_paths",
     }
     missing = sorted(required - set(document))
     if missing:
@@ -549,6 +596,7 @@ def verify_receipt(document: Mapping[str, Any], *, policy: SandboxPolicy,
     expectations = {
         "pid": pid,
         "writable_root": policy.writable_root,
+        "writable_device_paths": list(policy.writable_device_paths),
         "cgroup_path": str(policy.cgroup_path(pid)),
         "resource_limits": policy.limits.to_dict(),
         "argv_sha256": expected_argv_sha,

@@ -1,0 +1,14 @@
+{
+  "max_tokens": 512,
+  "messages": [
+    {
+      "content": "Write a concise explanation of normalization of [0,2,3,5] by its sum, including the zero-sum edge case. The input total is 10. Then end with exactly `RESULT_JSON: {\"normalized\":[...],\"sum\":...}` using the computed normalized values. JSON `sum` must be the sum of the normalized values. Do not report the input total in JSON. The final JSON is machine-validated.",
+      "role": "user"
+    }
+  ],
+  "seed": 424242,
+  "stream": false,
+  "temperature": 0,
+  "top_k": 1,
+  "top_p": 1
+}

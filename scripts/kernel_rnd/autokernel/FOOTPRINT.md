@@ -30,11 +30,11 @@ a module it never looked at.
 
 | | non-test lines |
 |---|---:|
-| **ON THE CAMPAIGN PATH** | **63,618** |
-| **DEFERRED** (provably unreachable) | **4,360** |
-| **TOTAL** | **67,978** |
+| **ON THE CAMPAIGN PATH** | **68,837** |
+| **DEFERRED** (provably unreachable) | **48,072** |
+| **TOTAL** | **116,909** |
 
-**There is no deferred half.** The compact modules deliberately off the
+**The deferred plane is explicit.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
 observe-only proposal diagnostic, prior-art compiler, substrate and lane
 registries, turn-productivity reducer, and operator-invoked live-control
@@ -52,7 +52,9 @@ Until 2026-08-04 this table read *roughly half of this package is not on the pat
 from "an idea for a kernel" to "a measured number"*, over a total near 101k. The
 operator acted on it: `release/`, `adapters/`, `surface/` and the AK4 strategy
 plane under `controller/` were removed — about 79,600 lines including their
-tests, recoverable from the tag `autokernel-preserve-20260804`. The rationale is
+tests, recoverable from the tag `autokernel-preserve-20260804`. On 2026-08-12,
+the selected release compiler and speech adapters were restored for AK9 while
+remaining provably unreachable from campaign #1; `surface/` remains deleted. The rationale is
 `epyc-root/artifacts/operator/autokernel-simplification-review.md`; the
 prediction this document made — that removing them could not change what campaign
 #1 does, because the walked graph reached none of them — held, and no reachability
@@ -121,47 +123,107 @@ incident or a measured fact; "reduced rigour" is not a reason.
 
 | module | lines | campaign #1 | reason |
 |---|---:|:---:|---|
-| `campaign.py` | 3,490 | yes | THE ENTRYPOINT. Before it landed, `grep -rl "__main__|argparse|def main("` over every non-test module returned nothing: 94k lines, 5,695 passing tests, and no way to start it — which is the whole reason this package has produced no result |
+| `campaign.py` | 4,578 | yes | THE ENTRYPOINT. Before it landed, `grep -rl "__main__|argparse|def main("` over every non-test module returned nothing: 94k lines, 5,695 passing tests, and no way to start it — which is the whole reason this package has produced no result |
 | `dashboard.py` | 201 | yes | the terminal result was fsynced but the only dashboard exporter had been deleted, so active AutoKernel work remained permanently absent from the operator surface; this compact projection dates itself from the journal entry and cannot make an old campaign fresh |
 | `__init__.py` | 14 | yes | package docstring; `schemas` is declared here as the single source of record shape |
-| `schemas.py` | 3,360 | yes | one record shape — every module is written against it and none invents its own |
-| `journal.py` | 2,181 | yes | AutoPilot lost 232 trials and ~16 days when a restart came up empty and nothing objected |
+| `schemas.py` | 3,783 | yes | one record shape — every module is written against it and none invents its own |
+| `journal.py` | 2,289 | yes | AutoPilot lost 232 trials and ~16 days when a restart came up empty and nothing objected |
+| `fault_rehearsal.py` | 1,080 | no | governed process-only acceptance producer; real crash/restart, advisory revocation and tamper evidence must remain operator-invoked and cannot gain campaign mutation, inference, benchmark, kernel, stack or release authority |
 | `offline_least_commitment.py` | 345 | no | AP-WM-1 observe-only archive analysis; importing an offline hypothesis diagnostic into the mutation/build path would give it accidental live authority |
+| `least_commitment_archive_builder.py` | 429 | no | AK-WM-2a strict real-record projection; it reads hash-bound completed campaign evidence into an observe-only archive and cannot launch, rank, mutate, or promote |
+| `least_commitment_receipts.py` | 807 | no | AK-WM-2a governed offline producer; it copies only explicitly SHA-pinned journal fields into receipts and cannot launch, rank, mutate, or promote |
+| `least_commitment_capture.py` | 372 | yes | prospective hash-bound IQK diagnostic/control contract; live campaigns only reduce declared outcome functions and it exposes no selector, champion, release, process, or inference API |
+| `evidence_path_rehearsal.py` | 231 | no | architecture-only CLI proving proposal/capture/control/AP-WM/champion/readiness/T3/package producer coverage; emits no empirical evidence or live authority |
 | `turn_productivity.py` | 481 | no | AK-PT-1/AK-X-6 archive reducer; it consumes completed refine-turn records and may only withhold future search advancement, so campaign #1 must not give it live rank or mutation authority |
 | `prior_art.py` | 597 | no | deterministic proposal-input compiler; it classifies findings before a proposal exists and has no place in the mutation/build process |
-| `profile_report.py` | 542 | no | RVP-1–7 deterministic offline C4 report; it consumes completed paired traces and has no mutation, build, profiler-launch or ranking authority |
+| `profile_report.py` | 587 | no | RVP-1–7 deterministic offline C4 report; it consumes completed paired traces and has no mutation, build, profiler-launch or ranking authority |
+| `profile_context.py` | 287 | no | C4 hash-bound discovery/evaluator projection; it exposes diagnostic context to authoring without gaining verdict or ranking authority |
+| `placement_context.py` | 216 | no | P2-5j hash-bound placement-belief projection; it exposes observation-only topology context to authoring without gaining selection, ranking, launch, or promotion authority |
+| `hipkittens_lds.py` | 430 | no | INF-03 deterministic offline gfx90a LDS topology reducer; it consumes completed counter captures and gives authoring diagnostic context without profiler-launch or ranking authority |
+| `c5_seed_corpus.py` | 309 | no | C5 static HyRA task registry; it contributes hash-bound, non-numeric gfx90a authoring context and must never gain campaign mutation, scoring, or NVIDIA-to-MI210 claim-transfer authority |
+| `datatype_targets.py` | 132 | no | INF-03 static FP8/NVFP4 authoring contracts; they expose no cross-vendor performance numbers and have no campaign mutation, execution, scoring, or capability-attestation authority |
 | `substrate.py` | 340 | no | validated planning facts; it reads checked-in measured/datasheet receipts before proposal construction and never joins the mutation/build path |
 | `lanes.py` | 314 | no | screening declarations and rank-transfer calibration; without measured calibration campaign #1 stays on the full verified path |
 | `artifact_diff.py` | 200 | yes | AK-TR-6 must veto an unconfirmed GPU claim before the behavioral T0 provider can launch |
+| `candidate_record.py` | 289 | yes | every executed candidate is fsynced from the exact built snapshot and evaluation event identities before terminal STOP |
+| `source_candidate.py` | 443 | yes | source-changing proposals consume one immutable embedded patch bundle through the guarded worktree mutation boundary |
+| `source_prerequisite_package.py` | 534 | yes | source candidates may rank only after archived raw sensitivity, hostile and checker CSV bytes are re-reduced and rebound to the exact live build identities |
+| `source_prerequisite_producer.py` | 352 | yes | a source candidate with no prior archive must produce sensitivity, hostile and checker receipts under the campaign's already-held claims before behavioral T0 |
 | `storage.py` | 1,859 | yes | the 2026-07-04 async-prefetch win was written to `/mnt/raid0/llm/tmp/` and that directory no longer exists |
+| `adapters/__init__.py` | 21 | no | AK9 adapter namespace only; campaign #1 remains llama_cpu-only and imports no speech release surface |
+| `adapters/whisper_stt.py` | 1,843 | no | AK9 pure whisper.cpp tree, metric, linkage, protocol-prerequisite and release-binding declarations; no inference, build, mutation or freeze authority |
+| `adapters/qwentts_tts.py` | 1,981 | no | AK9 pure qwentts.cpp declarations; pins the STT intelligibility instrument and requires ggml-submodule closure traversal without inference, build, mutation or freeze authority |
+| `release/__init__.py` | 36 | no | AK9 release namespace; binds only the read-only plan compiler while readiness, T3, packager and preflight require explicit operator-side imports, all outside campaign #1 |
+| `release/plan.py` | 2,539 | no | AK9 read-only release-plan compiler; derives exact per-tree cells and fails closed on missing evidence or single-backend no-op candidates, but cannot run or promote one |
+| `release/preflight.py` | 184 | no | AK5 release-local pure preflight decisions over caller-supplied host, resource-claim and storage receipts; restores no controller guard or autonomous state machine and performs no observation or action |
+| `release/readiness.py` | 4,312 | no | AK5/AK6 operator-facing readiness reducer; preserves per-backend and per-phase outcomes without a cross-device scalar, and has no mutation, execution, freeze or cutover authority |
+| `release/t3.py` | 6,661 | no | AK5 dry-run release gate and sealed evidence receipt compiler; release mode refuses while P-KERNEL-FREEZE-1 is unratified, and the module cannot write, build, launch, signal, freeze or cut over |
+| `release/packager.py` | 4,276 | no | AK6 operator package renderer over completed T3 evidence; emits only in-memory drafts and terminal `RELEASE_PACKAGE_READY`, never freeze eligibility or an executed production transaction |
+| `release/closeout.py` | 482 | no | AK6 operator-triggered integration seam: joins the lean journaled champion to readiness, dry-run T3 and a validated package with crash/preemption/tamper terminal records, but has no build, inference, process or production-write capability |
+| `release/live_material.py` | 280 | no | actual-journal release-material compiler; hash-binds composed champion evidence to an exact externally measured full-build seal for operator-triggered dry run only, with no build, inference, process, transport, freeze, cutover or production-write authority |
 | `evaluator/__init__.py` | 41 | yes | docstring only — it binds no submodule, so importing `evaluator.api` does not drag the plane in |
 | `evaluator/api.py` | 3,320 | yes | a `Verdict` is constructible only via `compute_verdict()`; `kernel_eval.sh` stamped `"status":"OK"` unconditionally |
-| `evaluator/correctness.py` | 3,838 | yes | throughput is reward-hackable: deleting the computation is the fastest kernel there is |
+| `evaluator/correctness.py` | 3,952 | yes | throughput is reward-hackable: deleting the computation is the fastest kernel there is |
 | `evaluator/recipes.py` | 2,433 | yes | argv from a hashed constructor — production drifted off NUMA interleave 2026-05-24 and the front door ended up at 46% of canonical |
-| `evaluator/devices.py` | 701 | yes | a GPU cell must not be satisfied by `Device 0: CPU` |
+| `evaluator/devices.py` | 813 | yes | a GPU cell must not be satisfied by `Device 0: CPU` |
 | `evaluator/controls.py` | 2,406 | yes | the A/A control plane — 2026-08-04 measured 1.62% / 1.88% between-run CV over four identical runs |
+| `evaluator/baseline_honesty.py` | 186 | no | AK-BH-4 exact-surface strongest-provider selector; it rejects AUTO and cross-surface transfer before a campaign can claim an honest floor |
+| `evaluator/c3_epyc_suite.py` | 752 | no | INF-48 offline C3/C5 contract reducer; it binds EPYC op cases to exact vendor evidence and a captured-workload whole-model exit without launch, mutation, release, or promotion authority |
+| `evaluator/c3_epyc_compiler.py` | 510 | no | INF-48 offline JSON plan/receipt compiler; it is the callable controller/backend seam but cannot launch captures, benchmarks, builds, patches, inference, or promotion |
+| `evaluator/c3_apex_runner.py` | 960 | no | INF-48 selected-entry Apex seam: avoids the pinned CLI's unrelated-registry-file refusal, requires exact C5 mapping and environment/source/workload identities, and stays outside campaign mutation and candidate authoring |
+| `evaluator/sensitivity.py` | 333 | yes | RVP-C2-7/C2-11/C5-2 offline two-axis reducer; its report has no live authority until `source_candidate_authority.py` binds exact candidate/evaluator/evidence provenance, and missing or insensitive populations remain unscoreable |
+| `evaluator/oracle_integrity.py` | 145 | yes | RVP-C2-8/C2-9 offline reducers; hostile/checker results gain T0 authority only through the exact provenance bridge and never independently rank a candidate |
+| `evaluator/source_candidate_authority.py` | 87 | yes | fail-closed bridge from offline sensitivity/hostile/checker outputs to live T0: binds source, evaluator bundle, suite, capture mode and evidence hashes without launching or mutating anything |
+| `evaluator/historical_tasks.py` | 194 | no | RVP-C5-R/C3-2 sealed historical-task descriptor and expert-ceiling reducer; no terminal candidate means `COULD_NOT_CHECK` |
+| `evaluator/rebench_scoring.py` | 120 | no | AK-RB-1 offline reference-normalized scoring and matched-budget curve reducer; it consumes completed behavior checks and timings but has no campaign mutation, execution, or verdict authority |
 | `evaluator/statistics.py` | 3,669 | yes | **calibration constants and `median` only.** Its e-process made the gate unpassable: threshold 10 against a sign-martingale that tops out at 5.5687, at every effect size. Fenced by `TestNoOptionalStopping` |
 | `evaluator/integrity.py` | 3,661 | yes | **provenance primitives only** — `sha256_file`, `hash_source_tree`, `EMPTY_TREE_SHA256`, the clean-build snapshot check. Its §8.5.1 gate runner is fenced off |
 | `evaluator/surface.py` | 3,195 | yes | **change-class constants only** — `AffectedSurface`, the core/shared-header fanout classes. `SurfaceGateRunner` is fenced off |
 | `execution/__init__.py` | 24 | yes | docstring only; states the deny-8 limits every executor inherits |
-| `execution/worktree.py` | 2,773 | yes | no candidate exists without it: production-tip anchoring, campaign worktree, build, build-identity receipt |
-| `execution/microbench.py` | 4,292 | yes | paired ALTERNATING blocks plus C6-10 ranked hard cases — each hostile unit changes the receipted recipe and contributes blocks to the same rank instead of living only in a correctness gate |
+| `execution/worktree.py` | 2,883 | yes | no candidate exists without it: production-tip anchoring, campaign worktree, build, build-identity receipt |
+| `execution/provider.py` | 71 | yes | provider-backed proposals must resolve to isolated prefixes outside shared ROCm/system locations and frozen production trees before candidate recording |
+| `execution/microbench.py` | 4,345 | yes | paired ALTERNATING blocks plus C6-10 ranked hard cases — each hostile unit changes the receipted recipe and contributes blocks to the same rank instead of living only in a correctness gate |
 | `execution/device_sampler.py` | 410 | yes | RVP-C3-4 numeric 250 ms ROCm state producer; it brackets the exact captured benchmark-process lifetime and fails closed on missing fields, failed probes, empty traces, or cadence gaps |
 | `execution/instrument_integrity.py` | 111 | yes | RVP-C6-1: a candidate binary is built from candidate-controlled source, so every live T1 invocation must re-pin its reward-bearing translation unit to the named anchor before it can emit a number |
 | `execution/physical_bounds.py` | 197 | yes | RVP-C6-4 physical impossibility screen: per-shape conservative work floors and hardware peak ceilings are bound to the exact delivered unit and recipe/model/parameter frame, then every live sample is checked before ranking |
+| `execution/powercap_broker.py` | 248 | yes | the v9 CPU preflight could not read root-owned 0400 package counters, while running the campaign as root correctly failed the non-root candidate sandbox; a captured networkless read-only container now exposes only exact package-energy integers |
 | `execution/reward_hack_scan.py` | 186 | yes | RVP-C6-6/C6-9 plus static C6-2/C6-3 detectors: protected-frame, pointer-memo, structured-shortcut, environment/timing and stream/thread findings; the named 10 planted/15 clean corpus states sensitivity/specificity/FPR, not arbitrary-program coverage |
-| `execution/sandbox.py` | 587 | yes | C6 candidate boundary: Landlock write confinement, seccomp signal/network/namespace denials, non-root finite rlimits, per-invocation cgroup membership and verified empty teardown |
-| `execution/t0_provider.py` | 3,676 | yes | the predecessor harness tested MUL_MAT only, so a kernel that broke MUL_MAT_ID — MoE dispatch, every token in production — passed it cleanly |
-| `execution/control_runner.py` | 1,550 | yes | runs the neutral / A-A controls that the measured drift makes mandatory rather than optional |
-| `execution/live_controls.py` | 839 | no | standalone, operator-invoked calibration producer for the fixed five controls; it prepares the instrument before campaign #1 and is deliberately not imported by the mutation/build entrypoint |
+| `execution/reward_hack_corpus.py` | 370 | no | operator-invoked instrument producer that compiles and runs the named 10 planted/15 clean HIP corpus on gfx90a under the shared device claim, with normal and anti-short-circuit units both timed in the ranked stream |
+| `execution/sandbox.py` | 635 | yes | C6 candidate boundary: Landlock write confinement with an exact receipted optional `/dev/kfd` + render-node allowance for ROCm workers, seccomp signal/network/namespace denials, non-root finite rlimits, discoverable host cgroup delegation, per-invocation membership and verified empty teardown |
+| `execution/t0_provider.py` | 3,697 | yes | the predecessor harness tested MUL_MAT only, so a kernel that broke MUL_MAT_ID — MoE dispatch, every token in production — passed it cleanly |
+| `execution/control_runner.py` | 1,805 | yes | runs the neutral / A-A controls that the measured drift makes mandatory rather than optional |
+| `execution/live_controls.py` | 1,413 | no | standalone, operator-invoked calibration producer for the fixed five controls; it prepares the instrument before campaign #1 and is deliberately not imported by the mutation/build entrypoint |
 | `execution/cpu_region_claim.py` | 2,408 | yes | 2026-08-04: two A/A runs were destroyed by a legitimate co-tenant because the loop held no claim. Before this module a claim could be READ but never acquired |
 | `execution/chain.py` | 1,928 | yes | holds the seams — four mismatches between executors and evaluator, one of them a field whose meaning INVERTS across the seam |
 | `resource/__init__.py` | 28 | yes | docstring only; names the `resource`-shadows-stdlib hazard the loop must not trip |
 | `resource/device_claim.py` | 1,826 | yes | §2.6's first row of substrate that exists nowhere in the project: a cross-process GPU device claim someone actually holds |
 | `resource/preflight.py` | 1,788 | yes | INC-20260731: a name-pattern kill took out another agent's `llama-server` twice, and `earlyoom`, whose argv names what it guards |
 | `resource/claim_witness.py` | 325 | yes | invariant 9 — idle sensing is never a claim, and the witness is what tells the two apart |
-| `controller/__init__.py` | 76 | yes | binds every surviving controller module, so importing one reaches both — which is why `controller.do_not_repeat` is on the path whether or not the driver names it, and why `CONTROLLER_ALLOWED` lists this file rather than leaving the edge unexplained |
-| `controller/authoring_contract.py` | 449 | no | AK-PL-1/AK-LE-4/AK-LE-5 pre-proposal adapter: fully rendered prompt leak refusal, priced never-bulk-read context, reversible compaction, and structured external numbers; it calls no model and must not gain mutation/build authority |
+| `controller/__init__.py` | 89 | yes | binds every surviving controller module, so importing one reaches both — which is why `controller.do_not_repeat` is on the path whether or not the driver names it, and why `CONTROLLER_ALLOWED` lists this file rather than leaving the edge unexplained |
+| `controller/champion.py` | 1,461 | no | AK4 lean lifecycle projection and composition transaction: consumes validated journal evidence, requires a real combined rebuild/evaluation through an injected runner, and carries no source-mutation, build, benchmark, process, release, or production-write capability |
+| `controller/sequencer.py` | 468 | no | AK4 deterministic outer ordering seam: consumes supplied proposals and injected execution capabilities, journals bounded stop states, and remains unbound from `controller.__init__` so campaign #1 cannot acquire a second live loop |
+| `controller/completed_campaign_adapter.py` | 105 | no | strict live-journal-to-sequencer join; banks only event-bound dispatch/mechanism-confirmed wins above floor and MDE and launches nothing |
+| `controller/arena_adapter.py` | 518 | no | INF-03 paper-pin GEAK/AgentKernelArena integration: validates clean vendor sources and physical gfx90a identity, binds C4 into a hygienic priced prompt, and launches registered whole-agent task adapters without entering campaign mutation or scoring |
+| `controller/claude_codex_actor_critic.py` | 664 | no | INF-03 bounded Claude-planner/critic + Codex-actor controller: exact three-argument Arena launcher, explicit model/effort pins, checkpoint process-group termination, single-candidate workspace confinement, and transcript/artifact hashing; its preflight invokes neither CLI |
+| `controller/codex_container_actor.py` | 219 | no | INF-03/AK-LE-3 host-compatible Codex actor boundary: pins a read-only container image, exposes exactly one writable host bind for the copied Arena workspace, stages auth only in an automatically erased temporary directory, and admits exactly the reviewed gpt-5.6-sol/gpt-5.6-terra high-effort model cells without granting host filesystem writes |
+| `controller/arena_campaign.py` | 1,029 | no | INF-03 matched-panel audit and injected-runner seam: binds the baseline plus seven controller arms to equal tasks and checkpoints, admits each governed arm only with exact adapter/upstream/CLI/model pins, refuses incomplete panels before execution, and remains outside live campaign mutation and scoring |
+| `controller/arena_cell_runner.py` | 1,435 | no | INF-03 concrete governed runner: re-audits every task/controller identity, runs independent fresh 2h/8h/32h cells under one sampled MI210 claim at a time, verifies and skips only exact completed checkpoints on restart, preserves incomplete attempts, refuses tamper or identity drift, delegates compile/correctness/timing to the pinned Arena evaluator, safely tears down captured worker groups, and publishes hash-bound non-promotional beliefs plus an aggregate only after the full ordered matrix completes |
+| `controller/arena_upstream_common.py` | 509 | no | INF-03 shared licensed-controller substrate: bounded read-only text-model calls and centralized Arena evaluation stay outside campaign mutation and carry no ranking or promotion authority |
+| `controller/k_search_arena.py` | 281 | no | INF-03 licensed K-Search world-model/tree port: injects the centralized Arena evaluator into the exact pinned upstream Task seam without entering campaign mutation or scoring |
+| `controller/geak_v1_arena.py` | 344 | no | INF-03 licensed GEAK-v1 OptimAgent port: maps its ROCm dataset and reflection loop onto centralized Arena evidence without entering campaign mutation or scoring |
+| `controller/xe_forge_arena.py` | 593 | no | INF-03 licensed Xe-Forge gfx90a port: retains the pinned DSPyEngine linear-CoVeR analysis/planning loop, replaces process-global device prompts with scoped AMD MI210 guidance, uses a no-shape executor gate, and routes initialized KernelBench execution through Arena |
+| `controller/kernelfoundry_arena.py` | 481 | no | INF-03 licensed KernelFoundry gfx90a port: retains inherited Controller.run_single MAP-Elites/island branching, strictly activates pinned Triton feature patterns, binds measured parent transitions to upstream QD tracking, and routes evaluation through Arena |
+| `controller/arena_roundtrip.py` | 203 | no | EVL-47 SC20/SC21 prospective GEAK/Arena receipt producer; emits only observed correctness/timing rates and retains preflight as non-ordinal dependency evidence, with no launch, mutation, or verdict authority |
+| `controller/hip_authoring_arm.py` | 627 | no | governed raw-HIP compatibility seam: pins and hashes a true Torch2HIP task/candidate/toolchain, compiles GPU-blind for gfx90a, and scopes distinct MI210 claims to baseline/final evaluation; emits observation-only correctness/timing-validity rows with no ranking, campaign, production-tree, or promotion authority |
+| `controller/hip_decision_grade.py` | 516 | no | task-local raw-HIP decision evaluator: source-before-suite sealing, unseen hostile inputs, independent host-double reduction, static C6 scan, exact Torch-ROCm-compile C3 provider, per-arm gfx90a duration admission, paired e-process reduction, and no release/promotion authority |
+| `controller/hip_decision_grade_worker.py` | 232 | no | C6-contained raw-HIP child: receives inputs but never expected outputs, performs double-poison/determinism checks, and captures exact candidate/provider timings plus Torch-Inductor implementation identity |
+| `controller/authoring_contract.py` | 468 | no | AK-PL-1/AK-LE-4/AK-LE-5 pre-proposal adapter: fully rendered prompt leak refusal, priced never-bulk-read context, reversible compaction, and structured external numbers; it calls no model and must not gain mutation/build authority |
+| `controller/loop_experiments.py` | 680 | no | AK-LE-1/2/3 observation-only experiment contract: predeclares matched planner/scaffold cells, renders target values only into planner context, reduces complete observations, and emits a distinct planner-only AK-LE-1/2 receipt rather than fabricating missing scaffold evidence; no model, campaign, ranking, champion, or release authority |
+| `controller/loop_experiment_runner.py` | 730 | no | AK-LE-1/2 governed planner bridge and AK-LE-3 router: compiles exact model/effort cells, runs read-only captured Claude/Codex processes, seals strict observations, and delegates scaffold work to the separate governed writer seam; no campaign, ranking, champion, or release authority |
+| `controller/loop_scaffold_runner.py` | 1,216 | no | AK-LE-3 governed SAME-MODEL scaffold seam: exact selected task/context/champion/source/container-actor/evaluator pins, reviewed Sol/Terra × direct/split cells, matched wall time, fresh disposable baseline/candidate worktrees, captured PID/process groups, audited write scope, sealed role checkpoints, exclusive MI210 claim, verified worktree removal, and centralized Arena evaluation without campaign/ranking/champion/release authority |
+| `controller/arena_scaffold_evaluator.py` | 151 | no | AK-LE-3 isolated AgentKernelArena worker: independently revalidates pinned disposable worktrees and the clean evaluator/task source, measures baseline then candidate through the centralized vendor evaluator, rejects actor-reported scores, and returns diagnostic-only compile/correctness/timing facts |
+| `controller/loop_experiment_prefilter.py` | 613 | no | AK-LE-1/2 deterministic external reducer: requires an independently persisted/hash-pinned experiment-only structural prefilter contract before manifest compilation, verifies the panel and sealed observation bytes, binds exact normalized fingerprints plus prior/duplicate decisions, and emits either a partial receipt or durable refusal without invoking/replacing the campaign do-not-repeat gate or gaining model/operator labels or campaign/ranking/champion/release authority |
+| `controller/loop_experiment_beliefs.py` | 371 | no | EVL-47 SC29 prospective AK-LE projection: wraps the exact source-pinned planner reducer, emits self-hashed per-cell search-persistence measurements bound to manifest/panel/prefilter/evidence/producer identities, and cannot gain campaign, ranking, champion, release, inference, build, or mutation authority |
 | `controller/reward_monitor.py` | 453 | no | C6 monitor adapter: binds campaign/candidate traces and the whole journal tree to a predeclared monitor panel, requires awareness plus reasoning visibility, and reports sensitivity/specificity/FPR without calling a model |
 | `controller/hypotheses.py` | 4,493 | yes | `claim_for_hypothesis` — the falsifier-before-compute gate `campaign.py --hypothesis` acquires its region claim through. It calls itself the ONLY route from a hypothesis to a resource claim and had ZERO non-test callers until 2026-08-04, because this boundary put it on the far side of the line: the driver is what SPENDS the claim |
 | `controller/do_not_repeat.py` | 2,205 | yes | the §19.2 ledger a loop needs to tell "tried and failed" from "never tried". On the path because `authorize_claim(ledger=…)` has no default and `claim_for_hypothesis` refuses a token with no verdict, so no spendable token exists without a real one — `compile_for_tracker` is it |
@@ -175,8 +237,9 @@ incident or a measured fact; "reduced rigour" is not a reason.
 
 1. **`TestCampaignFootprint.test_campaign_path_does_not_reach_the_deferred_half`**
    — the walked graph reaches nothing under `controller/`, `release/`,
-   `adapters/` or `surface/`. The last three are deleted, so for them it is a ban
-   on their ever coming back onto the path; `controller/` is the live prefix, and
+   `adapters/` or `surface/`. `release/` and `adapters/` are live deferred AK9
+   prefixes, while `surface/` remains deleted; none may come onto the campaign path.
+   `controller/` is also a live prefix, and
    it is the DEFERRED figure in the table above.
 2. **`test_the_deferred_half_is_still_on_disk`**,
    **`test_the_deferred_half_is_a_real_share_of_the_tree`** and

@@ -19,6 +19,7 @@ if str(REPO_ROOT) not in sys.path:
 from scripts.kernel_rnd.autokernel import storage
 from scripts.kernel_rnd.autokernel.execution import device_sampler
 from scripts.kernel_rnd.autokernel.resource import device_claim
+from scripts.benchmark import autokernel_rocm_diagnostic_beliefs as beliefs
 
 
 SCHEMA = "epyc.rvp_t0_1_saturation_probe.v1"
@@ -67,6 +68,9 @@ def run(args: argparse.Namespace) -> dict:
     binary = Path(args.binary).resolve()
     if not binary.is_file() or not os.access(binary, os.X_OK):
         raise RuntimeError(f"probe binary is not executable: {binary}")
+    source = Path(args.source).resolve()
+    if not source.is_file():
+        raise RuntimeError(f"probe source is not a file: {source}")
     output_dir = Path(storage.assert_not_scratch(
         args.output_dir, what="RVP-T0-1 evidence directory"))
     output_dir.mkdir(parents=True, exist_ok=False)
@@ -140,6 +144,8 @@ def run(args: argparse.Namespace) -> dict:
         "workload": workload,
         "workload_binary": str(binary),
         "workload_binary_sha256": sha256_file(binary),
+        "workload_source": str(source),
+        "workload_source_sha256": sha256_file(source),
         "workload_command": list(command),
         "process_duration_s": process_duration_s,
         "device_claim_open": opened_receipt,
@@ -157,6 +163,7 @@ def run(args: argparse.Namespace) -> dict:
             sum(value >= NOMINAL_SCLK_MHZ for value in sclks) / len(sclks)),
         "stderr_tail": stderr_tail,
     }
+    payload = beliefs.attach_beliefs(payload, producer_path=Path(__file__).resolve())
     write_json_atomic(output_dir / "receipt.json", payload)
     return payload
 
@@ -164,6 +171,10 @@ def run(args: argparse.Namespace) -> dict:
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument("--binary", required=True)
+    result.add_argument(
+        "--source",
+        default=str(Path(__file__).with_name("rocm_gemm_saturation.cpp")),
+        help="source file used to build --binary (hash-bound into the receipt)")
     result.add_argument("--output-dir", required=True)
     result.add_argument("--campaign-id", default="ak-rvp-t0-1-20260811")
     result.add_argument("--claim-journal",

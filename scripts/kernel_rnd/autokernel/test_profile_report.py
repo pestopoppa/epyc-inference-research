@@ -137,6 +137,21 @@ class ProfileReportTest(unittest.TestCase):
         with self.assertRaisesRegex(R.ProfileReportError, "same source commit"):
             R.ReportManifest.from_dict(payload)
 
+    def test_two_trace_pair_requires_same_workload_and_distinct_captures(self):
+        payload = self.manifest_dict()
+        payload["formal"]["receipt"]["workload_id"] = "different-workload"
+        with self.assertRaisesRegex(R.ProfileReportError, "same workload"):
+            R.ReportManifest.from_dict(payload)
+        payload = self.manifest_dict()
+        payload["formal"]["receipt"]["corpus_id"] = "mapping-trace"
+        with self.assertRaisesRegex(R.ProfileReportError, "distinct corpus ids"):
+            R.ReportManifest.from_dict(payload)
+        payload = self.manifest_dict()
+        payload["formal"]["receipt"]["profile_path"] = (
+            payload["mapping"]["receipt"]["profile_path"])
+        with self.assertRaisesRegex(R.ProfileReportError, "distinct trace paths"):
+            R.ReportManifest.from_dict(payload)
+
     def test_capture_window_is_fixed_and_rpd_must_be_declared(self):
         payload = self.manifest_dict()
         payload["mapping"]["warmup_steps"] = 9
@@ -157,10 +172,59 @@ class ProfileReportTest(unittest.TestCase):
         payload["catalogue_scope"] = "kernel_and_host"
         with self.assertRaisesRegex(R.ProfileReportError, "host_catalog_sha256"):
             R.ReportManifest.from_dict(payload)
+        payload["host_catalog_sha256"] = payload["source_catalog_sha256"]
+        with self.assertRaisesRegex(R.ProfileReportError, "not alias"):
+            R.ReportManifest.from_dict(payload)
         payload["host_catalog_sha256"] = "2" * 64
         report = R.run_profile_report(
             self.mapping_path, self.formal_path, R.ReportManifest.from_dict(payload))
         self.assertEqual(report.coverage_gaps, ())
+
+    def test_all_three_pattern_tables_apply_the_one_percent_floor(self):
+        payload = self.manifest_dict()
+        payload["patterns"].append({
+            "pattern_id": "tiny-tail-overlap",
+            "table": "overlap",
+            "kernel_keywords": ["tiny_tail"],
+            "match_mode": "all",
+            "source_symbols": ["tiny_tail"],
+            "source_paths": ["ggml/src/ggml-cuda/tiny.cu"],
+            "reader_should_conclude": "ignore below-floor tail",
+        })
+        payload["patterns"].append({
+            "pattern_id": "tiny-tail-fuse",
+            "table": "fuse",
+            "kernel_keywords": ["tiny_tail"],
+            "match_mode": "all",
+            "source_symbols": ["tiny_tail"],
+            "source_paths": ["ggml/src/ggml-cuda/tiny.cu"],
+            "reader_should_conclude": "ignore below-floor tail",
+        })
+        report = R.run_profile_report(
+            self.mapping_path, self.formal_path, R.ReportManifest.from_dict(payload))
+        rendered = report.as_dict()
+        pattern_ids = {
+            row["pattern_id"]
+            for table in ("overlap_opportunity_table", "fuse_pattern_table")
+            for row in rendered[table]
+        }
+        self.assertNotIn("tiny-tail-overlap", pattern_ids)
+        self.assertNotIn("tiny-tail-fuse", pattern_ids)
+
+    def test_architecture_shape_uses_reviewed_family_aliases(self):
+        payload = self.manifest_dict()
+        block = payload["architecture_blocks"][0]
+        block["kernel_family_aliases"] = [
+            ["runtime_fill"], ["quantize_q8_1"],
+            ["mul_mat_vec_q", "renamed_mmvq"],
+        ]
+        renamed = self.MAPPING.replace("mul_mat_vec_q", "renamed_mmvq")
+        self.mapping_path.write_text(renamed, encoding="utf-8")
+        payload["mapping"]["receipt"] = self.receipt(
+            self.mapping_path, "mapping-trace")
+        report = R.run_profile_report(
+            self.mapping_path, self.formal_path, R.ReportManifest.from_dict(payload))
+        self.assertEqual(report.architecture_rows[0]["exact_sequence_occurrences"], 2)
 
     def test_bounded_judgment_cannot_rewrite_deterministic_fields(self):
         report = self.report()

@@ -161,12 +161,15 @@ from pathlib import Path
 from statistics import median
 from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 
-from . import artifact_diff, dashboard, journal as journal_module
+from . import (artifact_diff, candidate_record, dashboard, least_commitment_capture,
+               journal as journal_module, source_candidate,
+               source_prerequisite_package, source_prerequisite_producer)
 from . import schemas, storage
 from .controller import do_not_repeat, hypotheses
 from .evaluator import api, correctness, devices, recipes
-from .execution import (chain, cpu_region_claim, device_sampler, instrument_integrity,
-                        microbench, physical_bounds, sandbox, t0_provider, worktree)
+from .execution import (chain, control_runner, cpu_region_claim, device_sampler,
+                        instrument_integrity, microbench, physical_bounds,
+                        powercap_broker, provider, sandbox, t0_provider, worktree)
 from .resource import claim_witness, device_claim, preflight
 
 __all__ = [
@@ -223,6 +226,19 @@ __all__ = [
 MODULES_THE_DRIVER_USES: Mapping[str, str] = {
     "artifact_diff": "AK-TR-6 compile-only register/scratch/instruction movement vetoes "
                      "a GPU claim before the behavioural T0 provider can launch",
+    "candidate_record": "every executed candidate is durably recorded from the exact "
+                        "built snapshot and evaluation event identities",
+    "least_commitment_capture": "a live IQK result must carry the predeclared, hash-bound "
+                                "diagnostics and measured outcome reducers needed by the "
+                                "observe-only AK-WM-2 archive",
+    "source_candidate": "source-changing proposals consume one immutable embedded patch "
+                        "bundle through the guarded worktree mutation boundary",
+    "source_prerequisite_package": "source candidates may rank only after the archived "
+                                   "raw sensitivity/hostile/checker CSV bytes are re-reduced "
+                                   "and rebound to the exact live source, binary and evaluator",
+    "source_prerequisite_producer": "fresh source receipts reuse the campaign's already-held "
+                                    "claims and built candidate, then enter the identical "
+                                    "content-addressed archive/reducer boundary before T0",
     "dashboard": "the fsynced terminal campaign result must reach the operator surface; "
                  "the exporter is derived and cannot make an old journal entry fresh",
     "schemas": "one record shape; PASS/FAIL/COULD_NOT_CHECK",
@@ -249,6 +265,9 @@ MODULES_THE_DRIVER_USES: Mapping[str, str] = {
     "evaluator.devices": "a GPU cell must not be satisfied by 'Device 0: CPU'",
     "evaluator.recipes": "argv from a hashed constructor. Production once drifted off "
                          "NUMA interleave and the front door ended up at 46% of canonical",
+    "execution.control_runner": "the accepted five-control/calibration bundle is the "
+                                "authority for prospective EVALUATION_EVENT reductions; "
+                                "the live loop may not invent its own e-value or panel",
     "execution.chain": "the seams; a hand-written evidence record is what T0 exists to refuse",
     "execution.instrument_integrity": "RVP-C6-1: candidate reward translation units "
                                       "must equal the reviewed measurement overlay before "
@@ -263,6 +282,11 @@ MODULES_THE_DRIVER_USES: Mapping[str, str] = {
     "execution.physical_bounds": "RVP-C6-4 refuses a live throughput sample that exceeds "
                                  "the predeclared compute-or-memory speed of light; the "
                                  "candidate cannot author its own work denominator",
+    "execution.powercap_broker": "root-owned package counters are read by one captured, "
+                                 "networkless read-only container; candidate code remains "
+                                 "non-root and cannot reach its control plane",
+    "execution.provider": "provider roots are realpath-resolved and must not overlap "
+                          "shared ROCm/system prefixes or frozen production trees",
     "execution.sandbox": "C6: code authored by the loop executes under Landlock, seccomp, "
                          "non-root finite rlimits and an owned cgroup whose empty teardown "
                          "is verified; an agent tool allowlist does not constrain a binary",
@@ -352,6 +376,7 @@ class LeanCalibration:
     production_commit: str
     measurement_commit: str
     evidence_ref: str
+    evaluation_authority: Optional[control_runner.LiveEvaluationAuthority] = None
 
     def to_dict(self) -> dict:
         return {
@@ -631,6 +656,9 @@ class T0Outcome:
     all_pass: bool
     gates: tuple = ()          # ((gate_id, outcome, (reason, ...)), ...)
     report_ref: Optional[str] = None
+    # The evaluator-native records are retained for the prospective journal
+    # writer.  The flattened triples above remain the small accept-loop seam.
+    gate_results: tuple = ()
 
     @property
     def failures(self) -> tuple:
@@ -1008,9 +1036,9 @@ PRODUCTION_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 #: evaluator-only llama-bench changes are present without modifying production.
 #: Kernel proposals may change kernel sources but RVP-C6-1 requires all reward
 #: translation units to remain byte-identical to this commit.
-MEASUREMENT_REPO = "/mnt/raid0/llm/llama.cpp-experimental"
-MEASUREMENT_BRANCH = "experimental-v9-autokernel-t1-hardening"
-MEASUREMENT_COMMIT = "0492c2319a79e9bcc4edaa1bfb6af5a096276ab7"
+MEASUREMENT_REPO = "/mnt/raid0/llm/llama.cpp-ak-controls-v9-final"
+MEASUREMENT_BRANCH = "experimental-v9-autokernel-t1-hardening-final"
+MEASUREMENT_COMMIT = "a4cb04ca8f92fa4d665684490f609b380f9b5e96"
 MEASUREMENT_BUILD_ROOT = os.path.join(MEASUREMENT_REPO, "build-v9-cpu")
 
 
@@ -1096,6 +1124,19 @@ def load_calibration_bundle(path: os.PathLike[str] | str) -> LeanCalibration:
         raise ValueError("calibration B_min exceeds the declared candidate ceiling")
     if float(values["mde"]) > float(values["contribution_floor"]):
         raise ValueError("calibration MDE exceeds the declared contribution floor")
+    authority = None
+    # Legacy/synthetic loader fixtures intentionally carry only the three files
+    # above. They remain valid arithmetic fixtures, but cannot drive the live
+    # prospective writer. A real executing HostOps run requires these files and
+    # refuses later at the request boundary if they are absent.
+    if (root / "calibration.json").is_file() or (root / "control_sweep.json").is_file():
+        authority = control_runner.load_live_evaluation_authority(root)
+        if authority.campaign_controls.contribution_floor != float(values["contribution_floor"]) \
+                or authority.calibration.b_min_blocks != int(values["b_min_blocks"]) \
+                or authority.campaign_controls.max_blocks_per_candidate != int(values["max_blocks"]) \
+                or authority.calibration.noise_floor_phi != float(values["noise_floor_phi"]) \
+                or authority.mde != float(values["mde"]):
+            raise ValueError("calibration summary disagrees with live evaluation authority")
     return LeanCalibration(
         recipe_id=recipe_id,
         contribution_floor=float(values["contribution_floor"]),
@@ -1106,6 +1147,7 @@ def load_calibration_bundle(path: os.PathLike[str] | str) -> LeanCalibration:
         production_commit=PRODUCTION_COMMIT,
         measurement_commit=MEASUREMENT_COMMIT,
         evidence_ref=str(root),
+        evaluation_authority=authority,
     )
 
 RANKED_UNITS_SCHEMA = "epyc.autokernel.ranked-units.v1"
@@ -1212,9 +1254,23 @@ class CampaignSpec:
     build_root: str = "/mnt/raid0/llm/ak-build"
     claim_journal_path: str = "/mnt/raid0/llm/ak-claims/region.jsonl"
     max_hold_s: int = 6 * 3600
-    #: Validated proposal.v3 record. Optional for composition-only legacy dry
+    #: Validated current-schema proposal record. Optional for composition-only legacy dry
     #: runs; mandatory on the executing CLI before any claim or mutation.
     proposal: Optional[Mapping[str, Any]] = None
+    #: Immutable embedded source artifact, loaded completely before any claim.
+    source_patch: Optional[source_candidate.SourcePatchManifest] = None
+    #: Immutable raw correctness archive for a source candidate. It is loaded
+    #: before the claim and identity-bound after the candidate build exists.
+    source_prerequisite_package: Optional[
+        source_prerequisite_package.SourcePrerequisitePackage] = None
+    #: Predeclared execute-in-this-window producer plan. Mutually exclusive
+    #: with an archive: fresh and resume are two modes, never two authorities.
+    fresh_source_prerequisite_plan: Optional[
+        source_prerequisite_producer.FreshSourcePrerequisitePlan] = None
+    #: Prospective observe-only diagnostic plan.  It is fixed before a claim and
+    #: supplies no selection authority; the campaign only journals its diagnostics
+    #: and reduces the immutable outcome functions after measurement.
+    least_commitment_plan: Optional[least_commitment_capture.CapturePlan] = None
     #: Accepted, identity-bound live calibration.  Supplied by the CLI bundle
     #: loader; absent means composition-only and carries no ranking authority.
     calibration: Optional[LeanCalibration] = None
@@ -1262,9 +1318,34 @@ class CampaignSpec:
                     f"{self.authorization.campaign_id!r}, not {self.campaign_id!r}. A "
                     "token that travelled between campaigns would charge this run's "
                     "claim to another run's question")
+        if self.source_patch is not None and not isinstance(
+                self.source_patch, source_candidate.SourcePatchManifest):
+            raise TypeError("source_patch must be a SourcePatchManifest or None")
+        if self.source_prerequisite_package is not None and not isinstance(
+                self.source_prerequisite_package,
+                source_prerequisite_package.SourcePrerequisitePackage):
+            raise TypeError(
+                "source_prerequisite_package must be a SourcePrerequisitePackage or None")
+        if self.fresh_source_prerequisite_plan is not None and not isinstance(
+                self.fresh_source_prerequisite_plan,
+                source_prerequisite_producer.FreshSourcePrerequisitePlan):
+            raise TypeError("fresh_source_prerequisite_plan must be a "
+                            "FreshSourcePrerequisitePlan or None")
+        if (self.source_prerequisite_package is not None
+                and self.fresh_source_prerequisite_plan is not None):
+            raise ValueError("archive/resume and fresh source prerequisite modes are "
+                             "mutually exclusive")
+        if self.proposal is None and (self.source_prerequisite_package is not None
+                                      or self.fresh_source_prerequisite_plan is not None):
+            raise ValueError("source prerequisites require a source proposal")
+        if self.least_commitment_plan is not None and not isinstance(
+                self.least_commitment_plan, least_commitment_capture.CapturePlan):
+            raise TypeError("least_commitment_plan must be a CapturePlan or None")
+        if self.least_commitment_plan is not None and self.proposal is None:
+            raise ValueError("least_commitment_plan requires a proposal")
         if self.proposal is not None:
             proposal = json.loads(schemas.canonical_json(self.proposal))
-            violations = schemas.validate_proposal_v3(proposal)
+            violations = schemas.validate_proposal(proposal)
             if violations:
                 raise ValueError("proposal manifest is invalid: " + "; ".join(violations))
             if proposal["campaign_id"] != self.campaign_id:
@@ -1272,8 +1353,42 @@ class CampaignSpec:
                     f"proposal campaign_id {proposal['campaign_id']!r} does not match "
                     f"campaign {self.campaign_id!r}"
                 )
+            provider_reference = proposal["provider_reference"]
+            try:
+                provider.IsolatedProviderPrefix.create(
+                    provider_reference["isolation_root"])
+            except provider.ProviderIsolationError as exc:
+                raise ValueError(f"proposal provider isolation is invalid: {exc}") from exc
+            if provider_reference["target_backend"] != self.backend:
+                raise ValueError(
+                    f"proposal provider target {provider_reference['target_backend']!r} "
+                    f"does not match campaign backend {self.backend!r}"
+                )
             object.__setattr__(self, "proposal", proposal)
             self._validate_arm_parameter_surface(proposal)
+            if proposal["change_class"] == "parameter" and self.source_patch is not None:
+                raise ValueError("parameter campaigns may not carry a source patch")
+            if proposal["change_class"] == "parameter" \
+                    and self.source_prerequisite_package is not None:
+                raise ValueError("parameter campaigns may not carry source prerequisites")
+            if proposal["change_class"] == "parameter" \
+                    and self.fresh_source_prerequisite_plan is not None:
+                raise ValueError("parameter campaigns may not carry a fresh source plan")
+            if proposal["change_class"] != "parameter":
+                if self.source_patch is not None:
+                    self.source_patch.bind(
+                        proposal=proposal, campaign_id=self.campaign_id,
+                        candidate_id=self.candidate_id,
+                        production_base_commit=PRODUCTION_COMMIT,
+                        instrument_commit=MEASUREMENT_COMMIT)
+                if self.source_prerequisite_package is not None:
+                    self.source_prerequisite_package.bind_campaign(
+                        proposal=proposal, campaign_id=self.campaign_id,
+                        candidate_id=self.candidate_id)
+                if self.fresh_source_prerequisite_plan is not None:
+                    self.fresh_source_prerequisite_plan.bind_campaign(
+                        proposal=proposal, campaign_id=self.campaign_id,
+                        candidate_id=self.candidate_id)
         if self.calibration is not None and not isinstance(
                 self.calibration, LeanCalibration):
             raise TypeError("calibration must be a LeanCalibration or None")
@@ -1390,8 +1505,7 @@ class CampaignSpec:
                 f"{envelope.measurement_frame_sha256}, but the exact recipe, model, and "
                 f"parameters derive {derived}")
 
-    @staticmethod
-    def _validate_arm_parameter_surface(proposal: Mapping[str, Any]) -> None:
+    def _validate_arm_parameter_surface(self, proposal: Mapping[str, Any]) -> None:
         """Validate the one recipe-declared arm-local parameter comparison.
 
         ``MicrobenchPlan`` already carries candidate/anchor overrides and limits
@@ -1418,9 +1532,15 @@ class CampaignSpec:
                 raise ValueError(
                     f"parameter_surface.{arm} must declare ggml_iqk as '0' or '1'")
         if surface["candidate"] == surface["anchor"]:
+            if self.least_commitment_plan is not None \
+                    and self.least_commitment_plan.role == "control" \
+                    and surface["candidate"]["ggml_iqk"] == "0":
+                return
             raise ValueError(
                 "a parameter proposal gives candidate and anchor the same GGML_IQK "
-                "value; it declares no comparison")
+                "value; it declares no comparison. Only a hash-bound least-commitment "
+                "role=control plan may "
+                "declare the production-setting A/A control")
 
     # -- derived -----------------------------------------------------------
 
@@ -1640,6 +1760,17 @@ class CampaignSpec:
                     "representation_contract"
                 ]["frame_sha256"],
             },
+            "source_patch_bundle_sha256": (
+                None if self.source_patch is None else self.source_patch.patch_bundle_sha256),
+            "source_prerequisite_package_sha256": (
+                None if self.source_prerequisite_package is None
+                else self.source_prerequisite_package.package_sha256),
+            "fresh_source_prerequisite_plan_sha256": (
+                None if self.fresh_source_prerequisite_plan is None
+                else self.fresh_source_prerequisite_plan.plan_sha256),
+            "least_commitment_capture_plan_sha256": (
+                None if self.least_commitment_plan is None
+                else self.least_commitment_plan.plan_sha256),
             "physical_envelope": (
                 None if self.physical_envelope is None
                 else self.physical_envelope.to_dict()),
@@ -1798,6 +1929,8 @@ class CampaignOps(Protocol):
     def keep_or_revert(self, spec: CampaignSpec, tree: Any,
                        decision: Optional[AcceptDecision]) -> Any: ...
     def prove_production_unchanged(self, spec: CampaignSpec) -> schemas.Check: ...
+    def close_evaluation_window(self, spec: CampaignSpec, tree: Any) -> Any: ...
+    def journal_evaluation(self, spec: CampaignSpec, result: Any) -> Any: ...
     def journal(self, spec: CampaignSpec, payload: Mapping[str, Any]) -> Any: ...
 
 
@@ -1853,7 +1986,8 @@ class DryRunOps:
     def record_proposal(self, spec: CampaignSpec) -> Any:
         self._step(
             "record_proposal",
-            "would validate and fsync proposal.v3 before preflight, claim, mutation, or build.",
+            "would validate and fsync the current proposal schema before preflight, "
+            "claim, mutation, or build.",
             proposal_id=spec.proposal_id,
             representation_frame_sha256=spec.proposal["representation_contract"][
                 "frame_sha256"
@@ -2048,6 +2182,16 @@ def render_bench_commands(spec: CampaignSpec, *,
     return out
 
 
+class _RecordedGateRunner:
+    """Evaluator gate seam over gates already produced by the executed T0."""
+
+    def __init__(self, gates: Sequence[api.GateResult]) -> None:
+        self._gates = tuple(gates)
+
+    def run_gates(self, request: api.EvaluationRequest) -> tuple:
+        return self._gates
+
+
 class HostOps:
     """The real one. Touches the host, spends the claim, spawns the benchmarks.
 
@@ -2086,6 +2230,10 @@ class HostOps:
             "the anchor capture and the richer T0 surfaces, which need the PROPOSAL's "
             "own declarations. Pass HostOps(t0_evidence=...); the reference wiring is "
             "ChainLeg.t0_evidence_inputs",
+        "source_prerequisites":
+            "a source proposal requires either an immutable archive or a predeclared "
+            "fresh producer plan. Pass one of --source-prerequisite-package / "
+            "--fresh-source-prerequisite-plan; parameter proposals reject both",
         "nominal_khz":
             "the healthy all-core clock for this cell, which only the operator can "
             "supply (--nominal-khz). Without it every frequency reading in the run "
@@ -2111,26 +2259,65 @@ class HostOps:
         parameter_only = bool(
             spec is not None and spec.proposal is not None
             and spec.proposal.get("change_class") == "parameter")
-        if (getattr(type(self), "apply_candidate", None) is HostOps.apply_candidate
-                and not parameter_only):
+        if (not parameter_only and (spec is None or spec.source_patch is None)
+                and getattr(type(self), "apply_candidate", None) is HostOps.apply_candidate):
             missing.append("apply_candidate")
         if self._t0_evidence is None and not parameter_only:
             missing.append("t0_evidence")
+        if (spec is not None and spec.proposal is not None and not parameter_only
+                and spec.source_prerequisite_package is None
+                and spec.fresh_source_prerequisite_plan is None):
+            missing.append("source_prerequisites")
         if self._nominal_khz is None:
             missing.append("nominal_khz")
         return tuple(sorted(missing))
 
     def __init__(self, *, spawner: Optional[Any] = None,
                  t0_evidence: Optional[Callable[..., Mapping[str, Any]]] = None,
-                 nominal_khz: Optional[int] = None) -> None:
+                 nominal_khz: Optional[int] = None,
+                 host_state: Optional[Callable[..., microbench.HostState]] = None,
+                 source_prerequisite_runner: Optional[Any] = None) -> None:
         self._spawner = spawner
         self._t0_evidence = t0_evidence
         self._nominal_khz = nominal_khz
+        self._read_host_state = host_state or microbench.read_host_state
+        self._source_prerequisite_runner = source_prerequisite_runner
         self._claim_binding: Optional[Any] = None
         self._device_claims: list = []
         self._build_state: dict = {}
         self._fingerprints: dict = {}
         self._t0_anchor_binding: Optional[Any] = None
+        self._preflight_check: Optional[schemas.Check] = None
+        self._preflight_open_receipt: Optional[Mapping[str, Any]] = None
+        self._preflight_close_receipt: Optional[Mapping[str, Any]] = None
+        self._host_open: Optional[Any] = None
+        self._claim_release_receipt: Optional[Mapping[str, Any]] = None
+        self._claim_open_receipt: Optional[Mapping[str, Any]] = None
+        self._claim_close_receipt: Optional[Mapping[str, Any]] = None
+        self._claim_open_check: Optional[schemas.Check] = None
+        self._claim_close_check: Optional[schemas.Check] = None
+        self._claim_same_holder_check: Optional[schemas.Check] = None
+        self._no_concurrent_close: Optional[schemas.Check] = None
+        self._t0_request: Optional[api.EvaluationRequest] = None
+        self._t0_report: Optional[correctness.T0Report] = None
+        self._t0_gate_results: tuple = ()
+        self._t0_started = False
+        self._microbench_run: Optional[microbench.MicrobenchRun] = None
+        self._t1_request: Optional[api.EvaluationRequest] = None
+        self._storage_open: Optional[schemas.Check] = None
+        self._storage_close: Optional[schemas.Check] = None
+        self._host_close: Optional[Any] = None
+        self._host_health_close: Optional[schemas.Check] = None
+        self._anchors_at_close: dict[str, api.AnchorIdentity] = {}
+        self._anchor_close_checks: dict[str, schemas.Check] = {}
+        self._evaluator_close_check: Optional[schemas.Check] = None
+        self._runtime_close_check: Optional[schemas.Check] = None
+        self._recipe_receipts: dict[tuple[str, str], api.RecipeReceipt] = {}
+        self._source_application: Optional[source_candidate.AppliedSourceCandidate] = None
+        self._build_identity: Optional[worktree.BuildIdentity] = None
+        self._build_snapshot: Optional[worktree.Worktree] = None
+        self._cached_evaluation_events: Optional[tuple] = None
+        self._cached_candidate_record: Optional[dict] = None
 
     def calibration_gate(self, spec: CampaignSpec) -> schemas.Check:
         """Refuse live ranking outside the accepted cell-local calibration."""
@@ -2146,12 +2333,32 @@ class HostOps:
                 f"{calibration.evidence_ref}",))
         return schemas.Check(schemas.PASS, ())
 
+    @staticmethod
+    def _storage_check(spec: CampaignSpec) -> schemas.Check:
+        if spec.calibration is None or spec.calibration.evaluation_authority is None \
+                or not spec.journal_root:
+            return schemas.Check(schemas.COULD_NOT_CHECK, (
+                "storage floor or journal root was not available",))
+        try:
+            stat = os.statvfs(spec.journal_root)
+        except OSError as exc:
+            return schemas.Check(schemas.COULD_NOT_CHECK, (
+                f"could not read journal filesystem headroom: {exc}",))
+        free = stat.f_bavail * stat.f_frsize
+        floor = spec.calibration.evaluation_authority.campaign_controls.storage_floor_bytes_free
+        if free < floor:
+            return schemas.Check(schemas.FAIL, (
+                f"journal filesystem has {free} bytes free, below floor {floor}",))
+        return schemas.Check(schemas.PASS, (
+            f"journal filesystem has {free} bytes free, at or above floor {floor}",))
+
     # -- 0. preflight ------------------------------------------------------
 
     def record_proposal(self, spec: CampaignSpec) -> Any:
-        """Fsync proposal.v3 before any host work; identical resume is idempotent."""
+        """Fsync the current proposal schema before host work; resume is idempotent."""
         if spec.proposal is None or not spec.journal_root:
-            raise RuntimeError("an executing campaign requires proposal.v3 and --journal-root")
+            raise RuntimeError(
+                "an executing campaign requires a current-schema proposal and --journal-root")
         root = storage.assert_not_scratch(spec.journal_root, what="campaign journal root")
         book = journal_module.Journal(root, campaign_id=spec.campaign_id)
         book.initialize()
@@ -2182,6 +2389,7 @@ class HostOps:
                 "an executing campaign requires --journal-root before any claim or T0 "
                 "inference; completed benchmark attempts cannot be machine-enforced in "
                 "volatile memory",))
+        self._storage_open = self._storage_check(spec)
         reasons: list = []
         outcome = schemas.PASS
 
@@ -2262,10 +2470,13 @@ class HostOps:
         sources = claim_witness.gpu_claim_sources(
             spec.devices, region_lock_dir=str(cpu_region_claim.default_region_lock_dir()))
         result = preflight.preflight(scope, sources)
-        fold(schemas.Check(result.verdict, tuple(result.reasons)), "concurrent_inference",
+        self._preflight_open_receipt = result.to_dict()
+        self._preflight_check = result.as_check()
+        fold(self._preflight_check, "concurrent_inference",
              hard=True)
 
-        state = microbench.read_host_state(cpu_list=spec.cpu_list)
+        state = self._read_host_state(cpu_list=spec.cpu_list)
+        self._host_open = state
         fold(check_host_uptime(getattr(state, "uptime_s", None)), "host_uptime")
         boosting = sum(1 for _cpu, khz in state.khz_by_cpu if khz >= BOOST_THRESHOLD_KHZ)
         boost = check_boost_under_load(boosting_cores=boosting, load1=state.load1,
@@ -2369,6 +2580,19 @@ class HostOps:
                     device_id, purpose=f"AutoKernel {spec.campaign_id}",
                     campaign_id=spec.campaign_id, journal=journal,
                     max_hold_s=float(spec.max_hold_s)))
+            region_receipt = claim.receipt().to_dict()
+            device_receipts = [held.receipt().to_dict() for held in self._device_claims]
+            self._claim_open_receipt = {
+                "region": region_receipt, "devices": device_receipts}
+            self._claim_open_check = schemas.Check.worst_of((
+                claim.verify_held(),
+                *(device_claim.check_device_claim_held(receipt)
+                  for receipt in device_receipts),
+            ))
+            if self._claim_open_check.outcome != schemas.PASS:
+                raise RuntimeError(
+                    "resource claim could not be verified immediately after acquisition: "
+                    + "; ".join(self._claim_open_check.reasons))
         except BaseException:
             self._release_device_claims()
             self._claim_binding = None
@@ -2378,6 +2602,182 @@ class HostOps:
                 pass
             raise
         return claim
+
+    @staticmethod
+    def _claim_holder_identity(receipt: Mapping[str, Any]) -> tuple:
+        """Stable identities for every claim plane in one window snapshot."""
+        region = receipt.get("region")
+        devices = receipt.get("devices", ())
+        values = []
+        if isinstance(region, Mapping):
+            identity = (region.get("claim_id"), region.get("holder_pid"),
+                        region.get("holder_start_ticks"), region.get("holder_boot_id"))
+            if any(value is None or value == "" for value in identity):
+                return ()
+            values.append(("region", *identity))
+        for item in devices if isinstance(devices, (list, tuple)) else ():
+            if isinstance(item, Mapping):
+                identity = (item.get("device_id"), item.get("claim_id"),
+                            item.get("holder_pid"), item.get("holder_start_ticks"),
+                            item.get("holder_boot_id"))
+                if any(value is None or value == "" for value in identity):
+                    return ()
+                values.append(identity)
+            else:
+                return ()
+        return tuple(sorted(values, key=lambda value: str(value[0])))
+
+    @classmethod
+    def _check_same_claim_holder(cls, opened_receipt: Mapping[str, Any],
+                                 closed_receipt: Mapping[str, Any]) -> schemas.Check:
+        opened = cls._claim_holder_identity(opened_receipt)
+        closed = cls._claim_holder_identity(closed_receipt)
+        return schemas.Check(
+            schemas.PASS if opened and opened == closed else schemas.FAIL,
+            () if opened and opened == closed else
+            (f"claim holder identity incomplete or moved: "
+             f"open={opened!r}, close={closed!r}",))
+
+    def close_evaluation_window(self, spec: CampaignSpec, tree: Any) -> None:
+        """Re-attest the live window while every claim is still held.
+
+        This method deliberately performs fresh reads.  A release receipt can
+        prove that locks were eventually dropped, but it cannot prove that the
+        same locks, anchor, evaluator, and host remained valid through the last
+        measured block.
+        """
+        unknown = lambda reason: schemas.Check(schemas.COULD_NOT_CHECK, (reason,))
+
+        claim = None if self._claim_binding is None else self._claim_binding.claim
+        claim_checks = []
+        close_devices = []
+        if claim is None:
+            claim_checks.append(unknown("CPU region claim was unavailable at window close"))
+            close_region = None
+        else:
+            claim_checks.append(claim.verify_held())
+            close_region = claim.receipt().to_dict()
+        for held in self._device_claims:
+            receipt = held.receipt().to_dict()
+            close_devices.append(receipt)
+            claim_checks.append(device_claim.check_device_claim_held(receipt))
+        self._claim_close_receipt = {"region": close_region, "devices": close_devices}
+        self._claim_close_check = schemas.Check.worst_of(claim_checks)
+        if self._claim_open_receipt is None:
+            self._claim_same_holder_check = unknown(
+                "claim identity was not retained at window open")
+        else:
+            self._claim_same_holder_check = self._check_same_claim_holder(
+                self._claim_open_receipt, self._claim_close_receipt)
+
+        try:
+            scope = (preflight.PreflightScope.gpu(spec.campaign_id, spec.devices)
+                     if spec.backend == BACKEND_GPU else
+                     preflight.PreflightScope.whole_machine_cpu(spec.campaign_id))
+            sources = claim_witness.gpu_claim_sources(
+                spec.devices,
+                region_lock_dir=str(cpu_region_claim.default_region_lock_dir()))
+            result = preflight.preflight(scope, sources)
+            self._preflight_close_receipt = result.to_dict()
+            self._no_concurrent_close = result.as_check()
+        except BaseException as exc:  # noqa: BLE001 - becomes three-valued evidence
+            self._no_concurrent_close = unknown(
+                f"concurrent-inference close preflight raised: {type(exc).__name__}: {exc}")
+
+        host_checks = []
+        try:
+            state = self._read_host_state(cpu_list=spec.cpu_list)
+            self._host_close = state
+            policy = microbench.HostStatePolicy(
+                nominal_khz=self._nominal_khz,
+                require_package_power=(spec.backend == BACKEND_CPU))
+            # Do not apply the idle/open load policy here: load1 still includes
+            # this campaign's own just-finished benchmark.  The runner's actual
+            # pre-spawn load check below is the contention observation; close
+            # contributes uptime and counter availability.
+            host_checks.append(check_host_uptime(getattr(state, "uptime_s", None)))
+            if spec.backend == BACKEND_CPU:
+                host_checks.append(policy.check_package_power_available(state))
+        except BaseException as exc:  # noqa: BLE001
+            host_checks.append(unknown(
+                f"host close-state read raised: {type(exc).__name__}: {exc}"))
+        if self._microbench_run is not None:
+            host_checks.extend(
+                check for name, check in self._microbench_run.checks
+                if name == "host_load_open")
+            for block in self._microbench_run.blocks:
+                host_checks.extend(
+                    check for name, check in block.checks
+                    if name in ("host_frequency_block_close",
+                                "host_package_power_block"))
+                for invocation in block.invocations:
+                    host_checks.extend(
+                        check for name, check in invocation.checks
+                        if name == "gpu_device_state_window")
+            host_checks.append(self._microbench_run.order_control)
+            host_checks.append(schemas.Check(
+                schemas.PASS if self._microbench_run.complete else schemas.FAIL,
+                () if self._microbench_run.complete else
+                ("microbench run was incomplete at window close",)))
+        self._host_health_close = schemas.Check.worst_of(host_checks)
+        self._storage_close = self._storage_check(spec)
+
+        requests = tuple(request for request in (self._t0_request, self._t1_request)
+                         if request is not None)
+        if not requests:
+            self._evaluator_close_check = unknown(
+                "no executed evaluator identity was available at window close")
+        else:
+            for request in requests:
+                tool = request.anchor.tool or "llama-cli"
+                try:
+                    capture = t0_provider.capture_anchor_identity(
+                        anchor=self._measurement_anchor_build(tool), tools=self._t0_tools(),
+                        runner=t0_provider.SubprocessRunner(),
+                        base_env=tuple(sorted(
+                            self._construct(spec, arm="anchor").env.items())),
+                        parameter_env=spec.t0_parameter_env_for_arm("anchor"))
+                    binding = chain.bind_anchor(capture, tool=tool)
+                    self._anchors_at_close[tool] = binding.identity
+                    self._anchor_close_checks[tool] = request.anchor.identity_matches(
+                        binding.identity)
+                except BaseException as exc:  # noqa: BLE001
+                    self._anchor_close_checks[tool] = unknown(
+                        f"anchor close capture for {tool} raised: "
+                        f"{type(exc).__name__}: {exc}")
+
+        authority = (None if spec.calibration is None else
+                     spec.calibration.evaluation_authority)
+        if authority is None:
+            self._runtime_close_check = unknown(
+                "typed live evaluation authority was unavailable at window close")
+            if self._evaluator_close_check is None:
+                self._evaluator_close_check = unknown(
+                    "typed live evaluation authority was unavailable at window close")
+        else:
+            try:
+                current = control_runner.load_live_evaluation_authority(
+                    authority.evidence_ref)
+                same_authority = current == authority
+                self._runtime_close_check = schemas.Check(
+                    schemas.PASS if same_authority else schemas.FAIL,
+                    () if same_authority else
+                    ("live calibration/control authority changed during the window",))
+            except BaseException as exc:  # noqa: BLE001
+                self._runtime_close_check = unknown(
+                    f"runtime authority close read raised: {type(exc).__name__}: {exc}")
+            if requests:
+                try:
+                    current_evaluator = self._evaluator_identity(authority)
+                    same_evaluator = all(
+                        current_evaluator == request.evaluator for request in requests)
+                    self._evaluator_close_check = schemas.Check(
+                        schemas.PASS if same_evaluator else schemas.FAIL,
+                        () if same_evaluator else
+                        ("evaluator identity changed during the evaluation window",))
+                except BaseException as exc:  # noqa: BLE001
+                    self._evaluator_close_check = unknown(
+                        f"evaluator close hash raised: {type(exc).__name__}: {exc}")
 
     def _release_device_claims(self) -> list:
         """Release every device claim, in reverse, past a failing one."""
@@ -2402,7 +2802,9 @@ class HostOps:
         self._claim_binding = None
         devices_released = self._release_device_claims()
         region = claim.release().to_dict() if claim is not None else None
-        return {"region": region, "devices": devices_released}
+        receipt = {"region": region, "devices": devices_released}
+        self._claim_release_receipt = receipt
+        return receipt
 
     # -- 2. worktree -------------------------------------------------------
 
@@ -2455,17 +2857,28 @@ class HostOps:
                 "anchor": dict(spec.anchor_param_overrides),
                 "source_mutated": False,
             }
-        raise NotImplementedError(
-            f"apply_candidate({spec.candidate_ref!r}): the candidate mutation is the "
-            "proposal's, not the driver's. Wire it by subclassing HostOps and overriding "
-            "this one method, or land the change in the worktree before --execute. "
-            "worktree.GitRepo deliberately carries no content-mutating git verb.")
+        if spec.proposal is None or spec.source_patch is None:
+            raise RuntimeError("source candidate requires proposal and immutable source patch")
+        self._source_application = source_candidate.apply_source_candidate(
+            spec.source_patch, proposal=spec.proposal, actor=tree)
+        return self._source_application
 
     # -- 3. build ----------------------------------------------------------
 
     def build(self, spec: CampaignSpec, tree: Any) -> Any:
+        if isinstance(tree, worktree.Worktree):
+            snapshot_path = worktree.snapshot_worktree_path(
+                spec.campaign_id, spec.candidate_id)
+            snapshot, proof = worktree.create_snapshot_worktree(
+                tree.repo, tree.head_commit(), snapshot_path)
+            if not proof.holds:
+                raise worktree.ProductionMutated(
+                    f"creating build snapshot changed the source tree: {proof.differences}")
+            self._build_snapshot = snapshot
+        else:  # test-double compatibility; executing HostOps always has the typed tree
+            snapshot = tree
         plan = worktree.BuildPlan(
-            source_root=tree.path,
+            source_root=snapshot.path,
             build_dir=worktree.default_build_dir(spec.campaign_id, spec.candidate_id),
             actor_worktree=tree.path,
             parallelism=worktree.BuildParallelism(jobs=64, load_average_cap=8.0),
@@ -2475,7 +2888,8 @@ class HostOps:
         log_path = os.path.join(spec.build_root, spec.campaign_id,
                                 f"{spec.candidate_id}.log")
         result = worktree.run_build(plan, log_path=log_path)
-        self._build_state = {"plan": plan, "result": result, "tree": tree}
+        self._build_state = {"plan": plan, "result": result, "tree": snapshot,
+                             "mutation_tree": tree}
         return result
 
     # -- 4. T0 -------------------------------------------------------------
@@ -2494,6 +2908,25 @@ class HostOps:
         return t0_provider.AnchorBuild(
             worktree=MEASUREMENT_REPO, source_commit=MEASUREMENT_COMMIT,
             binary=os.path.join(bindir, tool), library_path=bindir)
+
+    @staticmethod
+    def _evaluator_identity(authority: control_runner.LiveEvaluationAuthority
+                            ) -> api.EvaluatorIdentity:
+        """Hash the exact prospective evaluator bundle used by this driver."""
+        files = (
+            Path(__file__), Path(api.__file__), Path(correctness.__file__),
+            Path(schemas.__file__), Path(recipes.__file__),
+            Path(control_runner.__file__),
+            Path(source_prerequisite_producer.__file__),
+        ) + source_prerequisite_package.evaluator_source_files()
+        bundle_sha = schemas.content_hash({
+            str(path): storage.hash_file(path) for path in sorted(files)
+        })
+        return api.EvaluatorIdentity(
+            id="autokernel.campaign-live-evaluation/v1",
+            bundle_sha256=bundle_sha,
+            runtime_source_label_ref=authority.runtime_source_label_ref,
+        )
 
     def _parameter_t0_evidence(self, spec: CampaignSpec, *, identity: Any,
                                build_evidence: Any) -> dict:
@@ -2561,6 +2994,72 @@ class HostOps:
         return chain.t0_plan_evidence(
             symbols=symbols, diff=diff, change_surface=surface_evidence)
 
+    def _source_prerequisites_for_t0(
+            self, spec: CampaignSpec, *, identity: worktree.BuildIdentity,
+            candidate: t0_provider.CandidateBuild,
+            evaluator: api.EvaluatorIdentity
+            ) -> tuple[correctness.SourcePrerequisiteEvidence, ...]:
+        """Re-reduce the preloaded archive against one exact completed build."""
+        if spec.proposal is None or spec.proposal.get("change_class") == "parameter":
+            if (spec.source_prerequisite_package is not None
+                    or spec.fresh_source_prerequisite_plan is not None):
+                raise source_prerequisite_package.SourcePrerequisitePackageError(
+                    "parameter/no-source campaign carried source prerequisites")
+            return ()
+        package = spec.source_prerequisite_package
+        if package is None and spec.fresh_source_prerequisite_plan is not None:
+            if not spec.journal_root:
+                raise source_prerequisite_package.SourcePrerequisitePackageError(
+                    "fresh source prerequisites require the durable campaign journal")
+            runner = self._source_prerequisite_runner or t0_provider.SubprocessRunner(
+                sandbox_policy=self._candidate_sandbox_policy(spec))
+            try:
+                package = source_prerequisite_producer.FreshSourcePrerequisiteProducer(
+                    runner=runner).produce_or_resume(
+                        plan=spec.fresh_source_prerequisite_plan,
+                        journal_root=spec.journal_root, candidate=candidate,
+                        candidate_source_sha256=identity.snapshot_sha256,
+                        evaluator_bundle_sha256=evaluator.bundle_sha256,
+                        base_env=tuple(sorted(
+                            self._construct(spec, arm="candidate").env.items())),
+                        parameter_env=spec.t0_parameter_env_for_arm("candidate"),
+                        cpu_claim=self._claim_binding.t0_claim,
+                        cpu_list=spec.cpu_list, held_devices=tuple(self._device_claims),
+                        require_device=spec.backend == BACKEND_GPU)
+            except (source_prerequisite_producer.FreshSourcePrerequisiteError,
+                    OSError, storage.StorageError) as exc:
+                raise source_prerequisite_package.SourcePrerequisitePackageError(
+                    f"fresh producer refused: {exc}") from exc
+        if package is None:
+            raise source_prerequisite_package.SourcePrerequisitePackageError(
+                "source candidate has neither an archive nor a fresh producer plan")
+        try:
+            binary_sha256 = storage.hash_file(candidate.test_backend_ops)
+        except (OSError, storage.StorageError) as exc:
+            raise source_prerequisite_package.SourcePrerequisitePackageError(
+                f"cannot hash the live candidate test-backend-ops binary: {exc}") from exc
+        return package.materialize(
+            candidate_source_sha256=identity.snapshot_sha256,
+            candidate_binary_sha256=binary_sha256,
+            evaluator_bundle_sha256=evaluator.bundle_sha256)
+
+    def _stop_t0_early(self, request: api.EvaluationRequest, gate_id: str,
+                       check: schemas.Check) -> T0Outcome:
+        """Retain a typed non-rate gate for a refusal before behavioural T0."""
+        gate = api.GateResult(
+            gate_id=gate_id, gate_class=api.GATE_INTEGRITY, check=check,
+            requires_anchor=False,
+            evidence_ref="sha256:" + schemas.content_hash({
+                "gate_id": gate_id, "outcome": check.outcome,
+                "reasons": list(check.reasons)}),
+            notes=("pre-behavioural T0 refusal; no rate measurement exists",))
+        self._t0_request = request
+        self._t0_gate_results = (gate,)
+        return T0Outcome(
+            all_pass=False,
+            gates=((gate_id, check.outcome, tuple(check.reasons)),),
+            report_ref=gate.evidence_ref, gate_results=(gate,))
+
     def run_t0(self, spec: CampaignSpec, build: Any) -> T0Outcome:
         """T0 first, and its failure ENDS the campaign — see `run_campaign`.
 
@@ -2570,18 +3069,12 @@ class HostOps:
         disk (or the clean-build gate becomes `x == x`), the anchor is bound PER
         TOOL, and the claim is bound for both Protocols.
         """
+        self._t0_started = True
         if self._claim_binding is None:
             raise RuntimeError("run_t0 was reached without a bound claim")
         result = self._build_state["result"]
         tree = self._build_state["tree"]
         plan = self._build_state["plan"]
-
-        source_pin = instrument_integrity.compare_manifest_to_anchor(
-            candidate_root=tree.path.path, anchor_root=MEASUREMENT_REPO)
-        if source_pin.outcome != schemas.PASS:
-            return T0Outcome(all_pass=False, gates=((
-                "t0.measurement_source_pin", source_pin.outcome,
-                tuple(source_pin.reasons)),))
 
         snapshot = _source_tree_digest(tree.path.path)
         identity = worktree.build_identity(
@@ -2593,15 +3086,60 @@ class HostOps:
                        os.path.join(plan.build_dir.path, "bin", "libggml.so.0"),
                        "libggml-base.so.0":
                        os.path.join(plan.build_dir.path, "bin", "libggml-base.so.0")})
+        candidate_capture = t0_provider.capture_anchor_identity(
+            anchor=t0_provider.AnchorBuild(
+                worktree=tree.path.path, source_commit=tree.head_commit(),
+                binary=os.path.join(plan.build_dir.path, "bin", "llama-cli"),
+                library_path=os.path.join(plan.build_dir.path, "bin")),
+            tools=self._t0_tools(), runner=t0_provider.SubprocessRunner(),
+            base_env=tuple(sorted(self._construct(spec, arm="candidate").env.items())),
+            parameter_env=spec.t0_parameter_env_for_arm("candidate"))
+        identity = replace(identity, linkage_sha256=candidate_capture.linkage_sha256)
+        self._build_identity = identity
+        early_anchor_capture = t0_provider.capture_anchor_identity(
+            anchor=self._measurement_anchor_build("llama-cli"),
+            tools=self._t0_tools(), runner=t0_provider.SubprocessRunner(),
+            base_env=tuple(sorted(self._construct(spec, arm="anchor").env.items())),
+            parameter_env=spec.t0_parameter_env_for_arm("anchor"))
+        early_anchor = chain.bind_anchor(early_anchor_capture, tool="llama-cli")
+        early_request = self._evaluation_request(
+            spec, identity=identity, anchor_identity=early_anchor.identity,
+            device_state=None,
+            candidate_linkage_sha256=candidate_capture.linkage_sha256,
+            determinism=api.DeterminismReport(
+                determinism_class="not_measured", same_seed_repeat_runs=0))
+
+        source_pin = instrument_integrity.compare_manifest_to_anchor(
+            candidate_root=tree.path.path, anchor_root=MEASUREMENT_REPO)
+        if source_pin.outcome != schemas.PASS:
+            return self._stop_t0_early(
+                early_request, "t0.measurement_source_pin", source_pin)
+
         build_ev = chain.build_evidence(identity)                       # seam 1
         if build_ev.worst.outcome != schemas.PASS:
-            return T0Outcome(all_pass=False, gates=(
-                ("build_evidence", build_ev.worst.outcome, tuple(build_ev.worst.reasons)),))
+            return self._stop_t0_early(
+                early_request, "t0.build_evidence", build_ev.worst)
 
         candidate = chain.candidate_build_for(identity)                 # seam 3
         extra = dict(self._t0_evidence(spec=spec, identity=identity,
                                        build_evidence=build_ev)) if self._t0_evidence \
             else {}
+        if "source_prerequisites" in extra:
+            return self._stop_t0_early(
+                early_request, correctness.GID_OP_UNITS, schemas.Check(
+                    schemas.COULD_NOT_CHECK, (
+                        "t0_evidence attempted to supply source prerequisites outside "
+                        "the immutable campaign package boundary",)))
+        if spec.proposal is not None and spec.proposal.get("change_class") != "parameter":
+            try:
+                extra["source_prerequisites"] = self._source_prerequisites_for_t0(
+                    spec, identity=identity, candidate=candidate,
+                    evaluator=early_request.evaluator)
+            except source_prerequisite_package.SourcePrerequisitePackageError as exc:
+                return self._stop_t0_early(
+                    early_request, correctness.GID_OP_UNITS, schemas.Check(
+                        schemas.COULD_NOT_CHECK,
+                        (f"source prerequisite package refused: {exc}",)))
         # AK-TR-6: keep this before ExecutedT0EvidenceProvider construction.
         # That provider launches op/generation processes while collecting the
         # behavioural evidence, so discovering a compile-only veto later would
@@ -2610,9 +3148,8 @@ class HostOps:
         device_state = extra.pop("device_state", None)
         artifact_check = artifact_diff.require_confirmed_for_t1(artifact_evidence)
         if spec.backend == BACKEND_GPU and artifact_check.outcome != schemas.PASS:
-            return T0Outcome(all_pass=False, gates=((
-                "t0.compile_artifact_diff", artifact_check.outcome,
-                tuple(artifact_check.reasons)),))
+            return self._stop_t0_early(
+                early_request, "t0.compile_artifact_diff", artifact_check)
         anchor_capture = extra.pop("anchor_capture", None)
         if anchor_capture is None:
             anchor_plan = t0_provider.T0ExecutionPlan(
@@ -2670,7 +3207,10 @@ class HostOps:
                 if spec.proposal is not None
                 and spec.proposal.get("change_class") == "parameter" else None),
             determinism_runs=2, cache_state="cold", state_safety_probe=False,
-            candidate_diff_text=tree.unified_diff_from_source(),
+            candidate_diff_text=(
+                self._source_application.diff_text
+                if self._source_application is not None
+                else tree.unified_diff_from_source()),
             oracle_ids=(f"oracle://{MEASUREMENT_BRANCH}",),
             base_env=tuple(sorted(self._construct(spec, arm="candidate").env.items())),
             parameter_env=spec.t0_parameter_env_for_arm("candidate"),
@@ -2682,18 +3222,36 @@ class HostOps:
                 sandbox_policy=self._candidate_sandbox_policy(spec)),
             claim=self._claim_binding.t0_claim,
             anchor_capture=t0_anchor.capture)
-        request = self._evaluation_request(
-            spec, identity=identity, anchor=t0_anchor, device_state=device_state)
-        report = correctness.T0CorrectnessRunner(
-            provider=provider, policy=correctness.T0Policy()).evaluate(request)
+        provisional = self._evaluation_request(
+            spec, identity=identity, anchor_identity=t0_anchor.identity,
+            device_state=device_state,
+            candidate_linkage_sha256=candidate_capture.linkage_sha256,
+            determinism=api.DeterminismReport(
+                determinism_class="not_measured", same_seed_repeat_runs=0))
+        evidence = provider.evidence_for(provisional)
+        measured_determinism = (
+            api.DeterminismReport(
+                determinism_class=evidence.determinism.measured_class(),
+                same_seed_repeat_runs=evidence.determinism.runs)
+            if evidence.determinism is not None else api.DeterminismReport(
+                determinism_class="not_measured", same_seed_repeat_runs=0)
+        )
+        request = replace(provisional, determinism=measured_determinism)
+        report = correctness.evaluate_t0(request, evidence, correctness.T0Policy())
+        self._t0_request = request
+        self._t0_report = report
+        self._t0_gate_results = report.gates
         gates = tuple((g.gate_id, g.check.outcome, tuple(g.check.reasons))
                       for g in report.gates)
         return T0Outcome(
             all_pass=all(outcome == schemas.PASS for _gid, outcome, _r in gates),
-            gates=gates, report_ref=report.policy_ref)
+            gates=gates, report_ref=report.policy_ref, gate_results=report.gates)
 
     def _evaluation_request(self, spec: CampaignSpec, *, identity: Any,
-                            anchor: Any, device_state: Any = None) -> api.EvaluationRequest:
+                            anchor_identity: api.AnchorIdentity,
+                            candidate_linkage_sha256: str,
+                            determinism: api.DeterminismReport,
+                            device_state: Any = None) -> api.EvaluationRequest:
         """The request T0 is evaluated against. Digests MEASURED, not copied.
 
         `chain.measure_artifact_identity` re-walks the source tree and re-hashes
@@ -2706,27 +3264,31 @@ class HostOps:
         binary = os.path.join(plan.build_dir.path, "bin", "llama-cli")
         artifact = chain.measure_artifact_identity(          # seam 2
             source_root=tree.path.path, binary=binary,
-            linkage_sha256=anchor.capture.linkage_sha256)
+            linkage_sha256=candidate_linkage_sha256)
         command = self._construct(spec, arm="candidate")
+        self._recipe_receipts[("T0", anchor_identity.tool or "llama-cli")] = \
+            command.receipt
+        if spec.calibration is None or spec.calibration.evaluation_authority is None:
+            raise RuntimeError("live evaluation request requires accepted typed authority")
+        authority = spec.calibration.evaluation_authority
         return api.EvaluationRequest(
             event_id=f"ake-{spec.campaign_id}-{spec.candidate_id}-t0",
             campaign_id=spec.campaign_id, candidate_id=spec.candidate_id,
             tier="T0", backend=spec.backend, phase=command.phase,
             cell_class=command.cell_class, protocol_id="P-AK-SEARCH-1",
-            artifact=artifact, anchor=anchor.identity,
-            evaluator=api.EvaluatorIdentity(
-                evaluator_id="autokernel.campaign/v1",
-                evaluator_sha256=storage.hash_file(__file__)),
+            artifact=artifact, anchor=anchor_identity,
+            evaluator=self._evaluator_identity(authority),
             scope_denominator=command.scope_denominator,
             scope_manifest_sha256=identity.snapshot_sha256,
             co_residency="single",
-            determinism=api.DeterminismReport(determinism_class="bitwise_stable"),
+            determinism=determinism,
             metric=command.metric, metric_direction=command.metric_direction,
             reps=spec.reps,
             change_class=("parameter" if spec.proposal is None
                           else spec.proposal["change_class"]),
             anchor_tier="T0", transfer_ratio_to=(), created_at=spec.created_at,
-            campaign_controls=None, calibration=None, device_state=device_state,
+            campaign_controls=authority.campaign_controls,
+            calibration=authority.calibration, device_state=device_state,
             suite_seed=spec.suite_seed)
 
     def _construct(self, spec: CampaignSpec, *, arm: str) -> Any:
@@ -2759,6 +3321,10 @@ class HostOps:
         candidate_cmd = self._construct(spec, arm="candidate")
         anchor_cmd = self._construct(spec, arm="anchor")
         anchor_identity = self._anchor_identity_for_bench(spec)
+        self._recipe_receipts[("T1", anchor_identity.tool or "llama-bench")] = \
+            candidate_cmd.receipt
+        self._t1_request = self._t1_evaluation_request(
+            spec, command=candidate_cmd, anchor=anchor_identity)
         plan = microbench.MicrobenchPlan(
             recipe_id=spec.recipe_id, candidate_id=spec.candidate_id,
             campaign_seed=f"{spec.campaign_id}/{spec.created_at}",
@@ -2801,9 +3367,56 @@ class HostOps:
                 device_sampler=(
                     device_sampler.RocmSmiSampler(device_index=spec.device_index)
                     if spec.backend == BACKEND_GPU else None)),
+            host_state=self._read_host_state,
             run_ledger=self._completed_run_ledger(spec))
         run = runner.run(plan)
+        self._microbench_run = run
         return pairs_from_run(run)
+
+    def _t1_evaluation_request(self, spec: CampaignSpec, *, command: Any,
+                               anchor: api.AnchorIdentity) -> api.EvaluationRequest:
+        """Bind the T1 request to the benchmark binary's own linkage identity."""
+        if spec.calibration is None or spec.calibration.evaluation_authority is None:
+            raise RuntimeError("T1 evaluation requires accepted typed authority")
+        plan = self._build_state["plan"]
+        tree = self._build_state["tree"]
+        bindir = os.path.join(plan.build_dir.path, "bin")
+        capture = t0_provider.capture_anchor_identity(
+            anchor=t0_provider.AnchorBuild(
+                worktree=tree.path.path, source_commit=tree.head_commit(),
+                binary=os.path.join(bindir, "llama-bench"), library_path=bindir),
+            tools=self._t0_tools(), runner=t0_provider.SubprocessRunner(),
+            base_env=tuple(sorted(command.env.items())),
+            parameter_env=spec.t0_parameter_env_for_arm("candidate"))
+        artifact = chain.measure_artifact_identity(
+            source_root=tree.path.path, binary=os.path.join(bindir, "llama-bench"),
+            linkage_sha256=capture.linkage_sha256)
+        authority = spec.calibration.evaluation_authority
+        determinism = (
+            self._t0_request.determinism if self._t0_request is not None
+            else api.DeterminismReport(
+                determinism_class="not_measured", same_seed_repeat_runs=0)
+        )
+        return api.EvaluationRequest(
+            event_id=f"ake-{spec.campaign_id}-{spec.candidate_id}-t1",
+            campaign_id=spec.campaign_id, candidate_id=spec.candidate_id,
+            tier="T1", backend=spec.backend, phase=command.phase,
+            cell_class=command.cell_class, protocol_id="P-AK-SEARCH-1",
+            artifact=artifact, anchor=anchor,
+            evaluator=self._evaluator_identity(authority),
+            scope_denominator=command.scope_denominator,
+            scope_manifest_sha256=(
+                self._t0_request.scope_manifest_sha256
+                if self._t0_request is not None else artifact.source_sha256),
+            co_residency="single", determinism=determinism,
+            metric=command.metric, metric_direction=command.metric_direction,
+            reps=spec.reps,
+            change_class=("parameter" if spec.proposal is None
+                          else spec.proposal["change_class"]),
+            anchor_tier="T1", transfer_ratio_to=(), created_at=spec.created_at,
+            campaign_controls=authority.campaign_controls,
+            calibration=authority.calibration, device_state=None,
+            suite_seed=spec.suite_seed)
 
     @staticmethod
     def _candidate_sandbox_policy(spec: CampaignSpec) -> sandbox.SandboxPolicy:
@@ -2863,9 +3476,15 @@ class HostOps:
     # -- 6. teardown -------------------------------------------------------
 
     def teardown_worktree(self, spec: CampaignSpec, tree: Any) -> Any:
+        snapshot_receipt = None
+        if self._build_snapshot is not None:
+            snapshot_receipt = worktree.teardown_worktree(
+                self._build_snapshot, witness_trees=list(worktree.frozen_tree_paths()))
+            self._build_snapshot = None
         receipt = worktree.teardown_worktree(
             tree, witness_trees=list(worktree.frozen_tree_paths()))
-        return receipt.to_dict()
+        return {"snapshot": None if snapshot_receipt is None else snapshot_receipt.to_dict(),
+                "campaign": receipt.to_dict()}
 
     def keep_or_revert(self, spec: CampaignSpec, tree: Any,
                        decision: Optional[AcceptDecision]) -> Any:
@@ -2896,6 +3515,301 @@ class HostOps:
             f"{len(self._fingerprints)} frozen tree(s) byte-identical",))
 
     # -- 8. durability ------------------------------------------------------
+
+    def _window_attestations(self, spec: CampaignSpec, request: api.EvaluationRequest,
+                             *, raw_evidence_ref: str,
+                             rate_run: Optional[microbench.MicrobenchRun]
+                             ) -> api.WindowAttestations:
+        authority = spec.calibration.evaluation_authority
+        if authority is None:
+            raise RuntimeError("evaluation window has no typed live authority")
+        unknown = lambda reason: schemas.Check(schemas.COULD_NOT_CHECK, (reason,))
+        release_material = (self._claim_release_receipt
+                            if isinstance(self._claim_release_receipt, Mapping) else
+                            {"unavailable": "claim release receipt was not retained"})
+        claim_ref = "sha256:" + schemas.content_hash(release_material)
+        open_check = self._claim_open_check or unknown(
+            "resource claims were not freshly checked at window open")
+        close_check = self._claim_close_check or unknown(
+            "resource claims were not freshly checked at window close")
+        holder_check = self._claim_same_holder_check or unknown(
+            "resource-claim holder continuity was not checked")
+        concurrent = schemas.Check.worst_of((
+            self._preflight_check or unknown(
+                "concurrent-inference preflight was not retained at open"),
+            self._no_concurrent_close or unknown(
+                "concurrent-inference preflight was not repeated at close"),
+        ))
+        preflight_material = {
+            "open": self._preflight_open_receipt,
+            "close": self._preflight_close_receipt,
+        }
+        host_material = {
+            "open": None if self._host_open is None else self._host_open.to_dict(),
+            "close": None if self._host_close is None else self._host_close.to_dict(),
+            "raw_evidence_ref": raw_evidence_ref,
+        }
+        host_ref = "sha256:" + schemas.content_hash(host_material)
+        host_health = self._host_health_close or unknown(
+            "host health was not re-attested at window close")
+        anchor_tool = request.anchor.tool or "llama-cli"
+        anchor_identity_check = self._anchor_close_checks.get(anchor_tool) or unknown(
+            f"anchor identity for {anchor_tool} was not re-captured at window close")
+        if rate_run is not None:
+            anchor_values = [median(block.anchor_samples)
+                             for block in rate_run.paired_blocks()]
+            anchor_value = median(anchor_values)
+            low, high = authority.calibration.anchor_gate_band
+            anchor_band = schemas.Check(
+                schemas.PASS if low <= anchor_value <= high else schemas.FAIL,
+                (f"anchor median {anchor_value:.9g} vs calibrated band [{low:.9g}, "
+                 f"{high:.9g}]",))
+            anchor_gate = schemas.Check.worst_of((
+                anchor_band,
+                anchor_identity_check,
+            ))
+            order_check = rate_run.order_control
+            strata = schemas.Check(
+                schemas.PASS if all(block.stratum == api.STRATUM_SELECTION
+                                    for block in rate_run.paired_blocks())
+                else schemas.FAIL,
+                ("all completed blocks are in the selection stratum",))
+            rule = schemas.Check(
+                schemas.PASS if len(rate_run.paired_blocks()) == spec.blocks
+                and len(rate_run.paired_blocks()) <=
+                authority.campaign_controls.max_blocks_per_candidate else schemas.FAIL,
+                (f"realized {len(rate_run.paired_blocks())} of precommitted "
+                 f"{spec.blocks} blocks",))
+            order_seed = rate_run.plan.campaign_seed
+        else:
+            anchor_gate = schemas.Check.worst_of((
+                schemas.Check(
+                    schemas.PASS if self._t0_gate_results else schemas.COULD_NOT_CHECK,
+                    ("T0 anchor-bound gate set completed",)),
+                anchor_identity_check,
+            ))
+            order_check = schemas.Check(
+                schemas.COULD_NOT_CHECK, ("no rate-order schedule applies to T0",))
+            strata = schemas.Check(
+                schemas.COULD_NOT_CHECK, ("no selection stratum applies to T0",))
+            rule = schemas.Check(schemas.PASS, ("T0 precedes the speed stopping rule",))
+            order_seed = f"{spec.campaign_id}/t0"
+        recipe_receipt = self._recipe_receipts.get((request.tier, anchor_tool))
+        return api.WindowAttestations(
+            resource_claim_receipt=claim_ref,
+            resource_claim_open=open_check, resource_claim_close=close_check,
+            resource_claim_same_holder=holder_check,
+            no_concurrent_inference=concurrent,
+            preflight_attestation_ref="sha256:" + schemas.content_hash(
+                preflight_material),
+            host_receipt=host_ref, host_health=host_health,
+            anchor_at_open=request.anchor,
+            anchor_at_close=self._anchors_at_close.get(anchor_tool),
+            anchor_gate=anchor_gate,
+            evaluator_bundle=self._evaluator_close_check or unknown(
+                "evaluator bundle was not re-hashed at window close"),
+            runtime_source_label=self._runtime_close_check or unknown(
+                "runtime source label was not re-read at window close"),
+            recipe=recipe_receipt,
+            storage_open=self._storage_open or schemas.Check(
+                schemas.COULD_NOT_CHECK, ("storage headroom was not retained at open",)),
+            storage_close=self._storage_close or unknown(
+                "storage headroom was not re-read at window close"), strata=strata,
+            stopping_rule_id=authority.stopping_rule_id,
+            rule_immutability=rule, order_randomized=order_check,
+            order_seed=order_seed, aa_cadence=authority.aa_cadence,
+            controls=authority.controls, calibration=schemas.Check(
+                schemas.PASS, (authority.evidence_ref,)),
+            control_definitions_immutable=authority.control_definitions_immutable,
+            raw_evidence_ref=raw_evidence_ref)
+
+    @staticmethod
+    def _event_request(request: api.EvaluationRequest, evidence: Any,
+                       suffix: str) -> api.EvaluationRequest:
+        digest = schemas.content_hash(evidence)
+        return replace(request, event_id=(
+            f"ake-{request.campaign_id}-{request.candidate_id}-{suffix}-{digest[:16]}"))
+
+    def _evaluation_events(self, spec: CampaignSpec) -> tuple:
+        """Build T0 then T1 from retained executed evidence; never from display pairs."""
+        events = []
+        t0_request = None
+        if self._t0_request is not None and self._t0_gate_results:
+            evidence = [gate.to_dict() for gate in self._t0_gate_results]
+            t0_request = self._event_request(self._t0_request, evidence, "t0")
+            window = self._window_attestations(
+                spec, t0_request,
+                raw_evidence_ref="sha256:" + schemas.content_hash(evidence),
+                rate_run=None)
+            outcome = api.TierDispatcher(gate_runners={
+                "T0": _RecordedGateRunner(self._t0_gate_results),
+            }).dispatch(t0_request, window, effect=None)
+            if outcome.event is None or outcome.event_violations:
+                raise RuntimeError(
+                    "T0 evaluation event was not schema-valid: "
+                    f"blocked={outcome.event_blocked_reason!r} "
+                    f"violations={list(outcome.event_violations)}")
+            events.append(outcome.event)
+        if self._microbench_run is not None and self._t1_request is not None:
+            blocks = self._microbench_run.paired_blocks()
+            raw_ref = "sha256:" + schemas.content_hash(
+                [block.to_list() for block in blocks])
+            anchor = replace(
+                self._t1_request.anchor,
+                measurement_event_ids=(() if t0_request is None
+                                       else (t0_request.event_id,)))
+            request = replace(self._t1_request, anchor=anchor)
+            request = self._event_request(
+                request, [block.to_list() for block in blocks], "t1")
+            window = self._window_attestations(
+                spec, request, raw_evidence_ref=raw_ref,
+                rate_run=self._microbench_run)
+            effect = control_runner.reduce_live_blocks(
+                request, blocks, spec.calibration.evaluation_authority)
+            t1_gates = list(self._t0_gate_results)
+            if spec.proposal is not None \
+                    and spec.proposal.get("change_class") == "parameter":
+                dispatch = next((gate for gate in self._t0_gate_results
+                                 if gate.gate_id == "no_fallback_dispatch_trace"), None)
+                check = (dispatch.check if dispatch is not None else schemas.Check(
+                    schemas.COULD_NOT_CHECK,
+                    ("T0 emitted no no-fallback dispatch identity",)))
+                t1_gates.append(api.GateResult(
+                    gate_id="t1.parameter_intervention_explained",
+                    gate_class=api.GATE_MECHANISM,
+                    check=check,
+                    notes=("the registered GGML_IQK arm-local intervention and its "
+                           "no-fallback real-path trace are bound to this T1 effect",),
+                ))
+            outcome = api.TierDispatcher(gate_runners={
+                "T1": _RecordedGateRunner(t1_gates),
+            }).dispatch(request, window, effect=effect)
+            if outcome.event is None or outcome.event_violations:
+                raise RuntimeError(
+                    "T1 evaluation event was not schema-valid: "
+                    f"blocked={outcome.event_blocked_reason!r} "
+                    f"violations={list(outcome.event_violations)}")
+            if not spec.model:
+                raise RuntimeError("prospective belief capture requires the measured model")
+            event = control_runner.attach_belief_capture(
+                outcome.event, effect_scale="relative",
+                model_id=os.path.basename(spec.model),
+                model_sha256=storage.hash_file(spec.model),
+                producer_sha256=request.evaluator.bundle_sha256)
+            violations = schemas.validate_evaluation_event(event)
+            if violations:
+                raise RuntimeError(
+                    "belief-capture event failed schema validation: "
+                    + "; ".join(violations))
+            events.append(event)
+        return tuple(events)
+
+    def prepare_durable_records(self, spec: CampaignSpec, *, state: str,
+                                decision: Optional[AcceptDecision]) -> None:
+        """Materialize evaluation and candidate bytes while the built snapshot lives."""
+        if self._cached_evaluation_events is not None:
+            return
+        events = self._evaluation_events(spec)
+        self._cached_evaluation_events = events
+        if self._build_identity is None or self._build_snapshot is None \
+                or self._t0_request is None or spec.proposal is None:
+            return
+        event_ids = tuple(event["event_id"] for event in events)
+        event = events[-1] if events else None
+        evaluator = self._t0_request.evaluator
+        if state == STATE_DECIDED:
+            status = "evaluating" if decision is not None and decision.keep else "rejected"
+        elif state == STATE_T0_FAILED:
+            status = "invalid"
+        else:
+            status = "evaluating"
+        derived_tokens = (
+            tuple(f"file:{path}" for path in self._source_application.actual_files)
+            if self._source_application is not None else ("flag:GGML_IQK",))
+        derived_verdicts = {
+            "campaign_state": state,
+            "accept_decision": None if decision is None else decision.to_dict(),
+        }
+        if spec.least_commitment_plan is not None:
+            derived_verdicts["least_commitment"] = least_commitment_capture.materialize(
+                spec.least_commitment_plan, decision=decision,
+                calibration=spec.calibration)
+        self._cached_candidate_record = candidate_record.build_candidate_record(
+            proposal=spec.proposal, candidate_id=spec.candidate_id,
+            campaign_id=spec.campaign_id, production_base_commit=PRODUCTION_COMMIT,
+            instrument_commit=MEASUREMENT_COMMIT,
+            source_commit=self._build_snapshot.head_commit(),
+            actor=self._build_snapshot, identity=self._build_identity,
+            build_result=self._build_state.get("result"),
+            source_application=self._source_application, status=status,
+            evaluator_id=evaluator.id,
+            evaluator_bundle_sha256=evaluator.bundle_sha256,
+            evaluator_runtime_source_label_ref=evaluator.runtime_source_label_ref,
+            resource_claim_receipt=(
+                event["resource_claim_receipt"] if event is not None
+                else schemas.content_hash(self._claim_close_receipt or {})),
+            host_receipt=(event["host_receipt"] if event is not None
+                          else schemas.content_hash({"open": str(self._host_open),
+                                                    "close": str(self._host_close)})),
+            evaluation_event_ids=event_ids,
+            derived_surface_tokens=derived_tokens,
+            dispatch_predicates=(),
+            protocol_ids=tuple(sorted({event["claim_grammar"]["protocol_id"]
+                                       for event in events})) or ("P-AK-SEARCH-1/v1",),
+            same_seed_repeat_runs=self._t0_request.determinism.same_seed_repeat_runs,
+            derived_verdicts=derived_verdicts,
+            created_at=spec.created_at)
+
+    def journal_evaluation(self, spec: CampaignSpec, result: Any) -> tuple:
+        """Append prospective events idempotently, before terminal STOP_STATE."""
+        if not spec.journal_root:
+            raise RuntimeError("executed evaluation has no durable journal root")
+        root = storage.assert_not_scratch(spec.journal_root, what="campaign journal root")
+        book = journal_module.Journal(root, campaign_id=spec.campaign_id)
+        book.initialize()
+        appended = []
+        events = (self._cached_evaluation_events if self._cached_evaluation_events is not None
+                  else self._evaluation_events(spec))
+        if self._t0_started and not events and getattr(result, "error", None):
+            refusal = {
+                "campaign_id": spec.campaign_id,
+                "candidate_id": spec.candidate_id,
+                "stage": "run_t0.before_event_emission",
+                "error": result.error,
+                "rate_measured": False,
+            }
+            refusal_id = "akt0r-" + schemas.content_hash(refusal)[:24]
+            with book.write_lock():
+                prior = [entry for entry in book.read_all()
+                         if entry.kind == journal_module.KIND_T0_REFUSAL
+                         and entry.record_id == refusal_id]
+                if prior:
+                    if schemas.content_hash(prior[0].payload) != schemas.content_hash(refusal):
+                        raise RuntimeError(
+                            f"T0 refusal id {refusal_id!r} names different bytes")
+                    appended.append(prior[0].event_id)
+                else:
+                    appended.append(book.append(
+                        journal_module.KIND_T0_REFUSAL, refusal,
+                        record_id=refusal_id).event_id)
+        for event in events:
+            with book.write_lock():
+                prior = [entry for entry in book.read_all()
+                         if entry.kind == journal_module.KIND_EVALUATION_EVENT
+                         and entry.record_id == event["event_id"]]
+                if prior:
+                    if schemas.content_hash(prior[0].payload) != schemas.content_hash(event):
+                        raise RuntimeError(
+                            f"evaluation id {event['event_id']!r} names different bytes")
+                    appended.append(prior[0].event_id)
+                    continue
+                appended.append(book.append(
+                    journal_module.KIND_EVALUATION_EVENT, event).event_id)
+        if self._cached_candidate_record is not None:
+            appended.append(candidate_record.append_candidate_idempotent(
+                book, self._cached_candidate_record,
+                kind=journal_module.KIND_CANDIDATE_RECORDED))
+        return tuple(appended)
 
     def journal(self, spec: CampaignSpec, payload: Mapping[str, Any]) -> Any:
         """Journal the terminal state, fsynced, before the process can exit.
@@ -3169,6 +4083,27 @@ def _finish(spec: CampaignSpec, ops: Any, ledger: ResourceLedger, *, state: str,
         except BaseException as exc:  # noqa: BLE001
             error = "; ".join(x for x in (error, f"keep_or_revert: {exc}") if x)
 
+    # The last truthful time to attest a measurement window is while its claim
+    # and worktree are still held.  Release receipts are evidence that cleanup
+    # happened; they are not substitutes for re-reading the live resources.
+    close_window = getattr(ops, "close_evaluation_window", None)
+    if bool(getattr(ops, "executes", True)) and callable(close_window):
+        try:
+            close_window(spec, tree)
+        except BaseException as exc:  # noqa: BLE001 - release must still run
+            state = STATE_ERROR
+            error = "; ".join(x for x in (
+                error, f"close_evaluation_window: {type(exc).__name__}: {exc}") if x)
+
+    prepare_records = getattr(ops, "prepare_durable_records", None)
+    if bool(getattr(ops, "executes", True)) and callable(prepare_records):
+        try:
+            prepare_records(spec, state=state, decision=decision)
+        except BaseException as exc:  # noqa: BLE001 - release must still run
+            state = STATE_ERROR
+            error = "; ".join(x for x in (
+                error, f"prepare_durable_records: {type(exc).__name__}: {exc}") if x)
+
     releases = ledger.release_all()
 
     try:
@@ -3188,6 +4123,16 @@ def _finish(spec: CampaignSpec, ops: Any, ledger: ResourceLedger, *, state: str,
         executed=bool(getattr(ops, "executes", True)),
         error="\n".join(x for x in (error, traceback_text) if x) or None)
 
+    evaluation_writer = getattr(ops, "journal_evaluation", None)
+    if result.executed and callable(evaluation_writer):
+        try:
+            evaluation_writer(spec, result)
+        except BaseException as exc:  # noqa: BLE001 - durability failure is terminal
+            detail = f"evaluation_event: {type(exc).__name__}: {exc}"
+            print(f"WARNING: evaluated evidence could not be journaled: {detail}",
+                  file=sys.stderr)
+            result = replace(result, journal_error=detail)
+
     try:
         ops.journal(spec, {"state": state, "campaign_id": spec.campaign_id,
                            "result": result.to_dict()})
@@ -3200,7 +4145,9 @@ def _finish(spec: CampaignSpec, ops: Any, ledger: ResourceLedger, *, state: str,
         print(f"WARNING: the result could not be journaled: {detail}", file=sys.stderr)
         # Frozen dataclass: rebuilt rather than mutated, so the record and its
         # `ok` cannot disagree.
-        result = replace(result, journal_error=detail)
+        prior = result.journal_error
+        result = replace(result, journal_error="; ".join(
+            item for item in (prior, detail) if item))
     return result
 
 
@@ -3225,7 +4172,31 @@ def build_parser() -> argparse.ArgumentParser:
         "--proposal-manifest",
         default=None,
         metavar="PATH",
-        help="validated proposal.v3 JSON. Required by --execute and fsynced before host work",
+        help="validated current-schema proposal JSON. Required by --execute and "
+             "fsynced before host work",
+    )
+    parser.add_argument(
+        "--least-commitment-capture-plan", default=None, metavar="PATH",
+        help="hash-bound prospective AK-WM-2 diagnostic/control plan. Required by "
+             "executing IQK parameter campaigns so a clean result is archive-usable",
+    )
+    parser.add_argument(
+        "--source-patch-manifest", default=None, metavar="PATH",
+        help="immutable source-patch.v1 JSON with embedded bytes; required for "
+             "source-changing --execute campaigns",
+    )
+    source_prerequisite_group = parser.add_mutually_exclusive_group()
+    source_prerequisite_group.add_argument(
+        "--source-prerequisite-package", default=None, metavar="PATH",
+        help="immutable content-addressed archive/resume package containing all three "
+             "raw source-candidate correctness receipts. Loaded before any claim and "
+             "reduced again against the live build before T0",
+    )
+    source_prerequisite_group.add_argument(
+        "--fresh-source-prerequisite-plan", default=None, metavar="PATH",
+        help="strict predeclared plan for producing all three raw source-candidate "
+             "receipts after the candidate build, under this campaign's already-held "
+             "CPU/device claims. Loaded before any claim; execute-only",
     )
     parser.add_argument(
         "--calibration-bundle",
@@ -3315,6 +4286,10 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
     """
     stream = out if out is not None else sys.stdout
     args = build_parser().parse_args(list(argv) if argv is not None else None)
+    # ``--json`` is an automation contract: stdout (or the injected ``out``
+    # stream) must contain exactly one parseable result document. Keep the
+    # detailed composition trace, but move it to stderr in JSON mode.
+    detail_stream = sys.stderr if args.as_json else stream
 
     if not args.dry_run and not args.i_hold_the_host:
         print("--execute requires --i-hold-the-host. This driver spawns benchmarks on a "
@@ -3336,6 +4311,68 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
             file=sys.stderr,
         )
         return 2
+
+    least_commitment_plan = None
+    if args.least_commitment_capture_plan is not None:
+        if proposal is None:
+            print("refusing to start: --least-commitment-capture-plan requires "
+                  "--proposal-manifest", file=sys.stderr)
+            return 2
+        try:
+            least_commitment_plan = least_commitment_capture.load(
+                args.least_commitment_capture_plan, proposal=proposal,
+                campaign_id=args.campaign_id, candidate_id=args.candidate_id)
+        except (OSError, json.JSONDecodeError, TypeError,
+                least_commitment_capture.CapturePlanError) as exc:
+            print(f"refusing to start: --least-commitment-capture-plan: {exc}",
+                  file=sys.stderr)
+            return 2
+    if not args.dry_run and isinstance(proposal, Mapping) \
+            and proposal.get("change_class") == "parameter" \
+            and least_commitment_plan is None:
+        print("refusing to --execute: IQK parameter campaigns require "
+              "--least-commitment-capture-plan before any claim, mutation, build, "
+              "or benchmark; otherwise a clean result cannot enter AK-WM-2",
+              file=sys.stderr)
+        return 2
+    if not args.dry_run and least_commitment_plan is not None \
+            and least_commitment_plan.raw["capture_mode"] != "measured":
+        print("refusing to --execute: architecture_regression_fixture cannot supply "
+              "least-commitment evidence", file=sys.stderr)
+        return 2
+
+    source_patch = None
+    if args.source_patch_manifest is not None:
+        try:
+            source_patch = source_candidate.load_source_patch_manifest(
+                args.source_patch_manifest)
+        except (OSError, ValueError, TypeError, source_candidate.SourceCandidateError) as exc:
+            print(f"refusing to start: --source-patch-manifest: {exc}", file=sys.stderr)
+            return 2
+
+    source_prerequisites = None
+    if args.source_prerequisite_package is not None:
+        try:
+            source_prerequisites = (
+                source_prerequisite_package.load_source_prerequisite_package(
+                    args.source_prerequisite_package))
+        except (OSError, ValueError, TypeError,
+                source_prerequisite_package.SourcePrerequisitePackageError) as exc:
+            print(f"refusing to start: --source-prerequisite-package: {exc}",
+                  file=sys.stderr)
+            return 2
+
+    fresh_source_plan = None
+    if args.fresh_source_prerequisite_plan is not None:
+        try:
+            fresh_source_plan = (
+                source_prerequisite_producer.load_fresh_source_prerequisite_plan(
+                    args.fresh_source_prerequisite_plan))
+        except (OSError, ValueError, TypeError,
+                source_prerequisite_producer.FreshSourcePrerequisiteError) as exc:
+            print(f"refusing to start: --fresh-source-prerequisite-plan: {exc}",
+                  file=sys.stderr)
+            return 2
 
     selected_calibration = None
     if args.calibration_bundle is not None:
@@ -3401,10 +4438,26 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
             recipe_id=resolved_recipe_id, model=args.model, reps=args.reps,
             devices=tuple(args.device), device_names=tuple(args.device_name),
             journal_root=args.journal_root, proposal=proposal,
+            source_patch=source_patch,
+            source_prerequisite_package=source_prerequisites,
+            fresh_source_prerequisite_plan=fresh_source_plan,
+            least_commitment_plan=least_commitment_plan,
             calibration=selected_calibration,
             physical_envelope=physical_envelope, ranked_units=ranked_units)
-    except (ValueError, TypeError, storage.StorageError, recipes.RecipeError) as exc:
+    except (ValueError, TypeError, storage.StorageError, recipes.RecipeError,
+            source_candidate.SourceCandidateError,
+            source_prerequisite_package.SourcePrerequisitePackageError,
+            source_prerequisite_producer.FreshSourcePrerequisiteError) as exc:
         print(f"refusing to start: {exc}", file=sys.stderr)
+        return 2
+
+    if (not args.dry_run and spec.source_prerequisite_package is not None
+            and spec.source_prerequisite_package.capture_mode != "measured"):
+        print(
+            "refusing to --execute: --source-prerequisite-package was captured in "
+            "dry_run mode; it cannot supply correctness authority",
+            file=sys.stderr,
+        )
         return 2
 
     # Ranking authority is cell-local.  The five-control bundle calibrated the
@@ -3429,9 +4482,17 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
             )
             return 2
 
+    broker: Optional[powercap_broker.PowercapBroker] = None
     if ops is None:
-        ops = (DryRunOps(out=stream) if args.dry_run
-               else HostOps(nominal_khz=args.nominal_khz))
+        if args.dry_run:
+            ops = DryRunOps(out=detail_stream)
+        else:
+            # Root-owned package counters are read through a networkless,
+            # read-only broker. It starts lazily on the first host snapshot, so
+            # every pre-claim refusal above remains side-effect free.
+            broker = powercap_broker.PowercapBroker()
+            ops = HostOps(nominal_khz=args.nominal_khz,
+                          host_state=broker.read_host_state)
 
     # BEFORE the claim, and before the banner: source-changing campaigns still
     # have proposal-specific seams; the IQK
@@ -3472,39 +4533,44 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
 
     print(f"AutoKernel campaign {spec.campaign_id} / {spec.candidate_id} — "
           f"{'DRY RUN (nothing will be executed)' if args.dry_run else 'EXECUTING'}",
-          file=stream)
+          file=detail_stream)
     print("  question    "
           + (f"{spec.hypothesis_id} — falsifier: {spec.authorization.falsifier}"
              if spec.authorization is not None
              else "EXPLORATORY (no --hypothesis; this run resolves no question)"),
-          file=stream)
-    print(f"  cell        {spec.recipe_id}  metric={spec.metric}", file=stream)
+          file=detail_stream)
+    print(f"  cell        {spec.recipe_id}  metric={spec.metric}", file=detail_stream)
     if spec.calibration is None:
         print("  accept      UNCALIBRATED CELL — dry-run composition only; live ranking "
-              "will refuse", file=stream)
+              "will refuse", file=detail_stream)
     else:
         print(f"  accept      min(delta) > 0 over {spec.blocks} pre-committed pairs AND "
-              f"median(relative) > {spec.contribution_floor:.4%}", file=stream)
+              f"median(relative) > {spec.contribution_floor:.4%}", file=detail_stream)
         print(f"  calibration B_min={spec.calibration.b_min_blocks}, "
               f"MDE={spec.calibration.mde:.4%}: "
-              f"{spec.calibration.evidence_ref}", file=stream)
+              f"{spec.calibration.evidence_ref}", file=detail_stream)
     print(f"  anchor movement bound: {spec.drift_bound:.4%} from {AA_EVIDENCE_REF}",
-          file=stream)
-    print("", file=stream)
+          file=detail_stream)
+    print("", file=detail_stream)
 
-    result = run_campaign(spec, ops)
+    try:
+        result = run_campaign(spec, ops)
+    finally:
+        if broker is not None:
+            broker.close()
 
-    print("", file=stream)
-    print(f"state: {result.state}", file=stream)
+    print("", file=detail_stream)
+    print(f"state: {result.state}", file=detail_stream)
     if result.decision is not None:
-        print(result.decision.reason, file=stream)
+        print(result.decision.reason, file=detail_stream)
     if result.error:
-        print(f"error: {result.error.splitlines()[0]}", file=stream)
+        print(f"error: {result.error.splitlines()[0]}", file=detail_stream)
     for record in result.releases:
         marker = "released" if record.released else "NOT RELEASED"
-        print(f"  {record.name}: {marker} ({record.detail})", file=stream)
+        print(f"  {record.name}: {marker} ({record.detail})", file=detail_stream)
     if result.production_unchanged is not None:
-        print(f"  production trees: {result.production_unchanged.outcome}", file=stream)
+        print(f"  production trees: {result.production_unchanged.outcome}",
+              file=detail_stream)
     if args.as_json:
         print(json.dumps(result.to_dict(), indent=2, sort_keys=True, default=str),
               file=stream)

@@ -84,7 +84,7 @@ Usage: $(basename "$0") -m MODEL [OPTIONS] [-- EXTRA_BENCH_FLAGS...]
   -r REPS             Repetitions (default: 2)
   --perf              Wrap in sudo perf stat with canonical event set
   --no-ik-llama       Prefer v5_clean over ik_llama (default: prefer ik_llama)
-  --v4-fork           Use the DeepSeek-V4 fork binary (only for V4 GGUFs)
+  --v4-fork           Retired; fails with mainline V4 migration guidance
   --binary PATH        Explicit llama-bench binary for a candidate A/B arm
   --source-root DIR    Git worktree root owning --binary
   --library-path DIR   Candidate llama.cpp library directory; pinned first
@@ -101,6 +101,9 @@ Pass any args after '--' directly to llama-bench (e.g. -ctk q8_0 -ctv q8_0).
 
 The recipe single source of truth is:
   $RECIPE_LIB
+
+DeepSeek-V4 uses the normal mainline production binary. Candidate V4 arms must
+pass --binary, --source-root, and --library-path together.
 EOF
 }
 

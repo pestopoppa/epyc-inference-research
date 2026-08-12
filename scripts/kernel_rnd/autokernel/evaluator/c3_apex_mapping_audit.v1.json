@@ -1,0 +1,142 @@
+{
+  "schema": "epyc.autokernel.c3_apex_mapping_audit.v1",
+  "audit_date": "2026-08-11",
+  "authority": "static_source_audit_only_no_runtime_equivalence_or_inference",
+  "pins": {
+    "apex_revision": "e06b5d1cd58996a82c5e2897164f760c3b3f87ac",
+    "magpie_revision": "2a9263833f71755df2a93b466cdd3a9f803fc625",
+    "aiter_revision": "7890e4be789ac362d3033437d09920ddd5f2891a",
+    "registry_sha256": "72d6529ca945a860abd2ba22dd26bb8dbf8d9c33797327c0e5ce9e11d8047a61",
+    "target_architecture": "gfx90a",
+    "aiter_hsa_architectures": [
+      "gfx942",
+      "gfx950"
+    ],
+    "aiter_hsa_file_count": 2867,
+    "aiter_hsa_inventory_sha256": "e0503ea08e860b1af7c5f5d0f235ec53310dcdf23932d1b201881533e1cb02dc"
+  },
+  "cases": [
+    {
+      "case_id": "epyc.attention.mla_paged_prefill.k228",
+      "c5_ref": "hyra-sol-execbench/k228",
+      "c5_artifact_path": "/mnt/raid0/llm/tmp/autokernel-hyra-results-20260811/AI4AI/sol_execbench/k228__sid25896__mla_paged_prefill_causal_h16_ckv512_kpe64_ps1__019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1.json",
+      "c5_artifact_sha256": "696b6b0802ba4d2ae371cbdeddee07f5ca2796827805dcc90561205c3f81d83a",
+      "disposition": "structural_mismatch",
+      "closest_registry_entries": [
+        "aiter.hip.mla_prefill_asm_fwd"
+      ],
+      "component_graph": [
+        "concatenate q_nope[total_q,16,512] with q_pe[total_q,16,64] into Q[...,576]",
+        "concatenate ckv_cache[num_pages,1,512] with kpe_cache[num_pages,1,64] into KV[...,1,576]",
+        "causal paged MLA prefill with page_size=1 and sm_scale",
+        "emit bf16 output[total_q,16,512] and base-2 fp32 lse[total_q,16]"
+      ],
+      "missing_components": [
+        {
+          "id": "gfx90a_mla_prefill_kernel_object",
+          "detail": "pinned AITER contains MLA HSA objects only under hsa/gfx942 and hsa/gfx950; mla_prefill_asm_fwd selects an architecture-keyed object and has no gfx90a object"
+        },
+        {
+          "id": "base2_lse_contract",
+          "detail": "the C5 case requires base-2 LSE, while pinned AITER's Python declaration and checked prefill test do not state or assert the returned LSE base"
+        },
+        {
+          "id": "c5_abi_adapter",
+          "detail": "no reviewed adapter binds the separate q_nope/q_pe and ckv/kpe tensors plus derived kv_last_page_lens/max_seqlen_q to the concatenated AITER ABI"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "pipeline/kernel_tracing/supported_kernels.yaml",
+          "sha256": "72d6529ca945a860abd2ba22dd26bb8dbf8d9c33797327c0e5ce9e11d8047a61"
+        },
+        {
+          "path": "tools/rocm/aiter/aiter/ops/attention.py",
+          "sha256": "a4cda7222f06b60c1ca8f53f22cfa8c58db08d512d32e423ee936caa86f786d5"
+        },
+        {
+          "path": "tools/rocm/aiter/aiter/mla.py",
+          "sha256": "22c92a0d2c588856b5f5a31545d5e64b3b3a80b1c805ae43e2b08c964a21ffd9"
+        },
+        {
+          "path": "tools/rocm/aiter/csrc/py_itfs_cu/asm_mla.cu",
+          "sha256": "1c818bd78a7c3e35013c5eebf69ca26042629097b2de0d29e0a7ad56f45af846"
+        }
+      ]
+    },
+    {
+      "case_id": "epyc.moe.sparse_expert_dispatch.k175",
+      "c5_ref": "hyra-sol-execbench/k175",
+      "c5_artifact_path": "/mnt/raid0/llm/tmp/autokernel-hyra-results-20260811/AI4AI/sol_execbench/k175__sid25683__moe_sparse_expert_dispatch__081_moe_sparse_expert_dispatch.json",
+      "c5_artifact_sha256": "5b28cd02aab7e1ad1b8c48394e220ae398036ce81416e153c7a5e3237ba6f8c3",
+      "disposition": "structural_mismatch",
+      "closest_registry_entries": [
+        "aiter.hip.biased_grouped_topk",
+        "aiter.hip.moe_align_block_size",
+        "aiter.hip.moe_sorting_fwd",
+        "aiter.hip.fmoe_g1u1",
+        "aiter.hip.ck_moe_stage1",
+        "aiter.hip.ck_moe_stage2",
+        "aiter.hip.moe_sum"
+      ],
+      "component_graph": [
+        "router projection GEMM hidden[*,4096] x router_weight[128,4096]",
+        "sigmoid plus correction bias; top-8 selection; biased-value normalization; per-expert counts and per-token ranks",
+        "N<=1350: padded prefix/alignment, source/canonical maps and inverse map",
+        "N>1350: prefix offsets, hidden scatter/gather and inverse map",
+        "routed expert gate and up GEMMs, bf16 SiLU multiply, then down GEMM",
+        "shared-expert gate and up GEMMs, bf16 SiLU multiply, then down GEMM on an overlapped stream",
+        "weighted inverse-map undispatch plus shared-expert addition",
+        "pointer-keyed graph capture/replay wrapper"
+      ],
+      "missing_components": [
+        {
+          "id": "router_projection_gemm",
+          "detail": "the Apex registry has no row for the exact 4096-to-128 router projection"
+        },
+        {
+          "id": "biased_top8_counts_and_ranks",
+          "detail": "adjacent biased_grouped_topk uses bias for selection but gathers un-biased sigmoid weights and emits neither per-expert counts nor per-token ranks"
+        },
+        {
+          "id": "dispatch_scatter_gather_inverse_map",
+          "detail": "moe_align_block_size and moe_sorting_fwd do not implement the C5 hidden-state gather plus exact inverse-map contract for both size branches"
+        },
+        {
+          "id": "shared_expert_branch",
+          "detail": "the registry has no row binding the separate shared gate/up, SiLU multiply and shared down projection branch"
+        },
+        {
+          "id": "weighted_undispatch_shared_add",
+          "detail": "moe_sum does not bind inverse-map gathers, top-8 weights and the shared-expert addition"
+        },
+        {
+          "id": "component_graph_trace_plan",
+          "detail": "the Apex adapter supports one selected registry row, not an ordered, branch-aware, multi-stream graph of hash-bound component traces"
+        }
+      ],
+      "evidence": [
+        {
+          "path": "pipeline/kernel_tracing/supported_kernels.yaml",
+          "sha256": "72d6529ca945a860abd2ba22dd26bb8dbf8d9c33797327c0e5ce9e11d8047a61"
+        },
+        {
+          "path": "tools/rocm/aiter/aiter/ops/topk.py",
+          "sha256": "25f5c12483e90a153645a139bb71d5b4236dc0c8bb9db6331ce3b0657b9eaf62"
+        },
+        {
+          "path": "tools/rocm/aiter/aiter/ops/moe_op.py",
+          "sha256": "22eaaa416aa70cce46af1a1d2689cc67736948d0ccc22b5bd85c83fa112fcbd3"
+        },
+        {
+          "path": "tools/rocm/aiter/aiter/ops/moe_sorting.py",
+          "sha256": "310750ef26b44b43afbf0a321c2d04b2a7c291d3ea3f5a0dfecf654354155395"
+        },
+        {
+          "path": "tools/rocm/aiter/aiter/fused_moe.py",
+          "sha256": "a856069c3b088b3f351ed91c31f2859b2d3a6b56c0ccaaf9fe22e02d63f5d7b6"
+        }
+      ]
+    }
+  ]
+}

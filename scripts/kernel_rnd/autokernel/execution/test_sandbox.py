@@ -84,6 +84,22 @@ class SandboxKernelProbeTest(unittest.TestCase):
             with self.assertRaisesRegex(S.SandboxError, "evaluator-owned"):
                 policy.wrap(["/bin/true"], receipt_path=str(Path(root, "receipt.json")))
 
+    def test_host_delegation_is_the_default_when_present(self):
+        with mock.patch.dict(S.os.environ, {}, clear=True), \
+                mock.patch.object(S.os.path, "isdir", return_value=True):
+            self.assertEqual(S.default_cgroup_root(), S.HOST_CGROUP_ROOT)
+
+    def test_explicit_cgroup_root_must_be_absolute(self):
+        with mock.patch.dict(
+                S.os.environ, {S.CGROUP_ROOT_ENV: "relative/cgroup"}, clear=True):
+            with self.assertRaisesRegex(S.SandboxError, "absolute"):
+                S.default_cgroup_root()
+
+    def test_explicit_cgroup_root_overrides_host_default(self):
+        with mock.patch.dict(
+                S.os.environ, {S.CGROUP_ROOT_ENV: "/delegated/cgroup"}, clear=True):
+            self.assertEqual(S.default_cgroup_root(), "/delegated/cgroup")
+
 
 class LiveRunnerWiringTest(unittest.TestCase):
     def test_microbench_spawner_returns_activation_and_teardown_receipts(self):

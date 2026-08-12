@@ -1,0 +1,143 @@
+{
+  "attestation_reason": "ok",
+  "attestation_valid": true,
+  "binding": {
+    "harness": {
+      "bytes": 105518,
+      "dev": 2431,
+      "inode": 102791693,
+      "mtime_ns": 1786409254594374127,
+      "path": "/workspace/worktrees/v9-promotion-research/scripts/benchmark/laguna_pgpu1_dflash_runner.py",
+      "resolved_path": "/workspace/worktrees/v9-promotion-research/scripts/benchmark/laguna_pgpu1_dflash_runner.py",
+      "sha256": "cc9868b14c4e808569359936aa8af15d794c37f8b0de2bdd289b54f6601aec3a",
+      "stable": true
+    },
+    "models": {
+      "drafter": {
+        "bytes": 3471497600,
+        "dev": 2431,
+        "inode": 98208220,
+        "mtime_ns": 1786408994118482871,
+        "path": "/mnt/raid0/llm/models/dflash/Qwen3.6-27B-DFlash/Qwen3.6-27B-DFlash-f16-canonical-v4.gguf",
+        "resolved_path": "/mnt/raid0/llm/models/dflash/Qwen3.6-27B-DFlash/Qwen3.6-27B-DFlash-f16-canonical-v4.gguf",
+        "sha256": "9977c9c94580c8767ea99f979fa20cbb16b1047e3796e38e9a25eb7d39af98de",
+        "stable": true
+      },
+      "target": {
+        "bytes": 29047084160,
+        "dev": 2431,
+        "inode": 96242884,
+        "mtime_ns": 1783076098258643673,
+        "path": "/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf",
+        "resolved_path": "/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf",
+        "sha256": "9408dcb356cc061a05c139e5647cbde0698ff980c6a69f7fc214e9989f86cfa8",
+        "stable": true
+      }
+    },
+    "promotion_attestation": {
+      "path": "/mnt/raid0/llm/epyc-root/handoffs/active/v9-kernel-promotion-attestation.json",
+      "sha256": "813bf569c03aace2fb57856edff7dbc20e8bc8fb5fecdd1f6e3342169d15486a"
+    },
+    "server": {
+      "artifact": {
+        "bytes": 17984,
+        "dev": 2431,
+        "inode": 102794750,
+        "mtime_ns": 1786401631900616927,
+        "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+        "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+        "sha256": "21cfb750dc0ba4b3add0674fcb9dd061d77b3604ebf8e1d063ba0e2c51902feb",
+        "stable": true
+      },
+      "local_llama_ggml_libraries": [
+        {
+          "bytes": 971409,
+          "dev": 2431,
+          "inode": 102794705,
+          "mtime_ns": 1786401631877616681,
+          "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-base.so.0",
+          "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-base.so.0.16.0",
+          "sha256": "eedeb7380ef4f82f2feedf514341c92d52e5673846ea1c11d7ebb7c8643390de",
+          "soname": "libggml-base.so.0",
+          "stable": true
+        },
+        {
+          "bytes": 2885088,
+          "dev": 2431,
+          "inode": 102794714,
+          "mtime_ns": 1786401631689614669,
+          "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-cpu.so.0",
+          "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-cpu.so.0.16.0",
+          "sha256": "ddead9e009cc1de96cc18154fa9bb891d69d4689e84e57920034a585afaccb55",
+          "soname": "libggml-cpu.so.0",
+          "stable": true
+        },
+        {
+          "bytes": 66824128,
+          "dev": 2431,
+          "inode": 102794706,
+          "mtime_ns": 1786401631628614016,
+          "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-hip.so.0",
+          "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-hip.so.0.16.0",
+          "sha256": "18192805ae84178ea1fd0ebee6ea0a5092b99d064bc357800325fc65015cd5e1",
+          "soname": "libggml-hip.so.0",
+          "stable": true
+        },
+        {
+          "bytes": 59440,
+          "dev": 2431,
+          "inode": 102794708,
+          "mtime_ns": 1786401631816616028,
+          "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml.so.0",
+          "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml.so.0.16.0",
+          "sha256": "fd87ca295fb3c3ed760def97b6787a994611efc18ad7279049c64a50f6ea72f0",
+          "soname": "libggml.so.0",
+          "stable": true
+        },
+        {
+          "bytes": 6188944,
+          "dev": 2431,
+          "inode": 102794712,
+          "mtime_ns": 1786401631775615589,
+          "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-common.so.0",
+          "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-common.so.0.0.10125",
+          "sha256": "eae6f202532cf7f031b3ea7dc1d9784e93badeb56011b3f31795324382cd5755",
+          "soname": "libllama-common.so.0",
+          "stable": true
+        },
+        {
+          "bytes": 7321552,
+          "dev": 2431,
+          "inode": 102794754,
+          "mtime_ns": 1786401631841616296,
+          "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-server-impl.so",
+          "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-server-impl.so",
+          "sha256": "20cbf39b087e6a3beacc51e2c9fc9ecf55bfc5b524c3b1de3c0c46db8bd858df",
+          "soname": "libllama-server-impl.so",
+          "stable": true
+        },
+        {
+          "bytes": 4251240,
+          "dev": 2431,
+          "inode": 102794836,
+          "mtime_ns": 1786401631705614840,
+          "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama.so.0",
+          "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama.so.0.0.10125",
+          "sha256": "f31db68deb459fb7d7835f2a835849bbb5de0cea1ae2c3daee2ab2b995ca9bd5",
+          "soname": "libllama.so.0",
+          "stable": true
+        }
+      ],
+      "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+      "sha256": "21cfb750dc0ba4b3add0674fcb9dd061d77b3604ebf8e1d063ba0e2c51902feb"
+    }
+  },
+  "binding_reason": "ok",
+  "binding_unchanged": true,
+  "harness_reason": "ok",
+  "harness_valid": true,
+  "models_reason": "ok",
+  "models_valid": true,
+  "production_reason": "ok",
+  "production_valid": true
+}

@@ -1,0 +1,34 @@
+warning: no usable GPU found, --gpu-layers option will be ignored
+warning: one possible reason is that llama.cpp was compiled without GPU support
+warning: consult docs/build.md for compilation instructions
+warning: no usable GPU found, --gpu-layers-draft option will be ignored
+warning: one possible reason is that llama.cpp was compiled without GPU support
+warning: consult docs/build.md for compilation instructions
+0.00.001.468 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.001.750 W srv  llama_server: -----------------
+0.00.001.751 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.001.751 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.001.751 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.001.752 W srv  llama_server: -----------------
+0.00.002.930 I srv    load_model: loading model '/mnt/raid0/llm/models/deepseek-v4-flash-0731/UD-Q8_K_XL/DeepSeek-V4-Flash-0731-UD-Q8_K_XL-00001-of-00005.gguf'
+0.00.112.626 E llama_init_from_model: failed to initialize the context: dflash requires ctx_other to be set (this warning is normal during memory fitting)
+0.00.130.820 W srv    load_model: [spec] failed to measure draft model memory: failed to create llama_context from model
+0.04.502.636 W load_arch_hparams: missing target_hidden_size; using legacy draft hidden size 4096 and requiring the runtime target model to match
+0.05.351.608 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 3328, kv_unified = 'false'
+0.05.351.645 W common_speculative_impl_draft_dflash: missing dflash.target_hidden_size; using legacy draft hidden size 4096 and requiring it to match the target model
+0.05.351.653 I common_speculative_impl_draft_dflash: adding speculative implementation 'draft-dspark'
+0.05.351.656 I common_speculative_impl_draft_dflash: - n_max=3, n_min=0, p_min=0.00
+0.05.351.657 I common_speculative_impl_draft_dflash: - block_size=5, mask_token_id=128799, n_extract=3
+0.05.407.120 I srv  llama_server: model loaded
+0.05.407.127 I srv  llama_server: listening on http://127.0.0.1:19620
+0.08.091.961 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.08.092.004 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.17.584.867 I slot print_timing: id  0 | task 0 | prompt processing, n_tokens =    512, progress = 0.48, t =   9.49 s / 53.94 tokens per second
+0.18.717.843 I slot print_timing: id  0 | task 0 | prompt processing, n_tokens =    549, progress = 0.52, t =  10.63 s / 51.67 tokens per second
+0.28.450.480 I slot print_timing: id  0 | task 0 | prompt processing, n_tokens =   1057, progress = 1.00, t =  20.36 s / 51.92 tokens per second
+0.34.584.306 I slot print_timing: id  0 | task 0 | prompt eval time =   20886.42 ms /  1061 tokens (   19.69 ms per token,    50.80 tokens per second)
+0.34.584.311 I slot print_timing: id  0 | task 0 |        eval time =    5605.85 ms /    16 tokens (  350.37 ms per token,     2.85 tokens per second)
+0.34.584.311 I slot print_timing: id  0 | task 0 |       total time =   26492.27 ms /  1077 tokens
+0.34.584.317 I slot print_timing: id  0 | task 0 |    graphs reused =         14
+0.34.584.389 I slot      release: id  0 | task 0 | stop processing: n_tokens = 1076, truncated = 0
+0.38.103.236 I srv    operator(): operator(): cleaning up before exit...

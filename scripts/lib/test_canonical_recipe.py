@@ -305,24 +305,11 @@ class TestBinaryDiscovery(unittest.TestCase):
         self.assertEqual(binary, r.V6_IQK_BENCH)
         self.assertEqual(libs, r.EXPECTED_LIBS_V6_IQK)
 
-    def test_v4_fork_discovery_when_built(self):
-        if not os.path.isfile(r.V4_FORK_BENCH):
-            self.skipTest("V4 fork bench binary not built")
-        binary, libs = r.discover_v4_fork_bench()
-        self.assertEqual(binary, r.V4_FORK_BENCH)
-        self.assertEqual(libs, r.EXPECTED_LIBS_V4_FORK)
-
-    def test_v4_fork_discovery_raises_when_unbuilt(self):
-        # Negative case: if the binary doesn't exist, FileNotFoundError with
-        # rebuild instructions
-        if os.path.isfile(r.V4_FORK_BENCH):
-            self.skipTest(
-                "V4 fork is built; this test only meaningful pre-build."
-            )
-        with self.assertRaises(FileNotFoundError) as ctx:
+    def test_v4_fork_discovery_is_retired(self):
+        with self.assertRaises(r.CanonicalRecipeViolation) as ctx:
             r.discover_v4_fork_bench()
-        # Error message must include the rebuild command
-        self.assertIn("--disable-new-dtags", str(ctx.exception))
+        self.assertIn("--v4-fork is retired", str(ctx.exception))
+        self.assertIn("--binary/--source-root/--library-path", str(ctx.exception))
 
     def test_v4_fork_does_not_appear_in_default_discovery(self):
         # discover_canonical_bench_binary must NOT return V4_FORK_BENCH because

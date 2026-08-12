@@ -1,0 +1,13 @@
+[runner] Waiting for server at http://127.0.0.1:18072...
+[runner] Server healthy
+
+[runner] Evaluating mmlu_pro (n=150, seed=42)...
+  [runner] mmlu_pro: pass 1/1 25/150 (14/25 correct so far)
+  [runner] mmlu_pro: pass 1/1 50/150 (29/50 correct so far)
+  [runner] mmlu_pro: pass 1/1 75/150 (45/75 correct so far)
+  [runner] mmlu_pro: pass 1/1 100/150 (61/100 correct so far)
+  [runner] mmlu_pro: pass 1/1 125/150 (74/125 correct so far)
+  [runner] mmlu_pro: pass 1/1 150/150 (93/150 correct so far)
+[runner] mmlu_pro: 62.0% (93/150)
+
+[runner] Results written to /mnt/raid0/llm/worktrees/mmlu-pro-research-20260812/artifacts/architect-bench-gpu-20260720/runs/mmlu_pro/A1_qwen35_122b_iq2m_v9/result.json

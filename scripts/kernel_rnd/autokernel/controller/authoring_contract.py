@@ -12,6 +12,7 @@ import math
 import os
 import re
 import shlex
+import json
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Iterable, Optional
@@ -24,7 +25,7 @@ __all__ = [
     "price_context", "GitRecoveryRecipe", "CompactionRecord",
     "ExternalNumber", "EvaluationCase", "CasePopulation", "DiagnosticRecord",
     "DiagnosticDisclosure", "filter_refine_diagnostics", "assert_prompt_hygiene",
-    "assemble_authoring_prompt",
+    "assemble_authoring_prompt", "c4_profile_context_item",
 ]
 
 
@@ -152,6 +153,24 @@ def price_context(*, round_id: str, budget: ContextBudget,
             f"{budget.max_total_tokens}")
     return PricedContext(round_id=round_id, budget=budget, items=rows,
                          estimated_tokens=total)
+
+
+def c4_profile_context_item(report_path: str, *, expected_sha256: str) -> ContextItem:
+    """Project a hash-bound C4 report into the priced authoring-context seam."""
+    from .. import profile_context
+
+    context = profile_context.load_profile_context(
+        report_path, expected_sha256=expected_sha256)
+    content = json.dumps(
+        context.discovery_context(), sort_keys=True, separators=(",", ":"))
+    # This is a contractual check, not a caller convenience: a new C4 field may
+    # never silently disclose a sealed evaluator marker to the authoring model.
+    assert_prompt_hygiene(content)
+    return ContextItem(
+        source_ref=f"c4-profile://{context.report_sha256}",
+        purpose=f"C4 {context.stage} mechanism and wall-share evidence",
+        content=content,
+    )
 
 
 @dataclass(frozen=True)
@@ -417,7 +436,7 @@ def assemble_authoring_prompt(*, role: str, task: str, context: PricedContext,
     enter only through validated typed records; context has already passed the
     per-round budget and never-bulk-read gate.
     """
-    if role not in {"planner", "actor", "critic", "exploit"}:
+    if role not in {"planner", "actor", "critic", "implement", "exploit"}:
         raise ValueError(f"unknown authoring role {role!r}")
     if not isinstance(task, str) or not task.strip():
         raise ValueError("task must be non-empty")
