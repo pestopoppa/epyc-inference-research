@@ -35,6 +35,7 @@ from scripts.kernel_rnd.autokernel.resource import device_claim
 
 
 SCHEMA = "epyc.autokernel.async_prefetch_replay.v1"
+PRODUCER_ID = "scripts.benchmark.run_autokernel_async_prefetch_replay/v2"
 PRODUCTION_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 GFX90A_DURATION_FLOOR_NS = 250_090_903
 GFX90A_DURATION_FLOOR_REF = (
@@ -49,6 +50,13 @@ ARMS = ("anchor", "candidate")
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def canonical_sha256(value: object) -> str:
+    encoded = json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+        allow_nan=False).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def command_output(command: tuple[str, ...], *, env: dict[str, str] | None = None) -> str:
@@ -160,6 +168,83 @@ def summarize(block_rows: list[dict], *, contribution_floor: float) -> dict:
     }
 
 
+def belief_measurements(*, declaration: dict, result: dict,
+                        opened_claim: dict, released_claim: dict,
+                        producer_sha256: str) -> tuple[list[dict], str, str]:
+    """Build the prospective write-time tuple from governed replay evidence.
+
+    The historical 2026-08-12 replay has no vector and remains untouched.  A
+    future receipt gets exactly one row: the paired-block median used by its
+    native verdict, with every denominator and identity captured while the
+    writer still has them.
+    """
+    if result.get("verdict") not in {"REPRODUCED_KNOWN_WIN", "NOT_REPRODUCED"}:
+        raise RuntimeError("async-prefetch replay has no admitted native verdict")
+    paired = result.get("paired_blocks")
+    if not isinstance(paired, list) or len(paired) != declaration.get("blocks"):
+        raise RuntimeError("async-prefetch replay belief row needs every scored block")
+    source_identity = {
+        "source_root": declaration["source_root"],
+        "source_branch": declaration["source_branch"],
+        "source_commit": declaration["source_commit"],
+        "binary": declaration["binary"],
+        "binary_sha256": declaration["binary_sha256"],
+        "linkage_sha256": declaration["linkage_sha256"],
+        "model": declaration["model"],
+        "model_sha256": declaration["model_sha256"],
+    }
+    source_identity_sha256 = canonical_sha256(source_identity)
+    claim_identity = {"opened": opened_claim, "released": released_claim}
+    claim_identity_sha256 = canonical_sha256(claim_identity)
+    evidence_basis = {
+        "paired_blocks": paired,
+        "aggregation": "median(candidate_tokens_per_s/anchor_tokens_per_s-1)",
+        "scored_blocks": len(paired),
+        "samples_per_arm_per_block": declaration["cell"]["repetitions"],
+        "contribution_floor": result["contribution_floor"],
+        "all_blocks_positive": result["all_blocks_positive"],
+        "native_verdict": result["verdict"],
+        "orders": declaration["orders"],
+        "order_seed": declaration["order_seed"],
+        "source_identity_sha256": source_identity_sha256,
+        "claim_identity_sha256": claim_identity_sha256,
+        "producer_sha256": producer_sha256,
+    }
+    evidence_sha256 = canonical_sha256(evidence_basis)
+    row = {
+        "measurement_id": "async_prefetch_median_relative_delta",
+        "metric": "async_prefetch_paired_median_relative_throughput_delta",
+        "value": result["median_relative_delta"],
+        "unit": "fraction",
+        "metric_direction": "higher_better",
+        "category": "BASELINE",
+        "protocol_id": SCHEMA,
+        "reps": len(paired),
+        "reps_basis": "scored:balanced paired replay blocks",
+        "claim": (
+            "Frozen-v9 async-prefetch replay observed paired median relative "
+            f"throughput delta {result['median_relative_delta']:.9g}; native verdict "
+            f"{result['verdict']}"),
+        "native_verdict": result["verdict"],
+        "extra": {
+            "candidate_parameter": declaration["candidate_parameter"],
+            "anchor_parameter": declaration["anchor_parameter"],
+            "source_identity": source_identity,
+            "source_identity_sha256": source_identity_sha256,
+            "binary_sha256": declaration["binary_sha256"],
+            "model_sha256": declaration["model_sha256"],
+            "device_claim_id": opened_claim["claim_id"],
+            "claim_identity_sha256": claim_identity_sha256,
+            "producer_id": PRODUCER_ID,
+            "producer_sha256": producer_sha256,
+            "evidence_basis": evidence_basis,
+            "evidence_sha256": evidence_sha256,
+        },
+    }
+    row["measurement_sha256"] = canonical_sha256(row)
+    return [row], source_identity_sha256, claim_identity_sha256
+
+
 def run(args: argparse.Namespace) -> dict:
     source_root = Path(args.source_root).resolve()
     binary = Path(args.binary).resolve()
@@ -254,15 +339,29 @@ def run(args: argparse.Namespace) -> dict:
     if sampling is None:
         raise RuntimeError("async-prefetch replay completed without device sampling")
     result = summarize(runs, contribution_floor=args.contribution_floor)
+    producer_sha256 = sha256_file(Path(__file__).resolve())
+    measurements, source_identity_sha256, claim_identity_sha256 = belief_measurements(
+        declaration=declaration, result=result, opened_claim=opened,
+        released_claim=released, producer_sha256=producer_sha256)
     payload = {
         **declaration, "started_at": started_at, "ended_at": utc_now(),
+        "status": "complete",
         "duration_s": time.monotonic() - started, "warmups": warmups, "runs": runs,
         "result": result, "device_claim_open": opened,
         "device_claim_held_after_runs": {
             "outcome": held.outcome, "reasons": list(held.reasons)},
         "device_claim_released": released,
         "device_sampling": sampling.to_dict(),
+        "producer": {
+            "producer_id": PRODUCER_ID,
+            "path": "scripts/benchmark/run_autokernel_async_prefetch_replay.py",
+            "sha256": producer_sha256,
+        },
+        "source_identity_sha256": source_identity_sha256,
+        "claim_identity_sha256": claim_identity_sha256,
+        "belief_measurements": measurements,
     }
+    payload["receipt_sha256"] = canonical_sha256(payload)
     write_json_atomic(output_dir / "receipt.json", payload)
     return payload
 

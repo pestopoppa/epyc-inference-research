@@ -91,6 +91,8 @@ REQUIRED_HARDENING_RECEIPTS = (
     b"autokernel_thread_set_hashes",
     b"autokernel_device_sync_mode",
 )
+BELIEF_RECEIPT_SCHEMA = "epyc.autokernel.live_control_beliefs.v1"
+BELIEF_PRODUCER_ID = "autokernel.execution.live_controls/v2"
 
 
 @dataclass(frozen=True)
@@ -127,6 +129,12 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _json_file_sha256(value: object) -> str:
+    """Digest the exact bytes :func:`_write_json` will persist."""
+    payload = (json.dumps(value, sort_keys=True, indent=2) + "\n").encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -250,6 +258,7 @@ def _write_declaration(output_root: Path, *, identity: LiveCampaignIdentity,
         "recipe_id": RECIPE_ID,
         "cpu_list": CPU_LIST,
         "model": str(MODEL),
+        "model_sha256": _sha256_file(MODEL) if MODEL.is_file() else None,
         "prompt_tokens": PROMPT_TOKENS,
         "wrong_prompt_tokens": WRONG_PROMPT_TOKENS,
         "calibration_blocks": CALIBRATION_BLOCKS,
@@ -262,9 +271,171 @@ def _write_declaration(output_root: Path, *, identity: LiveCampaignIdentity,
             for label, envelope in sorted(_declared_physical_envelopes().items())
         },
         "source_sha256": source_sha,
+        "belief_capture_schema": BELIEF_RECEIPT_SCHEMA,
     }
     _write_json(output_root / "campaign_declaration.json", declaration)
     return source_sha
+
+
+def _build_belief_receipt(
+        output_root: Path, *, identity: LiveCampaignIdentity,
+        result: control_runner.SweepResult,
+        claim_receipt: cpu_region_claim.RegionClaimReceipt,
+        measured_at: str) -> dict | None:
+    """Capture future control-panel claims without retrofitting old evidence.
+
+    The declaration marker is written before measurement.  Its absence is the
+    unambiguous pre-hook boundary: recovery of an older raw bundle may compose
+    the old control sweep, but it must never invent a Vidya tuple afterward.
+    """
+    declaration = _load_json(output_root / "campaign_declaration.json")
+    if declaration.get("belief_capture_schema") != BELIEF_RECEIPT_SCHEMA:
+        return None
+    runtime = _load_json(output_root / "runtime-source-label.json")
+    sweep = result.to_dict()
+    panel = sweep.get("panel_result")
+    outcomes = panel.get("outcomes") if isinstance(panel, Mapping) else None
+    observations = panel.get("observations") if isinstance(panel, Mapping) else None
+    if not isinstance(outcomes, list) or not isinstance(observations, list):
+        raise RuntimeError("live-control sweep lacks terminal outcomes and observations")
+    by_control = {
+        row.get("control_id"): row for row in observations
+        if isinstance(row, Mapping)
+    }
+    expected = {outcome.get("control_id") for outcome in outcomes
+                if isinstance(outcome, Mapping)}
+    required = {
+        controls.CONTROL_POSITIVE, controls.CONTROL_NEUTRAL,
+        controls.CONTROL_DEGRADED_NEGATIVE, controls.CONTROL_AA,
+        controls.CONTROL_HISTORICAL_WIN_REPLAY,
+    }
+    if expected != required or set(by_control) != required:
+        raise RuntimeError("live-control belief receipt requires exactly the five controls")
+    sweep_sha256 = _json_file_sha256(sweep)
+    producer_sha256 = _sha256_file(Path(__file__).resolve())
+    producer = {
+        "producer_id": BELIEF_PRODUCER_ID,
+        "path": "scripts/kernel_rnd/autokernel/execution/live_controls.py",
+        "sha256": producer_sha256,
+    }
+    runtime_body = {key: value for key, value in runtime.items()
+                    if key != "source_sha256"}
+    if runtime.get("source_sha256") != schemas.content_hash(runtime_body):
+        raise RuntimeError("runtime source identity changed before belief finalization")
+    source_identity = {
+        "production_source_commit": runtime["production_source_commit"],
+        "measurement_instrument_commit": runtime["measurement_instrument_commit"],
+        "runtime_source_sha256": runtime["source_sha256"],
+    }
+    source_identity_sha256 = schemas.content_hash(source_identity)
+    binary_identity = {
+        "path": str(output_root / "anchor_binary_copy" / "llama-bench"),
+        "sha256": runtime["copied_binary_sha256"],
+        "linkage_sha256": runtime["copied_linkage_sha256"],
+        "copy_exact": runtime["binary_copy_exact"],
+    }
+    model_identity = {
+        "path": declaration["model"],
+        "sha256": declaration["model_sha256"],
+    }
+    claim_identity = claim_receipt.to_dict()
+    claim_identity_sha256 = schemas.content_hash(claim_identity)
+    raw_paths = {
+        controls.CONTROL_POSITIVE: ("positive",),
+        controls.CONTROL_NEUTRAL: ("neutral_calibration",),
+        controls.CONTROL_DEGRADED_NEGATIVE: (
+            "negative_committed_cell", "negative_wrong_cell"),
+        controls.CONTROL_AA: ("aa_calibration",),
+        controls.CONTROL_HISTORICAL_WIN_REPLAY: ("historical_win_replay",),
+    }
+    raw_sha256 = {
+        control_id: {
+            label: _sha256_file(output_root / "raw" / f"{label}.json")
+            for label in raw_paths[control_id]
+        }
+        for control_id in required
+    }
+    measurements = []
+    for outcome in sorted(outcomes, key=lambda row: row["ordinal"]):
+        control_id = outcome["control_id"]
+        observation = by_control[control_id]
+        reps = observation.get("abs_effect_count")
+        if isinstance(reps, bool) or not isinstance(reps, int) or reps < 1:
+            raise RuntimeError(f"control {control_id} lacks its scored-block count")
+        native_verdict = outcome.get("outcome")
+        if native_verdict not in {schemas.PASS, schemas.FAIL}:
+            raise RuntimeError(f"control {control_id} lacks a native PASS/FAIL verdict")
+        evidence_basis = {
+            "control_id": control_id,
+            "outcome": outcome,
+            "observation": observation,
+            "raw_vector_sha256": raw_sha256[control_id],
+            "control_sweep_sha256": sweep_sha256,
+            "source_identity_sha256": source_identity_sha256,
+            "binary_sha256": binary_identity["sha256"],
+            "model_sha256": model_identity["sha256"],
+            "claim_identity_sha256": claim_identity_sha256,
+            "producer_sha256": producer_sha256,
+        }
+        row = {
+            "measurement_id": f"live_control_{control_id}_requirement_satisfied",
+            "metric": "autokernel_control_requirement_satisfaction",
+            "value": 1.0 if native_verdict == schemas.PASS else 0.0,
+            "unit": "fraction",
+            "metric_direction": "higher_better",
+            "category": "BASELINE",
+            "protocol_id": api.PROTOCOL_VERSIONED_ID,
+            "reps": reps,
+            "reps_basis": "scored:paired live-control blocks",
+            "claim": (
+                f"AutoKernel live control {control_id} requirement outcome is "
+                f"{native_verdict} after {reps} scored paired blocks"),
+            "native_verdict": native_verdict,
+            "extra": {
+                "control_id": control_id,
+                "native_disposition": outcome.get("disposition"),
+                "native_effect_resolution": observation.get("effect_resolution"),
+                "source_identity": source_identity,
+                "source_identity_sha256": source_identity_sha256,
+                "binary_identity": binary_identity,
+                "model_identity": model_identity,
+                "resource_claim_identity": claim_identity,
+                "claim_identity_sha256": claim_identity_sha256,
+                "producer_id": BELIEF_PRODUCER_ID,
+                "producer_sha256": producer_sha256,
+                "evidence_basis": evidence_basis,
+                "evidence_sha256": schemas.content_hash(evidence_basis),
+            },
+        }
+        row["measurement_sha256"] = schemas.content_hash(row)
+        measurements.append(row)
+    payload = {
+        "schema": BELIEF_RECEIPT_SCHEMA,
+        "status": "complete",
+        "campaign_id": identity.campaign_id,
+        "created_at": measured_at,
+        "ended_at": measured_at,
+        "protocol_id": api.PROTOCOL_VERSIONED_ID,
+        "producer": producer,
+        "source_identity": source_identity,
+        "source_identity_sha256": source_identity_sha256,
+        "binary_identity": binary_identity,
+        "model_identity": model_identity,
+        "resource_claim_identity": claim_identity,
+        "claim_identity_sha256": claim_identity_sha256,
+        "control_sweep_sha256": sweep_sha256,
+        "raw_vector_sha256": raw_sha256,
+        "control_panel": panel,
+        "native_verdict": {
+            "marker": panel.get("marker"),
+            "may_rank": panel.get("may_rank"),
+            "halts_campaign": panel.get("halts_campaign"),
+            "voids_window": panel.get("voids_window"),
+        },
+        "belief_measurements": measurements,
+    }
+    payload["receipt_sha256"] = schemas.content_hash(payload)
+    return payload
 
 
 def _write_preflight(output_root: Path, *, instrument_sha: str, copy_sha: str,
@@ -969,7 +1140,12 @@ def execute(output_root: Path, *, campaign_id: str,
         anchor=anchor, recipe_receipt=receipt.recipe_receipt,
         claim_receipt=claim_receipt, source_sha=source_sha,
         binary_sha=copy_sha, linkage_sha=copy_linkage, measured_at=ended)
+    belief_receipt = _build_belief_receipt(
+        output_root, identity=identity, result=result,
+        claim_receipt=claim_receipt, measured_at=ended)
     _write_json(output_root / "control_sweep.json", result.to_dict())
+    if belief_receipt is not None:
+        _write_json(output_root / "belief_receipt.json", belief_receipt)
     summary = {
         "campaign_id": identity.campaign_id, "measured_at": _utc_now(),
         "state": "controls_complete", "controls_started": True,
@@ -980,6 +1156,8 @@ def execute(output_root: Path, *, campaign_id: str,
         "binary_copy_exact": instrument_sha == copy_sha,
         "calibration": solve.to_dict(), "controls": result.to_dict(),
         "may_rank": result.may_rank,
+        "belief_receipt_sha256": (
+            belief_receipt["receipt_sha256"] if belief_receipt else None),
     }
     _write_json(output_root / "summary.json", summary)
     return summary
@@ -1152,8 +1330,13 @@ def evaluate_existing(output_root: Path, *, campaign_id: str) -> dict:
         "evaluator_source_sha256": _sha256_file(Path(__file__)),
         "inputs": {name: _sha256_file(output_root / name) for name in input_paths},
     }
+    belief_receipt = _build_belief_receipt(
+        output_root, identity=identity, result=result,
+        claim_receipt=claim_receipt, measured_at=measured_at)
     _write_json(output_root / "composition_attestation.json", composition)
     _write_json(output_root / "control_sweep.json", result.to_dict())
+    if belief_receipt is not None:
+        _write_json(output_root / "belief_receipt.json", belief_receipt)
     summary = {
         "campaign_id": identity.campaign_id, "measured_at": _utc_now(),
         "state": "controls_complete", "controls_started": True,
@@ -1166,6 +1349,8 @@ def evaluate_existing(output_root: Path, *, campaign_id: str) -> dict:
         "composition_attestation_sha256": schemas.content_hash(composition),
         "calibration": solve.to_dict(), "controls": result.to_dict(),
         "may_rank": result.may_rank,
+        "belief_receipt_sha256": (
+            belief_receipt["receipt_sha256"] if belief_receipt else None),
     }
     _write_json(output_root / "summary.json", summary)
     return summary
