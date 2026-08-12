@@ -4225,6 +4225,10 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
     """
     stream = out if out is not None else sys.stdout
     args = build_parser().parse_args(list(argv) if argv is not None else None)
+    # ``--json`` is an automation contract: stdout (or the injected ``out``
+    # stream) must contain exactly one parseable result document. Keep the
+    # detailed composition trace, but move it to stderr in JSON mode.
+    detail_stream = sys.stderr if args.as_json else stream
 
     if not args.dry_run and not args.i_hold_the_host:
         print("--execute requires --i-hold-the-host. This driver spawns benchmarks on a "
@@ -4390,7 +4394,7 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
     broker: Optional[powercap_broker.PowercapBroker] = None
     if ops is None:
         if args.dry_run:
-            ops = DryRunOps(out=stream)
+            ops = DryRunOps(out=detail_stream)
         else:
             # Root-owned package counters are read through a networkless,
             # read-only broker. It starts lazily on the first host snapshot, so
@@ -4438,25 +4442,25 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
 
     print(f"AutoKernel campaign {spec.campaign_id} / {spec.candidate_id} — "
           f"{'DRY RUN (nothing will be executed)' if args.dry_run else 'EXECUTING'}",
-          file=stream)
+          file=detail_stream)
     print("  question    "
           + (f"{spec.hypothesis_id} — falsifier: {spec.authorization.falsifier}"
              if spec.authorization is not None
              else "EXPLORATORY (no --hypothesis; this run resolves no question)"),
-          file=stream)
-    print(f"  cell        {spec.recipe_id}  metric={spec.metric}", file=stream)
+          file=detail_stream)
+    print(f"  cell        {spec.recipe_id}  metric={spec.metric}", file=detail_stream)
     if spec.calibration is None:
         print("  accept      UNCALIBRATED CELL — dry-run composition only; live ranking "
-              "will refuse", file=stream)
+              "will refuse", file=detail_stream)
     else:
         print(f"  accept      min(delta) > 0 over {spec.blocks} pre-committed pairs AND "
-              f"median(relative) > {spec.contribution_floor:.4%}", file=stream)
+              f"median(relative) > {spec.contribution_floor:.4%}", file=detail_stream)
         print(f"  calibration B_min={spec.calibration.b_min_blocks}, "
               f"MDE={spec.calibration.mde:.4%}: "
-              f"{spec.calibration.evidence_ref}", file=stream)
+              f"{spec.calibration.evidence_ref}", file=detail_stream)
     print(f"  anchor movement bound: {spec.drift_bound:.4%} from {AA_EVIDENCE_REF}",
-          file=stream)
-    print("", file=stream)
+          file=detail_stream)
+    print("", file=detail_stream)
 
     try:
         result = run_campaign(spec, ops)
@@ -4464,17 +4468,18 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
         if broker is not None:
             broker.close()
 
-    print("", file=stream)
-    print(f"state: {result.state}", file=stream)
+    print("", file=detail_stream)
+    print(f"state: {result.state}", file=detail_stream)
     if result.decision is not None:
-        print(result.decision.reason, file=stream)
+        print(result.decision.reason, file=detail_stream)
     if result.error:
-        print(f"error: {result.error.splitlines()[0]}", file=stream)
+        print(f"error: {result.error.splitlines()[0]}", file=detail_stream)
     for record in result.releases:
         marker = "released" if record.released else "NOT RELEASED"
-        print(f"  {record.name}: {marker} ({record.detail})", file=stream)
+        print(f"  {record.name}: {marker} ({record.detail})", file=detail_stream)
     if result.production_unchanged is not None:
-        print(f"  production trees: {result.production_unchanged.outcome}", file=stream)
+        print(f"  production trees: {result.production_unchanged.outcome}",
+              file=detail_stream)
     if args.as_json:
         print(json.dumps(result.to_dict(), indent=2, sort_keys=True, default=str),
               file=stream)
