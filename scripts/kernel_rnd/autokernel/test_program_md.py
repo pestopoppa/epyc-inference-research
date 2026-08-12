@@ -90,21 +90,24 @@ def _write_current_calibration(root: Path) -> None:
         },
     }), encoding="utf-8")
 
-#: Subpackages the operator has not adopted and which are STILL ON DISK.
-#: `program.md` may not send a reader into any of them by module path.
-DEFERRED_PACKAGES = ("controller",)
+#: Subpackages the operator has not adopted into campaign #1 and which are STILL
+#: ON DISK. `release/` and `adapters/` were restored narrowly for the AK9 speech
+#: release compiler on 2026-08-12; restoration does not make them part of the
+#: mutation/build path, so `program.md` still may not route a campaign into them.
+DEFERRED_PACKAGES = ("controller", "release", "adapters")
 
 #: Deleted on the operator's approval, 2026-08-04 (tag
-#: `autokernel-preserve-20260804`). `program.md` may not name these either, and
-#: the reason is a different one worth keeping separate: not that a reader would
-#: be routed into the unadopted half, but that a runbook citing a module which no
-#: longer exists is the same staleness arriving by another route.
+#: `autokernel-preserve-20260804`) and not subsequently restored. `program.md`
+#: may not name these either, and the reason is a different one worth keeping
+#: separate: not that a reader would be routed into the unadopted half, but that
+#: a runbook citing a module which no longer exists is the same staleness
+#: arriving by another route.
 #:
 #: They are a separate tuple because the CONTROL below is inverted for them —
 #: "still on disk" is exactly what must NOT hold. Left in the deferred list, they
 #: made that control pass over an empty directory containing nothing but a
 #: `__pycache__`, which is the vacuity it was written to prevent.
-DELETED_PACKAGES = ("release", "adapters", "surface")
+DELETED_PACKAGES = ("surface",)
 
 #: Modules of the adopted half, by the leaf name `program.md` cites them under.
 ESSENTIAL_MODULES = {
@@ -160,10 +163,11 @@ class TestTheProseStaysInsideTheAdoptedHalf(unittest.TestCase):
 
         Deleting it is the operator's call and stays a separate one; when it is
         made, this test says so instead of passing silently — which is what it did
-        on 2026-08-04. `release/` and `adapters/` had been deleted, but the
+        on 2026-08-04. `release/` and `adapters/` had been deleted then, but the
         directories survived holding a stale `__pycache__`, so `is_dir()` was
         still true and the control reported a boundary over files that no longer
-        existed. Both directions are now asserted, so neither a deletion nor a
+        existed. They are now deliberately restored and classified as deferred;
+        both directions remain asserted, so neither an unrecorded deletion nor a
         leftover shell can pass.
         """
         package = Path(__file__).resolve().parent
@@ -262,6 +266,9 @@ class TestTheDocumentedCommandsAreTheRealCommands(unittest.TestCase):
                 campaign_id = argv[argv.index("--campaign-id") + 1]
                 proposal["campaign_id"] = campaign_id
                 proposal["proposal_id"] = "akp-documented-command"
+                proposal["provider_reference"]["target_backend"] = (
+                    argv[argv.index("--backend") + 1]
+                    if "--backend" in argv else campaign.BACKEND_CPU)
                 manifest = Path(tempdir.name) / "proposal.json"
                 manifest.write_text(json.dumps(proposal), encoding="utf-8")
                 argv[argv.index("--proposal-manifest") + 1] = str(manifest)

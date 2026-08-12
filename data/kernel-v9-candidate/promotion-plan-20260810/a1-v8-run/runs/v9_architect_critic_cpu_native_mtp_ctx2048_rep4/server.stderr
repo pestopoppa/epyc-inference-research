@@ -1,0 +1,28 @@
+warning: no usable GPU found, --gpu-layers option will be ignored
+warning: one possible reason is that llama.cpp was compiled without GPU support
+warning: consult docs/build.md for compilation instructions
+0.00.001.482 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.001.781 W srv  llama_server: -----------------
+0.00.001.783 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.001.783 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.001.783 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.001.783 W srv  llama_server: -----------------
+0.00.002.963 I srv    load_model: loading model '/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf'
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 activation=99 n_as=256)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=13 activation=99 n_as=256)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=14 activation=99 n_as=256)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 activation=99 ne00=3072)
+0.10.778.218 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 3328, kv_unified = 'false'
+0.10.809.753 I srv  llama_server: model loaded
+0.10.809.761 I srv  llama_server: listening on http://127.0.0.1:19713
+0.11.754.018 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.11.754.096 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.17.831.741 I slot print_timing: id  0 | task 0 | prompt processing, n_tokens =    961, progress = 1.00, t =   6.08 s / 158.12 tokens per second
+0.21.480.019 I slot print_timing: id  0 | task 0 | n_decoded =    100, tg =  28.84 t/s, tg_3s =  28.84 t/s
+0.22.500.942 I slot print_timing: id  0 | task 0 | prompt eval time =    6258.54 ms /   965 tokens (    6.49 ms per token,   154.19 tokens per second)
+0.22.500.948 I slot print_timing: id  0 | task 0 |        eval time =    4488.27 ms /   128 tokens (   35.06 ms per token,    28.52 tokens per second)
+0.22.500.949 I slot print_timing: id  0 | task 0 |       total time =   10746.81 ms /  1093 tokens
+0.22.500.954 I slot print_timing: id  0 | task 0 |    graphs reused =         24
+0.22.500.959 I slot print_timing: id  0 | task 0 | draft acceptance = 0.99020 (  101 accepted /   102 generated), mean len =  4.88
+0.22.501.036 I slot      release: id  0 | task 0 | stop processing: n_tokens = 1092, truncated = 0
+0.23.977.959 I srv    operator(): operator(): cleaning up before exit...

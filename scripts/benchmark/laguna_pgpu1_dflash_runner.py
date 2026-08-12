@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Production-only P-GPU-1 Laguna IQ2 DFlash base-vs-spec runner.
+"""Production-only P-GPU-1 Qwen3.6-27B Q8 DFlash base-vs-spec runner.
 
 Dry-run is the default.  ``--execute`` is intentionally guarded: it requires a
-clean production-consolidated-v8 HIP tree, then runs five fresh-server
+clean production-consolidated-v9 HIP tree, then runs five fresh-server
 replicates *per arm*.  Every replicate executes the same immutable prompt pack.
 """
 
@@ -33,20 +33,20 @@ from typing import Any
 RESEARCH_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_BINARY = Path("/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server")
 DEFAULT_SOURCE_ROOT = Path("/mnt/raid0/llm/llama.cpp")
-DEFAULT_TARGET_MODEL = Path("/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/Laguna-S-2.1-UD-IQ2_M.gguf")
-DEFAULT_DRAFTER_MODEL = Path("/mnt/raid0/llm/models/Laguna-S-2.1-GGUF/laguna-s-2.1-DFlash-BF16.gguf")
-DEFAULT_OUTPUT_DIR = RESEARCH_ROOT / "data/gpu-mi210/laguna-iq2-dflash-pgpu1"
+DEFAULT_TARGET_MODEL = Path("/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf")
+DEFAULT_DRAFTER_MODEL = Path("/mnt/raid0/llm/models/dflash/Qwen3.6-27B-DFlash/Qwen3.6-27B-DFlash-f16-canonical-v4.gguf")
+DEFAULT_OUTPUT_DIR = RESEARCH_ROOT / "data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9"
 DEFAULT_REPS = 5
 DEFAULT_PORT_BASE = 19880
 DEFAULT_CONTEXT = 4096
-DEFAULT_MAX_TOKENS = 320
+DEFAULT_MAX_TOKENS = 512
 DEFAULT_MIN_COMPLETION_TOKENS = 96
 MIN_EXPLANATION_WORDS = 8
 DEFAULT_SEED = 424242
 DEFAULT_STARTUP_TIMEOUT_S = 600
 DEFAULT_REQUEST_TIMEOUT_S = 900
-TARGET_CACHE_K = "f16"
-TARGET_CACHE_V = "f16"
+TARGET_CACHE_K = "q8_0"
+TARGET_CACHE_V = "q8_0"
 DRAFTER_CACHE_K = "q8_0"
 DRAFTER_CACHE_V = "q8_0"
 PROMPT_SPECS = (
@@ -57,22 +57,28 @@ PROMPT_SPECS = (
 PROMPTS = tuple(text for _, text in PROMPT_SPECS)
 PGPU1_WARMUP_POLICY = "no warm-up requests; no discarded reps; fresh server per rep; graph recapture remains inside each measured fresh-server replicate"
 CPU_INTERFERENCE_POLICY = "CPU production stack quiesced and verified before the window; no concurrent llama-server, AutoPilot, or KFD model-owner process is permitted"
-EXPECTED_BRANCH = "production-consolidated-v8"
-ROLLBACK_BRANCH = "production-consolidated-v7"
+EXPECTED_BRANCH = "production-consolidated-v9"
+ROLLBACK_BRANCH = "production-consolidated-v8"
 PROMOTION_ATTESTATION_SCHEMA = "epyc.kernel_promotion_attestation.v1"
-CANDIDATE_SMOKE_SCHEMA = "epyc.laguna_iq2_dflash_candidate_smoke.v2"
+CANDIDATE_SMOKE_SCHEMA = "epyc.qwen36_27b_q8_dflash_candidate_smoke.v1"
 SAFE_PATH = "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 BASE_ENVIRONMENT = {"PATH": SAFE_PATH, "LANG": "C", "LC_ALL": "C"}
 PINNED_VISIBLE_DEVICE_ENVIRONMENT = {"HIP_VISIBLE_DEVICES": "0", "ROCR_VISIBLE_DEVICES": "0"}
 SCRUBBED_ENV_PREFIXES = ("GGML_", "HSA_", "HIP_", "ROCR_")
 SCRUBBED_ENV_NAMES = ("LD_PRELOAD",)
 GOVERNANCE_REPO = Path("/mnt/raid0/llm/epyc-root")
-PROMOTION_ATTESTATION_RELATIVE_PATH = Path("handoffs/active/laguna-pgpu1-v8-promotion-attestation.json")
+PROMOTION_ATTESTATION_RELATIVE_PATH = Path("handoffs/active/v9-kernel-promotion-attestation.json")
 PROMOTION_ATTESTATION_PATH = GOVERNANCE_REPO / PROMOTION_ATTESTATION_RELATIVE_PATH
-TARGET_MODEL_BYTES = 37_268_665_376
-TARGET_MODEL_SHA256 = "1a0d44795f71044de1a9671bf70def4655f4ab7294b002263dfc8046820bfd2c"
-DRAFTER_MODEL_BYTES = 2_233_764_000
-DRAFTER_MODEL_SHA256 = "24614292a4477f3ae5203c3875edcde0bc219f02616a9c9f65791e29b18a67ee"
+TARGET_MODEL_BYTES = 29_047_084_160
+TARGET_MODEL_SHA256 = "9408dcb356cc061a05c139e5647cbde0698ff980c6a69f7fc214e9989f86cfa8"
+DRAFTER_MODEL_BYTES = 3_471_497_600
+DRAFTER_MODEL_SHA256 = "9977c9c94580c8767ea99f979fa20cbb16b1047e3796e38e9a25eb7d39af98de"
+TARGET_OFFLOAD_LAYER_COUNT = 66
+DRAFTER_OFFLOAD_LAYER_COUNT = 6
+TARGET_POSITIVE_KV_BUFFER_COUNT = 1
+DRAFTER_POSITIVE_KV_BUFFER_COUNT = 1
+DFLASH_LINEUP_ACCEPTANCE_FLOOR = 0.60
+DFLASH_LINEUP_PROMPT_RATIO_FLOOR = 1.00
 SOURCE_UNTRACKED_ALLOWLIST = {
     ".gitnexusignore": "local GitNexus configuration; not a llama.cpp build input",
     "tools/math-tools/": "operator-owned unrelated tool subtree; not linked into llama-server",
@@ -253,7 +259,6 @@ def proc_fd_owners(target: str | None = None, listener_only: bool = False) -> di
 
 
 def exact_process_owners(names: tuple[str, ...]) -> dict[str, Any]:
-    commands = {name: run_capture(["pgrep", "-ax", name], timeout=10) for name in names}
     owners: list[dict[str, Any]] = []
     try:
         for proc_dir in Path("/proc").iterdir():
@@ -267,15 +272,52 @@ def exact_process_owners(names: tuple[str, ...]) -> dict[str, Any]:
                     owners.append({"pid": int(proc_dir.name), "comm": comm, "exe": exe, "exe_path": exe_link, "exe_resolved": str(Path(exe_link).resolve())})
             except (FileNotFoundError, PermissionError, ProcessLookupError):
                 continue
+        commands = {
+            name: {
+                "argv": ["/proc", "exact-comm-or-exe", name],
+                "returncode": 0 if any(owner["comm"] == name or owner["exe"] == name for owner in owners) else 1,
+                "stdout": "\n".join(
+                    f"{owner['pid']} {owner['exe_path']}"
+                    for owner in owners
+                    if owner["comm"] == name or owner["exe"] == name
+                ),
+                "stderr": "",
+            }
+            for name in names
+        }
         return {"commands": commands, "proc_owners": owners, "returncode": 0}
     except OSError as exc:
-        return {"commands": commands, "proc_owners": [], "returncode": None, "exec_error": repr(exc)}
+        return {"commands": {}, "proc_owners": [], "returncode": None, "exec_error": repr(exc)}
+
+
+def cmdline_process_owners(names: tuple[str, ...]) -> dict[str, Any]:
+    """Return exact /proc argv-basename owners without a pattern process tool."""
+    owners: list[dict[str, Any]] = []
+    try:
+        for proc_dir in Path("/proc").iterdir():
+            if not proc_dir.name.isdigit():
+                continue
+            try:
+                argv = [part.decode("utf-8", errors="replace") for part in (proc_dir / "cmdline").read_bytes().split(b"\0") if part]
+                if any(Path(argument).name in names for argument in argv):
+                    owners.append({"pid": int(proc_dir.name), "argv": argv})
+            except (FileNotFoundError, PermissionError, ProcessLookupError):
+                continue
+        return {
+            "argv": ["/proc", "argv-basename", *names],
+            "returncode": 0 if owners else 1,
+            "stdout": "\n".join(f"{owner['pid']} {' '.join(owner['argv'])}" for owner in owners),
+            "stderr": "",
+            "owners": owners,
+        }
+    except OSError as exc:
+        return {"argv": ["/proc", "argv-basename", *names], "returncode": None, "stdout": "", "stderr": "", "owners": [], "exec_error": repr(exc)}
 
 
 def process_snapshot() -> dict[str, Any]:
     return {
         "model_binaries": exact_process_owners(("llama-server", "llama-cli", "llama-bench")),
-        "autopilot": run_capture(["pgrep", "-af", "autopilot"], timeout=10),
+        "autopilot": cmdline_process_owners(("autopilot.py", "autopilot_supervisor.py")),
         "listeners_lsof": run_capture(["lsof", "-nP", "-iTCP", "-sTCP:LISTEN"], timeout=10),
         "listeners_proc": proc_fd_owners(listener_only=True),
         "kfd_lsof": run_capture(["lsof", "-nP", "/dev/kfd"], timeout=10),
@@ -500,7 +542,7 @@ def load_promotion_attestation(path: Path, expected_head: str, expected_server_s
         "frozen": False,
     }
     if not isinstance(document, dict) or any(document.get(key) != value for key, value in required.items()):
-        return None, "attestation must be the provisional v8 promotion record for this execution, not a final frozen record"
+        return None, "attestation must be the provisional v9 promotion record for this execution, not a final frozen record"
     server = document.get("server_binary")
     if not isinstance(server, dict) or server.get("path") != str(DEFAULT_BINARY) or server.get("sha256") != expected_server_sha256:
         return None, "attestation server binary path/SHA256 does not match the execution"
@@ -516,19 +558,19 @@ def load_promotion_attestation(path: Path, expected_head: str, expected_server_s
     if not isinstance(rollback, dict):
         return None, "attestation rollback metadata is missing"
     if rollback.get("branch") != ROLLBACK_BRANCH or not re.fullmatch(r"[0-9a-f]{40}", str(rollback.get("head") or "")):
-        return None, "attestation rollback branch/head must identify production-consolidated-v7 exactly"
+        return None, f"attestation rollback branch/head must identify {ROLLBACK_BRANCH} exactly"
     backup_ref = rollback.get("backup_ref")
     source_ref = rollback.get("source_ref")
     expected_backup_ref = f"refs/heads/{ROLLBACK_BRANCH}"
     expected_source_ref = f"refs/heads/{EXPECTED_BRANCH}"
     if backup_ref != expected_backup_ref or source_ref != expected_source_ref:
-        return None, "attestation rollback refs must be the canonical v7 backup and v8 production refs"
+        return None, f"attestation rollback refs must be the canonical {ROLLBACK_BRANCH} backup and {EXPECTED_BRANCH} production refs"
     backup_commit = git_ref_commit(DEFAULT_SOURCE_ROOT, backup_ref)
     source_commit = git_ref_commit(DEFAULT_SOURCE_ROOT, source_ref)
     if backup_commit is None or source_commit is None:
         return None, "attestation rollback refs must resolve in the canonical production repository"
     if backup_commit != rollback["head"] or source_commit != expected_head or backup_commit == source_commit:
-        return None, "attestation rollback refs do not resolve to the distinct attested v7/v8 commits"
+        return None, "attestation rollback refs do not resolve to the distinct attested rollback/production commits"
     return {**identity, "document": document}, "ok"
 
 
@@ -635,9 +677,9 @@ def production_identity_valid(identity: dict[str, Any], expected_head: str, expe
 
 def model_identities_valid(target: dict[str, Any], drafter: dict[str, Any]) -> tuple[bool, str]:
     if Path(str(target.get("path") or "")).resolve() != DEFAULT_TARGET_MODEL.resolve() or target.get("bytes") != TARGET_MODEL_BYTES or target.get("sha256") != TARGET_MODEL_SHA256:
-        return False, "Laguna IQ2 target size/SHA256 mismatch"
+        return False, "Qwen3.6-27B Q8 target size/SHA256 mismatch"
     if Path(str(drafter.get("path") or "")).resolve() != DEFAULT_DRAFTER_MODEL.resolve() or drafter.get("bytes") != DRAFTER_MODEL_BYTES or drafter.get("sha256") != DRAFTER_MODEL_SHA256:
-        return False, "Laguna DFlash BF16 size/SHA256 mismatch"
+        return False, "Qwen3.6-27B DFlash F16 size/SHA256 mismatch"
     return True, "ok"
 
 
@@ -967,10 +1009,12 @@ def request_body(prompt: str, args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
-def wait_for_health(port: int, timeout_s: int) -> None:
+def wait_for_health(port: int, timeout_s: int, proc: subprocess.Popen[str] | None = None) -> None:
     deadline = time.monotonic() + timeout_s
     last_error = ""
     while time.monotonic() < deadline:
+        if proc is not None and proc.poll() is not None:
+            raise RuntimeError(f"llama-server exited before health became ready (returncode={proc.returncode})")
         try:
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5) as response:
                 if response.status == 200:
@@ -1079,17 +1123,17 @@ def parse_log_residency(log_text: str, arm: Arm) -> dict[str, Any]:
     split_at = draft_load.start() if draft_load is not None else len(log_text)
     target_section = log_text[:split_at]
     draft_section = log_text[split_at:] if draft_load is not None else ""
-    target_models = _positive_model_buffers(target_section, 49)
+    target_models = _positive_model_buffers(target_section, TARGET_OFFLOAD_LAYER_COUNT)
     target_kv = _positive_kv_buffers(
         target_section, cache_k=TARGET_CACHE_K, cache_v=TARGET_CACHE_V
     )
-    draft_models = _positive_model_buffers(draft_section, 7)
+    draft_models = _positive_model_buffers(draft_section, DRAFTER_OFFLOAD_LAYER_COUNT)
     draft_kv = _positive_kv_buffers(
         draft_section, cache_k=DRAFTER_CACHE_K, cache_v=DRAFTER_CACHE_V
     )
-    target_valid = target_load is not None and len(target_models) == 1 and len(target_kv) == 2
+    target_valid = target_load is not None and len(target_models) == 1 and len(target_kv) == TARGET_POSITIVE_KV_BUFFER_COUNT
     draft_valid = (
-        draft_load is not None and len(draft_models) == 1 and len(draft_kv) == 1
+        draft_load is not None and len(draft_models) == 1 and len(draft_kv) == DRAFTER_POSITIVE_KV_BUFFER_COUNT
         if arm.speculative
         else draft_load is None and not draft_models and not draft_kv
     )
@@ -1097,7 +1141,7 @@ def parse_log_residency(log_text: str, arm: Arm) -> dict[str, Any]:
         "passed": target_valid and draft_valid,
         "target_model_load_exact": target_load is not None,
         "target_positive_rocm0_model_buffers_mib": target_models,
-        "target_positive_f16_kv_buffers": target_kv,
+        "target_positive_kv_buffers": target_kv,
         "target_valid": target_valid,
         "drafter_model_load_exact": draft_load is not None,
         "drafter_positive_rocm0_model_buffers_mib": draft_models,
@@ -1105,7 +1149,7 @@ def parse_log_residency(log_text: str, arm: Arm) -> dict[str, Any]:
         "drafter_valid": draft_valid,
         "proof_contract": (
             "anchored exact layer offload plus positive ROCm0 model/KV buffers; "
-            "target K/V=f16 and DFlash drafter K/V=q8_0 are independently required"
+            "target and DFlash drafter K/V=q8_0 are independently required"
         ),
     }
 
@@ -1296,6 +1340,71 @@ def matrix_cardinality_valid(results: list[dict[str, Any]], reps: int) -> tuple[
     return True, "ok"
 
 
+def dflash_lineup_decision(results: list[dict[str, Any]], cardinality_valid: bool) -> dict[str, Any]:
+    """Apply ratified P-DFLASH-LINEUP-1 to the complete lane evidence."""
+    dflash_records = [
+        record
+        for result in results
+        if result.get("arm") == DFLASH_ARM.name and result.get("status") == "ok"
+        for record in result.get("records", [])
+    ]
+    draft_n = sum(strict_int(record.get("draft_n"), "draft_n") for record in dflash_records)
+    accepted = sum(strict_int(record.get("draft_n_accepted"), "draft_n_accepted") for record in dflash_records)
+    acceptance = (accepted / draft_n) if draft_n else None
+
+    prompt_rows: list[dict[str, Any]] = []
+    for prompt_id, _ in PROMPT_SPECS:
+        arms: dict[str, dict[str, Any]] = {}
+        for arm in ARMS:
+            records = [
+                record
+                for result in results
+                if result.get("arm") == arm.name and result.get("status") == "ok"
+                for record in result.get("records", [])
+                if record.get("prompt_id") == prompt_id
+            ]
+            completion_tokens = sum(strict_int(record.get("completion_tokens"), "completion_tokens") for record in records)
+            decode_ms = sum(strict_real(record.get("decode_ms"), "decode_ms") for record in records)
+            arms[arm.name] = {
+                "records": len(records),
+                "completion_tokens": completion_tokens,
+                "decode_ms": decode_ms,
+                "decode_tps": (completion_tokens / (decode_ms / 1000.0)) if decode_ms > 0 else None,
+            }
+        base_tps = arms[BASE_ARM.name]["decode_tps"]
+        dflash_tps = arms[DFLASH_ARM.name]["decode_tps"]
+        ratio = (dflash_tps / base_tps) if base_tps and dflash_tps else None
+        prompt_rows.append({
+            "prompt_id": prompt_id,
+            "base": arms[BASE_ARM.name],
+            "dflash": arms[DFLASH_ARM.name],
+            "dflash_over_base_ratio": ratio,
+            "ratio_floor": DFLASH_LINEUP_PROMPT_RATIO_FLOOR,
+            "meets_ratio_floor": ratio is not None and ratio >= DFLASH_LINEUP_PROMPT_RATIO_FLOOR,
+        })
+
+    blockers: list[str] = []
+    if not cardinality_valid:
+        blockers.append("incomplete_or_invalid_matrix")
+    if acceptance is None or acceptance < DFLASH_LINEUP_ACCEPTANCE_FLOOR:
+        blockers.append("pooled_acceptance_below_floor")
+    if not all(row["meets_ratio_floor"] for row in prompt_rows):
+        blockers.append("per_prompt_decode_ratio_below_floor")
+    return {
+        "protocol": "P-DFLASH-LINEUP-1",
+        "eligible": not blockers,
+        "blockers": blockers,
+        "pooled_acceptance": {
+            "draft_n": draft_n,
+            "draft_n_accepted": accepted,
+            "rate": acceptance,
+            "floor": DFLASH_LINEUP_ACCEPTANCE_FLOOR,
+            "meets_floor": acceptance is not None and acceptance >= DFLASH_LINEUP_ACCEPTANCE_FLOOR,
+        },
+        "per_prompt_decode": prompt_rows,
+    }
+
+
 def candidate_smoke_projection(
     results: list[dict[str, Any]],
     *,
@@ -1393,7 +1502,7 @@ def build_plan(args: argparse.Namespace, model_identity: dict[str, Any] | None =
         for arm in ordered_arms:
             cells.append({"arm": arm.name, "rep": rep, "port": args.port_base + len(cells), "prompt_count": len(PROMPTS)})
     return {
-        "schema": "epyc.laguna_iq2_dflash_pgpu1.plan.v2", "created_at": utc_now(), "execute": args.execute,
+        "schema": "epyc.qwen36_27b_q8_dflash_pgpu1.plan.v1", "created_at": utc_now(), "execute": args.execute,
         "production_named_kernel_required": True, "required_branch": EXPECTED_BRANCH, "reps_per_arm": args.reps,
         "arm_order": "paired by rep; base-first on odd reps and dflash-first on even reps",
         "rep_policy": "n >= 5 per arm; n >= 10 is required before making any <=2% claim; this runner does not make a <=2% claim",
@@ -1451,7 +1560,7 @@ def run_replicate(args: argparse.Namespace, arm: Arm, rep: int, port: int, outpu
             raise RuntimeError("pre-launch ROCm snapshot incomplete")
         with log_path.open("w", encoding="utf-8") as stderr:
             proc = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=stderr, text=True, start_new_session=True, env=runtime_env(args.binary))
-        wait_for_health(port, args.startup_timeout)
+        wait_for_health(port, args.startup_timeout, proc)
         resident_rocm = collect_rocm_snapshot(proc.pid)
         resident_processes = process_snapshot()
         resident_valid, resident_reason = live_binding_is_valid(resident_processes, resident_rocm, proc.pid, port, args.binary, expected_identity["binding"], arm.speculative)
@@ -1671,7 +1780,8 @@ def execute(args: argparse.Namespace, output_dir: Path, plan: dict[str, Any]) ->
     per_replicate_bindings_valid = len(replicate_binding_checks) == len(plan["cells"]) and all(check["valid"] for check in replicate_binding_checks)
     execution_binding_valid = binding_unchanged and final_identity["valid"] and per_replicate_bindings_valid
     final_guard_valid = final_clean and final_vram_settled and execution_binding_valid
-    status = "ok" if cardinality_valid and all(summary["all_ok"] for summary in summaries.values()) and final_guard_valid else "failed"
+    lineup_decision = dflash_lineup_decision(results, cardinality_valid)
+    status = "ok" if cardinality_valid and all(summary["all_ok"] for summary in summaries.values()) and final_guard_valid and lineup_decision["eligible"] else "failed"
     candidate_smoke = candidate_smoke_projection(
         results,
         initial_rocm=initial_rocm,
@@ -1680,7 +1790,7 @@ def execute(args: argparse.Namespace, output_dir: Path, plan: dict[str, Any]) ->
         final_port=int(plan["cells"][-1]["port"]) if plan["cells"] else None,
     )
     write_json(output_dir / "candidate_smoke_summary.json", candidate_smoke)
-    return {"schema": "epyc.laguna_iq2_dflash_pgpu1.summary.v2", "created_at": utc_now(), "status": status, "production_named_kernel": True, "required_branch": EXPECTED_BRANCH, "attestation_ref": str(args.attestation_ref), "attestation_sha256": attestation["sha256"], "n": args.reps, "rep_policy": plan["rep_policy"], "median": True, "mad": True, "arm_order": plan["arm_order"], "results": results, "matrix_cardinality_valid": cardinality_valid, "matrix_cardinality_reason": cardinality_reason, "arm_summaries": summaries, "base_vs_dflash": {"decode_tps_ratio": ratio, "direction": "higher_better"}, "cross_arm_hash_observation": {"contract": "distribution-lossless, not byte-exact greedy", "decision_gating": False, "quality_equivalence_claimed": False, "rows": hash_observations}, "warmup_discard_policy": PGPU1_WARMUP_POLICY, "cpu_interference_policy": CPU_INTERFERENCE_POLICY, "hardware_state": hardware_state, "target_kv_quant": {"k": TARGET_CACHE_K, "v": TARGET_CACHE_V}, "drafter_kv_quant": {"k": DRAFTER_CACHE_K, "v": DRAFTER_CACHE_V}, "replicate_binding_checks": replicate_binding_checks, "per_replicate_bindings_valid": per_replicate_bindings_valid, "execution_binding_valid": execution_binding_valid, "post_execution_identity": post_identity, "final_process_guard": final_processes, "final_rocm": final_rocm, "final_clean": final_clean, "final_reason": final_reason, "final_vram_settled": final_vram_settled, "final_guard_valid": final_guard_valid, "post_cleanup_vram_sample": "after_cleanup ROCm snapshots in every replicate", "candidate_smoke_projection": {"path": "candidate_smoke_summary.json", "schema": CANDIDATE_SMOKE_SCHEMA, "non_gating": True}}
+    return {"schema": "epyc.qwen36_27b_q8_dflash_pgpu1.summary.v1", "created_at": utc_now(), "status": status, "production_named_kernel": True, "required_branch": EXPECTED_BRANCH, "attestation_ref": str(args.attestation_ref), "attestation_sha256": attestation["sha256"], "n": args.reps, "rep_policy": plan["rep_policy"], "median": True, "mad": True, "arm_order": plan["arm_order"], "results": results, "matrix_cardinality_valid": cardinality_valid, "matrix_cardinality_reason": cardinality_reason, "arm_summaries": summaries, "base_vs_dflash": {"decode_tps_ratio": ratio, "direction": "higher_better"}, "lineup_decision": lineup_decision, "cross_arm_hash_observation": {"contract": "distribution-lossless, not byte-exact greedy", "decision_gating": False, "quality_equivalence_claimed": False, "rows": hash_observations}, "warmup_discard_policy": PGPU1_WARMUP_POLICY, "cpu_interference_policy": CPU_INTERFERENCE_POLICY, "hardware_state": hardware_state, "target_kv_quant": {"k": TARGET_CACHE_K, "v": TARGET_CACHE_V}, "drafter_kv_quant": {"k": DRAFTER_CACHE_K, "v": DRAFTER_CACHE_V}, "replicate_binding_checks": replicate_binding_checks, "per_replicate_bindings_valid": per_replicate_bindings_valid, "execution_binding_valid": execution_binding_valid, "post_execution_identity": post_identity, "final_process_guard": final_processes, "final_rocm": final_rocm, "final_clean": final_clean, "final_reason": final_reason, "final_vram_settled": final_vram_settled, "final_guard_valid": final_guard_valid, "post_cleanup_vram_sample": "after_cleanup ROCm snapshots in every replicate", "candidate_smoke_projection": {"path": "candidate_smoke_summary.json", "schema": CANDIDATE_SMOKE_SCHEMA, "non_gating": True}}
 
 
 def run_audit(output_dir: Path) -> dict[str, Any]:
@@ -1695,10 +1805,10 @@ def render_operator_run_script(args: argparse.Namespace) -> str:
     return "\n".join([
         "#!/usr/bin/env bash",
         "set -euo pipefail",
-        "# Execute only in the approved P-GPU-1 quiet window using the provisional v8 promotion record.",
-        ': "${LAGUNA_PGPU1_PROVISIONAL_ATTESTATION_REF:?set provisional promotion attestation reference}"',
-        ': "${LAGUNA_PGPU1_PROMOTED_HEAD:?set promoted 40-hex production HEAD}"',
-        ': "${LAGUNA_PGPU1_PROMOTED_SERVER_SHA256:?set promoted 64-hex llama-server SHA256}"',
+        "# Execute only in the approved P-GPU-1 quiet window using the provisional v9 promotion record.",
+        ': "${QWEN36_PGPU1_PROVISIONAL_ATTESTATION_REF:?set provisional promotion attestation reference}"',
+        ': "${QWEN36_PGPU1_PROMOTED_HEAD:?set promoted 40-hex production HEAD}"',
+        ': "${QWEN36_PGPU1_PROMOTED_SERVER_SHA256:?set promoted 64-hex llama-server SHA256}"',
         "cd " + str(RESEARCH_ROOT),
         "exec " + " ".join([
             "/usr/bin/env", "-i",
@@ -1709,9 +1819,9 @@ def render_operator_run_script(args: argparse.Namespace) -> str:
             "--source-root", shlex_quote(str(args.source_root)), "--reps", str(args.reps),
             "--context", str(args.context), "--max-tokens", str(args.max_tokens),
             "--min-completion-tokens", str(args.min_completion_tokens), "--seed", str(args.seed),
-            "--attestation-ref", '"$LAGUNA_PGPU1_PROVISIONAL_ATTESTATION_REF"',
-            "--expected-production-head", '"$LAGUNA_PGPU1_PROMOTED_HEAD"',
-            "--expected-server-sha256", '"$LAGUNA_PGPU1_PROMOTED_SERVER_SHA256"',
+            "--attestation-ref", '"$QWEN36_PGPU1_PROVISIONAL_ATTESTATION_REF"',
+            "--expected-production-head", '"$QWEN36_PGPU1_PROMOTED_HEAD"',
+            "--expected-server-sha256", '"$QWEN36_PGPU1_PROMOTED_SERVER_SHA256"',
         ]),
         "",
     ])
@@ -1744,9 +1854,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     if args.reps < DEFAULT_REPS:
         parser.error("P-GPU-1 requires --reps >= 5 per arm")
     if args.target_model != DEFAULT_TARGET_MODEL or args.drafter_model != DEFAULT_DRAFTER_MODEL:
-        parser.error("Laguna P-GPU-1 runner uses fixed target and DFlash model paths")
+        parser.error("Qwen3.6-27B P-GPU-1 runner uses fixed target and DFlash model paths")
     if args.binary != DEFAULT_BINARY or args.source_root != DEFAULT_SOURCE_ROOT:
-        parser.error("Laguna P-GPU-1 runner uses the canonical production HIP binary and source root")
+        parser.error("Qwen3.6-27B P-GPU-1 runner uses the canonical production HIP binary and source root")
     if (args.context, args.max_tokens, args.min_completion_tokens, args.seed) != (DEFAULT_CONTEXT, DEFAULT_MAX_TOKENS, DEFAULT_MIN_COMPLETION_TOKENS, DEFAULT_SEED):
         parser.error("context, max tokens, completion floor, and seed are fixed protocol constants")
     if args.execute and args.attestation_ref is None:
@@ -1778,7 +1888,7 @@ def main(argv: list[str] | None = None) -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     if args.execute:
         if not args.target_model.is_file() or not args.drafter_model.is_file():
-            failure = {"schema": "epyc.laguna_iq2_dflash_pgpu1.summary.v2", "status": "failed", "production_named_kernel_required": True, "error": "required target or drafter model file is absent"}
+            failure = {"schema": "epyc.qwen36_27b_q8_dflash_pgpu1.summary.v1", "status": "failed", "production_named_kernel_required": True, "error": "required target or drafter model file is absent"}
             write_json(args.output_dir / "summary.json", failure)
             return 1
         args.target_identity = immutable_model_identity(args.target_model)
@@ -1789,13 +1899,13 @@ def main(argv: list[str] | None = None) -> int:
     operator_script.write_text(render_operator_run_script(args), encoding="utf-8")
     operator_script.chmod(0o755)
     if not args.execute:
-        write_json(args.output_dir / "summary.json", {"schema": "epyc.laguna_iq2_dflash_pgpu1.summary.v2", "status": "prepared_no_inference", "production_named_kernel_required": True, "n": args.reps, "median": True, "mad": True, "warmup_discard_policy": PGPU1_WARMUP_POLICY, "cpu_interference_policy": CPU_INTERFERENCE_POLICY, "draft_n_accepted": 0, "post_cleanup_vram_sample": "required on execute", "harness": harness_identity()})
+        write_json(args.output_dir / "summary.json", {"schema": "epyc.qwen36_27b_q8_dflash_pgpu1.summary.v1", "status": "prepared_no_inference", "production_named_kernel_required": True, "n": args.reps, "median": True, "mad": True, "warmup_discard_policy": PGPU1_WARMUP_POLICY, "cpu_interference_policy": CPU_INTERFERENCE_POLICY, "draft_n_accepted": 0, "post_cleanup_vram_sample": "required on execute", "harness": harness_identity()})
         print(f"prepared: {args.output_dir}")
         return 0
     try:
         summary = execute(args, args.output_dir, plan)
     except Exception as exc:  # noqa: BLE001 - failed gates must leave a durable summary
-        summary = {"schema": "epyc.laguna_iq2_dflash_pgpu1.summary.v2", "status": "failed", "production_named_kernel_required": True, "attestation_ref": str(args.attestation_ref), "error": repr(exc), "harness": harness_identity()}
+        summary = {"schema": "epyc.qwen36_27b_q8_dflash_pgpu1.summary.v1", "status": "failed", "production_named_kernel_required": True, "attestation_ref": str(args.attestation_ref), "error": repr(exc), "harness": harness_identity()}
     write_json(args.output_dir / "summary.json", summary)
     audit = run_audit(args.output_dir)
     if summary["status"] != "ok" or audit["status"] != "complete":

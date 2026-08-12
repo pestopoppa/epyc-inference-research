@@ -10,8 +10,8 @@
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/architect_bench_gpu_lib.sh"
 gpu_require_kernel_label || exit 3
-ART=/mnt/raid0/llm/epyc-inference-research/artifacts/architect-bench-gpu-20260720
-RES=/mnt/raid0/llm/epyc-inference-research
+ART="${GPU_BENCH_ART:-/mnt/raid0/llm/epyc-inference-research/artifacts/architect-bench-gpu-20260720}"
+RES="${GPU_BENCH_RES:-/mnt/raid0/llm/epyc-inference-research}"
 
 arm="$1"; MODEL="$2"; SPEC="$3"; SUITE="$4"; N="$5"; MAXTOK="$6"; REPS="$7"
 d="$ART/runs/${SUITE}/${arm}"

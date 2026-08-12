@@ -1,0 +1,585 @@
+{
+  "attestation": {
+    "bytes": 954,
+    "document": {
+      "frozen": false,
+      "production_branch": "production-consolidated-v9",
+      "production_head": "0db32c06e3e550065b78311a6031ef3dd2c4f27c",
+      "promoted_at": "2026-08-10T23:59:00Z",
+      "qualification": {
+        "path": "artifacts/operator/v9-qualification-20260810T235723Z-0db32c06e/summary.json",
+        "sha256": "04344a3624247646d0ebd795c12abfa4db48be895ebc8ccc465867917e7da679",
+        "status": "preproduction_qualification_pass"
+      },
+      "rollback": {
+        "backup_ref": "refs/heads/production-consolidated-v8",
+        "branch": "production-consolidated-v8",
+        "head": "67a433bf45a8a091d83b4ea0b32ff0735fd51800",
+        "source_ref": "refs/heads/production-consolidated-v9"
+      },
+      "schema": "epyc.kernel_promotion_attestation.v1",
+      "server_binary": {
+        "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+        "sha256": "21cfb750dc0ba4b3add0674fcb9dd061d77b3604ebf8e1d063ba0e2c51902feb"
+      },
+      "status": "production_promoted_pending_gpu_certification"
+    },
+    "governance_head_blob": "5643da077279413e6cba750f1917ddf9b5768d5b",
+    "path": "/mnt/raid0/llm/epyc-root/handoffs/active/v9-kernel-promotion-attestation.json",
+    "sha256": "813bf569c03aace2fb57856edff7dbc20e8bc8fb5fecdd1f6e3342169d15486a"
+  },
+  "attestation_reason": "ok",
+  "attestation_valid": true,
+  "binary": {
+    "artifact": {
+      "bytes": 17984,
+      "dev": 2431,
+      "inode": 102794750,
+      "mtime_ns": 1786401631900616927,
+      "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+      "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+      "sha256": "21cfb750dc0ba4b3add0674fcb9dd061d77b3604ebf8e1d063ba0e2c51902feb",
+      "stable": true
+    },
+    "binary": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+    "binary_sha256": "21cfb750dc0ba4b3add0674fcb9dd061d77b3604ebf8e1d063ba0e2c51902feb",
+    "environment": {
+      "HIP_VISIBLE_DEVICES": "0",
+      "LANG": "C",
+      "LC_ALL": "C",
+      "LD_LIBRARY_PATH": "/mnt/raid0/llm/llama.cpp/build-hip/bin:/opt/rocm/lib",
+      "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "ROCR_VISIBLE_DEVICES": "0"
+    },
+    "git": {
+      "branch": {
+        "argv": [
+          "git",
+          "-C",
+          "/mnt/raid0/llm/llama.cpp",
+          "branch",
+          "--show-current"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "production-consolidated-v9\n"
+      },
+      "commit": {
+        "argv": [
+          "git",
+          "-C",
+          "/mnt/raid0/llm/llama.cpp",
+          "rev-parse",
+          "HEAD"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "0db32c06e3e550065b78311a6031ef3dd2c4f27c\n"
+      },
+      "index_diff": {
+        "argv": [
+          "git",
+          "-C",
+          "/mnt/raid0/llm/llama.cpp",
+          "diff",
+          "--cached",
+          "--name-only"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "source_root": "/mnt/raid0/llm/llama.cpp",
+      "tracked_diff": {
+        "argv": [
+          "git",
+          "-C",
+          "/mnt/raid0/llm/llama.cpp",
+          "diff",
+          "--name-only"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "untracked": {
+        "argv": [
+          "git",
+          "-C",
+          "/mnt/raid0/llm/llama.cpp",
+          "ls-files",
+          "--others",
+          "--exclude-standard"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ".gitnexusignore\ntools/math-tools/external/eigen/\ntools/math-tools/external/odeint/\n"
+      }
+    },
+    "ld_library_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin:/opt/rocm/lib",
+    "ldd": {
+      "argv": [
+        "ldd",
+        "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "LD_LIBRARY_PATH": "/mnt/raid0/llm/llama.cpp/build-hip/bin:/opt/rocm/lib",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "\tlinux-vdso.so.1 (0x000071a257140000)\n\tlibllama-server-impl.so => /mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-server-impl.so (0x000071a256a00000)\n\tlibstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6 (0x000071a256773000)\n\tlibgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x000071a257102000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x000071a256530000)\n\tlibllama-common.so.0 => /mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-common.so.0 (0x000071a256000000)\n\tlibmtmd.so.0 => /mnt/raid0/llm/llama.cpp/build-hip/bin/libmtmd.so.0 (0x000071a255eb8000)\n\tlibllama.so.0 => /mnt/raid0/llm/llama.cpp/build-hip/bin/libllama.so.0 (0x000071a255a00000)\n\tlibggml.so.0 => /mnt/raid0/llm/llama.cpp/build-hip/bin/libggml.so.0 (0x000071a2570f3000)\n\tlibggml-base.so.0 => /mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-base.so.0 (0x000071a255dda000)\n\tlibssl.so.3 => /lib/x86_64-linux-gnu/libssl.so.3 (0x000071a2558f2000)\n\tlibcrypto.so.3 => /lib/x86_64-linux-gnu/libcrypto.so.3 (0x000071a2552df000)\n\tlibm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x000071a2551d2000)\n\t/lib64/ld-linux-x86-64.so.2 (0x000071a257142000)\n\tlibggml-cpu.so.0 => /mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-cpu.so.0 (0x000071a254e00000)\n\tlibggml-hip.so.0 => /mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-hip.so.0 (0x000071a251000000)\n\tlibgomp.so.1 => /lib/x86_64-linux-gnu/libgomp.so.1 (0x000071a257098000)\n\tlibz.so.1 => /lib/x86_64-linux-gnu/libz.so.1 (0x000071a257076000)\n\tlibzstd.so.1 => /lib/x86_64-linux-gnu/libzstd.so.1 (0x000071a250f37000)\n\tlibhipblas.so.2 => /opt/rocm/lib/libhipblas.so.2 (0x000071a250e1c000)\n\tlibrocblas.so.4 => /opt/rocm/lib/librocblas.so.4 (0x000071a20fa00000)\n\tlibamdhip64.so.6 => /opt/rocm/lib/libamdhip64.so.6 (0x000071a20e200000)\n\tlibrocsolver.so.0 => /opt/rocm/lib/librocsolver.so.0 (0x000071a1a9400000)\n\tlibrocprofiler-register.so.0 => /opt/rocm/lib/librocprofiler-register.so.0 (0x000071a25514d000)\n\tlibamd_comgr.so.2 => /opt/rocm/lib/libamd_comgr.so.2 (0x000071a1a0800000)\n\tlibhsa-runtime64.so.1 => /opt/rocm/lib/libhsa-runtime64.so.1 (0x000071a1a0400000)\n\tlibnuma.so.1 => /lib/x86_64-linux-gnu/libnuma.so.1 (0x000071a257066000)\n\tlibrocsparse.so.1 => /opt/rocm/lib/librocsparse.so.1 (0x000071a14c200000)\n\tlibtinfo.so.6 => /lib/x86_64-linux-gnu/libtinfo.so.6 (0x000071a2564f9000)\n\tlibelf.so.1 => /lib/x86_64-linux-gnu/libelf.so.1 (0x000071a257045000)\n\tlibdrm.so.2 => /lib/x86_64-linux-gnu/libdrm.so.2 (0x000071a25702e000)\n\tlibdrm_amdgpu.so.1 => /lib/x86_64-linux-gnu/libdrm_amdgpu.so.1 (0x000071a2564ec000)\n"
+    },
+    "local_llama_ggml_libraries": [
+      {
+        "bytes": 971409,
+        "dev": 2431,
+        "inode": 102794705,
+        "mtime_ns": 1786401631877616681,
+        "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-base.so.0",
+        "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-base.so.0.16.0",
+        "sha256": "eedeb7380ef4f82f2feedf514341c92d52e5673846ea1c11d7ebb7c8643390de",
+        "soname": "libggml-base.so.0",
+        "stable": true
+      },
+      {
+        "bytes": 2885088,
+        "dev": 2431,
+        "inode": 102794714,
+        "mtime_ns": 1786401631689614669,
+        "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-cpu.so.0",
+        "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-cpu.so.0.16.0",
+        "sha256": "ddead9e009cc1de96cc18154fa9bb891d69d4689e84e57920034a585afaccb55",
+        "soname": "libggml-cpu.so.0",
+        "stable": true
+      },
+      {
+        "bytes": 66824128,
+        "dev": 2431,
+        "inode": 102794706,
+        "mtime_ns": 1786401631628614016,
+        "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-hip.so.0",
+        "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-hip.so.0.16.0",
+        "sha256": "18192805ae84178ea1fd0ebee6ea0a5092b99d064bc357800325fc65015cd5e1",
+        "soname": "libggml-hip.so.0",
+        "stable": true
+      },
+      {
+        "bytes": 59440,
+        "dev": 2431,
+        "inode": 102794708,
+        "mtime_ns": 1786401631816616028,
+        "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml.so.0",
+        "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml.so.0.16.0",
+        "sha256": "fd87ca295fb3c3ed760def97b6787a994611efc18ad7279049c64a50f6ea72f0",
+        "soname": "libggml.so.0",
+        "stable": true
+      },
+      {
+        "bytes": 6188944,
+        "dev": 2431,
+        "inode": 102794712,
+        "mtime_ns": 1786401631775615589,
+        "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-common.so.0",
+        "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-common.so.0.0.10125",
+        "sha256": "eae6f202532cf7f031b3ea7dc1d9784e93badeb56011b3f31795324382cd5755",
+        "soname": "libllama-common.so.0",
+        "stable": true
+      },
+      {
+        "bytes": 7321552,
+        "dev": 2431,
+        "inode": 102794754,
+        "mtime_ns": 1786401631841616296,
+        "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-server-impl.so",
+        "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-server-impl.so",
+        "sha256": "20cbf39b087e6a3beacc51e2c9fc9ecf55bfc5b524c3b1de3c0c46db8bd858df",
+        "soname": "libllama-server-impl.so",
+        "stable": true
+      },
+      {
+        "bytes": 4251240,
+        "dev": 2431,
+        "inode": 102794836,
+        "mtime_ns": 1786401631705614840,
+        "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama.so.0",
+        "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama.so.0.0.10125",
+        "sha256": "f31db68deb459fb7d7835f2a835849bbb5de0cea1ae2c3daee2ab2b995ca9bd5",
+        "soname": "libllama.so.0",
+        "stable": true
+      }
+    ],
+    "scrubbed_parent_env_keys": [
+      "HIP_VISIBLE_DEVICES",
+      "ROCR_VISIBLE_DEVICES"
+    ],
+    "server_version": {
+      "argv": [
+        "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+        "--version"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "LD_LIBRARY_PATH": "/mnt/raid0/llm/llama.cpp/build-hip/bin:/opt/rocm/lib",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "version: 10125 (0db32c06e)\nbuilt with GNU 15.2.0 for Linux x86_64\n",
+      "stdout": ""
+    }
+  },
+  "binding": {
+    "harness": {
+      "bytes": 105518,
+      "dev": 2431,
+      "inode": 102791693,
+      "mtime_ns": 1786409254594374127,
+      "path": "/workspace/worktrees/v9-promotion-research/scripts/benchmark/laguna_pgpu1_dflash_runner.py",
+      "resolved_path": "/workspace/worktrees/v9-promotion-research/scripts/benchmark/laguna_pgpu1_dflash_runner.py",
+      "sha256": "cc9868b14c4e808569359936aa8af15d794c37f8b0de2bdd289b54f6601aec3a",
+      "stable": true
+    },
+    "models": {
+      "drafter": {
+        "bytes": 3471497600,
+        "dev": 2431,
+        "inode": 98208220,
+        "mtime_ns": 1786408994118482871,
+        "path": "/mnt/raid0/llm/models/dflash/Qwen3.6-27B-DFlash/Qwen3.6-27B-DFlash-f16-canonical-v4.gguf",
+        "resolved_path": "/mnt/raid0/llm/models/dflash/Qwen3.6-27B-DFlash/Qwen3.6-27B-DFlash-f16-canonical-v4.gguf",
+        "sha256": "9977c9c94580c8767ea99f979fa20cbb16b1047e3796e38e9a25eb7d39af98de",
+        "stable": true
+      },
+      "target": {
+        "bytes": 29047084160,
+        "dev": 2431,
+        "inode": 96242884,
+        "mtime_ns": 1783076098258643673,
+        "path": "/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf",
+        "resolved_path": "/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf",
+        "sha256": "9408dcb356cc061a05c139e5647cbde0698ff980c6a69f7fc214e9989f86cfa8",
+        "stable": true
+      }
+    },
+    "promotion_attestation": {
+      "path": "/mnt/raid0/llm/epyc-root/handoffs/active/v9-kernel-promotion-attestation.json",
+      "sha256": "813bf569c03aace2fb57856edff7dbc20e8bc8fb5fecdd1f6e3342169d15486a"
+    },
+    "server": {
+      "artifact": {
+        "bytes": 17984,
+        "dev": 2431,
+        "inode": 102794750,
+        "mtime_ns": 1786401631900616927,
+        "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+        "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+        "sha256": "21cfb750dc0ba4b3add0674fcb9dd061d77b3604ebf8e1d063ba0e2c51902feb",
+        "stable": true
+      },
+      "local_llama_ggml_libraries": [
+        {
+          "bytes": 971409,
+          "dev": 2431,
+          "inode": 102794705,
+          "mtime_ns": 1786401631877616681,
+          "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-base.so.0",
+          "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-base.so.0.16.0",
+          "sha256": "eedeb7380ef4f82f2feedf514341c92d52e5673846ea1c11d7ebb7c8643390de",
+          "soname": "libggml-base.so.0",
+          "stable": true
+        },
+        {
+          "bytes": 2885088,
+          "dev": 2431,
+          "inode": 102794714,
+          "mtime_ns": 1786401631689614669,
+          "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-cpu.so.0",
+          "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-cpu.so.0.16.0",
+          "sha256": "ddead9e009cc1de96cc18154fa9bb891d69d4689e84e57920034a585afaccb55",
+          "soname": "libggml-cpu.so.0",
+          "stable": true
+        },
+        {
+          "bytes": 66824128,
+          "dev": 2431,
+          "inode": 102794706,
+          "mtime_ns": 1786401631628614016,
+          "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-hip.so.0",
+          "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-hip.so.0.16.0",
+          "sha256": "18192805ae84178ea1fd0ebee6ea0a5092b99d064bc357800325fc65015cd5e1",
+          "soname": "libggml-hip.so.0",
+          "stable": true
+        },
+        {
+          "bytes": 59440,
+          "dev": 2431,
+          "inode": 102794708,
+          "mtime_ns": 1786401631816616028,
+          "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml.so.0",
+          "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libggml.so.0.16.0",
+          "sha256": "fd87ca295fb3c3ed760def97b6787a994611efc18ad7279049c64a50f6ea72f0",
+          "soname": "libggml.so.0",
+          "stable": true
+        },
+        {
+          "bytes": 6188944,
+          "dev": 2431,
+          "inode": 102794712,
+          "mtime_ns": 1786401631775615589,
+          "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-common.so.0",
+          "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-common.so.0.0.10125",
+          "sha256": "eae6f202532cf7f031b3ea7dc1d9784e93badeb56011b3f31795324382cd5755",
+          "soname": "libllama-common.so.0",
+          "stable": true
+        },
+        {
+          "bytes": 7321552,
+          "dev": 2431,
+          "inode": 102794754,
+          "mtime_ns": 1786401631841616296,
+          "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-server-impl.so",
+          "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-server-impl.so",
+          "sha256": "20cbf39b087e6a3beacc51e2c9fc9ecf55bfc5b524c3b1de3c0c46db8bd858df",
+          "soname": "libllama-server-impl.so",
+          "stable": true
+        },
+        {
+          "bytes": 4251240,
+          "dev": 2431,
+          "inode": 102794836,
+          "mtime_ns": 1786401631705614840,
+          "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama.so.0",
+          "resolved_path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/libllama.so.0.0.10125",
+          "sha256": "f31db68deb459fb7d7835f2a835849bbb5de0cea1ae2c3daee2ab2b995ca9bd5",
+          "soname": "libllama.so.0",
+          "stable": true
+        }
+      ],
+      "path": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+      "sha256": "21cfb750dc0ba4b3add0674fcb9dd061d77b3604ebf8e1d063ba0e2c51902feb"
+    }
+  },
+  "harness": {
+    "bytes": 105518,
+    "dev": 2431,
+    "git": {
+      "branch": {
+        "argv": [
+          "git",
+          "-C",
+          "/workspace/worktrees/v9-promotion-research",
+          "branch",
+          "--show-current"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "v9-promotion-instrument-20260810\n"
+      },
+      "commit": {
+        "argv": [
+          "git",
+          "-C",
+          "/workspace/worktrees/v9-promotion-research",
+          "rev-parse",
+          "HEAD"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "96420244a96b83038ebf6003236f83fe40d5980a\n"
+      },
+      "index_diff": {
+        "argv": [
+          "git",
+          "-C",
+          "/workspace/worktrees/v9-promotion-research",
+          "diff",
+          "--cached",
+          "--name-only"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "source_root": "/workspace/worktrees/v9-promotion-research",
+      "tracked_diff": {
+        "argv": [
+          "git",
+          "-C",
+          "/workspace/worktrees/v9-promotion-research",
+          "diff",
+          "--name-only"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "uv.lock\n"
+      },
+      "untracked": {
+        "argv": [
+          "git",
+          "-C",
+          "/workspace/worktrees/v9-promotion-research",
+          "ls-files",
+          "--others",
+          "--exclude-standard"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "data/gpu-mi210/laguna-iq2-dflash-pgpu1-v9/run-20260811T000819Z/summary.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/binary_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/guard_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/hardware_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/operator_run.sh\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/plan.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/pre_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep1/binding_after.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep1/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep1/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep1/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep1/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep1/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep1/request_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep1/request_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep1/request_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep1/response_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep1/response_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep1/response_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep1/result.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep1/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep1/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep2/binding_after.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep2/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep2/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep2/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep2/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep2/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep2/request_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep2/request_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep2/request_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep2/response_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep2/response_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep2/response_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep2/result.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep2/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep2/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep3/binding_after.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep3/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep3/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep3/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep3/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep3/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep3/request_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep3/request_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep3/request_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep3/response_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep3/response_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep3/response_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep3/result.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep3/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/base_rep3/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep1/binding_after.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep1/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep1/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep1/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep1/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep1/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep1/request_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep1/request_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep1/request_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep1/response_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep1/response_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep1/response_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep1/result.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep1/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep1/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep2/binding_after.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep2/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep2/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep2/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep2/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep2/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep2/request_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep2/request_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep2/request_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep2/response_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep2/response_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep2/response_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep2/result.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep2/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep2/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep3/binding_after.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep3/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep3/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep3/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep3/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep3/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep3/request_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep3/request_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep3/request_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep3/response_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep3/response_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep3/response_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep3/result.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep3/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811/run-20260811T004814Z/runs/dflash_rep3/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/binary_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/candidate_smoke_summary.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/completeness_audit.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/guard_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/hardware_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/operator_run.sh\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/plan.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/post_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/pre_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/binding_after.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/request_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/response_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/result.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/summary.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/binary_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/candidate_smoke_summary.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/completeness_audit.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/guard_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/hardware_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/operator_run.sh\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/plan.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/post_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/pre_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/binding_after.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/request_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/request_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/request_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/response_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/response_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/response_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/result.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/summary.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/binary_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/guard_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/hardware_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/operator_run.sh\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/plan.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/pre_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/binding_after.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/request_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/request_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/request_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/response_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/response_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/response_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/result.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/dflash_rep1/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/dflash_rep1/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/dflash_rep1/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/dflash_rep1/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/dflash_rep1/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/dflash_rep1/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/dflash_rep1/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/binary_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/candidate_smoke_summary.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/completeness_audit.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/guard_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/hardware_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/operator_run.sh\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/plan.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/post_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/pre_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/binding_after.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/request_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/request_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/request_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/response_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/response_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/response_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/result.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/binding_after.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/result.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/summary.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-plan/commands.sh\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-plan/operator_run.sh\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-plan/plan.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/commands.sh\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/guard_state.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/operator_run.sh\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/plan.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep2/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep2/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep2/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep2/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep2/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep2/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep2/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep3/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep3/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep3/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep3/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep3/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep3/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep3/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep4/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep4/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep4/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep4/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep4/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep4/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep4/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep5/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep5/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep5/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep5/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep5/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep5/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep5/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep2/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep2/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep2/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep2/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep2/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep2/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep2/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep3/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep3/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep3/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep3/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep3/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep3/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep3/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep4/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep4/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep4/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep4/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep4/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep4/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep4/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep5/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep5/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep5/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep5/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep5/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep5/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep5/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep2/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep2/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep2/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep2/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep2/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep2/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep2/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep3/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep3/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep3/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep3/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep3/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep3/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep3/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep4/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep4/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep4/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep4/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep4/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep4/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep4/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep5/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep5/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep5/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep5/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep5/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep5/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep5/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/summary.json\n"
+      }
+    },
+    "index_unchanged": {
+      "argv": [
+        "git",
+        "-C",
+        "/workspace/worktrees/v9-promotion-research",
+        "diff",
+        "--cached",
+        "--quiet",
+        "--",
+        "scripts/benchmark/laguna_pgpu1_dflash_runner.py"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": ""
+    },
+    "inode": 102791693,
+    "mtime_ns": 1786409254594374127,
+    "path": "/workspace/worktrees/v9-promotion-research/scripts/benchmark/laguna_pgpu1_dflash_runner.py",
+    "resolved_path": "/workspace/worktrees/v9-promotion-research/scripts/benchmark/laguna_pgpu1_dflash_runner.py",
+    "sha256": "cc9868b14c4e808569359936aa8af15d794c37f8b0de2bdd289b54f6601aec3a",
+    "stable": true,
+    "tracked": {
+      "argv": [
+        "git",
+        "-C",
+        "/workspace/worktrees/v9-promotion-research",
+        "ls-files",
+        "--error-unmatch",
+        "scripts/benchmark/laguna_pgpu1_dflash_runner.py"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "scripts/benchmark/laguna_pgpu1_dflash_runner.py\n"
+    },
+    "worktree_unchanged": {
+      "argv": [
+        "git",
+        "-C",
+        "/workspace/worktrees/v9-promotion-research",
+        "diff",
+        "--quiet",
+        "HEAD",
+        "--",
+        "scripts/benchmark/laguna_pgpu1_dflash_runner.py"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": ""
+    }
+  },
+  "harness_reason": "ok",
+  "harness_valid": true,
+  "models_reason": "ok",
+  "models_valid": true,
+  "production_reason": "ok",
+  "production_valid": true,
+  "valid": true
+}

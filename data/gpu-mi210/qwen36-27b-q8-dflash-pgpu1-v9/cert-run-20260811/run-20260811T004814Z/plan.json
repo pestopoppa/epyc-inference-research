@@ -1,0 +1,304 @@
+{
+  "arm_order": "paired by rep; base-first on odd reps and dflash-first on even reps",
+  "attestation_ref": "/mnt/raid0/llm/epyc-root/handoffs/active/v9-kernel-promotion-attestation.json",
+  "cells": [
+    {
+      "arm": "base",
+      "port": 19880,
+      "prompt_count": 3,
+      "rep": 1
+    },
+    {
+      "arm": "dflash",
+      "port": 19881,
+      "prompt_count": 3,
+      "rep": 1
+    },
+    {
+      "arm": "dflash",
+      "port": 19882,
+      "prompt_count": 3,
+      "rep": 2
+    },
+    {
+      "arm": "base",
+      "port": 19883,
+      "prompt_count": 3,
+      "rep": 2
+    },
+    {
+      "arm": "base",
+      "port": 19884,
+      "prompt_count": 3,
+      "rep": 3
+    },
+    {
+      "arm": "dflash",
+      "port": 19885,
+      "prompt_count": 3,
+      "rep": 3
+    },
+    {
+      "arm": "dflash",
+      "port": 19886,
+      "prompt_count": 3,
+      "rep": 4
+    },
+    {
+      "arm": "base",
+      "port": 19887,
+      "prompt_count": 3,
+      "rep": 4
+    },
+    {
+      "arm": "base",
+      "port": 19888,
+      "prompt_count": 3,
+      "rep": 5
+    },
+    {
+      "arm": "dflash",
+      "port": 19889,
+      "prompt_count": 3,
+      "rep": 5
+    }
+  ],
+  "cpu_interference_policy": "CPU production stack quiesced and verified before the window; no concurrent llama-server, AutoPilot, or KFD model-owner process is permitted",
+  "created_at": "2026-08-11T00:48:30.900073+00:00",
+  "drafter_kv_quant": {
+    "k": "q8_0",
+    "v": "q8_0"
+  },
+  "drafter_model": {
+    "bytes": 3471497600,
+    "dev": 2431,
+    "inode": 98208220,
+    "mtime_ns": 1786408994118482871,
+    "path": "/mnt/raid0/llm/models/dflash/Qwen3.6-27B-DFlash/Qwen3.6-27B-DFlash-f16-canonical-v4.gguf",
+    "resolved_path": "/mnt/raid0/llm/models/dflash/Qwen3.6-27B-DFlash/Qwen3.6-27B-DFlash-f16-canonical-v4.gguf",
+    "sha256": "9977c9c94580c8767ea99f979fa20cbb16b1047e3796e38e9a25eb7d39af98de",
+    "stable": true
+  },
+  "execute": true,
+  "fixed_prompt_pack": [
+    {
+      "id": "primes",
+      "text": "Write a concise explanation of how to enumerate every prime below 30 and sum them. Do not enumerate rejected or composite candidates one by one. Then end with exactly `RESULT_JSON: {\"primes\":[...],\"sum\":...}` using the computed values. The final JSON is machine-validated."
+    },
+    {
+      "id": "nested_flatten",
+      "text": "Write a concise explanation of a deterministic encounter-order flatten of {\"a\":[1,{\"b\":[2,3]}],\"c\":{\"d\":4},\"e\":[5]}. Then end with exactly `RESULT_JSON: {\"values\":[...]}` using the computed scalar order. The final JSON is machine-validated."
+    },
+    {
+      "id": "normalize",
+      "text": "Write a concise explanation of normalization of [0,2,3,5] by its sum, including the zero-sum edge case. The input total is 10. Then end with exactly `RESULT_JSON: {\"normalized\":[...],\"sum\":...}` using the computed normalized values. JSON `sum` must be the sum of the normalized values. Do not report the input total in JSON. The final JSON is machine-validated."
+    }
+  ],
+  "harness": {
+    "bytes": 105518,
+    "dev": 2431,
+    "git": {
+      "branch": {
+        "argv": [
+          "git",
+          "-C",
+          "/workspace/worktrees/v9-promotion-research",
+          "branch",
+          "--show-current"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "v9-promotion-instrument-20260810\n"
+      },
+      "commit": {
+        "argv": [
+          "git",
+          "-C",
+          "/workspace/worktrees/v9-promotion-research",
+          "rev-parse",
+          "HEAD"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "96420244a96b83038ebf6003236f83fe40d5980a\n"
+      },
+      "index_diff": {
+        "argv": [
+          "git",
+          "-C",
+          "/workspace/worktrees/v9-promotion-research",
+          "diff",
+          "--cached",
+          "--name-only"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": ""
+      },
+      "source_root": "/workspace/worktrees/v9-promotion-research",
+      "tracked_diff": {
+        "argv": [
+          "git",
+          "-C",
+          "/workspace/worktrees/v9-promotion-research",
+          "diff",
+          "--name-only"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "uv.lock\n"
+      },
+      "untracked": {
+        "argv": [
+          "git",
+          "-C",
+          "/workspace/worktrees/v9-promotion-research",
+          "ls-files",
+          "--others",
+          "--exclude-standard"
+        ],
+        "environment": {
+          "HIP_VISIBLE_DEVICES": "0",
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+          "ROCR_VISIBLE_DEVICES": "0"
+        },
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "data/gpu-mi210/laguna-iq2-dflash-pgpu1-v9/run-20260811T000819Z/summary.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/binary_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/candidate_smoke_summary.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/completeness_audit.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/guard_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/hardware_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/operator_run.sh\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/plan.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/post_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/pre_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/binding_after.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/request_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/response_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/result.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/runs/base_rep1/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T001857Z/summary.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/binary_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/candidate_smoke_summary.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/completeness_audit.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/guard_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/hardware_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/operator_run.sh\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/plan.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/post_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/pre_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/binding_after.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/request_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/request_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/request_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/response_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/response_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/response_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/result.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/runs/base_rep1/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002047Z/summary.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/binary_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/guard_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/hardware_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/operator_run.sh\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/plan.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/pre_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/binding_after.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/request_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/request_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/request_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/response_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/response_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/response_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/result.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/base_rep1/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/dflash_rep1/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/dflash_rep1/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/dflash_rep1/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/dflash_rep1/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/dflash_rep1/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/dflash_rep1/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T002319Z/runs/dflash_rep1/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/binary_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/candidate_smoke_summary.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/completeness_audit.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/guard_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/hardware_state.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/operator_run.sh\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/plan.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/post_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/pre_execution_binding.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/binding_after.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/request_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/request_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/request_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/response_1.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/response_2.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/response_3.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/result.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/base_rep1/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/binding_after.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/binding_before.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/environment.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/expected_execution_identity.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/model_identity_refs.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/prompts.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/result.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/server.stderr\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/runs/dflash_rep1/server_argv.json\ndata/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/run-20260811T003121Z/summary.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-plan/commands.sh\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-plan/operator_run.sh\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-plan/plan.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/commands.sh\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/guard_state.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/operator_run.sh\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/plan.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep1/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep2/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep2/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep2/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep2/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep2/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep2/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep2/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep3/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep3/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep3/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep3/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep3/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep3/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep3/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep4/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep4/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep4/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep4/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep4/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep4/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep4/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep5/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep5/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep5/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep5/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep5/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep5/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_architect_general_gpu_native_mtp_ctx2048_rep5/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep1/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep2/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep2/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep2/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep2/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep2/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep2/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep2/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep3/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep3/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep3/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep3/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep3/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep3/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep3/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep4/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep4/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep4/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep4/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep4/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep4/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep4/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep5/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep5/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep5/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep5/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep5/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep5/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_coder_escalation_gpu_request_no_spec_ctx2048_rep5/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep1/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep2/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep2/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep2/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep2/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep2/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep2/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep2/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep3/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep3/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep3/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep3/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep3/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep3/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep3/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep4/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep4/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep4/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep4/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep4/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep4/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep4/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep5/prompt.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep5/prompt_sha256.txt\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep5/request.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep5/response.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep5/result.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep5/server.stderr\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/runs/v9_worker_vision_gpu_no_spec_ctx2048_rep5/server_argv.json\ndata/kernel-v9-candidate/promotion-plan-20260810/production-v9-gpu-cert-run/summary.json\n"
+      }
+    },
+    "index_unchanged": {
+      "argv": [
+        "git",
+        "-C",
+        "/workspace/worktrees/v9-promotion-research",
+        "diff",
+        "--cached",
+        "--quiet",
+        "--",
+        "scripts/benchmark/laguna_pgpu1_dflash_runner.py"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": ""
+    },
+    "inode": 102791693,
+    "mtime_ns": 1786409254594374127,
+    "path": "/workspace/worktrees/v9-promotion-research/scripts/benchmark/laguna_pgpu1_dflash_runner.py",
+    "resolved_path": "/workspace/worktrees/v9-promotion-research/scripts/benchmark/laguna_pgpu1_dflash_runner.py",
+    "sha256": "cc9868b14c4e808569359936aa8af15d794c37f8b0de2bdd289b54f6601aec3a",
+    "stable": true,
+    "tracked": {
+      "argv": [
+        "git",
+        "-C",
+        "/workspace/worktrees/v9-promotion-research",
+        "ls-files",
+        "--error-unmatch",
+        "scripts/benchmark/laguna_pgpu1_dflash_runner.py"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "scripts/benchmark/laguna_pgpu1_dflash_runner.py\n"
+    },
+    "worktree_unchanged": {
+      "argv": [
+        "git",
+        "-C",
+        "/workspace/worktrees/v9-promotion-research",
+        "diff",
+        "--quiet",
+        "HEAD",
+        "--",
+        "scripts/benchmark/laguna_pgpu1_dflash_runner.py"
+      ],
+      "environment": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": "/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "returncode": 0,
+      "stderr": "",
+      "stdout": ""
+    }
+  },
+  "max_tokens": 512,
+  "min_completion_tokens": 96,
+  "min_explanation_words": 8,
+  "production_named_kernel_required": true,
+  "prompt_pack_sha256": "070e14fbd34586481f85bab24179bb0c77768b002351215c5a3b79e7fd0114da",
+  "provisional_promotion_identity": {
+    "expected_head": "0db32c06e3e550065b78311a6031ef3dd2c4f27c",
+    "expected_server_sha256": "21cfb750dc0ba4b3add0674fcb9dd061d77b3604ebf8e1d063ba0e2c51902feb"
+  },
+  "rep_policy": "n >= 5 per arm; n >= 10 is required before making any <=2% claim; this runner does not make a <=2% claim",
+  "reps_per_arm": 5,
+  "required_branch": "production-consolidated-v9",
+  "schema": "epyc.qwen36_27b_q8_dflash_pgpu1.plan.v1",
+  "seed": 424242,
+  "source_untracked_allowlist": {
+    ".gitnexusignore": "local GitNexus configuration; not a llama.cpp build input",
+    "tools/math-tools/": "operator-owned unrelated tool subtree; not linked into llama-server"
+  },
+  "target_kv_quant": {
+    "k": "q8_0",
+    "v": "q8_0"
+  },
+  "target_model": {
+    "bytes": 29047084160,
+    "dev": 2431,
+    "inode": 96242884,
+    "mtime_ns": 1783076098258643673,
+    "path": "/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf",
+    "resolved_path": "/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf",
+    "sha256": "9408dcb356cc061a05c139e5647cbde0698ff980c6a69f7fc214e9989f86cfa8",
+    "stable": true
+  },
+  "warmup_discard_policy": "no warm-up requests; no discarded reps; fresh server per rep; graph recapture remains inside each measured fresh-server replicate"
+}

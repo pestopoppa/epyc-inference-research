@@ -39,7 +39,7 @@ class PriorArtGateTest(unittest.TestCase):
     def test_multi_keyword_pattern_does_not_match_one_generic_token(self):
         result = P.classify(self.finding(
             trace_text="void mul_mat_vec_q<(ggml_type)8>", symbols=()), self.catalogue)
-        self.assertEqual(result.matched_pattern, "Q8 quantized GEMV")
+        self.assertEqual(result.matched_pattern, "quantized GEMV (MMVQ)")
         self.assertNotEqual(result.matched_pattern, "RMSNorm MUL RoPE fusion")
 
     def test_hip_top_k_limitation_wins_over_generic_sampling_port(self):
@@ -125,6 +125,83 @@ class ScopeReductionTest(unittest.TestCase):
         self.assertEqual([row.duration_ns for row in rows], [60, 50])
         self.assertAlmostEqual(sum(row.finding.gpu_time_share for row in rows), 1.0)
 
+    def test_rocprof_v1_schema_uses_device_begin_end_and_pinned_enum_names(self):
+        profile = Path(self.tmp.name) / "rocprof-v1.csv"
+        profile.write_text(
+            "Index,KernelName,DispatchNs,BeginNs,EndNs,CompleteNs\n"
+            "0,\"void mul_mat_vec_q<(ggml_type)16>(void const*) [clone .kd]\",1,10,40,99\n"
+            "1,\"void mul_mat_vec_q<(ggml_type)18>(void const*) [clone .kd]\",2,50,90,199\n",
+            encoding="utf-8")
+        receipt = P.ProfileReceipt(
+            corpus_id="rocprof-v1-real",
+            workload_id="qwen35-122b-iq2-decode",
+            profile_path="rocprof-v1.csv",
+            profile_sha256=hashlib.sha256(profile.read_bytes()).hexdigest(),
+            source_commit=P.GGML_TYPE_ENUM_SOURCE_COMMIT,
+        )
+        dispatches = P.load_rocprof_dispatches(profile, receipt)
+        self.assertEqual([row.profiler_schema for row in dispatches],
+                         ["rocprof_v1", "rocprof_v1"])
+        self.assertEqual([row.duration_ns for row in dispatches], [30, 40])
+        self.assertEqual([row.kernel_family for row in dispatches],
+                         ["mul_mat_vec_q[GGML_TYPE_IQ2_XXS]",
+                          "mul_mat_vec_q[GGML_TYPE_IQ3_XXS]"])
+        self.assertEqual([row.ggml_types for row in dispatches], [
+            ("GGML_TYPE_IQ2_XXS",), ("GGML_TYPE_IQ3_XXS",),
+        ])
+        findings = P.load_rocprof_findings(profile, receipt)
+        self.assertEqual([row.duration_ns for row in findings], [30, 40])
+        self.assertIn("GGML_TYPE_IQ2_XXS", findings[0].finding.trace_text)
+        self.assertIn("GGML_TYPE_IQ3_XXS", findings[1].finding.trace_text)
+
+    def test_numeric_ggml_type_is_not_named_for_an_unpinned_revision(self):
+        profile = Path(self.tmp.name) / "other-source.csv"
+        profile.write_text(
+            "Index,KernelName,BeginNs,EndNs\n"
+            "0,\"void mul_mat_vec_q<(ggml_type)16>() [clone .kd]\",10,40\n",
+            encoding="utf-8")
+        receipt = P.ProfileReceipt(
+            corpus_id="other-source", workload_id="decode",
+            profile_path="other-source.csv",
+            profile_sha256=hashlib.sha256(profile.read_bytes()).hexdigest(),
+            source_commit="abcdef0123456789",
+        )
+        dispatch = P.load_rocprof_dispatches(profile, receipt)[0]
+        self.assertEqual(dispatch.ggml_types, ())
+        self.assertNotIn(
+            "GGML_TYPE_IQ2_XXS",
+            P.load_rocprof_findings(profile, receipt)[0].finding.trace_text)
+
+    def test_schema_detection_refuses_hybrid_profiler_columns(self):
+        profile = Path(self.tmp.name) / "hybrid.csv"
+        profile.write_text(
+            "Dispatch_ID,Kernel_Name,Start_Timestamp,End_Timestamp,"
+            "Index,KernelName,BeginNs,EndNs\n"
+            "0,k,10,20,0,k,10,20\n", encoding="utf-8")
+        receipt = P.ProfileReceipt(
+            corpus_id="hybrid", workload_id="decode",
+            profile_path="hybrid.csv",
+            profile_sha256=hashlib.sha256(profile.read_bytes()).hexdigest(),
+            source_commit=P.GGML_TYPE_ENUM_SOURCE_COMMIT,
+        )
+        with self.assertRaisesRegex(P.ProfileError, "ambiguously matches"):
+            P.load_rocprof_dispatches(profile, receipt)
+
+    def test_pinned_enum_map_matches_frozen_v9_values_used_by_live_trace(self):
+        self.assertEqual(P.GGML_TYPE_ENUM_SOURCE_COMMIT,
+                         "0db32c06e3e550065b78311a6031ef3dd2c4f27c")
+        self.assertEqual(P.GGML_TYPE_ENUM_SOURCE_PATH, "ggml/include/ggml.h")
+        self.assertEqual(P.GGML_TYPE_ENUM_SHA256,
+                         "c9f2351a01af698a2e011d306747d49989030e45230ca6a515b6bb3e1c95c59d")
+        self.assertEqual({value: P.GGML_TYPE_NAMES[value]
+                          for value in (1, 8, 12, 13, 14, 16, 18, 22, 23)}, {
+            1: "GGML_TYPE_F16", 8: "GGML_TYPE_Q8_0",
+            12: "GGML_TYPE_Q4_K", 13: "GGML_TYPE_Q5_K",
+            14: "GGML_TYPE_Q6_K", 16: "GGML_TYPE_IQ2_XXS",
+            18: "GGML_TYPE_IQ3_XXS", 22: "GGML_TYPE_IQ2_S",
+            23: "GGML_TYPE_IQ4_XS",
+        })
+
     def test_profile_hash_mismatch_refuses_classification(self):
         wrong = P.ProfileReceipt(
             corpus_id=self.receipt.corpus_id,
@@ -166,7 +243,7 @@ class ScopeReductionTest(unittest.TestCase):
                          "epyc.autokernel.scope_reduction_report.v1")
         self.assertEqual(json.loads(json.dumps(rendered)), rendered)
 
-    def test_existing_or_port_count_must_strictly_dominate(self):
+    def test_existing_or_port_duration_must_strictly_dominate(self):
         base = P.load_catalogue()
         present = P.CatalogueRow(
             pattern="Q8 activation requantization",
@@ -204,6 +281,55 @@ class ScopeReductionTest(unittest.TestCase):
         self.assertTrue(report.existing_or_port_dominates)
         self.assertEqual(report.recommendation,
                          "expand_catalogue_before_novel_generator")
+
+    def test_many_cheap_existing_families_do_not_outvote_expensive_novel_work(self):
+        profile = Path(self.tmp.name) / "duration-dominance.csv"
+        profile.write_text(
+            "Dispatch_ID,Kernel_Name,Start_Timestamp,End_Timestamp\n"
+            "0,existing_a,0,20\n"
+            "1,existing_b,30,50\n"
+            "2,existing_c,60,80\n"
+            "3,novel_expensive_kernel,90,1090\n",
+            encoding="utf-8",
+        )
+        receipt = P.ProfileReceipt(
+            corpus_id="duration-dominance",
+            workload_id="decode",
+            profile_path=profile.name,
+            profile_sha256=hashlib.sha256(profile.read_bytes()).hexdigest(),
+            source_commit="abcdef0123456789",
+        )
+        base = P.load_catalogue()
+        existing = tuple(P.CatalogueRow(
+            pattern=f"existing {suffix}",
+            trace_keywords=(f"existing_{suffix}",),
+            primary_code=(f"existing_{suffix}",),
+            existing_path=f"kernels/existing_{suffix}",
+            reader_should_conclude="existing path applies",
+            upstream_state="mainline",
+            local_state="present",
+            source_project="llama.cpp",
+            source_commit="abcdef0123456789",
+        ) for suffix in ("a", "b", "c"))
+        catalogue = P.Catalogue(
+            scanned_at=base.scanned_at,
+            scan_commands=base.scan_commands,
+            searched_trees=base.searched_trees,
+            rows=existing,
+            expected_absence=base.expected_absence,
+        )
+        report = P.run_scope_reduction(profile, receipt, catalogue=catalogue)
+        self.assertGreater(
+            report.bucket_counts[P.BUCKET_EXISTING_APPLIES],
+            report.bucket_counts[P.BUCKET_NOVEL],
+        )
+        self.assertLess(
+            report.bucket_duration_ns[P.BUCKET_EXISTING_APPLIES],
+            report.bucket_duration_ns[P.BUCKET_NOVEL],
+        )
+        self.assertFalse(report.existing_or_port_dominates)
+        self.assertEqual(report.recommendation,
+                         "retain_novel_generator_scope")
 
     def test_checked_in_ak_del_1_report_replays_byte_for_byte(self):
         root = Path(P.__file__).resolve().parents[3]

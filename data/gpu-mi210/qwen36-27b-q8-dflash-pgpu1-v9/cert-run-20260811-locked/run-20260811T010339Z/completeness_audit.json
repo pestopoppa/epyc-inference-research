@@ -1,0 +1,343 @@
+{
+  "artifact": "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z",
+  "field_results": {
+    "binary_model_identity": {
+      "label": "binary, git, model, and backend identity",
+      "matched_patterns": [
+        "llama-server",
+        "\\.gguf\\b",
+        "rev-parse",
+        "ld_library_path",
+        "rocm0"
+      ],
+      "near_miss_patterns": [],
+      "required": true,
+      "state": "present"
+    },
+    "cleanup_proof": {
+      "label": "process cleanup proof",
+      "matched_patterns": [
+        "\"dead\"\\s*:\\s*true"
+      ],
+      "near_miss_patterns": [],
+      "required": true,
+      "state": "present"
+    },
+    "cpu_interference_policy": {
+      "label": "explicit CPU-stack interference policy",
+      "matched_patterns": [
+        "\\bquiesced\\b",
+        "\\bproduction stack\\b"
+      ],
+      "near_miss_patterns": [],
+      "required": true,
+      "state": "present"
+    },
+    "post_cleanup_vram_sample": {
+      "label": "post-cleanup VRAM/KFD sample",
+      "matched_patterns": [
+        "after_cleanup",
+        "post[-_ ]cleanup.*vram",
+        "post[-_ ]cleanup.*kfd",
+        "no kfd pids"
+      ],
+      "near_miss_patterns": [
+        "before_cleanup",
+        "\"dead\"\\s*:\\s*true"
+      ],
+      "required": true,
+      "state": "present"
+    },
+    "production_named_kernel_identity": {
+      "label": "production-named kernel identity",
+      "matched_patterns": [
+        "production-consolidated-v[0-9]"
+      ],
+      "near_miss_patterns": [],
+      "required": true,
+      "state": "present"
+    },
+    "rep_count": {
+      "label": "rep count sufficient for >=5% claim",
+      "matched_patterns": [
+        "\"rep\"\\s*:\\s*5\\b"
+      ],
+      "near_miss_patterns": [],
+      "required": true,
+      "state": "present"
+    },
+    "result_grammar": {
+      "label": "median/MAD throughput, prompt/decode split, and draft counters",
+      "matched_patterns": [
+        "prompt_tps",
+        "decode_tps",
+        "draft_n_accepted"
+      ],
+      "near_miss_patterns": [],
+      "required": true,
+      "state": "present"
+    },
+    "rocm_clocks_before_after": {
+      "label": "ROCm clocks before+after",
+      "matched_patterns": [
+        "--showclocks?\\b",
+        "\\bsclk\\b",
+        "\\bmclk\\b"
+      ],
+      "near_miss_patterns": [
+        "rocm-smi",
+        "rocm system management interface"
+      ],
+      "required": true,
+      "state": "present"
+    },
+    "rocm_power_before_after": {
+      "label": "ROCm power before+after",
+      "matched_patterns": [
+        "--showpower\\b",
+        "\\bpower\\b"
+      ],
+      "near_miss_patterns": [
+        "rocm-smi",
+        "rocm system management interface"
+      ],
+      "required": true,
+      "state": "present"
+    },
+    "rocm_temp_before_after": {
+      "label": "ROCm temperature before+after",
+      "matched_patterns": [
+        "--showtemp\\b",
+        "\\btemperature\\b",
+        "\\btemp\\b"
+      ],
+      "near_miss_patterns": [
+        "rocm-smi",
+        "rocm system management interface"
+      ],
+      "required": true,
+      "state": "present"
+    },
+    "summary_json": {
+      "label": "summary.json or explicit summary file",
+      "matched_patterns": [
+        "__file__:summary\\.json"
+      ],
+      "near_miss_patterns": [],
+      "required": true,
+      "state": "present"
+    },
+    "vram_pid_util_samples": {
+      "label": "VRAM, utilization, and GPU PID samples",
+      "matched_patterns": [
+        "--showpidgpus\\b",
+        "--showuse\\b",
+        "\\bvram",
+        "\\bgpu use"
+      ],
+      "near_miss_patterns": [],
+      "required": true,
+      "state": "present"
+    },
+    "warmup_discard_policy": {
+      "label": "explicit warm-up/discard policy",
+      "matched_patterns": [
+        "\\bwarm[-_ ]?up\\b",
+        "\\bdiscard(?:ed)?\\b",
+        "\\bgraph recapture\\b",
+        "\\bno warm[-_ ]?up\\b"
+      ],
+      "near_miss_patterns": [
+        "\\bfresh-server\\b",
+        "\\brep(?:s|licate)?\\b"
+      ],
+      "required": true,
+      "state": "present"
+    }
+  },
+  "files_scanned": [
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/binary_identity.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/candidate_smoke_summary.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/guard_state.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/hardware_state.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/operator_run.sh",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/plan.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/post_execution_binding.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/pre_execution_binding.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep1/binding_after.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep1/binding_before.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep1/environment.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep1/expected_execution_identity.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep1/model_identity_refs.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep1/prompts.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep1/request_1.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep1/request_2.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep1/request_3.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep1/response_1.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep1/response_2.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep1/response_3.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep1/result.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep1/server.stderr",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep1/server_argv.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep2/binding_after.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep2/binding_before.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep2/environment.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep2/expected_execution_identity.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep2/model_identity_refs.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep2/prompts.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep2/request_1.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep2/request_2.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep2/request_3.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep2/response_1.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep2/response_2.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep2/response_3.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep2/result.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep2/server.stderr",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep2/server_argv.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep3/binding_after.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep3/binding_before.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep3/environment.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep3/expected_execution_identity.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep3/model_identity_refs.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep3/prompts.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep3/request_1.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep3/request_2.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep3/request_3.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep3/response_1.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep3/response_2.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep3/response_3.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep3/result.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep3/server.stderr",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep3/server_argv.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep4/binding_after.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep4/binding_before.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep4/environment.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep4/expected_execution_identity.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep4/model_identity_refs.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep4/prompts.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep4/request_1.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep4/request_2.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep4/request_3.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep4/response_1.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep4/response_2.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep4/response_3.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep4/result.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep4/server.stderr",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep4/server_argv.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep5/binding_after.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep5/binding_before.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep5/environment.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep5/expected_execution_identity.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep5/model_identity_refs.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep5/prompts.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep5/request_1.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep5/request_2.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep5/request_3.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep5/response_1.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep5/response_2.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep5/response_3.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep5/result.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep5/server.stderr",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/base_rep5/server_argv.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep1/binding_after.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep1/binding_before.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep1/environment.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep1/expected_execution_identity.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep1/model_identity_refs.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep1/prompts.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep1/request_1.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep1/request_2.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep1/request_3.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep1/response_1.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep1/response_2.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep1/response_3.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep1/result.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep1/server.stderr",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep1/server_argv.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep2/binding_after.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep2/binding_before.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep2/environment.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep2/expected_execution_identity.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep2/model_identity_refs.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep2/prompts.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep2/request_1.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep2/request_2.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep2/request_3.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep2/response_1.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep2/response_2.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep2/response_3.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep2/result.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep2/server.stderr",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep2/server_argv.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep3/binding_after.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep3/binding_before.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep3/environment.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep3/expected_execution_identity.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep3/model_identity_refs.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep3/prompts.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep3/request_1.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep3/request_2.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep3/request_3.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep3/response_1.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep3/response_2.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep3/response_3.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep3/result.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep3/server.stderr",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep3/server_argv.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep4/binding_after.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep4/binding_before.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep4/environment.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep4/expected_execution_identity.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep4/model_identity_refs.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep4/prompts.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep4/request_1.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep4/request_2.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep4/request_3.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep4/response_1.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep4/response_2.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep4/response_3.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep4/result.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep4/server.stderr",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep4/server_argv.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep5/binding_after.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep5/binding_before.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep5/environment.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep5/expected_execution_identity.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep5/model_identity_refs.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep5/prompts.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep5/request_1.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep5/request_2.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep5/request_3.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep5/response_1.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep5/response_2.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep5/response_3.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep5/result.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep5/server.stderr",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/runs/dflash_rep5/server_argv.json",
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/summary.json"
+  ],
+  "files_scanned_n": 159,
+  "files_skipped_large": [
+    "/workspace/worktrees/v9-promotion-research/data/gpu-mi210/qwen36-27b-q8-dflash-pgpu1-v9/cert-run-20260811-locked/run-20260811T010339Z/summary.json"
+  ],
+  "missing_required_fields": [],
+  "near_miss_fields": [],
+  "present_required_fields": [
+    "summary_json",
+    "rocm_clocks_before_after",
+    "rocm_power_before_after",
+    "rocm_temp_before_after",
+    "vram_pid_util_samples",
+    "binary_model_identity",
+    "production_named_kernel_identity",
+    "warmup_discard_policy",
+    "rep_count",
+    "cpu_interference_policy",
+    "result_grammar",
+    "cleanup_proof",
+    "post_cleanup_vram_sample"
+  ],
+  "recommendation": "retro_cert_candidate",
+  "status": "complete",
+  "summary_status": "failed"
+}

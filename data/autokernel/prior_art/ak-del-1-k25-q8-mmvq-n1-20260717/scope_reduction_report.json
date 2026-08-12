@@ -14,7 +14,7 @@
   },
   "captured_dispatches": 9,
   "captured_duration_ns": 57442,
-  "catalogue_sha256": "08a988a5646f52d9e1436a9eeac61f2dfe74f3f7f1e5316d1c45f351659c51db",
+  "catalogue_sha256": "b72af2542a9d487ea23debb38eff43ac7191b954a39e77dfe944d6233bfd7f2b",
   "cumulative_floor": 0.01,
   "existing_or_port_dominates": true,
   "findings": [
@@ -38,8 +38,8 @@
       "exit_action": "config_or_dispatch_fix",
       "finding_id": "ak-del-1-k25-q8-mmvq-n1-20260717:mul_mat_vec_q",
       "kernel_family": "mul_mat_vec_q",
-      "matched_pattern": "Q8 quantized GEMV",
-      "reason": "the current MMVQ path is active; a replacement proposal must name the deficiency and distinct mechanism",
+      "matched_pattern": "quantized GEMV (MMVQ)",
+      "reason": "the current type-specialized MMVQ path is active; a replacement proposal must name the exact ggml_type deficiency and distinct mechanism",
       "source_commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
     },
     {

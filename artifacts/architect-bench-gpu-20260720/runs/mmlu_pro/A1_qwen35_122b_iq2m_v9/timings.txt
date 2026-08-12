@@ -1,0 +1,6 @@
+2.06.814.338 I slot print_timing: id  0 | task 597 | draft acceptance = 1.00000 (    2 accepted /     2 generated), mean len =  3.00
+2.07.400.272 I slot print_timing: id  0 | task 601 | prompt eval time =     427.25 ms /    95 tokens (    4.50 ms per token,   222.35 tokens per second)
+2.07.400.278 I slot print_timing: id  0 | task 601 |        eval time =      61.10 ms /     2 tokens (   30.55 ms per token,    32.73 tokens per second)
+2.07.400.278 I slot print_timing: id  0 | task 601 |       total time =     488.35 ms /    97 tokens
+2.07.400.280 I slot print_timing: id  0 | task 601 |    graphs reused =          1
+2.07.400.283 I slot print_timing: id  0 | task 601 | draft acceptance = 1.00000 (    2 accepted /     2 generated), mean len =  3.00

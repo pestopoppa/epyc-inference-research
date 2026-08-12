@@ -1,0 +1,21 @@
+0.00.035.165 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.035.502 W srv  llama_server: -----------------
+0.00.035.504 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.035.504 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.035.504 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.035.505 W srv  llama_server: -----------------
+0.00.036.714 I srv    load_model: loading model '/mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf'
+0.00.405.009 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.02.040.542 I srv    load_model: loaded multimodal model, '/mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf'
+0.02.059.977 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 3328, kv_unified = 'false'
+0.02.060.129 W srv          init: --cache-idle-slots requires --cache-ram, disabling
+0.02.063.421 I srv  llama_server: model loaded
+0.02.063.427 I srv  llama_server: listening on http://127.0.0.1:20013
+0.03.793.188 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.03.793.288 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.05.631.887 I slot print_timing: id  0 | task 0 | prompt eval time =     488.97 ms /   959 tokens (    0.51 ms per token,  1961.25 tokens per second)
+0.05.631.891 I slot print_timing: id  0 | task 0 |        eval time =    1349.59 ms /   128 tokens (   10.54 ms per token,    94.84 tokens per second)
+0.05.631.891 I slot print_timing: id  0 | task 0 |       total time =    1838.57 ms /  1087 tokens
+0.05.631.896 I slot print_timing: id  0 | task 0 |    graphs reused =        126
+0.05.631.989 I slot      release: id  0 | task 0 | stop processing: n_tokens = 1086, truncated = 0
+0.06.178.759 I srv    operator(): operator(): cleaning up before exit...

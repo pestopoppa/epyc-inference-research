@@ -715,6 +715,18 @@ class ChainLeg:
         candidate = chain.candidate_build_for(
             self.identity, test_backend_ops=self.artifacts["test-backend-ops"])
         symbols, diff, surface_evidence = self.t0_evidence_inputs()
+        source_prerequisites = tuple(
+            correctness.SourcePrerequisiteEvidence(
+                prerequisite_id=prerequisite_id,
+                candidate_source_sha256=self.identity.snapshot_sha256,
+                evaluator_bundle_sha256=self.identity.snapshot_sha256,
+                suite_version="0db32c06e", producer_id="trusted_evaluator",
+                capture_mode="measured",
+                evidence_ref=f"fixture://chain/{prerequisite_id}",
+                evidence_sha256=T0.sha256_text(
+                    f"chain source prerequisite {prerequisite_id}"),
+                check=schemas.Check(schemas.PASS))
+            for prerequisite_id in correctness.SOURCE_PREREQUISITE_IDS)
         return T0.T0ExecutionPlan(
             candidate=candidate,
             tools=T0.ToolPaths(
@@ -741,6 +753,7 @@ class ChainLeg:
             determinism_runs=2, cache_state="cold", state_safety_probe=False,
             oracle_ids=("oracle://anchor-v8",),
             candidate_diff_text=CANDIDATE_DIFF,
+            source_prerequisites=source_prerequisites,
             build=self.build_evidence.provenance,
             **chain.t0_plan_evidence(
                 symbols=symbols, diff=diff, change_surface=surface_evidence),

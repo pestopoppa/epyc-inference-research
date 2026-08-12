@@ -1,0 +1,22 @@
+{
+  "drafter": {
+    "bytes": 3471497600,
+    "dev": 2431,
+    "inode": 98208220,
+    "mtime_ns": 1786408994118482871,
+    "path": "/mnt/raid0/llm/models/dflash/Qwen3.6-27B-DFlash/Qwen3.6-27B-DFlash-f16-canonical-v4.gguf",
+    "resolved_path": "/mnt/raid0/llm/models/dflash/Qwen3.6-27B-DFlash/Qwen3.6-27B-DFlash-f16-canonical-v4.gguf",
+    "sha256": "9977c9c94580c8767ea99f979fa20cbb16b1047e3796e38e9a25eb7d39af98de",
+    "stable": true
+  },
+  "target": {
+    "bytes": 29047084160,
+    "dev": 2431,
+    "inode": 96242884,
+    "mtime_ns": 1783076098258643673,
+    "path": "/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf",
+    "resolved_path": "/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf",
+    "sha256": "9408dcb356cc061a05c139e5647cbde0698ff980c6a69f7fc214e9989f86cfa8",
+    "stable": true
+  }
+}

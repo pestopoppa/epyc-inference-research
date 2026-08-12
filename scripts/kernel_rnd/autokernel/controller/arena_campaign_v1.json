@@ -1,0 +1,323 @@
+{
+  "schema": "epyc.autokernel.arena_controller_campaign.v1",
+  "campaign_id": "inf03-mi210-controller-ab-v2",
+  "target_gpu_model": "MI210",
+  "target_gfx_arch": "gfx90a",
+  "budget": {
+    "match_axis": "elapsed_wall_time",
+    "checkpoint_hours": [2.0, 8.0, 32.0],
+    "maximum_wall_hours_per_controller_task": 32.0,
+    "concurrent_gpu_cells": 1
+  },
+  "tasks": [
+    {
+      "task_id": "instruction2triton.rocmbench.test_add_kernel",
+      "relative_root": "tasks/instruction2triton/rocmbench/test_add_kernel",
+      "file_sha256": {
+        "config.yaml": "1762a6311a1f23dc827dcbe626c286a242577235a9d9fd56b97119439511c04e",
+        "performance_utils_pytest.py": "fb8709f766736aff7e1047e13f601af2f30ff98342ade7f7083f450d87917b88",
+        "test_add_kernel.py": "7b6e63cc81f6ec18e311700f7eb3d2048b194ca2a16f07b97ff33ce25f755745"
+      }
+    },
+    {
+      "task_id": "instruction2triton.tritonbench.attention_llama",
+      "relative_root": "tasks/instruction2triton/tritonbench/attention_llama",
+      "file_sha256": {
+        "config.yaml": "d336e8053c8ac526540239ed88e5a2d88b7179f17f45f642e7c089a5415e87ea",
+        "python_bindings/tritonbench.py": "c6df727582e3a0d8a2a82c5aa135dccaf63474ddb14f61e561e7e7e55004bb42"
+      }
+    },
+    {
+      "task_id": "instruction2triton.rocmbench.moe_gemm",
+      "relative_root": "tasks/instruction2triton/rocmbench/moe_gemm",
+      "file_sha256": {
+        "config.yaml": "6595b27ab1b23ee3e3981c40e5a8723de394b540f3569b81907313c9a7308122",
+        "moe_gemm.py": "7dc9331749c6fa1f9af2d34491173c5356609eca5ff8a08fe8bdb5421441f1f1",
+        "performance_utils_pytest.py": "fb8709f766736aff7e1047e13f601af2f30ff98342ade7f7083f450d87917b88"
+      }
+    },
+    {
+      "task_id": "instruction2triton.tritonbench.dequantize_matmul",
+      "relative_root": "tasks/instruction2triton/tritonbench/dequantize_matmul",
+      "file_sha256": {
+        "config.yaml": "1a347010dc9b51b32b8d8f3faf133fc342df21ae3e00446604826fc9dd21a9e1",
+        "python_bindings/tritonbench.py": "c6df727582e3a0d8a2a82c5aa135dccaf63474ddb14f61e561e7e7e55004bb42"
+      }
+    }
+  ],
+  "arms": [
+    {
+      "arm_id": "starting_state_baseline",
+      "availability": "ready",
+      "adapter_kind": "arena_measure_baseline",
+      "missing_artifacts": []
+    },
+    {
+      "arm_id": "claude_codex_actor_critic",
+      "availability": "ready",
+      "adapter_kind": "agentkernelarena_three_arg_v1",
+      "missing_artifacts": [],
+      "argv": [
+        "python3",
+        "-m",
+        "scripts.kernel_rnd.autokernel.controller.claude_codex_actor_critic",
+        "--claude-model",
+        "claude-opus-5",
+        "--claude-effort",
+        "high",
+        "--codex-model",
+        "gpt-5.6-sol",
+        "--codex-effort",
+        "high",
+        "--checkpoint-hours",
+        "32",
+        "--timeout-seconds",
+        "115200",
+        "--max-iterations",
+        "64",
+        "--workspace",
+        "."
+      ],
+      "source_root": "repository://.",
+      "source_commit": "537163d5696ab646a0d8ef4b543d78da1199332c",
+      "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/claude_codex_actor_critic.py",
+      "entrypoint_sha256": "675434e64b6fca6bc9867f124466892e35ad8e0f1aaf377ea67c1808b551e722",
+      "model_ids": [
+        "claude-opus-5:high:planner+critic",
+        "gpt-5.6-sol:high:actor"
+      ],
+      "required_clis": [
+        "claude",
+        "codex"
+      ]
+    },
+    {
+      "arm_id": "evoengineer",
+      "availability": "ready",
+      "adapter_kind": "evoengineer_full_arena_v1",
+      "missing_artifacts": [],
+      "argv": [
+        "/mnt/raid0/llm/tools/geak-v1-rocm62-py312/bin/python",
+        "-m",
+        "scripts.kernel_rnd.autokernel.controller.evoengineer_arena",
+        "--model",
+        "gpt-5.6-sol",
+        "--effort",
+        "high",
+        "--checkpoint-hours",
+        "32",
+        "--timeout-seconds",
+        "115200",
+        "--workspace",
+        ".",
+        "--arena-root",
+        "/mnt/raid0/llm/autokernel/vendor/agent-kernel-arena",
+        "--source-root",
+        "/mnt/raid0/llm/autokernel/vendor/arena-controllers/evoengineer"
+      ],
+      "source_root": "repository://.",
+      "source_commit": "381bc55e5eadb58763d86e0043da0884b26eea3a",
+      "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/evoengineer_arena.py",
+      "entrypoint_sha256": "d5544c2397da53770bb77897fdd0fdbff72baabd9839adca2a3f8350c58d4ef4",
+      "model_ids": [
+        "gpt-5.6-sol:high:upstream-controller"
+      ],
+      "required_clis": [
+        "codex"
+      ],
+      "upstream_source_root": "vendor://evoengineer",
+      "upstream_source_commit": "1649715a975b9022c84b5279c88aaef0b73b28dc",
+      "upstream_entrypoint_path": "src/evotoolkit/evo_method/evoengineer/evoengineer.py",
+      "upstream_entrypoint_sha256": "28c56fbeb8663c9084734c8682dea39df4a539e1680eee782a8553046963e50d",
+      "upstream_license_path": "LICENSE",
+      "upstream_license_sha256": "3a18133891b736252655b83391edfef51bd52aa317198fcc4374eb5f16e99de3"
+    },
+    {
+      "arm_id": "kernelfoundry",
+      "availability": "ready",
+      "adapter_kind": "kernelfoundry_map_elites_arena_v1",
+      "missing_artifacts": [],
+      "argv": [
+        "/mnt/raid0/llm/tools/geak-v1-rocm62-py312/bin/python",
+        "-m",
+        "scripts.kernel_rnd.autokernel.controller.kernelfoundry_arena",
+        "--model",
+        "gpt-5.6-sol",
+        "--effort",
+        "high",
+        "--checkpoint-hours",
+        "32",
+        "--timeout-seconds",
+        "115200",
+        "--max-iterations",
+        "16",
+        "--branches-per-iteration",
+        "4",
+        "--workspace",
+        ".",
+        "--arena-root",
+        "/mnt/raid0/llm/autokernel/vendor/agent-kernel-arena",
+        "--source-root",
+        "/mnt/raid0/llm/autokernel/vendor/arena-controllers/kernelfoundry"
+      ],
+      "source_root": "repository://.",
+      "source_commit": "381bc55e5eadb58763d86e0043da0884b26eea3a",
+      "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/kernelfoundry_arena.py",
+      "entrypoint_sha256": "98a89b745eb32a9f067020615878ead2820672cdd27b387d951a80c5c0e4ec98",
+      "model_ids": [
+        "gpt-5.6-sol:high:upstream-controller"
+      ],
+      "required_clis": [
+        "codex"
+      ],
+      "upstream_source_root": "vendor://kernelfoundry",
+      "upstream_source_commit": "1c053e02383d12937f144923bcc1faa82fa7788f",
+      "upstream_entrypoint_path": "kernelfoundry/algorithm/controller.py",
+      "upstream_entrypoint_sha256": "c8e5bc70526325f8b33bbf7a7623d3ffad978c2ba4ce8b8561ab04f7c46cadcf",
+      "upstream_license_path": "LICENSE",
+      "upstream_license_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "arm_id": "k_search",
+      "availability": "ready",
+      "adapter_kind": "k_search_world_model_arena_v1",
+      "missing_artifacts": [],
+      "argv": [
+        "/mnt/raid0/llm/tools/geak-v1-rocm62-py312/bin/python",
+        "-m",
+        "scripts.kernel_rnd.autokernel.controller.k_search_arena",
+        "--model",
+        "gpt-5.6-sol",
+        "--effort",
+        "high",
+        "--checkpoint-hours",
+        "32",
+        "--timeout-seconds",
+        "115200",
+        "--max-rounds",
+        "64",
+        "--workspace",
+        ".",
+        "--arena-root",
+        "/mnt/raid0/llm/autokernel/vendor/agent-kernel-arena",
+        "--source-root",
+        "/mnt/raid0/llm/autokernel/vendor/arena-controllers/k-search"
+      ],
+      "source_root": "repository://.",
+      "source_commit": "381bc55e5eadb58763d86e0043da0884b26eea3a",
+      "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/k_search_arena.py",
+      "entrypoint_sha256": "abf5a2a5d0e6efd18ac6e5563f9a24012ce47cb5cd290fc20e356159683acbde",
+      "model_ids": [
+        "gpt-5.6-sol:high:upstream-controller"
+      ],
+      "required_clis": [
+        "codex"
+      ],
+      "upstream_source_root": "vendor://k-search",
+      "upstream_source_commit": "53c8fab9a5e8fab2c86610d24fbec5067f90e115",
+      "upstream_entrypoint_path": "k_search/kernel_generators/kernel_generator_world_model.py",
+      "upstream_entrypoint_sha256": "022a9381cd31e8429e2d4fa0486fd94fc806ca5a331e710991f84e6d82b79723",
+      "upstream_license_path": "LICENSE",
+      "upstream_license_sha256": "4eb338364aa80d8a3a0a226e78643960271f4181ad32e91403b686720d086b1e"
+    },
+    {
+      "arm_id": "xe_forge",
+      "availability": "ready",
+      "adapter_kind": "xe_forge_linear_cover_arena_v1",
+      "missing_artifacts": [],
+      "argv": [
+        "/mnt/raid0/llm/tools/geak-v1-rocm62-py312/bin/python",
+        "-m",
+        "scripts.kernel_rnd.autokernel.controller.xe_forge_arena",
+        "--model",
+        "gpt-5.6-sol",
+        "--effort",
+        "high",
+        "--checkpoint-hours",
+        "32",
+        "--timeout-seconds",
+        "115200",
+        "--max-iterations",
+        "64",
+        "--workspace",
+        ".",
+        "--arena-root",
+        "/mnt/raid0/llm/autokernel/vendor/agent-kernel-arena",
+        "--source-root",
+        "/mnt/raid0/llm/autokernel/vendor/arena-controllers/xe-forge"
+      ],
+      "source_root": "repository://.",
+      "source_commit": "381bc55e5eadb58763d86e0043da0884b26eea3a",
+      "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/xe_forge_arena.py",
+      "entrypoint_sha256": "7ecaf2139872ed0c3ca0561bf509393ce49ea862876472460874b725fc9971ca",
+      "model_ids": [
+        "gpt-5.6-sol:high:upstream-controller"
+      ],
+      "required_clis": [
+        "codex"
+      ],
+      "upstream_source_root": "vendor://xe-forge",
+      "upstream_source_commit": "4dcb5080b0f56d0b655ec8c8c9509b8e3ba0382c",
+      "upstream_entrypoint_path": "src/xe_forge/engines/dspy_engine.py",
+      "upstream_entrypoint_sha256": "8ec39507d909fa3a442dad5b13fa9c4518ba440d3429f6205fdb746ff74b3631",
+      "upstream_license_path": "LICENSE",
+      "upstream_license_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "arm_id": "geak_v1",
+      "availability": "ready",
+      "adapter_kind": "geak_v1_optimagent_arena_v1",
+      "missing_artifacts": [],
+      "argv": [
+        "/mnt/raid0/llm/tools/geak-v1-rocm62-py312/bin/python",
+        "-m",
+        "scripts.kernel_rnd.autokernel.controller.geak_v1_arena",
+        "--model",
+        "gpt-5.6-sol",
+        "--effort",
+        "high",
+        "--checkpoint-hours",
+        "32",
+        "--timeout-seconds",
+        "115200",
+        "--max-iterations",
+        "64",
+        "--ancestor-num",
+        "2",
+        "--workspace",
+        ".",
+        "--arena-root",
+        "/mnt/raid0/llm/autokernel/vendor/agent-kernel-arena",
+        "--source-root",
+        "/mnt/raid0/llm/autokernel/vendor/arena-controllers/geak-v1"
+      ],
+      "source_root": "repository://.",
+      "source_commit": "381bc55e5eadb58763d86e0043da0884b26eea3a",
+      "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/geak_v1_arena.py",
+      "entrypoint_sha256": "a7ad925b293110d12e7ff9a64fa09e2aebcd3bebacf11a2c26ce09ef8f847df9",
+      "model_ids": [
+        "gpt-5.6-sol:high:upstream-controller"
+      ],
+      "required_clis": [
+        "codex"
+      ],
+      "upstream_source_root": "vendor://geak-v1",
+      "upstream_source_commit": "4ffba15a55f250816598b4e27eb56ca40a699cea",
+      "upstream_entrypoint_path": "src/agents/OptimAgent_ROCm.py",
+      "upstream_entrypoint_sha256": "ff742e9ecb5195114c96600e1a1daeedaac1d1769484f60287716e5ea254d2c1",
+      "upstream_license_path": "LICENSE.md",
+      "upstream_license_sha256": "51f22193d2056db3ec1b578e0b94568b5641807b90c0f3e75e1878c435b03709"
+    },
+    {
+      "arm_id": "argus",
+      "availability": "missing",
+      "adapter_kind": "stdin_workspace_v1",
+      "missing_artifacts": [
+        "a publicly available, licensed, commit-pinned ARGUS source artifact",
+        "a demonstrated or implemented gfx90a controller path instead of transferring MI300X/gfx942 results",
+        "a hash-bound three-argument AgentKernelArena launcher with explicit model pins"
+      ]
+    }
+  ],
+  "out_of_panel_registered": []
+}

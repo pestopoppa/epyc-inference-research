@@ -34,6 +34,7 @@ The "why" behind every benchmark, model swap, and methodology decision lives in 
 | **[`docs/reference/models/MODELS.md`](docs/reference/models/MODELS.md)** | Model catalogue reference |
 | **[`docs/reference/GENERATED_DOCS_INDEX.md`](docs/reference/GENERATED_DOCS_INDEX.md)** · **[`docs/reference/ANALYSIS_REPORTS_INDEX.md`](docs/reference/ANALYSIS_REPORTS_INDEX.md)** | Generated indices over every doc / analysis artifact in the repo |
 | **[`docs/reference/model-probe-scoreboard.md`](docs/reference/model-probe-scoreboard.md)** | Pointer + row schema; the canonical scoreboard lives in epyc-root (do not fork it here) |
+| **[`scripts/kernel_rnd/autokernel/controller/ARENA_INTEGRATION.md`](scripts/kernel_rnd/autokernel/controller/ARENA_INTEGRATION.md)** | Governed AgentKernelArena controller and raw-HIP authoring seams for MI210 |
 | **[`docs/MODEL_MANIFEST.md`](docs/MODEL_MANIFEST.md)** | Per-model lineage + provenance (live-deployment truth is compiled in epyc-orchestrator) |
 | **[`docs/data/`](docs/data/)** | Dated evidence packets + measurement manifests for individual campaigns |
 | **[`docs/design/`](docs/design/)** | Measurement/harness design specs written before anything is run |

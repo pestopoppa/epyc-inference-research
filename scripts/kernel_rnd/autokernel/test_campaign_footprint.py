@@ -130,6 +130,12 @@ ENTRYPOINT_MODULE = f"{ROOT_PKG}.campaign"
 CAMPAIGN_ROOTS = {
     f"{ROOT_PKG}.artifact_diff":
         "AK-TR-6 must veto an unconfirmed GPU claim before behavioral T0 can launch",
+    f"{ROOT_PKG}.candidate_record":
+        "every executed candidate must be fsynced from the exact built snapshot and "
+        "evaluation event identities before terminal STOP",
+    f"{ROOT_PKG}.least_commitment_capture":
+        "a clean IQK run must journal predeclared diagnostics and mechanically reduced "
+        "outcomes or it cannot enter the observe-only AK-WM-2 archive",
     f"{ROOT_PKG}.dashboard":
         "the terminal result was fsynced but the only dashboard exporter had been deleted, "
         "so active AutoKernel work remained permanently absent from the operator surface",
@@ -140,6 +146,15 @@ CAMPAIGN_ROOTS = {
     f"{ROOT_PKG}.storage":
         "the 2026-07-04 async-prefetch win was written to /mnt/raid0/llm/tmp/ and that "
         "directory no longer exists",
+    f"{ROOT_PKG}.source_candidate":
+        "source-changing proposals consume one immutable embedded patch bundle through "
+        "the guarded worktree mutation boundary",
+    f"{ROOT_PKG}.source_prerequisite_package":
+        "source candidates may rank only after archived raw sensitivity, hostile and "
+        "checker CSV bytes are re-reduced and rebound to the exact live build identities",
+    f"{ROOT_PKG}.source_prerequisite_producer":
+        "a source candidate with no prior archive must produce sensitivity, hostile and "
+        "checker receipts under the campaign's already-held claims before behavioral T0",
     f"{ROOT_PKG}.evaluator.api":
         "a Verdict is constructible only via compute_verdict(); it cannot be stamped",
     f"{ROOT_PKG}.evaluator.correctness":
@@ -160,6 +175,9 @@ CAMPAIGN_ROOTS = {
         "four runs, so candidate-then-anchor charges the second arm ~4% systematically",
     f"{ROOT_PKG}.execution.physical_bounds":
         "RVP-C6-4 refuses physically impossible throughput before it can enter a rank",
+    f"{ROOT_PKG}.execution.powercap_broker":
+        "the v9 CPU preflight could not read root-owned 0400 package counters, while "
+        "running the campaign as root correctly failed the candidate sandbox",
     f"{ROOT_PKG}.execution.t0_provider":
         "the predecessor harness tested MUL_MAT only, so a kernel that broke MUL_MAT_ID — "
         "MoE dispatch, every token in production — passed it cleanly",
@@ -223,10 +241,11 @@ DEFERRED = {
         "The prefix stays banned so that a module ADDED under `controller/` later is a "
         "finding rather than a silent re-admission",
     f"{ROOT_PKG}.release":
-        "needed to SHIP a champion, never to FIND one; committed the day before the code "
-        "that can compile a candidate",
+        "restored for AK9 speech release-plan compilation, but still needed only to SHIP "
+        "a champion and deliberately unreachable from campaign #1",
     f"{ROOT_PKG}.adapters":
-        "backends a kernel search is not searching",
+        "restored as pure AK9 speech declarations and release bindings; campaign #1 "
+        "still searches llama_cpu and must not import them",
     f"{ROOT_PKG}.surface":
         "a freshness contract so a dead loop cannot read as fresh; the loop has never "
         "been alive",
@@ -237,13 +256,13 @@ DEFERRED = {
 #: absent module is unreachable), and `test_the_deferred_half_is_still_on_disk`
 #: stops requiring the files. Nothing else in this file changes.
 DELETED_BY_OPERATOR: tuple = (
-    f"{ROOT_PKG}.release",
-    f"{ROOT_PKG}.adapters",
     f"{ROOT_PKG}.surface",
 )
 
 #: Removed 2026-08-04 on the operator's approval; recoverable from the tag
-#: `autokernel-preserve-20260804`. ~79,600 lines including tests.
+#: `autokernel-preserve-20260804`. The selected `release` compiler and speech
+#: `adapters` were restored on 2026-08-12 for AK9 and remain DEFERRED above;
+#: `surface` remains deleted.
 #:
 #: The edit above is the entire cost of acting on this boundary, exactly as this
 #: file promised — but the removal was NOT free, and the bill is worth recording
@@ -381,6 +400,17 @@ OPTIONAL_STOPPING_NAMES = frozenset({
 OPTIONAL_STOPPING_CALLS = frozenset({
     "sequential_evaluation", "next_block_request", "submit_block",
 })
+
+# The prospective writer evaluates the fixed, fully completed block vector once
+# to populate the evaluator's required e-value field.  It cannot request a
+# block, stop early, alter the campaign accept rule, or trigger an interim look.
+# Keep this exception exact by module and symbol; every other binding remains a
+# campaign-boundary defect.
+FIXED_N_EVENT_REDUCTION = {
+    f"{ROOT_PKG}.execution.control_runner": frozenset({
+        "run_e_process", "select_construction",
+    }),
+}
 
 STATISTICS_MODULE = f"{ROOT_PKG}.evaluator.statistics"
 ACCEPT_RULE_MODULE = f"{ROOT_PKG}.evaluator.api"
@@ -829,7 +859,8 @@ def optional_stopping_findings(graph: "ImportGraph", edges: dict) -> list:
     target = f"{graph.root}.evaluator.statistics"
     findings = []
     for module, names in sorted(graph.names_bound_from(edges, target).items()):
-        for name in sorted(names & OPTIONAL_STOPPING_NAMES):
+        allowed = FIXED_N_EVENT_REDUCTION.get(module, frozenset())
+        for name in sorted((names & OPTIONAL_STOPPING_NAMES) - allowed):
             findings.append(f"{module} binds {target}.{name}")
     for module, names in sorted(graph.attribute_uses(edges, exclude=(target,)).items()):
         for name in sorted(names & OPTIONAL_STOPPING_CALLS):
@@ -1384,7 +1415,8 @@ class TestNoOptionalStopping(unittest.TestCase):
         used = self.graph.names_bound_from(self.edges, STATISTICS_MODULE)
         findings = []
         for module, names in sorted(used.items()):
-            for name in sorted(names & OPTIONAL_STOPPING_NAMES):
+            allowed = FIXED_N_EVENT_REDUCTION.get(module, frozenset())
+            for name in sorted((names & OPTIONAL_STOPPING_NAMES) - allowed):
                 findings.append(f"{module} binds {STATISTICS_MODULE}.{name}")
         self.assertEqual(
             findings, [],
@@ -1562,8 +1594,8 @@ class TestTheBoundaryCatchesRealTreeViolations(unittest.TestCase):
     def test_re_adding_a_deleted_plane_and_importing_it_is_caught(self):
         """The DELETED prefixes, and the only honest assertion left about them.
 
-        `release`, `adapters` and `surface` are in `DEFERRED` *and* in
-        `DELETED_BY_OPERATOR`, which is a pair of claims that would otherwise go
+        Every prefix in `DELETED_BY_OPERATOR` is also in `DEFERRED`, which is a pair
+        of claims that would otherwise go
         unchecked forever: an absent module is trivially unreachable, so nothing
         distinguishes "the ban holds" from "the ban is dead text". What CAN be
         checked is the case the ban is for — someone puts the plane back and
