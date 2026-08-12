@@ -871,6 +871,7 @@ class ArenaCellRunnerTest(unittest.TestCase):
         self.assertIn(str(self.arena.resolve()), roots)
         self.assertNotIn(str((self.arena / "src").resolve()), roots)
         self.assertNotIn("/proc", roots)
+        self.assertIn("/usr/libexec", roots)
 
     def test_parent_broker_is_short_private_fresh_and_hash_chained(self):
         cell = self.root / "broker-cell"

@@ -1302,6 +1302,7 @@ class SandboxedEvaluatorRunner:
         candidates = (
             EVALUATOR_PYTHON.resolve().parents[1], EVALUATOR_PYTHON.parents[1],
             Path("/opt/rocm"), Path("/usr/bin"), Path("/usr/lib"),
+            Path("/usr/libexec"),
             Path("/usr/share"), Path("/usr/include"),
             Path("/sys/devices/virtual/kfd/kfd/topology"),
             Path("/sys/devices/system/node"), Path("/sys/devices/system/cpu"),
