@@ -274,6 +274,11 @@ def _score_stdin_program(
         return False
 
 
+#: An entry point is interpolated into generated source, so it must be an
+#: identifier and nothing else.
+_EPYC_SAFE_ENTRY_POINT = re.compile(r"[A-Za-z_]\w*")
+
+
 def _score_code_execution(
     answer: str, expected: str, config: dict[str, Any]
 ) -> bool:
@@ -291,6 +296,7 @@ def _score_code_execution(
     timeout = config.get("timeout", 10)
     test_code = config.get("test_code", "")
     entry_point = config.get("entry_point", "")
+    entry_point_cases = config.get("entry_point_cases")
 
     if language != "python":
         # Only Python execution supported currently
@@ -321,9 +327,38 @@ def _score_code_execution(
     full_code = _TYPING_PREAMBLE + code
     if test_code:
         full_code += "\n\n" + test_code
+    elif entry_point and entry_point_cases:
+        # PORTED 2026-08-12 from the orchestrator copy, which is the one the eval
+        # tower actually scores this pool with. Without it, a livecodebench row
+        # (entry_point + entry_point_cases, no test_code) fell through to the
+        # zero-argument branch below and could NEVER pass — the half-a-suite trap
+        # this repo already hit once on debugbench's python rows.
+        if not _EPYC_SAFE_ENTRY_POINT.fullmatch(entry_point):
+            raise ValueError(
+                f"code_execution entry_point {entry_point!r} is not a safe Python identifier"
+            )
+        full_code += (
+            "\n\n"
+            f"_EPYC_ENTRY_POINT_CASES = {entry_point_cases!r}\n"
+            "for _case in _EPYC_ENTRY_POINT_CASES:\n"
+            "    if isinstance(_case, dict):\n"
+            "        _args = _case.get('args', [])\n"
+            "        _kwargs = _case.get('kwargs', {})\n"
+            "        _expected = _case.get('expected')\n"
+            "    else:\n"
+            "        _args, _expected = _case\n"
+            "        _kwargs = {}\n"
+            f"    assert {entry_point}(*_args, **_kwargs) == _expected\n"
+        )
     elif entry_point and expected:
-        # Simple assertion test
-        full_code += f"\n\nassert {entry_point}() == {expected}"
+        # Refuse, do not synthesize. `assert f() == <expected text>` on a function
+        # that takes arguments cannot pass, and scoring it False books a scorer
+        # defect as a wrong answer. The orchestrator copy raises here too.
+        raise ValueError(
+            "code_execution entry_point oracle requires executable "
+            "entry_point_cases or test_code; refusing to synthesize a "
+            "zero-argument assertion from expected text"
+        )
 
     # Execute in sandboxed subprocess
     try:

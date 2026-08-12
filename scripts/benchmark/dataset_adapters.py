@@ -1565,6 +1565,61 @@ class HotpotQAAdapter(BaseAdapter):
 # ── LiveCodeBench (Competition Programming) ───────────────────────────────
 
 
+#: The livecodebench oracle builder and its validated manifest live with the
+#: CANONICAL scorer they were validated against, in epyc-orchestrator — the eval
+#: tower scores this pool with that copy of debug_scorer.py, so an oracle built
+#: against any other copy would be validated against a scorer that never runs.
+#: Loaded by absolute path, exactly as the debugbench oracle below is.
+_LIVECODEBENCH_ORACLE_PATH = (
+    "/mnt/raid0/llm/epyc-orchestrator/scripts/benchmark/livecodebench_oracle.py"
+)
+_LIVECODEBENCH_MANIFEST_PATH = (
+    "/mnt/raid0/llm/epyc-orchestrator/data/benchmark/"
+    "livecodebench_oracle_manifest.json"
+)
+_LIVECODEBENCH_ORACLE_KEY = "epyc_research_livecodebench_oracle"
+_LIVECODEBENCH_MANIFEST = None
+
+
+def _livecodebench_oracle_module():
+    import importlib.util
+    import sys
+
+    cached = sys.modules.get(_LIVECODEBENCH_ORACLE_KEY)
+    if cached is not None:
+        return cached
+    spec = importlib.util.spec_from_file_location(
+        _LIVECODEBENCH_ORACLE_KEY, _LIVECODEBENCH_ORACLE_PATH)
+    if spec is None or spec.loader is None:
+        raise ImportError(
+            f"cannot load livecodebench_oracle from {_LIVECODEBENCH_ORACLE_PATH}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    sys.modules[_LIVECODEBENCH_ORACLE_KEY] = module
+    return module
+
+
+def livecodebench_manifest() -> dict:
+    """The validated per-slug oracles, or an EMPTY manifest if none is built.
+
+    Empty rather than a silent fallback to the old ``"def "`` oracle: a missing
+    manifest must make the suite disappear from the next pool build, not quietly
+    resume scoring nothing. Regenerate with
+    ``python3 /mnt/raid0/llm/epyc-orchestrator/scripts/benchmark/livecodebench_oracle.py
+    --manifest /mnt/raid0/llm/epyc-orchestrator/data/benchmark/livecodebench_oracle_manifest.json``.
+    """
+    global _LIVECODEBENCH_MANIFEST
+    if _LIVECODEBENCH_MANIFEST is None:
+        import json as _json
+
+        try:
+            _LIVECODEBENCH_MANIFEST = _json.loads(
+                Path(_LIVECODEBENCH_MANIFEST_PATH).read_text())
+        except (OSError, ValueError):
+            _LIVECODEBENCH_MANIFEST = {"oracles": {}}
+    return _LIVECODEBENCH_MANIFEST
+
+
 class LiveCodeBenchAdapter(BaseAdapter):
     """LiveCodeBench: Competition programming problems from LeetCode.
 
@@ -1580,6 +1635,7 @@ class LiveCodeBenchAdapter(BaseAdapter):
 
     suite_name = "livecodebench"
     has_real_tiers = True
+    _scoreable_cache = None
 
     # LeetCode difficulty mapping
     DIFFICULTY_MAP = {
@@ -1601,7 +1657,10 @@ class LiveCodeBenchAdapter(BaseAdapter):
             self._dataset = []
 
     def _get_tier_for_index(self, idx: int) -> int:
-        row = self._dataset[idx]
+        return self._tier_for_row(self._dataset[idx], idx)
+
+    def _tier_for_row(self, row: dict, idx: int = 0) -> int:
+        """Tier from the ROW, so a row can be converted without the dataset loaded."""
         difficulty = row.get("difficulty", "")
         if difficulty:
             difficulty_lower = str(difficulty).lower()
@@ -1614,95 +1673,114 @@ class LiveCodeBenchAdapter(BaseAdapter):
             return 2
         return 1
 
-    def _extract_test_cases(self, content: str) -> list[tuple[str, str]]:
-        """Extract example test cases from problem content."""
-        tests = []
-        # Pattern: Input: X Output: Y (or similar variations)
-        pattern = re.compile(
-            r"(?:Input|Example[^:]*Input)[:\s]*`?([^`\n]+)`?\s*"
-            r"(?:Output)[:\s]*`?([^`\n]+)`?",
-            re.IGNORECASE | re.MULTILINE
-        )
-        for match in pattern.finditer(content):
-            inp = match.group(1).strip()
-            out = match.group(2).strip()
-            if inp and out:
-                tests.append((inp, out))
-        return tests[:3]  # Limit to 3 examples
+    def _row_to_prompt(self, idx: int, row: dict):
+        """Emit a row ONLY if a validated executable oracle exists for its slug.
 
-    def _row_to_prompt(self, idx: int, row: dict) -> dict:
-        title = row.get("title", f"Problem {idx}")
-        content = row.get("content", "")
-        difficulty = row.get("difficulty", "Medium")
+        2026-08-12 ORACLE REBUILD. This method used to emit ``expected="def "``
+        with ``scoring_method="substring"`` for every row, plus a
+        ``code_execution`` variant whose ``test_code`` was entirely commented out
+        and whose arguments had been scraped out of English prose. Measured
+        through the real scorer over all 2,360 upstream rows: ``def solve():
+        pass`` passed 100% of them and echoing the prompt passed 100% of them —
+        one ``expected`` value, ``"def "``, across the whole suite.
+
+        The oracle now RUNS the answer against LeetCode's own worked examples.
+        Rows with no validated oracle return ``None`` and are DROPPED rather than
+        emitted with a weaker one; 704 of 2,360 survive the build gate in
+        ``epyc-orchestrator/scripts/benchmark/livecodebench_oracle.py``.
+        """
         slug = row.get("slug", f"problem-{idx}")
-        python_solution = row.get("python", "")
+        entry = livecodebench_manifest().get("oracles", {}).get(slug)
+        if not entry:
+            return None
 
-        # Clean HTML from content
-        content_clean = re.sub(r"<[^>]+>", " ", content)
-        content_clean = re.sub(r"\s+", " ", content_clean).strip()
-
-        # Extract test cases
-        test_cases = self._extract_test_cases(content)
-
-        # Build prompt
-        prompt_lines = [
-            f"# {title}",
-            "",
-            content_clean,
-            "",
-        ]
-
-        if test_cases:
-            prompt_lines.append("### Examples:")
-            for i, (inp, out) in enumerate(test_cases, 1):
-                prompt_lines.append(f"Example {i}:")
-                prompt_lines.append(f"  Input: {inp}")
-                prompt_lines.append(f"  Output: {out}")
-                prompt_lines.append("")
-
-        prompt_lines.append(
-            "Write a Python function to solve this problem. "
-            "Include proper type hints and handle edge cases."
+        oracle_module = _livecodebench_oracle_module()
+        content = re.sub(r"<[^>]+>", " ", row.get("content", "") or "")
+        content = oracle_module.unescape_markdown(content)
+        prompt = (
+            f"# {row.get('title', slug)}\n\n{content.strip()}\n\n"
+            + oracle_module.prompt_contract(entry["entry_point"], entry["params"])
         )
-
-        tier = self._get_tier_for_index(idx)
-
-        # Build test code from extracted cases
-        test_code = ""
-        if test_cases and python_solution:
-            # Try to extract function name from solution
-            fn_match = re.search(r"def\s+(\w+)\s*\(", python_solution)
-            if fn_match:
-                fn_name = fn_match.group(1)
-                test_code = f"# Test cases for {fn_name}\n"
-                for inp, out in test_cases:
-                    test_code += f"# assert {fn_name}({inp}) == {out}\n"
-
-        # Determine scoring method based on content
-        scoring_method = "code_execution" if test_code else "substring"
-        scoring_config = {
-            "language": "python",
-            "timeout": 30,
-        }
-        if test_code:
-            scoring_config["test_code"] = test_code
-        else:
-            # Fallback: check for function definition
-            scoring_config["case_sensitive"] = True
-            scoring_config["substring"] = "def "
-
         return {
             "id": f"leetcode_{slug}",
             "suite": "livecodebench",
-            "prompt": "\n".join(prompt_lines),
+            "prompt": prompt,
             "context": "",
-            "expected": "def ",  # At minimum, expect a function
+            # The entry point, not a magic string: `_score_code_execution` uses
+            # `expected` only to name the function it will call.
+            "expected": entry["entry_point"],
             "scoring": [],
             "image_path": "",
-            "tier": tier,
-            "scoring_method": scoring_method,
-            "scoring_config": scoring_config,
+            "tier": self._tier_for_row(row, idx),
+            "scoring_method": "code_execution",
+            "scoring_config": entry["scoring_config"],
         }
+
+    def _scoreable_indices(self) -> list:
+        """Dataset indices whose slug has a validated oracle.
+
+        Restricting the sampling UNIVERSE rather than filtering the sample is the
+        difference between "give me 50 questions" returning 50 and returning 15,
+        and it keeps stratification honest: tier shares are computed over rows
+        that can actually be scored.
+        """
+        if self._scoreable_cache is None:
+            oracles = livecodebench_manifest().get("oracles", {})
+            self._scoreable_cache = [
+                i for i in range(len(self._dataset))
+                if (self._dataset[i] or {}).get("slug") in oracles
+            ]
+        return self._scoreable_cache
+
+    def _emit(self, indices) -> list:
+        rows = (self._row_to_prompt(i, self._dataset[i]) for i in indices)
+        return [row for row in rows if row]
+
+    def extract_all(self) -> list[dict]:
+        """Every row that HAS a validated oracle, with the drops booked honestly.
+
+        The base implementation books a `None` conversion as ``empty_prompt``,
+        which would file 1,656 rows under a reason that is not theirs — their
+        prompt is fine, their ORACLE could not be manufactured. A drop reason that
+        misnames the failure is how a systematic defect reads as noise, which is
+        the mistake this whole rebuild exists to correct.
+        """
+        self._ensure_accounting()
+        self._ensure_loaded()
+        if not self._dataset:
+            return []
+        scoreable = set(self._scoreable_indices())
+        for i in range(len(self._dataset)):
+            if i not in scoreable:
+                self.drop_row("no_validated_oracle")
+        results = self._emit(sorted(scoreable))
+        if self.dropped_rows:
+            logger.warning(
+                "[adapter:%s] dropped %d source row(s): %s",
+                self.suite_name or self.__class__.__name__,
+                self.dropped_rows,
+                self.dropped_by_reason,
+            )
+        return results
+
+    def _stratified_sample(self, n: int, seed: int) -> list:
+        """Equal share per tier, drawn only from rows that have an oracle."""
+        rng = random.Random(seed)
+        buckets: dict = {}
+        for i in self._scoreable_indices():
+            buckets.setdefault(self._get_tier_for_index(i), []).append(i)
+        tiers = sorted(buckets)
+        if not tiers:
+            return []
+        per_tier, remainder = divmod(n, len(tiers))
+        chosen: list = []
+        for position, tier in enumerate(tiers):
+            bucket = buckets[tier]
+            count = min(per_tier + (1 if position < remainder else 0), len(bucket))
+            chosen.extend(rng.sample(bucket, count))
+        results = self._emit(chosen)
+        rng.shuffle(results)
+        return results
 
     def sample(
         self, n: int = 10, seed: int = 42, stratify: bool = False,
@@ -1729,15 +1807,16 @@ class LiveCodeBenchAdapter(BaseAdapter):
             ]
             rng = random.Random(seed)
             indices = rng.sample(filtered_indices, min(n, len(filtered_indices)))
-            return [self._row_to_prompt(i, self._dataset[i]) for i in indices]
+            return self._emit(indices)
 
         # Default sampling
         if stratify and self.has_real_tiers:
             return self._stratified_sample(n, seed)
 
         rng = random.Random(seed)
-        indices = rng.sample(range(len(self._dataset)), min(n, len(self._dataset)))
-        return [self._row_to_prompt(i, self._dataset[i]) for i in indices]
+        universe = self._scoreable_indices()
+        indices = rng.sample(universe, min(n, len(universe)))
+        return self._emit(indices)
 
 
 # ── DebugBench (Bug Finding/Fixing) ───────────────────────────────────────
