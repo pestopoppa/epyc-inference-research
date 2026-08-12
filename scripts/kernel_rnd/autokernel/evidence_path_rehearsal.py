@@ -64,11 +64,19 @@ def verify_hypothesis_store(path: Path, *, hypothesis_id: str,
     }
 
 
-def verify_campaign_json_contract(model: str) -> dict[str, Any]:
-    """Exercise the current campaign automation surface without inference."""
+def verify_campaign_json_contract(
+        model: str, *, campaign_args: Sequence[str] = ()) -> dict[str, Any]:
+    """Exercise the current campaign automation surface without inference.
+
+    ``campaign_args`` is intentionally accepted here rather than validating only
+    the parser defaults.  Durable rehearsals pass their exact proposal and
+    least-commitment paths, so a proposal-schema migration cannot leave a green
+    rehearsal beside artifacts the live entry point refuses.
+    """
     machine, trace = io.StringIO(), io.StringIO()
     with contextlib.redirect_stderr(trace):
-        code = campaign.main(["--model", model, "--json"], out=machine)
+        code = campaign.main(
+            [*campaign_args, "--model", model, "--dry-run", "--json"], out=machine)
     if code != 0:
         raise RehearsalError(f"campaign --json dry run exited {code}")
     try:
@@ -182,16 +190,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", required=True)
     parser.add_argument("--intervention-proposal", type=Path, required=True)
+    parser.add_argument("--intervention-candidate-id", required=True)
     parser.add_argument("--intervention-capture-plan", type=Path, required=True)
+    parser.add_argument("--intervention-physical-envelope", type=Path, required=True)
     parser.add_argument("--intervention-hypothesis", required=True)
     parser.add_argument("--intervention-hypothesis-store", type=Path, required=True)
     parser.add_argument("--control-campaign-id", required=True)
     parser.add_argument("--control-proposal-id", required=True)
     parser.add_argument("--control-candidate-id", required=True)
     parser.add_argument("--control-capture-plan", type=Path, required=True)
+    parser.add_argument("--control-physical-envelope", type=Path, required=True)
     parser.add_argument("--control-hypothesis", required=True)
     parser.add_argument("--control-hypothesis-store", type=Path, required=True)
     parser.add_argument("--control-proposal-output", type=Path, required=True)
+    parser.add_argument("--calibration-bundle", type=Path, required=True)
     parser.add_argument("--report-output", type=Path, required=True)
     args = parser.parse_args(argv)
     intervention = _load(args.intervention_proposal)
@@ -219,9 +231,37 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.control_hypothesis_store,
             hypothesis_id=args.control_hypothesis, proposal=control),
     }
-    report["campaign_cli_contract"] = verify_campaign_json_contract(args.model)
     args.control_proposal_output.write_text(
         json.dumps(control, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    shared = ("--candidate", "registered:ggml_iqk",
+              "--calibration-bundle", str(args.calibration_bundle),
+              "--backend", "llama_cpu",
+              "--recipe", "t1b.llama_cpu.llama_bench_prefill.v1",
+              "--blocks", "10", "--reps", "5", "--nominal-khz", "2500000")
+    report["campaign_cli_contract"] = {
+        "intervention": verify_campaign_json_contract(args.model, campaign_args=(
+            "--campaign-id", intervention["campaign_id"],
+            "--candidate-id", args.intervention_candidate_id,
+            "--proposal-manifest", str(args.intervention_proposal),
+            "--least-commitment-capture-plan", str(args.intervention_capture_plan),
+            "--physical-envelope", str(args.intervention_physical_envelope),
+            "--journal-root", str(args.intervention_proposal.parent.parent),
+            "--hypothesis", args.intervention_hypothesis,
+            "--hypothesis-store", str(args.intervention_hypothesis_store),
+            *shared,
+        )),
+        "control": verify_campaign_json_contract(args.model, campaign_args=(
+            "--campaign-id", args.control_campaign_id,
+            "--candidate-id", args.control_candidate_id,
+            "--proposal-manifest", str(args.control_proposal_output),
+            "--least-commitment-capture-plan", str(args.control_capture_plan),
+            "--physical-envelope", str(args.control_physical_envelope),
+            "--journal-root", str(args.control_proposal_output.parent.parent),
+            "--hypothesis", args.control_hypothesis,
+            "--hypothesis-store", str(args.control_hypothesis_store),
+            *shared,
+        )),
+    }
     args.report_output.write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return 0

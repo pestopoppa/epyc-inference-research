@@ -196,7 +196,7 @@ def _load_completed_evidence(row: Mapping[str, Any]) -> CompletedEvidence:
         row.get("completion_event_id"), "row.completion_event_id")
 
     # Reuse the existing builder's clean terminal admission.  This enforces a
-    # proposal-v3 join, DECIDED state, executed/ok result, immutable production,
+    # proposal-v3/v4 join, DECIDED state, executed/ok result, immutable production,
     # nonempty pairs, and released resources before projection begins.
     completed = builder._completed_proposal(row)
     book = journal.Journal(str(root), campaign_id=campaign_id)

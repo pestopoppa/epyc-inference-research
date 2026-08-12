@@ -42,7 +42,7 @@ The entrypoint:
 cd /mnt/raid0/llm/epyc-inference-research
 python3 -m scripts.kernel_rnd.autokernel.campaign --help
 python3 -m scripts.kernel_rnd.autokernel.campaign --campaign-id ak-aug05 --candidate-id akc-0001 --model /mnt/raid0/llm/models/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
-python3 -m scripts.kernel_rnd.autokernel.campaign --campaign-id ak-aug05 --candidate-id akc-0001 --candidate /path/to/candidate.patch --proposal-manifest /path/to/proposal-v3.json --calibration-bundle /path/to/current-v9-control-bundle --physical-envelope /path/to/physical-envelope.json --model /mnt/raid0/llm/models/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf --journal-root /mnt/raid0/llm/autokernel/campaigns/ak-aug05 --execute --i-hold-the-host
+python3 -m scripts.kernel_rnd.autokernel.campaign --campaign-id ak-aug05 --candidate-id akc-0001 --candidate /path/to/candidate.patch --proposal-manifest /path/to/proposal-v4.json --calibration-bundle /path/to/current-v9-control-bundle --physical-envelope /path/to/physical-envelope.json --model /mnt/raid0/llm/models/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf --journal-root /mnt/raid0/llm/autokernel/campaigns/ak-aug05 --execute --i-hold-the-host
 ```
 
 `--model` is required and has no default — the cell must dispatch the path you changed, and a
@@ -52,10 +52,10 @@ the A/A's own model (`Qwen3-Coder-30B-A3B-Instruct-Q4_K_M`, MoE, so it exercises
 `--journal-root` is also mandatory on the executing path: every completed benchmark attempt is
 fsynced there before it may be pooled, so a declared extension round cannot be re-run after its
 result is observed. Use a new durable campaign directory; never put it under `/tmp` or a checkout.
-`--proposal-manifest` is mandatory too. It must be a valid proposal-v3 record for the same campaign;
+`--proposal-manifest` is mandatory too. It must be a valid current-schema proposal record for the same campaign;
 the driver fsyncs it before preflight, claim acquisition, candidate mutation, or build. A v2 record
 remains readable history but cannot drive a new run because it has no representation/demand frame.
-Current proposal-v3 records also carry `external_numbers` (an empty list when none are used); every
+Current proposal-v4 records also carry `external_numbers` (an empty list when none are used); every
 entry must include source revision and matching per-quant, same-basis roofline normalization.
 `--calibration-bundle` is mandatory for execution and must be the accepted live-control bundle for
 the exact production commit, measurement-instrument commit and recipe. The driver rejects the v8

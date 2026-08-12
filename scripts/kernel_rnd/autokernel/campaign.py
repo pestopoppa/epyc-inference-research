@@ -1254,7 +1254,7 @@ class CampaignSpec:
     build_root: str = "/mnt/raid0/llm/ak-build"
     claim_journal_path: str = "/mnt/raid0/llm/ak-claims/region.jsonl"
     max_hold_s: int = 6 * 3600
-    #: Validated proposal.v3 record. Optional for composition-only legacy dry
+    #: Validated current-schema proposal record. Optional for composition-only legacy dry
     #: runs; mandatory on the executing CLI before any claim or mutation.
     proposal: Optional[Mapping[str, Any]] = None
     #: Immutable embedded source artifact, loaded completely before any claim.
@@ -1986,7 +1986,8 @@ class DryRunOps:
     def record_proposal(self, spec: CampaignSpec) -> Any:
         self._step(
             "record_proposal",
-            "would validate and fsync proposal.v3 before preflight, claim, mutation, or build.",
+            "would validate and fsync the current proposal schema before preflight, "
+            "claim, mutation, or build.",
             proposal_id=spec.proposal_id,
             representation_frame_sha256=spec.proposal["representation_contract"][
                 "frame_sha256"
@@ -2354,9 +2355,10 @@ class HostOps:
     # -- 0. preflight ------------------------------------------------------
 
     def record_proposal(self, spec: CampaignSpec) -> Any:
-        """Fsync proposal.v3 before any host work; identical resume is idempotent."""
+        """Fsync the current proposal schema before host work; resume is idempotent."""
         if spec.proposal is None or not spec.journal_root:
-            raise RuntimeError("an executing campaign requires proposal.v3 and --journal-root")
+            raise RuntimeError(
+                "an executing campaign requires a current-schema proposal and --journal-root")
         root = storage.assert_not_scratch(spec.journal_root, what="campaign journal root")
         book = journal_module.Journal(root, campaign_id=spec.campaign_id)
         book.initialize()
@@ -4170,7 +4172,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--proposal-manifest",
         default=None,
         metavar="PATH",
-        help="validated proposal.v3 JSON. Required by --execute and fsynced before host work",
+        help="validated current-schema proposal JSON. Required by --execute and "
+             "fsynced before host work",
     )
     parser.add_argument(
         "--least-commitment-capture-plan", default=None, metavar="PATH",

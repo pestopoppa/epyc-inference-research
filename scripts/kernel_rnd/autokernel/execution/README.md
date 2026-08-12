@@ -66,7 +66,7 @@ python3 -m scripts.kernel_rnd.autokernel.campaign --model /path/to/model.gguf
 Dry run is the **default**; `--execute` additionally requires `--i-hold-the-host`
 AND an ops object with no unimplemented seams (refused at argv time, before the
 claim — see `HostOps.unimplemented_seams`). An executing run also requires a
-validated `--proposal-manifest` using proposal-v3, an exact-unit
+validated `--proposal-manifest` using the current proposal schema, an exact-unit
 `--physical-envelope` (or `--ranked-units`), and a current
 `--calibration-bundle`. The bundle is identity-bound to the production commit,
 measurement-instrument commit and recipe; the v8 control bundle is rejected on

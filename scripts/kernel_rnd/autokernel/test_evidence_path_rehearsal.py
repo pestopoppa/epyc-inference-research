@@ -10,6 +10,7 @@ from pathlib import Path
 
 from . import evidence_path_rehearsal as R
 from . import least_commitment_capture as C
+from . import schemas
 from .test_campaign import MODEL
 from .test_least_commitment_capture import plan, proposal
 
@@ -17,6 +18,7 @@ from .test_least_commitment_capture import plan, proposal
 class EvidencePathRehearsalTest(unittest.TestCase):
     def setUp(self):
         self.intervention = proposal()
+        self.intervention["provider_reference"]["target_backend"] = "llama_cpu"
         self.control = C.make_iqk_control_proposal(
             self.intervention, campaign_id="ak-iqk-control-20260812",
             proposal_id="akp-20260812-1000")
@@ -62,11 +64,34 @@ class EvidencePathRehearsalTest(unittest.TestCase):
                 control_proposal=self.control, control_plan=self.control_plan)
 
     def test_current_campaign_cli_contract_is_one_json_document(self):
-        contract = R.verify_campaign_json_contract(MODEL)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            proposal_path = root / "proposal-v4.json"
+            plan_path = root / "least-commitment-capture-plan.json"
+            proposal_path.write_text(
+                json.dumps(self.intervention), encoding="utf-8")
+            plan_path.write_text(
+                json.dumps(self.intervention_plan.raw), encoding="utf-8")
+            contract = R.verify_campaign_json_contract(MODEL, campaign_args=(
+                "--campaign-id", self.intervention["campaign_id"],
+                "--candidate-id", self.intervention_plan.raw["candidate_id"],
+                "--proposal-manifest", str(proposal_path),
+                "--least-commitment-capture-plan", str(plan_path),
+                "--backend", "llama_cpu",
+            ))
         self.assertEqual(contract["stdout"], "exactly_one_json_document")
         self.assertEqual(contract["trace"], "stderr")
         self.assertEqual(contract["state"], "dry_run_composed")
         self.assertFalse(contract["executed"])
+
+    def test_durable_contract_regression_uses_current_proposal_schema(self):
+        self.assertEqual(self.intervention["schema"], schemas.SCHEMA_PROPOSAL)
+        self.assertEqual(self.intervention["schema"], schemas.SCHEMA_PROPOSAL_V4)
+        self.assertFalse(schemas.validate_proposal(self.intervention))
+        self.assertEqual(
+            self.intervention["provider_reference"]["kind"], "llama_source")
+        self.assertEqual(
+            self.intervention["provider_reference"]["target_backend"], "llama_cpu")
 
     def test_hypothesis_store_resolves_the_exact_proposal_statement(self):
         with tempfile.TemporaryDirectory() as temp:

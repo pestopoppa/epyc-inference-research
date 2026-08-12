@@ -2,7 +2,7 @@
 """Build an observe-only AK-WM-2 archive from real completed campaign records.
 
 The builder never invents diagnostics, outcomes, controls, or completion events.
-Every projected row must resolve to a proposal-v3 event and one clean DECIDED
+Every projected row must resolve to a proposal-v3 or proposal-v4 event and one clean DECIDED
 terminal event in the append-only campaign journal.  Diagnostic, outcome, and
 matched-intervention receipts are external immutable inputs whose bytes are
 hash-pinned by the build manifest.  Synthetic fixtures exercise this code, but
