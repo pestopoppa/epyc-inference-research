@@ -28,6 +28,9 @@ def role(role_name: str, seconds: int, instruction: str) -> L.RoleBudget:
 def contract(context: A.PricedContext | None = None) -> L.ExperimentContract:
     context = context or priced_context()
     prompt = "PROPOSE one falsifiable kernel hypothesis; do not implement it yet."
+    selected_task = (
+        "Implement the preselected branchless Q4_K unpack hypothesis and falsify it "
+        "against the fixed VALU-instructions-per-wave counter.")
     planners = tuple(
         L.PlannerArm(
             f"plan-{model}-{effort}-{target}", model, quant, effort,
@@ -58,7 +61,9 @@ def contract(context: A.PricedContext | None = None) -> L.ExperimentContract:
         fixed=L.FixedPromptFrame(
             champion=L.ArtifactPin("champion://fixed", sha("champion")),
             retrieval_context_sha256=L.context_sha256(context),
-            propose_prompt=prompt, propose_prompt_sha256=sha(prompt)),
+            propose_prompt=prompt, propose_prompt_sha256=sha(prompt),
+            selected_task=L.SelectedTaskArtifact(
+                "hypothesis://selected/fixed", selected_task, sha(selected_task))),
         planner_arms=planners,
         predictions=predictions,
         scaffold_arms=tuple(scaffolds),
@@ -154,6 +159,13 @@ class TestImmutablePredeclaration(unittest.TestCase):
 
 
 class TestRenderedPromptBoundary(unittest.TestCase):
+    @staticmethod
+    def selected_task_bytes(prompt: str) -> bytes:
+        encoded = prompt.encode("utf-8")
+        begin = b"BEGIN EXACT SELECTED TASK\n"
+        end = b"\nEND EXACT SELECTED TASK"
+        return encoded.split(begin, 1)[1].split(end, 1)[0]
+
     def test_target_exists_only_in_the_rendered_planner_context(self):
         context = priced_context()
         spec = contract(context)
@@ -207,6 +219,50 @@ class TestRenderedPromptBoundary(unittest.TestCase):
             direct = next(arm for arm in spec.scaffold_arms
                           if arm.scaffold == L.SCAFFOLD_DIRECT)
             L.render_scaffold_prompt(spec, direct.cell_id, "exploit", context=context)
+
+    def test_scaffold_arms_receive_identical_hash_bound_selected_task_bytes(self):
+        context = priced_context()
+        spec = contract(context)
+        direct = next(arm for arm in spec.scaffold_arms
+                      if arm.model_id == "model-a"
+                      and arm.scaffold == L.SCAFFOLD_DIRECT)
+        split = next(arm for arm in spec.scaffold_arms
+                     if arm.model_id == "model-a"
+                     and arm.scaffold == L.SCAFFOLD_SPLIT)
+        prompts = (
+            L.render_scaffold_prompt(
+                spec, direct.cell_id, "implement", context=context),
+            L.render_scaffold_prompt(
+                spec, split.cell_id, "implement", context=context),
+            L.render_scaffold_prompt(
+                spec, split.cell_id, "exploit", context=context),
+        )
+        selected_bytes = tuple(self.selected_task_bytes(prompt) for prompt in prompts)
+        expected = spec.fixed.selected_task.task.encode("utf-8")
+        self.assertEqual(selected_bytes, (expected, expected, expected))
+        for prompt in prompts:
+            self.assertNotIn("do not implement it yet", prompt)
+            self.assertNotIn(spec.fixed.propose_prompt, prompt)
+
+    def test_scaffold_frame_is_independent_of_planner_instruction(self):
+        context = priced_context()
+        spec = contract(context)
+        direct = next(arm for arm in spec.scaffold_arms
+                      if arm.scaffold == L.SCAFFOLD_DIRECT)
+        original = L.render_scaffold_prompt(
+            spec, direct.cell_id, "implement", context=context)
+        changed_prompt = "PROPOSE a different planner-only hypothesis."
+        changed = replace(spec, fixed=replace(
+            spec.fixed,
+            propose_prompt=changed_prompt,
+            propose_prompt_sha256=sha(changed_prompt)))
+        self.assertEqual(original, L.render_scaffold_prompt(
+            changed, direct.cell_id, "implement", context=context))
+
+    def test_selected_task_refuses_unbound_bytes(self):
+        with self.assertRaisesRegex(L.LoopExperimentError, "exact selected task bytes"):
+            L.SelectedTaskArtifact(
+                "hypothesis://selected/fixed", "selected task", sha("other task"))
 
 
 class TestDeterministicReducers(unittest.TestCase):
