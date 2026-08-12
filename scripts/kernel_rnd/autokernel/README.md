@@ -185,6 +185,7 @@ calibration exists. Source-changing campaigns additionally require their own
 |---|---|
 | `schemas.py` | The §7 record contracts (`v2`–`v4` remain readable; evaluation-event `v5` adds parsed device state to v4's transfer surface), canonical JSON/content hashing, the `PASS`/`FAIL`/`COULD_NOT_CHECK` `Check` type, and record-level checkers. Proposal v3 requires a structured `external_numbers` list with source revision and independently re-derived same-quant/same-basis roofline utilization. **Single source of truth: every other module is written against these and must not invent a record shape.** |
 | `journal.py` | The append-only, fsynced, **sharded** primary record. Shard ordering, torn-tail repair, cursors, archiving, supersession (record-scope and retrieval-scope), tombstones, preflight attestations, derived views, and `check_view_consistency`. |
+| `fault_rehearsal.py` | **Process-only empirical acceptance producer (off campaign path).** Launches two exact private-session Python children to plant a journal crash and replay it after restart, then a third exact child holding a disposable fake-device claim to prove revocation is advisory rather than preemptive. It records PID/PGID/start-time identities, uses TERM→optional-KILL only on captured groups, verifies death, refuses changed hash-bound artifact bytes, and atomically publishes a versioned receipt with no inference/build/GPU/kernel/stack/release authority. |
 | `storage.py` | §3.7 durability classes, §5.8 retention classes and rule-bound tombstoned expiry, per-campaign quota and `DISK_PRESSURE`, the `data/<campaign>/` evidence root with `SHA256SUMS` + README, and `verify_durability`. |
 | `resource/device_claim.py` | The cross-process **exclusive GPU device claim** (§2.6) — `flock(LOCK_EX)` on a never-unlinked lock file, PID+start-time+boot-id liveness, journaled crash reclamation, quiesce-and-drain revocation, and the claim receipt id that lands in every evaluation event. |
 | `resource/preflight.py` | The **one** audited read-only inference preflight (§3.5): claim witness as the target instrument, an opt-in name-pattern enumerator as the labelled interim one, and an AST self-audit proving the module cannot deliver a signal. |
@@ -998,9 +999,16 @@ What remains is not another hidden static plane:
   remain recoverable from `autokernel-preserve-20260804`. Restore the narrow release
   slice only for a real champion/freeze request, and restore the speech slice only
   when a speech campaign is scheduled.
-- Real restart/crash/resource-preemption/tamper campaign rehearsal and every freeze,
-  re-anchor, and watch-window row remain empirical work; fixture and fault-injection
-  tests do not substitute for those runs.
+- `fault_rehearsal.py` now provides the governed real host-process producer for
+  restart/crash/resource-revocation/non-preemption/tamper acceptance. Its unit smoke
+  remains a regression test, not banked evidence; publish a durable new-path receipt with:
+
+  ```bash
+  PYTHONPATH=scripts/kernel_rnd python3 -m autokernel.fault_rehearsal \
+    --output-dir /mnt/raid0/llm/autokernel/rehearsals/<new-campaign-id>
+  ```
+
+  Freeze, re-anchor, and watch-window rows remain separate empirical work.
 
 ## Historical pre-pruning audit (superseded as current status)
 

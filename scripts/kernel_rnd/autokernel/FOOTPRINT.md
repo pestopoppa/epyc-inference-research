@@ -31,8 +31,8 @@ a module it never looked at.
 | | non-test lines |
 |---|---:|
 | **ON THE CAMPAIGN PATH** | **68,015** |
-| **DEFERRED** (provably unreachable) | **41,132** |
-| **TOTAL** | **109,147** |
+| **DEFERRED** (provably unreachable) | **42,091** |
+| **TOTAL** | **110,106** |
 
 **The deferred plane is explicit.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -128,6 +128,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `__init__.py` | 14 | yes | package docstring; `schemas` is declared here as the single source of record shape |
 | `schemas.py` | 3,598 | yes | one record shape — every module is written against it and none invents its own |
 | `journal.py` | 2,288 | yes | AutoPilot lost 232 trials and ~16 days when a restart came up empty and nothing objected |
+| `fault_rehearsal.py` | 959 | no | governed process-only acceptance producer; real crash/restart, advisory revocation and tamper evidence must remain operator-invoked and cannot gain campaign mutation, inference, benchmark, kernel, stack or release authority |
 | `offline_least_commitment.py` | 345 | no | AP-WM-1 observe-only archive analysis; importing an offline hypothesis diagnostic into the mutation/build path would give it accidental live authority |
 | `least_commitment_archive_builder.py` | 368 | no | AK-WM-2a strict real-record projection; it reads hash-bound completed campaign evidence into an observe-only archive and cannot launch, rank, mutate, or promote |
 | `least_commitment_receipts.py` | 677 | no | AK-WM-2a governed offline producer; it copies only explicitly SHA-pinned journal fields into receipts and cannot launch, rank, mutate, or promote |
