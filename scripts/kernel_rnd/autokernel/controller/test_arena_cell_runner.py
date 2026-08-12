@@ -912,6 +912,8 @@ class ArenaCellRunnerTest(unittest.TestCase):
         argv = R._controller_argv({"argv": list(arm.argv)}, 2.0)
         self.assertEqual(argv[argv.index("--checkpoint-hours") + 1], "2")
         self.assertEqual(argv[argv.index("--timeout-seconds") + 1], "7200")
+        self.assertEqual(
+            argv[2], "kernel_rnd.autokernel.controller.k_search_arena")
 
     def test_controller_argv_replaces_only_with_exact_audited_executable(self):
         arm = self.arm("k_search")
@@ -1422,7 +1424,8 @@ class ArenaCellRunnerTest(unittest.TestCase):
         def fake_launch(prepared, argv, *, timeout_seconds, command_prefix,
                         process_started):
             self.assertEqual(
-                prepared.environment["PYTHONPATH"], str(R.REPOSITORY_ROOT))
+                prepared.environment["PYTHONPATH"],
+                str(R.REPOSITORY_ROOT / "scripts"))
             process_started(os.getpid())
             broker_client = object.__new__(U.ArenaWorkspaceEvaluator)
             broker_client.workspace = Path(prepared.task.workspace)

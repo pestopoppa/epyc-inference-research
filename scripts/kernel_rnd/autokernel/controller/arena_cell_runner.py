@@ -1315,6 +1315,12 @@ def _controller_argv(
         if index + 1 >= len(argv):
             raise ArenaCellRunnerError(f"controller argv has no value after {flag}")
         argv[index + 1] = value
+    if len(argv) >= 3 and argv[1] == "-m" \
+            and argv[2].startswith("scripts.kernel_rnd."):
+        # The controller sandbox admits the exact scripts/ source tree but not
+        # its repository parent.  Import the identical package below that
+        # boundary rather than broadening Landlock to the whole checkout.
+        argv[2] = argv[2].removeprefix("scripts.")
     return tuple(argv)
 
 
@@ -2359,7 +2365,7 @@ def _run_worker_impl(
             "HIP_VISIBLE_DEVICES": "",
             "ROCR_VISIBLE_DEVICES": "",
             "CUDA_VISIBLE_DEVICES": "",
-            "PYTHONPATH": str(repository_root),
+            "PYTHONPATH": str(repository_root / "scripts"),
             "SSL_CERT_FILE": "/etc/ssl/certs/ca-certificates.crt",
             "CODEX_HOME": "/home/node/.codex",
             "CLAUDE_CONFIG_DIR": "/home/node/.claude",
@@ -2444,6 +2450,13 @@ def _run_worker_impl(
             controller_environment.update(broker.environment())
             prepared = arena_adapter.prepare_task(
                 prepared.task, base_environment=controller_environment)
+            prepared = arena_adapter.PreparedArenaTask(
+                task=prepared.task, prompt=prepared.prompt,
+                prompt_sha256=prepared.prompt_sha256,
+                environment={
+                    **prepared.environment,
+                    "PYTHONPATH": str(repository_root / "scripts"),
+                })
             stdout, controller_sandbox_execution = _launch_isolated_controller(
                 prepared=prepared, argv=argv,
                 timeout_seconds=int(float(checkpoint) * 3600),
