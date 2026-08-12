@@ -31,8 +31,8 @@ a module it never looked at.
 | | non-test lines |
 |---|---:|
 | **ON THE CAMPAIGN PATH** | **69,281** |
-| **DEFERRED** (provably unreachable) | **51,881** |
-| **TOTAL** | **121,162** |
+| **DEFERRED** (provably unreachable) | **51,894** |
+| **TOTAL** | **121,175** |
 
 **The deferred plane is explicit.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -210,7 +210,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `controller/arena_campaign.py` | 1,073 | no | INF-03 matched-panel audit and injected-runner seam: binds the baseline plus seven controller arms to equal tasks and checkpoints, admits each governed arm only with exact adapter/upstream/CLI/model pins, refuses incomplete panels before execution, and remains outside live campaign mutation and scoring |
 | `controller/arena_cell_runner.py` | 3,467 | no | INF-03 fail-closed runner: parent-owned authenticated broker serializes model and evaluation frames; direct model CLIs receive fresh per-PID outbound-client sandboxes, writable Codex actors retain an attested digest-pinned single-bind container, and every candidate evaluation enters a fresh GPU evaluator sandbox under exact claims; persistent model/child/request/result/lifecycle evidence is rehashed on restore |
 | `controller/arena_evaluator_child.py` | 207 | no | INF-03 claim-blind evaluator child: strictly reconstructs the hash-bound starting baseline, verifies pinned Python/config/vendor identities, invokes the vendor evaluator only inside the dedicated deny-network GPU sandbox, and emits one strict self-hashed JSON result |
-| `controller/arena_upstream_common.py` | 717 | no | INF-03 licensed-controller client: bounded read-only text-model calls are GPU-blind only after an OS-level device-open proof; the controller accepts the exact parent-declared source tuple without importing PyYAML/vendor evaluator code, and complete candidate bytes receive feedback solely through the authenticated parent-worker broker |
+| `controller/arena_upstream_common.py` | 730 | no | INF-03 licensed-controller client: bounded read-only text-model calls are GPU-blind only after an OS-level device-open proof; the controller accepts the exact parent-declared source tuple without importing PyYAML/vendor evaluator code, and complete candidate bytes receive feedback solely through interrupt-safe writes to the one preconnected authenticated parent-worker broker descriptor—never destination-bearing send or new socket authority |
 | `controller/evoengineer_arena.py` | 487 | no | INF-03 exact-source EvoEngineer-Full seam: pins the paper-era MIT source, preserves its named operators/parameters, and runs its executable CLI only through the parent-worker evaluation broker and device-isolating hash-bound launcher |
 | `controller/k_search_arena.py` | 283 | no | INF-03 licensed K-Search world-model/tree port: injects the centralized Arena evaluator into the exact pinned upstream Task seam without entering campaign mutation or scoring |
 | `controller/geak_v1_arena.py` | 344 | no | INF-03 licensed GEAK-v1 OptimAgent port: maps its ROCm dataset and reflection loop onto centralized Arena evidence without entering campaign mutation or scoring |

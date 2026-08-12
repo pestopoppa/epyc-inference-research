@@ -211,6 +211,7 @@ class ControllerSandboxContractTest(unittest.TestCase):
             "    except OSError as exc: result.append(['denied',exc.errno])",
             "  return result",
             "broker=socket.socket(fileno=int(os.environ['EPYC_AUTOKERNEL_BROKER_FD']))",
+            "os.write(broker.fileno(),b'controller-ok')",
             "child_pid=os.fork()",
             "if child_pid == 0:",
             "  os.close(0); os.close(1); os.close(2); time.sleep(60); os._exit(0)",
@@ -248,6 +249,7 @@ class ControllerSandboxContractTest(unittest.TestCase):
                     return
                 broker_result["registered_pid"] = invocation.pid
                 broker_result["registered_start_ticks"] = _start_ticks(peer_pid)
+                broker_result["request"] = connection.recv(32).decode()
                 connection.sendall(b"broker-ok")
 
         thread = threading.Thread(target=broker, daemon=True)
@@ -275,6 +277,7 @@ class ControllerSandboxContractTest(unittest.TestCase):
         self.assertTrue(broker_result["accepted_before_registration"])
         self.assertEqual(broker_result["peer_pid"], invocation.pid)
         self.assertEqual(broker_result["registered_pid"], invocation.pid)
+        self.assertEqual(broker_result["request"], "controller-ok")
         result = json.loads(output)
         self.assertEqual(result["workspace"], ["allowed", "VALUE = 1\n"])
         self.assertEqual(result["campaign_sibling"], ["denied", errno.EACCES])

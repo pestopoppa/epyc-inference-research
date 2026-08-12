@@ -111,7 +111,7 @@ class ModelBrokerClient:
             raise UpstreamControllerError("model broker request exceeds its size limit")
         with _MODEL_BROKER_IO_LOCK:
             try:
-                self.stream.sendall(struct.pack("!Q", len(encoded)) + encoded)
+                _write_all(self.stream, struct.pack("!Q", len(encoded)) + encoded)
                 length = struct.unpack("!Q", _recv_exact(self.stream, 8))[0]
                 if length > _MAX_BROKER_MESSAGE_BYTES:
                     raise UpstreamControllerError(
@@ -161,6 +161,19 @@ def _recv_exact(stream: socket.socket, length: int) -> bytes:
         chunks.append(chunk)
         remaining -= len(chunk)
     return b"".join(chunks)
+
+
+def _write_all(stream: socket.socket, payload: bytes) -> None:
+    """Write to the preconnected broker without a blocked destination syscall."""
+    remaining = memoryview(payload)
+    while remaining:
+        try:
+            written = os.write(stream.fileno(), remaining)
+        except InterruptedError:
+            continue
+        if written <= 0:
+            raise OSError("broker stream write returned no progress")
+        remaining = remaining[written:]
 
 
 def _atomic_json(path: Path, payload: Mapping[str, Any]) -> None:
@@ -616,7 +629,7 @@ class ArenaWorkspaceEvaluator:
                             or server_uid != os.getuid():
                         raise UpstreamControllerError(
                             "Arena broker server identity is invalid")
-                    client.sendall(struct.pack("!Q", len(encoded)) + encoded)
+                    _write_all(client, struct.pack("!Q", len(encoded)) + encoded)
                     header = _recv_exact(client, 8)
                     length = struct.unpack("!Q", header)[0]
                     if length > _MAX_BROKER_MESSAGE_BYTES:

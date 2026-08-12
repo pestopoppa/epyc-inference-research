@@ -620,6 +620,17 @@ vendor evaluation, GPU claims, and measurement receipts. R7 and r8 remain
 immutable partial engineering evidence. A fresh campaign source pin and new
 attempt directory are required for the live check.
 
+R9 crossed the controller import boundary and reached its first brokered
+starting-state request, then failed before Claude with `EPERM` from
+`socket.sendall()`. The controller seccomp profile deliberately denies
+destination-bearing `sendto`/`sendmsg`; CPython selected that syscall even for
+the already-connected inherited stream. The broker client now performs an
+interrupt-safe `os.write()` loop on the one peer-attested descriptor. No socket
+creation, destination selection, or network authority is added. The live
+controller isolation test sends a request to the parent under the exact profile
+and receives the response, while the existing peer/PID and cgroup assertions
+remain in force. R9 is partial/non-rankable and requires a fresh attempt.
+
 ## On-box substrate reproduction — 2026-08-11
 
 An isolated Python 3.12 environment at
