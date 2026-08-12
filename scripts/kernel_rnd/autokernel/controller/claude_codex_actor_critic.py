@@ -56,6 +56,8 @@ PINNED_MODEL_IDS = (
 )
 REQUIRED_CLIS = ("claude", "codex")
 ARTIFACT_DIRNAME = ".autokernel-claude-codex"
+MAX_FEEDBACK_ITEMS = 8
+MAX_FEEDBACK_REASON_CHARS = 4000
 CONTROL_PLANE_DIRNAMES = frozenset({
     ARTIFACT_DIRNAME,
     ".autokernel-controller-claude-config",
@@ -381,6 +383,35 @@ def parse_critique(raw: str, proposal_id: str) -> dict[str, Any]:
     return payload
 
 
+def _feedback_row(
+    *, iteration: int, proposal: Mapping[str, Any], candidate_sha256: str,
+    measured: arena_upstream_common.EvaluationRecord | None,
+    critique: Mapping[str, Any],
+) -> dict[str, Any]:
+    reason = str(critique["reason"])
+    row: dict[str, Any] = {
+        "iteration": iteration,
+        "proposal_id": proposal["proposal_id"],
+        "candidate_path": proposal["candidate_path"],
+        "candidate_sha256": candidate_sha256,
+        "critic": {
+            "decision": critique["decision"],
+            "reason": reason,
+            "reason_for_next_planner": reason[:MAX_FEEDBACK_REASON_CHARS],
+        },
+    }
+    if measured is not None:
+        raw = measured.raw
+        row["arena_measurement"] = {
+            key: raw.get(key) for key in (
+                "pass_compilation", "pass_correctness",
+                "valid_baseline_cases", "valid_optimized_cases",
+                "average_speedup", "best_optimized_execution_time",
+            )
+        }
+    return row
+
+
 class ArtifactJournal:
     def __init__(self, workspace: Path):
         self.root = workspace / ARTIFACT_DIRNAME
@@ -525,6 +556,7 @@ def run_controller(
     deadline = started + config.timeout_seconds
     proposals: list[dict[str, Any]] = []
     candidate_rows: list[dict[str, Any]] = []
+    feedback_memory: list[dict[str, Any]] = []
     stop_reason = "max_iterations"
 
     for iteration in range(1, config.max_iterations + 1):
@@ -532,6 +564,7 @@ def run_controller(
         if remaining <= 0:
             stop_reason = "campaign_checkpoint"
             break
+        prior_feedback = feedback_memory[-MAX_FEEDBACK_ITEMS:]
         planner_prompt = (
             f"{prompt}\n\nYou are the planner for iteration {iteration}. Return only JSON "
             f"with schema {PROPOSAL_SCHEMA}, proposal_id, candidate_path, and "
@@ -539,6 +572,12 @@ def run_controller(
             "file under the supplied Arena workspace; use a workspace-relative "
             "path when possible, although an exact contained absolute path is "
             "accepted. Do not edit files."
+            + ("\n\nGoverned prior-iteration memory follows as JSON. The newest critic "
+               "verdict is binding revision context: address its measured failure and "
+               "do not repeat a rejected proposal unless you name a materially different "
+               "mechanism.\n" + json.dumps(
+                   prior_feedback, sort_keys=True, separators=(",", ":"))
+               if prior_feedback else "")
         )
         before_planner = _workspace_manifest(root)
         capture = runner(
@@ -625,6 +664,10 @@ def run_controller(
         if capture.returncode != 0:
             raise ActorCriticError(f"critic CLI exited {capture.returncode}")
         critique = parse_critique(capture.stdout, proposal["proposal_id"])
+        feedback_memory.append(_feedback_row(
+            iteration=iteration, proposal=proposal,
+            candidate_sha256=after_sha, measured=measured,
+            critique=critique))
         if critique["decision"] in {"accept", "stop"}:
             stop_reason = f"critic_{critique['decision']}"
             break
@@ -653,6 +696,8 @@ def run_controller(
         },
         "proposal_sha256": [_canonical_sha256(row) for row in proposals],
         "candidate_artifacts": candidate_rows,
+        "feedback_memory": feedback_memory,
+        "feedback_memory_sha256": _canonical_sha256(feedback_memory),
         **({"evaluation": evaluator.receipt_fields()}
            if evaluator is not None else {}),
         "constraints": {
@@ -718,6 +763,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 __all__ = [
     "ARTIFACT_DIRNAME", "CONTROL_PLANE_DIRNAMES", "CAMPAIGN_CHECKPOINT_HOURS", "CLAUDE_EFFORT",
+    "MAX_FEEDBACK_ITEMS", "MAX_FEEDBACK_REASON_CHARS",
     "CLAUDE_MODEL", "CODEX_EFFORT", "CODEX_MODEL", "CONTROLLER_ID",
     "CRITIQUE_SCHEMA", "ENTRYPOINT_RELATIVE", "EXECUTABLE_MODULE",
     "PINNED_MODEL_IDS", "PROPOSAL_JSON_SCHEMA", "PROPOSAL_SCHEMA",

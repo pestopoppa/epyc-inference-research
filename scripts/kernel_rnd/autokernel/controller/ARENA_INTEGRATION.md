@@ -644,6 +644,28 @@ all task files and symlinks. Proposal paths into those roots are explicitly
 refused, and their lifecycle remains separately receipt-bound and scrubbed. R10
 is partial/non-rankable; no authored candidate or comparison exists yet.
 
+R11 then proved the full planner → digest-pinned Docker actor → claimed GPU
+evaluation → critic path. Six correct candidates measured average speedups
+`0.993531`, `0.841596`, `0.999066`, `0.988657`, `0.999333`, and `0.994993`;
+none displaced the banked starting state, and each claim was released after its
+short evaluator window. This is valid proposal/evaluation engineering evidence,
+not a completed or rankable campaign. The campaign owner stopped it after the
+sixth rejection because the critic's structured `revise` result was never fed
+into the next planner prompt, causing repeated load-shape proposals rather than
+evidence-informed search. The captured campaign, worker, controller, and model
+PIDs are dead; the one reparented model PID was terminated explicitly and its
+exact empty cgroup removed; no KFD process remains.
+
+The controller now maintains a bounded eight-item feedback window. Every next
+planner receives the prior proposal/candidate identity, selected centralized
+measurement fields, and the newest critic decision plus a 4,000-character
+reason bound. The full critique and measurement summary remain hash-bound in
+the final controller receipt as `feedback_memory`; the prompt-window projection
+is bounded but not substituted for durable evidence. The newest critic verdict
+is explicitly binding revision context, so a rejected mechanism may be repeated
+only when the planner names a materially different mechanism. A fresh campaign
+must prove this revision memory changes live search behavior.
+
 ## On-box substrate reproduction — 2026-08-11
 
 An isolated Python 3.12 environment at

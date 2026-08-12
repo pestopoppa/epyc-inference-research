@@ -31,8 +31,8 @@ a module it never looked at.
 | | non-test lines |
 |---|---:|
 | **ON THE CAMPAIGN PATH** | **69,281** |
-| **DEFERRED** (provably unreachable) | **51,901** |
-| **TOTAL** | **121,182** |
+| **DEFERRED** (provably unreachable) | **51,947** |
+| **TOTAL** | **121,228** |
 
 **The deferred plane is explicit.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -205,7 +205,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `controller/completed_campaign_adapter.py` | 105 | no | strict live-journal-to-sequencer join; banks only event-bound dispatch/mechanism-confirmed wins above floor and MDE and launches nothing |
 | `controller/arena_adapter.py` | 546 | no | INF-03 paper-pin GEAK/AgentKernelArena integration: validates clean vendor sources and physical gfx90a identity, binds C4 into a hygienic priced prompt, and launches registered whole-agent task adapters without entering campaign mutation or scoring; callback failures reap the exact captured process group |
 | `controller/arena_controller_sandbox.py` | 687 | no | INF-03 controller/model isolation adapter: exact copied workspace plus pinned Python/Codex/Claude/Node/source/CA runtime discovery and fixed Bun volatile reads, broad/device/production/campaign/symlink refusal, broker-only controller prefix, per-model-PID outbound-client prefix, exact activation verification, and descendant-draining cgroup teardown; no direct GPU or evaluator profile |
-| `controller/claude_codex_actor_critic.py` | 732 | no | INF-03 bounded Claude-planner/critic + Codex-actor controller: exact three-argument Arena launcher, explicit model/effort pins, brokered model and candidate-evaluation calls, measured starting-state fallback and best-candidate materialization, semantic task-manifest confinement with four exact receipt-bound/scrubbed control-plane roots excluded and refused as candidates, launcher-cgroup-owned timeout teardown, and transcript/outcome/artifact hashing; its preflight invokes neither CLI |
+| `controller/claude_codex_actor_critic.py` | 778 | no | INF-03 bounded Claude-planner/critic + Codex-actor controller: exact three-argument Arena launcher, explicit model/effort pins, brokered model and candidate-evaluation calls, measured starting-state fallback and best-candidate materialization, eight-item measurement/critic revision memory projected into each next planner and fully receipt-bound, semantic task-manifest confinement with four exact receipt-bound/scrubbed control-plane roots excluded and refused as candidates, launcher-cgroup-owned timeout teardown, and transcript/outcome/artifact hashing; its preflight invokes neither CLI |
 | `controller/codex_container_actor.py` | 219 | no | INF-03/AK-LE-3 host-compatible Codex actor boundary: pins a read-only container image, exposes exactly one writable host bind for the copied Arena workspace, stages auth only in an automatically erased temporary directory, and admits exactly the reviewed gpt-5.6-sol/gpt-5.6-terra high-effort model cells without granting host filesystem writes |
 | `controller/arena_campaign.py` | 1,073 | no | INF-03 matched-panel audit and injected-runner seam: binds the baseline plus seven controller arms to equal tasks and checkpoints, admits each governed arm only with exact adapter/upstream/CLI/model pins, refuses incomplete panels before execution, and remains outside live campaign mutation and scoring |
 | `controller/arena_cell_runner.py` | 3,467 | no | INF-03 fail-closed runner: parent-owned authenticated broker serializes model and evaluation frames; direct model CLIs receive fresh per-PID outbound-client sandboxes, writable Codex actors retain an attested digest-pinned single-bind container, and every candidate evaluation enters a fresh GPU evaluator sandbox under exact claims; persistent model/child/request/result/lifecycle evidence is rehashed on restore |
