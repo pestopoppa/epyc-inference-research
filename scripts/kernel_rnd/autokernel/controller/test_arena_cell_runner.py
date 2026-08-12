@@ -865,6 +865,13 @@ class ArenaCellRunnerTest(unittest.TestCase):
         self.assertEqual(environment["PYTHONDONTWRITEBYTECODE"], "1")
         self.assertNotIn("LD_LIBRARY_PATH", environment)
 
+    def test_evaluator_policy_admits_ephemeral_package_parent_not_proc(self):
+        runner = R.SandboxedEvaluatorRunner(arena_root=self.arena)
+        roots = (*runner._readable_roots(), str(runner.arena_root))
+        self.assertIn(str(self.arena.resolve()), roots)
+        self.assertNotIn(str((self.arena / "src").resolve()), roots)
+        self.assertNotIn("/proc", roots)
+
     def test_parent_broker_is_short_private_fresh_and_hash_chained(self):
         cell = self.root / "broker-cell"
         workspace = cell / "workspace"

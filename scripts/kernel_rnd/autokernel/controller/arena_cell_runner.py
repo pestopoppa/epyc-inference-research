@@ -1326,7 +1326,10 @@ class SandboxedEvaluatorRunner:
             writable_root=str(evaluation_root),
             writable_device_paths=self.DEVICE_PATHS,
             profile=sandbox.EVALUATOR_PROFILE,
-            readable_roots=(*self._readable_roots(), str(self.arena_root / "src")),
+            # Importing the ``src`` package requires listing its ephemeral
+            # parent.  The parent contains only the copied, hash-bound vendor
+            # ``src`` tree and is removed immediately after this evaluation.
+            readable_roots=(*self._readable_roots(), str(self.arena_root)),
             readable_files=("/etc/ld.so.cache",
                             str(arena_evaluator_child.__file__)),
             token=f"eval{secrets.token_hex(8)}")
