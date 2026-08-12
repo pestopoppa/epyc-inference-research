@@ -1094,6 +1094,20 @@ class ArenaCellRunnerTest(unittest.TestCase):
         self.assertIsNone(receipts[0]["previous_receipt_sha256"])
         self.assertEqual(receipts[1]["previous_receipt_sha256"],
                          receipts[0]["receipt_sha256"])
+        for receipt in receipts:
+            self.assertEqual(
+                receipt["producer"]["producer_id"],
+                R.INTERMEDIATE_BELIEF_PRODUCER_ID)
+            self.assertEqual(
+                [row["measurement_id"]
+                 for row in receipt["belief_measurements"]],
+                ["arena_intermediate_correctness_pass_rate",
+                 "arena_intermediate_timing_harness_validity_rate"])
+            self.assertTrue(all(
+                row["measurement_sha256"] == canonical_sha({
+                    key: value for key, value in row.items()
+                    if key != "measurement_sha256"})
+                for row in receipt["belief_measurements"]))
         self.assertEqual(seen, [(1, "// first\n"), (2, "// second\n")])
         self.assertFalse(broker.runtime_dir.exists())
         checkpoint = {
@@ -1111,6 +1125,20 @@ class ArenaCellRunnerTest(unittest.TestCase):
             checkpoint, cell_root=cell, claim_scope="attempt-r1",
             arena_root=self.arena)
         second_path = cell / "controller-evaluation-windows" / "0002-result.json"
+        original_second = second_path.read_text(encoding="utf-8")
+        broken = json.loads(original_second)
+        broken["belief_measurements"][0]["value"] = 0.0
+        broken["belief_measurements"][0]["measurement_sha256"] = canonical_sha({
+            key: value for key, value in broken["belief_measurements"][0].items()
+            if key != "measurement_sha256"})
+        broken["receipt_sha256"] = canonical_sha({
+            key: value for key, value in broken.items() if key != "receipt_sha256"})
+        second_path.write_text(json.dumps(broken), encoding="utf-8")
+        with self.assertRaisesRegex(R.ArenaCellRunnerError, "belief measurements"):
+            R._validate_broker_chain(
+                checkpoint, cell_root=cell, claim_scope="attempt-r1",
+                arena_root=self.arena)
+        second_path.write_text(original_second, encoding="utf-8")
         broken = json.loads(second_path.read_text())
         broken["previous_receipt_sha256"] = "f" * 64
         broken["receipt_sha256"] = canonical_sha({
