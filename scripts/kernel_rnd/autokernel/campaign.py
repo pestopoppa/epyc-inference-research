@@ -1382,6 +1382,18 @@ class CampaignSpec:
                     f"proposal provider target {provider_reference['target_backend']!r} "
                     f"does not match campaign backend {self.backend!r}"
                 )
+            # The provider identity is part of the measurement material.  A
+            # proposal from another kernel/instrument era must be rejected at
+            # composition time, before it can reach the journal, claim, or
+            # build.  Calibration independently binds this same commit in
+            # ``load_calibration_bundle``; accepting either side alone would
+            # make the resulting evidence impossible to interpret.
+            if (provider_reference["source_mode"] == "source"
+                    and provider_reference["source_commit"] != MEASUREMENT_COMMIT):
+                raise ValueError(
+                    "proposal provider source commit is not the campaign measurement "
+                    f"instrument: {provider_reference['source_commit']!r} != "
+                    f"{MEASUREMENT_COMMIT!r}")
             object.__setattr__(self, "proposal", proposal)
             self._validate_arm_parameter_surface(proposal)
             if proposal["change_class"] == "parameter" and self.source_patch is not None:

@@ -58,6 +58,7 @@ def proposal_manifest(campaign_id: str = "ak-test") -> dict:
     proposal["campaign_id"] = campaign_id
     proposal["proposal_id"] = "akp-test-0001"
     proposal["provider_reference"]["target_backend"] = campaign.BACKEND_CPU
+    proposal["provider_reference"]["source_commit"] = campaign.MEASUREMENT_COMMIT
     return proposal
 
 
@@ -1071,6 +1072,12 @@ class TestTheSpecIsAPreCommitment(unittest.TestCase):
         proposal = proposal_manifest()
         proposal["provider_reference"]["target_backend"] = campaign.BACKEND_GPU
         with self.assertRaisesRegex(ValueError, "provider target.*does not match"):
+            spec(proposal=proposal)
+
+    def test_proposal_provider_commit_must_match_measurement_instrument(self):
+        proposal = proposal_manifest()
+        proposal["provider_reference"]["source_commit"] = "a" * 40
+        with self.assertRaisesRegex(ValueError, "provider source commit.*measurement instrument"):
             spec(proposal=proposal)
 
     def test_proposal_provider_symlink_into_shared_rocm_is_refused(self):
