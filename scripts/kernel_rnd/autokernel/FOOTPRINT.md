@@ -31,8 +31,8 @@ a module it never looked at.
 | | non-test lines |
 |---|---:|
 | **ON THE CAMPAIGN PATH** | **68,015** |
-| **DEFERRED** (provably unreachable) | **39,759** |
-| **TOTAL** | **107,774** |
+| **DEFERRED** (provably unreachable) | **40,455** |
+| **TOTAL** | **108,470** |
 
 **The deferred plane is explicit.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -208,6 +208,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `controller/arena_roundtrip.py` | 203 | no | EVL-47 SC20/SC21 prospective GEAK/Arena receipt producer; emits only observed correctness/timing rates and retains preflight as non-ordinal dependency evidence, with no launch, mutation, or verdict authority |
 | `controller/authoring_contract.py` | 468 | no | AK-PL-1/AK-LE-4/AK-LE-5 pre-proposal adapter: fully rendered prompt leak refusal, priced never-bulk-read context, reversible compaction, and structured external numbers; it calls no model and must not gain mutation/build authority |
 | `controller/loop_experiments.py` | 603 | no | AK-LE-1/2/3 observation-only experiment contract: predeclares matched planner/scaffold cells, renders target values only into planner context, and reduces caller-supplied search/throughput observations without model, campaign, ranking, champion, or release authority |
+| `controller/loop_experiment_runner.py` | 696 | no | AK-LE-1/2 governed planner bridge: compiles exact model/effort cells, runs read-only captured Claude/Codex processes, seals strict observations, and explicitly refuses AK-LE-3 until a matched Arena authoring seam exists; no campaign, ranking, champion, or release authority |
 | `controller/reward_monitor.py` | 453 | no | C6 monitor adapter: binds campaign/candidate traces and the whole journal tree to a predeclared monitor panel, requires awareness plus reasoning visibility, and reports sensitivity/specificity/FPR without calling a model |
 | `controller/hypotheses.py` | 4,493 | yes | `claim_for_hypothesis` — the falsifier-before-compute gate `campaign.py --hypothesis` acquires its region claim through. It calls itself the ONLY route from a hypothesis to a resource claim and had ZERO non-test callers until 2026-08-04, because this boundary put it on the far side of the line: the driver is what SPENDS the claim |
 | `controller/do_not_repeat.py` | 2,205 | yes | the §19.2 ledger a loop needs to tell "tried and failed" from "never tried". On the path because `authorize_claim(ledger=…)` has no default and `claim_for_hypothesis` refuses a token with no verdict, so no spendable token exists without a real one — `compile_for_tracker` is it |
