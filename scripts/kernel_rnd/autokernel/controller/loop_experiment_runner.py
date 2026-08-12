@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-"""Governed, observation-only execution bridge for AK-LE-1/2.
+"""Governed, observation-only execution bridge for AK-LE-1/2/3.
 
 The compiler consumes an :class:`loop_experiments.ExperimentContract` and emits
 a hash-bound planner manifest.  The runner executes only those predeclared
 planner cells through captured Claude or Codex CLI process groups, preserving
 the exact prompt, stdout, stderr, last message, timing, argv, and parsed output.
 
-AK-LE-3 is deliberately refused.  The existing AgentKernelArena boundary owns
-GPU evaluation and fixed controller/checkpoint semantics; it does not expose a
-same-model direct-vs-split authoring seam.  Pretending otherwise would turn
-different model roles and evaluator paths into a scaffold comparison.
+AK-LE-3 delegates to ``loop_scaffold_runner``.  That seam writes only within
+fresh disposable worktrees and returns evaluation to the existing centralized
+AgentKernelArena boundary.  This planner module remains read-only.
 
 Importing this module performs no filesystem, process, model, evaluator, GPU,
 campaign, ranking, champion, or release action.
@@ -42,11 +41,9 @@ RAW_OBSERVATION_SCHEMA = "epyc.autokernel.loop_experiment_raw_planner.v1"
 AUTHORITY = "observe_only_no_campaign_ranking_champion_or_release_authority"
 PROVIDERS = frozenset({"claude", "codex"})
 SCAFFOLD_GAP = (
-    "AK-LE-3 requires a governed same-model direct-implement versus "
-    "implement-then-exploit authoring/evaluation seam. Existing Arena runners "
-    "fix controller roles and GPU checkpoint semantics, while the reviewed "
-    "Claude/Codex boundary fixes Claude as read-only planner/critic and Codex as "
-    "the workspace-writing actor; neither can produce the matched scaffold panel."
+    "AK-LE-3 execution is implemented in loop_scaffold_runner; a real observation "
+    "still requires its exact reviewed multi-model actor-launcher and pinned "
+    "AgentKernelArena/device prerequisites."
 )
 _SHA_RE = re.compile(r"[0-9a-f]{64}")
 _ID_RE = re.compile(r"[a-z][a-z0-9_.-]{2,95}")
@@ -696,9 +693,11 @@ def materialize_planner_observation(
         elapsed_wall_seconds, _sha(evidence_sha256, "prefilter evidence SHA-256"))
 
 
-def run_scaffold_manifest(*_args: Any, **_kwargs: Any) -> None:
-    """Fail closed until a matched governed AK-LE-3 authoring seam exists."""
-    raise LoopRunnerError(SCAFFOLD_GAP)
+def run_scaffold_manifest(manifest: Mapping[str, Any], **kwargs: Any) -> dict[str, Any]:
+    """Execute AK-LE-3 through its deferred, workspace-writing boundary."""
+    from . import loop_scaffold_runner
+
+    return loop_scaffold_runner.run_manifest(manifest, **kwargs)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
