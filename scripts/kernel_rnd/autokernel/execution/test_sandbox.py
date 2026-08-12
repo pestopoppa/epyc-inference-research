@@ -127,13 +127,15 @@ class SandboxKernelProbeTest(unittest.TestCase):
             policy = S.SandboxPolicy(
                 str(root), token="evalprofile1", profile=S.EVALUATOR_PROFILE,
                 readable_roots=("/usr/bin", "/usr/lib"),
-                readable_files=("/etc/ld.so.cache",),
+                readable_files=("/etc/ld.so.cache", "/dev/urandom"),
                 writable_device_paths=("/dev/kfd", "/dev/dri/renderD128", "/dev/null"))
             probe = (
                 "import errno,os,socket; "
                 "fds=[os.open(p,os.O_RDWR) for p in "
-                "('/dev/kfd','/dev/dri/renderD128')]; "
+                "('/dev/kfd','/dev/dri/renderD128','/dev/null')]; "
                 "[os.close(fd) for fd in fds]; "
+                "random_fd=os.open('/dev/urandom',os.O_RDONLY); "
+                "assert len(os.read(random_fd,8)) == 8; os.close(random_fd); "
                 "denied=[]; "
                 "\ntry: open('/etc/passwd').close()\n"
                 "except PermissionError: denied.append('read')\n"
@@ -158,6 +160,7 @@ class SandboxKernelProbeTest(unittest.TestCase):
             self.assertTrue(receipt["read_allowlist_enforced"])
             self.assertEqual(set(receipt["writable_device_paths"]),
                     {"/dev/kfd", "/dev/dri/renderD128", "/dev/null"})
+            self.assertIn("/dev/urandom", receipt["readable_files"])
             self.assertTrue(teardown["verified_empty"])
 
     def test_evaluator_profile_rejects_partial_devices_and_broker_identity(self):

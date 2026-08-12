@@ -489,8 +489,14 @@ class SandboxPolicy:
                     f"readable root would expose host devices: {path}")
         for path in normalized_files:
             mode = os.stat(path).st_mode
-            if not stat.S_ISREG(mode):
+            evaluator_random = (
+                self.profile == EVALUATOR_PROFILE
+                and path == "/dev/urandom" and stat.S_ISCHR(mode))
+            if not stat.S_ISREG(mode) and not evaluator_random:
                 raise SandboxError(f"readable file is not regular: {path}")
+            if path.startswith("/dev/") and not evaluator_random:
+                raise SandboxError(
+                    f"readable device is not the evaluator random source: {path}")
         for path in normalized_executables:
             mode = os.stat(path).st_mode
             if not stat.S_ISREG(mode) or not os.access(path, os.X_OK):

@@ -71,7 +71,8 @@ candidate compilation, correctness check, and timing pass—intermediate and
 final—runs in a fresh subprocess under the `candidate_evaluator_gpu_v1`
 profile. That profile default-denies read/exec outside the copied task, pinned
 Python/ROCm/Arena inputs, and exact system runtime roots; grants read/write only
-to `/dev/kfd`, `/dev/dri/renderD128`, `/dev/null`, and the copied task; denies all networking,
+to `/dev/kfd`, `/dev/dri/renderD128`, `/dev/null`, and the copied task, plus
+read-only access to exact `/dev/urandom` for PyTorch initialization; denies all networking,
 broker inheritance, cross-process memory, io_uring, signals, ptrace, namespaces,
 modules, BPF, and mounts; and owns a fresh process group/session and cgroup.
 The parent alone owns AutoKernel's cross-process `mi210_0` claim and 250 ms
