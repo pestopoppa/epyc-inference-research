@@ -83,6 +83,7 @@ def write_calibration_bundle(root: Path, *,
         "measurement_binary_sha256": "1" * 64,
         "copied_binary_sha256": "1" * 64,
         "measurement_linkage_sha256": "2" * 64,
+        "measurement_toolchain_manifest_sha256": "4" * 64,
         "copied_linkage_sha256": "2" * 64,
         "binary_copy_exact": True,
     }

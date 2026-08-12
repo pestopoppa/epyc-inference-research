@@ -160,6 +160,60 @@ def _write_json(path: Path, value: object) -> None:
         raise
 
 
+def _tool_version(executable: Path) -> str:
+    """Return version text from the executable actually recorded by CMake."""
+    if not executable.is_file():
+        raise RuntimeError(f"toolchain executable is not a file: {executable}")
+    return subprocess.run((str(executable), "--version"), text=True,
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                          check=True).stdout.strip()
+
+
+def _build_toolchain_manifest(output_root: Path) -> str:
+    """Persist a hashable receipt of the instrument's measured build inputs.
+
+    Values come from the instrument build's CMake cache and the files it names;
+    there are no fallback/toolchain labels.  The manifest is write-once so a
+    later phase cannot silently change the provider identity.
+    """
+    build_root = INSTRUMENT_BINARY.parent.parent
+    cache = build_root / "CMakeCache.txt"
+    if not cache.is_file():
+        raise RuntimeError(f"instrument build metadata is missing: {cache}")
+    entries: dict[str, str] = {}
+    for line in cache.read_text(encoding="utf-8").splitlines():
+        if line.startswith(("CMAKE_C_COMPILER:", "CMAKE_CXX_COMPILER:",
+                            "CMAKE_MAKE_PROGRAM:", "CMAKE_BUILD_TYPE:",
+                            "GGML_NATIVE:", "GGML_CPU:", "GGML_AVX")):
+            key, _, value = line.partition("=")
+            entries[key.split(":", 1)[0]] = value
+    required = ("CMAKE_C_COMPILER", "CMAKE_CXX_COMPILER", "CMAKE_MAKE_PROGRAM",
+                "CMAKE_BUILD_TYPE")
+    missing = [key for key in required if not entries.get(key)]
+    if missing:
+        raise RuntimeError("instrument CMake cache lacks: " + ", ".join(missing))
+    tools = {}
+    for key in ("CMAKE_C_COMPILER", "CMAKE_CXX_COMPILER", "CMAKE_MAKE_PROGRAM"):
+        path = Path(entries[key]).resolve(strict=True)
+        tools[key] = {"path": str(path), "sha256": _sha256_file(path),
+                      "version": _tool_version(path)}
+    manifest = {
+        "schema": "epyc.autokernel.measurement_toolchain_manifest.v1",
+        "build_root": str(build_root.resolve()),
+        "cmake_cache": {"path": str(cache.resolve()), "sha256": _sha256_file(cache)},
+        "cmake_cache_values": entries,
+        "tools": tools,
+    }
+    path = output_root / "measurement-toolchain-manifest.json"
+    if path.exists():
+        existing = json.loads(path.read_text(encoding="utf-8"))
+        if existing != manifest:
+            raise RuntimeError("measurement toolchain manifest is immutable")
+    else:
+        _write_json(path, manifest)
+    return _json_file_sha256(manifest)
+
+
 def _copy_anchor_bundle(root: Path) -> recipes.ToolBinding:
     """Copy the measured tool and every DSO it resolves inside the frozen build."""
     bundle = root / "anchor_binary_copy"
@@ -233,7 +287,8 @@ def _instrument_receipt_capability(binary: Path) -> schemas.Check:
 
 def _write_declaration(output_root: Path, *, identity: LiveCampaignIdentity,
                        instrument_sha: str, copy_sha: str,
-                       instrument_linkage: str, copy_linkage: str) -> str:
+                       instrument_linkage: str, copy_linkage: str,
+                       toolchain_manifest_sha256: str) -> str:
     """Commit the fresh campaign inputs before the first measurement."""
     source_manifest = {
         "schema": "epyc.autokernel.runtime_source_label.v1",
@@ -242,6 +297,7 @@ def _write_declaration(output_root: Path, *, identity: LiveCampaignIdentity,
         "measurement_binary_sha256": instrument_sha,
         "copied_binary_sha256": copy_sha,
         "measurement_linkage_sha256": instrument_linkage,
+        "measurement_toolchain_manifest_sha256": toolchain_manifest_sha256,
         "copied_linkage_sha256": copy_linkage,
         "binary_copy_exact": instrument_sha == copy_sha,
     }
@@ -1052,7 +1108,8 @@ def execute(output_root: Path, *, campaign_id: str,
     source_sha = _write_declaration(
         output_root, identity=identity,
         instrument_sha=instrument_sha, copy_sha=copy_sha,
-        instrument_linkage=instrument_linkage, copy_linkage=copy_linkage)
+        instrument_linkage=instrument_linkage, copy_linkage=copy_linkage,
+        toolchain_manifest_sha256=_build_toolchain_manifest(output_root))
     _write_preflight(output_root, instrument_sha=instrument_sha, copy_sha=copy_sha,
                      host_state=host_state)
     anchor = api.AnchorIdentity(
