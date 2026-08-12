@@ -14,12 +14,15 @@ import hashlib
 import json
 import math
 import os
+import re
 import signal
+import socket
 import stat
 import subprocess
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
@@ -39,6 +42,8 @@ CAPTURE_KIND = "real_model_inference_tensor_capture"
 AUTHORITY = "tensor_identity_only_no_correctness_speedup_or_promotion"
 TARGET_ARCH = c3.TARGET_ARCH
 WINDOW_SCHEMA = "epyc.autokernel.c3_epyc_tensor_capture_window.v2"
+DEVICE_INVENTORY_SCHEMA = "epyc.autokernel.device_inventory.v2"
+DEVICE_INVENTORY_PRODUCER = "autokernel.c3_epyc_tensor_capture.device_inventory/v2"
 MAX_JSON_BYTES = 4 * 1024 * 1024
 MAX_TENSORS = 128
 MAX_TENSOR_RANK = 8
@@ -98,6 +103,34 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _process_identity(pid: int) -> tuple[int, int]:
+    text = (Path("/proc") / str(pid) / "stat").read_text(encoding="utf-8")
+    fields = text[text.rfind(")") + 2:].split()
+    return int(fields[1]), int(fields[19])
+
+
+def _descendant_chain(pid: int, producer_pid: int,
+                      producer_start_ticks: int) -> list[dict[str, int]] | None:
+    chain: list[dict[str, int]] = []
+    seen: set[int] = set()
+    current = pid
+    while current > 1 and current not in seen:
+        seen.add(current)
+        try:
+            parent, start_ticks = _process_identity(current)
+        except (OSError, ValueError, IndexError):
+            return None
+        chain.append({"pid": current, "start_ticks": start_ticks})
+        if current == producer_pid:
+            return chain if start_ticks == producer_start_ticks else None
+        current = parent
+    return None
+
+
 def _checked_regular_file(path: Path, expected_sha256: str, label: str,
                           *, root: Path | None = None) -> Path:
     path = Path(path)
@@ -120,13 +153,85 @@ def _checked_regular_file(path: Path, expected_sha256: str, label: str,
 
 
 def _reject_governed_path(path: Path, label: str) -> Path:
-    resolved = Path(path).resolve()
+    lexical = Path(path).absolute()
+    for candidate in (lexical, *lexical.parents):
+        if candidate.exists() and candidate.is_symlink():
+            raise TensorCaptureRefusal(f"{label} must not traverse a symlink")
+    resolved = lexical.resolve()
     if ".git" in resolved.parts:
         raise TensorCaptureRefusal(f"{label} must not be inside .git")
-    frozen = Path("/mnt/raid0/llm/llama.cpp").resolve()
-    if resolved == frozen or resolved.is_relative_to(frozen):
-        raise TensorCaptureRefusal(f"{label} must not touch the frozen production tree")
+    for tree in ("llama.cpp", "whisper.cpp", "qwentts.cpp"):
+        frozen = Path("/mnt/raid0/llm") / tree
+        if resolved == frozen or resolved.is_relative_to(frozen):
+            raise TensorCaptureRefusal(f"{label} must not touch frozen {tree}")
     return resolved
+
+
+def _probe_device_identity() -> dict[str, Any]:
+    """Read the live ROCm/sysfs mapping; this does not launch a workload."""
+    rocm_smi = Path("/opt/rocm/bin/rocm-smi")
+    rocminfo = Path("/opt/rocm/bin/rocminfo")
+    for path, label in ((rocm_smi, "rocm-smi"), (rocminfo, "rocminfo")):
+        if not path.is_file() or not os.access(path, os.X_OK):
+            raise TensorCaptureRefusal(f"live device inventory cannot execute {label}")
+    bus = subprocess.run((str(rocm_smi), "--showbus", "--json"), text=True,
+                         capture_output=True, timeout=10, check=False)
+    info = subprocess.run((str(rocminfo),), text=True, capture_output=True,
+                          timeout=20, check=False)
+    if bus.returncode != 0 or info.returncode != 0:
+        raise TensorCaptureRefusal("live ROCm device inventory probe failed")
+    try:
+        buses = _mapping(json.loads(bus.stdout), "rocm-smi bus inventory")
+        card = _mapping(buses["card0"], "rocm-smi card0")
+        pci_bdf = _text(card["PCI Bus"], "rocm-smi PCI Bus")
+    except (KeyError, json.JSONDecodeError) as exc:
+        raise TensorCaptureRefusal("rocm-smi did not expose exact card0 PCI Bus") from exc
+    names = (line.split("Name:", 1)[1].strip() for line in info.stdout.splitlines()
+             if line.strip().startswith("Name:"))
+    architectures = sorted(set(name for name in names
+                               if re.fullmatch(r"gfx[0-9a-z]+", name)))
+    if architectures != [TARGET_ARCH]:
+        raise TensorCaptureRefusal(
+            f"rocminfo accelerator architecture differs: {architectures}")
+    sysfs = Path("/sys/bus/pci/devices") / pci_bdf
+    uevent = _checked_regular_file(
+        sysfs / "uevent", _sha256_file(sysfs / "uevent"), "MI210 sysfs uevent")
+    return {
+        "host": socket.gethostname(), "logical_device_id": "mi210_0",
+        "visible_ordinal": 0, "pci_bdf": pci_bdf, "architecture": TARGET_ARCH,
+        "sysfs_device": str(sysfs.resolve()), "sysfs_uevent_sha256": _sha256_file(uevent),
+        "rocm_smi": str(rocm_smi), "rocm_smi_sha256": _sha256_file(rocm_smi),
+        "rocminfo": str(rocminfo), "rocminfo_sha256": _sha256_file(rocminfo),
+    }
+
+
+def build_device_inventory() -> dict[str, Any]:
+    document = {"schema": DEVICE_INVENTORY_SCHEMA,
+                "producer_id": DEVICE_INVENTORY_PRODUCER,
+                **_probe_device_identity()}
+    document["receipt_sha256"] = hashlib.sha256(_canonical(document).encode()).hexdigest()
+    return document
+
+
+def load_device_inventory(path: Path) -> Mapping[str, Any]:
+    document = _read_json(path, "device inventory")
+    required = {"schema", "producer_id", "host", "logical_device_id",
+                "visible_ordinal", "pci_bdf", "architecture", "sysfs_device",
+                "sysfs_uevent_sha256", "rocm_smi", "rocm_smi_sha256", "rocminfo",
+                "rocminfo_sha256", "receipt_sha256"}
+    _exact_keys(document, required, "device inventory")
+    if document["schema"] != DEVICE_INVENTORY_SCHEMA \
+            or document["producer_id"] != DEVICE_INVENTORY_PRODUCER:
+        raise TensorCaptureRefusal("unsupported device inventory producer")
+    material = dict(document)
+    claimed = _sha(material.pop("receipt_sha256"), "device inventory receipt_sha256")
+    if hashlib.sha256(_canonical(material).encode()).hexdigest() != claimed:
+        raise TensorCaptureRefusal("device inventory self-hash mismatch")
+    live = _probe_device_identity()
+    drift = [key for key, value in live.items() if document.get(key) != value]
+    if drift:
+        raise TensorCaptureRefusal(f"device inventory drifted from live host at {drift}")
+    return document
 
 
 @dataclass(frozen=True)
@@ -380,13 +485,11 @@ def prepare_capture_plan(*, campaign_id: str | None = None, case_id: str,
         raise TensorCaptureRefusal("capture requires a hash-bound device inventory")
     inventory_path = _checked_regular_file(
         Path(device_inventory), device_inventory_sha256, "device inventory")
-    inventory = _read_json(inventory_path, "device inventory")
-    _exact_keys(inventory, {"schema", "logical_device_id", "pci_bdf",
-                            "visible_ordinal", "architecture"}, "device inventory")
-    if inventory != {"schema": "epyc.autokernel.device_inventory.v1",
-                      "logical_device_id": device_claim_id, "pci_bdf": device_id,
-                      "visible_ordinal": device_visible_ordinal,
-                      "architecture": TARGET_ARCH}:
+    inventory = load_device_inventory(inventory_path)
+    if any((inventory["logical_device_id"] != device_claim_id,
+            inventory["pci_bdf"] != device_id,
+            inventory["visible_ordinal"] != device_visible_ordinal,
+            inventory["architecture"] != TARGET_ARCH)):
         raise TensorCaptureRefusal("device inventory differs from logical/physical plan")
     cpu_list = cpu_region_claim.gpu_host_cpu_list() if cpu_list is None else cpu_list
     if cpu_list != cpu_region_claim.gpu_host_cpu_list():
@@ -455,6 +558,14 @@ def prepare_capture_plan(*, campaign_id: str | None = None, case_id: str,
         "authority": AUTHORITY,
     }
     digest = hashlib.sha256(_canonical(material).encode()).hexdigest()
+    if source.producer_id == "autokernel.c3_epyc_capture_provider/v1":
+        from . import c3_epyc_capture_provider
+        try:
+            c3_epyc_capture_provider.validate_provider_binding({
+                **material, "plan_sha256": digest})
+        except c3_epyc_capture_provider.ProviderRefusal as exc:
+            raise TensorCaptureRefusal(
+                f"real-model provider binding refused: {exc}") from exc
     return TensorCapturePlan(
         campaign_id=campaign_id, case_id=case_id, workload_id=workload_id, stage=stage,
         token_count=token_count, device_id=device_id, source=source, model=model,
@@ -562,6 +673,7 @@ def load_capture_plan(path: Path) -> TensorCapturePlan:
 
 
 def _publish_json_exclusive(path: Path, document: Mapping[str, Any]) -> None:
+    path = _reject_governed_path(path, path.name)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = (json.dumps(document, sort_keys=True, indent=2) + "\n").encode()
     descriptor: int | None = None
@@ -663,6 +775,8 @@ def _run_producer(argv: Sequence[str], **kwargs: Any) -> subprocess.CompletedPro
         tuple(argv), text=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
         stderr=subprocess.PIPE, start_new_session=True, **kwargs)
     pgid = process.pid
+    _, producer_start_ticks = _process_identity(process.pid)
+    witness_started_at = _utc_now()
     buffers: dict[str, bytearray] = {"stdout": bytearray(), "stderr": bytearray()}
     overflow: set[str] = set()
     residency: list[dict[str, Any]] = []
@@ -683,7 +797,7 @@ def _run_producer(argv: Sequence[str], **kwargs: Any) -> subprocess.CompletedPro
     def sample_kfd() -> None:
         started = time.monotonic()
         while not stop.wait(0.05):
-            users: list[int] = []
+            users: list[dict[str, Any]] = []
             for raw in Path("/proc").iterdir():
                 if not raw.name.isdigit():
                     continue
@@ -693,11 +807,14 @@ def _run_producer(argv: Sequence[str], **kwargs: Any) -> subprocess.CompletedPro
                         continue
                     if any(path.resolve() == Path("/dev/kfd")
                            for path in (raw / "fd").iterdir()):
-                        users.append(pid)
+                        chain = _descendant_chain(
+                            pid, process.pid, producer_start_ticks)
+                        if chain is not None:
+                            users.append({"pid": pid, "ancestry": chain})
                 except (FileNotFoundError, PermissionError, ProcessLookupError, OSError):
                     continue
             residency.append({"offset_s": time.monotonic() - started,
-                              "kfd_pids": sorted(users)})
+                              "kfd_users": sorted(users, key=lambda row: row["pid"])})
 
     def monitor_boundary() -> None:
         if poll_check is None:
@@ -778,11 +895,15 @@ def _run_producer(argv: Sequence[str], **kwargs: Any) -> subprocess.CompletedPro
         tuple(argv), process.returncode,
         buffers["stdout"].decode("utf-8", errors="strict"),
         buffers["stderr"].decode("utf-8", errors="replace"))
-    result.residency_witness = {
+    witness = {
         "schema": "epyc.autokernel.kfd_process_group_witness.v1",
-        "process_group_id": pgid, "samples": residency,
-        "overlap_observed": any(row["kfd_pids"] for row in residency),
+        "producer_pid": process.pid, "producer_start_ticks": producer_start_ticks,
+        "process_group_id": pgid, "started_at": witness_started_at,
+        "ended_at": _utc_now(), "samples": residency,
+        "overlap_observed": any(row["kfd_users"] for row in residency),
     }
+    witness["sha256"] = hashlib.sha256(_canonical(witness).encode()).hexdigest()
+    result.residency_witness = witness
     return result
 
 
@@ -810,6 +931,16 @@ def _validate_held_claims(plan: TensorCapturePlan, cpu_claim: Any,
     if (gpu_receipt.get("device_id") != plan.device_claim_id
             or gpu_receipt.get("campaign_id") != plan.campaign_id):
         raise TensorCaptureRefusal("MI210 resource claim identity differs from the plan")
+    required_until = datetime.now(timezone.utc).timestamp() + plan.timeout_seconds + 60
+    for receipt, label in ((cpu_receipt, "CPU"), (gpu_receipt, "MI210")):
+        raw = receipt.get("expires_at")
+        try:
+            expires = datetime.fromisoformat(str(raw).replace("Z", "+00:00")).timestamp()
+        except (TypeError, ValueError):
+            raise TensorCaptureRefusal(f"{label} resource claim lacks a valid expiry")
+        if expires < required_until:
+            raise TensorCaptureRefusal(
+                f"{label} resource claim lacks capture-plus-teardown expiry headroom")
 
 
 def execute_capture(
@@ -834,6 +965,7 @@ def execute_capture(
     plan.source.validate()
     plan.model.validate()
     plan.toolchain.validate()
+    load_device_inventory(plan.device_inventory)
     producer_path = (Path(plan.source.repository_root).resolve()
                      / plan.source.producer_file).resolve()
     environment_source = os.environ if environ is None else environ
@@ -895,6 +1027,7 @@ def execute_capture(
     plan.source.validate()
     plan.model.validate()
     plan.toolchain.validate()
+    load_device_inventory(plan.device_inventory)
     _validate_held_claims(plan, cpu_claim, gpu_claim,
                           device_lock_root=device_lock_root)
     receipt = bind_capture_outputs(plan)
@@ -922,8 +1055,23 @@ def finalize_capture_window(
     if device_sampling.get("schema") != "epyc.autokernel.device_sampling_receipt.v1" \
             or not device_sampling.get("samples"):
         raise TensorCaptureRefusal("capture window lacks overlapping numeric device samples")
-    journal_path = _checked_regular_file(
-        claim_journal, _sha256_file(claim_journal), "claim journal")
+    journal_path = _reject_governed_path(claim_journal, "claim journal")
+    records = device_claim.ClaimJournal(journal_path).read_all()
+    claim_ids = {open_cpu_claim["claim_id"], open_device_claim["claim_id"]}
+    selected = [row for row in records
+                if _mapping(row.get("detail"), "claim journal detail").get("claim_id")
+                in claim_ids]
+    for claim_id in claim_ids:
+        kinds = {row.get("kind") for row in selected
+                 if row["detail"].get("claim_id") == claim_id}
+        if kinds != {device_claim.KIND_ACQUIRED, device_claim.KIND_RELEASED}:
+            raise TensorCaptureRefusal(
+                f"claim journal lacks exact acquire/release slice for {claim_id}")
+    claim_slice = {"schema": "epyc.autokernel.claim_window_slice.v1",
+                   "claim_ids": sorted(claim_ids), "records": selected}
+    claim_slice["sha256"] = hashlib.sha256(_canonical(claim_slice).encode()).hexdigest()
+    claim_slice_path = plan.output_root / "resource_claim_window.json"
+    _publish_json_exclusive(claim_slice_path, claim_slice)
     tensor_path = _checked_regular_file(
         plan.output_root / "tensor_capture_receipt.json",
         _sha256_file(plan.output_root / "tensor_capture_receipt.json"),
@@ -941,8 +1089,8 @@ def finalize_capture_window(
         "released_device_claim": dict(released_device_claim),
         "device_sampling": dict(device_sampling),
         "kfd_residency": dict(kfd_residency),
-        "claim_journal": str(journal_path),
-        "claim_journal_sha256": _sha256_file(journal_path),
+        "claim_window": str(claim_slice_path),
+        "claim_window_sha256": _sha256_file(claim_slice_path),
         "device_inventory": str(plan.device_inventory),
         "device_inventory_sha256": plan.device_inventory_sha256,
         "runtime_environment": dict(plan.runtime_environment),
@@ -956,7 +1104,7 @@ def load_capture_window_receipt(path: Path) -> Mapping[str, Any]:
     required = {"schema", "authority", "plan_sha256", "tensor_capture_receipt",
                 "tensor_capture_receipt_sha256", "open_cpu_claim", "open_device_claim",
                 "released_cpu_claim", "released_device_claim", "device_sampling",
-                "kfd_residency", "claim_journal", "claim_journal_sha256",
+                "kfd_residency", "claim_window", "claim_window_sha256",
                 "device_inventory", "device_inventory_sha256", "runtime_environment",
                 "receipt_sha256"}
     _exact_keys(document, required, "tensor capture window receipt")
@@ -966,8 +1114,17 @@ def load_capture_window_receipt(path: Path) -> Mapping[str, Any]:
     claimed = _sha(material.pop("receipt_sha256"), "receipt_sha256")
     if hashlib.sha256(_canonical(material).encode()).hexdigest() != claimed:
         raise TensorCaptureRefusal("capture window self-hash mismatch")
-    for field in ("tensor_capture_receipt", "claim_journal", "device_inventory"):
+    for field in ("tensor_capture_receipt", "claim_window", "device_inventory"):
         _checked_regular_file(Path(document[field]), document[f"{field}_sha256"], field)
+    load_device_inventory(Path(document["device_inventory"]))
+    claim_slice = _read_json(Path(document["claim_window"]), "claim window")
+    _exact_keys(claim_slice, {"schema", "claim_ids", "records", "sha256"},
+                "claim window")
+    slice_material = dict(claim_slice)
+    slice_sha = _sha(slice_material.pop("sha256"), "claim window sha256")
+    if claim_slice["schema"] != "epyc.autokernel.claim_window_slice.v1" \
+            or hashlib.sha256(_canonical(slice_material).encode()).hexdigest() != slice_sha:
+        raise TensorCaptureRefusal("claim window slice is invalid")
     if not _mapping(document["released_cpu_claim"], "released_cpu_claim").get("released_at") \
             or not _mapping(document["released_device_claim"],
                             "released_device_claim").get("released_at"):
@@ -987,16 +1144,42 @@ def load_capture_window_receipt(path: Path) -> Mapping[str, Any]:
             or open_gpu.claim_id != released_gpu.claim_id
             or open_cpu.released_at is not None or open_gpu.released_at is not None):
         raise TensorCaptureRefusal("capture window open/released claim identities differ")
+    if sorted((open_cpu.claim_id, open_gpu.claim_id)) != claim_slice["claim_ids"]:
+        raise TensorCaptureRefusal("claim window slice identities differ from receipts")
+    rows = claim_slice["records"]
+    if not isinstance(rows, list):
+        raise TensorCaptureRefusal("claim window records must be a list")
+    for claim_id in claim_slice["claim_ids"]:
+        kinds = {row.get("kind") for row in rows if isinstance(row, Mapping)
+                 and isinstance(row.get("detail"), Mapping)
+                 and row["detail"].get("claim_id") == claim_id}
+        if kinds != {device_claim.KIND_ACQUIRED, device_claim.KIND_RELEASED}:
+            raise TensorCaptureRefusal("claim window lacks exact acquire/release records")
     kfd = _mapping(document["kfd_residency"], "kfd_residency")
-    _exact_keys(kfd, {"schema", "process_group_id", "samples", "overlap_observed"},
+    _exact_keys(kfd, {"schema", "producer_pid", "producer_start_ticks",
+                      "process_group_id", "started_at", "ended_at", "samples",
+                      "overlap_observed", "sha256"},
                 "kfd_residency")
-    if kfd["schema"] != "epyc.autokernel.kfd_process_group_witness.v1" \
+    kfd_material = dict(kfd)
+    kfd_sha = _sha(kfd_material.pop("sha256"), "kfd_residency.sha256")
+    if hashlib.sha256(_canonical(kfd_material).encode()).hexdigest() != kfd_sha \
+            or kfd["schema"] != "epyc.autokernel.kfd_process_group_witness.v1" \
             or kfd["overlap_observed"] is not True or not isinstance(kfd["samples"], list) \
             or not kfd["samples"]:
         raise TensorCaptureRefusal("capture window lacks KFD overlap")
-    if not any(isinstance(row, Mapping) and row.get("kfd_pids")
-               and isinstance(row.get("offset_s"), (int, float))
-               and math.isfinite(float(row["offset_s"])) for row in kfd["samples"]):
+    producer_identity = {"pid": kfd["producer_pid"],
+                         "start_ticks": kfd["producer_start_ticks"]}
+    witnessed = False
+    for row in kfd["samples"]:
+        if not isinstance(row, Mapping) or not isinstance(row.get("offset_s"), (int, float)) \
+                or not math.isfinite(float(row["offset_s"])):
+            raise TensorCaptureRefusal("capture window KFD sample is malformed")
+        for user in row.get("kfd_users", ()):
+            if not isinstance(user, Mapping) or not isinstance(user.get("ancestry"), list) \
+                    or not user["ancestry"] or user["ancestry"][-1] != producer_identity:
+                raise TensorCaptureRefusal("KFD user is not bound to the pinned producer")
+            witnessed = True
+    if not witnessed:
         raise TensorCaptureRefusal("capture window KFD samples do not witness residency")
     sampling = _mapping(document["device_sampling"], "device_sampling")
     sampling_required = {"schema", "sampler_id", "device_id", "source", "started_at",
@@ -1017,6 +1200,15 @@ def load_capture_window_receipt(path: Path) -> Mapping[str, Any]:
             if isinstance(value, bool) or not isinstance(value, (int, float)) \
                     or not math.isfinite(float(value)) or value < 0:
                 raise TensorCaptureRefusal(f"device sample {field} is not finite/non-negative")
+    try:
+        kfd_start = datetime.fromisoformat(kfd["started_at"].replace("Z", "+00:00"))
+        kfd_end = datetime.fromisoformat(kfd["ended_at"].replace("Z", "+00:00"))
+        sample_start = datetime.fromisoformat(sampling["started_at"].replace("Z", "+00:00"))
+        sample_end = datetime.fromisoformat(sampling["ended_at"].replace("Z", "+00:00"))
+    except (AttributeError, ValueError) as exc:
+        raise TensorCaptureRefusal("capture window intervals are invalid") from exc
+    if max(kfd_start, sample_start) > min(kfd_end, sample_end):
+        raise TensorCaptureRefusal("KFD and numeric device sampling intervals do not overlap")
     tensor = load_capture_receipt(Path(document["tensor_capture_receipt"]))
     if tensor["plan_sha256"] != document["plan_sha256"]:
         raise TensorCaptureRefusal("capture window plan differs from tensor receipt")
@@ -1108,6 +1300,9 @@ def load_capture_receipt(path: Path) -> Mapping[str, Any]:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
+    inventory_parser = subparsers.add_parser(
+        "inventory", help="probe and publish the live logical/BDF ROCm inventory")
+    inventory_parser.add_argument("--output", type=Path, required=True)
     compile_parser = subparsers.add_parser(
         "compile", help="validate a request manifest and emit a no-inference plan")
     compile_parser.add_argument("--manifest", type=Path, required=True)
@@ -1125,9 +1320,18 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
+        if args.command == "inventory":
+            output = _reject_governed_path(args.output, "device inventory output")
+            inventory = build_device_inventory()
+            _publish_json_exclusive(output, inventory)
+            print(json.dumps({"inventory": str(output.resolve()),
+                              "receipt_sha256": inventory["receipt_sha256"]},
+                             sort_keys=True))
+            return 0
         if args.command == "compile":
             plan = compile_capture_manifest(args.manifest)
-            _publish_json_exclusive(args.plan, plan.to_dict())
+            plan_path = _reject_governed_path(args.plan, "capture plan")
+            _publish_json_exclusive(plan_path, plan.to_dict())
             print(json.dumps({"plan": str(args.plan.resolve()),
                               "plan_sha256": plan.plan_sha256}, sort_keys=True))
             return 0
@@ -1206,10 +1410,12 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 __all__ = [
     "AUTHORITY", "CAPTURE_KIND", "COMPLETION_SCHEMA", "MANIFEST_SCHEMA", "PLAN_SCHEMA",
-    "RECEIPT_SCHEMA", "REQUEST_SCHEMA", "WINDOW_SCHEMA",
+    "DEVICE_INVENTORY_PRODUCER", "DEVICE_INVENTORY_SCHEMA", "RECEIPT_SCHEMA",
+    "REQUEST_SCHEMA", "WINDOW_SCHEMA",
     "CaptureModelIdentity", "CaptureSourceIdentity", "CaptureToolchainIdentity",
     "TensorCapturePlan", "TensorCaptureRefusal", "TensorSpec", "bind_capture_outputs",
-    "compile_capture_manifest", "execute_capture", "finalize_capture_window",
+    "build_device_inventory", "compile_capture_manifest", "execute_capture",
+    "finalize_capture_window", "load_device_inventory",
     "load_capture_plan", "load_capture_receipt", "load_capture_window_receipt",
     "main", "prepare_capture_plan",
 ]
