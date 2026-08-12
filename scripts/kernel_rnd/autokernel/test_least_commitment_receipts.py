@@ -123,6 +123,7 @@ class ReceiptProjectionTest(unittest.TestCase):
         least_commitment = {
             "schema": C.BLOCK_SCHEMA,
             "capture_mode": "measured",
+            "matched_experiment_id": "akm-iqk-20260812-0001",
             "candidate_frame_id": "candidate-frame-real-v1",
             "regime": "prefill",
             "surface": "mul_mat",
@@ -220,6 +221,8 @@ class ReceiptProjectionTest(unittest.TestCase):
                 f"{prefix}/intervention_id", candidate_sha256),
             "changed_factor_binding": _binding(
                 f"{prefix}/changed_factor", candidate_sha256),
+            "matched_experiment_id_binding": _binding(
+                f"{prefix}/matched_experiment_id", candidate_sha256),
             "factor_bindings": _bindings(
                 f"{prefix}/factors", ("ggml_iqk", "threads"), candidate_sha256),
             "diagnostic_bindings": _bindings(

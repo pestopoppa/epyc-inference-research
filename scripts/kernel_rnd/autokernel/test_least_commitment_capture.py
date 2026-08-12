@@ -61,6 +61,7 @@ def plan(value: dict, *, role: str = "intervention",
     raw = {
         "schema": C.SCHEMA, "capture_id": "aklc-20260812-1001",
         "campaign_id": value["campaign_id"], "candidate_id": "akc-20260812-1001",
+        "matched_experiment_id": "akm-iqk-20260812-0001",
         "proposal_id": value["proposal_id"], "role": role,
         "matched_control_proposal_id": matched_control,
         "candidate_frame_id": "iqk-cpu-prefill-v9", "regime": "prefill",
@@ -88,7 +89,8 @@ class CapturePlanTest(unittest.TestCase):
         block = C.materialize(
             capture,
             decision=SimpleNamespace(median_relative=0.06, contribution_floor=0.03),
-            calibration=SimpleNamespace(noise_floor_phi=0.01))
+            calibration=SimpleNamespace(noise_floor_phi=0.01),
+            executed_factors=capture.raw["factors"])
         self.assertEqual(block["schema"], C.BLOCK_SCHEMA)
         self.assertEqual(set(block["diagnostics"]), set(C.DIAGNOSTICS))
         self.assertEqual(block["outcome"], {

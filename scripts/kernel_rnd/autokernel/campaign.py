@@ -1271,6 +1271,10 @@ class CampaignSpec:
     #: supplies no selection authority; the campaign only journals its diagnostics
     #: and reduces the immutable outcome functions after measurement.
     least_commitment_plan: Optional[least_commitment_capture.CapturePlan] = None
+    #: Shared identity for a matched intervention/control experiment. Unlike
+    #: campaign_id/candidate_id, this value is deliberately identical across
+    #: both completed campaigns and owns every randomized ordering/holdout seed.
+    matched_experiment_id: Optional[str] = None
     #: Accepted, identity-bound live calibration.  Supplied by the CLI bundle
     #: loader; absent means composition-only and carries no ranking authority.
     calibration: Optional[LeanCalibration] = None
@@ -1343,6 +1347,20 @@ class CampaignSpec:
             raise TypeError("least_commitment_plan must be a CapturePlan or None")
         if self.least_commitment_plan is not None and self.proposal is None:
             raise ValueError("least_commitment_plan requires a proposal")
+        if self.least_commitment_plan is not None:
+            if (not isinstance(self.matched_experiment_id, str)
+                    or not self.matched_experiment_id.startswith("akm-")
+                    or "\0" in self.matched_experiment_id):
+                raise ValueError(
+                    "least_commitment_plan requires matched_experiment_id starting "
+                    "with 'akm-'")
+            if self.least_commitment_plan.raw.get("matched_experiment_id") \
+                    != self.matched_experiment_id:
+                raise ValueError(
+                    "least-commitment plan matched_experiment_id differs from campaign")
+        elif self.matched_experiment_id is not None:
+            raise ValueError(
+                "matched_experiment_id has no meaning without least_commitment_plan")
         if self.proposal is not None:
             proposal = json.loads(schemas.canonical_json(self.proposal))
             violations = schemas.validate_proposal(proposal)
@@ -1489,6 +1507,11 @@ class CampaignSpec:
                         f"anti-short-circuit unit {unit.unit_id!r} has the same recipe "
                         "params as a normal control; relabelling one command does not "
                         "price the hard case")
+        if self.least_commitment_plan is not None:
+            least_commitment_capture.bind_executed_factor_frame(
+                self.least_commitment_plan,
+                matched_experiment_id=str(self.matched_experiment_id),
+                factors=self.matched_factor_frame)
 
     def _check_physical_envelope_frame(
             self, unit_id: str, envelope: physical_bounds.PhysicalEnvelope,
@@ -1705,7 +1728,10 @@ class CampaignSpec:
 
     @property
     def bench_params(self) -> dict:
-        seed_material = f"{self.campaign_id}\0{self.candidate_id}\0{self.recipe_id}"
+        seed_material = (
+            f"matched\0{self.matched_experiment_id}\0{self.recipe_id}"
+            if self.matched_experiment_id is not None else
+            f"{self.campaign_id}\0{self.candidate_id}\0{self.recipe_id}")
         autokernel_seed = int.from_bytes(
             hashlib.sha256(seed_material.encode("utf-8")).digest()[:8], "big"
         ) & ((1 << 63) - 1)
@@ -1726,9 +1752,90 @@ class CampaignSpec:
 
     @property
     def suite_seed(self) -> int:
-        """Deterministic T0 tensor seed fixed by the campaign identity."""
-        material = f"t0-suite\0{self.campaign_id}\0{self.candidate_id}\0{self.recipe_id}"
+        """Deterministic T0 tensor seed fixed by campaign or matched identity."""
+        material = (
+            f"t0-suite\0matched\0{self.matched_experiment_id}\0{self.recipe_id}"
+            if self.matched_experiment_id is not None else
+            f"t0-suite\0{self.campaign_id}\0{self.candidate_id}\0{self.recipe_id}")
         return int.from_bytes(hashlib.sha256(material.encode("utf-8")).digest()[:8], "big")
+
+    @property
+    def schedule_seed(self) -> str:
+        return (
+            f"ak-schedule/v1:matched:{self.matched_experiment_id}:{self.recipe_id}"
+            if self.matched_experiment_id is not None else
+            f"{self.campaign_id}/{self.created_at}")
+
+    @property
+    def holdout_selection_seed(self) -> str:
+        return (
+            f"ak-holdout/v1:matched:{self.matched_experiment_id}:{self.suite_seed}"
+            if self.matched_experiment_id is not None else
+            f"{self.campaign_id}/{self.suite_seed}")
+
+    @property
+    def matched_factor_frame(self) -> dict:
+        """Derive every execution axis that must match except the intervention."""
+        if self.least_commitment_plan is None or self.matched_experiment_id is None:
+            raise ValueError("matched factor frame requires a least-commitment plan")
+        if not self.model:
+            raise ValueError("matched factor frame requires the measured model")
+        model_path = storage.assert_not_scratch(self.model, what="matched model")
+        if not os.path.isfile(model_path):
+            raise ValueError(f"matched model is not a file: {model_path}")
+        calibration = self.calibration
+        if calibration is None:
+            raise ValueError("matched factor frame requires accepted calibration")
+        if self.ranked_units:
+            envelope: Any = [unit.to_dict() for unit in self.ranked_units]
+        elif self.physical_envelope is not None:
+            envelope = self.physical_envelope.to_dict()
+        else:
+            raise ValueError("matched factor frame requires a physical envelope")
+        provider_reference = (
+            dict(self.proposal["provider_reference"])
+            if self.proposal is not None else None)
+        return {
+            "matched_experiment_id": self.matched_experiment_id,
+            "backend": self.backend,
+            "recipe_id": self.recipe_id,
+            "metric": self.metric,
+            "measurement_unit_id": self.measurement_unit_id,
+            "model_path": model_path,
+            "model_sha256": storage.hash_file(model_path),
+            "reps": self.reps,
+            "blocks": self.blocks,
+            "n_gen": self.n_gen,
+            "n_prompt": self.n_prompt,
+            "t0_ops": list(self.t0_ops),
+            "devices": list(self.devices),
+            "device_names": list(self.device_names),
+            "device_index": self.device_index,
+            "n_gpu_layers": self.n_gpu_layers,
+            "cpu_list": self.cpu_list,
+            "autokernel_seed": self.bench_params["autokernel_seed"],
+            "suite_seed": self.suite_seed,
+            "schedule_seed": self.schedule_seed,
+            "holdout_selection_seed": self.holdout_selection_seed,
+            "calibration": {
+                "recipe_id": calibration.recipe_id,
+                "contribution_floor": calibration.contribution_floor,
+                "b_min_blocks": calibration.b_min_blocks,
+                "max_blocks": calibration.max_blocks,
+                "noise_floor_phi": calibration.noise_floor_phi,
+                "mde": calibration.mde,
+                "production_commit": calibration.production_commit,
+                "measurement_commit": calibration.measurement_commit,
+                "evidence_ref": calibration.evidence_ref,
+            },
+            "physical_envelope": envelope,
+            "production_commit": PRODUCTION_COMMIT,
+            "measurement_commit": MEASUREMENT_COMMIT,
+            "claim_journal_path": self.claim_journal_path,
+            "max_hold_s": self.max_hold_s,
+            "provider_reference": provider_reference,
+            "ggml_iqk": self.candidate_param_overrides.get("ggml_iqk"),
+        }
 
     def to_dict(self) -> dict:
         return {
@@ -1748,6 +1855,9 @@ class CampaignSpec:
             "model": self.model, "reps": self.reps, "n_gen": self.n_gen,
             "n_prompt": self.n_prompt,
             "suite_seed": self.suite_seed,
+            "schedule_seed": self.schedule_seed,
+            "holdout_selection_seed": self.holdout_selection_seed,
+            "matched_experiment_id": self.matched_experiment_id,
             "t0_ops": list(self.t0_ops), "devices": list(self.devices),
             "device_names": list(self.device_names),
             "cpu_list": self.cpu_list, "worktree": self.worktree_path,
@@ -3202,7 +3312,7 @@ class HostOps:
                 unseen_case_filter="type_a=(q4_K|iq4_xs)",
                 boundary_case_filter="n=1",
                 selection_rule_id="ak.iqk-heldout/v1",
-                selection_seed=f"{spec.campaign_id}/{spec.suite_seed}",
+                selection_seed=spec.holdout_selection_seed,
                 visible_to_planner=False)
                 if spec.proposal is not None
                 and spec.proposal.get("change_class") == "parameter" else None),
@@ -3327,7 +3437,7 @@ class HostOps:
             spec, command=candidate_cmd, anchor=anchor_identity)
         plan = microbench.MicrobenchPlan(
             recipe_id=spec.recipe_id, candidate_id=spec.candidate_id,
-            campaign_seed=f"{spec.campaign_id}/{spec.created_at}",
+            campaign_seed=spec.schedule_seed,
             candidate_binding=candidate_cmd.binding,
             anchor_binding=anchor_cmd.binding,
             anchor=anchor_identity,
@@ -3733,7 +3843,8 @@ class HostOps:
         if spec.least_commitment_plan is not None:
             derived_verdicts["least_commitment"] = least_commitment_capture.materialize(
                 spec.least_commitment_plan, decision=decision,
-                calibration=spec.calibration)
+                calibration=spec.calibration,
+                executed_factors=spec.matched_factor_frame)
         self._cached_candidate_record = candidate_record.build_candidate_record(
             proposal=spec.proposal, candidate_id=spec.candidate_id,
             campaign_id=spec.campaign_id, production_base_commit=PRODUCTION_COMMIT,
@@ -4181,6 +4292,11 @@ def build_parser() -> argparse.ArgumentParser:
              "executing IQK parameter campaigns so a clean result is archive-usable",
     )
     parser.add_argument(
+        "--matched-experiment-id", default=None, metavar="AKM-ID",
+        help="shared intervention/control identity that owns benchmark, T0, and "
+             "holdout randomization; required with --least-commitment-capture-plan",
+    )
+    parser.add_argument(
         "--source-patch-manifest", default=None, metavar="PATH",
         help="immutable source-patch.v1 JSON with embedded bytes; required for "
              "source-changing --execute campaigns",
@@ -4442,6 +4558,7 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
             source_prerequisite_package=source_prerequisites,
             fresh_source_prerequisite_plan=fresh_source_plan,
             least_commitment_plan=least_commitment_plan,
+            matched_experiment_id=args.matched_experiment_id,
             calibration=selected_calibration,
             physical_envelope=physical_envelope, ranked_units=ranked_units)
     except (ValueError, TypeError, storage.StorageError, recipes.RecipeError,

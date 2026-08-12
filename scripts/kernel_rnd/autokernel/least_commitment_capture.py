@@ -18,8 +18,8 @@ from typing import Any, Mapping
 
 from . import schemas
 
-SCHEMA = "epyc.autokernel.least_commitment_capture_plan.v1"
-BLOCK_SCHEMA = "epyc.autokernel.least_commitment_capture.v1"
+SCHEMA = "epyc.autokernel.least_commitment_capture_plan.v2"
+BLOCK_SCHEMA = "epyc.autokernel.least_commitment_capture.v2"
 SOURCE_SCHEMA = "epyc.autokernel.least_commitment_diagnostic_source.v1"
 ROLES = frozenset({"control", "intervention"})
 DIAGNOSTICS = (
@@ -33,6 +33,7 @@ OUTCOME_REDUCERS = {
 }
 _FIELDS = frozenset({
     "schema", "capture_id", "campaign_id", "candidate_id", "proposal_id",
+    "matched_experiment_id",
     "role", "matched_control_proposal_id", "candidate_frame_id", "regime",
     "surface", "intervention_id", "changed_factor", "factors", "diagnostics",
     "recodings", "diagnostic_source_receipts", "outcome_reducers",
@@ -225,6 +226,10 @@ def from_mapping(raw: Any, *, proposal: Mapping[str, Any], campaign_id: str,
     if role == "intervention" and (not isinstance(control_id, str) or not control_id.strip()
                                    or control_id == proposal.get("proposal_id")):
         raise CapturePlanError("intervention plan requires another matched control proposal id")
+    matched_experiment_id = _text(
+        raw.get("matched_experiment_id"), "matched_experiment_id")
+    if not matched_experiment_id.startswith("akm-"):
+        raise CapturePlanError("matched_experiment_id must start with 'akm-'")
     for key in ("capture_id", "candidate_frame_id", "regime", "surface",
                 "intervention_id", "changed_factor"):
         _text(raw.get(key), key)
@@ -307,6 +312,33 @@ def from_mapping(raw: Any, *, proposal: Mapping[str, Any], campaign_id: str,
     return CapturePlan(json.loads(schemas.canonical_json(raw)))
 
 
+def bind_executed_factor_frame(
+    plan: CapturePlan, *, matched_experiment_id: str,
+    factors: Mapping[str, Any],
+) -> None:
+    """Fail closed unless the prospective plan names every executed axis.
+
+    ``CampaignSpec`` derives ``factors`` from the actual recipe, model bytes,
+    seeds, topology, calibration, envelope, provider and registered parameter.
+    The plan may bind those bytes prospectively, but it cannot choose the
+    vocabulary by omission.
+    """
+    if plan.raw.get("matched_experiment_id") != matched_experiment_id:
+        raise CapturePlanError("matched experiment identity differs at execution")
+    if not isinstance(factors, Mapping) or not factors:
+        raise CapturePlanError("executed factor frame is empty")
+    expected = json.loads(schemas.canonical_json(factors))
+    if plan.raw.get("factors") != expected:
+        missing = sorted(set(expected) - set(plan.raw.get("factors", {})))
+        extra = sorted(set(plan.raw.get("factors", {})) - set(expected))
+        changed = sorted(
+            key for key in set(expected) & set(plan.raw.get("factors", {}))
+            if plan.raw["factors"][key] != expected[key])
+        raise CapturePlanError(
+            "capture factors differ from mechanically executed frame: "
+            f"missing={missing}, extra={extra}, changed={changed}")
+
+
 def load(path: str | Path, *, proposal: Mapping[str, Any], campaign_id: str,
          candidate_id: str) -> CapturePlan:
     raw = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -314,7 +346,8 @@ def load(path: str | Path, *, proposal: Mapping[str, Any], campaign_id: str,
                         candidate_id=candidate_id)
 
 
-def materialize(plan: CapturePlan, *, decision: Any, calibration: Any) -> dict:
+def materialize(plan: CapturePlan, *, decision: Any, calibration: Any,
+                executed_factors: Mapping[str, Any]) -> dict:
     """Reduce a validated pre-run plan with the completed measured decision."""
     if decision is None or calibration is None:
         raise CapturePlanError("a measured decision and calibration are required")
@@ -325,18 +358,22 @@ def materialize(plan: CapturePlan, *, decision: Any, calibration: Any) -> dict:
     noise = _finite(getattr(calibration, "noise_floor_phi", None),
                     "calibration.noise_floor_phi", non_negative=True)
     raw = plan.raw
+    bind_executed_factor_frame(
+        plan, matched_experiment_id=raw["matched_experiment_id"],
+        factors=executed_factors)
     return {
         "schema": BLOCK_SCHEMA,
         "capture_id": raw["capture_id"],
         "capture_plan_sha256": raw["plan_sha256"],
         "capture_mode": raw["capture_mode"],
+        "matched_experiment_id": raw["matched_experiment_id"],
         "role": raw["role"],
         "matched_control_proposal_id": raw["matched_control_proposal_id"],
         "candidate_frame_id": raw["candidate_frame_id"],
         "regime": raw["regime"], "surface": raw["surface"],
         "intervention_id": raw["intervention_id"],
         "changed_factor": raw["changed_factor"],
-        "factors": dict(raw["factors"]),
+        "factors": json.loads(schemas.canonical_json(executed_factors)),
         "diagnostics": dict(raw["diagnostics"]),
         "recodings": {key: dict(value) for key, value in raw["recodings"].items()},
         "diagnostic_source_receipts": dict(raw["diagnostic_source_receipts"]),
