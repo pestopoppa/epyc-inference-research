@@ -255,6 +255,32 @@ class RealProcessAdapter:
     """Linux adapter that acts only on exact processes returned by ``spawn``."""
 
     @staticmethod
+    def _child_environment() -> dict[str, str]:
+        """Return an environment that imports this exact checkout first.
+
+        The parent may have imported ``autokernel`` because a test runner added
+        ``scripts/kernel_rnd`` to ``sys.path`` without exporting ``PYTHONPATH``.
+        A fresh ``python -m autokernel.fault_rehearsal`` child does not inherit
+        that in-process path mutation.  Depending on the caller to export it
+        made both real-process rehearsal legs exit before their ready marker.
+
+        Pin the resolved package parent ahead of any inherited entries.  The
+        source commit and producer digest in the receipt continue to bind the
+        checkout, while retaining later entries avoids silently breaking a
+        caller's unrelated environment.
+        """
+        environment = dict(os.environ)
+        package_parent = str(Path(__file__).resolve().parents[1])
+        inherited = environment.get("PYTHONPATH", "")
+        entries = [package_parent]
+        entries.extend(
+            entry for entry in inherited.split(os.pathsep)
+            if entry and Path(entry).resolve() != Path(package_parent)
+        )
+        environment["PYTHONPATH"] = os.pathsep.join(entries)
+        return environment
+
+    @staticmethod
     def _assert_identity(process: OwnedProcess) -> None:
         identity = process.identity
         current_ticks = _read_proc_start_ticks(identity.pid)
@@ -292,6 +318,7 @@ class RealProcessAdapter:
                 stdin=subprocess.DEVNULL,
                 stdout=stdout_handle,
                 stderr=stderr_handle,
+                env=self._child_environment(),
                 start_new_session=True,
                 close_fds=True,
             )

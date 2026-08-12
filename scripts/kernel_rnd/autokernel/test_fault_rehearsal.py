@@ -9,6 +9,7 @@ benchmark, kernel tree, stack process, or live claim root.
 from __future__ import annotations
 
 import json
+import os
 import signal
 import sys
 import tempfile
@@ -100,6 +101,20 @@ def _dependency_receipt() -> dict:
 
 
 class TestInjectedProcessAdapter(unittest.TestCase):
+    def test_child_environment_imports_this_checkout_first(self):
+        prior = os.environ.get("PYTHONPATH")
+        try:
+            os.environ["PYTHONPATH"] = "/tmp/foreign-autokernel:/tmp/another"
+            environment = fr.RealProcessAdapter._child_environment()
+        finally:
+            if prior is None:
+                os.environ.pop("PYTHONPATH", None)
+            else:
+                os.environ["PYTHONPATH"] = prior
+        entries = environment["PYTHONPATH"].split(os.pathsep)
+        self.assertEqual(entries[0], str(Path(fr.__file__).resolve().parents[1]))
+        self.assertEqual(entries[1:], ["/tmp/foreign-autokernel", "/tmp/another"])
+
     def test_term_then_kill_only_after_term_timeout(self):
         adapter = _ScriptedAdapter([None, -signal.SIGKILL])
         receipt = fr.terminate_owned_process(
@@ -167,7 +182,13 @@ class TestRealProcessSmoke(unittest.TestCase):
             self.assertTrue(all(value is False for value in receipt["authority"].values()))
             source_tree = receipt["environment"]["source_tree"]
             self.assertRegex(source_tree["commit"], r"^[0-9a-f]{40}$")
-            self.assertTrue(source_tree["branch"])
+            # A clean campaign checkout may intentionally be detached at an
+            # exact commit.  Commit identity is mandatory; a branch label is
+            # not provenance and must not make the rehearsal fail.
+            self.assertTrue(
+                source_tree["branch"] is None
+                or isinstance(source_tree["branch"], str) and source_tree["branch"]
+            )
             self.assertTrue((target / "receipt.json").is_file())
             disk = json.loads((target / "receipt.json").read_text(encoding="utf-8"))
             self.assertEqual(fr.validate_receipt(disk), [])
