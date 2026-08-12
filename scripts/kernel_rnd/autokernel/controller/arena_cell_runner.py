@@ -1274,7 +1274,7 @@ class EvaluatorChildResult:
 class SandboxedEvaluatorRunner:
     """Run one Arena evaluation in a fresh deny-network GPU sandbox."""
 
-    DEVICE_PATHS = ("/dev/kfd", "/dev/dri/renderD128")
+    DEVICE_PATHS = ("/dev/kfd", "/dev/dri/renderD128", "/dev/null")
 
     def __init__(self, *, arena_root: Path):
         self.arena_root = arena_root.resolve()

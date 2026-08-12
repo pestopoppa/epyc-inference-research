@@ -128,7 +128,7 @@ class SandboxKernelProbeTest(unittest.TestCase):
                 str(root), token="evalprofile1", profile=S.EVALUATOR_PROFILE,
                 readable_roots=("/usr/bin", "/usr/lib"),
                 readable_files=("/etc/ld.so.cache",),
-                writable_device_paths=("/dev/kfd", "/dev/dri/renderD128"))
+                writable_device_paths=("/dev/kfd", "/dev/dri/renderD128", "/dev/null"))
             probe = (
                 "import errno,os,socket; "
                 "fds=[os.open(p,os.O_RDWR) for p in "
@@ -157,12 +157,12 @@ class SandboxKernelProbeTest(unittest.TestCase):
             self.assertEqual(receipt["network_profile"], S.NETWORK_DENY_ALL)
             self.assertTrue(receipt["read_allowlist_enforced"])
             self.assertEqual(set(receipt["writable_device_paths"]),
-                             {"/dev/kfd", "/dev/dri/renderD128"})
+                    {"/dev/kfd", "/dev/dri/renderD128", "/dev/null"})
             self.assertTrue(teardown["verified_empty"])
 
     def test_evaluator_profile_rejects_partial_devices_and_broker_identity(self):
         with tempfile.TemporaryDirectory(prefix="ak-eval-profile-") as root:
-            with self.assertRaisesRegex(S.SandboxError, "exact MI210 device pair"):
+            with self.assertRaisesRegex(S.SandboxError, "exact MI210 pair and /dev/null"):
                 S.SandboxPolicy(
                     root, profile=S.EVALUATOR_PROFILE,
                     readable_roots=("/usr/bin",),
@@ -172,7 +172,7 @@ class SandboxKernelProbeTest(unittest.TestCase):
                     root, profile=S.EVALUATOR_PROFILE,
                     readable_roots=("/usr/bin",), broker_peer_pid=123,
                     broker_peer_start_ticks=456,
-                    writable_device_paths=("/dev/kfd", "/dev/dri/renderD128"))
+                    writable_device_paths=("/dev/kfd", "/dev/dri/renderD128", "/dev/null"))
 
     def test_controller_profile_enforces_read_devices_signals_and_client_network(self):
         with tempfile.TemporaryDirectory(prefix="ak-controller-profile-") as outer:

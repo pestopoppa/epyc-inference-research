@@ -60,7 +60,7 @@ def fake_evaluator_execution(
         "profile": R.sandbox.EVALUATOR_PROFILE, "pid": 12345,
         "process_start_ticks": 67890,
         "writable_root": str(workspace.resolve()),
-        "writable_device_paths": ["/dev/kfd", "/dev/dri/renderD128"],
+        "writable_device_paths": ["/dev/kfd", "/dev/dri/renderD128", "/dev/null"],
         "read_allowlist_enforced": True, "readable_roots": ["/usr/lib"],
         "network_profile": R.sandbox.NETWORK_DENY_ALL,
         "outbound_socket_families": [], "unix_socket_creation_denied": True,

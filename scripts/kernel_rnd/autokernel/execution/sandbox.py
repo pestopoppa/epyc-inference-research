@@ -458,7 +458,7 @@ class SandboxPolicy:
             raise SandboxError("candidate sandbox refuses a root execution identity")
         if not isinstance(self.limits, ResourceLimits):
             raise TypeError("limits must be ResourceLimits")
-        allowed_devices = {"/dev/kfd", "/dev/dri/renderD128"}
+        allowed_devices = {"/dev/kfd", "/dev/dri/renderD128", "/dev/null"}
         normalized_devices = tuple(str(Path(path).resolve(strict=True))
                                    for path in self.writable_device_paths)
         if len(normalized_devices) != len(set(normalized_devices)):
@@ -544,10 +544,10 @@ class SandboxPolicy:
             if self.broker_peer_pid is not None \
                     or self.broker_peer_start_ticks is not None:
                 raise SandboxError("evaluator profile cannot name a broker peer")
-            if (len(normalized_devices) != 2 or set(normalized_devices)
-                    != {"/dev/kfd", "/dev/dri/renderD128"}):
+            if (len(normalized_devices) != 3 or set(normalized_devices)
+                    != {"/dev/kfd", "/dev/dri/renderD128", "/dev/null"}):
                 raise SandboxError(
-                    "evaluator profile requires the exact MI210 device pair")
+                    "evaluator profile requires the exact MI210 pair and /dev/null")
             if network_profile != NETWORK_DENY_ALL:
                 raise SandboxError("evaluator profile must deny all networking")
         else:
