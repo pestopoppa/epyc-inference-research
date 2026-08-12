@@ -371,3 +371,35 @@ internal payload SHA-256
 `3533ee0955ecbdfd61be58d45f69f15030de9dbf1a1238148a220b14b8bfd138`).
 Its `status=refused` is the intended safe outcome: no controller or GPU command
 ran, and no incomplete comparison was reported.
+
+## Governed raw-HIP authoring arm — 2026-08-12
+
+`hip_authoring_arm.py` closes the smallest real Torch2HIP loop without touching
+a production kernel tree. It accepts only an exact `torch2hip/<suite>/<task>`
+locator from clean AgentKernelArena commit
+`2dbbf1d3f676b948c04c339de50516fe80ed4ab9`, hashes every task input and the HIP
+candidate, binds the evaluator Python/Ninja/hipcc identities, and compiles for
+`gfx90a` while GPU-blind. The vendor PyTorch baseline and final centralized
+evaluation use separate short `mi210_0` claim/sampler windows; source authoring
+and compilation hold no GPU claim.
+
+```bash
+/mnt/raid0/llm/tools/geak-v1-rocm62-py312/bin/python -m \
+  scripts.kernel_rnd.autokernel.controller.hip_authoring_arm \
+  --task-id torch2hip/gpumode/16636_SiLU \
+  --candidate-source /path/to/candidate.hip \
+  --output-root /new/campaign/root \
+  --campaign-id unique-campaign-id
+```
+
+The completed MI210 diagnostic is
+`/mnt/raid0/llm/autokernel/campaigns/hip-arm-silu-roundtrip-20260812-r4/receipt.json`
+(file SHA-256
+`e682ca027781acc03e4ce33ef8584ec9660721711aadd10670791ddfbbe5fc89`;
+internal payload SHA-256
+`1cb7087f715a2a9ac28b187a3f2d25c41be6a82279ca4fb254ac9b481805bc48`).
+The candidate compiled and passed all 11 public correctness cases. The observed
+Torch-eager ratio is explicitly non-rankable: public shapes are not sealed and
+the evaluator does not bind an honest vendor baseline. The receipt may prove
+round-trip compatibility and harness validity; it cannot rank, promote, or
+deploy a HIP candidate.
