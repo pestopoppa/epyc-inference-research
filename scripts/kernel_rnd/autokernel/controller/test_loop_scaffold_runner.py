@@ -269,6 +269,58 @@ class ExecutionTest(Fixture):
                 self.assertGreater(checkpoint["process"]["pid"], 1)
                 self.assertEqual(checkpoint["process"]["group_members_after_reap"], [])
         self.assertEqual(json.loads((output / "panel.json").read_text()), panel)
+        self.assertNotIn("belief_measurements", panel)
+
+    def test_prospective_beliefs_preserve_cells_and_same_model_effects(self):
+        panel = R.run_manifest(
+            self.manifest(), output_root=self.root / "belief-fixture",
+            actor_runner=FakeActor(), evaluator_runner=fake_evaluator,
+            fixture_mode=True)
+        for ordinal, cell in enumerate(panel["cells"], 1):
+            common = {
+                "schema": "epyc.autokernel.device_claim_receipt.v1",
+                "claim_id": f"claim-{ordinal}", "device_id": "mi210_0",
+                "campaign_id": self.manifest()["experiment_id"],
+                "acquired_at": "2026-08-12T00:00:00+00:00", "state": "held",
+            }
+            cell["device_claim_open"] = {**common, "released_at": None}
+            cell["device_claim_released"] = {
+                **common, "released_at": "2026-08-12T00:00:02+00:00"}
+            unsigned = dict(cell)
+            unsigned.pop("cell_receipt_sha256", None)
+            cell["cell_receipt_sha256"] = R._digest(unsigned)
+        rows = R._belief_measurements(self.manifest(), panel["cells"])
+        self.assertEqual(len(rows), 6)
+        self.assertEqual(
+            len({row["measurement_id"] for row in rows}), 6)
+        effects = [row for row in rows if row["metric"].startswith(
+            "implement_then_exploit_over_direct")]
+        self.assertEqual(len(effects), 2)
+        self.assertTrue(all(row["value"] == 1.0 for row in effects))
+        self.assertTrue(all(row["extra"]["diagnostic_only"] for row in rows))
+        self.assertTrue(all(not row["extra"]["ranking_authority"] for row in rows))
+
+    def test_belief_capture_refuses_unmatched_case_basis(self):
+        panel = R.run_manifest(
+            self.manifest(), output_root=self.root / "belief-mismatch",
+            actor_runner=FakeActor(), evaluator_runner=fake_evaluator,
+            fixture_mode=True)
+        for ordinal, cell in enumerate(panel["cells"], 1):
+            common = {
+                "claim_id": f"claim-{ordinal}", "device_id": "mi210_0",
+                "campaign_id": self.manifest()["experiment_id"],
+                "acquired_at": "2026-08-12T00:00:00+00:00", "state": "held",
+            }
+            cell["device_claim_open"] = {**common, "released_at": None}
+            cell["device_claim_released"] = {
+                **common, "released_at": "2026-08-12T00:00:02+00:00"}
+            unsigned = dict(cell)
+            unsigned.pop("cell_receipt_sha256", None)
+            cell["cell_receipt_sha256"] = R._digest(unsigned)
+        panel["cells"][1]["evaluation"]["valid_baseline_cases"] = 3
+        panel["cells"][1]["evaluation"]["valid_optimized_cases"] = 3
+        with self.assertRaisesRegex(R.ScaffoldRunnerError, "different scored-case basis"):
+            R._belief_measurements(self.manifest(), panel["cells"])
 
     def test_undeclared_write_fails_closed_with_terminal_panel(self):
         output = self.root / "rejected"

@@ -39,6 +39,7 @@ MANIFEST_SCHEMA = "epyc.autokernel.ak_le_3_scaffold_manifest.v1"
 PANEL_SCHEMA = "epyc.autokernel.ak_le_3_scaffold_panel.v1"
 CHECKPOINT_SCHEMA = "epyc.autokernel.ak_le_3_role_checkpoint.v1"
 EVALUATION_SCHEMA = "epyc.autokernel.ak_le_3_arena_evaluation.v1"
+BELIEF_PRODUCER_ID = "autokernel.controller.loop_scaffold_runner/ak_le_3_beliefs_v1"
 AUTHORITY = "diagnostic_scaffold_observation_only"
 REQUIRED_ACTOR_BOUNDARY = "disposable_worktree_single_writable_bind_v1"
 EVALUATOR_BOUNDARY = "agentkernelarena_centralized_evaluator_v1"
@@ -753,6 +754,139 @@ def _capture_dict(capture: ProcessCapture) -> dict[str, Any]:
     }
 
 
+def _released_claim_identity(cell: Mapping[str, Any]) -> tuple[dict[str, Any], str]:
+    opened, released = cell.get("device_claim_open"), cell.get("device_claim_released")
+    if not isinstance(opened, dict) or not isinstance(released, dict):
+        raise ScaffoldRunnerError("belief capture requires both device claim receipts")
+    for key in ("claim_id", "device_id", "campaign_id", "acquired_at"):
+        if not opened.get(key) or released.get(key) != opened[key]:
+            raise ScaffoldRunnerError(f"device claim {key} changed before belief capture")
+    if not released.get("released_at"):
+        raise ScaffoldRunnerError("belief capture requires a released device claim")
+    identity = {"opened": opened, "released": released}
+    return identity, _digest(identity)
+
+
+def _belief_measurements(manifest: Mapping[str, Any],
+                         cells: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Derive prospective diagnostic rows from a terminal measured 2x2 panel.
+
+    The four cell estimates and the two within-model scaffold ratios remain
+    observations: they confer no ranking, champion, campaign, or release authority.
+    Keeping the native evaluations and their released device claims in each row lets
+    the downstream adapter independently re-derive every value and identity.
+    """
+    if len(cells) != 4:
+        raise ScaffoldRunnerError("AK-LE-3 belief capture requires the exact four-cell panel")
+    producer = {
+        "producer_id": BELIEF_PRODUCER_ID,
+        "path": "scripts/kernel_rnd/autokernel/controller/loop_scaffold_runner.py",
+        "sha256": _file_sha(Path(__file__)),
+    }
+    source = dict(manifest["selected_pins"]["source"])
+    evaluator = dict(manifest["selected_pins"]["evaluator"])
+    by_model: dict[str, dict[str, Mapping[str, Any]]] = {}
+    rows: list[dict[str, Any]] = []
+    common_authority = {
+        "diagnostic_only": True,
+        "campaign_authority": False,
+        "ranking_authority": False,
+        "champion_authority": False,
+        "release_authority": False,
+    }
+    for cell in cells:
+        evaluation = cell.get("evaluation")
+        if not isinstance(evaluation, dict) \
+                or evaluation.get("schema") != EVALUATION_SCHEMA \
+                or evaluation.get("cell_id") != cell.get("cell_id"):
+            raise ScaffoldRunnerError("cell belief capture lacks its native evaluation")
+        if evaluation.get("pass_compilation") is not True \
+                or evaluation.get("pass_correctness") is not True:
+            raise ScaffoldRunnerError("incorrect cells cannot produce scaffold-effect beliefs")
+        baseline_cases = evaluation.get("valid_baseline_cases")
+        optimized_cases = evaluation.get("valid_optimized_cases")
+        speedup = evaluation.get("average_speedup")
+        if (isinstance(baseline_cases, bool) or not isinstance(baseline_cases, int)
+                or baseline_cases < 1 or optimized_cases != baseline_cases
+                or isinstance(speedup, bool) or not isinstance(speedup, (int, float))
+                or not math.isfinite(speedup) or speedup <= 0):
+            raise ScaffoldRunnerError("cell evaluation has no matched scored performance basis")
+        claim_identity, claim_sha = _released_claim_identity(cell)
+        model, scaffold = str(cell["model_id"]), str(cell["scaffold"])
+        by_model.setdefault(model, {})[scaffold] = cell
+        evidence = {
+            "cell_id": cell["cell_id"], "model_id": model,
+            "quant_id": cell["quant_id"], "effort": cell["effort"],
+            "scaffold": scaffold, "planned_wall_seconds": cell["planned_wall_seconds"],
+            "evaluation": evaluation, "evaluation_sha256": cell["evaluation_sha256"],
+            "cell_receipt_sha256": cell["cell_receipt_sha256"],
+            "device_claim_identity_sha256": claim_sha,
+            "manifest_sha256": manifest["manifest_sha256"],
+            "source": source, "evaluator": evaluator,
+            "producer_sha256": producer["sha256"],
+        }
+        row = {
+            "measurement_id": f"ak_le_3_{model.replace('.', '_').replace('-', '_')}_{scaffold}_average_speedup",
+            "metric": "agentkernelarena_candidate_over_baseline_average_speedup",
+            "value": float(speedup), "unit": "ratio", "metric_direction": "higher_better",
+            "category": "BASELINE" if scaffold == experiments.SCAFFOLD_DIRECT else "CANDIDATE",
+            "protocol_id": PANEL_SCHEMA, "reps": baseline_cases,
+            "reps_basis": "scored:matched AgentKernelArena baseline/candidate cases",
+            "date": cell["evaluation_process"]["finished_at"],
+            "claim": (f"AK-LE-3 {model} {scaffold} observed AgentKernelArena average "
+                      f"speedup {float(speedup):.9g}x"),
+            "extra": {**common_authority, "experiment_id": manifest["experiment_id"],
+                      "source": source, "evaluator": evaluator, "producer": producer,
+                      "device_claim_identity": claim_identity,
+                      "device_claim_identity_sha256": claim_sha,
+                      "evidence_basis": evidence, "evidence_sha256": _digest(evidence)},
+        }
+        row["measurement_sha256"] = _digest(row)
+        rows.append(row)
+    for model, arms in sorted(by_model.items()):
+        if set(arms) != {experiments.SCAFFOLD_DIRECT, experiments.SCAFFOLD_SPLIT}:
+            raise ScaffoldRunnerError("each AK-LE-3 model requires direct and split scaffolds")
+        direct, split = arms[experiments.SCAFFOLD_DIRECT], arms[experiments.SCAFFOLD_SPLIT]
+        direct_eval, split_eval = direct["evaluation"], split["evaluation"]
+        if (direct_eval["valid_baseline_cases"] != split_eval["valid_baseline_cases"]
+                or direct_eval["valid_optimized_cases"] != split_eval["valid_optimized_cases"]):
+            raise ScaffoldRunnerError("matched scaffold pair has a different scored-case basis")
+        ratio = float(split_eval["average_speedup"]) / float(direct_eval["average_speedup"])
+        direct_claim, direct_claim_sha = _released_claim_identity(direct)
+        split_claim, split_claim_sha = _released_claim_identity(split)
+        evidence = {
+            "model_id": model, "direct_cell_id": direct["cell_id"],
+            "split_cell_id": split["cell_id"], "direct_evaluation": direct_eval,
+            "split_evaluation": split_eval,
+            "direct_cell_receipt_sha256": direct["cell_receipt_sha256"],
+            "split_cell_receipt_sha256": split["cell_receipt_sha256"],
+            "direct_device_claim_identity_sha256": direct_claim_sha,
+            "split_device_claim_identity_sha256": split_claim_sha,
+            "manifest_sha256": manifest["manifest_sha256"],
+            "source": source, "evaluator": evaluator, "producer_sha256": producer["sha256"],
+        }
+        row = {
+            "measurement_id": f"ak_le_3_{model.replace('.', '_').replace('-', '_')}_split_over_direct_scaffold_effect",
+            "metric": "implement_then_exploit_over_direct_average_speedup_ratio",
+            "value": ratio, "unit": "ratio", "metric_direction": "higher_better",
+            "category": "CANDIDATE", "protocol_id": PANEL_SCHEMA,
+            "reps": direct_eval["valid_baseline_cases"],
+            "reps_basis": "scored:same-model matched AgentKernelArena cases per scaffold arm",
+            "date": max(direct["evaluation_process"]["finished_at"],
+                        split["evaluation_process"]["finished_at"]),
+            "claim": (f"AK-LE-3 {model} implement-then-exploit/direct matched scaffold "
+                      f"effect was {ratio:.9g}x"),
+            "extra": {**common_authority, "experiment_id": manifest["experiment_id"],
+                      "model_id": model, "source": source, "evaluator": evaluator,
+                      "producer": producer,
+                      "device_claim_identities": {"direct": direct_claim, "split": split_claim},
+                      "evidence_basis": evidence, "evidence_sha256": _digest(evidence)},
+        }
+        row["measurement_sha256"] = _digest(row)
+        rows.append(row)
+    return rows
+
+
 def _seal_checkpoint(
     *, cell_root: Path, ordinal: int, cell_id: str, role: Mapping[str, Any],
     capture: ProcessCapture, before: Mapping[str, str], after: Mapping[str, str],
@@ -963,6 +1097,7 @@ def run_manifest(
                     "checkpoints": checkpoints,
                     "evaluation_process": _capture_dict(evaluation_capture),
                     "evaluation_sha256": _file_sha(cell_root / "arena-evaluation.json"),
+                    "evaluation": dict(evaluation),
                     "device_claim_open": claim_open,
                     "device_claim_released": claim_released,
                     "authority": AUTHORITY if not fixture_mode else "fixture_only",
@@ -1009,6 +1144,15 @@ def run_manifest(
             "champion_authority": False, "release_authority": False,
         },
     }
+    if not fixture_mode:
+        panel["producer"] = {
+            "producer_id": BELIEF_PRODUCER_ID,
+            "path": "scripts/kernel_rnd/autokernel/controller/loop_scaffold_runner.py",
+            "sha256": _file_sha(Path(__file__)),
+        }
+        panel["source_identity"] = dict(payload["selected_pins"]["source"])
+        panel["evaluator_identity"] = dict(payload["selected_pins"]["evaluator"])
+        panel["belief_measurements"] = _belief_measurements(payload, completed)
     panel["panel_sha256"] = _digest(panel)
     _atomic_json(root / "panel.json", panel)
     return panel
