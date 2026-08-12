@@ -52,6 +52,31 @@ class InstrumentCapability(unittest.TestCase):
         self.assertIn("autokernel_device_sync_mode", check.reasons[0])
 
 
+class CampaignIdentity(unittest.TestCase):
+
+    def test_distinct_campaigns_have_distinct_seeds_and_windows(self):
+        first = live_controls.LiveCampaignIdentity(
+            "ak-controls-v9-first", "/tmp/ak-controls-v9-first")
+        second = live_controls.LiveCampaignIdentity(
+            "ak-controls-v9-second", "/tmp/ak-controls-v9-second")
+        self.assertNotEqual(first.campaign_seed, second.campaign_seed)
+        self.assertNotEqual(first.window_id, second.window_id)
+        self.assertTrue(first.window_id.startswith("akw-"))
+
+    def test_evidence_reference_must_be_absolute(self):
+        with self.assertRaisesRegex(ValueError, "absolute durable path"):
+            live_controls.LiveCampaignIdentity(
+                "ak-controls-v9-relative", "data/ak-controls-v9-relative")
+
+    def test_parser_requires_and_preserves_fresh_identity(self):
+        args = live_controls.build_parser().parse_args([
+            "--campaign-id", "ak-controls-v9-parser",
+            "--output", "/tmp/ak-controls-v9-parser",
+        ])
+        self.assertEqual(args.campaign_id, "ak-controls-v9-parser")
+        self.assertEqual(args.output, Path("/tmp/ak-controls-v9-parser"))
+
+
 class ControlEffectReachability(unittest.TestCase):
 
     def test_predeclared_control_window_crosses_where_base_segment_cannot(self):

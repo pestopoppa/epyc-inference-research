@@ -30,9 +30,9 @@ a module it never looked at.
 
 | | non-test lines |
 |---|---:|
-| **ON THE CAMPAIGN PATH** | **64,073** |
-| **DEFERRED** (provably unreachable) | **14,357** |
-| **TOTAL** | **78,430** |
+| **ON THE CAMPAIGN PATH** | **64,074** |
+| **DEFERRED** (provably unreachable) | **14,398** |
+| **TOTAL** | **78,472** |
 
 **There is no deferred half.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -162,12 +162,12 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `execution/device_sampler.py` | 410 | yes | RVP-C3-4 numeric 250 ms ROCm state producer; it brackets the exact captured benchmark-process lifetime and fails closed on missing fields, failed probes, empty traces, or cadence gaps |
 | `execution/instrument_integrity.py` | 111 | yes | RVP-C6-1: a candidate binary is built from candidate-controlled source, so every live T1 invocation must re-pin its reward-bearing translation unit to the named anchor before it can emit a number |
 | `execution/physical_bounds.py` | 197 | yes | RVP-C6-4 physical impossibility screen: per-shape conservative work floors and hardware peak ceilings are bound to the exact delivered unit and recipe/model/parameter frame, then every live sample is checked before ranking |
-| `execution/powercap_broker.py` | 247 | yes | the v9 CPU preflight could not read root-owned 0400 package counters, while running the campaign as root correctly failed the non-root candidate sandbox; a captured networkless read-only container now exposes only exact package-energy integers |
+| `execution/powercap_broker.py` | 248 | yes | the v9 CPU preflight could not read root-owned 0400 package counters, while running the campaign as root correctly failed the non-root candidate sandbox; a captured networkless read-only container now exposes only exact package-energy integers |
 | `execution/reward_hack_scan.py` | 186 | yes | RVP-C6-6/C6-9 plus static C6-2/C6-3 detectors: protected-frame, pointer-memo, structured-shortcut, environment/timing and stream/thread findings; the named 10 planted/15 clean corpus states sensitivity/specificity/FPR, not arbitrary-program coverage |
 | `execution/sandbox.py` | 606 | yes | C6 candidate boundary: Landlock write confinement, seccomp signal/network/namespace denials, non-root finite rlimits, discoverable host cgroup delegation, per-invocation membership and verified empty teardown |
 | `execution/t0_provider.py` | 3,676 | yes | the predecessor harness tested MUL_MAT only, so a kernel that broke MUL_MAT_ID — MoE dispatch, every token in production — passed it cleanly |
 | `execution/control_runner.py` | 1,550 | yes | runs the neutral / A-A controls that the measured drift makes mandatory rather than optional |
-| `execution/live_controls.py` | 859 | no | standalone, operator-invoked calibration producer for the fixed five controls; it prepares the instrument before campaign #1 and is deliberately not imported by the mutation/build entrypoint |
+| `execution/live_controls.py` | 900 | no | standalone, operator-invoked calibration producer for the fixed five controls; it prepares the instrument before campaign #1 and is deliberately not imported by the mutation/build entrypoint |
 | `execution/cpu_region_claim.py` | 2,408 | yes | 2026-08-04: two A/A runs were destroyed by a legitimate co-tenant because the loop held no claim. Before this module a claim could be READ but never acquired |
 | `execution/chain.py` | 1,928 | yes | holds the seams — four mismatches between executors and evaluator, one of them a field whose meaning INVERTS across the seam |
 | `resource/__init__.py` | 28 | yes | docstring only; names the `resource`-shadows-stdlib hazard the loop must not trip |

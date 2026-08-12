@@ -18,6 +18,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -32,10 +33,6 @@ from ..evaluator import api, controls, recipes, statistics
 from . import (control_runner, cpu_region_claim, microbench, physical_bounds,
                powercap_broker, sandbox)
 
-CAMPAIGN_ID = "ak-controls-3pct-20260811-v9-hardened"
-EVIDENCE_DIR = "autokernel_controls_3pct_20260811_v9_hardened"
-CAMPAIGN_SEED = "ak-controls-3pct-20260811-v9-hardened-seed-v1"
-WINDOW_ID = "akw-controls-3pct-20260811-v9-hardened-0001"
 RECIPE_ID = "t1b.llama_cpu.llama_bench_prefill.v1"
 CPU_LIST = recipes.CANONICAL_PREFIX[recipes.CANONICAL_PREFIX.index("-c") + 1]
 PRODUCTION_ROOT = Path("/mnt/raid0/llm/llama.cpp")
@@ -90,6 +87,30 @@ REQUIRED_HARDENING_RECEIPTS = (
     b"autokernel_thread_set_hashes",
     b"autokernel_device_sync_mode",
 )
+
+
+@dataclass(frozen=True)
+class LiveCampaignIdentity:
+    """Fresh operator-chosen id plus every deterministic name derived from it."""
+
+    campaign_id: str
+    evidence_ref: str
+
+    def __post_init__(self) -> None:
+        if not re.fullmatch(r"ak-[a-z0-9][a-z0-9._-]{2,95}", self.campaign_id):
+            raise ValueError(
+                "campaign_id must match ak-[a-z0-9][a-z0-9._-]{2,95}")
+        if not isinstance(self.evidence_ref, str) or not self.evidence_ref.startswith("/"):
+            raise ValueError("evidence_ref must be an absolute durable path")
+
+    @property
+    def campaign_seed(self) -> str:
+        return f"{self.campaign_id}/live-controls/seed-v1"
+
+    @property
+    def window_id(self) -> str:
+        digest = hashlib.sha256(self.campaign_seed.encode()).hexdigest()[:24]
+        return f"akw-{digest}"
 
 
 def _utc_now() -> str:
@@ -198,7 +219,8 @@ def _instrument_receipt_capability(binary: Path) -> schemas.Check:
          "escape-check, and device-sync receipt key",))
 
 
-def _write_declaration(output_root: Path, *, instrument_sha: str, copy_sha: str,
+def _write_declaration(output_root: Path, *, identity: LiveCampaignIdentity,
+                       instrument_sha: str, copy_sha: str,
                        instrument_linkage: str, copy_linkage: str) -> str:
     """Commit the fresh campaign inputs before the first measurement."""
     source_manifest = {
@@ -217,10 +239,10 @@ def _write_declaration(output_root: Path, *, instrument_sha: str, copy_sha: str,
     declaration = {
         "schema": "epyc.autokernel.live_control_campaign_declaration.v1",
         "declared_at": _utc_now(),
-        "campaign_id": CAMPAIGN_ID,
+        "campaign_id": identity.campaign_id,
         "campaign_seed_sha256": hashlib.sha256(
-            CAMPAIGN_SEED.encode("utf-8")).hexdigest(),
-        "window_id": WINDOW_ID,
+            identity.campaign_seed.encode("utf-8")).hexdigest(),
+        "window_id": identity.window_id,
         "recipe_id": RECIPE_ID,
         "cpu_list": CPU_LIST,
         "model": str(MODEL),
@@ -309,7 +331,8 @@ def _write_preflight(output_root: Path, *, instrument_sha: str, copy_sha: str,
 
 
 def _write_host_receipt(output_root: Path, materials: Sequence[LiveMaterial],
-                        claim_receipt: cpu_region_claim.RegionClaimReceipt) -> None:
+                        claim_receipt: cpu_region_claim.RegionClaimReceipt,
+                        identity: LiveCampaignIdentity) -> None:
     _write_json(output_root / "host.json", {
         "schema": "epyc.autokernel.live_control_host_receipt.v1",
         "measured_at": _utc_now(),
@@ -320,7 +343,7 @@ def _write_host_receipt(output_root: Path, materials: Sequence[LiveMaterial],
             "ended_at": material.run.ended_at,
             "complete": material.run.complete,
             "refusals": list(material.run.refusals),
-            "raw_ref": f"data/{EVIDENCE_DIR}/raw/{material.label}.json",
+            "raw_ref": f"{identity.evidence_ref}/raw/{material.label}.json",
         } for material in materials],
     })
 
@@ -395,7 +418,8 @@ def _measure(*, label: str, blocks: int, claim: object,
              anchor: api.AnchorIdentity, prompt: int = PROMPT_TOKENS,
              candidate_iqk: str = "1", anchor_iqk: str = "1",
              output_root: Path,
-             host_state: Callable[..., microbench.HostState]) -> LiveMaterial:
+             host_state: Callable[..., microbench.HostState],
+             identity: LiveCampaignIdentity) -> LiveMaterial:
     declared_prompt = CONTROL_PROMPT_BY_LABEL.get(label)
     if declared_prompt != prompt:
         raise ValueError(
@@ -404,7 +428,7 @@ def _measure(*, label: str, blocks: int, claim: object,
     envelope = _declared_physical_envelopes()[label]
     plan = microbench.MicrobenchPlan(
         recipe_id=RECIPE_ID, candidate_id=f"akc-control-{label}",
-        campaign_seed=f"{CAMPAIGN_SEED}/{label}",
+        campaign_seed=f"{identity.campaign_seed}/{label}",
         candidate_binding=candidate_binding, anchor_binding=anchor_binding,
         anchor=anchor, params=_params(prompt=prompt),
         candidate_instrument_root=str(INSTRUMENT_ROOT),
@@ -446,7 +470,8 @@ def _control_stopping_rule() -> statistics.StoppingRule:
         max_blocks_per_candidate=20)
 
 
-def _campaign_inputs(aa: LiveMaterial, neutral: LiveMaterial
+def _campaign_inputs(aa: LiveMaterial, neutral: LiveMaterial,
+                     identity: LiveCampaignIdentity
                      ) -> tuple[api.CampaignControls, statistics.StoppingRule,
                                 statistics.EProcessConstruction,
                                 statistics.StratumSplitRule,
@@ -460,7 +485,7 @@ def _campaign_inputs(aa: LiveMaterial, neutral: LiveMaterial
     construction = statistics.select_construction(
         "sign_martingale_predictable_lambda/v1")
     split = statistics.StratumSplitRule(
-        rule_id="ak-split-live-controls/v1", campaign_seed=CAMPAIGN_SEED,
+        rule_id="ak-split-live-controls/v1", campaign_seed=identity.campaign_seed,
         confirmation_fraction=0.3,
         rotation=statistics.RotationSchedule(
             schedule_id="ak-rotation-live-controls/v1", period_campaigns=4))
@@ -468,13 +493,13 @@ def _campaign_inputs(aa: LiveMaterial, neutral: LiveMaterial
         statistics.median(block.anchor_samples) for block in aa.blocks)
     inputs = statistics.CalibrationInputs(
         backend="llama_cpu", phase="prefill", cell_class=recipes.CELL_CLASS_TINY_GRAPH,
-        campaign_seed=CAMPAIGN_SEED, controls=declared, stopping_rule=rule,
+        campaign_seed=identity.campaign_seed, controls=declared, stopping_rule=rule,
         construction=construction, effect_scale=statistics.EFFECT_SCALE_RELATIVE,
         metric_direction="higher_better",
         hypothesis=statistics.HYPOTHESIS_IMPROVEMENT, margin=0.0,
         aa_blocks=aa.blocks, neutral_blocks=neutral.blocks,
         anchor_calibration_values=anchors,
-        samples_ref=f"data/{EVIDENCE_DIR}/raw/aa_calibration.json")
+        samples_ref=f"{identity.evidence_ref}/raw/aa_calibration.json")
     return declared, rule, construction, split, controls.run_calibration_block(inputs)
 
 
@@ -542,12 +567,13 @@ def _evaluate_controls(*, solve: statistics.CalibrationSolve,
                        recipe_receipt: api.RecipeReceipt,
                        claim_receipt: cpu_region_claim.RegionClaimReceipt,
                        source_sha: str, measured_at: str,
-                       output_root: Path) -> control_runner.SweepResult:
+                       output_root: Path,
+                       identity: LiveCampaignIdentity) -> control_runner.SweepResult:
     outputs = solve.require_accepted()
     commitment = statistics.StoppingRuleCommitment.commit(
-        rule, campaign_id=CAMPAIGN_ID, committed_at=measured_at)
+        rule, campaign_id=identity.campaign_id, committed_at=measured_at)
     campaign_stats = statistics.CampaignStatistics(
-        campaign_id=CAMPAIGN_ID, campaign_seed=CAMPAIGN_SEED,
+        campaign_id=identity.campaign_id, campaign_seed=identity.campaign_seed,
         effect_scale=statistics.EFFECT_SCALE_RELATIVE,
         hypothesis=statistics.HYPOTHESIS_IMPROVEMENT, margin=0.0,
         stopping_rule=rule, stopping_rule_commitment=commitment,
@@ -558,7 +584,7 @@ def _evaluate_controls(*, solve: statistics.CalibrationSolve,
         f.candidate_id for f in fixtures
         if f.control_id == controls.CONTROL_DEGRADED_NEGATIVE)
     dispatcher = api.TierDispatcher(gate_runners={
-        tier: _EvidenceGateRunner(degraded_candidate_id, f"data/{EVIDENCE_DIR}")
+        tier: _EvidenceGateRunner(degraded_candidate_id, identity.evidence_ref)
         for tier in ("T0", "T1", "T1b", "T2")})
     pipeline = control_runner.DispatchPipeline(
         dispatcher=dispatcher,
@@ -566,17 +592,18 @@ def _evaluate_controls(*, solve: statistics.CalibrationSolve,
     fixture_digest = schemas.content_hash(control_runner._fixture_payload(fixtures))
     fixture_set = control_runner.resolve_fixture_set(
         fixtures=fixtures, pinned_digest=fixture_digest,
-        source_label=f"{CAMPAIGN_ID}/live-fixtures")
+        source_label=f"{identity.campaign_id}/live-fixtures")
     evaluator_hash = schemas.content_hash({
         "controls": controls.CONTROL_DEFINITIONS_DIGEST,
         "runner": control_runner.CONTROL_RUNNER_ID})
     binding = control_runner.CampaignBinding(
-        campaign_id=CAMPAIGN_ID, backend="llama_cpu", phase="prefill",
+        campaign_id=identity.campaign_id, backend="llama_cpu", phase="prefill",
         cell_class=recipes.CELL_CLASS_TINY_GRAPH,
         protocol_id=api.PROTOCOL_VERSIONED_ID,
         evaluator=api.EvaluatorIdentity(
             id="P-AK-SEARCH-1/v1", bundle_sha256=evaluator_hash,
-            runtime_source_label_ref=f"data/{EVIDENCE_DIR}/runtime-source-label.json"),
+            runtime_source_label_ref=(
+                f"{identity.evidence_ref}/runtime-source-label.json")),
         scope_denominator=api.ScopeDenominator(
             machine_subset="full", numa_nodes=(), devices=(), cores=96),
         scope_manifest_sha256=schemas.content_hash({"cpu_list": CPU_LIST}),
@@ -600,9 +627,10 @@ def _evaluate_controls(*, solve: statistics.CalibrationSolve,
         seed_rotation=controls.SeedRotationSchedule(
             rotate_every_windows=10, declared_at=measured_at),
         historical_win_replays=(declaration,),
-        source_label=f"{CAMPAIGN_ID}/evaluator-bundle")
+        source_label=f"{identity.campaign_id}/evaluator-bundle")
     harness = controls.ControlHarness(bundle=bundle, runner=runner)
-    sweep = control_runner.ControlSweep(harness=harness, campaign_seed=CAMPAIGN_SEED)
+    sweep = control_runner.ControlSweep(
+        harness=harness, campaign_seed=identity.campaign_seed)
     def passed(reason: str) -> schemas.Check:
         return schemas.Check(schemas.PASS, (reason,))
 
@@ -622,8 +650,8 @@ def _evaluate_controls(*, solve: statistics.CalibrationSolve,
         no_concurrent_inference=passed(
             "operator handed the CPU inference lane to this session; every measured "
             "invocation also passed its run-open load and held-claim checks"),
-        preflight_attestation_ref=f"data/{EVIDENCE_DIR}/preflight.json",
-        host_receipt=f"data/{EVIDENCE_DIR}/host.json",
+        preflight_attestation_ref=f"{identity.evidence_ref}/preflight.json",
+        host_receipt=f"{identity.evidence_ref}/host.json",
         host_health=passed(
             "all raw measurement legs completed with their host-state checks recorded"),
         anchor_at_open=anchor, anchor_at_close=anchor,
@@ -642,7 +670,7 @@ def _evaluate_controls(*, solve: statistics.CalibrationSolve,
             f"the evaluated stopping rule hashes to {rule.content_hash()}"),
         order_randomized=passed(
             "control block orders are re-derived from the committed campaign seed"),
-        order_seed=CAMPAIGN_SEED,
+        order_seed=identity.campaign_seed,
         aa_cadence=passed("this sweep contains its declared A/A control"),
         controls=api.ControlPanel(
             positive=provisional, neutral=provisional,
@@ -651,18 +679,18 @@ def _evaluate_controls(*, solve: statistics.CalibrationSolve,
         calibration=passed("fresh A/A and neutral pools produced an accepted solve"),
         control_definitions_immutable=passed(
             f"the pinned control definitions digest is {controls.CONTROL_DEFINITIONS_DIGEST}"),
-        raw_evidence_ref=f"data/{EVIDENCE_DIR}/raw/")
+        raw_evidence_ref=f"{identity.evidence_ref}/raw/")
     historical = controls.HistoricalWinResolution(
         backend="llama_cpu", available=True, declaration=declaration,
         durability_outcome=schemas.PASS,
         check=schemas.Check(schemas.PASS, ("historical fixture resolves in git",)))
     run_context = controls.ControlRunContext(
-        campaign_id=CAMPAIGN_ID, backend="llama_cpu", phase="prefill",
-        cell_class=recipes.CELL_CLASS_TINY_GRAPH, window_id=WINDOW_ID, tier="T1",
+        campaign_id=identity.campaign_id, backend="llama_cpu", phase="prefill",
+        cell_class=recipes.CELL_CLASS_TINY_GRAPH, window_id=identity.window_id, tier="T1",
         seed="DERIVED-BY-SWEEP", anchor=anchor, declaration=declaration)
     context = controls.ControlContext(
-        campaign_id=CAMPAIGN_ID, backend="llama_cpu", phase="prefill",
-        cell_class=recipes.CELL_CLASS_TINY_GRAPH, window_id=WINDOW_ID,
+        campaign_id=identity.campaign_id, backend="llama_cpu", phase="prefill",
+        cell_class=recipes.CELL_CLASS_TINY_GRAPH, window_id=identity.window_id,
         historical=historical,
         neutral_dispersion=controls.neutral_dispersion_check(solve),
         calibration=outputs)
@@ -671,9 +699,12 @@ def _evaluate_controls(*, solve: statistics.CalibrationSolve,
         aa_cadence=window.aa_cadence, windows_completed=0, last_rotation_epoch=0)
 
 
-def execute(output_root: Path, *,
+def execute(output_root: Path, *, campaign_id: str,
             host_state: Callable[..., microbench.HostState] =
             microbench.read_host_state) -> dict:
+    output_root = output_root.resolve()
+    identity = LiveCampaignIdentity(
+        campaign_id=campaign_id, evidence_ref=str(output_root))
     output_root.mkdir(parents=True, exist_ok=False)
     if _sha256_file(INSTRUMENT_BINARY) == "":  # pragma: no cover - explicit read gate
         raise RuntimeError("unreadable hardened measurement binary")
@@ -691,7 +722,8 @@ def execute(output_root: Path, *,
     instrument_sha = _sha256_file(INSTRUMENT_BINARY)
     copy_sha = _sha256_file(Path(candidate_binding.binary))
     source_sha = _write_declaration(
-        output_root, instrument_sha=instrument_sha, copy_sha=copy_sha,
+        output_root, identity=identity,
+        instrument_sha=instrument_sha, copy_sha=copy_sha,
         instrument_linkage=instrument_linkage, copy_linkage=copy_linkage)
     _write_preflight(output_root, instrument_sha=instrument_sha, copy_sha=copy_sha,
                      host_state=host_state)
@@ -702,20 +734,23 @@ def execute(output_root: Path, *,
     materials = []
     with cpu_region_claim.acquire_cpu_region_claim(
             CPU_LIST, purpose="AutoKernel five-control calibration block",
-            campaign_id=CAMPAIGN_ID, journal=journal, timeout_s=60.0,
+            campaign_id=identity.campaign_id, journal=journal, timeout_s=60.0,
             max_hold_s=2 * 3600) as claim:
         aa = _measure(
             label="aa_calibration", blocks=CALIBRATION_BLOCKS, claim=claim,
             candidate_binding=candidate_binding, anchor_binding=anchor_binding,
-            anchor=anchor, output_root=output_root, host_state=host_state)
+            anchor=anchor, output_root=output_root, host_state=host_state,
+            identity=identity)
         materials.append(aa)
         _wait_for_quiet()
         neutral = _measure(
             label="neutral_calibration", blocks=NEUTRAL_BLOCKS, claim=claim,
             candidate_binding=candidate_binding, anchor_binding=anchor_binding,
-            anchor=anchor, output_root=output_root, host_state=host_state)
+            anchor=anchor, output_root=output_root, host_state=host_state,
+            identity=identity)
         materials.append(neutral)
-        declared, rule, construction, split, solve = _campaign_inputs(aa, neutral)
+        declared, rule, construction, split, solve = _campaign_inputs(
+            aa, neutral, identity)
         _write_json(output_root / "calibration.json", solve.to_dict())
         if solve.accepted:
             outputs = solve.require_accepted()
@@ -726,36 +761,36 @@ def execute(output_root: Path, *,
                 label="positive", blocks=control_blocks, claim=claim,
                 candidate_binding=candidate_binding, anchor_binding=anchor_binding,
                 anchor=anchor, candidate_iqk="1", anchor_iqk="0",
-                output_root=output_root, host_state=host_state)
+                output_root=output_root, host_state=host_state, identity=identity)
             materials.append(positive)
             _wait_for_quiet()
             historical = _measure(
                 label="historical_win_replay", blocks=control_blocks, claim=claim,
                 candidate_binding=candidate_binding, anchor_binding=anchor_binding,
                 anchor=anchor, candidate_iqk="1", anchor_iqk="0",
-                output_root=output_root, host_state=host_state)
+                output_root=output_root, host_state=host_state, identity=identity)
             materials.append(historical)
             _wait_for_quiet()
             negative_anchor = _measure(
                 label="negative_committed_cell", blocks=control_blocks, claim=claim,
                 candidate_binding=candidate_binding, anchor_binding=anchor_binding,
                 anchor=anchor, prompt=PROMPT_TOKENS, output_root=output_root,
-                host_state=host_state)
+                host_state=host_state, identity=identity)
             materials.append(negative_anchor)
             _wait_for_quiet()
             negative_wrong = _measure(
                 label="negative_wrong_cell", blocks=control_blocks, claim=claim,
                 candidate_binding=candidate_binding, anchor_binding=anchor_binding,
                 anchor=anchor, prompt=WRONG_PROMPT_TOKENS, output_root=output_root,
-                host_state=host_state)
+                host_state=host_state, identity=identity)
             materials.append(negative_wrong)
             ended = _utc_now()
     claim_receipt = claim.receipt()
     _write_json(output_root / "claim_receipt.json", claim_receipt.to_dict())
-    _write_host_receipt(output_root, materials, claim_receipt)
+    _write_host_receipt(output_root, materials, claim_receipt, identity)
     if not solve.accepted:
         summary = {
-            "campaign_id": CAMPAIGN_ID, "measured_at": _utc_now(),
+            "campaign_id": identity.campaign_id, "measured_at": _utc_now(),
             "state": "calibration_rejected", "controls_started": False,
             "production_source_commit": PRODUCTION_COMMIT,
             "measurement_instrument_commit": INSTRUMENT_COMMIT,
@@ -800,10 +835,10 @@ def execute(output_root: Path, *,
         construction=construction, split=split, fixtures=fixtures,
         anchor=anchor, recipe_receipt=receipt.recipe_receipt,
         claim_receipt=claim_receipt, source_sha=source_sha,
-        measured_at=ended, output_root=output_root)
+        measured_at=ended, output_root=output_root, identity=identity)
     _write_json(output_root / "control_sweep.json", result.to_dict())
     summary = {
-        "campaign_id": CAMPAIGN_ID, "measured_at": _utc_now(),
+        "campaign_id": identity.campaign_id, "measured_at": _utc_now(),
         "state": "controls_complete", "controls_started": True,
         "production_source_commit": PRODUCTION_COMMIT,
         "measurement_instrument_commit": INSTRUMENT_COMMIT,
@@ -819,8 +854,12 @@ def execute(output_root: Path, *,
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path,
-                        default=Path("data") / EVIDENCE_DIR)
+    parser.add_argument(
+        "--campaign-id", required=True,
+        help="fresh ak-* identifier committed into every control receipt")
+    parser.add_argument(
+        "--output", type=Path, required=True,
+        help="fresh absolute evidence directory; execution refuses reuse")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--i-hold-the-host", action="store_true")
     return parser
@@ -829,7 +868,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     plan = {
-        "campaign_id": CAMPAIGN_ID, "cpu_list": CPU_LIST,
+        "campaign_id": args.campaign_id, "cpu_list": CPU_LIST,
         "production_source": f"{PRODUCTION_ROOT}@{PRODUCTION_COMMIT}",
         "measurement_binary": str(INSTRUMENT_BINARY),
         "measurement_instrument_commit": INSTRUMENT_COMMIT,
@@ -845,7 +884,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not args.i_hold_the_host:
         raise SystemExit("--execute requires --i-hold-the-host")
     with powercap_broker.PowercapBroker() as broker:
-        summary = execute(args.output.resolve(), host_state=broker.read_host_state)
+        summary = execute(
+            args.output.resolve(), campaign_id=args.campaign_id,
+            host_state=broker.read_host_state)
     print(json.dumps({
         "campaign_id": summary["campaign_id"],
         "calibration_accepted": summary["calibration"]["accepted"],
