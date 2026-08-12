@@ -25,11 +25,12 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Sequence
+from typing import Callable, Sequence
 
 from .. import schemas
 from ..evaluator import api, controls, recipes, statistics
-from . import control_runner, cpu_region_claim, microbench, physical_bounds, sandbox
+from . import (control_runner, cpu_region_claim, microbench, physical_bounds,
+               powercap_broker, sandbox)
 
 CAMPAIGN_ID = "ak-controls-3pct-20260811-v9-hardened"
 EVIDENCE_DIR = "autokernel_controls_3pct_20260811_v9_hardened"
@@ -40,17 +41,19 @@ CPU_LIST = recipes.CANONICAL_PREFIX[recipes.CANONICAL_PREFIX.index("-c") + 1]
 PRODUCTION_ROOT = Path("/mnt/raid0/llm/llama.cpp")
 PRODUCTION_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 INSTRUMENT_ROOT = Path(os.environ.get(
-    "AUTOKERNEL_INSTRUMENT_ROOT", "/mnt/raid0/llm/llama.cpp-experimental"))
+    "AUTOKERNEL_INSTRUMENT_ROOT", "/mnt/raid0/llm/llama.cpp-ak-controls-v9-final"))
 INSTRUMENT_BINARY = Path(os.environ.get(
     "AUTOKERNEL_INSTRUMENT_BINARY",
     str(INSTRUMENT_ROOT / "build-v9-cpu/bin/llama-bench")))
-INSTRUMENT_BRANCH = "experimental-v9-autokernel-t1-hardening"
-INSTRUMENT_COMMIT = "0492c2319a79e9bcc4edaa1bfb6af5a096276ab7"
+INSTRUMENT_BRANCH = "experimental-v9-autokernel-t1-hardening-final"
+INSTRUMENT_COMMIT = "a4cb04ca8f92fa4d665684490f609b380f9b5e96"
 MODEL = Path(
     "/mnt/raid0/llm/models/lmstudio-community/"
     "Qwen2.5-Coder-0.5B-GGUF/Qwen2.5-Coder-0.5B-Q4_K_M.gguf")
 CALIBRATION_BLOCKS = 200
 NEUTRAL_BLOCKS = 60
+CONTROL_EXTENSION_ROUNDS = 1
+CONTROL_EXTENSION_BLOCKS = 5
 CONTRIBUTION_FLOOR = 0.03
 PROMPT_TOKENS = 512
 WRONG_PROMPT_TOKENS = 2048
@@ -238,7 +241,8 @@ def _write_declaration(output_root: Path, *, instrument_sha: str, copy_sha: str,
     return source_sha
 
 
-def _write_preflight(output_root: Path, *, instrument_sha: str, copy_sha: str) -> None:
+def _write_preflight(output_root: Path, *, instrument_sha: str, copy_sha: str,
+                     host_state: Callable[..., microbench.HostState]) -> None:
     topology = cpu_region_claim.verify_host_topology()
     free_bytes = shutil.disk_usage(output_root).free
     source_head = subprocess.run(
@@ -262,7 +266,7 @@ def _write_preflight(output_root: Path, *, instrument_sha: str, copy_sha: str) -
          INSTRUMENT_COMMIT),
         text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         check=True).stdout.split()[1:]
-    host_state = microbench.read_host_state(cpu_list=CPU_LIST)
+    state = host_state(cpu_list=CPU_LIST)
     host_policy = microbench.HostStatePolicy(
         nominal_khz=NOMINAL_KHZ, require_package_power=True)
     checks = {
@@ -292,7 +296,7 @@ def _write_preflight(output_root: Path, *, instrument_sha: str, copy_sha: str) -
             schemas.PASS if free_bytes >= 200 * 1024 ** 3 else schemas.FAIL,
             (f"{free_bytes} bytes free at campaign open",))),
         "package_power_available": _check_payload(
-            host_policy.check_package_power_available(host_state)),
+            host_policy.check_package_power_available(state)),
     }
     _write_json(output_root / "preflight.json", {
         "schema": "epyc.autokernel.live_control_preflight.v1",
@@ -390,7 +394,8 @@ def _measure(*, label: str, blocks: int, claim: object,
              anchor_binding: recipes.ToolBinding,
              anchor: api.AnchorIdentity, prompt: int = PROMPT_TOKENS,
              candidate_iqk: str = "1", anchor_iqk: str = "1",
-             output_root: Path) -> LiveMaterial:
+             output_root: Path,
+             host_state: Callable[..., microbench.HostState]) -> LiveMaterial:
     declared_prompt = CONTROL_PROMPT_BY_LABEL.get(label)
     if declared_prompt != prompt:
         raise ValueError(
@@ -419,12 +424,26 @@ def _measure(*, label: str, blocks: int, claim: object,
         policy=microbench.HostStatePolicy(
             nominal_khz=NOMINAL_KHZ, require_package_power=True),
         spawner=microbench.SubprocessSpawner(
-            workdir_root=str(sandbox_root), sandbox_policy=sandbox_policy))
+            workdir_root=str(sandbox_root), sandbox_policy=sandbox_policy),
+        host_state=host_state)
     run = runner.run(plan)
     _write_json(output_root / "raw" / f"{label}.json", run.raw_vector())
     if not run.complete:
         raise RuntimeError(f"{label} refused: {'; '.join(run.refusals)}")
     return LiveMaterial(label, run)
+
+
+def _control_stopping_rule() -> statistics.StoppingRule:
+    """The precommitted window that makes the positive control reachable."""
+    return statistics.StoppingRule(
+        rule_id="ak-stop-live-controls/v1", final_table="t1_paired_block_table",
+        decisions=(("evidence_threshold_crossed", "compose_into_champion_lineage"),
+                   ("extension_exhausted", "abandon"),
+                   ("block_ceiling_reached", "abandon")),
+        extension=statistics.BoundedExtension(
+            max_rounds=CONTROL_EXTENSION_ROUNDS,
+            blocks_per_round=CONTROL_EXTENSION_BLOCKS),
+        max_blocks_per_candidate=20)
 
 
 def _campaign_inputs(aa: LiveMaterial, neutral: LiveMaterial
@@ -437,13 +456,7 @@ def _campaign_inputs(aa: LiveMaterial, neutral: LiveMaterial
         contribution_floor=CONTRIBUTION_FLOOR, max_candidates=10,
         confirmation_admission_count=2, max_blocks_per_candidate=20,
         storage_floor_bytes_free=200 * 1024 ** 3)
-    rule = statistics.StoppingRule(
-        rule_id="ak-stop-live-controls/v1", final_table="t1_paired_block_table",
-        decisions=(("evidence_threshold_crossed", "compose_into_champion_lineage"),
-                   ("extension_exhausted", "abandon"),
-                   ("block_ceiling_reached", "abandon")),
-        extension=statistics.BoundedExtension(max_rounds=0, blocks_per_round=5),
-        max_blocks_per_candidate=20)
+    rule = _control_stopping_rule()
     construction = statistics.select_construction(
         "sign_martingale_predictable_lambda/v1")
     split = statistics.StratumSplitRule(
@@ -658,7 +671,9 @@ def _evaluate_controls(*, solve: statistics.CalibrationSolve,
         aa_cadence=window.aa_cadence, windows_completed=0, last_rotation_epoch=0)
 
 
-def execute(output_root: Path) -> dict:
+def execute(output_root: Path, *,
+            host_state: Callable[..., microbench.HostState] =
+            microbench.read_host_state) -> dict:
     output_root.mkdir(parents=True, exist_ok=False)
     if _sha256_file(INSTRUMENT_BINARY) == "":  # pragma: no cover - explicit read gate
         raise RuntimeError("unreadable hardened measurement binary")
@@ -678,7 +693,8 @@ def execute(output_root: Path) -> dict:
     source_sha = _write_declaration(
         output_root, instrument_sha=instrument_sha, copy_sha=copy_sha,
         instrument_linkage=instrument_linkage, copy_linkage=copy_linkage)
-    _write_preflight(output_root, instrument_sha=instrument_sha, copy_sha=copy_sha)
+    _write_preflight(output_root, instrument_sha=instrument_sha, copy_sha=copy_sha,
+                     host_state=host_state)
     anchor = api.AnchorIdentity(
         source_commit=INSTRUMENT_COMMIT, binary_sha256=instrument_sha,
         linkage_sha256=instrument_linkage, tool="llama-bench")
@@ -691,44 +707,47 @@ def execute(output_root: Path) -> dict:
         aa = _measure(
             label="aa_calibration", blocks=CALIBRATION_BLOCKS, claim=claim,
             candidate_binding=candidate_binding, anchor_binding=anchor_binding,
-            anchor=anchor, output_root=output_root)
+            anchor=anchor, output_root=output_root, host_state=host_state)
         materials.append(aa)
         _wait_for_quiet()
         neutral = _measure(
             label="neutral_calibration", blocks=NEUTRAL_BLOCKS, claim=claim,
             candidate_binding=candidate_binding, anchor_binding=anchor_binding,
-            anchor=anchor, output_root=output_root)
+            anchor=anchor, output_root=output_root, host_state=host_state)
         materials.append(neutral)
         declared, rule, construction, split, solve = _campaign_inputs(aa, neutral)
         _write_json(output_root / "calibration.json", solve.to_dict())
         if solve.accepted:
             outputs = solve.require_accepted()
             n = outputs.b_min_blocks
+            control_blocks = rule.max_total_blocks(n)
             _wait_for_quiet()
             positive = _measure(
-                label="positive", blocks=n, claim=claim,
+                label="positive", blocks=control_blocks, claim=claim,
                 candidate_binding=candidate_binding, anchor_binding=anchor_binding,
                 anchor=anchor, candidate_iqk="1", anchor_iqk="0",
-                output_root=output_root)
+                output_root=output_root, host_state=host_state)
             materials.append(positive)
             _wait_for_quiet()
             historical = _measure(
-                label="historical_win_replay", blocks=n, claim=claim,
+                label="historical_win_replay", blocks=control_blocks, claim=claim,
                 candidate_binding=candidate_binding, anchor_binding=anchor_binding,
                 anchor=anchor, candidate_iqk="1", anchor_iqk="0",
-                output_root=output_root)
+                output_root=output_root, host_state=host_state)
             materials.append(historical)
             _wait_for_quiet()
             negative_anchor = _measure(
-                label="negative_committed_cell", blocks=n, claim=claim,
+                label="negative_committed_cell", blocks=control_blocks, claim=claim,
                 candidate_binding=candidate_binding, anchor_binding=anchor_binding,
-                anchor=anchor, prompt=PROMPT_TOKENS, output_root=output_root)
+                anchor=anchor, prompt=PROMPT_TOKENS, output_root=output_root,
+                host_state=host_state)
             materials.append(negative_anchor)
             _wait_for_quiet()
             negative_wrong = _measure(
-                label="negative_wrong_cell", blocks=n, claim=claim,
+                label="negative_wrong_cell", blocks=control_blocks, claim=claim,
                 candidate_binding=candidate_binding, anchor_binding=anchor_binding,
-                anchor=anchor, prompt=WRONG_PROMPT_TOKENS, output_root=output_root)
+                anchor=anchor, prompt=WRONG_PROMPT_TOKENS, output_root=output_root,
+                host_state=host_state)
             materials.append(negative_wrong)
             ended = _utc_now()
     claim_receipt = claim.receipt()
@@ -760,13 +779,13 @@ def execute(output_root: Path) -> dict:
         _fixture(controls.CONTROL_POSITIVE, positive.blocks, tier="T1",
                  source_sha=source_sha, binary_sha=copy_sha,
                  linkage_sha=copy_linkage, measured_at=positive.run.ended_at),
-        _fixture(controls.CONTROL_NEUTRAL, neutral.blocks[:n], tier="T1",
+        _fixture(controls.CONTROL_NEUTRAL, neutral.blocks[:control_blocks], tier="T1",
                  source_sha=source_sha, binary_sha=copy_sha,
                  linkage_sha=copy_linkage, measured_at=neutral.run.ended_at),
         _fixture(controls.CONTROL_DEGRADED_NEGATIVE, negative_blocks, tier="T1",
                  source_sha=source_sha, binary_sha=copy_sha,
                  linkage_sha=copy_linkage, measured_at=ended),
-        _fixture(controls.CONTROL_AA, aa.blocks[:n], tier="T1",
+        _fixture(controls.CONTROL_AA, aa.blocks[:control_blocks], tier="T1",
                  source_sha=source_sha, binary_sha=copy_sha,
                  linkage_sha=copy_linkage, measured_at=aa.run.ended_at),
         _fixture(controls.CONTROL_HISTORICAL_WIN_REPLAY, historical.blocks,
@@ -825,7 +844,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if not args.i_hold_the_host:
         raise SystemExit("--execute requires --i-hold-the-host")
-    summary = execute(args.output.resolve())
+    with powercap_broker.PowercapBroker() as broker:
+        summary = execute(args.output.resolve(), host_state=broker.read_host_state)
     print(json.dumps({
         "campaign_id": summary["campaign_id"],
         "calibration_accepted": summary["calibration"]["accepted"],

@@ -28,8 +28,8 @@ Work with the operator to:
 3. **Verify the frozen trees**, exactly as `execution/README.md` §1.1 prints them. If
    `/mnt/raid0/llm/llama.cpp` is not at `0db32c06e3e` on `production-consolidated-v9`, stop:
    something else moved production and every anchor you are about to take is wrong.
-   Separately verify the reviewed measurement overlay at `0492c2319a79` on
-   `experimental-v9-autokernel-t1-hardening`; candidate worktrees start from that exact
+   Separately verify the reviewed measurement overlay at `a4cb04ca8f92` on
+   `experimental-v9-autokernel-t1-hardening-final`; candidate worktrees start from that exact
    one-commit child of production so the hardened evaluator is present without patching serving.
 4. **Verify the claim is acquirable and the host is quiet** — §1.2 and §1.3. Two A/A runs on
    2026-08-04 were destroyed by a legitimate co-tenant because we held no claim. The co-tenant

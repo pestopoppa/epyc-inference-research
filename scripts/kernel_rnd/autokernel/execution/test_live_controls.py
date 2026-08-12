@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from unittest import mock
 
+from ..evaluator import statistics
 from . import live_controls
 
 
@@ -49,6 +50,26 @@ class InstrumentCapability(unittest.TestCase):
             check = live_controls._instrument_receipt_capability(binary)
         self.assertEqual(check.outcome, "FAIL")
         self.assertIn("autokernel_device_sync_mode", check.reasons[0])
+
+
+class ControlEffectReachability(unittest.TestCase):
+
+    def test_predeclared_control_window_crosses_where_base_segment_cannot(self):
+        rule = live_controls._control_stopping_rule()
+        self.assertEqual(rule.max_total_blocks(5), 10)
+        construction = statistics.select_construction(
+            "sign_martingale_predictable_lambda/v1")
+        base = statistics.run_e_process(
+            (0.08,) * 5, construction=construction,
+            hypothesis=statistics.HYPOTHESIS_IMPROVEMENT,
+            margin=0.0, threshold=10.0)
+        full = statistics.run_e_process(
+            (0.08,) * rule.max_total_blocks(5), construction=construction,
+            hypothesis=statistics.HYPOTHESIS_IMPROVEMENT,
+            margin=0.0, threshold=10.0)
+        self.assertLess(base.e_running_max, 10.0)
+        self.assertGreaterEqual(full.e_running_max, 10.0)
+        self.assertEqual(full.first_crossing_block, 7)
 
 
 if __name__ == "__main__":

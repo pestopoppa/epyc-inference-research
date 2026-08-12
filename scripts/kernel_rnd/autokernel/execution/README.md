@@ -22,10 +22,11 @@ decides whether today is a campaign or a plumbing session.
 | `worktree.py` | Resolves the production tip, adds a campaign worktree, configures + builds, emits a build receipt | never built anything |
 | `t0_provider.py` | Runs `test-backend-ops`, `verify_ggml_linkage.sh`, generations, sanitizers; returns `correctness.T0Evidence` | never launched a tool |
 | `microbench.py` | Runs the T1 paired-block `llama-bench` design under the claim; requires unique content/address, ordinary/full-device-sync hybrid, stable thread-set, and bitwise output receipts | pre-v9 controls ran 2026-08-05; hardened hybrid awaits explicit inference permission |
+| `powercap_broker.py` | Reads root-owned package counters through one captured networkless/read-only container while the candidate remains non-root | live preflight PASS on 2026-08-12 |
 | `instrument_integrity.py` | Pins reward-bearing measurement source to the named anchor before every live invocation | candidate/anchor source roots |
 | `physical_bounds.py` | Re-derives the per-shape physical time floor and throughput ceiling from predeclared work/peak receipts | live runner requires it |
 | `control_runner.py` | Scores the five controls through the same dispatcher a candidate uses | live 5/5 panel, 2026-08-05 |
-| `live_controls.py` | Predeclares, measures, calibrates and scores the live CPU controls | live; dry-run by default |
+| `live_controls.py` | Predeclares, measures, calibrates and scores the live CPU controls, including the fixed five-block control extension needed to make a positive verdict reachable | live; dry-run by default |
 | `chain.py` | The **seams** between the above and the evaluator that reads them, plus the four T0 evidence projections (build, symbols, diff, change surface) | projection only; reads ELF/diff/log text it is handed, spawns nothing |
 | `../campaign.py` | **The entrypoint.** Composes everything above into one loop and gives it a `main()` | dry-run composition yes; no candidate built, no bench spawned |
 
@@ -117,7 +118,7 @@ Something else moved production and every anchor you are about to take is wrong.
 The reward instrument is a separate reviewed source anchor:
 
 ```
-/mnt/raid0/llm/llama.cpp-experimental  0492c2319a79e9bcc4edaa1bfb6af5a096276ab7  experimental-v9-autokernel-t1-hardening
+/mnt/raid0/llm/llama.cpp-ak-controls-v9-final  a4cb04ca8f92fa4d665684490f609b380f9b5e96  experimental-v9-autokernel-t1-hardening-final
 ```
 
 That commit has exactly one parent, the production v9 commit above. It changes
@@ -256,7 +257,7 @@ from autokernel.execution import worktree as WT
 
 repo = WT.GitRepo("/mnt/raid0/llm/llama.cpp-experimental") # READ-ONLY by construction
 anchor = WT.resolve_anchor(repo, "experimental-v9-autokernel-t1-hardening",
-                           expected_commit="0492c2319a79e9bcc4edaa1bfb6af5a096276ab7")
+                           expected_commit="a4cb04ca8f92fa4d665684490f609b380f9b5e96")
 wt, proof = WT.create_campaign_worktree(anchor, "ak-0001")   # /mnt/raid0/llm/llama.cpp-ak-0001
 assert proof.holds, proof.differences
 ```
