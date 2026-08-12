@@ -30,14 +30,15 @@ import ast
 import contextlib
 import io
 import json
+import math
 import os
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from . import campaign, schemas
-from .execution import physical_bounds
+from . import campaign, journal as journal_module, schemas
+from .execution import control_runner, physical_bounds
 from .resource import claim_witness
 from .test_schemas import _proposal as _proposal_fixture
 
@@ -288,6 +289,22 @@ class SpyOps:
     def journal(self, spec_, payload):
         self.calls.append("journal")
         self.journaled = dict(payload)
+
+
+class EvaluationSpyOps(SpyOps):
+    """The executing durability seam, with controllable evaluation failure."""
+
+    def __init__(self, *args, evaluation_raises=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._evaluation_raises = evaluation_raises
+
+    def journal_evaluation(self, spec_, result):
+        self.calls.append("journal_evaluation")
+        if self._evaluation_raises:
+            raise RuntimeError("induced evaluation append failure")
+
+    def close_evaluation_window(self, spec_, tree):
+        self._record("close_evaluation_window")
 
 
 # =============================================================================
@@ -1577,8 +1594,15 @@ class FakeClaim:
         self.released += 1
         return self
 
+    def receipt(self):
+        return self
+
+    def verify_held(self):
+        return schemas.Check(schemas.PASS, ())
+
     def to_dict(self):
-        return {"claim": self.name, "released": self.released}
+        return {"claim": self.name, "claim_id": self.name,
+                "device_id": self.name, "released": self.released}
 
 
 class TestTheClaimIsNeverHeldWithoutAReleaser(unittest.TestCase):
@@ -1602,6 +1626,9 @@ class TestTheClaimIsNeverHeldWithoutAReleaser(unittest.TestCase):
             mock.patch.object(campaign.cpu_region_claim, "acquire_cpu_region_claim",
                               lambda *a, **k: self.region),
             mock.patch.object(campaign.chain, "bind_claim", lambda *a, **k: object()),
+            mock.patch.object(
+                campaign.device_claim, "check_device_claim_held",
+                lambda *a, **k: schemas.Check(schemas.PASS, ())),
         ]
         for patch in patches:
             patch.start()
@@ -1626,6 +1653,27 @@ class TestTheClaimIsNeverHeldWithoutAReleaser(unittest.TestCase):
             claim = self.ops.acquire_claim(self.spec)
         self.assertIs(claim, self.region)
         self.assertEqual(self.region.released, 0)
+
+    def test_a_claim_that_cannot_be_reverified_is_released_before_return(self):
+        self.region.verify_held = lambda: schemas.Check(
+            schemas.FAIL, ("claim lock inode moved",))
+        with self._seams(schemas.PASS):
+            with self.assertRaisesRegex(RuntimeError, "inode moved"):
+                self.ops.acquire_claim(self.spec)
+        self.assertEqual(self.region.released, 1)
+
+    def test_missing_stable_holder_fields_cannot_compare_as_same_holder(self):
+        incomplete = {
+            "region": {"claim_id": "claim-1", "holder_pid": None,
+                       "holder_start_ticks": None, "holder_boot_id": None},
+            "devices": []}
+        self.assertEqual(campaign.HostOps._claim_holder_identity(incomplete), ())
+        ops = campaign.HostOps()
+        ops._claim_open_receipt = incomplete
+        closed = json.loads(json.dumps(incomplete))
+        check = ops._check_same_claim_holder(incomplete, closed)
+        self.assertEqual(check.outcome, schemas.FAIL)
+        self.assertIn("incomplete", " ".join(check.reasons))
 
     def test_a_device_claim_that_fails_releases_the_region_and_its_predecessor(self):
         """THE BITE, GPU: two devices, the second raises."""
@@ -1790,6 +1838,14 @@ class TestThePreflightIsWiredToSomethingThatExists(unittest.TestCase):
                           package_by_cpu=tuple((c, 0) for c in range(96)),
                           package_energy_uj=((0, 1_000_000, 100_000_000,
                                               "/power/package0"),))
+        def preflight_result(*_args, **_kwargs):
+            result = mock.Mock(verdict=verdict, reasons=("fake",))
+            result.as_check.return_value = schemas.Check(verdict, ("fake",))
+            result.to_dict.return_value = {
+                "verdict": verdict, "basis": "fixture",
+                "scope": {"label": "ak-test"}, "findings": [],
+                "owned": None, "region_claims": [], "gpu_claims": []}
+            return result
         return [
             mock.patch.object(campaign.worktree, "frozen_tree_paths", lambda: ()),
             mock.patch.object(campaign.worktree, "GitRepo", FakeRepo),
@@ -1797,8 +1853,7 @@ class TestThePreflightIsWiredToSomethingThatExists(unittest.TestCase):
             mock.patch.object(campaign.cpu_region_claim, "verify_host_topology",
                               lambda *a, **k: schemas.Check(schemas.PASS, ())),
             mock.patch.object(campaign.preflight, "preflight",
-                              lambda *a, **k: mock.Mock(verdict=verdict,
-                                                        reasons=("fake",))),
+                              preflight_result),
             mock.patch.object(campaign.microbench, "read_host_state",
                               lambda **k: state),
         ]
@@ -2782,3 +2837,434 @@ class TestTheGateIsTheSameGateInBothModes(_HypothesisGateCase):
         """CONTROL on the type gate: the spec takes a capability, not a name."""
         with self.assertRaises(TypeError):
             spec(authorization="akh-test-stated")
+
+
+class TestProspectiveEvaluationDurability(unittest.TestCase):
+    """An evaluated run writes evaluation evidence before terminal STOP_STATE."""
+
+    def test_t0_failure_writes_no_speed_and_evaluation_precedes_stop(self):
+        ops = EvaluationSpyOps(t0=FAILING_T0)
+        result = campaign.run_campaign(spec(), ops)
+        self.assertEqual(result.state, campaign.STATE_T0_FAILED)
+        self.assertNotIn("run_paired_blocks", ops.calls)
+        self.assertLess(ops.calls.index("close_evaluation_window"),
+                        ops.calls.index("release_claim"))
+        self.assertLess(ops.calls.index("journal_evaluation"), ops.calls.index("journal"))
+
+    def test_close_window_failure_does_not_skip_release_or_terminal_record(self):
+        ops = EvaluationSpyOps(t0=FAILING_T0,
+                               fail_at="close_evaluation_window")
+        result = campaign.run_campaign(spec(), ops)
+        self.assertEqual(result.state, campaign.STATE_ERROR)
+        self.assertIn("close_evaluation_window", result.error)
+        self.assertIn("release_claim", ops.calls)
+        self.assertEqual(ops.calls[-1], "journal")
+
+    def test_evaluation_append_failure_is_non_ok_and_stop_is_still_written(self):
+        durable_parent = Path(campaign.__file__).resolve().parents[3] / "data"
+        durable_parent.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=durable_parent) as root:
+            ops = EvaluationSpyOps(
+                t0=FAILING_T0, evaluation_raises=True)
+            result = campaign.run_campaign(spec(journal_root=root), ops)
+            self.assertFalse(result.ok)
+            self.assertIn("evaluation append failure", result.journal_error)
+            self.assertEqual(ops.calls[-1], "journal")
+            self.assertFalse(ops.journaled["result"]["ok"])
+
+    def test_dry_run_has_no_evaluation_event_seam(self):
+        ops = campaign.DryRunOps(out=io.StringIO())
+        result = campaign.run_campaign(spec(), ops)
+        self.assertEqual(result.state, campaign.STATE_COMPOSED)
+        self.assertNotIn("journal_evaluation", ops.calls)
+
+    def test_idempotent_append_reuses_identical_record_and_refuses_collision(self):
+        from .test_journal import _event
+
+        durable_parent = Path(campaign.__file__).resolve().parents[3] / "data"
+        durable_parent.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=durable_parent) as root:
+            run_spec = spec(journal_root=root)
+            ops = campaign.HostOps(nominal_khz=1)
+            record = _event("live-writer")
+            record["campaign_id"] = run_spec.campaign_id
+            record["candidate_id"] = run_spec.candidate_id
+            with mock.patch.object(ops, "_evaluation_events", return_value=(record,)):
+                first = ops.journal_evaluation(run_spec, None)
+                second = ops.journal_evaluation(run_spec, None)
+            self.assertEqual(first, second)
+            book = journal_module.Journal(root, campaign_id=run_spec.campaign_id)
+            entries = [entry for entry in book.read_all()
+                       if entry.kind == journal_module.KIND_EVALUATION_EVENT]
+            self.assertEqual(len(entries), 1)
+            mutated = json.loads(json.dumps(record))
+            mutated["status"] = "fail"
+            with mock.patch.object(ops, "_evaluation_events", return_value=(mutated,)):
+                with self.assertRaisesRegex(RuntimeError, "different bytes"):
+                    ops.journal_evaluation(run_spec, None)
+
+    def test_every_pre_behavioural_t0_refusal_emits_a_schema_valid_non_rate_event(self):
+        sha = lambda value: __import__("hashlib").sha256(value.encode()).hexdigest()
+        controls = campaign.api.CampaignControls(
+            calibration_block_count=20, contribution_floor=0.03,
+            max_candidates=10, confirmation_admission_count=2,
+            max_blocks_per_candidate=20, storage_floor_bytes_free=1)
+        calibration = campaign.api.CalibrationOutputs(
+            backend="llama_cpu", phase="prefill", cell_class="tiny_real_graph",
+            noise_floor_phi=0.03, b_min_blocks=10, alpha_sel=0.1,
+            alpha_conf=0.05, anchor_gate_band=(90.0, 110.0), accepted=True,
+            solve_order_recorded=campaign.api.CALIBRATION_SOLVE_ORDER,
+            samples_ref="sha256:" + sha("calibration"),
+            e_process_construction_id="sign_martingale_predictable_lambda/v1")
+        anchor = campaign.api.AnchorIdentity(
+            source_commit=campaign.PRODUCTION_COMMIT, binary_sha256=sha("anchor-bin"),
+            linkage_sha256=sha("anchor-link"), tool="llama-cli")
+        early_request = campaign.api.EvaluationRequest(
+            event_id="ake-early-refusal", campaign_id="ak-test",
+            candidate_id="akc-test", tier="T0", backend="llama_cpu",
+            phase="prefill", cell_class="tiny_real_graph",
+            protocol_id="P-AK-SEARCH-1/v1",
+            artifact=campaign.api.ArtifactIdentity(
+                sha("source"), sha("binary"), sha("linkage")), anchor=anchor,
+            evaluator=campaign.api.EvaluatorIdentity(
+                id="autokernel.campaign-live-evaluation/v1",
+                bundle_sha256=sha("evaluator"),
+                runtime_source_label_ref="sha256:" + sha("source-label")),
+            scope_denominator=campaign.api.ScopeDenominator(
+                machine_subset="full", numa_nodes=(), devices=(), cores=192),
+            scope_manifest_sha256=sha("scope"), co_residency="single",
+            determinism=campaign.api.DeterminismReport("not_measured", 0),
+            metric="prefill_tokens_per_s", metric_direction="higher_better",
+            reps=5, change_class="parameter", anchor_tier="T0",
+            transfer_ratio_to=(), created_at="2026-08-12T10:00:00+00:00",
+            campaign_controls=controls, calibration=calibration)
+        passed = schemas.Check(schemas.PASS)
+        panel = campaign.api.ControlPanel(
+            positive=passed, neutral=passed, degraded_negative=passed,
+            aa=passed, historical_replay=passed)
+        attestations = campaign.api.WindowAttestations(
+            resource_claim_receipt="sha256:" + sha("claim"),
+            resource_claim_open=passed, resource_claim_close=passed,
+            resource_claim_same_holder=passed, no_concurrent_inference=passed,
+            preflight_attestation_ref="sha256:" + sha("preflight"),
+            host_receipt="sha256:" + sha("host"), host_health=passed,
+            anchor_at_open=anchor, anchor_at_close=anchor, anchor_gate=passed,
+            evaluator_bundle=passed, runtime_source_label=passed,
+            recipe=campaign.api.RecipeReceipt(
+                "recipe/v1", sha("constructor"), sha("argv")),
+            storage_open=passed, storage_close=passed, strata=passed,
+            stopping_rule_id="fixed-10/v1", rule_immutability=passed,
+            order_randomized=passed, order_seed="ak-test/t0",
+            aa_cadence=passed, controls=panel, calibration=passed,
+            control_definitions_immutable=passed,
+            raw_evidence_ref="sha256:" + sha("raw-t0"))
+        for gate_id in (
+                "t0.measurement_source_pin", "t0.build_evidence",
+                "t0.compile_artifact_diff"):
+            with self.subTest(gate_id=gate_id):
+                ops = campaign.HostOps(nominal_khz=1)
+                check = schemas.Check(schemas.FAIL, (f"induced {gate_id}",))
+                outcome = ops._stop_t0_early(early_request, gate_id, check)
+                self.assertFalse(outcome.all_pass)
+                with mock.patch.object(
+                        ops, "_window_attestations", return_value=attestations):
+                    [event] = ops._evaluation_events(spec())
+                self.assertEqual(schemas.validate_evaluation_event_v5(event), [])
+                self.assertEqual(event["performance"]["raw_samples"], [])
+                self.assertEqual(event["performance"]["paired_blocks"], 0)
+                self.assertIsNone(event["performance"]["estimate"])
+                self.assertIn(gate_id, event["stability"])
+
+    def test_an_exception_before_event_construction_gets_a_distinct_t0_refusal(self):
+        durable_parent = Path(campaign.__file__).resolve().parents[3] / "data"
+        durable_parent.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=durable_parent) as root:
+            run_spec = spec(journal_root=root)
+            ops = campaign.HostOps(nominal_khz=1)
+            ops._t0_started = True
+            result = mock.Mock(error="ValueError: identity could not be formed")
+            ops.journal_evaluation(run_spec, result)
+            entries = journal_module.Journal(
+                root, campaign_id=run_spec.campaign_id).read_all()
+            [refusal] = [entry for entry in entries
+                         if entry.kind == journal_module.KIND_T0_REFUSAL]
+            self.assertFalse(refusal.payload["rate_measured"])
+            self.assertIn("identity could not be formed", refusal.payload["error"])
+
+    def test_t0_and_t1_use_their_own_close_anchor_and_close_drift_voids(self):
+        """The llama-cli T0 anchor must never be closed with llama-bench bytes."""
+        from .evaluator import statistics
+
+        passed = schemas.Check(schemas.PASS)
+        sha = lambda value: __import__("hashlib").sha256(value.encode()).hexdigest()
+        controls = campaign.api.CampaignControls(
+            calibration_block_count=20, contribution_floor=0.02,
+            max_candidates=10, confirmation_admission_count=2,
+            max_blocks_per_candidate=40, storage_floor_bytes_free=1)
+        calibration = campaign.api.CalibrationOutputs(
+            backend="llama_cpu", phase="prefill", cell_class="tiny_real_graph",
+            noise_floor_phi=0.009, b_min_blocks=10, alpha_sel=0.1,
+            alpha_conf=0.05, anchor_gate_band=(0.97, 1.03), accepted=True,
+            solve_order_recorded=campaign.api.CALIBRATION_SOLVE_ORDER,
+            samples_ref="raw/calibration",
+            e_process_construction_id="sign_martingale_predictable_lambda/v1")
+        panel = campaign.api.ControlPanel(
+            positive=passed, neutral=passed, degraded_negative=passed,
+            aa=passed, historical_replay=passed)
+        authority = control_runner.LiveEvaluationAuthority(
+            campaign_controls=controls, calibration=calibration, controls=panel,
+            aa_cadence=passed, control_definitions_immutable=passed,
+            construction_id="ak.test-construction/v1",
+            stopping_rule_id="ak.stopping.bounded_extension/v1", mde=0.021,
+            runtime_source_label_ref="ake-srclabel-0003",
+            evidence_ref="/durable/test-authority")
+        lean = campaign.LeanCalibration(
+            recipe_id=campaign.HISTORICAL_CALIBRATED_RECIPE_ID,
+            contribution_floor=0.02, b_min_blocks=10, max_blocks=40,
+            noise_floor_phi=0.009, mde=0.021,
+            production_commit=campaign.PRODUCTION_COMMIT,
+            measurement_commit=campaign.MEASUREMENT_COMMIT,
+            evidence_ref=authority.evidence_ref, evaluation_authority=authority)
+        run_spec = spec(blocks=12, calibration=lean)
+        base_anchor = campaign.api.AnchorIdentity(
+            source_commit=campaign.PRODUCTION_COMMIT,
+            binary_sha256=sha("anchor-binary"),
+            linkage_sha256=sha("anchor-linkage"))
+        cli = base_anchor.for_tool("llama-cli")
+        bench = base_anchor.for_tool("llama-bench")
+
+        def request(tier, anchor, event_id):
+            return campaign.api.EvaluationRequest(
+                event_id=event_id, campaign_id="ak-test", candidate_id="akc-test",
+                tier=tier, backend="llama_cpu", phase="prefill",
+                cell_class="tiny_real_graph", protocol_id="P-AK-SEARCH-1/v1",
+                artifact=campaign.api.ArtifactIdentity(
+                    sha("source"), sha("binary"), sha("linkage")), anchor=anchor,
+                evaluator=campaign.api.EvaluatorIdentity(
+                    id="autokernel.campaign-live-evaluation/v1",
+                    bundle_sha256=sha("evaluator"),
+                    runtime_source_label_ref=authority.runtime_source_label_ref),
+                scope_denominator=campaign.api.ScopeDenominator(
+                    machine_subset="full", numa_nodes=(), devices=(), cores=192),
+                scope_manifest_sha256=sha("scope"), co_residency="single",
+                determinism=campaign.api.DeterminismReport("bitwise_stable", 3),
+                metric="prefill_tokens_per_s", metric_direction="higher_better",
+                reps=1, change_class="parameter", anchor_tier=tier,
+                transfer_ratio_to=(), created_at="2026-08-12T10:00:00+00:00",
+                campaign_controls=controls, calibration=calibration)
+
+        t0_request = request("T0", cli, "ake-tool-t0")
+        t1_request = request("T1", bench, "ake-tool-t1")
+        gates = (
+            campaign.api.GateResult("exact", campaign.api.GATE_CORRECTNESS,
+                                    passed, requires_anchor=True),
+            campaign.api.GateResult("stable", campaign.api.GATE_STABILITY, passed),
+        )
+        blocks = tuple(statistics.PairedBlock(
+            block_index=index, unit_id=f"u{index}",
+            stratum=campaign.api.STRATUM_SELECTION,
+            order=(statistics.ORDER_ANCHOR_FIRST if index % 2 == 0 else
+                   statistics.ORDER_CANDIDATE_FIRST),
+            anchor_samples=(1.0,), candidate_samples=(1.061,))
+            for index in range(12))
+        rate_run = mock.Mock()
+        rate_run.paired_blocks.return_value = blocks
+        rate_run.order_control = passed
+        rate_run.plan.campaign_seed = "campaign-seed-4711"
+
+        ops = campaign.HostOps(nominal_khz=1)
+        ops._claim_release_receipt = {"region": {"released_at": "now"}, "devices": []}
+        ops._claim_open_check = ops._claim_close_check = passed
+        ops._claim_same_holder_check = passed
+        ops._preflight_check = ops._no_concurrent_close = passed
+        ops._preflight_open_receipt = {"basis": "claim_witness", "when": "open"}
+        ops._preflight_close_receipt = {"basis": "claim_witness", "when": "close"}
+        ops._host_health_close = ops._storage_open = ops._storage_close = passed
+        ops._evaluator_close_check = ops._runtime_close_check = passed
+        ops._anchors_at_close = {"llama-cli": cli, "llama-bench": bench}
+        ops._anchor_close_checks = {"llama-cli": passed, "llama-bench": passed}
+        ops._t0_gate_results = gates
+        retained_recipe = campaign.api.RecipeReceipt(
+            "ak.test-recipe/v1", sha("constructor"), sha("argv"))
+        ops._recipe_receipts = {
+            ("T0", "llama-cli"): retained_recipe,
+            ("T1", "llama-bench"): retained_recipe,
+        }
+        with mock.patch.object(
+                ops, "_construct",
+                side_effect=AssertionError("post-run recipe reconstruction")):
+            t0_window = ops._window_attestations(
+                run_spec, t0_request, raw_evidence_ref="raw/t0", rate_run=None)
+            t1_window = ops._window_attestations(
+                run_spec, t1_request, raw_evidence_ref="raw/t1", rate_run=rate_run)
+        self.assertIs(t0_window.recipe, retained_recipe)
+        self.assertIs(t1_window.recipe, retained_recipe)
+        self.assertEqual(t0_window.anchor_at_close.tool, "llama-cli")
+        self.assertEqual(t1_window.anchor_at_close.tool, "llama-bench")
+        self.assertNotEqual(t0_window.preflight_attestation_ref,
+                            "sha256:" + schemas.content_hash({
+                                "outcome": passed.outcome, "reasons": []}))
+        dispatcher = campaign.api.TierDispatcher(gate_runners={
+            "T0": campaign._RecordedGateRunner(gates),
+            "T1": campaign._RecordedGateRunner(gates),
+        })
+        self.assertNotEqual(
+            dispatcher.dispatch(t0_request, t0_window).verdict.status,
+            campaign.api.STATUS_INVALID)
+        self.assertNotEqual(
+            dispatcher.dispatch(t1_request, t1_window,
+                                effect=campaign.api.EffectEstimate(
+                                    metric="prefill_tokens_per_s",
+                                    metric_direction="higher_better", value=0.061,
+                                    e_value=20.0, threshold=10.0, mde=0.021,
+                                    noise_floor=0.009, paired_blocks=12,
+                                    stratum=campaign.api.STRATUM_SELECTION,
+                                    raw_samples=tuple(0.061 for _ in range(12)),
+                                    raw_samples_ref="raw/t1")).verdict.status,
+            campaign.api.STATUS_INVALID)
+
+        negative_windows = (
+            ("anchor", mock.patch.dict(ops._anchors_at_close,
+                                       {"llama-cli": bench})),
+            ("evaluator", mock.patch.object(
+                ops, "_evaluator_close_check",
+                schemas.Check(schemas.FAIL, ("bundle drift",)))),
+            ("claim", mock.patch.object(
+                ops, "_claim_close_check",
+                schemas.Check(schemas.FAIL, ("claim drift",)))),
+            ("host", mock.patch.object(
+                ops, "_host_health_close",
+                schemas.Check(schemas.FAIL, ("host drift",)))),
+        )
+        for label, patcher in negative_windows:
+            with self.subTest(drift=label), patcher:
+                drifted = ops._window_attestations(
+                    run_spec, t0_request, raw_evidence_ref="raw/t0", rate_run=None)
+                outcome = dispatcher.dispatch(t0_request, drifted)
+                self.assertEqual(outcome.verdict.status, campaign.api.STATUS_INVALID)
+
+
+class TestVidyaBeliefCaptureProducer(unittest.TestCase):
+    """The prospective write marker is identity- and raw-reduction-bound."""
+
+    def event(self):
+        from .test_journal import _event
+
+        record = _event("belief-capture")
+        raw = [
+            [0, "u0", "selection", "anchor_first", "base", None,
+             "2026-08-12T10:00:00+00:00", [100.0, 102.0], [104.0, 106.0]],
+            [1, "u1", "selection", "candidate_first", "base", None,
+             "2026-08-12T10:01:00+00:00", [99.0, 101.0], [103.0, 105.0]],
+        ]
+        effects = [
+            (campaign.median(block[8]) - campaign.median(block[7])) /
+            campaign.median(block[7]) for block in raw]
+        record["performance"]["raw_samples"] = raw
+        record["performance"]["raw_samples_ref"] = (
+            "sha256:" + schemas.content_hash(raw))
+        record["performance"]["paired_blocks"] = len(raw)
+        record["performance"]["estimate"] = campaign.median(effects)
+        record["claim_grammar"]["reps"] = 2
+        record["performance"].setdefault("search_discipline", {})
+        return record
+
+    def test_capture_has_exact_schema_and_load_bearing_identity(self):
+        record = self.event()
+        produced = control_runner.attach_belief_capture(
+            record, effect_scale="relative", model_id="model.gguf",
+            model_sha256="a" * 64, producer_sha256="b" * 64)
+        capture = produced["performance"]["search_discipline"]["belief_capture"]
+        self.assertEqual(schemas.validate_evaluation_event_v5(produced), [])
+        self.assertEqual(
+            capture["schema"],
+            "epyc.vidya.autokernel_evaluation_event_capture.v1")
+        self.assertEqual(capture["raw_samples_sha256"],
+                         schemas.content_hash(record["performance"]["raw_samples"]))
+        original_binding = capture["identity_binding_sha256"]
+        record["candidate_id"] = "akc-mutated"
+        changed = control_runner.attach_belief_capture(
+            record, effect_scale="relative", model_id="model.gguf",
+            model_sha256="a" * 64, producer_sha256="b" * 64)
+        self.assertNotEqual(
+            original_binding,
+            changed["performance"]["search_discipline"]["belief_capture"]
+                   ["identity_binding_sha256"])
+
+    @staticmethod
+    def _root_vidya_contract_accepts(envelope):
+        """Copied cross-contract from root commit 6c9cad04's SC10 adapter."""
+        if (envelope.get("journal_schema") != "epyc.autokernel.journal_entry.v1"
+                or envelope.get("kind") != "EVALUATION_EVENT"):
+            return False
+        event = envelope.get("payload")
+        if (not isinstance(event, dict)
+                or envelope.get("campaign_id") != event.get("campaign_id")
+                or envelope.get("record_id") != event.get("event_id")):
+            return False
+        performance = event["performance"]
+        capture = performance["search_discipline"].get("belief_capture")
+        if not isinstance(capture, dict):
+            return False
+        raw = performance["raw_samples"]
+        raw_sha = schemas.content_hash(raw)
+        if (capture.get("raw_samples_sha256") != raw_sha
+                or performance.get("raw_samples_ref") != f"sha256:{raw_sha}"
+                or performance.get("paired_blocks") != len(raw)):
+            return False
+        claim = event["claim_grammar"]
+        binding = {
+            "schema": capture["schema"], "event_id": event["event_id"],
+            "campaign_id": event["campaign_id"],
+            "candidate_id": event["candidate_id"], "category": claim["category"],
+            "protocol_id": claim["protocol_id"], "metric": claim["metric"],
+            "metric_direction": claim["metric_direction"], "reps": claim["reps"],
+            "effect_scale": capture["effect_scale"], "model_id": capture["model_id"],
+            "model_sha256": capture["model_sha256"],
+            "source_sha256": capture["source_sha256"],
+            "binary_sha256": capture["binary_sha256"],
+            "resource_claim_receipt": capture["resource_claim_receipt"],
+            "producer_sha256": capture["producer_sha256"],
+            "raw_samples_sha256": capture["raw_samples_sha256"],
+        }
+        if capture.get("identity_binding_sha256") != schemas.content_hash(binding):
+            return False
+        effects = []
+        for block in raw:
+            if (not isinstance(block, list) or len(block) != 9
+                    or len(block[7]) != claim["reps"]
+                    or len(block[8]) != claim["reps"]):
+                return False
+            anchor = campaign.median(block[7])
+            candidate = campaign.median(block[8])
+            effects.append((candidate - anchor) / anchor)
+        return math.isclose(
+            campaign.median(effects), performance["estimate"],
+            rel_tol=1e-12, abs_tol=1e-15)
+
+    def test_actual_journal_envelope_passes_root_vidya_sc10_contract(self):
+        record = control_runner.attach_belief_capture(
+            self.event(), effect_scale="relative", model_id="model.gguf",
+            model_sha256="a" * 64, producer_sha256="b" * 64)
+        durable_parent = Path(campaign.__file__).resolve().parents[3] / "data"
+        durable_parent.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=durable_parent) as root:
+            book = journal_module.Journal(
+                root, campaign_id=record["campaign_id"])
+            book.initialize()
+            entry = book.append(journal_module.KIND_EVALUATION_EVENT, record)
+            self.assertTrue(self._root_vidya_contract_accepts(entry.envelope()))
+
+    def test_capture_refuses_reps_or_raw_hash_drift(self):
+        record = self.event()
+        record["claim_grammar"]["reps"] += 1
+        with self.assertRaisesRegex(ValueError, "reps"):
+            control_runner.attach_belief_capture(
+                record, effect_scale="relative", model_id="model.gguf",
+                model_sha256="a" * 64, producer_sha256="b" * 64)
+        record = self.event()
+        record["performance"]["raw_samples"][0][8][0] += 1.0
+        with self.assertRaisesRegex(ValueError, "raw sample hash"):
+            control_runner.attach_belief_capture(
+                record, effect_scale="relative", model_id="model.gguf",
+                model_sha256="a" * 64, producer_sha256="b" * 64)

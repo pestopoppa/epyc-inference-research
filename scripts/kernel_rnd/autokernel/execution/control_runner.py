@@ -73,9 +73,12 @@ from __future__ import annotations
 MODULE_ID = "autokernel.execution.control_runner/v1"
 
 import ast
+import json
 from dataclasses import dataclass, fields as dataclass_fields, replace
+from math import isclose, isfinite
 from pathlib import Path
-from typing import Any, Optional, Protocol, Sequence
+from statistics import median
+from typing import Any, Mapping, Optional, Protocol, Sequence
 
 from .. import schemas
 from ..evaluator import api, controls
@@ -96,10 +99,262 @@ __all__ = [
     "ExecutedControlRunner", "SeedAssignment", "SweepResult", "ControlSweep",
     # the calibration join
     "calibration_material", "pool_calibration_material", "build_calibration_inputs",
+    # prospective live-campaign evaluation records
+    "LiveEvaluationAuthority", "load_live_evaluation_authority",
+    "reduce_live_blocks", "attach_belief_capture",
     # audit
     "audit_single_evaluation_path",
     "audit_submission_carries_no_control_marker",
 ]
+
+
+@dataclass(frozen=True)
+class LiveEvaluationAuthority:
+    """Typed, verified authority projected from one accepted live-control bundle.
+
+    The campaign driver consumes this object; it never copies calibration or
+    control values into its own constants.  The bundle remains the evidence
+    source and all five control outcomes remain three-valued ``Check`` objects.
+    """
+
+    campaign_controls: api.CampaignControls
+    calibration: api.CalibrationOutputs
+    controls: api.ControlPanel
+    aa_cadence: schemas.Check
+    control_definitions_immutable: schemas.Check
+    construction_id: str
+    stopping_rule_id: str
+    mde: float
+    runtime_source_label_ref: str
+    evidence_ref: str
+
+
+def _recorded_check(value: Any, label: str) -> schemas.Check:
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{label} must be a recorded check mapping")
+    outcome = value.get("outcome")
+    reasons = value.get("reasons", ())
+    if not isinstance(reasons, list):
+        raise ValueError(f"{label}.reasons must be a list")
+    return schemas.Check(outcome, tuple(str(reason) for reason in reasons))
+
+
+def load_live_evaluation_authority(path: str | Path) -> LiveEvaluationAuthority:
+    """Read the accepted calibration/control records used by the live writer.
+
+    This is deliberately stricter than a display loader: any missing control,
+    rejected calibration, or mismatched construction refuses the campaign.
+    """
+    root = Path(path).resolve()
+
+    def read(name: str) -> Mapping[str, Any]:
+        try:
+            value = json.loads((root / name).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError(f"live evaluation authority {name}: {exc}") from exc
+        if not isinstance(value, Mapping):
+            raise ValueError(f"live evaluation authority {name} must be an object")
+        return value
+
+    calibration_record = read("calibration.json")
+    sweep = read("control_sweep.json")
+    source = read("runtime-source-label.json")
+    inputs = calibration_record.get("inputs")
+    outputs = calibration_record.get("outputs")
+    attempts = calibration_record.get("attempts")
+    panel_result = sweep.get("panel_result")
+    if not calibration_record.get("accepted") or not isinstance(inputs, Mapping) \
+            or not isinstance(outputs, Mapping) or not outputs.get("accepted"):
+        raise ValueError("live evaluation authority carries no accepted calibration")
+    if not isinstance(attempts, list):
+        raise ValueError("live evaluation authority carries no calibration attempts")
+    accepted = [item for item in attempts
+                if isinstance(item, Mapping) and item.get("accepted")]
+    if len(accepted) != 1 or not isinstance(accepted[0].get("mde"), Mapping) \
+            or not accepted[0]["mde"].get("found"):
+        raise ValueError("live evaluation authority needs exactly one solved MDE")
+    if not isinstance(panel_result, Mapping) or not panel_result.get("may_rank"):
+        raise ValueError("live evaluation authority control panel does not authorize ranking")
+    panel = panel_result.get("panel")
+    if not isinstance(panel, Mapping) or panel.get("marker") != "5/5":
+        raise ValueError("live evaluation authority requires the recorded five-control panel")
+
+    controls_obj = inputs.get("controls")
+    if not isinstance(controls_obj, Mapping):
+        raise ValueError("live evaluation authority has no campaign controls")
+    campaign_controls = api.CampaignControls(**{
+        name: controls_obj[name] for name in (
+            "calibration_block_count", "contribution_floor", "max_candidates",
+            "confirmation_admission_count", "max_blocks_per_candidate",
+            "storage_floor_bytes_free")
+    })
+    calibration_values = {
+        name: outputs[name] for name in (
+            "backend", "phase", "cell_class", "noise_floor_phi", "b_min_blocks",
+            "alpha_sel", "alpha_conf", "accepted", "samples_ref",
+            "e_process_construction_id")
+    }
+    calibration = api.CalibrationOutputs(
+        **calibration_values,
+        # JSON arrays are transport shapes; the typed API owns tuple identity.
+        anchor_gate_band=tuple(outputs["anchor_gate_band"]),
+        solve_order_recorded=tuple(outputs["solve_order_recorded"]),
+    )
+    recorded_panel = api.ControlPanel(
+        positive=schemas.Check(panel["positive"]),
+        neutral=schemas.Check(panel["neutral"]),
+        degraded_negative=schemas.Check(panel["degraded_negative"]),
+        aa=schemas.Check(panel["aa"]),
+        historical_replay=schemas.Check(panel["historical_replay"]),
+        historical_replay_unavailable_reason=panel.get(
+            "historical_replay_unavailable_reason"),
+        operator_escalation_ref=panel.get("operator_escalation_ref"),
+    )
+    construction = inputs.get("construction")
+    stopping = inputs.get("stopping_rule")
+    if not isinstance(construction, Mapping) or not isinstance(stopping, Mapping):
+        raise ValueError("live evaluation authority lacks construction/stopping rule")
+    construction_id = construction.get("construction_id")
+    # Selection is also a content check: a stale or invented id is refused by
+    # the evaluator bundle here, before a candidate's samples are read.
+    ak_statistics.select_construction(construction_id)
+    source_body = dict(source)
+    source_sha = source_body.pop("source_sha256", None)
+    if source_sha != schemas.content_hash(source_body):
+        raise ValueError("runtime source label hash does not verify")
+    return LiveEvaluationAuthority(
+        campaign_controls=campaign_controls,
+        calibration=calibration,
+        controls=recorded_panel,
+        aa_cadence=_recorded_check(panel_result.get("aa_cadence"), "aa_cadence"),
+        control_definitions_immutable=_recorded_check(
+            panel_result.get("definitions_check"), "definitions_check"),
+        construction_id=construction_id,
+        stopping_rule_id=str(stopping.get("rule_id")),
+        mde=float(accepted[0]["mde"]["value"]),
+        runtime_source_label_ref=f"{root / 'runtime-source-label.json'}#sha256:{source_sha}",
+        evidence_ref=str(root),
+    )
+
+
+def reduce_live_blocks(request: api.EvaluationRequest, blocks: Sequence[Any],
+                       authority: LiveEvaluationAuthority) -> api.EffectEstimate:
+    """Reduce actual paired blocks with the bundle's fixed e-process.
+
+    Raw per-arm samples are retained in the returned estimate.  No median-only
+    campaign ``Pair`` can enter this function, so a writer cannot accidentally
+    manufacture reproducibility from the accept rule's display values.
+    """
+    material = tuple(blocks)
+    if not material or any(not isinstance(item, ak_statistics.PairedBlock)
+                           for item in material):
+        raise ValueError("live evaluation reduction requires real PairedBlock material")
+    effects = tuple(ak_statistics.block_effect(
+        item, scale=ak_statistics.EFFECT_SCALE_RELATIVE)
+                    for item in material)
+    oriented = tuple(ak_statistics.orient(value, request.metric_direction)
+                     for value in effects)
+    construction = ak_statistics.select_construction(authority.construction_id)
+    threshold = authority.calibration.threshold_for(material[0].stratum)
+    e_run = ak_statistics.run_e_process(
+        oriented, construction=construction,
+        hypothesis=ak_statistics.HYPOTHESIS_IMPROVEMENT, margin=0.0,
+        threshold=threshold)
+    raw = tuple(item.to_tuple() for item in material)
+    raw_ref = "sha256:" + schemas.content_hash([item.to_list() for item in material])
+    return api.EffectEstimate(
+        metric=request.metric, metric_direction=request.metric_direction,
+        value=median(effects), e_value=e_run.e_running_max, threshold=threshold,
+        mde=authority.mde, noise_floor=authority.calibration.noise_floor_phi,
+        paired_blocks=len(material), stratum=material[0].stratum,
+        raw_samples=raw, raw_samples_ref=raw_ref)
+
+
+def attach_belief_capture(event: Mapping[str, Any], *, effect_scale: str,
+                          model_id: str, model_sha256: str,
+                          producer_sha256: str) -> dict:
+    """Attach the prospective Vidya capture with an identity-bound reduction.
+
+    This mirrors the read-side contract in epyc-root's
+    ``vidya.adapters.autokernel_evaluation_event/v1``.  It is intentionally a
+    small producer helper in the research repository: runtime ingestion must
+    not depend on whichever root-repository branch happens to be mounted.
+    """
+    record = json.loads(schemas.canonical_json(event))
+    performance = record["performance"]
+    raw = performance["raw_samples"]
+    raw_sha = schemas.content_hash(raw)
+    raw_ref = f"sha256:{raw_sha}"
+    if performance.get("raw_samples_ref") != raw_ref:
+        raise ValueError("belief capture raw sample hash disagrees with evaluation event")
+    reps = record["claim_grammar"]["reps"]
+    if performance.get("paired_blocks") != len(raw):
+        raise ValueError("belief capture paired_blocks disagrees with raw block count")
+    for index, block in enumerate(raw):
+        if not isinstance(block, list) or len(block) != 9:
+            raise ValueError(f"belief capture raw block {index} is not the 9-field shape")
+        if not isinstance(block[7], list) or not isinstance(block[8], list) \
+                or len(block[7]) != reps or len(block[8]) != reps:
+            raise ValueError(
+                f"belief capture raw block {index} arm vectors must each contain "
+                f"claim reps={reps} scored repetitions")
+    effects = []
+    seen = set()
+    for index, block in enumerate(raw):
+        block_index, unit, stratum, order, segment, extension, measured_at, anchors, candidates = block
+        if (isinstance(block_index, bool) or not isinstance(block_index, int)
+                or block_index < 0 or block_index in seen
+                or not isinstance(unit, str) or not unit.strip()
+                or not isinstance(stratum, str) or not stratum.strip()
+                or order not in {"anchor_first", "candidate_first"}
+                or segment not in {"base", "extension"}
+                or (segment == "base" and extension is not None)
+                or (segment == "extension" and (
+                    isinstance(extension, bool) or not isinstance(extension, int)
+                    or extension < 1))):
+            raise ValueError(f"belief capture raw block {index} has invalid identity/order")
+        seen.add(block_index)
+        anchor_value, candidate_value = median(anchors), median(candidates)
+        if effect_scale == "relative":
+            if anchor_value <= 0:
+                raise ValueError("belief capture relative effect has non-positive anchor")
+            effects.append((candidate_value - anchor_value) / anchor_value)
+        elif effect_scale == "absolute":
+            effects.append(candidate_value - anchor_value)
+        else:
+            raise ValueError("belief capture effect_scale must be relative or absolute")
+    derived = median(effects)
+    estimate = performance.get("estimate")
+    if not isinstance(estimate, (int, float)) or isinstance(estimate, bool) \
+            or not isfinite(float(estimate)) or not isclose(
+                derived, float(estimate), rel_tol=1e-12, abs_tol=1e-15):
+        raise ValueError("belief capture event estimate disagrees with raw block reduction")
+    capture = {
+        "schema": "epyc.vidya.autokernel_evaluation_event_capture.v1",
+        "effect_scale": effect_scale,
+        "model_id": model_id,
+        "model_sha256": model_sha256,
+        "source_sha256": record["artifact"]["source_sha256"],
+        "binary_sha256": record["artifact"]["binary_sha256"],
+        "resource_claim_receipt": record["resource_claim_receipt"],
+        "producer_sha256": producer_sha256,
+        "raw_samples_sha256": raw_sha,
+    }
+    binding = {
+        "schema": capture["schema"],
+        "event_id": record["event_id"],
+        "campaign_id": record["campaign_id"],
+        "candidate_id": record["candidate_id"],
+        "category": record["claim_grammar"]["category"],
+        "protocol_id": record["claim_grammar"]["protocol_id"],
+        "metric": record["claim_grammar"]["metric"],
+        "metric_direction": record["claim_grammar"]["metric_direction"],
+        "reps": record["claim_grammar"]["reps"],
+        **capture,
+    }
+    capture["identity_binding_sha256"] = schemas.content_hash(binding)
+    performance["search_discipline"]["belief_capture"] = capture
+    return record
 
 #: Versioned, because a runner id with no version cannot fail closed on drift.
 CONTROL_RUNNER_ID = "ak3-executed-control-runner/v1"
