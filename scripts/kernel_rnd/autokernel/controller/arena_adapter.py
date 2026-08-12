@@ -20,6 +20,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -356,7 +357,11 @@ def prepare_task(task: ArenaTask, *, base_environment: Mapping[str, str] | None 
     )
 
 
-def launch(prepared: PreparedArenaTask, argv: Sequence[str], *, timeout_seconds: int) -> str:
+def launch(
+    prepared: PreparedArenaTask, argv: Sequence[str], *, timeout_seconds: int,
+    command_prefix: Sequence[str] = (),
+    process_started: Callable[[int], None] | None = None,
+) -> str:
     """Launch one registered controller through stdin; shell interpolation is forbidden."""
     if not isinstance(prepared, PreparedArenaTask):
         raise TypeError("prepared must be a PreparedArenaTask")
@@ -367,15 +372,28 @@ def launch(prepared: PreparedArenaTask, argv: Sequence[str], *, timeout_seconds:
     executable = shutil.which(argv[0], path=prepared.environment.get("PATH"))
     if executable is None:
         raise ArenaAdapterError(f"controller executable not found: {argv[0]}")
-    bound = (executable, *argv[1:])
-    result = _run(
-        bound, cwd=Path(prepared.task.workspace), env=prepared.environment,
-        timeout=timeout_seconds, input_text=prepared.prompt)
-    if result.returncode != 0:
+    if any(not isinstance(part, str) or not part for part in command_prefix):
+        raise ArenaAdapterError("command_prefix must contain non-empty strings")
+    bound = (*command_prefix, executable, *argv[1:])
+    try:
+        process = subprocess.Popen(
+            bound, cwd=Path(prepared.task.workspace), env=prepared.environment,
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, start_new_session=True)
+        if process_started is not None:
+            process_started(process.pid)
+        stdout, stderr = process.communicate(
+            input=prepared.prompt, timeout=timeout_seconds)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        if "process" in locals() and process.poll() is None:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+        raise ArenaAdapterError("controller failed to start or finish") from exc
+    if process.returncode != 0:
         raise ArenaAdapterError(
-            f"controller {prepared.task.controller_id} exited {result.returncode}: "
-            f"{result.stderr.strip()[:500]}")
-    return result.stdout
+            f"controller {prepared.task.controller_id} exited {process.returncode}: "
+            f"{stderr.strip()[:500]}")
+    return stdout
 
 
 def register_agentkernelarena_adapter(

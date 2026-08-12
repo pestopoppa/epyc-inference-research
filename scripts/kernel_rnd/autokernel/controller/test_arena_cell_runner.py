@@ -8,9 +8,11 @@ import json
 import os
 from pathlib import Path
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import types
 import unittest
 from unittest import mock
@@ -18,6 +20,7 @@ from unittest import mock
 from . import arena_adapter as A
 from . import arena_campaign as C
 from . import arena_cell_runner as R
+from . import arena_upstream_common as U
 from . import k_search_arena as KS
 
 
@@ -27,9 +30,11 @@ def canonical_sha(payload: object) -> str:
 
 
 class FakeReceipt:
-    def __init__(self, phase: str, claim_id: str = "akd-fixture0000001"):
+    def __init__(self, phase: str, claim_id: str = "akd-fixture0000001",
+                 campaign_id: str = "fixture-campaign-v1"):
         self.phase = phase
         self.claim_id = claim_id
+        self.campaign_id = campaign_id
 
     def to_dict(self):
         row = {
@@ -44,7 +49,7 @@ class FakeReceipt:
             "host": "fixture-host",
             "holder_label": "fixture",
             "purpose": "fixture test",
-            "campaign_id": "fixture-campaign-v1",
+            "campaign_id": self.campaign_id,
             "acquired_at": "2026-08-11T00:00:00Z",
             "expires_at": None,
             "released_at": None,
@@ -169,15 +174,24 @@ class ArenaCellRunnerTest(unittest.TestCase):
             window = {
                 "schema": R.MEASUREMENT_WINDOW_SCHEMA,
                 "campaign_id": request["campaign_id"],
+                **({"attempt_id": request["attempt_id"]}
+                   if request.get("attempt_id") is not None else {}),
+                "claim_campaign_id": request.get(
+                    "claim_campaign_id", request["campaign_id"]),
                 "task_id": request["task"]["task_id"],
                 "arm_id": request["arm"]["arm_id"],
+                "checkpoint_hours": request["checkpoint_hours"],
                 "phase": phase,
                 "ordinal": ordinal,
                 "status": "complete",
                 "started_at": "2026-08-11T00:00:00Z",
                 "ended_at": "2026-08-11T00:00:01Z",
-                "device_claim_open": FakeReceipt("opened", claim_id).to_dict(),
-                "device_claim_released": FakeReceipt("released", claim_id).to_dict(),
+                "device_claim_open": FakeReceipt(
+                    "opened", claim_id, request.get(
+                        "claim_campaign_id", request["campaign_id"])).to_dict(),
+                "device_claim_released": FakeReceipt(
+                    "released", claim_id, request.get(
+                        "claim_campaign_id", request["campaign_id"])).to_dict(),
                 "device_sampling": FakeSampling().to_dict(),
                 "gpu_action_executed_only_while_claim_held": True,
                 "failure": None,
@@ -191,6 +205,10 @@ class ArenaCellRunnerTest(unittest.TestCase):
             "schema": R.CHECKPOINT_SCHEMA,
             "authority": "whole_agent_task_only",
             "campaign_id": request["campaign_id"],
+            **({"attempt_id": request["attempt_id"]}
+               if request.get("attempt_id") is not None else {}),
+            "claim_campaign_id": request.get(
+                "claim_campaign_id", request["campaign_id"]),
             "task_id": request["task"]["task_id"],
             "arm_id": request["arm"]["arm_id"],
             "baseline": request["baseline"],
@@ -516,6 +534,58 @@ class ArenaCellRunnerTest(unittest.TestCase):
             R._prepare_campaign_root(
                 campaign_root, audit=audit, manifest=changed)
 
+    def test_validate_only_is_read_only_and_rejects_semantic_window_swap(self):
+        campaign = self.root / "attempt-r1"
+        execution = campaign / "execution"
+        campaign.mkdir()
+        audit = R._self_hash({
+            "schema": "audit.fixture", "campaign_id": "fixture-campaign-v1"})
+        manifest = R._self_hash({
+            "schema": R.RUN_MANIFEST_SCHEMA,
+            "campaign_id": "fixture-campaign-v1", "attempt_id": campaign.name,
+            "attempt_root": str(campaign.resolve()),
+            "claim_campaign_id": campaign.name})
+        (campaign / "audit.json").write_text(json.dumps(audit), encoding="utf-8")
+        (campaign / "campaign-manifest.json").write_text(
+            json.dumps(manifest), encoding="utf-8")
+        config = R.RunnerConfig(
+            campaign_id="fixture-campaign-v1", attempt_id=campaign.name,
+            arena_root=str(self.arena.resolve()),
+            preflight_path=str(self.preflight_path.resolve()),
+            output_root=str(execution.resolve()),
+            claim_journal=str((self.root / "claim.jsonl").resolve()))
+        runner = R.GovernedArenaCellRunner(config, worker=self.worker)
+        request = C.CampaignCellRequest(
+            arm=self.arm(C.BASELINE_ARM_ID), task=self.task,
+            is_starting_state_baseline=True, checkpoint_hours=(),
+            maximum_wall_hours=0.0)
+        runner(request)
+        before = {path: path.read_bytes() for path in campaign.rglob("*")
+                  if path.is_file()}
+        result = R.validate_campaign_receipts(campaign)
+        self.assertEqual(result["status"], "valid_partial")
+        self.assertEqual(result["validated_checkpoint_count"], 1)
+        self.assertEqual(before, {path: path.read_bytes()
+                                 for path in campaign.rglob("*") if path.is_file()})
+
+        checkpoint_path = next(execution.glob("cells/*/checkpoint-receipt.json"))
+        checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+        checkpoint["measurement_windows"][0]["task_id"] = "other.task"
+        checkpoint["measurement_windows"][0]["receipt_sha256"] = canonical_sha({
+            key: value for key, value in checkpoint["measurement_windows"][0].items()
+            if key != "receipt_sha256"})
+        persisted = checkpoint_path.parent / "measurement-windows" / \
+            "01-vendor_baseline.json"
+        persisted.write_text(
+            json.dumps(checkpoint["measurement_windows"][0]), encoding="utf-8")
+        checkpoint["receipt_sha256"] = canonical_sha({
+            key: value for key, value in checkpoint.items()
+            if key != "receipt_sha256"})
+        checkpoint_path.write_text(json.dumps(checkpoint), encoding="utf-8")
+        with self.assertRaisesRegex(
+                R.ArenaCellRunnerError, "semantic identity"):
+            R.validate_campaign_receipts(campaign)
+
     def test_aggregate_is_absent_until_atomic_complete_publication(self):
         path = self.root / "campaign" / "execution-receipt.json"
         path.parent.mkdir()
@@ -603,6 +673,164 @@ class ArenaCellRunnerTest(unittest.TestCase):
         self.assertEqual(argv[argv.index("--checkpoint-hours") + 1], "2")
         self.assertEqual(argv[argv.index("--timeout-seconds") + 1], "7200")
 
+    def test_controller_execution_fails_closed_without_device_sandbox(self):
+        with mock.patch.dict(
+                os.environ, {"AUTOKERNEL_CONTROLLER_SANDBOX_PREFIX_JSON": ""}):
+            with self.assertRaisesRegex(
+                    R.ArenaCellRunnerError, "device-isolation sandbox"):
+                R._controller_isolation_prefix()
+
+    def test_parent_broker_is_short_private_fresh_and_hash_chained(self):
+        cell = self.root / "broker-cell"
+        workspace = cell / "workspace"
+        workspace.mkdir(parents=True)
+        (workspace / "config.yaml").write_text(
+            "source_file_path: [kernel.hip]\n", encoding="utf-8")
+        (workspace / "kernel.hip").write_text("// original\n", encoding="utf-8")
+        seen = []
+
+        def evaluate(ordinal, evaluation_root):
+            seen.append((ordinal, (evaluation_root / "kernel.hip").read_text()))
+            claim_id = f"akd-broker0000000{ordinal}"
+            window = R._self_hash({
+                "schema": R.MEASUREMENT_WINDOW_SCHEMA,
+                "campaign_id": "fixture-campaign-v1", "attempt_id": "attempt-r1",
+                "claim_campaign_id": "attempt-r1", "task_id": "fixture.task",
+                "arm_id": "kernelfoundry", "checkpoint_hours": 2.0,
+                "phase": "controller_intermediate_evaluation", "ordinal": ordinal,
+                "status": "complete", "started_at": "2026-08-12T00:00:00Z",
+                "ended_at": "2026-08-12T00:00:01Z",
+                "device_claim_open": FakeReceipt(
+                    "opened", claim_id, "attempt-r1").to_dict(),
+                "device_claim_released": FakeReceipt(
+                    "released", claim_id, "attempt-r1").to_dict(),
+                "device_sampling": {"sample_count": 2},
+                "gpu_action_executed_only_while_claim_held": True,
+                "failure": None})
+            _path = cell / "controller-evaluation-windows" / \
+                f"{ordinal:04d}-measurement.json"
+            _path.parent.mkdir(parents=True, exist_ok=True)
+            _path.write_text(json.dumps(window), encoding="utf-8")
+            return ({"pass_compilation": True, "pass_correctness": True,
+                     "valid_optimized_cases": 1, "average_speedup": 1.1},
+                    window)
+
+        request = {
+            "campaign_id": "fixture-campaign-v1", "attempt_id": "attempt-r1",
+            "claim_campaign_id": "attempt-r1",
+            "task": {"task_id": "fixture.task"},
+            "arm": {"arm_id": "kernelfoundry"}, "checkpoint_hours": 2.0}
+        broker = R._ControllerEvaluationBroker(
+            request=request, workspace=workspace, cell_root=cell,
+            source_paths=("kernel.hip",), evaluate=evaluate,
+            baseline_receipt_sha256="b" * 64)
+        evaluator = object.__new__(U.ArenaWorkspaceEvaluator)
+        evaluator.workspace = workspace
+        evaluator.broker_receipts = []
+        with broker:
+            self.assertLess(len(os.fsencode(broker.socket_path)), 108)
+            self.assertEqual(broker.runtime_dir.stat().st_mode & 0o777, 0o700)
+            self.assertEqual(broker.socket_path.stat().st_mode & 0o777, 0o600)
+            broker.register_controller(os.getpid())
+            evaluator.broker_socket = broker.socket_path
+            evaluator._broker_token = broker.token
+            evaluator._broker_owner_pid = os.getpid()
+            first = evaluator._brokered_evaluation(
+                1, {"kernel.hip": b"// first\n"})
+            second = evaluator._brokered_evaluation(
+                2, {"kernel.hip": b"// second\n"})
+        self.assertEqual(first["average_speedup"], 1.1)
+        self.assertTrue(second["pass_correctness"])
+        self.assertEqual((workspace / "kernel.hip").read_text(), "// original\n")
+        self.assertEqual((broker.template / "kernel.hip").read_text(), "// original\n")
+        receipts = [json.loads(path.read_text()) for path in sorted(
+            (cell / "controller-evaluation-windows").glob("*-result.json"))]
+        self.assertIsNone(receipts[0]["previous_receipt_sha256"])
+        self.assertEqual(receipts[1]["previous_receipt_sha256"],
+                         receipts[0]["receipt_sha256"])
+        self.assertEqual(seen, [(1, "// first\n"), (2, "// second\n")])
+        self.assertFalse(broker.runtime_dir.exists())
+        checkpoint = {
+            "campaign_id": "fixture-campaign-v1", "attempt_id": "attempt-r1",
+            "claim_campaign_id": "attempt-r1", "task_id": "fixture.task",
+            "arm_id": "kernelfoundry", "checkpoint_hours": 2.0,
+            "broker_evaluation_chain": {
+                "evaluation_count": 2,
+                "terminal_receipt_sha256": receipts[-1]["receipt_sha256"],
+                "selected_receipt_sha256": receipts[0]["receipt_sha256"],
+                "source_paths": ["kernel.hip"]}}
+        checkpoint["broker_evaluation_chain"]["baseline_receipt_sha256"] = "b" * 64
+        checkpoint["measurement_windows"] = [{"receipt_sha256": "b" * 64}]
+        R._validate_broker_chain(
+            checkpoint, cell_root=cell, claim_scope="attempt-r1")
+        second_path = cell / "controller-evaluation-windows" / "0002-result.json"
+        broken = json.loads(second_path.read_text())
+        broken["previous_receipt_sha256"] = "f" * 64
+        broken["receipt_sha256"] = canonical_sha({
+            key: value for key, value in broken.items() if key != "receipt_sha256"})
+        second_path.write_text(json.dumps(broken), encoding="utf-8")
+        with self.assertRaisesRegex(R.ArenaCellRunnerError, "semantic identity"):
+            R._validate_broker_chain(
+                checkpoint, cell_root=cell, claim_scope="attempt-r1")
+
+    def test_parent_broker_rejects_bad_token_before_evaluation(self):
+        cell = self.root / "broker-reject"
+        workspace = cell / "workspace"
+        workspace.mkdir(parents=True)
+        (workspace / "config.yaml").write_text("x: y\n", encoding="utf-8")
+        (workspace / "kernel.hip").write_text("// original\n", encoding="utf-8")
+        evaluated = mock.Mock()
+        broker = R._ControllerEvaluationBroker(
+            request={"campaign_id": "fixture-campaign-v1",
+                     "task": {"task_id": "fixture.task"},
+                     "arm": {"arm_id": "k_search"}, "checkpoint_hours": 2.0},
+            workspace=workspace, cell_root=cell, source_paths=("kernel.hip",),
+            evaluate=evaluated, baseline_receipt_sha256="b" * 64)
+        evaluator = object.__new__(U.ArenaWorkspaceEvaluator)
+        evaluator.workspace = workspace
+        evaluator.broker_receipts = []
+        with broker:
+            broker.register_controller(os.getpid())
+            evaluator.broker_socket = broker.socket_path
+            evaluator._broker_token = "wrong-token"
+            evaluator._broker_owner_pid = os.getpid()
+            with self.assertRaisesRegex(U.UpstreamControllerError, "broker failed"):
+                evaluator._brokered_evaluation(
+                    1, {"kernel.hip": b"// candidate\n"})
+        evaluated.assert_not_called()
+
+    def test_broker_client_rejects_replacement_server_pid(self):
+        evaluator = object.__new__(U.ArenaWorkspaceEvaluator)
+        evaluator.workspace = self.root
+        evaluator.broker_receipts = []
+        evaluator.broker_socket = self.root / "replacement.sock"
+        evaluator._broker_token = "token"
+        evaluator._broker_owner_pid = os.getpid() + 100000
+        server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        server.bind(str(evaluator.broker_socket))
+        server.listen(1)
+        thread = threading.Thread(target=lambda: server.accept()[0].close())
+        thread.start()
+        try:
+            with self.assertRaisesRegex(U.UpstreamControllerError, "server identity"):
+                evaluator._brokered_evaluation(1, {"x.py": b"pass\n"})
+        finally:
+            thread.join(timeout=2)
+            server.close()
+
+    def test_candidate_evaluation_failure_releases_short_claim(self):
+        claim = FakeClaim()
+        cell = self.root / "cells" / "failed-candidate"
+        cell.mkdir(parents=True)
+        with self.assertRaisesRegex(RuntimeError, "candidate failed"):
+            R._run_gpu_measurement_window(
+                request=self.window_request(cell), cell_root=cell, ordinal=1,
+                phase="controller_intermediate_evaluation",
+                action=lambda: (_ for _ in ()).throw(RuntimeError("candidate failed")),
+                claim_acquirer=lambda *args, **kwargs: claim,
+                sampler_factory=FakeSampler)
+        self.assertTrue(claim.released)
+
     def test_worker_subprocess_uses_the_pinned_rocm_evaluator_python(self):
         cell = self.root / "cells" / "001"
         output = cell / "worker-result.json"
@@ -655,8 +883,8 @@ class ArenaCellRunnerTest(unittest.TestCase):
                     "source_root": str(self.root), "source_commit": "a" * 40,
                     "entrypoint_path": "controller.py", "entrypoint_sha256": "b" * 64,
                     "model_ids": ["fixture"]},
-            "baseline": False,
-            "checkpoint_hours": 2.0,
+            "baseline": True,
+            "checkpoint_hours": None,
             "visible_device": "0",
             "claim_journal": str((self.root / "claims.jsonl").resolve()),
             "claim_timeout_seconds": 0.0,
@@ -680,22 +908,11 @@ class ArenaCellRunnerTest(unittest.TestCase):
             claims.append(claim)
             return claim
 
-        def controller_launch(prepared, *args, **kwargs):
-            self.assertTrue(claims[0].released)
-            self.assertEqual(prepared.environment["HIP_VISIBLE_DEVICES"], "")
-            self.assertEqual(prepared.environment["ROCR_VISIBLE_DEVICES"], "")
-            # A second tenant can acquire the device during this gap because
-            # AutoKernel holds no claim on behalf of the remote model.
-            gap_claim = acquire(purpose="other governed tenant")
-            gap_claim.release()
-            return "controller receipt"
-
         with (
             mock.patch.dict(sys.modules, {
                 "src": src, "src.evaluator": evaluator,
                 "src.prompt_builder": prompt_builder,
             }),
-            mock.patch.object(R.arena_adapter, "launch", side_effect=controller_launch),
             mock.patch.object(
                 R, "_assert_worker_evaluator_identity",
                 return_value=R._evaluator_python_identity()),
@@ -703,11 +920,11 @@ class ArenaCellRunnerTest(unittest.TestCase):
             receipt = R.run_worker(
                 request, claim_acquirer=acquire, sampler_factory=FakeSampler)
         self.assertTrue(receipt["evaluation"]["pass_correctness"])
-        self.assertEqual(receipt["checkpoint_hours"], 2.0)
+        self.assertIsNone(receipt["checkpoint_hours"])
         self.assertTrue((cell_root / "workspace" / "task_result.yaml").is_file())
-        self.assertTrue((cell_root / "controller.stdout").is_file())
+        self.assertFalse((cell_root / "controller.stdout").exists())
         evaluator.evaluate_kernel.assert_called_once()
-        self.assertEqual(len(claims), 3)
+        self.assertEqual(len(claims), 2)
         self.assertTrue(all(claim.released for claim in claims))
         self.assertEqual(
             [window["phase"] for window in receipt["measurement_windows"]],
@@ -715,6 +932,31 @@ class ArenaCellRunnerTest(unittest.TestCase):
         self.assertEqual(
             receipt["constraints"]["evaluator_python"]["sha256"],
             R.EVALUATOR_PYTHON_SHA256)
+
+        refused = dict(request)
+        refused["baseline"] = False
+        refused["checkpoint_hours"] = 2.0
+        refused["cell_root"] = str((self.root / "cells" / "002-refused").resolve())
+        Path(refused["cell_root"]).mkdir()
+        evaluator.evaluate_compilation.reset_mock()
+        evaluator.measure_baseline.reset_mock()
+        evaluator.evaluate_kernel.reset_mock()
+        claims.clear()
+        with (
+            mock.patch.dict(sys.modules, {
+                "src": src, "src.evaluator": evaluator,
+                "src.prompt_builder": prompt_builder}),
+            mock.patch.object(
+                R, "_assert_worker_evaluator_identity",
+                return_value=R._evaluator_python_identity()),
+            self.assertRaisesRegex(R.ArenaCellRunnerError, "sandbox is not implemented"),
+        ):
+            R.run_worker(
+                refused, claim_acquirer=acquire, sampler_factory=FakeSampler)
+        evaluator.evaluate_compilation.assert_not_called()
+        evaluator.measure_baseline.assert_not_called()
+        evaluator.evaluate_kernel.assert_not_called()
+        self.assertEqual(claims, [])
 
     def test_exact_group_teardown_kills_a_planted_descendant(self):
         child_pid_path = self.root / "descendant.pid"

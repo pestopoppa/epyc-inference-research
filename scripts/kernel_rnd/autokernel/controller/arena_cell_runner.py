@@ -25,14 +25,19 @@ import math
 import os
 from pathlib import Path
 import re
+import secrets
 import shutil
 import signal
+import socket
+import struct
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 from typing import Any, Callable, Mapping, Sequence
 
-from . import arena_adapter, arena_campaign, arena_roundtrip
+from . import arena_adapter, arena_campaign, arena_roundtrip, arena_upstream_common
 from ..execution import device_sampler
 from ..resource import device_claim
 
@@ -40,7 +45,9 @@ from ..resource import device_claim
 RUNNER_SCHEMA = "epyc.autokernel.arena_cell_runner.v3"
 CHECKPOINT_SCHEMA = "epyc.autokernel.arena_checkpoint.v2"
 AGGREGATE_SCHEMA = "epyc.autokernel.arena_campaign_execution.v2"
-RUN_MANIFEST_SCHEMA = "epyc.autokernel.arena_campaign_run_manifest.v1"
+RUN_MANIFEST_SCHEMA = "epyc.autokernel.arena_campaign_run_manifest.v2"
+LEGACY_RUN_MANIFEST_SCHEMA = "epyc.autokernel.arena_campaign_run_manifest.v1"
+VALIDATION_SCHEMA = "epyc.autokernel.arena_campaign_validation.v1"
 MEASUREMENT_WINDOW_SCHEMA = "epyc.autokernel.arena_gpu_measurement_window.v1"
 IMPLEMENTATION_MODULE = Path(__file__).resolve()
 REPOSITORY_ROOT = IMPLEMENTATION_MODULE.parents[4]
@@ -178,6 +185,16 @@ def _evaluator_python_identity() -> dict[str, Any]:
         "resolved_path": str(EVALUATOR_PYTHON.resolve()),
         "sha256": observed_sha256,
         "packages": packages,
+    }
+
+
+def _declared_evaluator_python_identity() -> dict[str, Any]:
+    """Return the pinned evaluator identity without importing its packages."""
+    return {
+        "path": str(EVALUATOR_PYTHON),
+        "resolved_path": str(EVALUATOR_PYTHON.resolve()),
+        "sha256": EVALUATOR_PYTHON_SHA256,
+        "packages": dict(EVALUATOR_PACKAGE_VERSIONS),
     }
 
 
@@ -336,6 +353,7 @@ def _gpu_visibility(visible_device: str):
 def _run_gpu_measurement_window(
     *, request: Mapping[str, Any], cell_root: Path, ordinal: int, phase: str,
     action: Callable[[], Any],
+    window_path: Path | None = None,
     claim_acquirer: Callable[..., Any] = device_claim.acquire_device_claim,
     sampler_factory: Callable[..., Any] = device_sampler.RocmSmiSampler,
 ) -> tuple[Any, dict[str, Any]]:
@@ -345,9 +363,22 @@ def _run_gpu_measurement_window(
     publication are one signal-safe unit.  In particular, callers cannot carry
     this claim across controller/model deliberation.
     """
-    if phase not in {"vendor_baseline", "centralized_final_evaluation"}:
+    if phase not in {
+        "vendor_baseline", "centralized_final_evaluation",
+        "controller_intermediate_evaluation",
+    }:
         raise ArenaCellRunnerError(f"unsupported GPU measurement phase: {phase}")
     campaign_id = _safe_id(str(request.get("campaign_id")), "campaign_id")
+    attempt_id_raw = request.get("attempt_id")
+    attempt_id = (
+        _safe_id(str(attempt_id_raw), "attempt_id")
+        if attempt_id_raw is not None else None)
+    claim_campaign_id = _safe_id(
+        str(request.get("claim_campaign_id", campaign_id)),
+        "claim_campaign_id")
+    if attempt_id is not None and claim_campaign_id != attempt_id:
+        raise ArenaCellRunnerError(
+            "measurement claim scope does not match the campaign attempt")
     arm = request.get("arm")
     task = request.get("task")
     if not isinstance(arm, Mapping) or not isinstance(task, Mapping):
@@ -362,8 +393,12 @@ def _run_gpu_measurement_window(
             or not math.isfinite(claim_timeout) or claim_timeout < 0):
         raise ArenaCellRunnerError("worker claim timeout is invalid")
 
-    window_root = cell_root / "measurement-windows"
-    window_path = window_root / f"{ordinal:02d}-{phase}.json"
+    if window_path is None:
+        window_root = cell_root / "measurement-windows"
+        window_path = window_root / f"{ordinal:02d}-{phase}.json"
+    else:
+        window_path = _assert_contained(
+            window_path, cell_root, "measurement window receipt")
     if window_path.exists():
         raise ArenaCellRunnerError(f"measurement window receipt already exists: {window_path}")
     started_at = _utc_now()
@@ -380,7 +415,7 @@ def _run_gpu_measurement_window(
             claim = claim_acquirer(
                 DEFAULT_DEVICE_ID,
                 purpose=f"INF-03 {phase} {arm_id} {task_id}",
-                campaign_id=campaign_id,
+                campaign_id=claim_campaign_id,
                 journal=device_claim.ClaimJournal(claim_journal),
                 holder_label="arena_cell_runner.py:measurement-window",
                 timeout_s=float(claim_timeout),
@@ -412,8 +447,11 @@ def _run_gpu_measurement_window(
     receipt = _self_hash({
         "schema": MEASUREMENT_WINDOW_SCHEMA,
         "campaign_id": campaign_id,
+        **({"attempt_id": attempt_id} if attempt_id is not None else {}),
+        "claim_campaign_id": claim_campaign_id,
         "task_id": task_id,
         "arm_id": arm_id,
+        "checkpoint_hours": request.get("checkpoint_hours"),
         "phase": phase,
         "ordinal": ordinal,
         "status": "complete" if failure is None else "failed",
@@ -506,6 +544,7 @@ class RunnerConfig:
     arena_root: str
     preflight_path: str
     output_root: str
+    attempt_id: str | None = None
     claim_journal: str = DEFAULT_CLAIM_JOURNAL
     claim_timeout_seconds: float = 0.0
     device_id: str = DEFAULT_DEVICE_ID
@@ -519,6 +558,8 @@ class RunnerConfig:
 
     def __post_init__(self) -> None:
         _safe_id(self.campaign_id, "campaign_id")
+        if self.attempt_id is not None:
+            _safe_id(self.attempt_id, "attempt_id")
         arena = Path(self.arena_root)
         preflight = Path(self.preflight_path)
         output = Path(self.output_root)
@@ -597,6 +638,17 @@ class GovernedArenaCellRunner:
         self.executed_checkpoints = 0
         self._assert_static_identities()
 
+    @property
+    def attempt_id(self) -> str | None:
+        return self.config.attempt_id
+
+    @property
+    def claim_campaign_id(self) -> str:
+        # Legacy direct callers and v1 manifests used the logical campaign id
+        # as the claim scope.  Every v2 campaign supplies the run-directory
+        # attempt id instead, so journals cannot conflate separate attempts.
+        return self.config.attempt_id or self.config.campaign_id
+
     def __call__(self, request: arena_campaign.CampaignCellRequest) -> dict[str, Any]:
         if not isinstance(request, arena_campaign.CampaignCellRequest):
             raise TypeError("request must be a CampaignCellRequest")
@@ -610,6 +662,8 @@ class GovernedArenaCellRunner:
             "schema": RUNNER_SCHEMA,
             "authority": "whole_agent_task_only",
             "campaign_id": self.config.campaign_id,
+            **({"attempt_id": self.attempt_id}
+               if self.attempt_id is not None else {}),
             "task_id": request.task.task_id,
             "arm_id": request.arm.arm_id,
             "baseline": request.is_starting_state_baseline,
@@ -706,7 +760,8 @@ class GovernedArenaCellRunner:
         if not isinstance(artifact_map, Mapping) or not artifact_map:
             raise ArenaCellRunnerError("Arena worker returned no hash-bound artifacts")
         self._verify_measurement_windows(
-            worker_result.get("measurement_windows"), cell_root=cell_root)
+            worker_result.get("measurement_windows"), cell_root=cell_root,
+            expected=worker_result)
         belief_receipt = None
         if not request.is_starting_state_baseline:
             evaluation = worker_result.get("evaluation")
@@ -716,6 +771,9 @@ class GovernedArenaCellRunner:
             timing_passed = int(int(evaluation.get("valid_optimized_cases", 0)) > 0)
             belief_receipt = arena_roundtrip.build_receipt(
                 campaign_id=self.config.campaign_id,
+                attempt_id=self.attempt_id,
+                claim_campaign_id=(self.claim_campaign_id
+                                   if self.attempt_id is not None else None),
                 task_id=request.task.task_id,
                 controller_id=request.arm.arm_id,
                 started_at=started_at,
@@ -828,7 +886,8 @@ class GovernedArenaCellRunner:
         if receipt.get("preflight") != expected_preflight:
             raise ArenaCellRunnerError("checkpoint preflight identity drifted")
         self._verify_measurement_windows(
-            receipt.get("measurement_windows"), cell_root=cell_root)
+            receipt.get("measurement_windows"), cell_root=cell_root,
+            expected=receipt)
         worker_request = _load_json_object(
             cell_root / "worker-request.json", "worker request")
         expected_request = self._worker_request(
@@ -858,14 +917,18 @@ class GovernedArenaCellRunner:
         else:
             if not isinstance(belief, Mapping):
                 raise ArenaCellRunnerError("controller checkpoint lacks its belief receipt")
-            _verify_self_hash(belief, "belief receipt")
+            self._verify_belief_receipt(
+                belief, checkpoint=receipt, request=request,
+                artifacts=artifacts)
             persisted_belief = _load_json_object(
                 cell_root / "belief-receipt.json", "persisted belief receipt")
             if persisted_belief != belief:
                 raise ArenaCellRunnerError("persisted belief receipt drifted")
         return receipt
 
-    def _verify_released_claim(self, receipt: Mapping[str, Any]) -> None:
+    def _verify_released_claim(
+        self, receipt: Mapping[str, Any], *, expected_claim_campaign_id: str,
+    ) -> None:
         """Verify the claim pair embedded in one measurement-window receipt."""
         opened = receipt.get("device_claim_open")
         released = receipt.get("device_claim_released")
@@ -883,22 +946,47 @@ class GovernedArenaCellRunner:
             raise ArenaCellRunnerError("opened and released device claims disagree")
         if (released_receipt.schema != device_claim.RECEIPT_SCHEMA
                 or released_receipt.device_id != self.config.device_id
-                or released_receipt.campaign_id != self.config.campaign_id
+                or released_receipt.campaign_id != expected_claim_campaign_id
                 or not isinstance(released_receipt.released_at, str)
                 or not released_receipt.released_at
                 or opened_receipt.released_at is not None):
             raise ArenaCellRunnerError("checkpoint device claim was not cleanly released")
 
-    def _verify_measurement_windows(self, windows: object, *, cell_root: Path) -> None:
+    def _verify_measurement_windows(
+        self, windows: object, *, cell_root: Path,
+        expected: Mapping[str, Any],
+    ) -> None:
         if not isinstance(windows, list) or len(windows) != 2:
             raise ArenaCellRunnerError(
                 "checkpoint must carry exactly two GPU measurement windows")
         phases = ("vendor_baseline", "centralized_final_evaluation")
+        expected_attempt = expected.get("attempt_id")
+        expected_claim_scope = str(expected.get(
+            "claim_campaign_id", expected.get("campaign_id")))
         claim_ids: list[str] = []
         for ordinal, (window, phase) in enumerate(zip(windows, phases), start=1):
             if not isinstance(window, Mapping):
                 raise ArenaCellRunnerError("GPU measurement window is malformed")
             _verify_self_hash(window, "GPU measurement window")
+            if any(window.get(key) != expected.get(key)
+                   for key in ("campaign_id", "task_id", "arm_id")):
+                raise ArenaCellRunnerError(
+                    "GPU measurement window disagrees with its checkpoint identity")
+            if expected_attempt is not None:
+                if (window.get("attempt_id") != expected_attempt
+                        or window.get("claim_campaign_id") != expected_claim_scope
+                        or window.get("checkpoint_hours")
+                        != expected.get("checkpoint_hours")):
+                    raise ArenaCellRunnerError(
+                        "GPU measurement window disagrees with its attempt or budget")
+            elif (("attempt_id" in window and window.get("attempt_id") is not None)
+                  or ("claim_campaign_id" in window
+                      and window.get("claim_campaign_id") != expected_claim_scope)
+                  or ("checkpoint_hours" in window
+                      and window.get("checkpoint_hours")
+                      != expected.get("checkpoint_hours"))):
+                raise ArenaCellRunnerError(
+                    "legacy GPU measurement window carries inconsistent identity")
             if (window.get("schema") != MEASUREMENT_WINDOW_SCHEMA
                     or window.get("phase") != phase
                     or window.get("ordinal") != ordinal
@@ -907,7 +995,14 @@ class GovernedArenaCellRunner:
                     or not isinstance(window.get("device_sampling"), Mapping)):
                 raise ArenaCellRunnerError(
                     "GPU measurement window identity or evidence is incomplete")
-            self._verify_released_claim(window)
+            sampling = window.get("device_sampling")
+            if (isinstance(sampling.get("sample_count"), bool)
+                    or not isinstance(sampling.get("sample_count"), int)
+                    or sampling.get("sample_count") < 1):
+                raise ArenaCellRunnerError(
+                    "GPU measurement window has no numeric samples")
+            self._verify_released_claim(
+                window, expected_claim_campaign_id=expected_claim_scope)
             claim_ids.append(str(window["device_claim_open"]["claim_id"]))
             persisted = _load_json_object(
                 cell_root / "measurement-windows" / f"{ordinal:02d}-{phase}.json",
@@ -918,6 +1013,55 @@ class GovernedArenaCellRunner:
         if len(set(claim_ids)) != 2:
             raise ArenaCellRunnerError(
                 "baseline and final evaluation must use distinct device claims")
+
+    def _verify_belief_receipt(
+        self, belief: Mapping[str, Any], *, checkpoint: Mapping[str, Any],
+        request: arena_campaign.CampaignCellRequest,
+        artifacts: Mapping[str, Any],
+    ) -> None:
+        _verify_self_hash(belief, "belief receipt")
+        if (belief.get("schema") != arena_roundtrip.SCHEMA
+                or belief.get("producer_id") != arena_roundtrip.PRODUCER_ID
+                or belief.get("campaign_id") != checkpoint.get("campaign_id")
+                or belief.get("task") != {
+                    "task_id": request.task.task_id,
+                    "controller_id": request.arm.arm_id}
+                or not isinstance(belief.get("source"), Mapping)
+                or belief["source"].get("checkpoint_hours")
+                != checkpoint.get("checkpoint_hours")):
+            raise ArenaCellRunnerError(
+                "belief receipt disagrees with its checkpoint identity")
+        expected_attempt = checkpoint.get("attempt_id")
+        if expected_attempt is not None:
+            if (belief.get("attempt_id") != expected_attempt
+                    or belief.get("claim_campaign_id")
+                    != checkpoint.get("claim_campaign_id")):
+                raise ArenaCellRunnerError(
+                    "belief receipt disagrees with its campaign attempt")
+        elif "attempt_id" in belief or "claim_campaign_id" in belief:
+            raise ArenaCellRunnerError(
+                "legacy belief receipt carries an unexpected attempt identity")
+        expected_artifacts = [
+            {"path": str(path), "sha256": str(digest)}
+            for path, digest in sorted(artifacts.items())]
+        if belief.get("artifacts") != expected_artifacts:
+            raise ArenaCellRunnerError(
+                "belief receipt artifact identity disagrees with its checkpoint")
+        measurements = belief.get("belief_measurements")
+        expected_ids = {
+            "arena_correctness_pass_rate",
+            "arena_timing_harness_validity_rate",
+        }
+        if (not isinstance(measurements, list) or len(measurements) != 2
+                or {row.get("measurement_id") for row in measurements
+                    if isinstance(row, Mapping)} != expected_ids
+                or any(not isinstance(row, Mapping)
+                       or not isinstance(row.get("extra"), Mapping)
+                       or row["extra"].get("task_id") != request.task.task_id
+                       or row["extra"].get("controller_id") != request.arm.arm_id
+                       for row in measurements)):
+            raise ArenaCellRunnerError(
+                "belief receipt measurements disagree with their checkpoint")
 
     def _abandon_partial_checkpoint(self, cell_root: Path) -> None:
         abandoned = self.output_root / "abandoned"
@@ -939,6 +1083,9 @@ class GovernedArenaCellRunner:
         return {
             "schema": CHECKPOINT_SCHEMA,
             "campaign_id": self.config.campaign_id,
+            **({"attempt_id": self.attempt_id}
+               if self.attempt_id is not None else {}),
+            "claim_campaign_id": self.claim_campaign_id,
             "arena_root": str(self.arena_root),
             "repository_root": str(REPOSITORY_ROOT),
             "cell_root": str(cell_root),
@@ -1050,6 +1197,52 @@ def _copy_task(source: Path, destination: Path) -> None:
     shutil.copytree(source, destination)
 
 
+def _declared_task_sources(config: Mapping[str, Any]) -> tuple[str, ...]:
+    declared = config.get("source_file_path")
+    rows = ([declared] if isinstance(declared, str)
+            else declared if isinstance(declared, list) else [])
+    if (not rows or any(not isinstance(row, str) or not row.strip()
+                        for row in rows)):
+        raise ArenaCellRunnerError(
+            "brokered Arena tasks must declare source_file_path")
+    paths = tuple(sorted(row.strip() for row in rows))
+    if any(Path(row).is_absolute() or ".." in Path(row).parts for row in paths):
+        raise ArenaCellRunnerError("brokered Arena source path is unsafe")
+    return paths
+
+
+def _controller_isolation_prefix() -> tuple[str, ...]:
+    """Return a transparent exec sandbox or fail closed.
+
+    Environment-only GPU hiding is not isolation.  The configured wrapper must
+    hide /dev/kfd and DRM render nodes, then exec the controller so Popen.pid is
+    also the AF_UNIX peer PID.  The controller performs an independent open(2)
+    denial proof before constructing its evaluator.
+    """
+    raw = os.environ.get("AUTOKERNEL_CONTROLLER_SANDBOX_PREFIX_JSON")
+    if not raw:
+        raise ArenaCellRunnerError(
+            "controller device-isolation sandbox is not configured")
+    try:
+        prefix = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ArenaCellRunnerError("controller sandbox prefix is invalid JSON") from exc
+    if (not isinstance(prefix, list) or not prefix
+            or any(not isinstance(part, str) or not part for part in prefix)):
+        raise ArenaCellRunnerError("controller sandbox prefix is invalid")
+    executable = Path(prefix[0]).resolve()
+    if not executable.is_file() or not os.access(executable, os.X_OK):
+        raise ArenaCellRunnerError("controller sandbox executable is unavailable")
+    return tuple(prefix)
+
+
+def _require_candidate_evaluator_sandbox() -> None:
+    """Keep controller campaigns non-executable until evaluator isolation lands."""
+    raise ArenaCellRunnerError(
+        "broker candidate-evaluator sandbox is not implemented; "
+        "INF-03 execution remains fail-closed")
+
+
 def _artifact_hashes(root: Path) -> dict[str, str]:
     rows: dict[str, str] = {}
     for path in sorted(root.rglob("*")):
@@ -1058,6 +1251,184 @@ def _artifact_hashes(root: Path) -> dict[str, str]:
     if not rows:
         raise ArenaCellRunnerError("checkpoint produced no artifacts")
     return rows
+
+
+def _recv_exact(stream: socket.socket, length: int) -> bytes:
+    chunks: list[bytes] = []
+    while length:
+        chunk = stream.recv(length)
+        if not chunk:
+            raise ArenaCellRunnerError("broker peer closed a partial message")
+        chunks.append(chunk)
+        length -= len(chunk)
+    return b"".join(chunks)
+
+
+class _ControllerEvaluationBroker:
+    """Parent-worker-owned, serialized candidate evaluation service."""
+
+    def __init__(
+        self, *, request: Mapping[str, Any], workspace: Path, cell_root: Path,
+        source_paths: Sequence[str],
+        evaluate: Callable[[int, Path], tuple[Mapping[str, Any], Mapping[str, Any]]],
+        baseline_receipt_sha256: str,
+    ):
+        self.request, self.workspace, self.cell_root = request, workspace, cell_root
+        self.template = cell_root / "controller-evaluation-template"
+        _copy_task(workspace, self.template)
+        self.source_paths = tuple(sorted(source_paths))
+        self.evaluate = evaluate
+        self.baseline_receipt_sha256 = baseline_receipt_sha256
+        self.owner_pid = os.getpid()
+        self.token = secrets.token_hex(32)
+        runtime_parent = Path(os.environ.get(
+            "AUTOKERNEL_BROKER_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
+        if not runtime_parent.is_dir():
+            runtime_parent = Path("/tmp")
+        self.runtime_dir = Path(tempfile.mkdtemp(
+            prefix="akb-", dir=str(runtime_parent))).resolve()
+        os.chmod(self.runtime_dir, 0o700)
+        self.socket_path = self.runtime_dir / "broker.sock"
+        if len(os.fsencode(self.socket_path)) >= 108:
+            self.runtime_dir.rmdir()
+            raise ArenaCellRunnerError("controller broker socket path is too long")
+        self._server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self._stop = threading.Event()
+        self._ordinal = 0
+        self._controller_pid: int | None = None
+        self._controller_starttime: str | None = None
+        self._previous_receipt_sha256: str | None = None
+        self._thread: threading.Thread | None = None
+
+    def __enter__(self) -> "_ControllerEvaluationBroker":
+        if self.socket_path.exists():
+            raise ArenaCellRunnerError("controller broker socket already exists")
+        self._server.bind(str(self.socket_path))
+        os.chmod(self.socket_path, 0o600)
+        self._server.listen(1)
+        self._server.settimeout(0.2)
+        self._thread = threading.Thread(target=self._serve, daemon=True)
+        self._thread.start()
+        return self
+
+    def environment(self) -> dict[str, str]:
+        return {
+            arena_upstream_common.BROKER_SOCKET_ENV: str(self.socket_path),
+            arena_upstream_common.BROKER_TOKEN_ENV: self.token,
+            arena_upstream_common.BROKER_OWNER_PID_ENV: str(self.owner_pid),
+        }
+
+    def register_controller(self, pid: int) -> None:
+        if self._controller_pid is not None:
+            raise ArenaCellRunnerError("controller broker PID was already registered")
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+        self._controller_pid = pid
+        self._controller_starttime = stat[stat.rfind(")") + 2:].split()[19]
+
+    def __exit__(self, *_: object) -> None:
+        self._stop.set()
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as wake:
+                wake.connect(str(self.socket_path))
+        except OSError:
+            pass
+        if self._thread is not None:
+            self._thread.join(timeout=30)
+            if self._thread.is_alive():
+                raise ArenaCellRunnerError("controller broker did not stop")
+        self._server.close()
+        if self.socket_path.exists():
+            self.socket_path.unlink()
+        self.runtime_dir.rmdir()
+
+    def _serve(self) -> None:
+        while not self._stop.is_set():
+            try:
+                peer, _ = self._server.accept()
+            except TimeoutError:
+                continue
+            with peer:
+                try:
+                    self._handle(peer)
+                except Exception as exc:  # response is diagnostic, never authority
+                    try:
+                        self._send(peer, {"status": "error", "error": str(exc)})
+                    except OSError:
+                        pass
+
+    @staticmethod
+    def _send(peer: socket.socket, payload: Mapping[str, Any]) -> None:
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        peer.sendall(struct.pack("!Q", len(encoded)) + encoded)
+
+    def _handle(self, peer: socket.socket) -> None:
+        peer_pid, peer_uid, _ = struct.unpack(
+            "3i", peer.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+        if (peer_uid != os.getuid() or self._controller_pid is None
+                or peer_pid != self._controller_pid):
+            raise ArenaCellRunnerError("controller broker rejected peer identity")
+        stat = Path(f"/proc/{peer_pid}/stat").read_text(encoding="utf-8")
+        if stat[stat.rfind(")") + 2:].split()[19] != self._controller_starttime:
+            raise ArenaCellRunnerError("controller broker rejected PID reuse")
+        length = struct.unpack("!Q", _recv_exact(peer, 8))[0]
+        if length > 16 * 1024 * 1024:
+            raise ArenaCellRunnerError("controller broker request is too large")
+        payload = json.loads(_recv_exact(peer, length))
+        next_ordinal = self._ordinal + 1
+        if (not isinstance(payload, dict)
+                or payload.get("schema") != arena_upstream_common.BROKER_REQUEST_SCHEMA
+                or not secrets.compare_digest(str(payload.get("token")), self.token)
+                or payload.get("owner_pid") != self.owner_pid
+                or payload.get("workspace") != str(self.workspace)
+                or payload.get("evaluation_ordinal") != next_ordinal):
+            raise ArenaCellRunnerError("controller broker request identity is invalid")
+        self._ordinal = next_ordinal
+        sources = payload.get("source_files")
+        if not isinstance(sources, dict) or tuple(sorted(sources)) != self.source_paths:
+            raise ArenaCellRunnerError("controller candidate source set is invalid")
+        if sum(len(value.encode()) for value in sources.values()
+               if isinstance(value, str)) > 8 * 1024 * 1024:
+            raise ArenaCellRunnerError("controller candidate exceeds total byte limit")
+        evaluation_root = (
+            self.cell_root / "controller-evaluation-windows"
+            / f"{self._ordinal:04d}-workspace")
+        _copy_task(self.template, evaluation_root)
+        hashes: dict[str, str] = {}
+        for relative, text in sources.items():
+            if (not isinstance(text, str) or not text.strip()
+                    or len(text.encode()) > 2 * 1024 * 1024):
+                raise ArenaCellRunnerError("controller candidate source is empty")
+            target = _assert_contained(
+                evaluation_root / relative, evaluation_root, "controller candidate")
+            if target.is_symlink() or not target.is_file():
+                raise ArenaCellRunnerError("controller candidate target is unsafe")
+            target.write_text(text, encoding="utf-8")
+            hashes[relative] = _sha256_file(target)
+        evaluation, window = self.evaluate(self._ordinal, evaluation_root)
+        receipt = _self_hash({
+            "schema": arena_upstream_common.BROKER_RESULT_SCHEMA,
+            "campaign_id": self.request["campaign_id"],
+            **({"attempt_id": self.request["attempt_id"]}
+               if self.request.get("attempt_id") is not None else {}),
+            "claim_campaign_id": self.request.get(
+                "claim_campaign_id", self.request["campaign_id"]),
+            "task_id": self.request["task"]["task_id"],
+            "arm_id": self.request["arm"]["arm_id"],
+            "checkpoint_hours": self.request["checkpoint_hours"],
+            "evaluation_ordinal": self._ordinal,
+            "workspace": str(self.workspace), "evaluation_root": str(evaluation_root),
+            "source_sha256": hashes,
+            "baseline_receipt_sha256": self.baseline_receipt_sha256,
+            "evaluation": dict(evaluation),
+            "measurement_window": dict(window),
+            "previous_receipt_sha256": self._previous_receipt_sha256,
+            "authority": "controller_feedback_only",
+        })
+        _atomic_json(
+            self.cell_root / "controller-evaluation-windows"
+            / f"{self._ordinal:04d}-result.json", receipt)
+        self._previous_receipt_sha256 = str(receipt["receipt_sha256"])
+        self._send(peer, receipt)
 
 
 def run_worker(
@@ -1070,6 +1441,16 @@ def run_worker(
         raise ArenaCellRunnerError("worker request has the wrong schema")
     evaluator_python = _assert_worker_evaluator_identity(request)
     campaign_id = _safe_id(str(request.get("campaign_id")), "campaign_id")
+    attempt_id_raw = request.get("attempt_id")
+    attempt_id = (
+        _safe_id(str(attempt_id_raw), "attempt_id")
+        if attempt_id_raw is not None else None)
+    claim_campaign_id = _safe_id(
+        str(request.get("claim_campaign_id", campaign_id)),
+        "claim_campaign_id")
+    if attempt_id is not None and claim_campaign_id != attempt_id:
+        raise ArenaCellRunnerError(
+            "worker claim scope does not match the campaign attempt")
     arena_root = Path(str(request.get("arena_root"))).resolve()
     repository_root = Path(str(request.get("repository_root"))).resolve()
     cell_root = Path(str(request.get("cell_root"))).resolve()
@@ -1104,6 +1485,21 @@ def run_worker(
     task_config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
     if not isinstance(task_config, dict):
         raise ArenaCellRunnerError("Arena task config must be an object")
+    baseline = bool(request.get("baseline"))
+    isolation_prefix: tuple[str, ...] | None = None
+    if not baseline:
+        checkpoint = request.get("checkpoint_hours")
+        if (isinstance(checkpoint, bool) or not isinstance(checkpoint, (int, float))
+                or float(checkpoint) not in arena_campaign.MATCHED_BUDGET_HOURS):
+            raise ArenaCellRunnerError("worker checkpoint is not a matched budget")
+        # These gates precede compilation and the first GPU claim. A campaign
+        # cannot leave another misleading partial baseline before discovering
+        # that controller/candidate isolation is unavailable.
+        _require_candidate_evaluator_sandbox()
+        isolation_prefix = _controller_isolation_prefix()
+    elif request.get("checkpoint_hours") is not None:
+        raise ArenaCellRunnerError(
+            "starting-state baseline cannot have a checkpoint budget")
 
     log_path = cell_root / "arena.log"
     logger = logging.getLogger(f"autokernel.arena.{task_id}.{arm_id}")
@@ -1129,13 +1525,10 @@ def run_worker(
         action=lambda: vendor_evaluator.measure_baseline(
             workspace, task_config, logger, None),
         claim_acquirer=claim_acquirer, sampler_factory=sampler_factory)
-    baseline = bool(request.get("baseline"))
     controller_stdout_sha256 = None
+    broker_chain = None
     if not baseline:
         checkpoint = request.get("checkpoint_hours")
-        if (isinstance(checkpoint, bool) or not isinstance(checkpoint, (int, float))
-                or float(checkpoint) not in arena_campaign.MATCHED_BUDGET_HOURS):
-            raise ArenaCellRunnerError("worker checkpoint is not a matched budget")
         raw_prompt = vendor_prompt.prompt_builder(
             str(config_path), workspace,
             {"target_gpu_model": arena_adapter.TARGET_GPU_MODEL}, logger)
@@ -1145,25 +1538,100 @@ def run_worker(
             "ROCR_VISIBLE_DEVICES": "",
             "CUDA_VISIBLE_DEVICES": "",
         })
+        assert isolation_prefix is not None
+        source_paths = _declared_task_sources(task_config)
+
+        def broker_evaluate(
+            ordinal: int, evaluation_root: Path,
+        ) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
+            evaluation_config = yaml.safe_load(
+                (evaluation_root / "config.yaml").read_text(encoding="utf-8"))
+            if not isinstance(evaluation_config, dict):
+                raise ArenaCellRunnerError("broker evaluation config is malformed")
+
+            def action() -> Mapping[str, Any]:
+                passed, error = vendor_evaluator.evaluate_compilation(
+                    evaluation_root, evaluation_config, logger, None)
+                if not passed:
+                    return {
+                        "pass_compilation": False, "pass_correctness": False,
+                        "valid_baseline_cases": 0, "valid_optimized_cases": 0,
+                        "average_speedup": 0.0,
+                        "compilation_error_message": str(error or ""),
+                    }
+                result = vendor_evaluator.evaluate_kernel(
+                    evaluation_root, evaluation_config, baseline_cases,
+                    logger, None)
+                if not isinstance(result, Mapping):
+                    raise ArenaCellRunnerError(
+                        "broker evaluator returned a non-object")
+                return dict(result)
+
+            return _run_gpu_measurement_window(
+                request=request, cell_root=cell_root, ordinal=ordinal,
+                phase="controller_intermediate_evaluation", action=action,
+                window_path=(cell_root / "controller-evaluation-windows"
+                             / f"{ordinal:04d}-measurement.json"),
+                claim_acquirer=claim_acquirer, sampler_factory=sampler_factory)
+
+        broker = _ControllerEvaluationBroker(
+            request=request, workspace=workspace, cell_root=cell_root,
+            source_paths=source_paths, evaluate=broker_evaluate,
+            baseline_receipt_sha256=baseline_window["receipt_sha256"])
         prepared = arena_adapter.prepare_task(arena_adapter.ArenaTask(
             task_id=task_id,
             task_prompt=raw_prompt,
             workspace=str(workspace),
             controller_id=arm_id,
-            round_id=f"{campaign_id}-{checkpoint:g}h",
+            round_id=f"{claim_campaign_id}-{checkpoint:g}h",
             actual_gfx_arch=arena_adapter.TARGET_GFX_ARCH,
         ), base_environment=controller_environment)
         # This is the deliberately unclaimed gap.  The controller receives a
         # GPU-blind environment and may spend its remote-model budget while
         # another host tenant uses the MI210.
-        stdout = arena_adapter.launch(
-            prepared, _controller_argv(arm, float(checkpoint)),
-            timeout_seconds=int(float(checkpoint) * 3600))
+        with broker:
+            controller_environment.update(broker.environment())
+            prepared = arena_adapter.prepare_task(
+                prepared.task, base_environment=controller_environment)
+            stdout = arena_adapter.launch(
+                prepared, _controller_argv(arm, float(checkpoint)),
+                timeout_seconds=int(float(checkpoint) * 3600),
+                command_prefix=isolation_prefix,
+                process_started=broker.register_controller)
         controller_output = cell_root / "controller.stdout"
         controller_output.write_text(stdout, encoding="utf-8")
         controller_stdout_sha256 = _sha256_file(controller_output)
-    elif request.get("checkpoint_hours") is not None:
-        raise ArenaCellRunnerError("starting-state baseline cannot have a checkpoint budget")
+        try:
+            controller_receipt = json.loads(stdout.strip().splitlines()[-1])
+            best_hashes = controller_receipt["evaluation"]["best_source_sha256"]
+        except (IndexError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            raise ArenaCellRunnerError(
+                "controller did not identify its broker-evaluated selection") from exc
+        selected = None
+        for result_path in sorted((
+                cell_root / "controller-evaluation-windows").glob("*-result.json")):
+            candidate_receipt = _load_json_object(
+                result_path, "broker evaluation receipt")
+            _verify_self_hash(candidate_receipt, "broker evaluation receipt")
+            if candidate_receipt.get("source_sha256") == best_hashes:
+                selected = candidate_receipt
+        if selected is None:
+            raise ArenaCellRunnerError(
+                "controller selection does not name broker-stored candidate bytes")
+        selected_root = Path(str(selected["evaluation_root"])).resolve()
+        for relative in source_paths:
+            source = _assert_contained(
+                selected_root / relative, selected_root, "selected candidate")
+            target = _assert_contained(
+                workspace / relative, workspace, "selected candidate target")
+            shutil.copyfile(source, target)
+        broker_chain = {
+            "evaluation_count": broker._ordinal,
+            "terminal_receipt_sha256": broker._previous_receipt_sha256,
+            "selected_receipt_sha256": selected["receipt_sha256"],
+            "source_paths": list(source_paths),
+            "baseline_receipt_sha256": baseline_window["receipt_sha256"],
+        }
 
     evaluation, evaluation_window = _run_gpu_measurement_window(
         request=request, cell_root=cell_root, ordinal=2,
@@ -1179,6 +1647,8 @@ def run_worker(
         "schema": CHECKPOINT_SCHEMA,
         "authority": "whole_agent_task_only",
         "campaign_id": campaign_id,
+        **({"attempt_id": attempt_id} if attempt_id is not None else {}),
+        "claim_campaign_id": claim_campaign_id,
         "task_id": task_id,
         "arm_id": arm_id,
         "baseline": baseline,
@@ -1191,6 +1661,7 @@ def run_worker(
             "average_speedup": float(evaluation.get("average_speedup", 0.0)),
         },
         "controller_stdout_sha256": controller_stdout_sha256,
+        "broker_evaluation_chain": broker_chain,
         "measurement_windows": [baseline_window, evaluation_window],
         "artifacts": artifacts,
         "constraints": {
@@ -1213,9 +1684,14 @@ def _run_manifest(
     selected_arms = (
         arena_campaign.AVAILABLE_SOURCE_PANEL_IDS
         if available_source else arena_campaign.PRIMARY_PANEL_IDS)
+    output_root = Path(args.output_root).resolve()
+    attempt_id = _safe_id(output_root.name, "attempt_id")
     return _self_hash({
         "schema": RUN_MANIFEST_SCHEMA,
         "campaign_id": audit["campaign_id"],
+        "attempt_id": attempt_id,
+        "attempt_root": str(output_root),
+        "claim_campaign_id": attempt_id,
         "available_source": available_source,
         "authority": audit["authority"],
         "audit_receipt_sha256": audit["receipt_sha256"],
@@ -1304,6 +1780,238 @@ def _publish_or_verify_aggregate(
     _atomic_json(path, aggregate)
 
 
+def _validate_broker_chain(
+    checkpoint: Mapping[str, Any], *, cell_root: Path, claim_scope: str,
+) -> None:
+    chain = checkpoint.get("broker_evaluation_chain")
+    if not isinstance(chain, Mapping):
+        raise ArenaCellRunnerError(
+            "controller checkpoint lacks its broker evaluation chain")
+    count = chain.get("evaluation_count")
+    sources = chain.get("source_paths")
+    if (isinstance(count, bool) or not isinstance(count, int) or count < 1
+            or not isinstance(sources, list) or not sources):
+        raise ArenaCellRunnerError("broker evaluation chain is malformed")
+    result_paths = sorted((
+        cell_root / "controller-evaluation-windows").glob("*-result.json"))
+    window_paths = sorted((
+        cell_root / "controller-evaluation-windows").glob("*-measurement.json"))
+    if len(result_paths) != count or len(window_paths) != count:
+        raise ArenaCellRunnerError("broker evaluation chain has orphaned evidence")
+    previous = None
+    hashes: set[str] = set()
+    for ordinal, (result_path, window_path) in enumerate(
+            zip(result_paths, window_paths), 1):
+        result = _load_json_object(result_path, "broker evaluation receipt")
+        _verify_self_hash(result, "broker evaluation receipt")
+        if (result.get("schema") != arena_upstream_common.BROKER_RESULT_SCHEMA
+                or result.get("evaluation_ordinal") != ordinal
+                or result.get("previous_receipt_sha256") != previous
+                or any(result.get(key) != checkpoint.get(key) for key in (
+                    "campaign_id", "task_id", "arm_id", "checkpoint_hours"))
+                or result.get("claim_campaign_id") != claim_scope
+                or (checkpoint.get("attempt_id") is not None and
+                    result.get("attempt_id") != checkpoint.get("attempt_id"))):
+            raise ArenaCellRunnerError("broker evaluation semantic identity drifted")
+        if (result.get("baseline_receipt_sha256")
+                != chain.get("baseline_receipt_sha256")):
+            raise ArenaCellRunnerError("broker baseline identity drifted")
+        source_hashes = result.get("source_sha256")
+        if (not isinstance(source_hashes, Mapping)
+                or sorted(source_hashes) != sorted(sources)
+                or any(not _SHA256_RE.fullmatch(str(value))
+                       for value in source_hashes.values())):
+            raise ArenaCellRunnerError("broker candidate source identity is invalid")
+        window = result.get("measurement_window")
+        if not isinstance(window, Mapping):
+            raise ArenaCellRunnerError("broker evaluation lacks measurement evidence")
+        _verify_self_hash(window, "broker measurement window")
+        persisted = _load_json_object(window_path, "persisted broker measurement")
+        if persisted != window:
+            raise ArenaCellRunnerError("persisted broker measurement drifted")
+        if (window.get("phase") != "controller_intermediate_evaluation"
+                or window.get("ordinal") != ordinal
+                or window.get("status") != "complete"
+                or any(window.get(key) != checkpoint.get(key) for key in (
+                    "campaign_id", "task_id", "arm_id", "checkpoint_hours"))
+                or window.get("claim_campaign_id") != claim_scope):
+            raise ArenaCellRunnerError("broker measurement semantic identity drifted")
+        opened, released = window.get("device_claim_open"), window.get(
+            "device_claim_released")
+        if (not isinstance(opened, Mapping) or not isinstance(released, Mapping)
+                or opened.get("claim_id") != released.get("claim_id")
+                or opened.get("campaign_id") != claim_scope
+                or released.get("campaign_id") != claim_scope
+                or opened.get("released_at") is not None
+                or not released.get("released_at")):
+            raise ArenaCellRunnerError("broker measurement claim pair is invalid")
+        previous = str(result["receipt_sha256"])
+        if previous in hashes:
+            raise ArenaCellRunnerError("broker evaluation receipt is duplicated")
+        hashes.add(previous)
+    if (chain.get("terminal_receipt_sha256") != previous
+            or chain.get("selected_receipt_sha256") not in hashes
+            or chain.get("baseline_receipt_sha256") != checkpoint.get(
+                "measurement_windows", [{}])[0].get("receipt_sha256")):
+        raise ArenaCellRunnerError("broker chain terminal or selection is invalid")
+
+
+def validate_campaign_receipts(output_root: str | Path) -> dict[str, Any]:
+    """Validate durable campaign evidence without probing hardware or resuming work."""
+    root = Path(output_root).resolve()
+    if not root.is_dir() or root.is_symlink():
+        raise ArenaCellRunnerError("validation root must be a campaign directory")
+    audit = _load_json_object(root / "audit.json", "stored audit")
+    _verify_self_hash(audit, "stored audit")
+    manifest = _load_json_object(
+        root / "campaign-manifest.json", "campaign manifest")
+    _verify_self_hash(manifest, "campaign manifest")
+    if manifest.get("schema") not in {
+            RUN_MANIFEST_SCHEMA, LEGACY_RUN_MANIFEST_SCHEMA}:
+        raise ArenaCellRunnerError("campaign manifest schema is unsupported")
+    campaign_id = str(manifest.get("campaign_id"))
+    if audit.get("campaign_id") != campaign_id:
+        raise ArenaCellRunnerError("audit and manifest campaign identities disagree")
+    attempt_id = manifest.get("attempt_id")
+    claim_scope = str(manifest.get("claim_campaign_id", campaign_id))
+    if manifest.get("schema") == RUN_MANIFEST_SCHEMA:
+        if (attempt_id != root.name or claim_scope != attempt_id
+                or manifest.get("attempt_root") != str(root)):
+            raise ArenaCellRunnerError("campaign attempt identity is invalid")
+    checkpoints: list[dict[str, Any]] = []
+    cells_root = root / "execution" / "cells"
+    for receipt_path in sorted(cells_root.glob("*/checkpoint-receipt.json")):
+        receipt = _load_json_object(receipt_path, "checkpoint receipt")
+        _verify_self_hash(receipt, "checkpoint receipt")
+        if (receipt.get("schema") != CHECKPOINT_SCHEMA
+                or receipt.get("campaign_id") != campaign_id):
+            raise ArenaCellRunnerError("checkpoint campaign identity drifted")
+        if attempt_id is not None and (
+                receipt.get("attempt_id") != attempt_id
+                or receipt.get("claim_campaign_id") != claim_scope):
+            raise ArenaCellRunnerError("checkpoint attempt identity drifted")
+        cell_root = receipt_path.parent
+        windows = receipt.get("measurement_windows")
+        if not isinstance(windows, list) or len(windows) != 2:
+            raise ArenaCellRunnerError("checkpoint measurement windows are incomplete")
+        for ordinal, (window, phase) in enumerate(zip(
+                windows, ("vendor_baseline", "centralized_final_evaluation")), 1):
+            if not isinstance(window, Mapping):
+                raise ArenaCellRunnerError("checkpoint measurement window is malformed")
+            _verify_self_hash(window, "GPU measurement window")
+            if (window.get("phase") != phase or window.get("ordinal") != ordinal
+                    or any(window.get(key) != receipt.get(key)
+                           for key in ("campaign_id", "task_id", "arm_id"))
+                    or ("checkpoint_hours" in window and window.get(
+                        "checkpoint_hours") != receipt.get("checkpoint_hours"))
+                    or window.get("status") != "complete"):
+                raise ArenaCellRunnerError(
+                    "GPU measurement window semantic identity drifted")
+            if attempt_id is not None and (
+                    window.get("attempt_id") != attempt_id
+                    or window.get("claim_campaign_id") != claim_scope):
+                raise ArenaCellRunnerError("GPU window attempt identity drifted")
+            opened, released = window.get("device_claim_open"), window.get(
+                "device_claim_released")
+            if not isinstance(opened, Mapping) or not isinstance(released, Mapping):
+                raise ArenaCellRunnerError("GPU window lacks claim receipts")
+            if (opened.get("claim_id") != released.get("claim_id")
+                    or opened.get("campaign_id") != claim_scope
+                    or released.get("campaign_id") != claim_scope
+                    or opened.get("released_at") is not None
+                    or not released.get("released_at")):
+                raise ArenaCellRunnerError("GPU window claim pair is invalid")
+            persisted = _load_json_object(
+                cell_root / "measurement-windows" / f"{ordinal:02d}-{phase}.json",
+                "persisted GPU measurement window")
+            if persisted != window:
+                raise ArenaCellRunnerError("persisted GPU window drifted")
+        artifacts = receipt.get("artifacts")
+        if not isinstance(artifacts, Mapping) or not artifacts:
+            raise ArenaCellRunnerError("checkpoint artifact manifest is missing")
+        for relative, digest in artifacts.items():
+            path = Path(str(relative))
+            artifact = cell_root / path
+            if (path.is_absolute() or ".." in path.parts or artifact.is_symlink()
+                    or not artifact.is_file() or _sha256_file(artifact) != digest):
+                raise ArenaCellRunnerError("checkpoint artifact identity drifted")
+        belief = receipt.get("belief_receipt")
+        if receipt.get("baseline"):
+            if belief is not None:
+                raise ArenaCellRunnerError("baseline carries a belief receipt")
+        else:
+            _validate_broker_chain(
+                receipt, cell_root=cell_root, claim_scope=claim_scope)
+            if not isinstance(belief, Mapping):
+                raise ArenaCellRunnerError("controller checkpoint lacks belief evidence")
+            _verify_self_hash(belief, "belief receipt")
+            if (belief.get("campaign_id") != campaign_id
+                    or belief.get("task") != {
+                        "task_id": receipt.get("task_id"),
+                        "controller_id": receipt.get("arm_id")}
+                    or belief.get("source", {}).get("checkpoint_hours")
+                    != receipt.get("checkpoint_hours")):
+                raise ArenaCellRunnerError("belief receipt semantic identity drifted")
+            if attempt_id is not None and (
+                    belief.get("attempt_id") != attempt_id
+                    or belief.get("claim_campaign_id") != claim_scope):
+                raise ArenaCellRunnerError("belief attempt identity drifted")
+            if _load_json_object(cell_root / "belief-receipt.json",
+                                 "persisted belief receipt") != belief:
+                raise ArenaCellRunnerError("persisted belief receipt drifted")
+        checkpoints.append(receipt)
+    cell_receipts = []
+    checkpoint_hashes = {
+        str(receipt["receipt_sha256"]): receipt for receipt in checkpoints}
+    referenced_checkpoints: set[str] = set()
+    for path in sorted((root / "execution" / "cell-receipts").glob("*.json")):
+        receipt = _load_json_object(path, "cell receipt")
+        _verify_self_hash(receipt, "cell receipt")
+        if receipt.get("campaign_id") != campaign_id:
+            raise ArenaCellRunnerError("cell campaign identity drifted")
+        if attempt_id is not None and receipt.get("attempt_id") != attempt_id:
+            raise ArenaCellRunnerError("cell attempt identity drifted")
+        runs = receipt.get("runs")
+        if not isinstance(runs, list) or not runs:
+            raise ArenaCellRunnerError("cell receipt has no checkpoint runs")
+        for run in runs:
+            digest = run.get("receipt_sha256") if isinstance(run, Mapping) else None
+            durable = checkpoint_hashes.get(str(digest))
+            if (durable is None or durable != run
+                    or run.get("task_id") != receipt.get("task_id")
+                    or run.get("arm_id") != receipt.get("arm_id")):
+                raise ArenaCellRunnerError(
+                    "cell receipt disagrees with its durable checkpoints")
+            if str(digest) in referenced_checkpoints:
+                raise ArenaCellRunnerError("checkpoint is referenced by multiple cells")
+            referenced_checkpoints.add(str(digest))
+        cell_receipts.append(receipt)
+    aggregate_path = root / "execution-receipt.json"
+    complete = aggregate_path.is_file()
+    aggregate_hash = None
+    if complete:
+        aggregate = _load_json_object(aggregate_path, "campaign aggregate")
+        _verify_self_hash(aggregate, "campaign aggregate")
+        if aggregate.get("campaign_id") != campaign_id or (
+                attempt_id is not None and aggregate.get("attempt_id") != attempt_id):
+            raise ArenaCellRunnerError("aggregate campaign attempt drifted")
+        if aggregate.get("cells") != cell_receipts:
+            raise ArenaCellRunnerError("aggregate and durable cell receipts disagree")
+        if referenced_checkpoints != set(checkpoint_hashes):
+            raise ArenaCellRunnerError(
+                "complete aggregate omits durable checkpoint evidence")
+        aggregate_hash = aggregate["receipt_sha256"]
+    return _self_hash({
+        "schema": VALIDATION_SCHEMA, "status": "valid_complete" if complete
+        else "valid_partial", "campaign_id": campaign_id,
+        **({"attempt_id": attempt_id} if attempt_id is not None else {}),
+        "validated_checkpoint_count": len(checkpoints),
+        "validated_cell_count": len(cell_receipts),
+        "aggregate_receipt_sha256": aggregate_hash,
+        "hardware_or_controller_executed": False,
+    })
+
+
 def _execute_from_cli(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     spec = arena_campaign.load_spec(args.config)
     available_source = bool(getattr(args, "available_source", False))
@@ -1332,6 +2040,7 @@ def _execute_from_cli(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     cells_root = output_root / "execution"
     runner = GovernedArenaCellRunner(RunnerConfig(
         campaign_id=audit["campaign_id"],
+        attempt_id=manifest["attempt_id"],
         arena_root=str(Path(args.arena_root).resolve()),
         preflight_path=str(Path(args.preflight).resolve()),
         output_root=str(cells_root),
@@ -1352,6 +2061,8 @@ def _execute_from_cli(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     aggregate = _self_hash({
         "schema": AGGREGATE_SCHEMA,
         "campaign_id": audit["campaign_id"],
+        "attempt_id": manifest["attempt_id"],
+        "claim_campaign_id": manifest["claim_campaign_id"],
         "status": "complete",
         "authority": "whole_agent_task_only",
         "audit": str(output_root / "audit.json"),
@@ -1379,6 +2090,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--worker-request")
     parser.add_argument("--worker-output")
+    parser.add_argument("--validate-only", action="store_true")
     parser.add_argument("--config")
     parser.add_argument("--arena-root")
     parser.add_argument("--geak-root")
@@ -1392,6 +2104,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         help=("run the separately labelled six-arm available-source panel; "
               "never implies completion of the fixed eight-arm campaign"))
     args = parser.parse_args(argv)
+    if args.validate_only:
+        if not args.output_root:
+            parser.error("--validate-only requires --output-root")
+        disallowed = (args.worker_request, args.worker_output, args.config,
+                      args.arena_root, args.geak_root, args.preflight)
+        if any(value is not None for value in disallowed):
+            parser.error("--validate-only cannot be combined with execution options")
+        try:
+            result = validate_campaign_receipts(args.output_root)
+        except ArenaCellRunnerError as exc:
+            print(json.dumps({
+                "schema": VALIDATION_SCHEMA, "status": "invalid",
+                "output_root": str(Path(args.output_root).resolve()),
+                "error": str(exc), "hardware_or_controller_executed": False,
+            }, sort_keys=True))
+            return 2
+        print(json.dumps(result, sort_keys=True))
+        return 0
     if args.worker_request or args.worker_output:
         if not args.worker_request or not args.worker_output:
             parser.error("worker mode requires both --worker-request and --worker-output")
@@ -1427,7 +2157,7 @@ __all__ = [
     "RUN_MANIFEST_SCHEMA",
     "ArenaCampaignInterrupted", "ArenaCellRunnerError",
     "GovernedArenaCellRunner", "RunnerConfig",
-    "execute_from_cli", "run_worker",
+    "execute_from_cli", "run_worker", "validate_campaign_receipts",
 ]
 
 
