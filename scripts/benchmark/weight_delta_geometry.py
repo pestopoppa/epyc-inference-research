@@ -143,16 +143,57 @@ def q8_dequantize(raw: bytes) -> np.ndarray:
     if len(raw) % Q8_BLOCK_BYTES:
         raise ValueError("Q8_0 payload is not block aligned")
     blocks = np.frombuffer(raw, dtype=np.uint8).reshape(-1, Q8_BLOCK_BYTES)
-    scales = blocks[:, :2].copy().view("<f2").astype(np.float32)
-    values = blocks[:, 2:].view(np.int8).astype(np.float32)
-    return (values * scales[:, None]).reshape(-1)
+    scales = blocks[:, :2].copy().view("<f2").astype(np.float32)  # already shape (N, 1): the <f2 view
+    values = blocks[:, 2:].view(np.int8).astype(np.float32)  # merges the 2 scale bytes, it does not drop the axis
+    return (values * scales).reshape(-1)  # scales(N,1) broadcasts elementwise against values(N,32) -> (N,32)
 
 
-def _tensor_triplets(stock: Header, thinkingcap: Header, fable: Header) -> Iterable[tuple[Tensor, Tensor, Tensor]]:
-    for name in sorted(set(stock.tensors) & set(thinkingcap.tensors) & set(fable.tensors)):
+def _classify_tensors(
+    stock: Header, thinkingcap: Header, fable: Header
+) -> tuple[list[tuple[Tensor, Tensor, Tensor]], dict[str, list[dict[str, object]]]]:
+    """Partition every tensor name across the trio into a comparable triplet or an
+    explicit, named exclusion bucket. Nothing is dropped silently: a tensor absent
+    from one file, type-mismatched across the trio, shape-mismatched, or uniformly
+    a non-Q8_0 type is recorded by name in ``exclusions`` rather than folded into an
+    opaque count."""
+    names = {"stock": set(stock.tensors), "thinkingcap": set(thinkingcap.tensors), "fable": set(fable.tensors)}
+    shared = names["stock"] & names["thinkingcap"] & names["fable"]
+    union = names["stock"] | names["thinkingcap"] | names["fable"]
+    exclusions: dict[str, list[dict[str, object]]] = {
+        "not_in_all_three": [],
+        "shape_mismatch": [],
+        "type_mismatch": [],
+        "uniform_non_q8_0": [],
+    }
+    triplets: list[tuple[Tensor, Tensor, Tensor]] = []
+    for name in sorted(union):
+        if name not in shared:
+            exclusions["not_in_all_three"].append({
+                "name": name,
+                "in_stock": name in names["stock"],
+                "in_thinkingcap": name in names["thinkingcap"],
+                "in_fable": name in names["fable"],
+            })
+            continue
         trio = (stock.tensors[name], thinkingcap.tensors[name], fable.tensors[name])
-        if all(tensor.type_id == GGML_TYPE_Q8_0 for tensor in trio) and len({tensor.shape for tensor in trio}) == 1:
-            yield trio
+        shapes = {tensor.shape for tensor in trio}
+        if len(shapes) > 1:
+            exclusions["shape_mismatch"].append({"name": name, "shapes": [list(t.shape) for t in trio]})
+            continue
+        type_ids = {tensor.type_id for tensor in trio}
+        if len(type_ids) > 1:
+            exclusions["type_mismatch"].append({
+                "name": name,
+                "type_id_stock": trio[0].type_id,
+                "type_id_thinkingcap": trio[1].type_id,
+                "type_id_fable": trio[2].type_id,
+            })
+            continue
+        if type_ids != {GGML_TYPE_Q8_0}:
+            exclusions["uniform_non_q8_0"].append({"name": name, "type_id": trio[0].type_id})
+            continue
+        triplets.append(trio)
+    return triplets, exclusions
 
 
 def _accumulate_tensor(
@@ -193,27 +234,36 @@ def _geometry(norm_tc: float, norm_ff: float, dot: float) -> dict[str, float | N
     return {"r": math.sqrt(norm_ff / norm_tc), "cos": dot / math.sqrt(norm_tc * norm_ff), "p": dot / norm_tc}
 
 
-def execute(stock_path: Path, tc_path: Path, ff_path: Path, *, chunk_bytes: int) -> dict[str, object]:
+def execute(
+    stock_path: Path, tc_path: Path, ff_path: Path, *, chunk_bytes: int, jsonl_path: Path | None = None
+) -> dict[str, object]:
     stock_header, tc_header, ff_header = (read_header(path) for path in (stock_path, tc_path, ff_path))
-    skipped = {"not_shared_or_q8_or_shape_mismatch": 0}
-    triplets = list(_tensor_triplets(stock_header, tc_header, ff_header))
-    shared_names = set(stock_header.tensors) & set(tc_header.tensors) & set(ff_header.tensors)
-    skipped["not_shared_or_q8_or_shape_mismatch"] = len(shared_names) - len(triplets)
+    triplets, exclusions = _classify_tensors(stock_header, tc_header, ff_header)
+    skipped = {key: len(value) for key, value in exclusions.items()}
     layers: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0, 0.0])
     tensor_rows: list[dict[str, object]] = []
-    with stock_path.open("rb") as stock_file, tc_path.open("rb") as tc_file, ff_path.open("rb") as ff_file:
-        with mmap.mmap(stock_file.fileno(), 0, access=mmap.ACCESS_READ) as stock_map, mmap.mmap(tc_file.fileno(), 0, access=mmap.ACCESS_READ) as tc_map, mmap.mmap(ff_file.fileno(), 0, access=mmap.ACCESS_READ) as ff_map:
-            for base, tc, ff in triplets:
-                norm_tc, norm_ff, dot = _accumulate_tensor(
-                    stock_map, tc_map, ff_map, stock_header, tc_header, ff_header,
-                    base, tc, ff, chunk_bytes=chunk_bytes,
-                )
-                layer = layer_for(base.name)
-                layers[layer][0] += norm_tc
-                layers[layer][1] += norm_ff
-                layers[layer][2] += dot
-                layers[layer][3] += 1
-                tensor_rows.append({"name": base.name, "layer": layer, "norm_tc_sq": norm_tc, "norm_ff_sq": norm_ff, "dot": dot, **_geometry(norm_tc, norm_ff, dot)})
+    jsonl_handle = jsonl_path.open("w") if jsonl_path is not None else None
+    try:
+        with stock_path.open("rb") as stock_file, tc_path.open("rb") as tc_file, ff_path.open("rb") as ff_file:
+            with mmap.mmap(stock_file.fileno(), 0, access=mmap.ACCESS_READ) as stock_map, mmap.mmap(tc_file.fileno(), 0, access=mmap.ACCESS_READ) as tc_map, mmap.mmap(ff_file.fileno(), 0, access=mmap.ACCESS_READ) as ff_map:
+                for base, tc, ff in triplets:
+                    norm_tc, norm_ff, dot = _accumulate_tensor(
+                        stock_map, tc_map, ff_map, stock_header, tc_header, ff_header,
+                        base, tc, ff, chunk_bytes=chunk_bytes,
+                    )
+                    layer = layer_for(base.name)
+                    layers[layer][0] += norm_tc
+                    layers[layer][1] += norm_ff
+                    layers[layer][2] += dot
+                    layers[layer][3] += 1
+                    row = {"name": base.name, "layer": layer, "norm_tc_sq": norm_tc, "norm_ff_sq": norm_ff, "dot": dot, **_geometry(norm_tc, norm_ff, dot)}
+                    tensor_rows.append(row)
+                    if jsonl_handle is not None:
+                        jsonl_handle.write(json.dumps(row, sort_keys=True) + "\n")
+                        jsonl_handle.flush()
+    finally:
+        if jsonl_handle is not None:
+            jsonl_handle.close()
     layer_rows = [{"layer": layer, "norm_tc_sq": values[0], "norm_ff_sq": values[1], "dot": values[2], "tensor_count": int(values[3]), **_geometry(values[0], values[1], values[2])} for layer, values in sorted(layers.items())]
     zero_tc = [row["name"] for row in tensor_rows if row["norm_tc_sq"] == 0.0]
     return {
@@ -226,6 +276,7 @@ def execute(stock_path: Path, tc_path: Path, ff_path: Path, *, chunk_bytes: int)
         "zero_tc_tensor_count": len(zero_tc),
         "zero_tc_tensor_names": zero_tc,
         "skipped": skipped,
+        "exclusions": exclusions,
         "layers": layer_rows,
         "tensors": tensor_rows,
     }
@@ -237,6 +288,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--thinkingcap", type=Path, default=DEFAULT_THINKINGCAP)
     parser.add_argument("--fable", type=Path, default=DEFAULT_FABLE)
     parser.add_argument("--output", type=Path, help="required with --execute")
+    parser.add_argument("--jsonl", type=Path, help="incremental per-tensor JSONL sink (default: <output>.jsonl); written and flushed as each tensor completes so a crash loses nothing")
     parser.add_argument("--chunk-mib", type=int, default=64)
     parser.add_argument("--execute", action="store_true", help="read GGUF tensor payloads (otherwise emit only plan)")
     return parser.parse_args(argv)
@@ -252,8 +304,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise SystemExit("--output is required with --execute")
     if args.chunk_mib <= 0:
         raise SystemExit("--chunk-mib must be positive")
-    result = execute(args.stock, args.thinkingcap, args.fable, chunk_bytes=args.chunk_mib * 1024 * 1024)
     args.output.parent.mkdir(parents=True, exist_ok=True)
+    jsonl_path = args.jsonl if args.jsonl is not None else args.output.with_suffix(".jsonl")
+    jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+    result = execute(args.stock, args.thinkingcap, args.fable, chunk_bytes=args.chunk_mib * 1024 * 1024, jsonl_path=jsonl_path)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     return 0
 
