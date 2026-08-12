@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import copy
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from . import evidence_path_rehearsal as R
 from . import least_commitment_capture as C
@@ -64,6 +67,30 @@ class EvidencePathRehearsalTest(unittest.TestCase):
         self.assertEqual(contract["trace"], "stderr")
         self.assertEqual(contract["state"], "dry_run_composed")
         self.assertFalse(contract["executed"])
+
+    def test_hypothesis_store_resolves_the_exact_proposal_statement(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "hypotheses.json"
+            path.write_text(json.dumps({
+                "schema": "epyc.autokernel.operator_hypotheses.v1",
+                "hypotheses": [{
+                    "hypothesis_id": "akh-evidence-path-rehearsal",
+                    "statement": self.intervention["hypothesis"],
+                    "falsifier": "The accepted paired result misses its effect floor.",
+                    "author": "operator",
+                }],
+            }), encoding="utf-8")
+            binding = R.verify_hypothesis_store(
+                path, hypothesis_id="akh-evidence-path-rehearsal",
+                proposal=self.intervention)
+            self.assertEqual(binding["store_path"], str(path.resolve()))
+            self.assertEqual(len(binding["store_sha256"]), 64)
+            changed = copy.deepcopy(self.intervention)
+            changed["hypothesis"] = "a different question"
+            with self.assertRaisesRegex(R.RehearsalError, "differs"):
+                R.verify_hypothesis_store(
+                    path, hypothesis_id="akh-evidence-path-rehearsal",
+                    proposal=changed)
 
 
 if __name__ == "__main__":

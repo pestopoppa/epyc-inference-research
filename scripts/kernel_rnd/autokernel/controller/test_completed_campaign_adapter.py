@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +14,12 @@ from ..test_journal import _candidate, _event
 from ..test_schemas import _campaign, _proposal
 from . import champion
 from . import completed_campaign_adapter as A
+from . import hypotheses as H
+
+
+class _EmptyDoNotRepeat:
+    def matches_for(self, regime, statement):
+        return ()
 
 
 class CompletedCampaignAdapterTest(unittest.TestCase):
@@ -59,6 +66,23 @@ class CompletedCampaignAdapterTest(unittest.TestCase):
         book = J.Journal(str(self.root), campaign_id=self.campaign_id)
         book.initialize()
         book.append(J.KIND_PROPOSAL_RECORDED, proposal)
+        self.hypothesis_id = "akh-iqk-adapter-20260812"
+        tracker = H.HypothesisTracker(
+            journal_=book, root=str(self.root), campaign_id=self.campaign_id)
+        tracker.open_hypothesis(H.Hypothesis(
+            hypothesis_id=self.hypothesis_id,
+            statement=proposal["hypothesis"],
+            falsifier="The accepted paired run misses its effect floor.",
+            origin=H.ORIGIN_CONTROLLER,
+            author="completed-campaign-adapter-test",
+            regime={"recipe_id": "t1b.llama_cpu.llama_bench_prefill.v1"},
+        ))
+        authorization = tracker.authorize_claim(
+            self.hypothesis_id,
+            purpose="exercise completed-campaign sequencer admission",
+            authorized_by="completed-campaign-adapter-test",
+            ledger=_EmptyDoNotRepeat(),
+        )
         book.append(J.KIND_EVALUATION_EVENT, t0)
         book.append(J.KIND_EVALUATION_EVENT, t1)
         book.append(J.KIND_CANDIDATE_RECORDED, candidate)
@@ -69,6 +93,11 @@ class CompletedCampaignAdapterTest(unittest.TestCase):
                 "candidate_id": self.candidate_id, "executed": True, "ok": True,
                 "spec": {
                     "recipe_id": "t1b.llama_cpu.llama_bench_prefill.v1",
+                    "hypothesis": {
+                        "bound": True,
+                        "hypothesis_id": self.hypothesis_id,
+                        "authorization": authorization.to_dict(),
+                    },
                     "proposal": {"proposal_id": self.proposal_id},
                     "calibration": {
                         "contribution_floor": 0.03, "mde": 0.027,
@@ -105,6 +134,7 @@ class CompletedCampaignAdapterTest(unittest.TestCase):
         other = self.root.parent / "no-mechanism"
         rewritten = J.Journal(str(other), campaign_id=self.campaign_id)
         rewritten.initialize()
+        shutil.copy2(self.root / H.LEDGER_FILENAME, other / H.LEDGER_FILENAME)
         terminal = None
         for entry in entries:
             payload = copy.deepcopy(entry.payload)

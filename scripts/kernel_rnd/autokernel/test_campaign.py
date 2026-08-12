@@ -3033,6 +3033,28 @@ class TestTheGateIsTheSameGateInBothModes(_HypothesisGateCase):
             "akh-test-stated", store_path=self.store(ENTRY_STATED), dry_run=False)
         self.assertNotIn("DRY RUN", token.purpose)
 
+    def test_execute_after_dry_run_reuses_the_open_question(self):
+        """Composition may precede execution under the exact campaign identity.
+
+        Intake remains idempotent, while the ledger honestly records two distinct
+        authorizations: one composed-only token and one live-spend token.
+        """
+        store = self.store(ENTRY_STATED)
+        run_spec = spec(campaign_id=self.campaign_id, journal_root=self.root)
+        composed = campaign.authorize_for(
+            run_spec, "akh-test-stated", store_path=store, dry_run=True)
+        executing = campaign.authorize_for(
+            run_spec, "akh-test-stated", store_path=store, dry_run=False)
+        self.assertLess(composed.ledger_seq, executing.ledger_seq)
+        self.assertIn("DRY RUN", composed.purpose)
+        self.assertNotIn("DRY RUN", executing.purpose)
+        events = campaign.hypotheses.HypothesisLedger(
+            os.path.join(self.root, campaign.hypotheses.LEDGER_FILENAME)).read().events
+        self.assertEqual(sum(event.kind == campaign.hypotheses.EVENT_OPENED
+                             for event in events), 1)
+        self.assertEqual(sum(event.kind == campaign.hypotheses.EVENT_CLAIM_AUTHORIZED
+                             for event in events), 2)
+
     def test_the_authorization_is_a_durable_record(self):
         """`authorize_claim` writes a CLAIM_AUTHORIZED event before it returns a
         token; a token with no record behind it is not an authorization."""

@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import copy
+import json
+import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 
 from . import least_commitment_capture as C
-from .test_schemas import _proposal, _sha
+from .test_schemas import _proposal
 
 
 def proposal() -> dict:
@@ -23,13 +26,38 @@ def proposal() -> dict:
     return value
 
 
+def diagnostic_source(value: dict) -> dict:
+    cell = {
+        "cell_id": "prefill/mul_mat", "demand_weight": 1.0,
+        "supported": True, "compatible": True,
+        "report_mass": {"iqk_on": 0.8, "iqk_off": 0.2},
+        "regret_margin": 0.5,
+    }
+    fixtures = value["representation_contract"][
+        "semantics_preserving_recoding_fixture_ids"]
+    return {
+        "schema": C.SOURCE_SCHEMA, "authority": "prospective_observe_only",
+        "receipt_id": f"aklc-source-{value['proposal_id']}",
+        "proposal_sha256": C.schemas.content_hash(value),
+        "representation_frame_sha256": value["representation_contract"][
+            "frame_sha256"],
+        "candidate_frame_id": "iqk-cpu-prefill-v9",
+        "do_not_repeat_match_ids": [],
+        "quotients": {"canonical": [cell], **{
+            fixture_id: [copy.deepcopy(cell)] for fixture_id in fixtures}},
+    }
+
+
 def plan(value: dict, *, role: str = "intervention",
          matched_control: str | None = "akp-20260812-1000") -> dict:
-    diagnostics = {name: float(index + 1) / 10.0
-                   for index, name in enumerate(C.DIAGNOSTICS)}
-    diagnostics["information_gain"] = value["expected_information_gain"]
-    receipts = {name: {"receipt_id": f"rcpt-{name}", "sha256": _sha(name)}
-                for name in C.DIAGNOSTICS}
+    handle = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
+    with handle:
+        json.dump(diagnostic_source(value), handle)
+    binding = C.source_binding(Path(handle.name))
+    source = json.loads(Path(handle.name).read_text(encoding="utf-8"))
+    diagnostics, recodings = C.derive_diagnostics(
+        source, proposal=value, candidate_frame_id="iqk-cpu-prefill-v9")
+    receipts = {name: dict(binding) for name in C.DIAGNOSTICS}
     raw = {
         "schema": C.SCHEMA, "capture_id": "aklc-20260812-1001",
         "campaign_id": value["campaign_id"], "candidate_id": "akc-20260812-1001",
@@ -41,10 +69,7 @@ def plan(value: dict, *, role: str = "intervention",
         "factors": {"ggml_iqk": value["change"]["parameter_surface"]["candidate"]["ggml_iqk"],
                     "threads": 96},
         "diagnostics": diagnostics,
-        "recodings": {
-            fixture_id: copy.deepcopy(diagnostics)
-            for fixture_id in value["representation_contract"][
-                "semantics_preserving_recoding_fixture_ids"]},
+        "recodings": recodings,
         "diagnostic_source_receipts": receipts,
         "outcome_reducers": dict(C.OUTCOME_REDUCERS),
         "capture_mode": "measured",
@@ -77,6 +102,19 @@ class CapturePlanTest(unittest.TestCase):
         raw = plan(proposal_record)
         raw["diagnostics"]["k_rho"] += 1.0
         with self.assertRaisesRegex(C.CapturePlanError, "plan_sha256"):
+            C.from_mapping(raw, proposal=proposal_record,
+                           campaign_id=proposal_record["campaign_id"],
+                           candidate_id="akc-20260812-1001")
+
+    def test_source_bytes_are_resolved_and_mechanically_reduced(self):
+        proposal_record = proposal()
+        raw = plan(proposal_record)
+        source_path = Path(next(iter(
+            raw["diagnostic_source_receipts"].values()))["path"])
+        source = json.loads(source_path.read_text(encoding="utf-8"))
+        source["quotients"]["canonical"][0]["compatible"] = False
+        source_path.write_text(json.dumps(source), encoding="utf-8")
+        with self.assertRaisesRegex(C.CapturePlanError, "source SHA-256 differs"):
             C.from_mapping(raw, proposal=proposal_record,
                            campaign_id=proposal_record["campaign_id"],
                            candidate_id="akc-20260812-1001")

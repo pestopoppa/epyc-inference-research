@@ -9,6 +9,7 @@ measurement.  It has no selector, champion, release, process, or inference API.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from dataclasses import dataclass
@@ -19,6 +20,7 @@ from . import schemas
 
 SCHEMA = "epyc.autokernel.least_commitment_capture_plan.v1"
 BLOCK_SCHEMA = "epyc.autokernel.least_commitment_capture.v1"
+SOURCE_SCHEMA = "epyc.autokernel.least_commitment_diagnostic_source.v1"
 ROLES = frozenset({"control", "intervention"})
 DIAGNOSTICS = (
     "unsupported_scope_width", "compatible_future_mass", "k_rho",
@@ -61,6 +63,123 @@ def _text(value: Any, label: str) -> str:
 def plan_sha256(raw: Mapping[str, Any]) -> str:
     return schemas.content_hash({key: raw[key] for key in sorted(raw)
                                  if key != "plan_sha256"})
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _derive_quotient(cells: Any, label: str) -> dict[str, float]:
+    """Reduce one predeclared representation quotient into AP-WM diagnostics."""
+    if not isinstance(cells, list) or not cells:
+        raise CapturePlanError(f"{label}: expected at least one diagnostic cell")
+    unsupported = raw_impurity = compatible = minority = k_rho = 0.0
+    demand_total = 0.0
+    seen: set[str] = set()
+    for index, cell in enumerate(cells):
+        prefix = f"{label}[{index}]"
+        if not isinstance(cell, Mapping) or set(cell) != {
+                "cell_id", "demand_weight", "supported", "compatible",
+                "report_mass", "regret_margin"}:
+            raise CapturePlanError(f"{prefix}: malformed diagnostic cell")
+        cell_id = _text(cell.get("cell_id"), f"{prefix}.cell_id")
+        if cell_id in seen:
+            raise CapturePlanError(f"{prefix}.cell_id: duplicate {cell_id!r}")
+        seen.add(cell_id)
+        demand = _finite(cell.get("demand_weight"), f"{prefix}.demand_weight",
+                         non_negative=True)
+        margin = _finite(cell.get("regret_margin"), f"{prefix}.regret_margin",
+                         non_negative=True)
+        if not isinstance(cell.get("supported"), bool) \
+                or not isinstance(cell.get("compatible"), bool):
+            raise CapturePlanError(f"{prefix}: supported/compatible must be booleans")
+        reports = cell.get("report_mass")
+        if not isinstance(reports, Mapping) or not reports:
+            raise CapturePlanError(f"{prefix}.report_mass: expected non-empty mapping")
+        masses = [_finite(value, f"{prefix}.report_mass.{key}", non_negative=True)
+                  for key, value in reports.items()]
+        if not math.isclose(sum(masses), 1.0, abs_tol=1e-12):
+            raise CapturePlanError(f"{prefix}.report_mass: values must sum to one")
+        cell_minority = 1.0 - max(masses)
+        demand_total += demand
+        unsupported += 0.0 if cell["supported"] else 1.0
+        compatible += demand if cell["compatible"] else 0.0
+        raw_impurity += 1.0 if sum(value > 0.0 for value in masses) > 1 else 0.0
+        minority += demand * cell_minority
+        k_rho += demand * margin * cell_minority
+    if not math.isclose(demand_total, 1.0, abs_tol=1e-12):
+        raise CapturePlanError(f"{label}: demand weights must sum to one")
+    return {
+        "unsupported_scope_width": unsupported,
+        "compatible_future_mass": compatible,
+        "k_rho": k_rho,
+        "raw_impurity": raw_impurity,
+        "weighted_minority": minority,
+    }
+
+
+def derive_diagnostics(source: Any, *, proposal: Mapping[str, Any],
+                       candidate_frame_id: str) -> tuple[dict, dict]:
+    """Derive diagnostics from a hash-bound prospective quotient source."""
+    required = {
+        "schema", "authority", "receipt_id", "proposal_sha256",
+        "representation_frame_sha256", "candidate_frame_id",
+        "do_not_repeat_match_ids", "quotients",
+    }
+    if not isinstance(source, Mapping) or set(source) != required:
+        raise CapturePlanError("diagnostic source fields differ from the closed schema")
+    if source.get("schema") != SOURCE_SCHEMA \
+            or source.get("authority") != "prospective_observe_only":
+        raise CapturePlanError("diagnostic source schema/authority differs")
+    _text(source.get("receipt_id"), "diagnostic source receipt_id")
+    if source.get("proposal_sha256") != schemas.content_hash(proposal):
+        raise CapturePlanError("diagnostic source proposal_sha256 differs")
+    frame = proposal["representation_contract"]["frame_sha256"]
+    if source.get("representation_frame_sha256") != frame:
+        raise CapturePlanError("diagnostic source representation frame differs")
+    if source.get("candidate_frame_id") != candidate_frame_id:
+        raise CapturePlanError("diagnostic source candidate frame differs")
+    matches = source.get("do_not_repeat_match_ids")
+    if not isinstance(matches, list) or any(
+            not isinstance(value, str) or not value.strip() for value in matches):
+        raise CapturePlanError("do_not_repeat_match_ids must be a list of ids")
+    if len(matches) != len(set(matches)):
+        raise CapturePlanError("do_not_repeat_match_ids contains duplicates")
+    fixture_ids = set(proposal["representation_contract"][
+        "semantics_preserving_recoding_fixture_ids"])
+    quotients = source.get("quotients")
+    if not isinstance(quotients, Mapping) \
+            or set(quotients) != fixture_ids | {"canonical"}:
+        raise CapturePlanError(
+            "diagnostic source quotients must cover canonical plus every recoding")
+    def complete(values: dict[str, float]) -> dict[str, float]:
+        return {
+            **values,
+            "information_gain": float(proposal["expected_information_gain"]),
+            "novelty": 1.0 if not matches else 0.0,
+        }
+    diagnostics = complete(_derive_quotient(quotients["canonical"], "quotients.canonical"))
+    recodings = {
+        fixture_id: complete(_derive_quotient(
+            quotients[fixture_id], f"quotients.{fixture_id}"))
+        for fixture_id in sorted(fixture_ids)
+    }
+    return diagnostics, recodings
+
+
+def source_binding(path: str | Path) -> dict:
+    """Return the exact plan binding for one diagnostic source file."""
+    source_path = Path(path).resolve()
+    source = json.loads(source_path.read_text(encoding="utf-8"))
+    return {
+        "path": str(source_path),
+        "receipt_id": _text(source.get("receipt_id"), "diagnostic source receipt_id"),
+        "sha256": _sha256_file(source_path),
+    }
 
 
 @dataclass(frozen=True)
@@ -140,15 +259,46 @@ def from_mapping(raw: Any, *, proposal: Mapping[str, Any], campaign_id: str,
     receipts = raw.get("diagnostic_source_receipts")
     if not isinstance(receipts, Mapping) or set(receipts) != set(DIAGNOSTICS):
         raise CapturePlanError("diagnostic_source_receipts must bind every diagnostic")
+    source_records: dict[tuple[str, str, str], Mapping[str, Any]] = {}
     for key, receipt in receipts.items():
-        if not isinstance(receipt, Mapping) or set(receipt) != {"receipt_id", "sha256"}:
-            raise CapturePlanError(f"diagnostic_source_receipts.{key} must be {{receipt_id, sha256}}")
+        if not isinstance(receipt, Mapping) or set(receipt) != {
+                "path", "receipt_id", "sha256"}:
+            raise CapturePlanError(
+                f"diagnostic_source_receipts.{key} must be {{path, receipt_id, sha256}}")
+        path = Path(_text(receipt.get("path"),
+                          f"diagnostic_source_receipts.{key}.path"))
+        if not path.is_absolute():
+            raise CapturePlanError(f"diagnostic_source_receipts.{key}.path must be absolute")
         _text(receipt.get("receipt_id"), f"diagnostic_source_receipts.{key}.receipt_id")
         schemas.require.sha256(
             receipt.get("sha256"),
             f"diagnostic_source_receipts.{key}.sha256",
             error=CapturePlanError,
         )
+        try:
+            observed = _sha256_file(path)
+            source = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise CapturePlanError(
+                f"diagnostic_source_receipts.{key}: cannot read source: {exc}") from exc
+        if observed != receipt["sha256"]:
+            raise CapturePlanError(
+                f"diagnostic_source_receipts.{key}: source SHA-256 differs")
+        if not isinstance(source, Mapping) \
+                or source.get("receipt_id") != receipt["receipt_id"]:
+            raise CapturePlanError(
+                f"diagnostic_source_receipts.{key}: receipt identity differs")
+        source_records[(str(path), receipt["receipt_id"], observed)] = source
+    if len(source_records) != 1:
+        raise CapturePlanError(
+            "all diagnostics must come from one mechanically reduced source receipt")
+    source = next(iter(source_records.values()))
+    derived, derived_recodings = derive_diagnostics(
+        source, proposal=proposal, candidate_frame_id=raw["candidate_frame_id"])
+    if diagnostics != derived:
+        raise CapturePlanError("diagnostics differ from the bound source derivation")
+    if recodings != derived_recodings:
+        raise CapturePlanError("recodings differ from the bound source derivation")
     if raw.get("outcome_reducers") != OUTCOME_REDUCERS:
         raise CapturePlanError("outcome_reducers must be the immutable live reducer set")
     target_regimes = set(proposal.get("target", {}).get("regimes", ()))

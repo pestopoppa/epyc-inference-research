@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -21,6 +22,7 @@ from . import least_commitment_capture as C
 from . import least_commitment_receipts as P
 from . import offline_least_commitment as L
 from . import schemas as S
+from .controller import hypotheses as H
 from .test_journal import _candidate, _event
 from .test_schemas import _proposal
 
@@ -31,6 +33,11 @@ DIAGNOSTIC_DIRECTIONS = {
     } else "higher")
     for name in L.DIAGNOSTICS
 }
+
+
+class _EmptyDoNotRepeat:
+    def matches_for(self, regime, statement):
+        return ()
 
 
 def _diagnostics(score: float) -> dict[str, float]:
@@ -153,6 +160,23 @@ class ReceiptProjectionTest(unittest.TestCase):
         book = J.Journal(str(journal_root), campaign_id=campaign_id)
         book.initialize()
         book.append(J.KIND_PROPOSAL_RECORDED, proposal)
+        hypothesis_id = f"akh-receipt-projection-{ordinal:04d}"
+        tracker = H.HypothesisTracker(
+            journal_=book, root=str(journal_root), campaign_id=campaign_id)
+        tracker.open_hypothesis(H.Hypothesis(
+            hypothesis_id=hypothesis_id,
+            statement=proposal["hypothesis"],
+            falsifier="The accepted paired run fails its predeclared effect floor.",
+            origin=H.ORIGIN_CONTROLLER,
+            author="least-commitment-receipt-test",
+            regime={"recipe_id": "t1b.llama_cpu.llama_bench_prefill.v1"},
+        ))
+        authorization = tracker.authorize_claim(
+            hypothesis_id,
+            purpose="exercise the completed-proposal archive admission path",
+            authorized_by="least-commitment-receipt-test",
+            ledger=_EmptyDoNotRepeat(),
+        )
         book.append(J.KIND_EVALUATION_EVENT, evaluation)
         book.append(J.KIND_CANDIDATE_RECORDED, candidate)
         terminal = book.append(J.KIND_STOP_STATE, {
@@ -162,6 +186,11 @@ class ReceiptProjectionTest(unittest.TestCase):
                 "candidate_id": candidate_id, "executed": True, "ok": True,
                 "spec": {
                     "recipe_id": "t1b.llama_cpu.llama_bench_prefill.v1",
+                    "hypothesis": {
+                        "bound": True,
+                        "hypothesis_id": hypothesis_id,
+                        "authorization": authorization.to_dict(),
+                    },
                     "proposal": {
                         "schema": proposal["schema"],
                         "proposal_id": proposal_id,
@@ -328,6 +357,10 @@ class ReceiptProjectionTest(unittest.TestCase):
         synthetic_root = self.root / "synthetic"
         synthetic = J.Journal(str(synthetic_root), campaign_id=row["campaign_id"])
         synthetic.initialize()
+        shutil.copy2(
+            Path(row["journal_root"]) / H.LEDGER_FILENAME,
+            synthetic_root / H.LEDGER_FILENAME,
+        )
         for entry in entries[:-1]:
             synthetic.append(entry.kind, entry.payload, record_id=entry.record_id)
         replacement = synthetic.append(J.KIND_STOP_STATE, payload)

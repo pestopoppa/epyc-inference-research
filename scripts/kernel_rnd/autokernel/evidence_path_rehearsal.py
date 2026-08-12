@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -21,7 +22,7 @@ from . import least_commitment_capture as capture
 from . import least_commitment_receipts as receipts
 from . import offline_least_commitment as offline
 from . import schemas
-from .controller import champion, completed_campaign_adapter, sequencer
+from .controller import champion, completed_campaign_adapter, hypotheses, sequencer
 from .release import closeout, live_material, packager, readiness, t3
 
 SCHEMA = "epyc.autokernel.evidence_path_rehearsal.v1"
@@ -37,6 +38,30 @@ def _load(path: Path) -> Mapping[str, Any]:
     if not isinstance(raw, Mapping):
         raise RehearsalError(f"{path}: expected a JSON object")
     return raw
+
+
+def verify_hypothesis_store(path: Path, *, hypothesis_id: str,
+                            proposal: Mapping[str, Any]) -> dict[str, Any]:
+    """Resolve the exact stated question without mutating its campaign ledger."""
+    entries = hypotheses.OperatorHypothesisStore(str(path)).load()
+    matches = [entry for entry in entries if entry.hypothesis_id == hypothesis_id]
+    if len(matches) != 1:
+        raise RehearsalError(
+            f"{path}: expected one hypothesis {hypothesis_id!r}, got {len(matches)}")
+    entry = matches[0]
+    if entry.statement != proposal.get("hypothesis"):
+        raise RehearsalError(
+            f"{path}: {hypothesis_id} statement differs from proposal hypothesis")
+    if entry.falsifier_state != hypotheses.FALSIFIER_STATED:
+        raise RehearsalError(
+            f"{path}: {hypothesis_id} does not carry a stated falsifier")
+    return {
+        "hypothesis_id": hypothesis_id,
+        "statement_sha256": schemas.content_hash(entry.statement),
+        "falsifier_sha256": schemas.content_hash(entry.falsifier),
+        "store_path": str(path.resolve()),
+        "store_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+    }
 
 
 def verify_campaign_json_contract(model: str) -> dict[str, Any]:
@@ -158,10 +183,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--model", required=True)
     parser.add_argument("--intervention-proposal", type=Path, required=True)
     parser.add_argument("--intervention-capture-plan", type=Path, required=True)
+    parser.add_argument("--intervention-hypothesis", required=True)
+    parser.add_argument("--intervention-hypothesis-store", type=Path, required=True)
     parser.add_argument("--control-campaign-id", required=True)
     parser.add_argument("--control-proposal-id", required=True)
     parser.add_argument("--control-candidate-id", required=True)
     parser.add_argument("--control-capture-plan", type=Path, required=True)
+    parser.add_argument("--control-hypothesis", required=True)
+    parser.add_argument("--control-hypothesis-store", type=Path, required=True)
     parser.add_argument("--control-proposal-output", type=Path, required=True)
     parser.add_argument("--report-output", type=Path, required=True)
     args = parser.parse_args(argv)
@@ -182,6 +211,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     report = producer_manifest(
         intervention_proposal=intervention, intervention_plan=intervention_plan,
         control_proposal=control, control_plan=control_plan)
+    report["hypothesis_bindings"] = {
+        "intervention": verify_hypothesis_store(
+            args.intervention_hypothesis_store,
+            hypothesis_id=args.intervention_hypothesis, proposal=intervention),
+        "control": verify_hypothesis_store(
+            args.control_hypothesis_store,
+            hypothesis_id=args.control_hypothesis, proposal=control),
+    }
     report["campaign_cli_contract"] = verify_campaign_json_contract(args.model)
     args.control_proposal_output.write_text(
         json.dumps(control, indent=2, sort_keys=True) + "\n", encoding="utf-8")

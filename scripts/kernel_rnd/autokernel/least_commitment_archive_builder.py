@@ -20,11 +20,13 @@ from typing import Any, Mapping, Sequence
 
 try:
     from . import journal, offline_least_commitment as protocol, schemas
+    from .controller import hypotheses
     from .evaluator import recipes
 except ImportError:  # direct script execution
     import journal
     import offline_least_commitment as protocol
     import schemas
+    from controller import hypotheses
     from evaluator import recipes
 
 
@@ -40,6 +42,7 @@ class CompletedProposal:
     proposal_event_id: str
     result: Mapping[str, Any]
     completion_event_id: str
+    hypothesis_binding: Mapping[str, Any] | None = None
 
     @property
     def proposal_sha256(self) -> str:
@@ -69,6 +72,59 @@ def _need_string(value: Any, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{label}: required non-empty string")
     return value
+
+
+def _hypothesis_binding(*, root: Path, campaign_id: str,
+                        proposal: Mapping[str, Any], spec: Mapping[str, Any]) -> dict:
+    """Prove the completed proposal spent its claim on the stated prediction."""
+    binding = spec.get("hypothesis")
+    if not isinstance(binding, Mapping) or binding.get("bound") is not True:
+        raise ValueError(
+            f"{proposal['proposal_id']}: exploratory campaign is not archive-eligible")
+    hypothesis_id = _need_string(binding.get("hypothesis_id"), "hypothesis_id")
+    authorization = binding.get("authorization")
+    if not isinstance(authorization, Mapping):
+        raise ValueError(f"{proposal['proposal_id']}: hypothesis authorization is absent")
+    parsed = hypotheses.ClaimAuthorization.from_dict(authorization)
+    if parsed.hypothesis_id != hypothesis_id or parsed.campaign_id != campaign_id:
+        raise ValueError(
+            f"{proposal['proposal_id']}: hypothesis authorization identity differs")
+    ledger_path = root / hypotheses.LEDGER_FILENAME
+    ledger = hypotheses.HypothesisLedger(str(ledger_path)).read()
+    if ledger.discarded_tail_bytes:
+        raise ValueError(f"{ledger_path}: hypothesis ledger has a torn tail")
+    opened = [
+        event for event in ledger.events
+        if event.kind == hypotheses.EVENT_OPENED
+        and event.hypothesis_id == hypothesis_id
+    ]
+    if len(opened) != 1:
+        raise ValueError(
+            f"{proposal['proposal_id']}: expected one opened hypothesis, got {len(opened)}")
+    hypothesis_record = opened[0].payload.get("hypothesis")
+    statement = (hypothesis_record.get("statement")
+                 if isinstance(hypothesis_record, Mapping) else None)
+    if statement != proposal.get("hypothesis"):
+        raise ValueError(
+            f"{proposal['proposal_id']}: proposal hypothesis differs from claim ledger")
+    authorized = [
+        event for event in ledger.events
+        if event.kind == hypotheses.EVENT_CLAIM_AUTHORIZED
+        and event.hypothesis_id == hypothesis_id
+        and event.seq == parsed.ledger_seq
+    ]
+    if len(authorized) != 1 \
+            or authorized[0].payload.get("authorization") != dict(authorization):
+        raise ValueError(
+            f"{proposal['proposal_id']}: terminal authorization does not resolve exactly")
+    return {
+        "hypothesis_id": hypothesis_id,
+        "opened_ledger_seq": opened[0].seq,
+        "authorization_ledger_seq": authorized[0].seq,
+        "statement_sha256": schemas.content_hash(statement),
+        "ledger_path": str(ledger_path),
+        "ledger_sha256": _sha256_file(ledger_path),
+    }
 
 
 def _bound_receipt(binding: Any, *, schema: str, label: str) -> tuple[Mapping[str, Any], dict]:
@@ -146,9 +202,12 @@ def _completed_proposal(row: Mapping[str, Any]) -> CompletedProposal:
     if failed:
         raise ValueError(
             f"{completion_id}: terminal campaign is not a clean completed proposal: {failed}")
+    hypothesis_binding = _hypothesis_binding(
+        root=root, campaign_id=campaign_id, proposal=proposal, spec=spec)
     return CompletedProposal(
         proposal=proposal, proposal_event_id=proposals[0].event_id,
-        result=result, completion_event_id=completion_id)
+        result=result, completion_event_id=completion_id,
+        hypothesis_binding=hypothesis_binding)
 
 
 def _metric_direction(completed: CompletedProposal) -> tuple[str, str]:
@@ -325,6 +384,7 @@ def build_archive(manifest: Mapping[str, Any]) -> dict:
                 "proposal_event_id": item["completed"].proposal_event_id,
                 "proposal_sha256": item["completed"].proposal_sha256,
                 "campaign_result_sha256": item["completed"].result_sha256,
+                "hypothesis_binding": item["completed"].hypothesis_binding,
                 "diagnostic": item["diagnostic_ref"],
                 "outcome": item["outcome_ref"],
                 "matched_intervention": match_ref,
