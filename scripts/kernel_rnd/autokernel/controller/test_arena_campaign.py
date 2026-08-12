@@ -359,6 +359,48 @@ class ArenaCampaignTest(unittest.TestCase):
             evoengineer.upstream_license_sha256,
             EVO.EXPECTED_SOURCE_SHA256["LICENSE"])
         self.assertEqual(evoengineer.missing_artifacts, ())
+        refreshed = (evoengineer, kernelfoundry, k_search, xe_forge, geak)
+        for arm in refreshed:
+            pinned = subprocess.run(
+                ("git", "-C", str(C.REPOSITORY_ROOT), "show",
+                 f"{arm.source_commit}:{arm.entrypoint_path}"),
+                capture_output=True, check=True)
+            self.assertEqual(
+                hashlib.sha256(pinned.stdout).hexdigest(),
+                arm.entrypoint_sha256)
+            self.assertEqual(
+                sha(C.REPOSITORY_ROOT / arm.entrypoint_path),
+                arm.entrypoint_sha256)
+            subprocess.run(
+                ("git", "-C", str(C.REPOSITORY_ROOT), "merge-base",
+                 "--is-ancestor", arm.source_commit, "HEAD"), check=True)
+
+    def test_repository_evoengineer_fresh_current_source_is_admitted(self):
+        spec = C.load_spec(CONFIG)
+        evoengineer = next(
+            arm for arm in spec.arms if arm.arm_id == EVO.CONTROLLER_ID)
+        original_which = C.shutil.which
+
+        def required_tools_present(name):
+            if name == "codex":
+                return sys.executable
+            return original_which(name)
+
+        with (
+            mock.patch.object(
+                C.shutil, "which", side_effect=required_tools_present),
+            mock.patch.object(
+                C, "_upstream_source_audit",
+                return_value=({"fixture": "pinned upstream"}, [])),
+        ):
+            row = C._implementation_audit(evoengineer)
+        self.assertTrue(row["executable"], row["missing_artifacts"])
+        identity = row["source_identity"]
+        self.assertTrue(identity["clean"])
+        self.assertEqual(identity["pin_relation"], "ancestor")
+        self.assertEqual(
+            identity["observed_entrypoint_sha256"],
+            identity["pinned_entrypoint_sha256"])
 
     def test_controller_coverage_is_two_only_when_both_clis_are_present(self):
         actor = C.ArmImplementation(
