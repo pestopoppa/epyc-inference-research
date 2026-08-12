@@ -1500,6 +1500,22 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
         plan = run.call_args.args[0]
         self.assertEqual(dict(plan.effective_defines)["LLAMA_FATAL_WARNINGS"], "ON")
 
+    def test_failed_build_is_refused_before_artifact_hashing(self):
+        """THE BITE: a failed compiler result cannot enter T0 evidence assembly."""
+        failed = mock.Mock(spec=campaign.worktree.BuildResult)
+        failed.succeeded = False
+        failed.exit_code = 2
+        ops = campaign.HostOps(nominal_khz=2_900_000)
+        ops._claim_binding = object()
+        ops._build_state = {"result": failed, "tree": object(), "plan": object()}
+
+        with mock.patch.object(
+                campaign, "_source_tree_digest",
+                side_effect=AssertionError("artifact hashing must not start")):
+            with self.assertRaisesRegex(RuntimeError,
+                                        "failed build before artifact hashing.*exit_code=2"):
+                ops.run_t0(spec(), failed)
+
     def test_parameter_t0_adapter_derives_the_nonbehavioural_gate_surfaces(self):
         built = spec(proposal=iqk_parameter_proposal())
         tree = mock.Mock()

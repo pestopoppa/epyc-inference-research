@@ -3230,6 +3230,16 @@ class HostOps:
         tree = self._build_state["tree"]
         plan = self._build_state["plan"]
 
+        # Do not turn a compiler failure into a later artifact-hashing failure.
+        # `build_identity()` intentionally re-measures outputs from disk, but a
+        # failed build has no candidate artifact eligible for that measurement.
+        # Refuse before touching either the source tree or output paths so the
+        # failure remains a build outcome, never a T0/evidence outcome.
+        if not result.succeeded:
+            raise RuntimeError(
+                "run_t0 refuses a failed build before artifact hashing "
+                f"(exit_code={result.exit_code!r})")
+
         snapshot = _source_tree_digest(tree.path.path)
         identity = worktree.build_identity(
             result, candidate_id=spec.candidate_id, campaign_id=spec.campaign_id,
