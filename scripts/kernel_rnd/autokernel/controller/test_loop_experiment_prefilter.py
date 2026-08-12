@@ -11,6 +11,7 @@ import tempfile
 import unittest
 
 from . import authoring_contract as A
+from . import loop_experiment_beliefs as B
 from . import loop_experiment_prefilter as P
 from . import loop_experiment_runner as R
 from . import loop_experiments as L
@@ -263,6 +264,131 @@ class StructuralPrefilterTest(PrefilterFixture):
         with self.assertRaisesRegex(P.PrefilterError, "new absolute"):
             P.main([
                 "reduce", "--manifest", str(self.panel_root / "manifest.json"),
+                "--panel", str(self.panel_root / "panel.json"),
+                "--prefilter-contract", str(self.filter_path),
+                "--output", str(output),
+            ])
+
+    def test_belief_projection_emits_four_identity_bound_rows_per_cell(self):
+        reduction = B.reduce_with_beliefs(
+            manifest=self.manifest, panel=self.panel,
+            prefilter_contract=self.filter)
+        rows = reduction["belief_measurements"]
+        self.assertEqual(len(rows), 4 * len(self.spec.planner_arms))
+        self.assertEqual({row["extra"]["native_field"] for row in rows}, {
+            "novel_nonduplicate_count", "prefilter_survival_count",
+            "already_optimized_termination_count", "elapsed_wall_seconds",
+        })
+        directions = {
+            row["extra"]["native_field"]: row["metric_direction"] for row in rows
+        }
+        self.assertEqual(directions, {
+            "novel_nonduplicate_count": "higher_better",
+            "prefilter_survival_count": "higher_better",
+            "already_optimized_termination_count": "lower_better",
+            "elapsed_wall_seconds": "lower_better",
+        })
+        for row in rows:
+            extra = row["extra"]
+            self.assertEqual(row["reps"], 1)
+            self.assertEqual(row["reps_basis"], B.REPS_BASIS)
+            self.assertIn(extra["target_context_mode"], {
+                L.TARGET_ABSENT, L.TARGET_RENDERED})
+            self.assertEqual(extra["manifest_sha256"],
+                             reduction["manifest_sha256"])
+            self.assertEqual(extra["panel_sha256"], reduction["panel_sha256"])
+            self.assertEqual(extra["prefilter_contract_sha256"],
+                             reduction["prefilter_contract_sha256"])
+            self.assertEqual(extra["projection_producer"]["producer_id"],
+                             B.PRODUCER_ID)
+            self.assertEqual(extra["prefilter_reducer_producer"],
+                             self.filter["producer"])
+            self.assertTrue(extra["observation_only"])
+            for authority in ("campaign_1_authority", "ranking_authority",
+                              "champion_authority", "release_authority"):
+                self.assertFalse(extra[authority])
+            unsigned = dict(row)
+            claimed = unsigned.pop("measurement_sha256")
+            self.assertEqual(claimed, B._digest(unsigned))
+        first = [row for row in rows if row["extra"]["cell_id"] ==
+                 self.spec.planner_arms[0].cell_id]
+        self.assertEqual({row["extra"]["model_id"] for row in first}, {"model-a"})
+        self.assertEqual({row["extra"]["quant_id"] for row in first}, {"native"})
+        self.assertEqual({row["extra"]["effort"] for row in first}, {"high"})
+        self.assertEqual({row["value"] for row in first if row["extra"][
+            "native_field"] in {"novel_nonduplicate_count",
+                                "prefilter_survival_count"}}, {1})
+        elapsed = next(row for row in first if row["extra"]["native_field"] ==
+                       "elapsed_wall_seconds")
+        self.assertIn("observed_cost_lower_is_better",
+                      elapsed["extra"]["metric_interpretation"])
+        self.assertEqual(B.validate_reduction_with_beliefs(
+            reduction, manifest=self.manifest, panel=self.panel,
+            prefilter_contract=self.filter), reduction)
+
+    def test_belief_projection_refuses_tamper_even_after_attacker_rehashes(self):
+        reduction = B.reduce_with_beliefs(
+            manifest=self.manifest, panel=self.panel,
+            prefilter_contract=self.filter)
+
+        value_tamper = json.loads(json.dumps(reduction))
+        value_tamper["belief_measurements"][0]["value"] += 1
+        unsigned = dict(value_tamper["belief_measurements"][0])
+        unsigned.pop("measurement_sha256")
+        value_tamper["belief_measurements"][0]["measurement_sha256"] = B._digest(
+            unsigned)
+        outer = dict(value_tamper)
+        outer.pop("reduction_sha256")
+        value_tamper["reduction_sha256"] = B._digest(outer)
+        with self.assertRaisesRegex(B.BeliefProjectionError, "exactly rederive"):
+            B.validate_reduction_with_beliefs(
+                value_tamper, manifest=self.manifest, panel=self.panel,
+                prefilter_contract=self.filter)
+
+        identity_tamper = json.loads(json.dumps(reduction))
+        identity_tamper["belief_measurements"][0]["extra"][
+            "prefilter_evidence_sha256"] = "f" * 64
+        unsigned = dict(identity_tamper["belief_measurements"][0])
+        unsigned.pop("measurement_sha256")
+        identity_tamper["belief_measurements"][0]["measurement_sha256"] = B._digest(
+            unsigned)
+        outer = dict(identity_tamper)
+        outer.pop("reduction_sha256")
+        identity_tamper["reduction_sha256"] = B._digest(outer)
+        with self.assertRaisesRegex(B.BeliefProjectionError, "exactly rederive"):
+            B.validate_reduction_with_beliefs(
+                identity_tamper, manifest=self.manifest, panel=self.panel,
+                prefilter_contract=self.filter)
+
+        native_tamper = json.loads(json.dumps(reduction))
+        native_tamper["planner_receipt"]["search_persistence_observations"][0][
+            "elapsed_wall_seconds"] += 1
+        nested = dict(native_tamper["planner_receipt"])
+        nested.pop("receipt_sha256")
+        native_tamper["planner_receipt"]["receipt_sha256"] = B._digest(nested)
+        outer = dict(native_tamper)
+        outer.pop("reduction_sha256")
+        native_tamper["reduction_sha256"] = B._digest(outer)
+        with self.assertRaisesRegex(B.BeliefProjectionError, "exactly rederive"):
+            B.validate_reduction_with_beliefs(
+                native_tamper, manifest=self.manifest, panel=self.panel,
+                prefilter_contract=self.filter)
+
+    def test_belief_cli_verifies_sealed_sources_and_writes_once(self):
+        output = self.root / "belief-reduction.json"
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(B.main([
+                "--manifest", str(self.panel_root / "manifest.json"),
+                "--panel", str(self.panel_root / "panel.json"),
+                "--prefilter-contract", str(self.filter_path),
+                "--output", str(output),
+            ]), 0)
+        value = json.loads(output.read_text())
+        self.assertEqual(value["schema"], P.REDUCTION_SCHEMA)
+        self.assertEqual(len(value["belief_measurements"]), 16)
+        with self.assertRaisesRegex(B.BeliefProjectionError, "new absolute"):
+            B.main([
+                "--manifest", str(self.panel_root / "manifest.json"),
                 "--panel", str(self.panel_root / "panel.json"),
                 "--prefilter-contract", str(self.filter_path),
                 "--output", str(output),
