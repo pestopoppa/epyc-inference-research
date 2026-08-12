@@ -52,6 +52,10 @@ LEGACY_RUN_MANIFEST_SCHEMA = "epyc.autokernel.arena_campaign_run_manifest.v1"
 VALIDATION_SCHEMA = "epyc.autokernel.arena_campaign_validation.v1"
 DIAGNOSTIC_PILOT_SCHEMA = "epyc.autokernel.arena_diagnostic_pilot.v1"
 MEASUREMENT_WINDOW_SCHEMA = "epyc.autokernel.arena_gpu_measurement_window.v1"
+INTERMEDIATE_BELIEF_PRODUCER_ID = (
+    "autokernel.controller.arena_cell_runner/intermediate_evaluation_v1")
+INTERMEDIATE_BELIEF_PRODUCER_PATH = (
+    "scripts/kernel_rnd/autokernel/controller/arena_cell_runner.py")
 IMPLEMENTATION_MODULE = Path(__file__).resolve()
 REPOSITORY_ROOT = IMPLEMENTATION_MODULE.parents[4]
 DEFAULT_CLAIM_JOURNAL = "/mnt/raid0/llm/ak-claims/device.jsonl"
@@ -97,6 +101,74 @@ def _sha256_file(path: Path) -> str:
 def _canonical_sha256(payload: object) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _intermediate_belief_measurements(
+    *, evaluation: Mapping[str, Any], campaign_id: str,
+    attempt_id: str | None, claim_campaign_id: str, task_id: str,
+    arm_id: str, checkpoint_hours: float, evaluation_ordinal: int,
+    source_sha256: Mapping[str, str], baseline_receipt_sha256: str,
+    measurement_window_sha256: str, producer_sha256: str,
+) -> list[dict[str, Any]]:
+    """Emit prospective rows for one brokered evaluator observation."""
+    passed_correctness = int(
+        bool(evaluation.get("pass_compilation"))
+        and bool(evaluation.get("pass_correctness")))
+    valid_cases = evaluation.get("valid_optimized_cases")
+    if (isinstance(valid_cases, bool) or not isinstance(valid_cases, int)
+            or valid_cases < 0):
+        raise ArenaCellRunnerError(
+            "broker evaluation valid_optimized_cases is invalid")
+    shared = {
+        "measurement_role": "kernel_authoring_intermediate_evaluation",
+        "campaign_id": campaign_id,
+        **({"attempt_id": attempt_id} if attempt_id is not None else {}),
+        "claim_campaign_id": claim_campaign_id,
+        "task_id": task_id,
+        "controller_id": arm_id,
+        "checkpoint_hours": checkpoint_hours,
+        "evaluation_ordinal": evaluation_ordinal,
+        "source_sha256": dict(sorted(source_sha256.items())),
+        "baseline_receipt_sha256": baseline_receipt_sha256,
+        "measurement_window_sha256": measurement_window_sha256,
+        "producer_id": INTERMEDIATE_BELIEF_PRODUCER_ID,
+        "producer_path": INTERMEDIATE_BELIEF_PRODUCER_PATH,
+        "producer_sha256": producer_sha256,
+        "authority": "diagnostic_only_no_ranking_or_promotion_authority",
+    }
+    rows = []
+    for measurement_id, metric, value, role, claim in (
+        (
+            "arena_intermediate_correctness_pass_rate",
+            "geak_arena_intermediate_correctness_pass_rate",
+            passed_correctness,
+            "kernel_authoring_intermediate_correctness",
+            "Whether this brokered intermediate candidate passed compilation and correctness",
+        ),
+        (
+            "arena_intermediate_timing_harness_validity_rate",
+            "geak_arena_intermediate_timing_harness_validity_rate",
+            int(valid_cases > 0),
+            "kernel_authoring_intermediate_timing_validity",
+            "Whether this brokered intermediate evaluation admitted any optimized timing case",
+        ),
+    ):
+        row = {
+            "measurement_id": measurement_id,
+            "metric": metric,
+            "value": float(value),
+            "unit": "fraction",
+            "metric_direction": "higher_better",
+            "category": "CANDIDATE",
+            "claim": claim,
+            "reps": 1,
+            "reps_basis": "one brokered AgentKernelArena intermediate evaluation",
+            "extra": {**shared, "measurement_role": role, "passed": value,
+                      "total": 1},
+        }
+        row["measurement_sha256"] = _canonical_sha256(row)
+        rows.append(row)
+    return rows
 
 
 def _atomic_json(path: Path, payload: Mapping[str, Any]) -> Path:
@@ -2460,6 +2532,22 @@ class _ControllerEvaluationBroker:
         if disconnected:
             raise ArenaCellRunnerError("controller disconnected during evaluation")
         evaluation, window = outcome[0]
+        producer_sha256 = _sha256_file(IMPLEMENTATION_MODULE)
+        belief_measurements = _intermediate_belief_measurements(
+            evaluation=evaluation,
+            campaign_id=str(self.request["campaign_id"]),
+            attempt_id=(str(self.request["attempt_id"])
+                        if self.request.get("attempt_id") is not None else None),
+            claim_campaign_id=str(self.request.get(
+                "claim_campaign_id", self.request["campaign_id"])),
+            task_id=str(self.request["task"]["task_id"]),
+            arm_id=str(self.request["arm"]["arm_id"]),
+            checkpoint_hours=float(self.request["checkpoint_hours"]),
+            evaluation_ordinal=self._ordinal,
+            source_sha256=hashes,
+            baseline_receipt_sha256=self.baseline_receipt_sha256,
+            measurement_window_sha256=str(window["receipt_sha256"]),
+            producer_sha256=producer_sha256)
         receipt = _self_hash({
             "schema": arena_upstream_common.BROKER_RESULT_SCHEMA,
             "campaign_id": self.request["campaign_id"],
@@ -2476,6 +2564,12 @@ class _ControllerEvaluationBroker:
             "baseline_receipt_sha256": self.baseline_receipt_sha256,
             "evaluation": dict(evaluation),
             "measurement_window": dict(window),
+            "producer": {
+                "producer_id": INTERMEDIATE_BELIEF_PRODUCER_ID,
+                "path": INTERMEDIATE_BELIEF_PRODUCER_PATH,
+                "sha256": producer_sha256,
+            },
+            "belief_measurements": belief_measurements,
             "previous_receipt_sha256": self._previous_receipt_sha256,
             "authority": "controller_feedback_only",
         })
@@ -3098,6 +3192,32 @@ def _validate_broker_chain(
                     "campaign_id", "task_id", "arm_id", "checkpoint_hours"))
                 or window.get("claim_campaign_id") != claim_scope):
             raise ArenaCellRunnerError("broker measurement semantic identity drifted")
+        producer_sha256 = _sha256_file(IMPLEMENTATION_MODULE)
+        expected_producer = {
+            "producer_id": INTERMEDIATE_BELIEF_PRODUCER_ID,
+            "path": INTERMEDIATE_BELIEF_PRODUCER_PATH,
+            "sha256": producer_sha256,
+        }
+        if result.get("producer") != expected_producer:
+            raise ArenaCellRunnerError(
+                "broker belief measurement producer identity drifted")
+        expected_measurements = _intermediate_belief_measurements(
+            evaluation=result["evaluation"],
+            campaign_id=str(checkpoint["campaign_id"]),
+            attempt_id=(str(checkpoint["attempt_id"])
+                        if checkpoint.get("attempt_id") is not None else None),
+            claim_campaign_id=claim_scope,
+            task_id=str(checkpoint["task_id"]),
+            arm_id=str(checkpoint["arm_id"]),
+            checkpoint_hours=float(checkpoint["checkpoint_hours"]),
+            evaluation_ordinal=ordinal,
+            source_sha256=source_hashes,
+            baseline_receipt_sha256=str(chain["baseline_receipt_sha256"]),
+            measurement_window_sha256=str(window["receipt_sha256"]),
+            producer_sha256=producer_sha256)
+        if result.get("belief_measurements") != expected_measurements:
+            raise ArenaCellRunnerError(
+                "broker belief measurements do not rederive from evidence")
         evaluation_root = Path(str(result.get("evaluation_root"))).resolve()
         expected_evaluation_root = (
             cell_root / "controller-evaluation-windows"

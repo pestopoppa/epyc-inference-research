@@ -5,12 +5,14 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 import os
+import json
 from pathlib import Path
 import subprocess
 import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
 from . import arena_upstream_common as common
 from . import kernelfoundry_arena as K
@@ -61,10 +63,10 @@ class FixtureModel:
 
 
 class FixtureEvaluator:
-    def __init__(self, *, workspace, arena_root):
+    def __init__(self, *, workspace, arena_root, source_paths=("kernel.py",)):
         self.workspace = workspace
         self.arena_root = arena_root
-        self.source_paths = ("kernel.py",)
+        self.source_paths = tuple(source_paths)
         self.config = {"target_kernel_functions": ["kernel"]}
         self.calls = 0
 
@@ -147,6 +149,10 @@ class KernelFoundryArenaTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
+        self.source_env = mock.patch.dict(os.environ, {
+            common.ARENA_SOURCE_PATHS_ENV: json.dumps(["kernel.py"])})
+        self.source_env.start()
+        self.addCleanup(self.source_env.stop)
         self.workspace = Path(self.tmp.name) / "workspace"
         self.workspace.mkdir()
         (self.workspace / "kernel.py").write_text(
@@ -182,7 +188,7 @@ class KernelFoundryArenaTest(unittest.TestCase):
                 [str(K.RUNTIME_PYTHON), "-m", "unittest",
                  f"{__name__}.{type(self).__name__}."
                  "test_pinned_upstream_retains_map_elites_and_qd_transitions"],
-                cwd=Path(__file__).resolve().parents[2], env=env,
+                cwd=Path(__file__).resolve().parents[4], env=env,
                 text=True, capture_output=True, check=False)
             self.assertEqual(completed.returncode, 0,
                              msg=completed.stdout + "\n" + completed.stderr)

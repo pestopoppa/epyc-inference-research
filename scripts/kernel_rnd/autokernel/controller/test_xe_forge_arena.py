@@ -12,16 +12,17 @@ import subprocess
 from types import SimpleNamespace
 import tempfile
 import unittest
+from unittest import mock
 
 from . import arena_upstream_common as common
 from . import xe_forge_arena as X
 
 
 class FakeEvaluator:
-    def __init__(self, *, workspace: Path, arena_root: Path):
+    def __init__(self, *, workspace: Path, arena_root: Path, source_paths=("kernel.py",)):
         self.workspace = workspace
         self.arena_root = arena_root
-        self.source_paths = ("kernel.py",)
+        self.source_paths = tuple(source_paths)
         self.config = {"target_kernel_functions": ["kernel"]}
         self.seen = []
         self.materialized = False
@@ -177,6 +178,10 @@ class XeForgeArenaTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
+        self.source_env = mock.patch.dict(os.environ, {
+            common.ARENA_SOURCE_PATHS_ENV: json.dumps(["kernel.py"])})
+        self.source_env.start()
+        self.addCleanup(self.source_env.stop)
         self.root = Path(self.tmp.name)
         self.workspace = self.root / "workspace"
         self.workspace.mkdir()
@@ -310,7 +315,7 @@ class XeForgeArenaTest(unittest.TestCase):
                 [str(X.RUNTIME_PYTHON), "-m", "unittest",
                  f"{__name__}.{type(self).__name__}."
                  "test_pinned_upstream_prompts_are_amd_only_and_executor_closes"],
-                cwd=Path(__file__).resolve().parents[2], env=env,
+                cwd=Path(__file__).resolve().parents[4], env=env,
                 text=True, capture_output=True, check=False)
             self.assertEqual(
                 completed.returncode, 0,
