@@ -46,7 +46,7 @@ from scripts.kernel_rnd.autokernel.resource import device_claim
 
 SCHEMA = "epyc.autokernel.rocprofv1_attribution.v1"
 PROFILER_NAME = "rocprof-v1/device-timestamps"
-_PROMPT_RE = re.compile(r"[1-9][0-9]*")
+_PROMPT_RE = re.compile(r"(?:0|[1-9][0-9]*)")
 
 
 def utc_now() -> str:
@@ -56,17 +56,29 @@ def utc_now() -> str:
 def prompt_tokens(value: str) -> tuple[int, ...]:
     fields = value.split(",")
     if not fields or any(not _PROMPT_RE.fullmatch(field) for field in fields):
-        raise argparse.ArgumentTypeError("prompt tokens must be comma-separated positive integers")
+        raise argparse.ArgumentTypeError(
+            "prompt tokens must be comma-separated non-negative integers")
     parsed = tuple(int(field) for field in fields)
     if len(set(parsed)) != len(parsed):
         raise argparse.ArgumentTypeError("prompt token values must be unique")
     return parsed
 
 
-def workload_phase(gen_tokens: int) -> str:
+def workload_phase(gen_tokens: int, prompt_values: tuple[int, ...] | None = None) -> str:
     if gen_tokens < 0:
         raise ValueError("generation tokens must be non-negative")
-    return "prefill" if gen_tokens == 0 else "prefill+decode"
+    if prompt_values is None:
+        return "prefill" if gen_tokens == 0 else "prefill+decode"
+    if not prompt_values or any(value < 0 for value in prompt_values):
+        raise ValueError("prompt tokens must be non-negative")
+    if gen_tokens == 0:
+        if any(value == 0 for value in prompt_values):
+            raise ValueError("p0 requires positive generation tokens")
+        return "prefill"
+    zero = {value == 0 for value in prompt_values}
+    if len(zero) != 1:
+        raise ValueError("decode-only p0 cannot be mixed with combined prompt cells")
+    return "decode" if zero == {True} else "prefill+decode"
 
 
 def attribution_claim(*, model: Path, model_sha256: str, prompt_tokens: int,
@@ -79,13 +91,14 @@ def attribution_claim(*, model: Path, model_sha256: str, prompt_tokens: int,
     """
     return (
         f"{model.name} (SHA-256 {model_sha256}) gfx90a "
-        f"p{prompt_tokens}/tg{gen_tokens} {workload_phase(gen_tokens)} "
+        f"p{prompt_tokens}/tg{gen_tokens} "
+        f"{workload_phase(gen_tokens, (prompt_tokens,))} "
         f"gated-delta-net summed kernel-time share is {share:.12f}")
 
 
 def bench_command(binary: Path, model: Path, *, tokens: int,
                   repetitions: int, gen_tokens: int = 0) -> tuple[str, ...]:
-    workload_phase(gen_tokens)
+    workload_phase(gen_tokens, (tokens,))
     return (
         str(binary), "-m", str(model), "-p", str(tokens),
         "-n", str(gen_tokens),
@@ -413,7 +426,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     "model_sha256": tool_identity["model_sha256"],
                     "prompt_tokens": tokens,
                     "gen_tokens": args.gen_tokens,
-                    "phase": workload_phase(args.gen_tokens),
+                    "phase": workload_phase(args.gen_tokens, (tokens,)),
                 },
             })
     payload = {
@@ -428,7 +441,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "workload": {
             "prompt_tokens": list(args.prompt_tokens),
             "gen_tokens": args.gen_tokens,
-            "phase": workload_phase(args.gen_tokens),
+            "phase": workload_phase(args.gen_tokens, args.prompt_tokens),
             "preflight_tokens": args.preflight_tokens,
             "repetitions": args.repetitions,
             "graphs_disabled": True,
@@ -462,7 +475,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--model", required=True)
     result.add_argument("--output-dir", required=True)
     result.add_argument("--campaign-id", default="k28-rocprofv1-attribution-20260811")
-    result.add_argument("--prompt-tokens", type=prompt_tokens, default=(2048, 8192, 32768))
+    result.add_argument(
+        "--prompt-tokens", type=prompt_tokens, default=(2048, 8192, 32768),
+        help="comma-separated prompt lengths; p0 is admitted only with positive "
+             "--gen-tokens and creates a decode-only trace")
     result.add_argument(
         "--gen-tokens", type=int, default=0,
         help="tokens to generate (llama-bench -n). Default 0 = PREFILL ONLY. "

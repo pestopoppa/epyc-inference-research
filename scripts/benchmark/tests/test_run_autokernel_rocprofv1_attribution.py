@@ -11,10 +11,11 @@ from scripts.benchmark import run_autokernel_rocprofv1_attribution as R
 
 
 class RocprofV1AttributionTest(unittest.TestCase):
-    def test_prompt_tokens_are_positive_unique(self):
+    def test_prompt_tokens_are_non_negative_unique(self):
         self.assertEqual(R.prompt_tokens("2048,8192,32768"), (2048, 8192, 32768))
-        with self.assertRaisesRegex(Exception, "positive"):
-            R.prompt_tokens("32,0")
+        self.assertEqual(R.prompt_tokens("0"), (0,))
+        with self.assertRaisesRegex(Exception, "non-negative"):
+            R.prompt_tokens("32,-1")
         with self.assertRaisesRegex(Exception, "unique"):
             R.prompt_tokens("32,32")
 
@@ -48,6 +49,19 @@ class RocprofV1AttributionTest(unittest.TestCase):
             output_file=Path("/evidence/p2048.csv"), gen_tokens=128)
         self.assertEqual(command[command.index("-n") + 1], "128")
 
+    def test_profile_command_admits_explicit_decode_only_surface(self):
+        command = R.profile_command(
+            Path("/bin/bench"), Path("/model.gguf"), tokens=0,
+            repetitions=1, profiler=Path("/bin/rocprof"),
+            input_file=Path("/evidence/timestamps.txt"),
+            output_file=Path("/evidence/p0.csv"), gen_tokens=128)
+        self.assertEqual(command[command.index("-p") + 1], "0")
+        self.assertEqual(command[command.index("-n") + 1], "128")
+        with self.assertRaisesRegex(ValueError, "p0 requires"):
+            R.bench_command(
+                Path("/bin/bench"), Path("/model.gguf"), tokens=0,
+                repetitions=1, gen_tokens=0)
+
     def test_generation_tokens_must_be_non_negative(self):
         with self.assertRaisesRegex(ValueError, "non-negative"):
             R.bench_command(
@@ -57,6 +71,10 @@ class RocprofV1AttributionTest(unittest.TestCase):
     def test_workload_phase_matches_generation_surface(self):
         self.assertEqual(R.workload_phase(0), "prefill")
         self.assertEqual(R.workload_phase(128), "prefill+decode")
+        self.assertEqual(R.workload_phase(128, (0,)), "decode")
+        self.assertEqual(R.workload_phase(128, (2048,)), "prefill+decode")
+        with self.assertRaisesRegex(ValueError, "cannot be mixed"):
+            R.workload_phase(128, (0, 2048))
 
     def test_belief_claim_is_derived_from_bound_model_and_phase(self):
         digest = "ab" * 32
@@ -71,7 +89,7 @@ class RocprofV1AttributionTest(unittest.TestCase):
     def test_receipt_workload_binds_generation_tokens_and_phase(self):
         text = Path(R.__file__).read_text(encoding="utf-8")
         self.assertIn('"gen_tokens": args.gen_tokens', text)
-        self.assertIn('"phase": workload_phase(args.gen_tokens)', text)
+        self.assertIn('"phase": workload_phase(args.gen_tokens, args.prompt_tokens)', text)
 
     def test_parser_exposes_generation_tokens(self):
         args = R.parser().parse_args([
@@ -136,7 +154,7 @@ class RocprofV1AttributionTest(unittest.TestCase):
         self.assertIn('"metric_direction": "lower_better"', text)
         self.assertIn('"reps_basis": "scored:llama-bench prompt repetitions"', text)
         self.assertIn('"model_sha256": tool_identity["model_sha256"]', text)
-        self.assertIn('"phase": workload_phase(args.gen_tokens)', text)
+        self.assertIn('"phase": workload_phase(args.gen_tokens, (tokens,))', text)
 
 
 def json_line(value):
