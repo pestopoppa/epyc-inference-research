@@ -857,6 +857,14 @@ class ArenaCellRunnerTest(unittest.TestCase):
                 {"argv": list(arm.argv)}, 2.0,
                 executable_path=str(self.root / "missing-python"))
 
+    def test_evaluator_startup_is_deterministic_without_device_randomness(self):
+        workspace = self.root / "evaluator-workspace"
+        environment = R.SandboxedEvaluatorRunner._environment(
+            workspace, self.arena)
+        self.assertEqual(environment["PYTHONHASHSEED"], "0")
+        self.assertEqual(environment["PYTHONDONTWRITEBYTECODE"], "1")
+        self.assertNotIn("LD_LIBRARY_PATH", environment)
+
     def test_parent_broker_is_short_private_fresh_and_hash_chained(self):
         cell = self.root / "broker-cell"
         workspace = cell / "workspace"

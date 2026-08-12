@@ -1280,6 +1280,24 @@ class SandboxedEvaluatorRunner:
         self.arena_root = arena_root.resolve()
 
     @staticmethod
+    def _environment(evaluation_root: Path, arena_root: Path) -> dict[str, str]:
+        """Return the fixed startup environment admitted by the read policy."""
+        return {
+            "PATH": "/opt/rocm/bin:/usr/bin:/bin",
+            "PYTHONPATH": str(arena_root),
+            "HOME": str(evaluation_root), "TMPDIR": str(evaluation_root),
+            "XDG_CACHE_HOME": str(evaluation_root / ".cache"),
+            "TRITON_CACHE_DIR": str(evaluation_root / ".triton"),
+            "TORCH_EXTENSIONS_DIR": str(evaluation_root / ".torch-extensions"),
+            "HIP_VISIBLE_DEVICES": "0", "ROCR_VISIBLE_DEVICES": "0",
+            "CUDA_VISIBLE_DEVICES": "0", "PYTHONDONTWRITEBYTECODE": "1",
+            # The evaluator read policy intentionally excludes /dev.  CPython
+            # otherwise opens /dev/urandom during preinitialization before the
+            # child can emit its activation-bound result.
+            "PYTHONHASHSEED": "0",
+        }
+
+    @staticmethod
     def _readable_roots() -> tuple[str, ...]:
         candidates = (
             EVALUATOR_PYTHON.resolve().parents[1], EVALUATOR_PYTHON.parents[1],
@@ -1316,16 +1334,7 @@ class SandboxedEvaluatorRunner:
             str(EVALUATOR_PYTHON), str(arena_evaluator_child.__file__),
             "--request", str(request_path))
         spawn_argv = policy.wrap(child_argv, receipt_path=str(activation_path))
-        environment = {
-            "PATH": "/opt/rocm/bin:/usr/bin:/bin",
-            "PYTHONPATH": str(self.arena_root),
-            "HOME": str(evaluation_root), "TMPDIR": str(evaluation_root),
-            "XDG_CACHE_HOME": str(evaluation_root / ".cache"),
-            "TRITON_CACHE_DIR": str(evaluation_root / ".triton"),
-            "TORCH_EXTENSIONS_DIR": str(evaluation_root / ".torch-extensions"),
-            "HIP_VISIBLE_DEVICES": "0", "ROCR_VISIBLE_DEVICES": "0",
-            "CUDA_VISIBLE_DEVICES": "0", "PYTHONDONTWRITEBYTECODE": "1",
-        }
+        environment = self._environment(evaluation_root, self.arena_root)
         for path in (".cache", ".triton", ".torch-extensions"):
             (evaluation_root / path).mkdir()
         process: subprocess.Popen[str] | None = None
