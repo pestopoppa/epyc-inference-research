@@ -223,6 +223,50 @@ The observed `0.9991096842915198` starting-state/self speedup is deliberately
 `compatibility_only_no_ranking_or_promotion_authority`, no model inference ran,
 and the value must not be used as a kernel or controller performance claim.
 
+### Governed K-Search diagnostic pilot — 2026-08-12
+
+The attempts under
+`/mnt/raid0/llm/autokernel/probes/inf03-mi210-isolated-k-search-pilot-20260812-r*`
+are one evolving compatibility-debug sequence, not repeated measurements. R1-r12
+closed missing task-source discovery, exact module/runtime/ELF/Git/null/config
+allowlisting, and ephemeral Codex-home projection. R12 reached the real Codex
+client but the controller seccomp policy rejected client-side `bind(2)`. A
+seccomp-only differential reproduced that failure and showed that admitting
+only `bind` while retaining denied `listen`/`accept`, denied AF_UNIX creation,
+and exact filesystem/device allowlists was sufficient. R13 then completed the
+worker but exposed a stale parent validator that expected no controller
+`/dev/null`; r14 exposed the symmetric stale deny-all evaluator-network receipt
+expectation. R1-r14 are immutable invalid diagnostic attempts and must not be
+resumed, ranked, aggregated, or banked.
+
+R15 is the first terminal pass. Its receipt is
+`/mnt/raid0/llm/autokernel/probes/inf03-mi210-isolated-k-search-pilot-20260812-r15/diagnostic-pilot-receipt.json`,
+with internal receipt SHA-256
+`3425cf579a9d6fb06f5ed76b480ae652eaed3b3685eec9116299d253528a8771`
+and file SHA-256
+`eb53de389450ba6ef800528a0da6f54c8508eabc39b4357f0cd9beff64aacefa`.
+The exact one-task, one-round, `gpt-5.6-sol:high` K-Search controller made six
+governed model calls. Its brokered intermediate candidate passed compilation
+and correctness with 4/4 optimized cases and diagnostic ratio
+`1.0033912745189357`; the final isolated evaluator also passed 4/4 and reported
+`1.0019039030109136`. These ratios prove plumbing and candidate round-trip only;
+the pilot explicitly denies matched-campaign, cross-controller ranking, belief,
+promotion, and release authority.
+
+The intermediate broker result file SHA-256 is
+`c910243c8f7e11988f0246db30a4d1ad58a10928144f6d1b62ef3cb7ef522090`;
+the final evaluator execution receipt is
+`2d9fa2b575a021be8f385064b12f0ff665f1d0b136eedbdea99dc4cd171d7116`.
+Baseline, intermediate, and final GPU windows held and released identical claim
+IDs and captured 11, 21, and 21 samples respectively. The controller admitted
+only `/dev/null`, remained KFD/render blind, denied `listen`/`accept` and new
+AF_UNIX sockets, and inherited one peer-bound broker stream. Both evaluator
+invocations denied all networking and admitted exactly `/dev/kfd`,
+`/dev/dri/renderD128`, and `/dev/null`. Every cgroup was verified empty and
+removed, and the ephemeral controller Codex home was scrubbed before success
+publication. The warning-strict controller suite passed 578 tests plus 202
+subtests after the terminal pilot.
+
 The 2026-08-12 available-source r4 attempt is immutable defect evidence, not a
 valid partial campaign. KernelFoundry performed 64 intermediate vendor
 evaluations in the controller process while only the two outer checkpoint
