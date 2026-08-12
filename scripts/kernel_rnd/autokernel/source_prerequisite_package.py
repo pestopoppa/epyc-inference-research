@@ -92,6 +92,13 @@ class CsvDocument:
     csv_sha256: str
     csv_bytes: bytes
 
+    def to_mapping(self) -> dict[str, Any]:
+        return {
+            "suite_seed": self.suite_seed,
+            "csv_sha256": self.csv_sha256,
+            "csv_base64": base64.b64encode(self.csv_bytes).decode("ascii"),
+        }
+
     @classmethod
     def from_mapping(cls, raw: Any, *, label: str) -> "CsvDocument":
         value = _require_exact_fields(raw, _DOCUMENT_FIELDS, label)
@@ -148,6 +155,14 @@ class PrerequisiteReceipt:
     documents: tuple[CsvDocument, ...]
     receipt_sha256: str
 
+    def to_mapping(self) -> dict[str, Any]:
+        return {
+            "prerequisite_id": self.prerequisite_id,
+            "suite_version": self.suite_version,
+            "documents": [document.to_mapping() for document in self.documents],
+            "receipt_sha256": self.receipt_sha256,
+        }
+
     @classmethod
     def from_mapping(cls, raw: Any, *, index: int) -> "PrerequisiteReceipt":
         label = f"receipts[{index}]"
@@ -197,6 +212,21 @@ class SourcePrerequisitePackage:
     capture_mode: str
     receipts: tuple[PrerequisiteReceipt, ...]
     package_sha256: str
+
+    def to_mapping(self) -> dict[str, Any]:
+        return {
+            "schema": SCHEMA,
+            "campaign_id": self.campaign_id,
+            "proposal_id": self.proposal_id,
+            "candidate_id": self.candidate_id,
+            "candidate_source_sha256": self.candidate_source_sha256,
+            "candidate_binary_sha256": self.candidate_binary_sha256,
+            "evaluator_bundle_sha256": self.evaluator_bundle_sha256,
+            "producer_id": self.producer_id,
+            "capture_mode": self.capture_mode,
+            "receipts": [receipt.to_mapping() for receipt in self.receipts],
+            "package_sha256": self.package_sha256,
+        }
 
     @classmethod
     def from_mapping(cls, raw: Any) -> "SourcePrerequisitePackage":
@@ -399,6 +429,96 @@ def load_source_prerequisite_package(path: Any) -> SourcePrerequisitePackage:
     return SourcePrerequisitePackage.from_mapping(payload)
 
 
+def build_source_prerequisite_package(
+        *, campaign_id: str, proposal_id: str, candidate_id: str,
+        candidate_source_sha256: str, candidate_binary_sha256: str,
+        evaluator_bundle_sha256: str, capture_mode: str,
+        documents_by_prerequisite: Mapping[str, tuple[tuple[int, bytes], ...]],
+        ) -> SourcePrerequisitePackage:
+    """Build the same strict object accepted by the archive/resume loader.
+
+    Fresh producers do not get a second evidence grammar.  Their captured CSV
+    bytes enter this constructor and are immediately parsed again through
+    ``SourcePrerequisitePackage.from_mapping``; a package created in-process
+    therefore has exactly the same identity and reducer boundary as one loaded
+    after a restart.
+    """
+    if set(documents_by_prerequisite) != REQUIRED_IDS:
+        raise SourcePrerequisitePackageError(
+            f"fresh documents must contain exactly {sorted(REQUIRED_IDS)}")
+    receipts = []
+    for prerequisite_id in sorted(REQUIRED_IDS):
+        documents = []
+        for suite_seed, body in documents_by_prerequisite[prerequisite_id]:
+            if not isinstance(body, bytes):
+                raise SourcePrerequisitePackageError(
+                    f"{prerequisite_id} CSV must be bytes, got {type(body).__name__}")
+            document = CsvDocument(
+                suite_seed=suite_seed,
+                csv_sha256=hashlib.sha256(body).hexdigest(),
+                csv_bytes=body).to_mapping()
+            documents.append(document)
+        # Derive the suite version from the raw receipt itself, not from the
+        # candidate's branch name or a caller declaration.
+        parsed_documents = tuple(CsvDocument.from_mapping(
+            item, label=f"fresh.{prerequisite_id}[{index}]")
+            for index, item in enumerate(documents))
+        if not parsed_documents:
+            raise SourcePrerequisitePackageError(
+                f"{prerequisite_id} requires non-empty raw CSV documents")
+        versions: set[str] = set()
+        if prerequisite_id == "input_sensitivity":
+            for document in parsed_documents:
+                for row in document.rows(label=f"fresh sensitivity seed={document.suite_seed}"):
+                    try:
+                        versions.add(sensitivity.parse_sensitivity_receipt(
+                            row.get("sensitivity_receipt", "")).suite_version)
+                    except ValueError as exc:
+                        raise SourcePrerequisitePackageError(str(exc)) from exc
+        elif prerequisite_id == "hostile_distributions":
+            for row in parsed_documents[0].rows(label="fresh hostile distributions"):
+                try:
+                    versions.add(oracle_integrity.parse_hostile_receipt(
+                        row.get("hostile_receipt", "")).suite_version)
+                except ValueError as exc:
+                    raise SourcePrerequisitePackageError(str(exc)) from exc
+        else:
+            for row in parsed_documents[0].rows(label="fresh checker isolation"):
+                if not (row.get("property_receipt") or row.get("reference_receipt")):
+                    continue
+                try:
+                    versions.add(oracle_integrity.parse_checker_receipt(
+                        row.get("checker_receipt", "")).suite_version)
+                except ValueError as exc:
+                    raise SourcePrerequisitePackageError(str(exc)) from exc
+        if len(versions) != 1:
+            raise SourcePrerequisitePackageError(
+                f"{prerequisite_id} raw CSV has suite versions {sorted(versions)}")
+        receipt = {
+            "prerequisite_id": prerequisite_id,
+            "suite_version": next(iter(versions)),
+            "documents": documents,
+            "receipt_sha256": "0" * 64,
+        }
+        receipt["receipt_sha256"] = receipt_sha256(receipt)
+        receipts.append(receipt)
+    payload = {
+        "schema": SCHEMA,
+        "campaign_id": campaign_id,
+        "proposal_id": proposal_id,
+        "candidate_id": candidate_id,
+        "candidate_source_sha256": candidate_source_sha256,
+        "candidate_binary_sha256": candidate_binary_sha256,
+        "evaluator_bundle_sha256": evaluator_bundle_sha256,
+        "producer_id": sensitivity.TRUSTED_PRODUCER,
+        "capture_mode": capture_mode,
+        "receipts": receipts,
+        "package_sha256": "0" * 64,
+    }
+    payload["package_sha256"] = package_sha256(payload)
+    return SourcePrerequisitePackage.from_mapping(payload)
+
+
 def evaluator_source_files() -> tuple[Path, ...]:
     """Files whose exact bytes define this package/reducer authority."""
     return tuple(Path(module.__file__) for module in (
@@ -410,5 +530,5 @@ __all__ = [
     "SCHEMA", "MAX_PACKAGE_BYTES", "SourcePrerequisitePackageError",
     "CsvDocument", "PrerequisiteReceipt", "SourcePrerequisitePackage",
     "receipt_sha256", "package_sha256", "load_source_prerequisite_package",
-    "evaluator_source_files",
+    "build_source_prerequisite_package", "evaluator_source_files",
 ]
