@@ -1003,16 +1003,19 @@ What remains is not another hidden static plane:
   remain recoverable from `autokernel-preserve-20260804`. Restore the narrow release
   slice only for a real champion/freeze request, and restore the speech slice only
   when a speech campaign is scheduled.
-- `fault_rehearsal.py` now provides the governed real host-process producer for
-  restart/crash/resource-revocation/non-preemption/tamper acceptance. Its unit smoke
-  remains a regression test, not banked evidence; publish a durable new-path receipt with:
+- `fault_rehearsal.py` provides the governed real host-process producer for
+  restart/crash/resource-revocation/non-preemption/tamper acceptance. The post-hook
+  `ak-fault-rehearsal-20260812-r2` rehearsal passed all three legs and emitted dependency-only
+  evidence; its unit smoke remains a regression test rather than a substitute. Publish a later
+  durable new-path receipt with:
 
   ```bash
   PYTHONPATH=scripts/kernel_rnd python3 -m autokernel.fault_rehearsal \
     --output-dir /mnt/raid0/llm/autokernel/rehearsals/<new-campaign-id>
   ```
 
-  Freeze, re-anchor, and watch-window rows remain separate empirical work.
+  Freeze, re-anchor, and watch-window rows remain separate empirical work. See
+  `docs/data/autokernel_loop_engineering_20260812.md` for the bounded r2 receipt and AK-LE panel.
 
 ## Historical pre-pruning audit (superseded as current status)
 
