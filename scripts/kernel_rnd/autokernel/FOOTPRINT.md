@@ -31,8 +31,8 @@ a module it never looked at.
 | | non-test lines |
 |---|---:|
 | **ON THE CAMPAIGN PATH** | **64,074** |
-| **DEFERRED** (provably unreachable) | **14,726** |
-| **TOTAL** | **78,800** |
+| **DEFERRED** (provably unreachable) | **15,094** |
+| **TOTAL** | **79,168** |
 
 **There is no deferred half.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -127,6 +127,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `schemas.py` | 3,360 | yes | one record shape — every module is written against it and none invents its own |
 | `journal.py` | 2,181 | yes | AutoPilot lost 232 trials and ~16 days when a restart came up empty and nothing objected |
 | `offline_least_commitment.py` | 345 | no | AP-WM-1 observe-only archive analysis; importing an offline hypothesis diagnostic into the mutation/build path would give it accidental live authority |
+| `least_commitment_archive_builder.py` | 368 | no | AK-WM-2a strict real-record projection; it reads hash-bound completed campaign evidence into an observe-only archive and cannot launch, rank, mutate, or promote |
 | `turn_productivity.py` | 481 | no | AK-PT-1/AK-X-6 archive reducer; it consumes completed refine-turn records and may only withhold future search advancement, so campaign #1 must not give it live rank or mutation authority |
 | `prior_art.py` | 597 | no | deterministic proposal-input compiler; it classifies findings before a proposal exists and has no place in the mutation/build process |
 | `profile_report.py` | 587 | no | RVP-1–7 deterministic offline C4 report; it consumes completed paired traces and has no mutation, build, profiler-launch or ranking authority |
