@@ -27,6 +27,8 @@ class RocprofV1AttributionTest(unittest.TestCase):
             output_file=Path("/evidence/p2048.csv"))
         self.assertEqual(command[:5], (
             "/bin/rocprof", "--tool-version", "1", "--timestamp", "on"))
+        self.assertEqual(command[command.index("/usr/bin/taskset") + 1:command.index("/usr/bin/taskset") + 3],
+                         ("-c", "184-191"))
         self.assertIn("GGML_CUDA_DISABLE_GRAPHS", R.profiler_environment(
             Path("/build/bin/bench"), R.parser().parse_args([
                 "--source-root", "/source", "--binary", "/bin/bench",
@@ -57,6 +59,7 @@ class RocprofV1AttributionTest(unittest.TestCase):
             output_file=Path("/evidence/p0.csv"), gen_tokens=128)
         self.assertEqual(command[command.index("-p") + 1], "0")
         self.assertEqual(command[command.index("-n") + 1], "128")
+        self.assertEqual(command[command.index("-t") + 1], "8")
         with self.assertRaisesRegex(ValueError, "p0 requires"):
             R.bench_command(
                 Path("/bin/bench"), Path("/model.gguf"), tokens=0,
@@ -150,6 +153,8 @@ class RocprofV1AttributionTest(unittest.TestCase):
     def test_runner_writes_prospective_belief_measurements_only(self):
         text = Path(R.__file__).read_text(encoding="utf-8")
         self.assertIn('"producer": producer_identity()', text)
+        self.assertIn('"cpu_claim_open": cpu_opened', text)
+        self.assertIn('"cpu_claim_released": cpu_released', text)
         self.assertIn('"belief_measurements": belief_measurements', text)
         self.assertIn('"metric_direction": "lower_better"', text)
         self.assertIn('"reps_basis": "scored:llama-bench prompt repetitions"', text)

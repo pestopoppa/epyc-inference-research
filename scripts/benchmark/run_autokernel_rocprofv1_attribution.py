@@ -3,8 +3,9 @@
 
 This producer exists for workloads that crash rocprofv2.  It is diagnostic
 only: it binds a clean source commit, binary, model, profiler and linkage;
-holds the MI210 claim; samples device state; and reports device-timestamp wall
-share without turning that attribution into a performance verdict.
+holds the MI210 plus its codified host-CPU footprint, samples device state, and
+reports device-timestamp wall share without turning that attribution into a
+performance verdict.
 """
 from __future__ import annotations
 
@@ -40,12 +41,15 @@ from scripts.benchmark.run_autokernel_gpu_factorial import (
     write_json_atomic,
 )
 from scripts.kernel_rnd.autokernel import storage
+from scripts.kernel_rnd.autokernel.execution import cpu_region_claim
 from scripts.kernel_rnd.autokernel.execution import device_sampler
 from scripts.kernel_rnd.autokernel.resource import device_claim
 
 
 SCHEMA = "epyc.autokernel.rocprofv1_attribution.v1"
 PROFILER_NAME = "rocprof-v1/device-timestamps"
+DEFAULT_CPU_LIST = cpu_region_claim.gpu_host_cpu_list()
+DEFAULT_THREADS = 8
 _PROMPT_RE = re.compile(r"(?:0|[1-9][0-9]*)")
 
 
@@ -97,12 +101,19 @@ def attribution_claim(*, model: Path, model_sha256: str, prompt_tokens: int,
 
 
 def bench_command(binary: Path, model: Path, *, tokens: int,
-                  repetitions: int, gen_tokens: int = 0) -> tuple[str, ...]:
+                  repetitions: int, gen_tokens: int = 0,
+                  cpu_list: str = DEFAULT_CPU_LIST,
+                  threads: int = DEFAULT_THREADS) -> tuple[str, ...]:
     workload_phase(gen_tokens, (tokens,))
+    if cpu_list != DEFAULT_CPU_LIST or threads != DEFAULT_THREADS:
+        raise ValueError(
+            "rocprof attribution requires the codified 184-191/8-thread host footprint")
     return (
-        str(binary), "-m", str(model), "-p", str(tokens),
+        "/usr/bin/taskset", "-c", cpu_list, str(binary),
+        "-m", str(model), "-p", str(tokens),
         "-n", str(gen_tokens),
-        "-r", str(repetitions), "-ngl", "99", "-fa", "on", "-o", "jsonl",
+        "-r", str(repetitions), "-ngl", "99", "-fa", "on",
+        "-t", str(threads), "-o", "jsonl",
     )
 
 
@@ -124,13 +135,15 @@ def profiler_environment(binary: Path, args: argparse.Namespace) -> dict[str, st
 
 def profile_command(binary: Path, model: Path, *, tokens: int,
                     repetitions: int, profiler: Path, input_file: Path,
-                    output_file: Path, gen_tokens: int = 0) -> tuple[str, ...]:
+                    output_file: Path, gen_tokens: int = 0,
+                    cpu_list: str = DEFAULT_CPU_LIST,
+                    threads: int = DEFAULT_THREADS) -> tuple[str, ...]:
     return (
         str(profiler), "--tool-version", "1", "--timestamp", "on",
         "--ctx-wait", "on", "--heartbeat", "30", "-i", str(input_file),
         "-o", str(output_file),
         *bench_command(binary, model, tokens=tokens, repetitions=repetitions,
-                       gen_tokens=gen_tokens),
+                       gen_tokens=gen_tokens, cpu_list=cpu_list, threads=threads),
     )
 
 
@@ -300,7 +313,9 @@ def producer_identity() -> dict[str, Any]:
 def identity(binary: Path, model: Path, source_root: Path,
              args: argparse.Namespace, *, env: dict[str, str]) -> dict[str, Any]:
     profiler = Path(args.profiler_prefix).resolve() / "bin" / "rocprof"
-    for path, label in ((binary, "binary"), (model, "model"), (profiler, "rocprof v1")):
+    taskset = Path("/usr/bin/taskset")
+    for path, label in ((binary, "binary"), (model, "model"),
+                        (profiler, "rocprof v1"), (taskset, "taskset")):
         if not path.is_file():
             raise RuntimeError(f"{label} is unavailable: {path}")
     commit = assert_source_identity(source_root, args.source_commit)
@@ -316,6 +331,8 @@ def identity(binary: Path, model: Path, source_root: Path,
         "profiler_name": PROFILER_NAME,
         "profiler": str(profiler),
         "profiler_sha256": sha256_file(profiler),
+        "taskset": str(taskset),
+        "taskset_sha256": sha256_file(taskset),
         "linkage": linkage_identity(binary, env=env),
     }
 
@@ -335,13 +352,23 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     input_file.write_text("pmc:\n\ngpu:\nrange:\nkernel:\n", encoding="utf-8")
     profiler = Path(tool_identity["profiler"])
 
-    claim = device_claim.acquire_device_claim(
-        "mi210_0", purpose="AutoKernel K28 rocprof-v1 GDN attribution",
-        campaign_id=args.campaign_id,
-        journal=device_claim.ClaimJournal(args.claim_journal),
+    journal = device_claim.ClaimJournal(args.claim_journal)
+    max_hold_s = args.timeout_s * (len(args.prompt_tokens) + 1) + 300.0
+    cpu_claim = cpu_region_claim.acquire_cpu_region_claim(
+        args.cpu_list, purpose="AutoKernel K28 rocprof-v1 GDN attribution",
+        campaign_id=args.campaign_id, journal=journal, role="autokernel",
         holder_label="run_autokernel_rocprofv1_attribution.py",
-        timeout_s=args.claim_timeout_s,
-        max_hold_s=args.timeout_s * (len(args.prompt_tokens) + 1) + 300.0)
+        timeout_s=args.claim_timeout_s, max_hold_s=max_hold_s)
+    cpu_opened = cpu_claim.receipt().to_dict()
+    try:
+        claim = device_claim.acquire_device_claim(
+            "mi210_0", purpose="AutoKernel K28 rocprof-v1 GDN attribution",
+            campaign_id=args.campaign_id, journal=journal,
+            holder_label="run_autokernel_rocprofv1_attribution.py",
+            timeout_s=args.claim_timeout_s, max_hold_s=max_hold_s)
+    except BaseException:
+        cpu_claim.release()
+        raise
     opened = claim.receipt().to_dict()
     sampler = None
     sampling_receipt = None
@@ -356,7 +383,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         sampler = device_sampler.RocmSmiSampler(
             device_index=0, interval_s=0.250).start()
         rc, stdout, stderr, duration = run_owned(
-            bench_command(binary, model, tokens=args.preflight_tokens, repetitions=1),
+            bench_command(
+                binary, model, tokens=args.preflight_tokens, repetitions=1,
+                cpu_list=args.cpu_list, threads=args.threads),
             env=env, timeout_s=args.timeout_s)
         (output_dir / "preflight.stdout.jsonl").write_text(stdout, encoding="utf-8")
         (output_dir / "preflight.stderr.txt").write_text(stderr, encoding="utf-8")
@@ -370,7 +399,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             command = profile_command(
                 binary, model, tokens=tokens, repetitions=args.repetitions,
                 profiler=profiler, input_file=input_file, output_file=raw,
-                gen_tokens=args.gen_tokens)
+                gen_tokens=args.gen_tokens, cpu_list=args.cpu_list,
+                threads=args.threads)
             rc, stdout, stderr, duration = run_owned(
                 command, env=env, timeout_s=args.timeout_s)
             (output_dir / f"p{tokens}.stdout.jsonl").write_text(stdout, encoding="utf-8")
@@ -394,6 +424,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         sampling_receipt, released_receipt, teardown_errors = stop_sampler_and_release(
             sampler=sampler, claim=claim)
         released = released_receipt.to_dict() if released_receipt is not None else None
+        cpu_released = None
+        try:
+            cpu_released = cpu_claim.release().to_dict()
+        except BaseException as exc:
+            teardown_errors = (*teardown_errors, exc)
     if teardown_errors and captured_error is None:
         captured_error = teardown_errors[0]
     if captured_error is None:
@@ -444,6 +479,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "phase": workload_phase(args.gen_tokens, args.prompt_tokens),
             "preflight_tokens": args.preflight_tokens,
             "repetitions": args.repetitions,
+            "cpu_list": args.cpu_list,
+            "threads": args.threads,
             "graphs_disabled": True,
         },
         "preflight": preflight,
@@ -452,6 +489,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "captured_profiles": captured_profiles if captured_error is not None else None,
         "device_claim_open": opened,
         "device_claim_released": released,
+        "cpu_claim_open": cpu_opened,
+        "cpu_claim_released": cpu_released,
         "device_sampling": sampling_receipt.to_dict() if sampling_receipt is not None else None,
         "teardown_errors": error_payload(teardown_errors),
         "error": None if captured_error is None else {
@@ -486,6 +525,8 @@ def parser() -> argparse.ArgumentParser:
              "question answered with the default silently measures prefill.")
     result.add_argument("--preflight-tokens", type=int, default=32)
     result.add_argument("--repetitions", type=int, default=1)
+    result.add_argument("--cpu-list", default=DEFAULT_CPU_LIST)
+    result.add_argument("--threads", type=int, default=DEFAULT_THREADS)
     result.add_argument("--profiler-root", default="/mnt/raid0/llm/tools/rocm-profilers-6.2")
     result.add_argument("--profiler-prefix", default="/mnt/raid0/llm/tools/rocm-profilers-6.2/opt/rocm-6.2.0")
     result.add_argument("--claim-journal", default="/mnt/raid0/llm/ak-claims/device.jsonl")
@@ -496,10 +537,11 @@ def parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = parser().parse_args()
-    if args.repetitions < 1 or args.preflight_tokens < 1 or args.gen_tokens < 0:
+    if (args.repetitions < 1 or args.preflight_tokens < 1 or args.gen_tokens < 0
+            or args.cpu_list != DEFAULT_CPU_LIST or args.threads != DEFAULT_THREADS):
         raise RuntimeError(
-            "repetitions and preflight tokens must be positive; "
-            "generation tokens must be non-negative")
+            "repetitions and preflight tokens must be positive; generation tokens "
+            "must be non-negative; CPU footprint must be 184-191 with 8 threads")
     payload = run(args)
     print(json.dumps({
         "receipt": str(Path(args.output_dir) / "receipt.json"),
