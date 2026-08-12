@@ -131,35 +131,39 @@ logical campaign to the run-directory `attempt_id`, so device-claim journals
 cannot conflate repeated logical campaign IDs. Nested measurement-window and
 belief identities are checked semantically against their enclosing checkpoint.
 
-`arena_controller_sandbox.py` now provisions the reusable controller half of
-that OS boundary. It copies one task into a new workspace, discovers a
+`arena_controller_sandbox.py` now provisions the reusable controller and direct
+model halves of that OS boundary. It copies one task into a new workspace, discovers a
 fail-closed runtime allowlist from an exact real Python, licensed controller and
 repository source roots, the exact Codex package/CLI and shebang chain, real
 Node executable, auth and CA files, exact DNS/NSS/hosts/OpenSSL configuration,
 ELF loader, and shared-library closure, and then constructs
-`execution.sandbox.CONTROLLER_PROFILE`. Broad roots, devices, production trees,
+the broker-only controller and outbound-client model profiles. Broad roots, devices, production trees,
 campaign/evidence state, symlinks, and duplicate authority are refused. Exact
 executable files are a distinct Landlock capability: the interpreter and ELF
 loader can execute without granting their sibling directories. The adapter
-returns `command_prefix`, fixed startup environment overrides, the activation
-receipt path/policy, `process_started(pid)`, and strict activation-plus-cgroup
-teardown verification for `arena_adapter.launch`; it never accepts an arbitrary
-environment or command prefix.
+returns fixed startup environments, activation receipts/policies, exact PID
+registration, and strict activation-plus-cgroup teardown verification; it never
+accepts an arbitrary environment or command prefix.
 
-The controller permits unnamed `socketpair` IPC because the pinned Codex
-binary's Tokio signal driver requires it; such a pair has no filesystem or
-external peer. Creating a new AF_UNIX socket is still denied. The pinned Codex
-client also requires client-side `bind` before outbound traffic, while
-`listen`/`accept` remain denied; only the wrapper-created peer-bound broker
-stream is inherited.
+The controller can use only the wrapper-created peer-bound broker stream and
+has networking denied. Direct read-only Claude and Codex invocations receive a
+fresh model profile after the wrapper has become the actual model PID. That
+profile permits outbound INET clients and the unnamed `socketpair` IPC needed by
+the pinned Codex Tokio signal driver, but denies broker inheritance, GPU access,
+new filesystem AF_UNIX sockets, `listen`, and `accept`. Writable Codex actor
+requests keep the existing digest-pinned container boundary with one exact
+writable workspace bind.
 
 The wrapper preconnects its one broker stream before Landlock/seccomp and before
 the launch callback can register its exec-stable PID. A broker therefore queues
 an accepted stream until that exact PID and procfs start time are registered,
-then authenticates `SO_PEERCRED`; ancestry and uid admission are forbidden. A
-live tiny-controller test proves this ordering, inherited broker use, denied
-KFD/render/campaign-sibling and sibling-executable access, and descendant
-cgroup cleanup. It uses a fake local Codex package and no model or GPU work.
+then authenticates `SO_PEERCRED`; ancestry and uid admission are forbidden.
+Model and evaluation requests share that authenticated stream but are serialized
+and receive separate evidence ordinals. Live tiny-controller and tiny-model
+tests prove broker ordering, the absence of broker authority in model children,
+direct model `/proc/self/stat` compatibility, denial to a forked descendant,
+denied GPU/campaign-sibling access, outbound-client admission, and complete
+cgroup teardown. They use fake local CLIs and perform no model or GPU work.
 
 Candidate evaluation isolation is also implemented. Every intermediate and
 final candidate now runs in a fresh restricted-read GPU evaluator subprocess,
@@ -552,6 +556,134 @@ measured only by a fresh governed campaign.
 
 The returned arena score remains `whole_agent_task_only`; C4 input remains
 `diagnostic_only`. Neither is an AutoKernel promotion verdict.
+
+## Claude controller runtime confinement repair — 2026-08-12
+
+The first fresh 7/7 campaign attempt (`inf03-available-source-seven-arm-r5-20260812`)
+completed its starting-state baseline and then stopped in the first
+Claude+Codex actor-critic cell. The pinned Claude planner exited by `SIGSEGV`
+before stdout or stderr. This partial campaign has no comparative, ranking,
+belief-update, or promotion authority.
+
+Differential reproduction proved that the controller seccomp profile was not
+the cause: the same pinned request completed under seccomp alone and failed
+under the campaign's exact Landlock read allowlist. File-open tracing found the
+fixed Bun/Claude startup surface: self process maps/stat/cgroup, four bounded
+kernel/CPU facts, UTC zoneinfo, and `/dev/urandom`. The controller sandbox now
+admits only those declared literals for Claude-bearing arms. `/proc/self/*`
+binds after the wrapper becomes the controller PID, volatile values are not
+misrepresented as content identities, and `/dev/urandom` receives read—not
+write—authority. Claude's two credential/settings inputs are copied into a
+minimal workspace-local config directory and scrubbed after the controller;
+host history, projects, plugins, cache, and the rest of the home directory stay
+outside the read boundary.
+
+The governed live probe is
+`/mnt/raid0/llm/autokernel/probes/inf03-claude-sandbox-runtime-20260812-r1/`.
+Its activation, result, and teardown file SHA-256 values are respectively
+`c84232f3b8ca6514e5b221bc3ac3d2c4d07154ebf39cb468a2a196d9494b0795`,
+`3322e81aac1f68a3490875cbfcdcaf81a3496e2fe041e87946e9de2e4a1bd384`, and
+`e15ca322f2835ef581e06b3940ba3670671db50289674f5bf86cc3900d80df61`.
+The real pinned `claude-opus-5/high` request returned structured output with
+zero stderr; the exact cgroup was empty and removed, and ephemeral Claude state
+was absent after exit. This proves only that the narrow standalone request was
+runtime compatible. The fresh r6 campaign
+(`inf03-available-source-seven-arm-r6-20260812`) carried all ten fixed runtime
+reads, completed its baseline, and nevertheless reproduced the same first-cell
+Claude `SIGSEGV`; r6 is also partial and non-rankable.
+
+The exact remaining differential was process identity. A direct parent/child
+Landlock probe proved that a `/proc/self/stat` bind created for the sandboxed
+controller PID succeeds in that parent and returns `EACCES` after it forks a
+child. Therefore fixed `/proc/self/*` literals cannot safely be projected from
+a long-lived controller onto model subprocesses. The repair now keeps the
+controller broker-only and executes each direct model CLI inside a fresh
+outbound-client sandbox installed for that model PID. Model requests and
+centralized Arena evaluations traverse the authenticated parent broker; every
+model lifecycle/result is persisted and revalidated. The Claude+Codex arm also
+banks the measured starting state and emits the measured best candidate in its
+controller receipt, so a successful run can materialize downstream proposal
+evidence instead of another unusable archive. A fresh r7 campaign is required
+to establish live end-to-end compatibility and remains without ranking or
+promotion authority until its governed matrix completes.
+
+R7 then refused before any controller, model, compiler, or GPU command because
+the campaign still pinned the pre-repair actor entrypoint hash. After refreshing
+that source pin, r8 completed the governed starting-state baseline but the first
+actor cell stopped before Claude: constructing the broker-backed evaluator in
+the controller still imported PyYAML and the vendor evaluator even though those
+objects were never used there. Its controller cgroup was verified empty and
+removed, and no KFD process remained. The controller now consumes the exact
+source-path tuple already admitted by the parent worker and imports neither
+PyYAML nor vendor evaluator code; the parent remains the sole owner of YAML,
+vendor evaluation, GPU claims, and measurement receipts. R7 and r8 remain
+immutable partial engineering evidence. A fresh campaign source pin and new
+attempt directory are required for the live check.
+
+R9 crossed the controller import boundary and reached its first brokered
+starting-state request, then failed before Claude with `EPERM` from
+`socket.sendall()`. The controller seccomp profile deliberately denies
+destination-bearing `sendto`/`sendmsg`; CPython selected that syscall even for
+the already-connected inherited stream. The broker client now performs an
+interrupt-safe `os.write()` loop on the one peer-attested descriptor. No socket
+creation, destination selection, or network authority is added. The live
+controller isolation test sends a request to the parent under the exact profile
+and receives the response, while the existing peer/PID and cgroup assertions
+remain in force. R9 is partial/non-rankable and requires a fresh attempt.
+
+R10 completed and banked the brokered starting-state evaluation and the first
+real `claude-opus-5/high` planner call. The model exited zero after 129.158 s;
+its per-model sandbox activation, execution, result, and teardown receipts are
+durable, the cgroup was empty/removed, and staged credentials/session state was
+scrubbed. This closes the original SIGSEGV and controller-broker compatibility
+defects. The controller then refused before Codex because Claude legitimately
+updated its staged session/config directory and the semantic workspace manifest
+counted those control-plane files as task mutations. The manifest now excludes
+only four exact parent-owned controller-state roots while continuing to inspect
+all task files and symlinks. Proposal paths into those roots are explicitly
+refused, and their lifecycle remains separately receipt-bound and scrubbed. R10
+is partial/non-rankable; no authored candidate or comparison exists yet.
+
+R11 then proved the full planner → digest-pinned Docker actor → claimed GPU
+evaluation → critic path. Six correct candidates measured average speedups
+`0.993531`, `0.841596`, `0.999066`, `0.988657`, `0.999333`, and `0.994993`;
+none displaced the banked starting state, and each claim was released after its
+short evaluator window. This is valid proposal/evaluation engineering evidence,
+not a completed or rankable campaign. The campaign owner stopped it after the
+sixth rejection because the critic's structured `revise` result was never fed
+into the next planner prompt, causing repeated load-shape proposals rather than
+evidence-informed search. The captured campaign, worker, controller, and model
+PIDs are dead; the one reparented model PID was terminated explicitly and its
+exact empty cgroup removed; no KFD process remains.
+
+The controller now maintains a bounded eight-item feedback window. Every next
+planner receives the prior proposal/candidate identity, selected centralized
+measurement fields, and the newest critic decision plus a 4,000-character
+reason bound. The full critique and measurement summary remain hash-bound in
+the final controller receipt as `feedback_memory`; the prompt-window projection
+is bounded but not substituted for durable evidence. The newest critic verdict
+is explicitly binding revision context, so a rejected mechanism may be repeated
+only when the planner names a materially different mechanism. A fresh campaign
+must prove this revision memory changes live search behavior.
+
+R12 supplied that live proof. Iteration one compiled and passed correctness but
+measured `0.9967805649x`; its critic returned `revise`. Iteration two's planner
+then cited that exact measured rejection, explicitly forbade the rejected
+unmasked-fastpath mechanism, corrected an infeasible autotune suggestion from
+the pinned launcher contract, and proposed a distinct shared-offset/vectorized
+streaming mechanism. The second candidate compiled, passed correctness, measured
+`1.0059084616x` (inside noise), and the critic accepted the simpler non-regressing
+form. Thus measured critique now changes live search behavior; neither small
+ratio is a performance claim.
+
+R12 remained partial/non-rankable because final receipt construction tried to
+re-hash `/usr/bin/docker` inside the confined controller after all six model
+calls and three brokered evaluations had completed. Host actor-runtime identity
+already belongs to the parent worker's self-hashed model-inference receipts, so
+the controller now records that parent-owned authority instead of reopening the
+host executable. The campaign validator also consumes the producer's actual flat
+`model-inference-windows/*-result.json` layout rather than the erroneous nested
+glob. A fresh attempt is still required for a terminal, validated campaign.
 
 ## On-box substrate reproduction — 2026-08-11
 

@@ -24,7 +24,8 @@ import threading
 import time
 from typing import Any, Callable, Mapping, Sequence
 
-from . import arena_adapter, codex_container_actor
+from . import arena_adapter, arena_upstream_common, codex_container_actor
+from ..execution import sandbox
 
 
 CONTROLLER_ID = "claude_codex_actor_critic"
@@ -55,6 +56,14 @@ PINNED_MODEL_IDS = (
 )
 REQUIRED_CLIS = ("claude", "codex")
 ARTIFACT_DIRNAME = ".autokernel-claude-codex"
+MAX_FEEDBACK_ITEMS = 8
+MAX_FEEDBACK_REASON_CHARS = 4000
+CONTROL_PLANE_DIRNAMES = frozenset({
+    ARTIFACT_DIRNAME,
+    ".autokernel-controller-claude-config",
+    ".autokernel-controller-codex-home",
+    ".autokernel-upstream-controller",
+})
 ENTRYPOINT_RELATIVE = (
     "scripts/kernel_rnd/autokernel/controller/claude_codex_actor_critic.py")
 EXECUTABLE_MODULE = (
@@ -135,6 +144,7 @@ class ProcessCapture:
 
 CommandRunner = Callable[[Sequence[str], Path, Mapping[str, str], str, float],
                          ProcessCapture]
+_MODEL_BROKER_CLIENT: arena_upstream_common.ModelBrokerClient | None = None
 
 
 def _sha256_bytes(content: bytes) -> str:
@@ -174,6 +184,19 @@ def _run_process(argv: Sequence[str], cwd: Path, env: Mapping[str, str],
     if (not argv or any(not isinstance(part, str) or not part for part in argv)
             or not math.isfinite(timeout_seconds) or timeout_seconds <= 0):
         raise ActorCriticError("process argv and timeout must be bounded and non-empty")
+    global _MODEL_BROKER_CLIENT
+    if env.get(sandbox.BROKER_FD_ENV):
+        if _MODEL_BROKER_CLIENT is None:
+            _MODEL_BROKER_CLIENT = arena_upstream_common.ModelBrokerClient(env)
+        kind = "claude_json" if "--json-schema" in argv else "codex_actor"
+        response = _MODEL_BROKER_CLIENT.call(
+            kind=kind, argv=argv, prompt=input_text,
+            timeout_seconds=timeout_seconds)
+        return ProcessCapture(
+            tuple(argv), response.get("returncode"),
+            str(response.get("stdout", "")),
+            str(response.get("stderr", "")),
+            bool(response.get("timed_out")))
     try:
         process = subprocess.Popen(
             list(argv), cwd=cwd, env=dict(env), stdin=subprocess.PIPE,
@@ -264,19 +287,15 @@ def _relative_candidate(workspace: Path, value: object) -> tuple[str, Path]:
     if not candidate.is_file():
         raise ActorCriticError(
             "proposal candidate must name an existing non-symlink workspace file")
+    if relative.parts and relative.parts[0] in CONTROL_PLANE_DIRNAMES:
+        raise ActorCriticError(
+            "proposal candidate names reserved controller state")
     return relative.as_posix(), candidate
 
 
 def _workspace_manifest(workspace: Path) -> dict[str, str]:
     rows: dict[str, str] = {}
-    artifact_root = workspace / ARTIFACT_DIRNAME
     for path in sorted(workspace.rglob("*")):
-        try:
-            path.relative_to(artifact_root)
-        except ValueError:
-            pass
-        else:
-            continue
         relative = path.relative_to(workspace).as_posix()
         if path.is_symlink():
             target = path.resolve()
@@ -285,6 +304,11 @@ def _workspace_manifest(workspace: Path) -> dict[str, str]:
             except ValueError as exc:
                 raise ActorCriticError(
                     f"workspace symlink escapes isolation: {relative}") from exc
+        relative_path = PurePosixPath(relative)
+        if relative_path.parts \
+                and relative_path.parts[0] in CONTROL_PLANE_DIRNAMES:
+            continue
+        if path.is_symlink():
             rows[relative] = _sha256_bytes(os.readlink(path).encode("utf-8"))
         elif path.is_file():
             rows[relative] = _sha256_file(path)
@@ -357,6 +381,35 @@ def parse_critique(raw: str, proposal_id: str) -> dict[str, Any]:
     if not isinstance(payload.get("reason"), str) or not payload["reason"].strip():
         raise ActorCriticError("critic reason must be non-empty")
     return payload
+
+
+def _feedback_row(
+    *, iteration: int, proposal: Mapping[str, Any], candidate_sha256: str,
+    measured: arena_upstream_common.EvaluationRecord | None,
+    critique: Mapping[str, Any],
+) -> dict[str, Any]:
+    reason = str(critique["reason"])
+    row: dict[str, Any] = {
+        "iteration": iteration,
+        "proposal_id": proposal["proposal_id"],
+        "candidate_path": proposal["candidate_path"],
+        "candidate_sha256": candidate_sha256,
+        "critic": {
+            "decision": critique["decision"],
+            "reason": reason,
+            "reason_for_next_planner": reason[:MAX_FEEDBACK_REASON_CHARS],
+        },
+    }
+    if measured is not None:
+        raw = measured.raw
+        row["arena_measurement"] = {
+            key: raw.get(key) for key in (
+                "pass_compilation", "pass_correctness",
+                "valid_baseline_cases", "valid_optimized_cases",
+                "average_speedup", "best_optimized_execution_time",
+            )
+        }
+    return row
 
 
 class ArtifactJournal:
@@ -444,6 +497,28 @@ def _codex_argv(identity: Mapping[str, str], config: ControllerConfig,
     )
 
 
+def _actor_runtime_constraint(
+    environment: Mapping[str, str], codex_identity: Mapping[str, str],
+) -> dict[str, object]:
+    """Describe who owns the actor-runtime attestation at this boundary.
+
+    A brokered controller is intentionally unable to reopen host executables.
+    The parent worker hashes Docker and the staged Codex runtime after every
+    actor call, persists that self-hashed model-inference receipt, and validates
+    the complete receipt chain.  Re-reading ``/usr/bin/docker`` here both
+    duplicates that authority and violates the controller's Landlock profile.
+    Standalone controller probes retain their local, exact runtime identity.
+    """
+    if environment.get(sandbox.BROKER_FD_ENV):
+        return {
+            "kind": "parent_model_broker_receipt_chain",
+            "authority": "parent_worker_only",
+            "host_runtime_reopened_by_controller": False,
+        }
+    return codex_container_actor.runtime_identity(
+        Path(str(codex_identity["path"])))
+
+
 def campaign_argv(executable: str = "python3") -> tuple[str, ...]:
     """Return the exact maximum-checkpoint stdin executable bound by INF-03."""
     if not isinstance(executable, str) or not executable:
@@ -474,12 +549,36 @@ def run_controller(
     env = arena_adapter.architecture_environment(
         os.environ if environment is None else environment)
     cli = resolve_cli_identities(env)
+    evaluator = None
+    arena_root = env.get("AUTOKERNEL_ARENA_ROOT")
+    if env.get(sandbox.BROKER_FD_ENV):
+        if not arena_root:
+            raise ActorCriticError("brokered controller lacks its Arena root")
+        try:
+            source_paths = json.loads(
+                env[arena_upstream_common.ARENA_SOURCE_PATHS_ENV])
+        except (KeyError, json.JSONDecodeError) as exc:
+            raise ActorCriticError(
+                "brokered controller lacks exact Arena source paths") from exc
+        if (not isinstance(source_paths, list)
+                or not all(isinstance(value, str) for value in source_paths)):
+            raise ActorCriticError(
+                "brokered controller Arena source paths are invalid")
+        evaluator = arena_upstream_common.ArenaWorkspaceEvaluator(
+            workspace=root, arena_root=Path(arena_root),
+            source_paths=source_paths)
+        # Bank the starting state through the same broker so selection remains
+        # evidence-backed even when every authored candidate regresses.
+        evaluator.evaluate({
+            path: (root / path).read_text(encoding="utf-8")
+            for path in evaluator.source_paths})
     initial = _workspace_manifest(root)
     journal = ArtifactJournal(root)
     started = monotonic()
     deadline = started + config.timeout_seconds
     proposals: list[dict[str, Any]] = []
     candidate_rows: list[dict[str, Any]] = []
+    feedback_memory: list[dict[str, Any]] = []
     stop_reason = "max_iterations"
 
     for iteration in range(1, config.max_iterations + 1):
@@ -487,6 +586,7 @@ def run_controller(
         if remaining <= 0:
             stop_reason = "campaign_checkpoint"
             break
+        prior_feedback = feedback_memory[-MAX_FEEDBACK_ITEMS:]
         planner_prompt = (
             f"{prompt}\n\nYou are the planner for iteration {iteration}. Return only JSON "
             f"with schema {PROPOSAL_SCHEMA}, proposal_id, candidate_path, and "
@@ -494,6 +594,12 @@ def run_controller(
             "file under the supplied Arena workspace; use a workspace-relative "
             "path when possible, although an exact contained absolute path is "
             "accepted. Do not edit files."
+            + ("\n\nGoverned prior-iteration memory follows as JSON. The newest critic "
+               "verdict is binding revision context: address its measured failure and "
+               "do not repeat a rejected proposal unless you name a materially different "
+               "mechanism.\n" + json.dumps(
+                   prior_feedback, sort_keys=True, separators=(",", ":"))
+               if prior_feedback else "")
         )
         before_planner = _workspace_manifest(root)
         capture = runner(
@@ -537,17 +643,27 @@ def run_controller(
         if capture.returncode != 0:
             raise ActorCriticError(f"actor CLI exited {capture.returncode}")
         after_sha = _sha256_file(candidate_path)
+        measured = None
+        if evaluator is not None:
+            measured = evaluator.evaluate({
+                path: (root / path).read_text(encoding="utf-8")
+                for path in evaluator.source_paths})
+        before_critic = _workspace_manifest(root)
         candidate_rows.append({
             "iteration": iteration,
             "proposal_id": proposal["proposal_id"],
             "path": proposal["candidate_path"],
             "before_sha256": before_sha,
             "after_sha256": after_sha,
+            **({"arena_evaluation": dict(measured.raw)}
+               if measured is not None else {}),
         })
         critic_prompt = (
             f"{prompt}\n\nYou are the critic. Review proposal "
             f"{proposal['proposal_id']} for {proposal['candidate_path']}. The candidate "
             f"changed from SHA-256 {before_sha} to {after_sha}. Return only JSON with "
+            + (f"Centralized Arena measurement: {json.dumps(measured.raw, sort_keys=True)}. "
+               if measured is not None else "") +
             f"schema {CRITIQUE_SCHEMA}. The object must contain exactly these four "
             "fields and no others: schema, proposal_id (the same value), decision "
             "(accept, revise, or stop), and a non-empty reason. Do not edit files."
@@ -562,7 +678,7 @@ def run_controller(
                 _critique_json_schema(proposal["proposal_id"])),
             root, env, critic_prompt, remaining)
         journal.record("critic", iteration, critic_prompt, capture)
-        if _workspace_manifest(root) != after_actor:
+        if _workspace_manifest(root) != before_critic:
             raise ActorCriticError("critic changed the isolated Arena workspace")
         if capture.timed_out:
             stop_reason = "campaign_checkpoint"
@@ -570,10 +686,16 @@ def run_controller(
         if capture.returncode != 0:
             raise ActorCriticError(f"critic CLI exited {capture.returncode}")
         critique = parse_critique(capture.stdout, proposal["proposal_id"])
+        feedback_memory.append(_feedback_row(
+            iteration=iteration, proposal=proposal,
+            candidate_sha256=after_sha, measured=measured,
+            critique=critique))
         if critique["decision"] in {"accept", "stop"}:
             stop_reason = f"critic_{critique['decision']}"
             break
 
+    if evaluator is not None:
+        evaluator.materialize_best()
     final = _workspace_manifest(root)
     receipt = journal.receipt({
         "schema": RECEIPT_SCHEMA,
@@ -596,12 +718,15 @@ def run_controller(
         },
         "proposal_sha256": [_canonical_sha256(row) for row in proposals],
         "candidate_artifacts": candidate_rows,
+        "feedback_memory": feedback_memory,
+        "feedback_memory_sha256": _canonical_sha256(feedback_memory),
+        **({"evaluation": evaluator.receipt_fields()}
+           if evaluator is not None else {}),
         "constraints": {
             "workspace_only": True,
             "planner_critic_write_access": False,
             "actor_sandbox": "docker_workspace_bind_only",
-            "actor_runtime": codex_container_actor.runtime_identity(
-                Path(cli["codex"]["path"])),
+            "actor_runtime": _actor_runtime_constraint(env, cli["codex"]),
             "promotion_authority": False,
             "model_or_kernel_invoked_by_preflight": False,
         },
@@ -658,7 +783,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 __all__ = [
-    "ARTIFACT_DIRNAME", "CAMPAIGN_CHECKPOINT_HOURS", "CLAUDE_EFFORT",
+    "ARTIFACT_DIRNAME", "CONTROL_PLANE_DIRNAMES", "CAMPAIGN_CHECKPOINT_HOURS", "CLAUDE_EFFORT",
+    "MAX_FEEDBACK_ITEMS", "MAX_FEEDBACK_REASON_CHARS",
     "CLAUDE_MODEL", "CODEX_EFFORT", "CODEX_MODEL", "CONTROLLER_ID",
     "CRITIQUE_SCHEMA", "ENTRYPOINT_RELATIVE", "EXECUTABLE_MODULE",
     "PINNED_MODEL_IDS", "PROPOSAL_JSON_SCHEMA", "PROPOSAL_SCHEMA",

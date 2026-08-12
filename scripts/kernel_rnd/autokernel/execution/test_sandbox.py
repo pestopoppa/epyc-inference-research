@@ -301,6 +301,51 @@ class SandboxKernelProbeTest(unittest.TestCase):
                 argv=[controller_python, "-c", code])
             self.assertTrue(teardown["verified_empty"])
 
+    def test_controller_runtime_reads_are_exact_and_urandom_is_read_only(self):
+        with tempfile.TemporaryDirectory(prefix="ak-controller-runtime-") as outer:
+            root = Path(outer)
+            controller = root / "controller"
+            controller.mkdir()
+            allowed = root / "allowed.txt"
+            allowed.write_text("allowed", encoding="utf-8")
+            broker_path = root / "broker.sock"
+            server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            server.bind(str(broker_path))
+            server.listen(1)
+            roots, files = self._controller_read_surface(allowed)
+            policy = S.SandboxPolicy(
+                str(controller), token="controllerruntime1",
+                profile=S.CONTROLLER_PROFILE,
+                readable_roots=roots,
+                readable_files=(*files, *S.CONTROLLER_RUNTIME_READ_FILES),
+                broker_socket_path=str(broker_path),
+                broker_peer_pid=os.getpid(),
+                broker_peer_start_ticks=S._process_start_ticks())
+            code = (
+                "import errno,json,os; "
+                "stat=open('/proc/self/stat').read(); "
+                "fd=os.open('/dev/urandom',os.O_RDONLY); "
+                "random=os.read(fd,8); os.close(fd); "
+                "denied=None; "
+                "\ntry: os.open('/dev/urandom',os.O_WRONLY)\n"
+                "except OSError as exc: denied=exc.errno\n"
+                "print(json.dumps({'pid':int(stat.split()[0]),"
+                "'random_bytes':len(random),'write_errno':denied}))")
+            try:
+                rc, stdout, stderr, receipt, teardown = self._run(
+                    policy, [str(Path(sys.executable).resolve()), "-c", code])
+            finally:
+                server.close()
+            self.assertEqual(rc, 0, stderr)
+            result = json.loads(stdout)
+            self.assertEqual(result["pid"], receipt["pid"])
+            self.assertEqual(result["random_bytes"], 8)
+            self.assertEqual(result["write_errno"], errno.EACCES)
+            self.assertEqual(
+                receipt["readable_files"],
+                [*files, *S.CONTROLLER_RUNTIME_READ_FILES])
+            self.assertTrue(teardown["verified_empty"])
+
     def test_controller_receipt_policy_digest_detects_allowlist_drift(self):
         with tempfile.TemporaryDirectory(prefix="ak-controller-policy-") as outer:
             root = Path(outer)

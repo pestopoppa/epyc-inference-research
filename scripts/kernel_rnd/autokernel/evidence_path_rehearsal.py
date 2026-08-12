@@ -69,9 +69,11 @@ def verify_campaign_json_contract(
     """Exercise the current campaign automation surface without inference.
 
     ``campaign_args`` is intentionally accepted here rather than validating only
-    the parser defaults.  Durable rehearsals pass their exact proposal and
-    least-commitment paths, so a proposal-schema migration cannot leave a green
-    rehearsal beside artifacts the live entry point refuses.
+    the parser defaults. Durable rehearsals pass the exact proposal path, so a
+    proposal-schema migration cannot leave a green rehearsal beside artifacts
+    the live entry point refuses. Capture-plan admission is exercised separately
+    because a measured v2 plan also requires calibration, physical-envelope,
+    matched-frame, and held-out measurement inputs.
     """
     machine, trace = io.StringIO(), io.StringIO()
     with contextlib.redirect_stderr(trace):
@@ -141,6 +143,11 @@ def producer_manifest(*, intervention_proposal: Mapping[str, Any],
         raise RehearsalError("intervention does not name the generated control proposal")
     if intervention_plan.raw["candidate_frame_id"] != control_plan.raw["candidate_frame_id"]:
         raise RehearsalError("control and intervention candidate frames differ")
+    try:
+        capture.require_independent_control_diagnostics(
+            intervention_plan, control_plan)
+    except capture.CapturePlanError as exc:
+        raise RehearsalError(str(exc)) from exc
     if intervention_proposal["representation_contract"]["frame_sha256"] \
             != control_proposal["representation_contract"]["frame_sha256"]:
         raise RehearsalError("control generation changed the representation frame")
@@ -176,7 +183,8 @@ def producer_manifest(*, intervention_proposal: Mapping[str, Any],
             "python3 -m scripts.kernel_rnd.autokernel.least_commitment_receipts "
             "projection-plan.json --output-dir /absolute/new/output",
             "python3 -m scripts.kernel_rnd.autokernel.offline_least_commitment "
-            "/absolute/new/output/archive.json --output ap-wm-report.json",
+            "/absolute/new/output/archive.json --projection-result "
+            "/absolute/new/output/projection-result.json --output ap-wm-report.json",
         ],
         "real_evidence_required": [
             "two distinct clean DECIDED journals",

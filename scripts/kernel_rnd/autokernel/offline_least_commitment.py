@@ -9,6 +9,7 @@ caller cannot ask it to mutate fitness, archive admission, champion state, or T2
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 from collections import defaultdict
@@ -26,6 +27,9 @@ ARCHIVE_SCHEMA = "epyc.autokernel.least_commitment_archive.v1"
 REPORT_SCHEMA = "epyc.autokernel.least_commitment_report.v1"
 PROTOCOL_ID = "AP-WM-1/offline-v1"
 AUTHORITY = "observe_only"
+REAL_REPORT_PROVENANCE_SCHEMA = "epyc.autokernel.least_commitment_report_provenance.v1"
+PROJECTION_SCHEMA = "epyc.autokernel.least_commitment_receipt_projection_result.v1"
+BUILD_SCHEMA = "epyc.autokernel.least_commitment_archive_build.v1"
 
 DIAGNOSTICS = (
     "unsupported_scope_width",
@@ -43,6 +47,14 @@ DIRECTIONS = frozenset({"higher", "lower"})
 
 def _number(value: Any) -> bool:
     return not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value)
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def validate_archive(archive: Any) -> list[str]:
@@ -168,6 +180,58 @@ def validate_archive(archive: Any) -> list[str]:
     return errors
 
 
+def validate_real_report_provenance(
+        archive: Mapping[str, Any], projection: Any) -> list[str]:
+    """Validate the strict builder/projector chain required for a real report."""
+    errors: list[str] = []
+    build = archive.get("build_provenance")
+    if not isinstance(build, Mapping) or build.get("schema") != BUILD_SCHEMA:
+        errors.append("build_provenance: strict archive builder provenance is required")
+    if not isinstance(projection, Mapping):
+        return errors + ["projection_provenance: required mapping"]
+    if projection.get("schema") != PROJECTION_SCHEMA:
+        errors.append(f"projection_provenance.schema: expected {PROJECTION_SCHEMA!r}")
+    if projection.get("authority") != "observe_only_journal_projection":
+        errors.append("projection_provenance.authority: journal projection required")
+    archive_ref = projection.get("archive")
+    if not isinstance(archive_ref, Mapping) or set(archive_ref) != {"path", "sha256"}:
+        errors.append("projection_provenance.archive: expected {path, sha256}")
+    if projection.get("archive_sha256") != schemas.content_hash(archive):
+        errors.append("projection_provenance.archive_sha256: archive content differs")
+    emitted = projection.get("emitted_receipts")
+    if not isinstance(emitted, list) or not emitted:
+        errors.append("projection_provenance.emitted_receipts: required non-empty list")
+    rows = archive.get("rows")
+    if isinstance(rows, list):
+        for index, row in enumerate(rows):
+            sources = row.get("source_receipts") if isinstance(row, Mapping) else None
+            if not isinstance(sources, Mapping):
+                errors.append(f"rows[{index}].source_receipts: strict provenance required")
+                continue
+            for key in ("proposal_event_id", "proposal_sha256",
+                        "campaign_result_sha256", "hypothesis_binding",
+                        "diagnostic", "outcome"):
+                if not sources.get(key):
+                    errors.append(f"rows[{index}].source_receipts.{key}: required")
+            for key in ("diagnostic", "outcome", "matched_intervention"):
+                binding = sources.get(key)
+                if binding is None and key == "matched_intervention" \
+                        and row.get("matched_control_id") is None:
+                    continue
+                if not isinstance(binding, Mapping) or set(binding) != {"path", "sha256"}:
+                    errors.append(
+                        f"rows[{index}].source_receipts.{key}: expected {{path, sha256}}")
+                    continue
+                path = Path(str(binding.get("path", "")))
+                if not path.is_absolute() or not path.is_file():
+                    errors.append(
+                        f"rows[{index}].source_receipts.{key}: bound file is absent")
+                elif binding.get("sha256") != _file_sha256(path):
+                    errors.append(
+                        f"rows[{index}].source_receipts.{key}: file SHA-256 differs")
+    return errors
+
+
 def _tau(x: list[float], y: list[float]) -> float | None:
     concordant = discordant = 0
     for i in range(len(x)):
@@ -193,11 +257,19 @@ def _signed_delta(value: float, control: float, direction: str) -> float:
     return delta if direction == "higher" else -delta
 
 
-def evaluate_archive(archive: Mapping[str, Any]) -> dict[str, Any]:
+def evaluate_archive(
+        archive: Mapping[str, Any], *, projection: Mapping[str, Any] | None = None,
+        real_label: bool = False) -> dict[str, Any]:
     """Evaluate a valid archive and return an immutable observe-only report."""
     errors = validate_archive(archive)
     if errors:
         raise ValueError("invalid AP-WM-1 archive:\n- " + "\n- ".join(errors))
+    if real_label:
+        provenance_errors = validate_real_report_provenance(archive, projection)
+        if provenance_errors:
+            raise ValueError(
+                "invalid AP-WM-1 real provenance:\n- "
+                + "\n- ".join(provenance_errors))
     rows = archive["rows"]
     by_id = {row["proposal_id"]: row for row in rows}
     weights = archive["outcome_weights"]
@@ -231,6 +303,8 @@ def evaluate_archive(archive: Mapping[str, Any]) -> dict[str, Any]:
                 "surface": row["surface"],
                 "outcome_delta": outcome_delta,
                 "noise_floor": noise_floor,
+                "intervention_noise_floor": row["outcome"]["noise_floor"],
+                "control_noise_floor": control["outcome"]["noise_floor"],
                 "effective": abs(outcome_delta) > noise_floor,
                 "diagnostic_deltas": diagnostic_deltas,
                 "recoding_deltas": recoding_deltas,
@@ -301,6 +375,20 @@ def evaluate_archive(archive: Mapping[str, Any]) -> dict[str, Any]:
         if independent
         else "retain_simpler_baseline"
     )
+    effective_pair_count = sum(1 for pair in pairs if pair["effective"])
+    minimum_effective_pairs = 5
+    matched_validation = {
+        "status": "PASS",
+        "validated_pair_count": len(pairs),
+        "all_controls_resolved": all(pair["control_id"] in by_id for pair in pairs),
+        "candidate_frame_id": archive["candidate_frame_id"],
+        "representation_frame_sha256": rows[0]["representation_contract"]["frame_sha256"],
+    }
+    power_status = (
+        "adequately_powered"
+        if effective_pair_count >= minimum_effective_pairs
+        else "underpowered"
+    )
     return {
         "schema": REPORT_SCHEMA,
         "protocol_id": PROTOCOL_ID,
@@ -312,6 +400,20 @@ def evaluate_archive(archive: Mapping[str, Any]) -> dict[str, Any]:
         "diagnostic_directions": directions,
         "outcome_weights": weights,
         "pair_count": len(pairs),
+        "pair_noise_floors": [{
+            "proposal_id": pair["proposal_id"],
+            "control_id": pair["control_id"],
+            "intervention_noise_floor": pair["intervention_noise_floor"],
+            "control_noise_floor": pair["control_noise_floor"],
+            "effective_noise_floor": pair["noise_floor"],
+            "effective": pair["effective"],
+        } for pair in pairs],
+        "matched_validation": matched_validation,
+        "power": {
+            "status": power_status,
+            "effective_pair_count": effective_pair_count,
+            "minimum_effective_pairs": minimum_effective_pairs,
+        },
         "overall": overall,
         "by_regime": {
             name: summarize(group_pairs) for name, group_pairs in sorted(by_regime_groups.items())
@@ -321,18 +423,36 @@ def evaluate_archive(archive: Mapping[str, Any]) -> dict[str, Any]:
         },
         "by_regime_surface": by_regime_surface,
         "independent_new_diagnostics": independent,
-        "recommendation": recommendation,
+        "recommendation": (
+            "underpowered_retain_observe_only"
+            if power_status == "underpowered" else recommendation),
+        "evidence_label": "real" if real_label else "fixture_or_unlabelled",
+        "report_provenance": ({
+            "schema": REAL_REPORT_PROVENANCE_SCHEMA,
+            "projection_result_sha256": schemas.content_hash(projection),
+            "archive_build_schema": BUILD_SCHEMA,
+        } if real_label else None),
         "live_authority": False,
     }
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("archive", type=Path)
+    parser.add_argument(
+        "--projection-result", type=Path, required=True,
+        help="strict journal projector result required for a real-labelled report")
     parser.add_argument("--output", type=Path)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     archive = json.loads(args.archive.read_text(encoding="utf-8"))
-    report = evaluate_archive(archive)
+    projection = json.loads(args.projection_result.read_text(encoding="utf-8"))
+    archive_ref = projection.get("archive") if isinstance(projection, Mapping) else None
+    if not isinstance(archive_ref, Mapping) \
+            or Path(str(archive_ref.get("path", ""))).resolve() != args.archive.resolve() \
+            or archive_ref.get("sha256") != _file_sha256(args.archive):
+        raise ValueError(
+            "projection result does not hash-bind the exact archive input path")
+    report = evaluate_archive(archive, projection=projection, real_label=True)
     rendered = json.dumps(report, sort_keys=True, indent=2) + "\n"
     if args.output:
         args.output.write_text(rendered, encoding="utf-8")

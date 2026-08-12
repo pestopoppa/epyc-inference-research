@@ -98,7 +98,8 @@ class ReceiptProjectionTest(unittest.TestCase):
         self.temp.cleanup()
 
     def _completed_campaign(self, *, ordinal: int, campaign_suffix: str,
-                            arm: str, score: float, outcome: float) -> dict:
+                            arm: str, score: float, outcome: float,
+                            semantic_label: str | None = None) -> dict:
         campaign_id = f"ak-llama_cpu-prefill-20260812-{campaign_suffix}"
         proposal_id = f"akp-20260812-{ordinal:04d}"
         candidate_id = f"akc-20260812-{ordinal:04d}"
@@ -123,6 +124,7 @@ class ReceiptProjectionTest(unittest.TestCase):
         least_commitment = {
             "schema": C.BLOCK_SCHEMA,
             "capture_mode": "measured",
+            "matched_experiment_id": "akm-iqk-20260812-0001",
             "candidate_frame_id": "candidate-frame-real-v1",
             "regime": "prefill",
             "surface": "mul_mat",
@@ -130,6 +132,9 @@ class ReceiptProjectionTest(unittest.TestCase):
             "changed_factor": "ggml_iqk",
             "factors": {"ggml_iqk": arm, "threads": 96},
             "diagnostics": values,
+            "diagnostic_semantics_sha256": S.content_hash({
+                "role": semantic_label or campaign_suffix,
+                "diagnostics": values}),
             "recodings": {
                 fixture_id: copy.deepcopy(values) for fixture_id in fixture_ids
             },
@@ -220,6 +225,8 @@ class ReceiptProjectionTest(unittest.TestCase):
                 f"{prefix}/intervention_id", candidate_sha256),
             "changed_factor_binding": _binding(
                 f"{prefix}/changed_factor", candidate_sha256),
+            "matched_experiment_id_binding": _binding(
+                f"{prefix}/matched_experiment_id", candidate_sha256),
             "factor_bindings": _bindings(
                 f"{prefix}/factors", ("ggml_iqk", "threads"), candidate_sha256),
             "diagnostic_bindings": _bindings(
@@ -246,12 +253,21 @@ class ReceiptProjectionTest(unittest.TestCase):
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         archive = B.build_archive(manifest)
         report = L.evaluate_archive(archive)
+        real_report_path = self.root / "ap-wm-real-report.json"
+        self.assertEqual(L.main([
+            str(output / "archive.json"),
+            "--projection-result", str(output / "projection-result.json"),
+            "--output", str(real_report_path),
+        ]), 0)
+        real_report = json.loads(real_report_path.read_text(encoding="utf-8"))
 
         self.assertEqual(result["authority"], P.AUTHORITY)
         self.assertEqual(len(result["emitted_receipts"]), 5)
         self.assertEqual(L.validate_archive(archive), [])
         self.assertEqual(result["archive_sha256"], P._content_hash(archive))
         self.assertEqual(report["authority"], L.AUTHORITY)
+        self.assertEqual(real_report["evidence_label"], "real")
+        self.assertEqual(real_report["matched_validation"]["status"], "PASS")
         self.assertEqual(archive["rows"][1]["matched_control_id"],
                          self.rows[0]["proposal_id"])
         receipt = json.loads((
@@ -342,6 +358,21 @@ class ReceiptProjectionTest(unittest.TestCase):
         with self.assertRaisesRegex(P.ReceiptProjectionError, "changes 2 factors"):
             P.project(self.plan, self.root / "two-factor")
 
+    def test_copied_control_diagnostic_semantics_fail_closed(self):
+        control = self._completed_campaign(
+            ordinal=3, campaign_suffix="copied-control", arm="0", score=0.5,
+            outcome=0.0, semantic_label="copied")
+        intervention = self._completed_campaign(
+            ordinal=4, campaign_suffix="copied-intervention", arm="1", score=0.5,
+            outcome=0.2, semantic_label="copied")
+        intervention["matched_control_id"] = control["proposal_id"]
+        self.plan["rows"] = [control, intervention]
+        self.plan["candidate_frame_id_binding"] = copy.deepcopy(
+            control["candidate_frame_id_binding"])
+        self._rehash()
+        with self.assertRaisesRegex(P.ReceiptProjectionError, "semantics equal"):
+            P.project(self.plan, self.root / "copied-semantics-output")
+
     def test_non_real_marker_anywhere_in_source_record_fails_closed(self):
         # Add an explicit marker in the terminal result without modifying any
         # requested binding.  Provenance eligibility is record-wide.
@@ -369,6 +400,13 @@ class ReceiptProjectionTest(unittest.TestCase):
         self._rehash()
         with self.assertRaisesRegex(P.ReceiptProjectionError, "non-real marker"):
             P.project(self.plan, self.root / "non-real")
+
+    def test_completed_journal_with_torn_tail_fails_closed(self):
+        journal_path = Path(self.plan["rows"][1]["journal_root"]) / "events.jsonl"
+        with journal_path.open("a", encoding="utf-8") as handle:
+            handle.write('{"unacknowledged":')
+        with self.assertRaisesRegex(P.ReceiptProjectionError, "torn tail"):
+            P.project(self.plan, self.root / "torn-tail")
 
     def test_plan_cannot_supply_empirical_literals(self):
         self.plan["rows"][0]["diagnostic_bindings"]["novelty"] = {

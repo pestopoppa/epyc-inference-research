@@ -155,10 +155,55 @@ fixture therefore cannot be relabelled as an empirical archive row.
 steps. Executing IQK parameter campaigns require a hash-bound
 `--least-commitment-capture-plan`; diagnostics and recoding controls are fixed
 before the claim, while held-out transfer, falsifier margin, and noise floor are
-mechanically reduced from the completed decision and accepted calibration. A
+mechanically reduced from a separately hash-bound measured held-out-regime
+receipt, the role-specific falsifier, and accepted calibration.
+`least_commitment_heldout.py` creates that receipt only by joining a distinct,
+clean, hypothesis-bound completed campaign and resolving the journaled terminal
+`decision.median_relative` value. It re-derives the receipt on every capture-plan
+load, rejects torn journals and explicit non-real markers, and binds a candidate
+frame derived from model, source, backend, topology, provider and immutable
+production/measurement identities. A copied hash or hand-entered scalar cannot
+pass. The held-out
+regime must be outside the proposal target regimes; missing or target-regime
+evidence refuses live materialization. A control falsifies on KEEP or when its
+absolute measured effect exceeds the accepted noise floor. Control diagnostic
+semantics must come from an independently bound source and cannot be copied from
+the intervention under a new receipt id. A
 `role=control` plan is the only capability that permits the generated production-
 setting A/A control proposal to use identical arms. Architecture fixtures are
 accepted for rehearsal but refused by `--execute`.
+
+`prepare_iqk_matched_pair.py` is the single regeneration entry point for the
+final v2 pair. Its manifest names the intervention proposal, independent native
+diagnostic sources, real proposal-bound held-out receipts, calibration bundle,
+physical-envelope template, shared `akm-…` identity, and two new output
+directories. The producer derives the control proposal, all shared seeds, the
+matched physical frame, and the complete factor vocabulary; it refuses unless
+`ggml_iqk` is the sole difference. Publication uses private staging, revalidates
+both durable post-rename paths, and rolls both new outputs back if either final
+campaign fails admission; it never runs a campaign. Existing output directories
+are never overwritten.
+
+First project one receipt per role from real completed held-out campaigns:
+
+```bash
+python3 -m scripts.kernel_rnd.autokernel.least_commitment_heldout \
+  /absolute/path/heldout-projection-manifest.json \
+  --output /absolute/new/least-commitment-heldout-outcome.json
+```
+
+```bash
+python3 -m scripts.kernel_rnd.autokernel.prepare_iqk_matched_pair \
+  /absolute/path/iqk-matched-pair-preparation.json \
+  --result /absolute/new/iqk-matched-pair-preparation-result.json
+```
+
+The result records every input and emitted file hash. Re-running the same command
+against the published paths must refuse; byte reproducibility is checked by
+archiving the first two generated directories, recreating the same paths with
+the unchanged manifest, and comparing the complete results. A held-out
+placeholder cannot satisfy this command: both receipts must already bind their
+exact proposal and a measured regime outside the proposal targets.
 
 `least_commitment_receipts.py` is the governed producer for those three receipt
 schemas. Its offline CLI accepts a projection plan whose values are JSON-pointer
@@ -181,8 +226,17 @@ python3 -m scripts.kernel_rnd.autokernel.least_commitment_receipts \
   projection-plan.json --output-dir /absolute/new/output-directory
 
 python3 -m scripts.kernel_rnd.autokernel.offline_least_commitment \
-  /absolute/new/output-directory/archive.json --output ap-wm-report.json
+  /absolute/new/output-directory/archive.json \
+  --projection-result /absolute/new/output-directory/projection-result.json \
+  --output ap-wm-report.json
 ```
+
+The AP-WM CLI emits a `real` evidence label only after validating both strict
+builder provenance in the archive and the journal projector result. Direct
+library evaluation remains available for regression fixtures, but labels those
+reports `fixture_or_unlabelled`. Reports expose both members' noise floors,
+explicit matched validation, and an `underpowered` state below five effective
+pairs. Neither path has live selection or promotion authority.
 
 `evidence_path_rehearsal.py` is a no-inference dress rehearsal. It derives the
 matched A/A control proposal, validates both prospective capture plans, proves
@@ -276,12 +330,12 @@ calibration exists. Source-changing campaigns additionally require their own
 | `controller/hip_authoring_arm.py` | Governed raw-HIP compatibility seam over a true pinned Torch2HIP task. GPU-blind compilation and short public evaluator checks remain observation-only. |
 | `controller/hip_decision_grade.py`, `controller/hip_decision_grade_worker.py` | Task-local HIP hardening: seal candidate source before generating unseen hostile inputs, compare against an independent host-double oracle with poisoned-output and determinism checks, execute under C6 confinement, and run randomized paired blocks against the exact one-graph Torch-ROCm-compile operation. Every ranked arm must individually clear the local gfx90a duration floor. The receipt has no release or promotion authority. |
 | `controller/arena_adapter.py` | **INF-03 paper-pin adapter (off campaign path).** Registers the seven controller families against AgentKernelArena's exact launcher contract, refuses gfx90a spoofing, and binds C4/C5 context through the priced prompt seam without gaining verdict authority. |
-| `controller/arena_controller_sandbox.py` | **INF-03 controller isolation adapter (off campaign path).** Copies one exact task workspace, discovers a minimal pinned Python/Codex/Node/source/CA/DNS/TLS runtime including the CLI shebang chain, refuses broad/device/production/campaign/symlink/duplicate grants, and supplies `arena_adapter.launch` with a transparent controller-profile prefix, fixed startup environment, exact PID capture, activation receipt verification, and descendant-draining cgroup teardown. It grants no GPU device and constructs no evaluator profile. |
-| `controller/claude_codex_actor_critic.py` | **INF-03 first executable controller arm (off campaign path).** Provides AgentKernelArena's exact three-argument callable plus a stdin executable, pins Claude Opus 5/high as planner+critic and GPT-5.6 Sol/high as Codex actor, confines writes to one proposed workspace candidate, terminates captured process groups at an exact 2h/8h/32h checkpoint, and hashes prompts, raw transcripts, CLIs, candidate revisions, and receipt artifacts. Preflight resolves/hashes CLIs but invokes neither. |
-| `controller/arena_campaign.py` + `arena_campaign_v1.json` | **INF-03 matched-panel driver (off campaign path).** Separates registration from executable coverage, fixes the starting-state baseline plus all seven registered controller arms and 2h/8h/32h wall-time checkpoints, and declares 6/8 executable arms only when both the in-tree adapter identity and any licensed upstream source/licence identity validate. The full matrix remains refused: EvoEngineer is exact-source-admitted but runtime-pending, while ARGUS remains an external source exclusion. The separately labelled available-source panel stays at 6/6 with diagnostic-only authority and cannot imply the full comparison. |
-| `controller/evoengineer_arena.py` | **INF-03 EvoEngineer-Full admission/policy seam (off campaign path).** Pins the exact MIT paper-era EvoToolkit commit, licence and policy-bearing file digests; translates only AMD task/model/evaluator boundaries; and preserves the named Full operators and paper parameters. It has no CLI and fails closed until the parent-worker AF_UNIX evaluation broker and a device-isolating hash-bound launcher are integrated. |
-| `controller/arena_cell_runner.py` | **INF-03 governed campaign executor (off campaign path).** Implements the campaign's typed `run_cell` seam through fresh independent 2h/8h/32h workspaces, per-checkpoint identity re-audit, one exclusive sampled MI210 claim, isolated AgentKernelArena evaluator subprocesses, safe captured-process teardown, and hash-bound correctness/timing belief receipts. Its immutable run manifest makes the long panel restart-safe: the identical command skips only exact complete checkpoints with verified artifacts, belief hash, and released claim; preserves and reruns incomplete attempts; refuses tampered evidence or identity drift; and atomically publishes the aggregate only after the ordered matrix is complete. Copied task workspaces receive the immutable repository import root, and shared Arena evaluation is serialized across a controller's concurrent branches. The default incomplete eight-arm panel still refuses before any claim, model, compiler, or GPU command; `--available-source` selects only the explicitly availability-conditioned six-arm diagnostic. |
-| `controller/arena_upstream_common.py` | **INF-03 licensed-controller substrate (off campaign path).** Supplies an exact deadline-bound, read-only Codex text-model client and an injected AgentKernelArena task evaluator. It discovers only declared target files, admits only centralized compile/correctness/timing results, retains the best Arena-measured workspace, and emits hash-bound non-promotional controller receipts. |
+| `controller/arena_controller_sandbox.py` | **INF-03 controller/model isolation adapter (off campaign path).** Copies one exact task workspace, discovers the pinned Python/Codex/Claude/Node/source/CA/DNS/TLS runtime and fixed Bun self/kernel reads, and refuses broad/device/production/campaign/symlink/duplicate grants. The controller PID receives only an inherited authenticated broker stream with networking denied; each direct model CLI receives a fresh outbound-client sandbox bound after it becomes the actual `/proc/self` PID, with no broker or GPU. Writable Codex actors remain inside the separately attested digest-pinned container. Claude credentials/settings are staged into writable ephemeral state and scrubbed; `/dev/urandom` is read-only. Every direct sandbox has exact PID activation and descendant-draining cgroup teardown evidence. |
+| `controller/claude_codex_actor_critic.py` | **INF-03 first executable controller arm (off campaign path).** Provides AgentKernelArena's exact three-argument callable plus a stdin executable, pins Claude Opus 5/high as planner+critic and GPT-5.6 Sol/high as Codex actor, and routes every model request and every candidate evaluation through the parent broker. The starting workspace is measured before authoring, each actor candidate is centrally compile/correctness/timing tested, and only the best measured workspace is materialized. A bounded eight-item revision window supplies each next planner with proposal/candidate identity, governed measurement summary, and the prior critic verdict/reason; full feedback memory is receipt-bound. Semantic mutation checks exclude only the four exact parent-owned controller/evidence roots, reject those roots as candidate paths, and continue to hash every task file and contained symlink; the excluded state is separately receipt-bound and scrubbed. It terminates captured process groups at an exact 2h/8h/32h checkpoint and hashes prompts, raw transcripts, CLIs, candidate revisions, measured outcomes, and receipt artifacts. Preflight resolves/hashes CLIs but invokes neither. |
+| `controller/arena_campaign.py` + `arena_campaign_v1.json` | **INF-03 matched-panel driver (off campaign path).** Separates registration from executable coverage, fixes the starting-state baseline plus all seven registered controller arms and 2h/8h/32h wall-time checkpoints, and declares 7/8 executable arms only when both the in-tree adapter identity and any licensed upstream source/licence identity validate. The full matrix remains refused solely because ARGUS has no official source release. The separately labelled available-source panel is 7/7 with diagnostic-only authority and cannot imply the full comparison. |
+| `controller/evoengineer_arena.py` | **INF-03 EvoEngineer-Full admission/policy seam (off campaign path).** Pins the exact MIT paper-era EvoToolkit commit, licence and policy-bearing file digests; translates only AMD task/model/evaluator boundaries; and preserves the named Full operators and paper parameters. Its CLI runs the exact upstream loop through the parent-worker AF_UNIX evaluation broker and hash-bound controller launcher; results remain diagnostic until a governed panel completes. |
+| `controller/arena_cell_runner.py` | **INF-03 governed campaign executor (off campaign path).** Implements the campaign's typed `run_cell` seam through fresh independent 2h/8h/32h workspaces, per-checkpoint identity re-audit, one exclusive sampled MI210 claim, isolated AgentKernelArena evaluator subprocesses, safe captured-process teardown, and hash-bound correctness/timing belief receipts. A parent-owned authenticated broker serializes model and evaluation frames: direct read-only Claude/Codex calls run under fresh per-model outbound-client sandboxes, writable Codex actors retain the digest-pinned Docker image and one exact writable workspace bind, and every lifecycle/result is persisted in the receipt chain. Its immutable run manifest makes the long panel restart-safe: the identical command skips only exact complete checkpoints with verified artifacts, belief hash, and released claim; preserves and reruns incomplete attempts; refuses tampered evidence or identity drift; and atomically publishes the aggregate only after the ordered matrix is complete. The default incomplete eight-arm panel still refuses before any claim, model, compiler, or GPU command; `--available-source` selects only the explicitly availability-conditioned seven-arm diagnostic. |
+| `controller/arena_upstream_common.py` | **INF-03 licensed-controller substrate (off campaign path).** Supplies an exact deadline-bound Codex text-model client, authenticated model-broker client, and parent-declared AgentKernelArena task evaluator. The GPU-blind controller imports neither PyYAML nor vendor evaluator code: it accepts only the exact source-path tuple admitted by the parent, admits only centrally brokered compile/correctness/timing results, retains the best Arena-measured workspace, and emits hash-bound non-promotional receipts. Model and evaluation traffic share one serialized inherited stream; the client writes only to that preconnected descriptor, without `sendto`/`sendmsg`, new socket, destination, or model-child broker authority. |
 | `controller/k_search_arena.py` | **INF-03 K-Search port (off campaign path).** Runs the pinned Apache-2.0 `WorldModelKernelGeneratorWithBaseline.generate` implementation against an exact K-Search `Task` backed by the shared gfx90a Arena evaluator and the fixed GPT-5.6 Sol/high model pin. The upstream world-model/tree loop remains the proposer; no similarly named replacement loop is used. |
 | `controller/geak_v1_arena.py` | **INF-03 GEAK-v1 port (off campaign path).** Runs the pinned Apache-2.0 `OptimAgent_ROCm.run` loop with its real BM25 corpus and reflection memory, while an adapter dataset routes correctness and timing only through AgentKernelArena. It confines the upstream cleanup commands to an adapter-created workspace child and normalizes the upstream field named `ms` to the higher-is-better speedup direction that its selection code actually uses. |
 | `controller/xe_forge_arena.py` | **INF-03 Xe-Forge gfx90a port (off campaign path).** Runs the pinned Apache-2.0 `DSPyEngine.optimize` linear-CoVeR pipeline with GPT-5.6 Sol/high. A scoped AMD MI210/wave64 configuration replaces upstream device prompts and is restored after the run; a truthy empty executor gate opens upstream validation branches without inventing workload shapes. The initialized KernelBench-shaped adapter routes every compile, correctness, and timing decision to AgentKernelArena. |
@@ -320,7 +374,9 @@ calibration exists. Source-changing campaigns additionally require their own
 | `offline_least_commitment.py` | The observe-only AK-WM-2/AP-WM-1 diagnostic over matched completed-proposal archives; it has no live selection authority. |
 | `least_commitment_archive_builder.py` | The AK-WM-2a real-record join: resolves proposal-v3 or proposal-v4 and clean terminal journal events, verifies hash-bound diagnostic/outcome/matched-one-factor receipts, and emits only protocol-valid observe-only archives. |
 | `least_commitment_capture.py` | The prospective live IQK/control capture: binds pre-run diagnostics and recodings, reduces only declared measured outcomes, and gives no selector or release authority. |
+| `least_commitment_heldout.py` | The prospective held-out projector: derives an out-of-regime effect from a distinct clean terminal journal, binds the immutable cross-regime candidate frame, and replays the join before campaign execution. |
 | `least_commitment_receipts.py` | The AK-WM-2a governed receipt producer: derives SHA-pinned journal bindings from distinct clean completed campaigns, proves the sole matched intervention factor, rejects non-real evidence, and publishes the validated archive. |
+| `prepare_iqk_matched_pair.py` | Deterministically publishes the intervention/control proposals, shared matched frame, physical envelopes, and v2 capture plans into two new directories without executing either campaign. |
 | `evidence_path_rehearsal.py` | No-inference control/proposal/AP-WM/champion/readiness/T3/package producer inventory; architecture fixture only. |
 | `release/live_material.py` | Actual-journal release-material compiler: hash-binds the composed champion and its evidence to an exact full-build T3/package seal for operator-triggered dry run only. |
 | `turn_productivity.py` | **AK-PT-1 / AK-X-6.** Immutable per-refine-turn `(turn, task, correct?, speedup)` records, mechanically derived rescued/persistent classes, and a campaign-calibration-derived e-process rule. It may label a turn repair-only and withhold search advancement; it has no ranking, retention, promotion, or deployment authority. |

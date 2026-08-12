@@ -1036,6 +1036,17 @@ class TestTheSpecIsAPreCommitment(unittest.TestCase):
         self.assertNotEqual(first.suite_seed, different.suite_seed)
         self.assertEqual(first.to_dict()["suite_seed"], first.suite_seed)
 
+    def test_unmatched_campaign_seed_contract_is_byte_compatible(self):
+        """Adding matched experiments must not silently reseed legacy campaigns."""
+        built = spec(created_at="2026-08-12T00:00:00+00:00")
+        self.assertEqual(built.bench_params["autokernel_seed"],
+                         int("450223030" + "8888835942"))
+        self.assertEqual(built.suite_seed, int("141681052" + "43381952088"))
+        self.assertEqual(built.schedule_seed,
+                         "ak-test/2026-08-12T00:00:00+00:00")
+        self.assertEqual(built.holdout_selection_seed,
+                         "ak-test/14168105243381952088")
+
     def test_proposal_v4_is_validated_and_frozen_by_value(self):
         proposal = proposal_manifest()
         built = spec(proposal=proposal)

@@ -50,7 +50,8 @@ _PLAN_FIELDS = frozenset({
 _ROW_FIELDS = frozenset({
     "journal_root", "campaign_id", "proposal_id", "completion_event_id",
     "candidate_frame_id_binding", "regime_binding", "surface_binding",
-    "intervention_id_binding", "changed_factor_binding", "factor_bindings",
+    "intervention_id_binding", "changed_factor_binding",
+    "matched_experiment_id_binding", "factor_bindings",
     "diagnostic_bindings", "recoding_bindings", "outcome_bindings",
     "matched_control_id",
 })
@@ -200,7 +201,11 @@ def _load_completed_evidence(row: Mapping[str, Any]) -> CompletedEvidence:
     # nonempty pairs, and released resources before projection begins.
     completed = builder._completed_proposal(row)
     book = journal.Journal(str(root), campaign_id=campaign_id)
-    entries = book.read_all()
+    report = book.scan()
+    if report.torn_tail is not None:
+        raise ReceiptProjectionError(
+            "completed evidence journal has an unacknowledged torn tail")
+    entries = list(report.entries)
     views = journal.rebuild_views(entries)
     consistency = journal.check_view_consistency(entries, views)
     if consistency.outcome != schemas.PASS:
@@ -323,12 +328,19 @@ def _mapping_bindings(bindings: Any, expected: set[str], evidence: CompletedEvid
     return values, provenance
 
 
-def _scalar(value: Any, label: str) -> Any:
+def _factor_value(value: Any, label: str) -> Any:
+    """Admit canonical JSON factors while refusing non-finite numbers."""
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ReceiptProjectionError(f"{label}: factor value must be finite")
+    if isinstance(value, Mapping):
+        return {str(key): _factor_value(child, f"{label}.{key}")
+                for key, child in value.items()}
+    if isinstance(value, list):
+        return [_factor_value(child, f"{label}[{index}]")
+                for index, child in enumerate(value)]
     if value is None or isinstance(value, (str, int, float, bool)):
-        if isinstance(value, float) and not math.isfinite(value):
-            raise ReceiptProjectionError(f"{label}: factor value must be finite")
         return value
-    raise ReceiptProjectionError(f"{label}: factor value must be a JSON scalar")
+    raise ReceiptProjectionError(f"{label}: factor value is not canonical JSON")
 
 
 def _project_row(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -343,7 +355,7 @@ def _project_row(row: Mapping[str, Any]) -> dict[str, Any]:
 
     scalar_names = (
         "candidate_frame_id", "regime", "surface", "intervention_id",
-        "changed_factor",
+        "changed_factor", "matched_experiment_id",
     )
     scalar_values: dict[str, str] = {}
     scalar_sources: dict[str, dict] = {}
@@ -361,7 +373,7 @@ def _project_row(row: Mapping[str, Any]) -> dict[str, Any]:
     for name, binding in sorted(factor_bindings.items()):
         _need_text(name, "row.factor_bindings key")
         value, source = _binding(binding, evidence, f"row.factor_bindings.{name}")
-        factors[name] = _scalar(value, f"row.factor_bindings.{name}")
+        factors[name] = _factor_value(value, f"row.factor_bindings.{name}")
         factor_sources[name] = source
     if scalar_values["changed_factor"] not in factors:
         raise ReceiptProjectionError(
@@ -418,6 +430,7 @@ def _project_row(row: Mapping[str, Any]) -> dict[str, Any]:
         "regime": scalar_values["regime"], "surface": scalar_values["surface"],
         "intervention_id": scalar_values["intervention_id"],
         "changed_factor": scalar_values["changed_factor"],
+        "matched_experiment_id": scalar_values["matched_experiment_id"],
         "outcome": outcomes,
         "capture_mode": "measured", "authority": AUTHORITY,
         "source_provenance": {
@@ -427,6 +440,10 @@ def _project_row(row: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "evidence": evidence, "diagnostic": diagnostic, "outcome": outcome,
         "factors": factors, "factor_sources": factor_sources,
+        "diagnostic_semantics_sha256": _need_text(
+            evidence.candidate["derived_verdicts"]["least_commitment"].get(
+                "diagnostic_semantics_sha256"),
+            "least_commitment.diagnostic_semantics_sha256"),
         "matched_control_id": row.get("matched_control_id"),
     }
 
@@ -459,7 +476,7 @@ def assemble_plan(*, archive_id: str, created_at: str,
         evidence = _load_completed_evidence(row)
         block = evidence.candidate.get("derived_verdicts", {}).get("least_commitment")
         if not isinstance(block, Mapping) or block.get("schema") \
-                != "epyc.autokernel.least_commitment_capture.v1":
+                != "epyc.autokernel.least_commitment_capture.v2":
             raise ReceiptProjectionError(
                 f"{evidence.proposal_id}: candidate has no live least-commitment capture")
         if block.get("capture_mode") != "measured":
@@ -488,6 +505,8 @@ def assemble_plan(*, archive_id: str, created_at: str,
             "surface_binding": binding(f"{prefix}/surface"),
             "intervention_id_binding": binding(f"{prefix}/intervention_id"),
             "changed_factor_binding": binding(f"{prefix}/changed_factor"),
+            "matched_experiment_id_binding": binding(
+                f"{prefix}/matched_experiment_id"),
             "factor_bindings": {
                 key: binding(f"{prefix}/factors/{_encode_pointer_token(key)}")
                 for key in factor_names},
@@ -609,12 +628,20 @@ def project(plan: Mapping[str, Any], output_dir: Path) -> dict[str, Any]:
             raise ReceiptProjectionError(
                 f"{proposal_id}: matched_control_id does not resolve to another row")
         control = by_id[control_id]
+        if item["diagnostic_semantics_sha256"] \
+                == control["diagnostic_semantics_sha256"]:
+            raise ReceiptProjectionError(
+                f"{proposal_id}: control diagnostic semantics equal intervention semantics")
         intervention_outcome = item["outcome"]
         control_outcome = control["outcome"]
         for key in ("candidate_frame_id", "metric", "regime", "surface"):
             if intervention_outcome[key] != control_outcome[key]:
                 raise ReceiptProjectionError(
                     f"{proposal_id}: matched control differs on {key}")
+        if (intervention_outcome.get("matched_experiment_id")
+                != control_outcome.get("matched_experiment_id")):
+            raise ReceiptProjectionError(
+                f"{proposal_id}: matched experiment identity differs")
         if set(item["factors"]) != set(control["factors"]):
             raise ReceiptProjectionError(
                 f"{proposal_id}: matched factor vocabularies differ")
@@ -637,6 +664,8 @@ def project(plan: Mapping[str, Any], output_dir: Path) -> dict[str, Any]:
             "regime": intervention_outcome["regime"],
             "surface": intervention_outcome["surface"],
             "changed_factor": changed[0], "one_factor": True,
+            "matched_experiment_id": intervention_outcome[
+                "matched_experiment_id"],
             "capture_mode": "measured", "authority": AUTHORITY,
             "source_provenance": {
                 "intervention_factors": item["factor_sources"],

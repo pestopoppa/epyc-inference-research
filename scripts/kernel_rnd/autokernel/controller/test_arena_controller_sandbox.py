@@ -135,6 +135,42 @@ class ControllerSandboxContractTest(unittest.TestCase):
                 C.discover_runtime_allowlist(
                     **dict(base, controller_source_roots=(campaign,)))
 
+    def test_runtime_allowlist_binds_only_declared_pinned_cli_kernel_reads(self):
+        baseline = self.runtime()
+        identity_only = self.root / "staged-cli-input.json"
+        identity_only.write_text('{"fixture":true}\n', encoding="utf-8")
+        runtime = C.discover_runtime_allowlist(
+            workspace=self.workspace, python_executable=self.python,
+            controller_source_roots=(self.module_root,),
+            controller_entrypoint=Path(__file__).resolve(),
+            repository_module_roots=(), codex_cli=self.fake_codex,
+            node_executable=self.fake_node, codex_auth=self.auth,
+            ca_files=(self.ca,), forbidden_roots=(self.forbidden,),
+            additional_cli_identity_files=(identity_only,),
+            additional_cli_runtime_read_files=
+            sandbox.CONTROLLER_RUNTIME_READ_FILES,
+        )
+        self.assertEqual(
+            runtime.readable_files[-len(sandbox.CONTROLLER_RUNTIME_READ_FILES):],
+            sandbox.CONTROLLER_RUNTIME_READ_FILES)
+        self.assertTrue(all(
+            path not in runtime.identities
+            for path in sandbox.CONTROLLER_RUNTIME_READ_FILES))
+        self.assertIn(str(identity_only), runtime.identities)
+        self.assertNotIn(str(identity_only), runtime.readable_files)
+        self.assertNotEqual(runtime.sha256, baseline.sha256)
+        with self.assertRaisesRegex(
+                C.ControllerSandboxError, "undeclared controller runtime read"):
+            C.discover_runtime_allowlist(
+                workspace=self.workspace, python_executable=self.python,
+                controller_source_roots=(self.module_root,),
+                controller_entrypoint=Path(__file__).resolve(),
+                repository_module_roots=(), codex_cli=self.fake_codex,
+                node_executable=self.fake_node, codex_auth=self.auth,
+                ca_files=(self.ca,), forbidden_roots=(self.forbidden,),
+                additional_cli_runtime_read_files=("/proc/meminfo",),
+            )
+
     def test_copy_workspace_rejects_symlink_and_binds_regular_files(self):
         self.assertEqual(self.copy_receipt["files"], {
             "task.py": C._sha256_file(self.source_workspace / "task.py")})
@@ -175,6 +211,7 @@ class ControllerSandboxContractTest(unittest.TestCase):
             "    except OSError as exc: result.append(['denied',exc.errno])",
             "  return result",
             "broker=socket.socket(fileno=int(os.environ['EPYC_AUTOKERNEL_BROKER_FD']))",
+            "os.write(broker.fileno(),b'controller-ok')",
             "child_pid=os.fork()",
             "if child_pid == 0:",
             "  os.close(0); os.close(1); os.close(2); time.sleep(60); os._exit(0)",
@@ -212,6 +249,7 @@ class ControllerSandboxContractTest(unittest.TestCase):
                     return
                 broker_result["registered_pid"] = invocation.pid
                 broker_result["registered_start_ticks"] = _start_ticks(peer_pid)
+                broker_result["request"] = connection.recv(32).decode()
                 connection.sendall(b"broker-ok")
 
         thread = threading.Thread(target=broker, daemon=True)
@@ -239,6 +277,7 @@ class ControllerSandboxContractTest(unittest.TestCase):
         self.assertTrue(broker_result["accepted_before_registration"])
         self.assertEqual(broker_result["peer_pid"], invocation.pid)
         self.assertEqual(broker_result["registered_pid"], invocation.pid)
+        self.assertEqual(broker_result["request"], "controller-ok")
         result = json.loads(output)
         self.assertEqual(result["workspace"], ["allowed", "VALUE = 1\n"])
         self.assertEqual(result["campaign_sibling"], ["denied", errno.EACCES])
@@ -309,6 +348,60 @@ class ControllerSandboxContractTest(unittest.TestCase):
         self.assertEqual((self.evidence / "wrong-activation.json").read_text(), "")
         teardown = sandbox.cleanup_cgroup(invocation.policy, invocation.pid)
         self.assertTrue(teardown["verified_empty"])
+
+    def test_model_profile_binds_proc_self_to_the_direct_cli_pid(self):
+        runtime = C.discover_runtime_allowlist(
+            workspace=self.workspace, python_executable=self.python,
+            controller_source_roots=(self.module_root,),
+            controller_entrypoint=Path(__file__).resolve(),
+            repository_module_roots=(), codex_cli=self.fake_codex,
+            node_executable=self.fake_node, codex_auth=self.auth,
+            ca_files=(self.ca,), forbidden_roots=(self.forbidden,),
+            additional_cli_runtime_read_files=("/proc/self/stat",),
+        )
+        code = "\n".join((
+            "import json,os,socket",
+            "parent=open('/proc/self/stat').read().split()[0]",
+            "child=os.fork()",
+            "if child == 0:",
+            "  try: open('/proc/self/stat').read(); value='unexpected'",
+            "  except PermissionError: value='denied'",
+            f"  open({str(self.workspace / 'child.json')!r},'w').write(json.dumps(value))",
+            "  os._exit(0)",
+            "os.waitpid(child,0)",
+            "inet=socket.socket(socket.AF_INET,socket.SOCK_STREAM); inet.close()",
+            "print(json.dumps({'parent':parent,'pid':str(os.getpid())}))",
+        ))
+        argv = (str(self.python), "-c", code)
+        invocation = C.prepare_model_sandbox(
+            workspace=self.workspace,
+            receipt_path=self.evidence / "model-activation.json",
+            expected_argv=argv, runtime=runtime)
+        prepared = arena_adapter.prepare_task(
+            arena_adapter.ArenaTask(
+                task_id="tiny/model", task_prompt="Probe.",
+                workspace=str(self.workspace), controller_id="kernelfoundry",
+                round_id="sandbox-test", actual_gfx_arch="gfx90a"),
+            base_environment={
+                "PATH": os.environ["PATH"], "PYTHONPATH": "",
+                **invocation.environment_overrides})
+        output = arena_adapter.launch(
+            prepared, argv, timeout_seconds=10,
+            command_prefix=invocation.command_prefix,
+            process_started=invocation.process_started)
+        result = json.loads(output)
+        self.assertEqual(result["parent"], result["pid"])
+        self.assertEqual(
+            json.loads((self.workspace / "child.json").read_text()), "denied")
+        teardown = invocation.verify_and_teardown(
+            self.evidence / "model-teardown.json")
+        activation = sandbox.read_receipt(
+            self.evidence / "model-activation.json")
+        self.assertEqual(activation["profile"], sandbox.MODEL_PROFILE)
+        self.assertEqual(
+            activation["network_profile"], sandbox.NETWORK_OUTBOUND_CLIENT)
+        self.assertFalse(activation["broker_fd_inherited"])
+        self.assertTrue(teardown["teardown"]["verified_empty"])
 
 
 if __name__ == "__main__":

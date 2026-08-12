@@ -26,19 +26,26 @@ class FakeRunner:
     def __init__(self, workspace: Path, *, planner_path: str = "kernel.py",
                  malformed_planner: bool = False, change_extra: bool = False,
                  timeout_role: str | None = None,
-                 planner_extra_fields: bool = False):
+                 planner_extra_fields: bool = False,
+                 critic_decisions: tuple[str, ...] = ("accept",)):
         self.workspace = workspace
         self.planner_path = planner_path
         self.malformed_planner = malformed_planner
         self.change_extra = change_extra
         self.timeout_role = timeout_role
         self.planner_extra_fields = planner_extra_fields
+        self.critic_decisions = critic_decisions
+        self.planner_count = 0
+        self.critic_count = 0
+        self.last_proposal_id = "proposal-001"
         self.calls = []
 
     def __call__(self, argv, cwd, env, input_text, timeout_seconds):
         self.calls.append((tuple(argv), cwd, dict(env), input_text, timeout_seconds))
         executable = Path(argv[0]).name
         if executable == "claude" and "You are the planner" in input_text:
+            self.planner_count += 1
+            self.last_proposal_id = f"proposal-{self.planner_count:03d}"
             if self.timeout_role == "planner":
                 return A.ProcessCapture(tuple(argv), -15, "", "", True)
             if self.malformed_planner:
@@ -46,7 +53,7 @@ class FakeRunner:
             else:
                 proposal = {
                     "schema": A.PROPOSAL_SCHEMA,
-                    "proposal_id": "proposal-001",
+                    "proposal_id": self.last_proposal_id,
                     "candidate_path": self.planner_path,
                     "actor_instruction": "Replace the fixture with the bounded candidate.",
                 }
@@ -74,11 +81,14 @@ class FakeRunner:
                 (self.workspace / "escaped.py").write_text("changed\n", encoding="utf-8")
             return A.ProcessCapture(tuple(argv), 0, '{"type":"turn.completed"}\n', "")
         if executable == "claude" and "You are the critic" in input_text:
+            decision = self.critic_decisions[min(
+                self.critic_count, len(self.critic_decisions) - 1)]
+            self.critic_count += 1
             critique = {
                 "schema": A.CRITIQUE_SCHEMA,
-                "proposal_id": "proposal-001",
-                "decision": "accept",
-                "reason": "The candidate is ready for Arena evaluation.",
+                "proposal_id": self.last_proposal_id,
+                "decision": decision,
+                "reason": f"Measured iteration {self.critic_count} requires {decision}.",
             }
             return A.ProcessCapture(
                 tuple(argv), 0, json.dumps({"result": json.dumps(critique)}), "")
@@ -209,6 +219,60 @@ class ActorCriticControllerTest(unittest.TestCase):
             json.loads((artifacts / "receipt.json").read_text(encoding="utf-8")),
             receipt)
 
+    def test_brokered_receipt_defers_host_runtime_identity_to_parent_chain(self):
+        environment = {A.sandbox.BROKER_FD_ENV: "99"}
+        with mock.patch.object(
+                A.codex_container_actor, "runtime_identity",
+                side_effect=AssertionError("controller reopened host runtime")):
+            constraint = A._actor_runtime_constraint(
+                environment, {"path": str(self.bin / "codex")})
+        self.assertEqual(constraint, {
+            "kind": "parent_model_broker_receipt_chain",
+            "authority": "parent_worker_only",
+            "host_runtime_reopened_by_controller": False,
+        })
+
+    def test_revision_feedback_is_bound_and_supplied_to_the_next_planner(self):
+        workspace = self.workspace("feedback")
+        runner = FakeRunner(
+            workspace, critic_decisions=("revise", "stop"))
+        receipt = A.run_controller(
+            prompt="Optimize with measured feedback.", workspace=workspace,
+            config=self.config(), environment=self.environment(), runner=runner)
+        planner_prompts = [call[3] for call in runner.calls
+                           if "You are the planner" in call[3]]
+        self.assertEqual(len(planner_prompts), 2)
+        self.assertNotIn("Governed prior-iteration memory", planner_prompts[0])
+        self.assertIn("Governed prior-iteration memory", planner_prompts[1])
+        self.assertIn("proposal-001", planner_prompts[1])
+        self.assertIn("Measured iteration 1 requires revise.", planner_prompts[1])
+        self.assertEqual(receipt["stop_reason"], "critic_stop")
+        self.assertEqual(len(receipt["feedback_memory"]), 2)
+        self.assertEqual(
+            receipt["feedback_memory_sha256"],
+            canonical_sha(receipt["feedback_memory"]))
+
+    def test_feedback_row_carries_governed_measurement_and_bounded_reason(self):
+        reason = "r" * (A.MAX_FEEDBACK_REASON_CHARS + 17)
+        measured = A.arena_upstream_common.EvaluationRecord(
+            passed=True, latency_ms=0.02, speedup=0.99, log_excerpt="",
+            raw={
+                "pass_compilation": True, "pass_correctness": True,
+                "valid_baseline_cases": 4, "valid_optimized_cases": 4,
+                "average_speedup": 0.99,
+                "best_optimized_execution_time": 0.02,
+            })
+        row = A._feedback_row(
+            iteration=1,
+            proposal={"proposal_id": "proposal-001", "candidate_path": "kernel.py"},
+            candidate_sha256="a" * 64, measured=measured,
+            critique={"decision": "revise", "reason": reason})
+        self.assertEqual(row["arena_measurement"]["average_speedup"], 0.99)
+        self.assertEqual(row["critic"]["reason"], reason)
+        self.assertEqual(
+            len(row["critic"]["reason_for_next_planner"]),
+            A.MAX_FEEDBACK_REASON_CHARS)
+
     def test_malformed_proposal_and_candidate_escape_fail_closed(self):
         malformed_workspace = self.workspace("malformed")
         with self.assertRaisesRegex(A.ActorCriticError, "malformed JSON"):
@@ -259,6 +323,29 @@ class ActorCriticControllerTest(unittest.TestCase):
             "actor_instruction": "Implement the bounded candidate.",
         }
         with self.assertRaisesRegex(A.ActorCriticError, "non-symlink"):
+            A.parse_proposal(json.dumps(proposal), workspace)
+
+    def test_semantic_manifest_excludes_only_reserved_controller_state(self):
+        workspace = self.workspace("reserved-state")
+        initial = A._workspace_manifest(workspace)
+        for name in A.CONTROL_PLANE_DIRNAMES:
+            root = workspace / name
+            root.mkdir(exist_ok=True)
+            (root / "session.json").write_text("one\n", encoding="utf-8")
+        self.assertEqual(A._workspace_manifest(workspace), initial)
+        (workspace / ".autokernel-controller-claude-config"
+         / "session.json").write_text("two\n", encoding="utf-8")
+        self.assertEqual(A._workspace_manifest(workspace), initial)
+        (workspace / "kernel.py").write_text("VALUE = 2\n", encoding="utf-8")
+        self.assertNotEqual(A._workspace_manifest(workspace), initial)
+
+        proposal = {
+            "schema": A.PROPOSAL_SCHEMA,
+            "proposal_id": "proposal-reserved",
+            "candidate_path": ".autokernel-controller-claude-config/session.json",
+            "actor_instruction": "Never admit control-plane state as a candidate.",
+        }
+        with self.assertRaisesRegex(A.ActorCriticError, "reserved"):
             A.parse_proposal(json.dumps(proposal), workspace)
 
     def test_claude_result_accepts_only_an_exact_single_json_fence(self):

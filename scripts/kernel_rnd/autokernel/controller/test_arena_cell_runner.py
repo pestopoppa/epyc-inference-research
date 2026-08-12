@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import signal
 import socket
+import stat
 import struct
 import subprocess
 import sys
@@ -122,7 +123,7 @@ def fake_controller_sandbox_execution(cell_root: Path) -> dict:
     policy_sha = "b" * 64
     cgroup = "/sys/fs/cgroup/autokernel-fixture-controller"
     blocked = sorted(R.sandbox._network_policy(
-        R.sandbox.CONTROLLER_PROFILE)[0])
+        R.sandbox.CONTROLLER_BROKER_PROFILE)[0])
     activation = {
         "schema": R.sandbox.RECEIPT_SCHEMA,
         "sandbox_id": R.sandbox.SANDBOX_ID,
@@ -135,10 +136,11 @@ def fake_controller_sandbox_execution(cell_root: Path) -> dict:
         "read_allowlist_enforced": True,
         "readable_roots": readable_roots, "readable_files": [],
         "executable_files": [str(Path(sys.executable).resolve())],
-        "profile": R.sandbox.CONTROLLER_PROFILE,
-        "network_profile": R.sandbox.NETWORK_OUTBOUND_CLIENT,
-        "outbound_socket_families": ["AF_INET", "AF_INET6"],
-        "server_socket_operations_denied": ["listen", "accept", "accept4"],
+        "profile": R.sandbox.CONTROLLER_BROKER_PROFILE,
+        "network_profile": R.sandbox.NETWORK_DENY_ALL,
+        "outbound_socket_families": [],
+        "server_socket_operations_denied": [
+            "bind", "listen", "accept", "accept4"],
         "unix_socket_creation_denied": True,
         "broker_socket_path": "/tmp/fake-broker.sock",
         "broker_fd_inherited": True,
@@ -259,6 +261,38 @@ class ArenaCellRunnerTest(unittest.TestCase):
             file_sha256={"config.yaml": hashlib.sha256(
                 (task / "config.yaml").read_bytes()).hexdigest()},
         )
+
+    def test_staged_claude_config_is_minimal_writable_and_scrubbed(self):
+        workspace = self.root / "claude-workspace"
+        workspace.mkdir()
+        source = self.root / "host-claude"
+        source.mkdir()
+        (source / ".credentials.json").write_text(
+            '{"token":"fixture"}\n', encoding="utf-8")
+        (source / ".claude.json").write_text(
+            '{"setting":true}\n', encoding="utf-8")
+        (source / "history.jsonl").write_text(
+            "must-not-copy\n", encoding="utf-8")
+        with R._staged_controller_claude_config(
+                workspace, enabled=True, source_root=source) as staged:
+            self.assertIsNotNone(staged)
+            assert staged is not None
+            self.assertEqual(
+                sorted(path.name for path in staged.iterdir()),
+                [".claude.json", ".credentials.json"])
+            self.assertTrue(all(
+                stat.S_IMODE(path.stat().st_mode) == 0o600
+                for path in staged.iterdir()))
+            (staged / ".claude.json").write_text(
+                '{"setting":false}\n', encoding="utf-8")
+        self.assertFalse(
+            (workspace / ".autokernel-controller-claude-config").exists())
+        self.assertEqual(
+            (source / ".claude.json").read_text(encoding="utf-8"),
+            '{"setting":true}\n')
+        with R._staged_controller_claude_config(
+                workspace, enabled=False, source_root=source) as staged:
+            self.assertIsNone(staged)
 
     def arm(self, arm_id: str) -> C.ArmImplementation:
         if arm_id == C.BASELINE_ARM_ID:
@@ -947,6 +981,40 @@ class ArenaCellRunnerTest(unittest.TestCase):
         self.assertNotIn("/proc", roots)
         self.assertIn("/usr/libexec", roots)
 
+    def test_broker_evaluator_admits_parent_sources_without_vendor_imports(self):
+        workspace = self.root / "broker-evaluator-init"
+        workspace.mkdir()
+        (workspace / "config.yaml").write_text(
+            "source_file_path: [kernel.py]\n", encoding="utf-8")
+        (workspace / "kernel.py").write_text("def kernel(): pass\n", encoding="utf-8")
+        socket_path = self.root / "evaluator-init.sock"
+        server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        server.bind(str(socket_path))
+        try:
+            environment = {
+                U.BROKER_SOCKET_ENV: str(socket_path),
+                U.BROKER_TOKEN_ENV: "a" * 64,
+                U.BROKER_OWNER_PID_ENV: str(os.getpid()),
+            }
+            with mock.patch.object(U, "_assert_gpu_devices_inaccessible"), \
+                    mock.patch.dict(os.environ, environment, clear=False):
+                evaluator = U.ArenaWorkspaceEvaluator(
+                    workspace=workspace, arena_root=self.arena,
+                    source_paths=("kernel.py",))
+            self.assertEqual(evaluator.source_paths, ("kernel.py",))
+            self.assertEqual(evaluator.best_files["kernel.py"],
+                             b"def kernel(): pass\n")
+            self.assertFalse(hasattr(evaluator, "vendor"))
+            with mock.patch.object(U, "_assert_gpu_devices_inaccessible"), \
+                    mock.patch.dict(os.environ, environment, clear=False):
+                with self.assertRaisesRegex(
+                        U.UpstreamControllerError, "duplicate"):
+                    U.ArenaWorkspaceEvaluator(
+                        workspace=workspace, arena_root=self.arena,
+                        source_paths=("kernel.py", "kernel.py"))
+        finally:
+            server.close()
+
     def test_parent_broker_is_short_private_fresh_and_hash_chained(self):
         cell = self.root / "broker-cell"
         workspace = cell / "workspace"
@@ -1000,6 +1068,7 @@ class ArenaCellRunnerTest(unittest.TestCase):
         broker = R._ControllerEvaluationBroker(
             request=request, workspace=workspace, cell_root=cell,
             source_paths=("kernel.hip",), evaluate=evaluate,
+            infer=mock.Mock(),
             baseline_receipt_sha256="b" * 64)
         evaluator = object.__new__(U.ArenaWorkspaceEvaluator)
         evaluator.workspace = workspace
@@ -1064,7 +1133,8 @@ class ArenaCellRunnerTest(unittest.TestCase):
                      "task": {"task_id": "fixture.task"},
                      "arm": {"arm_id": "k_search"}, "checkpoint_hours": 2.0},
             workspace=workspace, cell_root=cell, source_paths=("kernel.hip",),
-            evaluate=evaluated, baseline_receipt_sha256="b" * 64)
+            evaluate=evaluated, infer=mock.Mock(),
+            baseline_receipt_sha256="b" * 64)
         evaluator = object.__new__(U.ArenaWorkspaceEvaluator)
         evaluator.workspace = workspace
         evaluator.broker_receipts = []
@@ -1133,6 +1203,7 @@ class ArenaCellRunnerTest(unittest.TestCase):
         broker = R._ControllerEvaluationBroker(
             request=request, workspace=workspace, cell_root=cell,
             source_paths=("kernel.hip",), evaluate=evaluate,
+            infer=mock.Mock(),
             baseline_receipt_sha256="b" * 64)
 
         def send(stream, ordinal):
@@ -1181,6 +1252,171 @@ class ArenaCellRunnerTest(unittest.TestCase):
         finally:
             thread.join(timeout=2)
             server.close()
+
+    def test_model_and_evaluation_frames_share_one_authenticated_stream(self):
+        cell = self.root / "broker-model"
+        workspace = cell / "workspace"
+        workspace.mkdir(parents=True)
+        (workspace / "config.yaml").write_text("x: y\n", encoding="utf-8")
+        (workspace / "kernel.hip").write_text("// original\n", encoding="utf-8")
+        infer = mock.Mock(return_value={
+            "returncode": 0, "stdout": '{"proposal":"ok"}', "stderr": "",
+            "timed_out": False,
+            "execution": {"schema": "fixture.model.execution.v1"},
+        })
+        evaluate = mock.Mock(return_value=(
+            {"pass_compilation": True, "pass_correctness": True,
+             "valid_optimized_cases": 1, "average_speedup": 1.2},
+            {"receipt_sha256": "c" * 64}))
+        request = {
+            "campaign_id": "fixture-campaign-v1", "attempt_id": "attempt-r1",
+            "claim_campaign_id": "attempt-r1",
+            "task": {"task_id": "fixture.task"},
+            "arm": {"arm_id": "claude_codex_actor_critic"},
+            "checkpoint_hours": 2.0}
+        broker = R._ControllerEvaluationBroker(
+            request=request, workspace=workspace, cell_root=cell,
+            source_paths=("kernel.hip",), evaluate=evaluate, infer=infer,
+            baseline_receipt_sha256="b" * 64)
+        with broker:
+            client_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            client_socket.connect(str(broker.socket_path))
+            broker.register_controller(os.getpid())
+            environment = {
+                R.sandbox.BROKER_FD_ENV: str(client_socket.fileno()),
+                U.BROKER_TOKEN_ENV: broker.token,
+                U.BROKER_OWNER_PID_ENV: str(os.getpid()),
+                "AUTOKERNEL_CONTROLLER_WORKSPACE": str(workspace),
+            }
+            model = U.ModelBrokerClient(environment)
+            response = model.call(
+                kind="claude_json", argv=("/pinned/claude", "--json-schema", "{}"),
+                prompt="propose", timeout_seconds=60)
+            self.assertEqual(response["stdout"], '{"proposal":"ok"}')
+            evaluator = object.__new__(U.ArenaWorkspaceEvaluator)
+            evaluator.workspace = workspace
+            evaluator.broker_receipts = []
+            evaluator.broker_socket = broker.socket_path
+            evaluator._broker_token = broker.token
+            evaluator._broker_owner_pid = os.getpid()
+            evaluator._broker_stream = socket.socket(
+                fileno=os.dup(client_socket.fileno()))
+            measured = evaluator._brokered_evaluation(
+                1, {"kernel.hip": b"// candidate\n"})
+            self.assertEqual(measured["average_speedup"], 1.2)
+            model.close()
+            evaluator._broker_stream.close()
+            client_socket.close()
+        infer.assert_called_once()
+        receipt_path = cell / "model-inference-windows" / "0001-result.json"
+        receipt = json.loads(receipt_path.read_text())
+        R._verify_self_hash(receipt, "model broker fixture")
+        self.assertEqual(R._model_inference_receipt_paths(cell), [receipt_path])
+        self.assertEqual(
+            broker.model_receipt_sha256s, [receipt["receipt_sha256"]])
+
+    def test_direct_model_call_replaces_ambient_host_temp_and_cleans_it(self):
+        workspace = self.root / "model-temp" / "workspace"
+        cell = workspace.parent
+        workspace.mkdir(parents=True)
+        ambient = self.root / "host-scratch"
+        ambient.mkdir()
+        observed = {}
+
+        class FakeProcess:
+            pid = os.getpid()
+            returncode = 0
+
+            def communicate(self, *, input, timeout):
+                observed["prompt"] = input
+                observed["timeout"] = timeout
+                temp = Path(observed["environment"]["TMPDIR"])
+                self.assertions = (
+                    temp.is_relative_to(workspace),
+                    temp.is_dir(),
+                    stat.S_IMODE(temp.stat().st_mode),
+                )
+                (temp / "claude-1000").mkdir()
+                return "{}\n", ""
+
+        process = FakeProcess()
+
+        def fake_popen(command, *, cwd, env, **kwargs):
+            observed["command"] = tuple(command)
+            observed["cwd"] = cwd
+            observed["environment"] = dict(env)
+            return process
+
+        invocation = types.SimpleNamespace(
+            command_prefix=(), environment_overrides={}, pid=os.getpid(),
+            policy=types.SimpleNamespace(policy_sha256="p" * 64),
+            process_started=mock.Mock(),
+            verify_and_teardown=mock.Mock(return_value={
+                "teardown": {"verified_empty": True, "removed": True}}))
+        executable = str(Path(sys.executable).resolve())
+        runtime = types.SimpleNamespace(
+            identities={executable: "a" * 64}, sha256="r" * 64)
+        with (
+            mock.patch.object(
+                R.arena_controller_sandbox, "prepare_model_sandbox",
+                return_value=invocation),
+            mock.patch.object(R.subprocess, "Popen", side_effect=fake_popen),
+            mock.patch.object(R.sandbox, "read_receipt", return_value={}),
+        ):
+            result = R._run_brokered_model(
+                ordinal=1, kind="claude_json",
+                argv=(executable, "--json-schema", "{}"), prompt="plan",
+                timeout_seconds=60, workspace=workspace, cell_root=cell,
+                environment={"TMPDIR": str(ambient), "TMP": str(ambient),
+                             "TEMP": str(ambient)}, runtime=runtime)
+
+        self.assertEqual(result["returncode"], 0)
+        self.assertEqual(process.assertions, (True, True, 0o700))
+        self.assertEqual(observed["cwd"], workspace)
+        temp_values = {
+            observed["environment"][name]
+            for name in ("TMPDIR", "TMP", "TEMP", "XDG_RUNTIME_DIR")}
+        self.assertEqual(len(temp_values), 1)
+        self.assertNotEqual(next(iter(temp_values)), str(ambient))
+        self.assertFalse(Path(next(iter(temp_values))).exists())
+        execution = result["execution"]
+        self.assertFalse(
+            execution["runtime_environment"]["ambient_host_temp_inherited"])
+        invocation.process_started.assert_called_once_with(os.getpid())
+        invocation.verify_and_teardown.assert_called_once()
+
+    def test_direct_model_temp_is_cleaned_when_cli_cannot_start(self):
+        workspace = self.root / "failed-model-temp" / "workspace"
+        cell = workspace.parent
+        workspace.mkdir(parents=True)
+        observed = {}
+
+        def fail_popen(command, *, cwd, env, **kwargs):
+            observed["temp"] = env["TMPDIR"]
+            raise OSError("fixture launch failure")
+
+        invocation = types.SimpleNamespace(
+            command_prefix=(), environment_overrides={}, pid=None,
+            policy=types.SimpleNamespace(policy_sha256="p" * 64),
+            process_started=mock.Mock(), verify_and_teardown=mock.Mock())
+        executable = str(Path(sys.executable).resolve())
+        runtime = types.SimpleNamespace(
+            identities={executable: "a" * 64}, sha256="r" * 64)
+        with (
+            mock.patch.object(
+                R.arena_controller_sandbox, "prepare_model_sandbox",
+                return_value=invocation),
+            mock.patch.object(R.subprocess, "Popen", side_effect=fail_popen),
+            self.assertRaisesRegex(OSError, "fixture launch failure"),
+        ):
+            R._run_brokered_model(
+                ordinal=1, kind="claude_json",
+                argv=(executable, "--json-schema", "{}"), prompt="plan",
+                timeout_seconds=60, workspace=workspace, cell_root=cell,
+                environment={}, runtime=runtime)
+        self.assertFalse(Path(observed["temp"]).exists())
+        invocation.process_started.assert_not_called()
+        invocation.verify_and_teardown.assert_not_called()
 
     def test_candidate_evaluation_failure_releases_short_claim(self):
         claim = FakeClaim()
