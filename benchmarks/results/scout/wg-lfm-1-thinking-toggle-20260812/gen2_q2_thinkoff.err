@@ -1,0 +1,70 @@
+0.00.001.420 I llama_completion: llama backend init
+0.00.001.425 I llama_completion: load the model and apply lora adapter, if any
+0.00.695.584 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.695.811 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.707.300 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list
+0.04.742.334 I llama_completion: llama threadpool init, n_threads = 24
+0.04.742.358 I 
+0.04.742.457 I system_info: n_threads = 24 (n_threads_batch = 24) / 192 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.04.742.458 I 
+0.04.742.595 I llama_completion: prompt: '<|turn>user
+Compute 17 * 23. Reply with only the number.<turn|>
+<|turn>model
+<|channel>thought
+<channel|>'
+0.04.742.596 I llama_completion: number of tokens in prompt = 28
+0.04.742.598 I      2 -> '<bos>'
+0.04.742.598 I    105 -> '<|turn>'
+0.04.742.599 I   2364 -> 'user'
+0.04.742.599 I    107 -> '
+'
+0.04.742.599 I  55822 -> 'Compute'
+0.04.742.600 I 236743 -> ' '
+0.04.742.600 I 236770 -> '1'
+0.04.742.600 I 236832 -> '7'
+0.04.742.600 I    808 -> ' *'
+0.04.742.600 I 236743 -> ' '
+0.04.742.601 I 236778 -> '2'
+0.04.742.601 I 236800 -> '3'
+0.04.742.601 I 236761 -> '.'
+0.04.742.601 I  24181 -> ' Reply'
+0.04.742.602 I    607 -> ' with'
+0.04.742.602 I   1186 -> ' only'
+0.04.742.602 I    506 -> ' the'
+0.04.742.603 I   1548 -> ' number'
+0.04.742.603 I 236761 -> '.'
+0.04.742.603 I    106 -> '<turn|>'
+0.04.742.603 I    107 -> '
+'
+0.04.742.603 I    105 -> '<|turn>'
+0.04.742.604 I   4368 -> 'model'
+0.04.742.604 I    107 -> '
+'
+0.04.742.604 I    100 -> '<|channel>'
+0.04.742.604 I  45518 -> 'thought'
+0.04.742.604 I    107 -> '
+'
+0.04.742.605 I    101 -> '<channel|>'
+0.04.742.605 I 
+0.04.742.611 I sampler seed: 42
+0.04.742.616 I sampler params: 
+	repeat_last_n = 64, repeat_penalty = 1.000, frequency_penalty = 0.000, presence_penalty = 0.000
+	dry_multiplier = 0.000, dry_base = 1.750, dry_allowed_length = 2, dry_penalty_last_n = -1
+	top_k = 64, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.000
+	mirostat = 0, mirostat_lr = 0.100, mirostat_ent = 5.000, adaptive_target = -1.000, adaptive_decay = 0.900
+0.04.742.623 I sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+0.04.742.623 I generate: n_ctx = 8192, n_batch = 2048, n_predict = 512, n_keep = 1
+0.04.742.624 I 
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=12 activation=99 ne00=2816)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 activation=99 ne00=2816)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 activation=99 n_as=128)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=6 activation=99 n_as=128)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=6 activation=99 ne00=2112)
+0.05.119.522 I common_perf_print:    sampling time =       1.78 ms
+0.05.119.532 I common_perf_print:    samplers time =       0.49 ms /    32 tokens
+0.05.119.541 I common_perf_print:        load time =     221.17 ms
+0.05.119.547 I common_perf_print: prompt eval time =     220.84 ms /    28 tokens (    7.89 ms per token,   126.79 tokens per second)
+0.05.119.552 I common_perf_print:        eval time =     154.08 ms /     3 runs   (   51.36 ms per token,    19.47 tokens per second)
+0.05.119.557 I common_perf_print:       total time =     377.21 ms /    31 tokens
+0.05.119.562 I common_perf_print: unaccounted time =       0.51 ms /   0.1 %      (total - sampling - prompt eval - eval) / (total)
+0.05.119.566 I common_perf_print:    graphs reused =          2

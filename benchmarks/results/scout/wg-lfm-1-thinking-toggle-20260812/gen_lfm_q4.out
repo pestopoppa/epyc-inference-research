@@ -1,0 +1,16 @@
+user
+Return ONLY a JSON object, no prose and no code fence, with keys "name" and "age" for a person named Ada who is 36 years old.
+assistant
+<think>The user wants a JSON object with keys "name" and "age" for a person named Ada who is 36 years old. The response must be ONLY a JSON object, no prose, no code fences. So output should be something like:
+
+{
+  "name": "Ada",
+  "age": 36
+}
+
+Make sure it's valid JSON. No extra text. No markdown fences. Just the JSON.</think>{
+  "name": "Ada",
+  "age": 36
+} [end of text]
+
+

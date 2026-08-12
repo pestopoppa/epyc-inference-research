@@ -1,0 +1,4 @@
+<|im_start|>user
+List the first five prime numbers as a comma-separated list, nothing else.<|im_end|>
+<|im_start|>assistant
+<think>

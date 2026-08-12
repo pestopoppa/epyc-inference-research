@@ -1,0 +1,4 @@
+<|im_start|>user
+A shelf holds 3 boxes. Each box holds 4 jars. Each jar holds 6 marbles. How many marbles in total? Reply with only the number.<|im_end|>
+<|im_start|>assistant
+<think>

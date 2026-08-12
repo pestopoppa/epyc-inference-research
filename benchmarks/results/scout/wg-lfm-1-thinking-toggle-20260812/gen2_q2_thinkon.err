@@ -1,0 +1,77 @@
+0.00.001.495 I llama_completion: llama backend init
+0.00.001.498 I llama_completion: load the model and apply lora adapter, if any
+0.00.764.430 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.764.683 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.777.401 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list
+0.04.881.598 I llama_completion: llama threadpool init, n_threads = 24
+0.04.881.622 I 
+0.04.881.702 I system_info: n_threads = 24 (n_threads_batch = 24) / 192 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.04.881.702 I 
+0.04.881.842 I llama_completion: prompt: '<|turn>system
+<|think|>
+<turn|>
+<|turn>user
+Compute 17 * 23. Reply with only the number.<turn|>
+<|turn>model
+'
+0.04.881.843 I llama_completion: number of tokens in prompt = 31
+0.04.881.845 I      2 -> '<bos>'
+0.04.881.845 I    105 -> '<|turn>'
+0.04.881.846 I   9731 -> 'system'
+0.04.881.846 I    107 -> '
+'
+0.04.881.846 I     98 -> '<|think|>'
+0.04.881.846 I    107 -> '
+'
+0.04.881.847 I    106 -> '<turn|>'
+0.04.881.847 I    107 -> '
+'
+0.04.881.847 I    105 -> '<|turn>'
+0.04.881.847 I   2364 -> 'user'
+0.04.881.847 I    107 -> '
+'
+0.04.881.848 I  55822 -> 'Compute'
+0.04.881.848 I 236743 -> ' '
+0.04.881.848 I 236770 -> '1'
+0.04.881.848 I 236832 -> '7'
+0.04.881.849 I    808 -> ' *'
+0.04.881.849 I 236743 -> ' '
+0.04.881.849 I 236778 -> '2'
+0.04.881.849 I 236800 -> '3'
+0.04.881.849 I 236761 -> '.'
+0.04.881.850 I  24181 -> ' Reply'
+0.04.881.850 I    607 -> ' with'
+0.04.881.850 I   1186 -> ' only'
+0.04.881.850 I    506 -> ' the'
+0.04.881.851 I   1548 -> ' number'
+0.04.881.851 I 236761 -> '.'
+0.04.881.851 I    106 -> '<turn|>'
+0.04.881.851 I    107 -> '
+'
+0.04.881.851 I    105 -> '<|turn>'
+0.04.881.851 I   4368 -> 'model'
+0.04.881.852 I    107 -> '
+'
+0.04.881.852 I 
+0.04.881.858 I sampler seed: 42
+0.04.881.863 I sampler params: 
+	repeat_last_n = 64, repeat_penalty = 1.000, frequency_penalty = 0.000, presence_penalty = 0.000
+	dry_multiplier = 0.000, dry_base = 1.750, dry_allowed_length = 2, dry_penalty_last_n = -1
+	top_k = 64, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.000
+	mirostat = 0, mirostat_lr = 0.100, mirostat_ent = 5.000, adaptive_target = -1.000, adaptive_decay = 0.900
+0.04.881.870 I sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+0.04.881.870 I generate: n_ctx = 8192, n_batch = 2048, n_predict = 512, n_keep = 1
+0.04.881.871 I 
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=12 activation=99 ne00=2816)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 activation=99 ne00=2816)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 activation=99 n_as=128)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=6 activation=99 n_as=128)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=6 activation=99 ne00=2112)
+0.17.155.936 I common_perf_print:    sampling time =      75.71 ms
+0.17.155.948 I common_perf_print:    samplers time =      34.95 ms /   258 tokens
+0.17.155.959 I common_perf_print:        load time =     256.25 ms
+0.17.155.967 I common_perf_print: prompt eval time =     255.94 ms /    31 tokens (    8.26 ms per token,   121.12 tokens per second)
+0.17.155.976 I common_perf_print:        eval time =   11929.06 ms /   226 runs   (   52.78 ms per token,    18.95 tokens per second)
+0.17.155.984 I common_perf_print:       total time =   12274.36 ms /   257 tokens
+0.17.155.991 I common_perf_print: unaccounted time =      13.66 ms /   0.1 %      (total - sampling - prompt eval - eval) / (total)
+0.17.155.999 I common_perf_print:    graphs reused =        224

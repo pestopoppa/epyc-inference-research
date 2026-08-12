@@ -1,0 +1,5 @@
+<|turn>user
+Compute 17 * 23. Reply with only the number.<turn|>
+<|turn>model
+<|channel>thought
+<channel|>

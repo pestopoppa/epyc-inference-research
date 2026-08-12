@@ -1,0 +1,97 @@
+0.00.002.508 I llama_completion: llama backend init
+0.00.002.514 I llama_completion: load the model and apply lora adapter, if any
+0.00.720.603 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.720.844 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.733.218 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list
+0.04.804.141 I llama_completion: llama threadpool init, n_threads = 24
+0.04.804.163 I 
+0.04.804.249 I system_info: n_threads = 24 (n_threads_batch = 24) / 192 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.04.804.251 I 
+0.04.804.518 I llama_completion: prompt: '<|turn>system
+<|think|>
+<turn|>
+<|turn>user
+Return ONLY a JSON object, no prose and no code fence, with keys "name" and "age" for a person named Ada who is 36 years old.<turn|>
+<|turn>model
+'
+0.04.804.519 I llama_completion: number of tokens in prompt = 51
+0.04.804.521 I      2 -> '<bos>'
+0.04.804.521 I    105 -> '<|turn>'
+0.04.804.523 I   9731 -> 'system'
+0.04.804.524 I    107 -> '
+'
+0.04.804.524 I     98 -> '<|think|>'
+0.04.804.524 I    107 -> '
+'
+0.04.804.524 I    106 -> '<turn|>'
+0.04.804.524 I    107 -> '
+'
+0.04.804.524 I    105 -> '<|turn>'
+0.04.804.525 I   2364 -> 'user'
+0.04.804.525 I    107 -> '
+'
+0.04.804.526 I  13293 -> 'Return'
+0.04.804.526 I  44917 -> ' ONLY'
+0.04.804.526 I    496 -> ' a'
+0.04.804.527 I  10434 -> ' JSON'
+0.04.804.527 I   2495 -> ' object'
+0.04.804.528 I 236764 -> ','
+0.04.804.528 I    951 -> ' no'
+0.04.804.528 I  57243 -> ' prose'
+0.04.804.529 I    532 -> ' and'
+0.04.804.529 I    951 -> ' no'
+0.04.804.529 I   3393 -> ' code'
+0.04.804.530 I  22295 -> ' fence'
+0.04.804.530 I 236764 -> ','
+0.04.804.530 I    607 -> ' with'
+0.04.804.531 I  13272 -> ' keys'
+0.04.804.531 I    623 -> ' "'
+0.04.804.531 I   1201 -> 'name'
+0.04.804.532 I 236775 -> '"'
+0.04.804.532 I    532 -> ' and'
+0.04.804.532 I    623 -> ' "'
+0.04.804.532 I    676 -> 'age'
+0.04.804.532 I 236775 -> '"'
+0.04.804.533 I    573 -> ' for'
+0.04.804.533 I    496 -> ' a'
+0.04.804.533 I   1589 -> ' person'
+0.04.804.534 I   7489 -> ' named'
+0.04.804.534 I  45158 -> ' Ada'
+0.04.804.534 I   1015 -> ' who'
+0.04.804.535 I    563 -> ' is'
+0.04.804.535 I 236743 -> ' '
+0.04.804.536 I 236800 -> '3'
+0.04.804.536 I 236825 -> '6'
+0.04.804.536 I   1518 -> ' years'
+0.04.804.536 I   2255 -> ' old'
+0.04.804.537 I 236761 -> '.'
+0.04.804.537 I    106 -> '<turn|>'
+0.04.804.537 I    107 -> '
+'
+0.04.804.537 I    105 -> '<|turn>'
+0.04.804.538 I   4368 -> 'model'
+0.04.804.538 I    107 -> '
+'
+0.04.804.538 I 
+0.04.804.545 I sampler seed: 42
+0.04.804.551 I sampler params: 
+	repeat_last_n = 64, repeat_penalty = 1.000, frequency_penalty = 0.000, presence_penalty = 0.000
+	dry_multiplier = 0.000, dry_base = 1.750, dry_allowed_length = 2, dry_penalty_last_n = -1
+	top_k = 64, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.000
+	mirostat = 0, mirostat_lr = 0.100, mirostat_ent = 5.000, adaptive_target = -1.000, adaptive_decay = 0.900
+0.04.804.559 I sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+0.04.804.559 I generate: n_ctx = 8192, n_batch = 2048, n_predict = 512, n_keep = 1
+0.04.804.560 I 
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=12 activation=99 ne00=2816)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 activation=99 ne00=2816)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 activation=99 n_as=128)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=6 activation=99 n_as=128)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=6 activation=99 ne00=2112)
+0.17.379.842 I common_perf_print:    sampling time =      50.54 ms
+0.17.379.873 I common_perf_print:    samplers time =      22.14 ms /   290 tokens
+0.17.379.883 I common_perf_print:        load time =     287.55 ms
+0.17.379.888 I common_perf_print: prompt eval time =     287.08 ms /    51 tokens (    5.63 ms per token,   177.65 tokens per second)
+0.17.379.894 I common_perf_print:        eval time =   12227.85 ms /   238 runs   (   51.38 ms per token,    19.46 tokens per second)
+0.17.379.899 I common_perf_print:       total time =   12575.74 ms /   289 tokens
+0.17.379.908 I common_perf_print: unaccounted time =      10.28 ms /   0.1 %      (total - sampling - prompt eval - eval) / (total)
+0.17.379.913 I common_perf_print:    graphs reused =        236

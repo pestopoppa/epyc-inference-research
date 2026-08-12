@@ -1,0 +1,82 @@
+[
+  {
+    "q": 1,
+    "think": "on",
+    "file": "/workspace/tmp/wg-lfm-1-thinking/prompt_q1_thinkon.txt",
+    "chars": 130,
+    "sha256": "20029b81cdfc0672b7d931b6924fc2e93ac8a58996e56844f77977c3c5e5ea5b",
+    "repr": "'<|turn>system\\n<|think|>\\n<turn|>\\n<|turn>user\\nWhat is the capital city of Japan? Reply with only the city name.<turn|>\\n<|turn>model\\n'"
+  },
+  {
+    "q": 1,
+    "think": "off",
+    "file": "/workspace/tmp/wg-lfm-1-thinking/prompt_q1_thinkoff.txt",
+    "chars": 126,
+    "sha256": "8016fc7110634d08a13e15381b318068301a9986e53598728ae36dffdba8d245",
+    "repr": "'<|turn>user\\nWhat is the capital city of Japan? Reply with only the city name.<turn|>\\n<|turn>model\\n<|channel>thought\\n<channel|>'"
+  },
+  {
+    "q": 2,
+    "think": "on",
+    "file": "/workspace/tmp/wg-lfm-1-thinking/prompt_q2_thinkon.txt",
+    "chars": 109,
+    "sha256": "03652494072a8a1d91e02980773304d38514485c8e72d180e4711b6400ceda72",
+    "repr": "'<|turn>system\\n<|think|>\\n<turn|>\\n<|turn>user\\nCompute 17 * 23. Reply with only the number.<turn|>\\n<|turn>model\\n'"
+  },
+  {
+    "q": 2,
+    "think": "off",
+    "file": "/workspace/tmp/wg-lfm-1-thinking/prompt_q2_thinkoff.txt",
+    "chars": 105,
+    "sha256": "658dc1c2ecd27c9ba8ba1d8e5694efe4b0c14c018bc900e2d7fc5ed06ed06bbd",
+    "repr": "'<|turn>user\\nCompute 17 * 23. Reply with only the number.<turn|>\\n<|turn>model\\n<|channel>thought\\n<channel|>'"
+  },
+  {
+    "q": 3,
+    "think": "on",
+    "file": "/workspace/tmp/wg-lfm-1-thinking/prompt_q3_thinkon.txt",
+    "chars": 139,
+    "sha256": "77fd398bddc5e3c95b90097b884e00bfe83d4c2436803173121d9e69741d2d85",
+    "repr": "'<|turn>system\\n<|think|>\\n<turn|>\\n<|turn>user\\nList the first five prime numbers as a comma-separated list, nothing else.<turn|>\\n<|turn>model\\n'"
+  },
+  {
+    "q": 3,
+    "think": "off",
+    "file": "/workspace/tmp/wg-lfm-1-thinking/prompt_q3_thinkoff.txt",
+    "chars": 135,
+    "sha256": "abffd2a899530c727afa5446f2f349311ac921af50d49accf0bd3e1b9e7e125b",
+    "repr": "'<|turn>user\\nList the first five prime numbers as a comma-separated list, nothing else.<turn|>\\n<|turn>model\\n<|channel>thought\\n<channel|>'"
+  },
+  {
+    "q": 4,
+    "think": "on",
+    "file": "/workspace/tmp/wg-lfm-1-thinking/prompt_q4_thinkon.txt",
+    "chars": 190,
+    "sha256": "cb81c9b6cb4ae4a343eb872dfc8eb938a0789e71d89aeed5cfa1d475e8fd6686",
+    "repr": "'<|turn>system\\n<|think|>\\n<turn|>\\n<|turn>user\\nReturn ONLY a JSON object, no prose and no code fence, with keys \"name\" and \"age\" for a person named Ada who is 36 years old.<turn|>\\n<|turn>model\\n'"
+  },
+  {
+    "q": 4,
+    "think": "off",
+    "file": "/workspace/tmp/wg-lfm-1-thinking/prompt_q4_thinkoff.txt",
+    "chars": 186,
+    "sha256": "0ea06b452236849d8da3193e9df963e104bfc6453203e9d447e0a9c7b2ba7a66",
+    "repr": "'<|turn>user\\nReturn ONLY a JSON object, no prose and no code fence, with keys \"name\" and \"age\" for a person named Ada who is 36 years old.<turn|>\\n<|turn>model\\n<|channel>thought\\n<channel|>'"
+  },
+  {
+    "q": 5,
+    "think": "on",
+    "file": "/workspace/tmp/wg-lfm-1-thinking/prompt_q5_thinkon.txt",
+    "chars": 191,
+    "sha256": "a289bd6a747791e63eec7b69a38c0047929fb9debeb19b13d40d41c422dbe452",
+    "repr": "'<|turn>system\\n<|think|>\\n<turn|>\\n<|turn>user\\nA shelf holds 3 boxes. Each box holds 4 jars. Each jar holds 6 marbles. How many marbles in total? Reply with only the number.<turn|>\\n<|turn>model\\n'"
+  },
+  {
+    "q": 5,
+    "think": "off",
+    "file": "/workspace/tmp/wg-lfm-1-thinking/prompt_q5_thinkoff.txt",
+    "chars": 187,
+    "sha256": "d53bdb15347b4e1aa45a5cc806574381c6341d16415dbad9e2bda084c129578b",
+    "repr": "'<|turn>user\\nA shelf holds 3 boxes. Each box holds 4 jars. Each jar holds 6 marbles. How many marbles in total? Reply with only the number.<turn|>\\n<|turn>model\\n<|channel>thought\\n<channel|>'"
+  }
+]

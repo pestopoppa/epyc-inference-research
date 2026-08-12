@@ -1,0 +1,24 @@
+system
+
+
+user
+A shelf holds 3 boxes. Each box holds 4 jars. Each jar holds 6 marbles. How many marbles in total? Reply with only the number.
+model
+<|channel>thought
+*   3 boxes.
+    *   Each box has 4 jars.
+    *   Each jar has 6 marbles.
+    *   Goal: Find the total number of marbles.
+
+    *   Total jars = (Number of boxes) × (Jars per box)
+    *   Total jars = 3 × 4 = 12 jars.
+    *   Total marbles = (Total jars) × (Marbles per jar)
+    *   Total marbles = 12 × 6 = 72 marbles.
+
+    *   3 * 4 * 6 = 12 * 6 = 72.
+
+    *   "Reply with only the number."
+
+    *   72.<channel|>72 [end of text]
+
+

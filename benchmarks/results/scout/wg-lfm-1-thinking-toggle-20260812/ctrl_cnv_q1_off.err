@@ -1,0 +1,87 @@
+[region-lock] acquiring regions ['q0'] as role='bench-cpu' (timeout_s=300.0) …
+[region-lock] held ['q0'] after 0.0s wait; running: taskset -c 0-23 numactl --membind=0 -- /mnt/raid0/llm/llama.cpp/build/bin/llama-completion -m /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf -t 24 -fa 1 --no-warmup --jinja -st -rea off --temp 0 -s 42 -n 1 -c 8192 --verbose-prompt -p What is the capital city of Japan? Reply with only the city name.
+0.00.001.408 I llama_completion: llama backend init
+0.00.001.412 I llama_completion: load the model and apply lora adapter, if any
+0.00.724.886 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.725.137 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.737.592 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list
+0.01.266.553 I llama_completion: llama threadpool init, n_threads = 24
+0.01.266.578 I llama_completion: chat template is available, enabling conversation mode (disable it with -no-cnv)
+0.01.266.579 W *** User-specified prompt will pre-start conversation, did you mean to set --system-prompt (-sys) instead?
+0.01.267.865 I llama_completion: chat template example:
+<|turn>system
+You are a helpful assistant<turn|>
+<|turn>user
+Hello<turn|>
+<|turn>model
+Hi there<turn|>
+<|turn>user
+How are you?<turn|>
+<|turn>model
+<|channel>thought
+<channel|>
+0.01.267.867 I 
+0.01.267.933 I system_info: n_threads = 24 (n_threads_batch = 24) / 192 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.01.267.934 I 
+0.01.268.902 I llama_completion: prompt: 'What is the capital city of Japan? Reply with only the city name.'
+0.01.268.904 I llama_completion: number of tokens in prompt = 31
+0.01.268.906 I      2 -> '<bos>'
+0.01.268.906 I    105 -> '<|turn>'
+0.01.268.906 I   9731 -> 'system'
+0.01.268.907 I    107 -> '
+'
+0.01.268.907 I     98 -> '<|think|>'
+0.01.268.907 I    107 -> '
+'
+0.01.268.907 I    106 -> '<turn|>'
+0.01.268.907 I    107 -> '
+'
+0.01.268.907 I    105 -> '<|turn>'
+0.01.268.908 I   2364 -> 'user'
+0.01.268.908 I    107 -> '
+'
+0.01.268.909 I   3689 -> 'What'
+0.01.268.909 I    563 -> ' is'
+0.01.268.909 I    506 -> ' the'
+0.01.268.910 I   5279 -> ' capital'
+0.01.268.910 I   3207 -> ' city'
+0.01.268.910 I    529 -> ' of'
+0.01.268.911 I   6056 -> ' Japan'
+0.01.268.911 I 236881 -> '?'
+0.01.268.912 I  24181 -> ' Reply'
+0.01.268.912 I    607 -> ' with'
+0.01.268.912 I   1186 -> ' only'
+0.01.268.913 I    506 -> ' the'
+0.01.268.913 I   3207 -> ' city'
+0.01.268.913 I   1463 -> ' name'
+0.01.268.914 I 236761 -> '.'
+0.01.268.914 I    106 -> '<turn|>'
+0.01.268.914 I    107 -> '
+'
+0.01.268.914 I    105 -> '<|turn>'
+0.01.268.915 I   4368 -> 'model'
+0.01.268.915 I    107 -> '
+'
+0.01.268.915 I 
+0.01.268.921 I sampler seed: 42
+0.01.268.927 I sampler params: 
+	repeat_last_n = 64, repeat_penalty = 1.000, frequency_penalty = 0.000, presence_penalty = 0.000
+	dry_multiplier = 0.000, dry_base = 1.750, dry_allowed_length = 2, dry_penalty_last_n = -1
+	top_k = 64, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.000
+	mirostat = 0, mirostat_lr = 0.100, mirostat_ent = 5.000, adaptive_target = -1.000, adaptive_decay = 0.900
+0.01.268.933 I sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+0.01.268.934 I generate: n_ctx = 8192, n_batch = 2048, n_predict = 1, n_keep = 0
+0.01.268.934 I 
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=12 activation=99 ne00=2816)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 activation=99 ne00=2816)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 activation=99 n_as=128)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=6 activation=99 n_as=128)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=6 activation=99 ne00=2112)
+0.01.442.703 I common_perf_print:    sampling time =       1.13 ms
+0.01.442.704 I common_perf_print:    samplers time =       0.13 ms /    32 tokens
+0.01.442.709 I common_perf_print:        load time =     174.99 ms
+0.01.442.710 I common_perf_print: prompt eval time =     172.57 ms /    31 tokens (    5.57 ms per token,   179.64 tokens per second)
+0.01.442.711 I common_perf_print:        eval time =       0.00 ms /     1 runs   (    0.00 ms per token,      inf tokens per second)
+0.01.442.711 I common_perf_print:       total time =     176.16 ms /    32 tokens
+0.01.442.712 I common_perf_print: unaccounted time =       2.46 ms /   1.4 %      (total - sampling - prompt eval - eval) / (total)
+0.01.442.712 I common_perf_print:    graphs reused =          0

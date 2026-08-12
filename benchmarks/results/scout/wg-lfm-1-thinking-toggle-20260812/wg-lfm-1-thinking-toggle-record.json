@@ -1,0 +1,428 @@
+{
+  "task": "WG-LFM-1 follow-up \u2014 MEASURE the gemma4 enable_thinking toggle",
+  "date_utc": "2026-08-12",
+  "grade": "SCOUT \u2014 NOT decision-grade",
+  "not_decision_grade_because": [
+    "host uptime exceeds the 7 d constitutional limit",
+    "CPU scope is ONE region (q0 = cores 0-23, membind 0, -t 24), not the canonical full-machine 0-95 / -t 96 recipe",
+    "n=5 prompts, n=2 repeats; no tool-schema or repair-rate measurement",
+    "raw-completion harness, not a served llama-server; gemma4 MTP self-speculation (draft_max=2) is NOT exercised, so gemma's t/s here is base decode only and production would be faster"
+  ],
+  "question": "worker_general (gemma4-26B-A4B) runs with enable_thinking=false. The 2026-08-12 scout benched every arm with thinking ON. How many tokens does the incumbent actually emit under the production setting, and does it stay correct?",
+  "method": {
+    "why_not_a_server": "enable_thinking is a chat-template kwarg applied at render time. The prompt was rendered here from the GGUF-embedded template and fed to llama-completion in RAW mode (-no-cnv), so the exact production prompt string is what gets tokenized. No process lifecycle.",
+    "render": "jinja2 3.1.6, context = {messages, bos_token:'', eos_token, add_generation_prompt:true, enable_thinking} \u2014 the same keys common/chat.cpp:common_chat_template_direct_apply_impl puts in the jinja context (chat.cpp:891-896).",
+    "bos": "bos_token rendered EMPTY because tokenizer.ggml.add_bos_token=true; llama-completion's common_tokenize(..., add_special=true, parse_special=true) prepends <bos> itself.",
+    "token_counting": "real tokenizer only \u2014 llama-tokenize for prompt tokens, llama-completion's common_perf_print eval-runs for generated tokens. No chars/4 proxy.",
+    "cpu_scope": {
+      "region": "q0",
+      "cpus": "0-23",
+      "numa": "membind=0",
+      "threads": 24,
+      "region_lock": "held via epyc-orchestrator/scripts/region-lock for every run, released after"
+    },
+    "sampling": {
+      "temp": 0,
+      "seed": 42,
+      "n_predict": 512,
+      "ctx": 8192,
+      "fa": 1,
+      "no_mmap": true
+    },
+    "env": {
+      "OMP_PROC_BIND": "spread",
+      "OMP_PLACES": "cores",
+      "OMP_WAIT_POLICY": "active",
+      "OMP_DYNAMIC": "false",
+      "GGML_IQK": "1"
+    }
+  },
+  "kernel": {
+    "tree": "/mnt/raid0/llm/llama.cpp",
+    "branch": "production-consolidated-v9",
+    "build": "b10125-0db32c06e"
+  },
+  "chat_template": {
+    "model": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+    "source": "GGUF tokenizer.chat_template",
+    "len": 17466,
+    "sha256": "36e3a42e5cf14cd0020e72d92e1fdd9970f59b82170e421f0cbe1bb42bead3f0"
+  },
+  "toggle_is_real": {
+    "verdict": "YES \u2014 enable_thinking is wired into the gemma4 template and changes the rendered prompt",
+    "mechanism": {
+      "line_179_182": "enable_thinking=true opens a system turn and injects the '<|think|>' marker",
+      "line_359_360": "if NOT enable_thinking, the generation prompt appends '<|channel>thought\\n<channel|>' \u2014 an immediately-CLOSED, EMPTY thought channel. Suppression is a prefill, not a system instruction.",
+      "default": "'not enable_thinking | default(false)' \u2014 with the kwarg absent the template DEFAULTS TO SUPPRESSED. llama.cpp overrides that: common/chat.h:261 sets enable_thinking=true, which is why the scout (no flag) got thinking."
+    },
+    "rendered_prompt_q1": {
+      "think_on": "<|turn>system\\n<|think|>\\n<turn|>\\n<|turn>user\\n...<turn|>\\n<|turn>model\\n",
+      "think_off": "<|turn>user\\n...<turn|>\\n<|turn>model\\n<|channel>thought\\n<channel|>"
+    },
+    "prompt_tokens_q1": {
+      "think_on": 31,
+      "think_off": 28
+    },
+    "controls": [
+      "llama-completion --jinja -st (llama.cpp applies the template ITSELF, default enable_thinking=true) produced a prompt token-for-token IDENTICAL to the hand-rendered think_on prompt (31 tokens). The hand render is therefore llama.cpp's render.",
+      "thinking-ON reasoning text reproduces the 2026-08-12 scout: q1 and q5 byte-identical, q2/q3/q4 same structure with minor wording drift (llama-cli's embedded-server decode path vs llama-completion; my own harness is bit-reproducible across repeats).",
+      "repeat run: gen-token counts identical in both conditions (see *_rep2)."
+    ]
+  },
+  "production_path_verified": {
+    "registry": "orchestration/derived/stack_priors.yaml roles.worker_general.acceleration.enable_thinking=false, thinking_control={mode: reasoning_off, source: reasoning}; serving.launch.runtime.flags.reasoning='off' (also toolrunner, worker_explore, worker_math \u2014 all four gemma4 roles).",
+    "server": "llama-server --reasoning off -> params_base.enable_reasoning=0 -> server-context.cpp:1463 enable_thinking=false -> server-common.cpp:1064 inputs.enable_thinking -> chat.cpp:895 jinja context. The served render is the think_off render measured here.",
+    "cli_caveat": "llama-completion IGNORES -rea off (default_template_kwargs is consumed only by common_chat_format_example in that tool) \u2014 verified: -rea off still rendered 31 tokens. This is a CLI-tool gap, not a serving gap; do not use llama-cli/llama-completion -rea to reproduce production thinking state."
+  },
+  "measured": {
+    "gemma_think_on": {
+      "gen_tok_per_prompt": [
+        66,
+        226,
+        211,
+        238,
+        161
+      ],
+      "total_gen_tok": 902,
+      "prompt_tok_per_prompt": [
+        31,
+        31,
+        32,
+        51,
+        49
+      ],
+      "decode_s": 46.866,
+      "wall_s": 48.416,
+      "mean_tg_t_s": 19.2
+    },
+    "gemma_think_on_rep2": {
+      "gen_tok_per_prompt": [
+        66,
+        226,
+        211,
+        238,
+        161
+      ],
+      "total_gen_tok": 902,
+      "prompt_tok_per_prompt": [
+        31,
+        31,
+        32,
+        51,
+        49
+      ],
+      "decode_s": 48.271,
+      "wall_s": 49.953,
+      "mean_tg_t_s": 18.55
+    },
+    "gemma_think_off": {
+      "gen_tok_per_prompt": [
+        1,
+        3,
+        14,
+        13,
+        2
+      ],
+      "total_gen_tok": 33,
+      "prompt_tok_per_prompt": [
+        28,
+        28,
+        29,
+        48,
+        46
+      ],
+      "decode_s": 1.685,
+      "wall_s": 2.987,
+      "mean_tg_t_s": 19.4
+    },
+    "gemma_think_off_rep2": {
+      "gen_tok_per_prompt": [
+        1,
+        3,
+        14,
+        13,
+        2
+      ],
+      "total_gen_tok": 33,
+      "prompt_tok_per_prompt": [
+        28,
+        28,
+        29,
+        48,
+        46
+      ],
+      "decode_s": 1.639,
+      "wall_s": 2.861,
+      "mean_tg_t_s": 19.68
+    },
+    "lfm25_q4km": {
+      "gen_tok_per_prompt": [
+        56,
+        74,
+        155,
+        104,
+        112
+      ],
+      "total_gen_tok": 501,
+      "prompt_tok_per_prompt": [
+        26,
+        24,
+        25,
+        44,
+        44
+      ],
+      "decode_s": 12.507,
+      "wall_s": 12.977,
+      "mean_tg_t_s": 40.34
+    }
+  },
+  "measured_rows": {
+    "gemma_think_on": [
+      {
+        "pp_ms": 261.54,
+        "pp_tok": 31,
+        "gen_ms": 3484.32,
+        "gen_tok": 66,
+        "tg": 18.94,
+        "total_ms": 3765.76
+      },
+      {
+        "pp_ms": 238.33,
+        "pp_tok": 31,
+        "gen_ms": 11774.72,
+        "gen_tok": 226,
+        "tg": 19.19,
+        "total_ms": 12076.8
+      },
+      {
+        "pp_ms": 245.06,
+        "pp_tok": 32,
+        "gen_ms": 11031.4,
+        "gen_tok": 211,
+        "tg": 19.13,
+        "total_ms": 11328.56
+      },
+      {
+        "pp_ms": 287.08,
+        "pp_tok": 51,
+        "gen_ms": 12227.85,
+        "gen_tok": 238,
+        "tg": 19.46,
+        "total_ms": 12575.74
+      },
+      {
+        "pp_ms": 278.82,
+        "pp_tok": 49,
+        "gen_ms": 8348.1,
+        "gen_tok": 161,
+        "tg": 19.29,
+        "total_ms": 8669.31
+      }
+    ],
+    "gemma_think_on_rep2": [
+      {
+        "pp_ms": 275.42,
+        "pp_tok": 31,
+        "gen_ms": 3806.75,
+        "gen_tok": 66,
+        "tg": 17.34,
+        "total_ms": 4106.93
+      },
+      {
+        "pp_ms": 255.94,
+        "pp_tok": 31,
+        "gen_ms": 11929.06,
+        "gen_tok": 226,
+        "tg": 18.95,
+        "total_ms": 12274.36
+      },
+      {
+        "pp_ms": 258.19,
+        "pp_tok": 32,
+        "gen_ms": 11480.15,
+        "gen_tok": 211,
+        "tg": 18.38,
+        "total_ms": 11794.78
+      },
+      {
+        "pp_ms": 323.94,
+        "pp_tok": 51,
+        "gen_ms": 12768.49,
+        "gen_tok": 238,
+        "tg": 18.64,
+        "total_ms": 13153.99
+      },
+      {
+        "pp_ms": 294.47,
+        "pp_tok": 49,
+        "gen_ms": 8286.1,
+        "gen_tok": 161,
+        "tg": 19.43,
+        "total_ms": 8623.12
+      }
+    ],
+    "gemma_think_off": [
+      {
+        "pp_ms": 239.93,
+        "pp_tok": 28,
+        "gen_ms": 54.32,
+        "gen_tok": 1,
+        "tg": 18.41,
+        "total_ms": 295.88
+      },
+      {
+        "pp_ms": 281.54,
+        "pp_tok": 28,
+        "gen_ms": 155.56,
+        "gen_tok": 3,
+        "tg": 19.29,
+        "total_ms": 439.23
+      },
+      {
+        "pp_ms": 225.4,
+        "pp_tok": 29,
+        "gen_ms": 683.03,
+        "gen_tok": 14,
+        "tg": 20.5,
+        "total_ms": 913.25
+      },
+      {
+        "pp_ms": 275.74,
+        "pp_tok": 48,
+        "gen_ms": 692.71,
+        "gen_tok": 13,
+        "tg": 18.77,
+        "total_ms": 972.97
+      },
+      {
+        "pp_ms": 264.13,
+        "pp_tok": 46,
+        "gen_ms": 99.84,
+        "gen_tok": 2,
+        "tg": 20.03,
+        "total_ms": 365.98
+      }
+    ],
+    "gemma_think_off_rep2": [
+      {
+        "pp_ms": 226.5,
+        "pp_tok": 28,
+        "gen_ms": 53.95,
+        "gen_tok": 1,
+        "tg": 18.53,
+        "total_ms": 281.95
+      },
+      {
+        "pp_ms": 220.84,
+        "pp_tok": 28,
+        "gen_ms": 154.08,
+        "gen_tok": 3,
+        "tg": 19.47,
+        "total_ms": 377.21
+      },
+      {
+        "pp_ms": 228.0,
+        "pp_tok": 29,
+        "gen_ms": 702.09,
+        "gen_tok": 14,
+        "tg": 19.94,
+        "total_ms": 934.95
+      },
+      {
+        "pp_ms": 266.76,
+        "pp_tok": 48,
+        "gen_ms": 627.44,
+        "gen_tok": 13,
+        "tg": 20.72,
+        "total_ms": 898.94
+      },
+      {
+        "pp_ms": 264.97,
+        "pp_tok": 46,
+        "gen_ms": 101.2,
+        "gen_tok": 2,
+        "tg": 19.76,
+        "total_ms": 368.15
+      }
+    ],
+    "lfm25_q4km": [
+      {
+        "pp_ms": 75.08,
+        "pp_tok": 26,
+        "gen_ms": 1304.68,
+        "gen_tok": 56,
+        "tg": 42.92,
+        "total_ms": 1390.7
+      },
+      {
+        "pp_ms": 69.54,
+        "pp_tok": 24,
+        "gen_ms": 1870.49,
+        "gen_tok": 74,
+        "tg": 39.56,
+        "total_ms": 1951.53
+      },
+      {
+        "pp_ms": 74.79,
+        "pp_tok": 25,
+        "gen_ms": 3895.98,
+        "gen_tok": 155,
+        "tg": 39.78,
+        "total_ms": 3996.14
+      },
+      {
+        "pp_ms": 82.8,
+        "pp_tok": 44,
+        "gen_ms": 2643.88,
+        "gen_tok": 104,
+        "tg": 39.34,
+        "total_ms": 2746.97
+      },
+      {
+        "pp_ms": 81.64,
+        "pp_tok": 44,
+        "gen_ms": 2791.72,
+        "gen_tok": 112,
+        "tg": 40.12,
+        "total_ms": 2891.39
+      }
+    ]
+  },
+  "correctness_thinking_off": {
+    "verdict": "5/5 correct \u2014 identical answers to the scout's thinking-ON run",
+    "answers": {
+      "1": "Tokyo",
+      "2": "391",
+      "3": "2, 3, 5, 7, 11",
+      "4": "{\"name\": \"Ada\", \"age\": 36}",
+      "5": "72"
+    }
+  },
+  "headline": {
+    "gemma_tokens_thinking_on_total_5_prompts": 902,
+    "gemma_tokens_thinking_off_total_5_prompts": 33,
+    "token_reduction": "27.3x",
+    "gemma_answer_tokens_per_prompt_thinking_off": [
+      1,
+      3,
+      14,
+      13,
+      2
+    ],
+    "lfm25_q4km_tokens_total_5_prompts": 501,
+    "prefill_plus_decode_s_over_5_prompts": {
+      "gemma_think_on": 48.177,
+      "gemma_think_off": 2.972,
+      "lfm25_q4km": 12.891
+    },
+    "verdict": "mainC's DIRECTION is confirmed and its MAGNITUDE is not. Production gemma (thinking off) answers all five prompts in 2.97 s vs LFM2.5's 12.89 s \u2014 4.3x faster, not ~31x. Thinking ON, gemma takes 48.18 s \u2014 3.7x SLOWER than LFM. The per-token decode advantage LFM holds (2.08x measured here) is real but is swamped by the ~15x token-count difference the toggle creates.",
+    "what_was_wrong_with_the_inferred_number": "the chars/4 proxy undercounted gemma's thinking-ON emission (902 measured vs ~599 inferred) and LFM's (501 measured vs ~398 inferred), and the ~0.3 s figure for production gemma applied a rate near LFM's to gemma's tokens. Measured answer emission is 6.6 tokens/prompt (not ~12) but gemma decodes at 19.4 t/s (not ~40), and per-call prefill on a 26B MoE costs ~0.26 s \u2014 so 2.97 s, not 0.3 s."
+  },
+  "artifacts": {
+    "chat_template_gemma": "chat_template_gemma-4-26B-A4B-it-ORIG-Q4_K_M.jinja",
+    "renderer": "render.py (gemma, both conditions) / render_lfm.py (LFM baseline)",
+    "runner": "measure.sh (gemma) / measure_rep2.sh (repeat) / measure_lfm.sh (LFM)",
+    "prompts": "prompt_q{1..5}_think{on,off}.txt, lfm_q{1..5}.txt",
+    "raw": "gen_*.out / gen_*.err (stderr carries common_perf_print and the --verbose-prompt token dump)"
+  }
+}

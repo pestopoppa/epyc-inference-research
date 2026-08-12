@@ -1,0 +1,4 @@
+<|im_start|>user
+Compute 17 * 23. Reply with only the number.<|im_end|>
+<|im_start|>assistant
+<think>

@@ -1,0 +1,70 @@
+0.00.002.427 I llama_completion: llama backend init
+0.00.002.434 I llama_completion: load the model and apply lora adapter, if any
+0.00.719.728 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.719.974 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.733.367 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list
+0.04.808.842 I llama_completion: llama threadpool init, n_threads = 24
+0.04.808.863 I 
+0.04.808.947 I system_info: n_threads = 24 (n_threads_batch = 24) / 192 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.04.808.948 I 
+0.04.809.123 I llama_completion: prompt: '<|turn>user
+What is the capital city of Japan? Reply with only the city name.<turn|>
+<|turn>model
+<|channel>thought
+<channel|>'
+0.04.809.125 I llama_completion: number of tokens in prompt = 28
+0.04.809.126 I      2 -> '<bos>'
+0.04.809.127 I    105 -> '<|turn>'
+0.04.809.127 I   2364 -> 'user'
+0.04.809.128 I    107 -> '
+'
+0.04.809.128 I   3689 -> 'What'
+0.04.809.128 I    563 -> ' is'
+0.04.809.129 I    506 -> ' the'
+0.04.809.129 I   5279 -> ' capital'
+0.04.809.130 I   3207 -> ' city'
+0.04.809.130 I    529 -> ' of'
+0.04.809.131 I   6056 -> ' Japan'
+0.04.809.131 I 236881 -> '?'
+0.04.809.132 I  24181 -> ' Reply'
+0.04.809.132 I    607 -> ' with'
+0.04.809.132 I   1186 -> ' only'
+0.04.809.132 I    506 -> ' the'
+0.04.809.133 I   3207 -> ' city'
+0.04.809.133 I   1463 -> ' name'
+0.04.809.133 I 236761 -> '.'
+0.04.809.133 I    106 -> '<turn|>'
+0.04.809.134 I    107 -> '
+'
+0.04.809.134 I    105 -> '<|turn>'
+0.04.809.134 I   4368 -> 'model'
+0.04.809.136 I    107 -> '
+'
+0.04.809.136 I    100 -> '<|channel>'
+0.04.809.136 I  45518 -> 'thought'
+0.04.809.137 I    107 -> '
+'
+0.04.809.137 I    101 -> '<channel|>'
+0.04.809.137 I 
+0.04.809.143 I sampler seed: 42
+0.04.809.150 I sampler params: 
+	repeat_last_n = 64, repeat_penalty = 1.000, frequency_penalty = 0.000, presence_penalty = 0.000
+	dry_multiplier = 0.000, dry_base = 1.750, dry_allowed_length = 2, dry_penalty_last_n = -1
+	top_k = 64, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.000
+	mirostat = 0, mirostat_lr = 0.100, mirostat_ent = 5.000, adaptive_target = -1.000, adaptive_decay = 0.900
+0.04.809.156 I sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+0.04.809.157 I generate: n_ctx = 8192, n_batch = 2048, n_predict = 512, n_keep = 1
+0.04.809.157 I 
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=12 activation=99 ne00=2816)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 activation=99 ne00=2816)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 activation=99 n_as=128)
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=6 activation=99 n_as=128)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=6 activation=99 ne00=2112)
+0.05.104.711 I common_perf_print:    sampling time =       1.21 ms
+0.05.104.715 I common_perf_print:    samplers time =       0.24 ms /    30 tokens
+0.05.104.719 I common_perf_print:        load time =     240.29 ms
+0.05.104.721 I common_perf_print: prompt eval time =     239.93 ms /    28 tokens (    8.57 ms per token,   116.70 tokens per second)
+0.05.104.722 I common_perf_print:        eval time =      54.32 ms /     1 runs   (   54.32 ms per token,    18.41 tokens per second)
+0.05.104.722 I common_perf_print:       total time =     295.88 ms /    29 tokens
+0.05.104.723 I common_perf_print: unaccounted time =       0.42 ms /   0.1 %      (total - sampling - prompt eval - eval) / (total)
+0.05.104.723 I common_perf_print:    graphs reused =          0

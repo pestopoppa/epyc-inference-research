@@ -1,0 +1,15 @@
+system
+
+
+user
+What is the capital city of Japan? Reply with only the city name.
+model
+<|channel>thought
+The user is asking for the capital city of Japan.
+The constraint is to reply with *only* the city name.
+
+1.  Identify the capital of Japan: Tokyo.
+2.  Check constraints: "Reply with only the city name."
+3.  Final output: Tokyo.<channel|>Tokyo [end of text]
+
+

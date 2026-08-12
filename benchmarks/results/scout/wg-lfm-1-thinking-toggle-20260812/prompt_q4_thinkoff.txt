@@ -1,0 +1,5 @@
+<|turn>user
+Return ONLY a JSON object, no prose and no code fence, with keys "name" and "age" for a person named Ada who is 36 years old.<turn|>
+<|turn>model
+<|channel>thought
+<channel|>

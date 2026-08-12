@@ -1,0 +1,26 @@
+system
+
+
+user
+Return ONLY a JSON object, no prose and no code fence, with keys "name" and "age" for a person named Ada who is 36 years old.
+model
+<|channel>thought
+*   Input: "Return ONLY a JSON object, no prose and no code fence, with keys 'name' and 'age' for a person named Ada who is 36 years old."
+    *   Constraints:
+        *   Format: JSON object.
+        *   Content: `name` (Ada), `age` (36).
+        *   Negative constraints: No prose, no code fence.
+        *   Output type: ONLY the JSON object.
+
+    *   `{"name": "Ada", "age": 36}`
+
+    *   Is it JSON? Yes.
+    *   Are keys "name" and "age" present? Yes.
+    *   Is the value for "name" "Ada"? Yes.
+    *   Is the value for "age" 36? Yes.
+    *   Is there prose? No.
+    *   Is there a code fence (```json ... ```)? No.
+
+    `{"name": "Ada", "age": 36}`<channel|>{"name": "Ada", "age": 36} [end of text]
+
+

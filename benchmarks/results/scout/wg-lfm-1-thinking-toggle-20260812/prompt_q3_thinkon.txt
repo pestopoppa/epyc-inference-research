@@ -1,0 +1,6 @@
+<|turn>system
+<|think|>
+<turn|>
+<|turn>user
+List the first five prime numbers as a comma-separated list, nothing else.<turn|>
+<|turn>model

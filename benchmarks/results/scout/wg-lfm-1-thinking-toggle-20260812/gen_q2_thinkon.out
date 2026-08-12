@@ -1,0 +1,34 @@
+system
+
+
+user
+Compute 17 * 23. Reply with only the number.
+model
+<|channel>thought
+The user wants to multiply 17 and 23.
+
+    *   Method 1: Standard multiplication
+        17 * 23 = 17 * (20 + 3)
+        = (17 * 20) + (17 * 3)
+        = 340 + 51
+        = 391
+
+    *   Method 2: Difference of squares
+        17 * 23 = (20 - 3) * (20 + 3)
+        = 20^2 - 3^2
+        = 400 - 9
+        = 391
+
+    *   Method 3: Long multiplication
+          23
+        x 17
+        ----
+         161 (7 * 23)
+         230 (10 * 23)
+        ----
+         391
+
+The result is 391.
+The user requested "only the number".<channel|>391 [end of text]
+
+

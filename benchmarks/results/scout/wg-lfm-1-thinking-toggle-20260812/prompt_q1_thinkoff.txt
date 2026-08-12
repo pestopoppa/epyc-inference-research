@@ -1,0 +1,5 @@
+<|turn>user
+What is the capital city of Japan? Reply with only the city name.<turn|>
+<|turn>model
+<|channel>thought
+<channel|>

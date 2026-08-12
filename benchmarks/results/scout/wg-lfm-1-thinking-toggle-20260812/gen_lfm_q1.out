@@ -1,0 +1,9 @@
+user
+What is the capital city of Japan? Reply with only the city name.
+assistant
+<think>
+The user is asking for the capital city of Japan. This is a straightforward factual question. The capital of Japan is Tokyo. The instruction says to reply with only the city name. So I should output just "Tokyo" without any additional text.
+</think>
+Tokyo [end of text]
+
+

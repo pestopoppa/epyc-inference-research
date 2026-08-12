@@ -1,0 +1,12 @@
+user
+Compute 17 * 23. Reply with only the number.
+assistant
+<think>The user wants me to compute the product of 17 and 23.
+The calculation is $17 \times 23$.
+$17 \times 20 = 340$
+$17 \times 3 = 51$
+$340 + 51 = 391$
+The user requested "Reply with only the number."
+So the output should be "391".</think>391 [end of text]
+
+
