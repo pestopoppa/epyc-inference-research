@@ -76,11 +76,42 @@ class CampaignIdentity(unittest.TestCase):
         self.assertEqual(args.campaign_id, "ak-controls-v9-parser")
         self.assertEqual(args.output, Path("/tmp/ak-controls-v9-parser"))
 
+    def test_parser_makes_live_and_existing_composition_exclusive(self):
+        with self.assertRaises(SystemExit):
+            live_controls.build_parser().parse_args([
+                "--campaign-id", "ak-controls-v9-parser",
+                "--output", "/tmp/ak-controls-v9-parser",
+                "--execute", "--evaluate-existing",
+            ])
+
     def test_current_source_claim_names_v9_and_exact_commit(self):
         reason = live_controls.CURRENT_SOURCE_CORRECTNESS_REASON
         self.assertIn("frozen v9 source", reason)
         self.assertIn(live_controls.PRODUCTION_COMMIT, reason)
         self.assertNotIn("frozen v8 source", reason)
+
+    def test_existing_composition_cannot_overwrite_a_terminal_bundle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "summary.json").write_text("{}\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "already exists"):
+                live_controls.evaluate_existing(
+                    root, campaign_id="ak-controls-v9-terminal")
+
+
+class RecordedCompositionMaterial(unittest.TestCase):
+
+    def test_canonical_paired_block_round_trips(self):
+        block = statistics.PairedBlock(
+            block_index=3, unit_id="fixture:pp512", stratum="selection",
+            order="candidate_first", anchor_samples=(1.0,),
+            candidate_samples=(1.1,), measured_at="2026-08-12T00:00:00+00:00")
+        self.assertEqual(
+            live_controls._paired_block_from_raw(block.to_list()), block)
+
+    def test_noncanonical_paired_block_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "nine-field"):
+            live_controls._paired_block_from_raw([0, "too-short"])
 
 
 class ControlEffectReachability(unittest.TestCase):
