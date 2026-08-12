@@ -1,0 +1,36 @@
+{
+  "schema": "epyc.mmlu_pro_hardened_control.attestation.v1",
+  "campaign_id": "mmlu-pro-hardened-control-20260812",
+  "arm": "A3_qwen36_27b_mtp_q8_v9",
+  "suite": "mmlu_pro",
+  "n": 150,
+  "seed": 42,
+  "sampling": {
+    "stratified": true,
+    "tier_counts": {"1": 50, "2": 50, "3": 50}
+  },
+  "kernel": "production-consolidated-v9",
+  "binary_version": "10125 (0db32c06e)",
+  "model": "/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf",
+  "device": "ROCm0",
+  "device_claim_id": "akd-88db6688708f401c",
+  "device_claim_acquired_at": "2026-08-12T08:07:15.291810+00:00",
+  "device_claim_released_at": "2026-08-12T08:09:16.661231+00:00",
+  "questions_manifest_sha256": "2d3694d2f0dfd2e5653c88dab4c28e9323ceaf94929129298ec012b9da6d2bcd",
+  "source_arrow_sha256": "4c741944e3b53719b433be6e7916e4ab9e8ff33f70e9c365614b4e317c0476bb",
+  "result_sha256": "236c3859d7e1de23b7b8b48b8edb9420c183ab5266f8ecc66d0747c865b3d08b",
+  "per_question_sha256": "94fe6dcd11fd21dc32c867496105231b5524a68e5ebf3a77b6171423122253e3",
+  "result": {
+    "correct": 88,
+    "accuracy": 0.5866666666666667,
+    "truncated": 21,
+    "request_errors": 0,
+    "tier_accuracy": {"1": 0.52, "2": 0.76, "3": 0.48}
+  },
+  "cleanup": {
+    "server_pid": 2821397,
+    "server_dead_confirmed": true,
+    "device_claim_free_confirmed": true,
+    "kfd_processes_after": 0
+  }
+}
