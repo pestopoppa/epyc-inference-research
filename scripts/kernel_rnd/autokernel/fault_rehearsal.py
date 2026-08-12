@@ -49,6 +49,11 @@ from .resource import device_claim as device_claim_mod
 
 
 RECEIPT_SCHEMA = "epyc.autokernel.host_process_fault_rehearsal.v1"
+DEPENDENCY_EVIDENCE_SCHEMA = (
+    "epyc.autokernel.host_process_fault_rehearsal_dependency_evidence.v1"
+)
+DEPENDENCY_EVIDENCE_CLASSIFICATION = "dependency_evidence_only"
+DEPENDENCY_SUPPORT_SCOPE = "rehearsal_run"
 CAPTURE_MODE = "measured_host_process_rehearsal"
 CAMPAIGN_PREFIX = "ak-fault-rehearsal-"
 DISPOSABLE_DEVICE_ID = "autokernel_rehearsal0"
@@ -706,6 +711,69 @@ def _authority_boundary() -> dict[str, bool]:
     }
 
 
+def _leg_process_identities(leg: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Return only identities natively captured by this leg; never synthesize one."""
+    rows: list[dict[str, Any]] = []
+    if leg.get("name") == "durable_journal_crash_restart_replay":
+        for role, field in (
+            ("crash_process", "crash_process"),
+            ("restart_process", "restart_process"),
+        ):
+            identity = leg.get(field)
+            if isinstance(identity, Mapping):
+                rows.append({"role": role, "identity": dict(identity)})
+    elif leg.get("name") == "resource_revocation_non_preemption":
+        teardown = leg.get("teardown")
+        identity = teardown.get("identity") if isinstance(teardown, Mapping) else None
+        if isinstance(identity, Mapping):
+            rows.append({"role": "claim_holder_process", "identity": dict(identity)})
+    return rows
+
+
+def _dependency_evidence_rows(receipt: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Build prospective dependency evidence without manufacturing a measurement tuple.
+
+    The three legs retain their native evidence, but they all name one run-level support key.
+    Consequently a consumer cannot count three legs from one rehearsal as three corroborating
+    witnesses.  The explicit false fields keep this seam outside the measurement carrier until a
+    dependency-evidence carrier and warrant rule exist.
+    """
+    campaign_id = receipt["campaign_id"]
+    run_identity = {"receipt_schema": RECEIPT_SCHEMA, "campaign_id": campaign_id}
+    support_key = "akfault_run_" + _sha256_bytes(_canonical_bytes(run_identity))[:24]
+    environment = receipt["environment"]
+    source_identity = dict(environment["source_tree"])
+    producer_identity = {
+        "path": environment["producer_path"],
+        "sha256": environment["producer_sha256"],
+    }
+    rows = []
+    for leg in receipt["legs"]:
+        leg_name = leg["name"]
+        row: dict[str, Any] = {
+            "schema": DEPENDENCY_EVIDENCE_SCHEMA,
+            "evidence_id": "akfault_" + _sha256_bytes(
+                _canonical_bytes([run_identity, leg_name])
+            )[:24],
+            "classification": DEPENDENCY_EVIDENCE_CLASSIFICATION,
+            "support_scope": DEPENDENCY_SUPPORT_SCOPE,
+            "support_key": support_key,
+            "run_identity": run_identity,
+            "run_status": receipt["status"],
+            "leg_name": leg_name,
+            "leg_status": leg["status"],
+            "source_identity": source_identity,
+            "producer_identity": producer_identity,
+            "process_identities": _leg_process_identities(leg),
+            "performance_measurement": False,
+            "corroborating_witness": False,
+            "belief_measurement_emitted": False,
+        }
+        row["evidence_sha256"] = _sha256_bytes(_canonical_bytes(row))
+        rows.append(row)
+    return rows
+
+
 def validate_receipt(receipt: Mapping[str, Any]) -> list[str]:
     """Validate the durable envelope without trusting producer-derived fields."""
     violations: list[str] = []
@@ -742,10 +810,35 @@ def validate_receipt(receipt: Mapping[str, Any]) -> list[str]:
     expected_authority = _authority_boundary()
     if authority != expected_authority:
         violations.append("authority must be the exact all-false authority boundary")
-    source = (receipt.get("environment") or {}).get("source_tree")
+    environment = receipt.get("environment") or {}
+    source = environment.get("source_tree")
     commit = source.get("commit") if isinstance(source, Mapping) else None
     if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit):
         violations.append("environment.source_tree.commit must be a full commit id")
+    producer_path = environment.get("producer_path")
+    producer_sha256 = environment.get("producer_sha256")
+    if not isinstance(producer_path, str) or not producer_path:
+        violations.append("environment.producer_path must be non-empty")
+    if not isinstance(producer_sha256, str) or not SHA256_RE.fullmatch(producer_sha256):
+        violations.append("environment.producer_sha256 must be a lowercase SHA-256")
+    dependency_evidence = receipt.get("dependency_evidence")
+    if not isinstance(dependency_evidence, list) or len(dependency_evidence) != len(EXPECTED_LEGS):
+        violations.append("dependency_evidence must contain exactly one row per recovery leg")
+    elif (
+        isinstance(campaign_id, str)
+        and isinstance(source, Mapping)
+        and isinstance(producer_path, str)
+        and producer_path
+        and isinstance(producer_sha256, str)
+        and SHA256_RE.fullmatch(producer_sha256)
+        and len(legs) == len(EXPECTED_LEGS)
+        and all(isinstance(leg, Mapping) for leg in legs)
+    ):
+        expected_evidence = _dependency_evidence_rows(receipt)
+        if dependency_evidence != expected_evidence:
+            violations.append(
+                "dependency_evidence must bind each native leg and share one rehearsal-run key"
+            )
     claimed_hash = receipt.get("receipt_sha256")
     body = dict(receipt)
     body.pop("receipt_sha256", None)
@@ -817,6 +910,7 @@ def run_fault_rehearsal(
             "process_selection": "captured_children_only_no_name_pattern_scan",
             "legs": legs,
         }
+        receipt["dependency_evidence"] = _dependency_evidence_rows(receipt)
         receipt["receipt_sha256"] = _sha256_bytes(_canonical_bytes(receipt))
         violations = validate_receipt(receipt)
         if violations:
