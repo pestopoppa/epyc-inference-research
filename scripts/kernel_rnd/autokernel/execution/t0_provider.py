@@ -1236,6 +1236,10 @@ class T0ExecutionPlan:
     #: records. Each entry is ``(existing_gate_id, check_name, Check)``. The
     #: evaluator folds these into the named gate; they are not advisory notes.
     projection_checks: tuple = ()
+    #: Hash-bound outputs from the sensitivity/hostile/checker reducers.  They
+    #: become verdict-bearing only after ``evidence_for`` binds them to the live
+    #: request's candidate source and evaluator bundle.
+    source_prerequisites: tuple = ()
     state_safety_probe: bool = False
     #: Committed source delta from the reviewed measurement base. `None` means
     #: the two C6 source detectors did not run, and empty findings then remain
@@ -1321,6 +1325,21 @@ class T0ExecutionPlan:
             _req_str(check_name, "plan.projection_checks[].check_name")
             if not isinstance(check, schemas.Check):
                 raise TypeError("plan.projection_checks[].check must be a schemas.Check")
+        prerequisite_ids = []
+        for item in self.source_prerequisites:
+            if not isinstance(item, correctness.SourcePrerequisiteEvidence):
+                raise TypeError(
+                    "plan.source_prerequisites entries must be "
+                    "correctness.SourcePrerequisiteEvidence")
+            prerequisite_ids.append(item.prerequisite_id)
+            if item.candidate_source_sha256 != self.candidate.source_sha256:
+                raise ValueError(
+                    "plan source prerequisite names a different candidate source SHA-256")
+        if len(prerequisite_ids) != len(set(prerequisite_ids)):
+            raise ValueError("plan.source_prerequisites contains duplicate ids")
+        if self.source_prerequisites and not (self.candidate_diff_text or "").strip():
+            raise ValueError(
+                "a parameter/no-source plan cannot carry source prerequisites")
 
 
 # =============================================================================
@@ -3350,6 +3369,8 @@ class ExecutedT0EvidenceProvider:
             determinism=determinism,
             linkage=linkage,
             anti_reward_hacking=anti_reward,
+            source_candidate=bool((self._plan.candidate_diff_text or "").strip()),
+            source_prerequisites=self._plan.source_prerequisites,
             projection_checks=self._plan.projection_checks,
         )
 

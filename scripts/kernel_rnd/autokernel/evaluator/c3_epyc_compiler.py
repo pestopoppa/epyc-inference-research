@@ -73,6 +73,15 @@ RUNNER_BINDINGS = {
             "cli": "t1b.llama_gpu.llama_bench_decode.v1",
             "python_entrypoint": "autokernel.execution.microbench",
         },
+        "baseline": {
+            "provider": c3.LLAMA_CPP_PRODUCTION_V9,
+            "branch": c3.PRODUCTION_V9_BRANCH,
+            "source_commit": c3.PRODUCTION_V9_COMMIT,
+            "version": c3.PRODUCTION_V9_VERSION,
+            "attestation_ref": c3.PRODUCTION_V9_FREEZE_ATTESTATION_REF,
+            "attestation_sha256": c3.PRODUCTION_V9_FREEZE_ATTESTATION_SHA256,
+            "binary_and_linkage_sha256": "receipt_required",
+        },
         "boundary": "experimental tree/binary only; never patches frozen production",
     },
 }
@@ -216,13 +225,27 @@ def _surface(payload: Mapping[str, Any]) -> c3.ExactOpSurface:
 def _timing(payload: Mapping[str, Any], surface: c3.ExactOpSurface,
             label: str) -> c3.TimingObservation:
     payload = _mapping(payload, label)
-    _exact_keys(payload, required={"provider", "implementation_sha256", "samples_ns",
-                                   "evidence_ref", "evidence_sha256"}, label=label)
+    provider = payload.get("provider")
+    required = {"provider", "implementation_sha256", "samples_ns",
+                "evidence_ref", "evidence_sha256"}
+    optional = ({"production_baseline"}
+                if provider == c3.LLAMA_CPP_PRODUCTION_V9 else set())
+    _exact_keys(payload, required=required, optional=optional, label=label)
+    production_baseline = None
+    if provider == c3.LLAMA_CPP_PRODUCTION_V9:
+        identity = _mapping(payload.get("production_baseline"),
+                            f"{label}.production_baseline")
+        identity_fields = {"branch", "source_commit", "version", "binary_sha256",
+                           "linkage_sha256", "attestation_ref", "attestation_sha256"}
+        _exact_keys(identity, required=identity_fields,
+                    label=f"{label}.production_baseline")
+        production_baseline = c3.FrozenProductionBaseline(**identity)
     return c3.TimingObservation(
         provider=payload["provider"], surface=surface,
         implementation_sha256=payload["implementation_sha256"],
         samples_ns=payload["samples_ns"], evidence_ref=payload["evidence_ref"],
-        evidence_sha256=payload["evidence_sha256"])
+        evidence_sha256=payload["evidence_sha256"],
+        production_baseline=production_baseline)
 
 
 def _gate_dict(gate: c3.FastPGate) -> dict[str, Any]:
@@ -274,8 +297,13 @@ def _compile_case(case: c3.EpycOpCase, payload: Mapping[str, Any], *,
     return gate, {
         "case_id": case_id, "state": state, "gate": _gate_dict(gate),
         "evidence": {
-            "vendor": [{"provider": row.provider, "evidence_ref": row.evidence_ref,
-                        "evidence_sha256": row.evidence_sha256} for row in vendor],
+            "vendor": [{
+                "provider": row.provider,
+                "evidence_ref": row.evidence_ref,
+                "evidence_sha256": row.evidence_sha256,
+                **({"production_baseline": row.production_baseline.to_dict()}
+                   if row.production_baseline is not None else {}),
+            } for row in vendor],
             "candidate": {"evidence_ref": candidate.evidence_ref,
                           "evidence_sha256": candidate.evidence_sha256},
             "correctness": correctness.to_dict(), "integrity": integrity.to_dict(),

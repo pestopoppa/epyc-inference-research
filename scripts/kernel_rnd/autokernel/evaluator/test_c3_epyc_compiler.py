@@ -49,16 +49,30 @@ class C3EpycCompilerTest(unittest.TestCase):
         }
 
     def observed_case(self, case, index: int) -> dict:
+        provider = (C.LLAMA_CPP_PRODUCTION_V9 if index == 2
+                    else C.TORCH_ROCM_COMPILE)
+        implementation_sha256 = digest(f"vendor-{index}")
+        production_baseline = ({
+            "branch": C.PRODUCTION_V9_BRANCH,
+            "source_commit": C.PRODUCTION_V9_COMMIT,
+            "version": C.PRODUCTION_V9_VERSION,
+            "binary_sha256": implementation_sha256,
+            "linkage_sha256": digest("production-v9-linkage"),
+            "attestation_ref": C.PRODUCTION_V9_FREEZE_ATTESTATION_REF,
+            "attestation_sha256": C.PRODUCTION_V9_FREEZE_ATTESTATION_SHA256,
+        } if provider == C.LLAMA_CPP_PRODUCTION_V9 else None)
         return {
             "case_id": case.case_id,
             "state": "observed",
             "surface": self.surface(case, index),
             "vendor_observations": [{
-                "provider": C.TORCH_ROCM_COMPILE,
-                "implementation_sha256": digest(f"vendor-{index}"),
+                "provider": provider,
+                "implementation_sha256": implementation_sha256,
                 "samples_ns": [100.0 + index, 101.0 + index, 99.0 + index],
                 "evidence_ref": f"evidence://vendor-{index}",
                 "evidence_sha256": digest(f"vendor-evidence-{index}"),
+                **({"production_baseline": production_baseline}
+                   if production_baseline is not None else {}),
             }],
             "candidate_observation": {
                 "provider": C.CANDIDATE_PROVIDER,
@@ -168,6 +182,11 @@ class C3EpycCompilerTest(unittest.TestCase):
         self.assertIn("no system C++", apex["boundary"])
         dequant = self.plan["cases"][2]
         self.assertEqual(dequant["runner_binding_id"], C.EPYC_EXPERIMENTAL_BINARY)
+        baseline = self.plan["runner_bindings"][C.EPYC_EXPERIMENTAL_BINARY]["baseline"]
+        self.assertEqual(baseline["provider"], C.LLAMA_CPP_PRODUCTION_V9)
+        self.assertEqual(baseline["source_commit"], C.PRODUCTION_V9_COMMIT)
+        self.assertEqual(baseline["attestation_sha256"],
+                         C.PRODUCTION_V9_FREEZE_ATTESTATION_SHA256)
         rendered = json.dumps(self.plan)
         self.assertNotIn("samples_ns", rendered)
         self.assertNotIn('"speedup":', rendered)
@@ -233,6 +252,25 @@ class C3EpycCompilerTest(unittest.TestCase):
         payload = self.observed_input()
         payload["whole_model"]["integration"]["candidate_source_sha256"] = digest("other")
         with self.assertRaisesRegex(C.IdentityMismatch, "different candidate source"):
+            P.compile_receipt(payload)
+
+    def test_dequant_baseline_missing_or_wrong_frozen_identity_refuses(self):
+        payload = self.observed_input()
+        del payload["cases"][2]["vendor_observations"][0]["production_baseline"]
+        with self.assertRaisesRegex(P.C3CompilerError, "must be an object"):
+            P.compile_receipt(payload)
+
+        payload = self.observed_input()
+        payload["cases"][2]["vendor_observations"][0]["production_baseline"][
+            "source_commit"] = "f" * 40
+        with self.assertRaisesRegex(C.IdentityMismatch, "identity drifted"):
+            P.compile_receipt(payload)
+
+        payload = self.observed_input()
+        row = payload["cases"][2]["vendor_observations"][0]
+        row["provider"] = C.TORCH_ROCM_COMPILE
+        del row["production_baseline"]
+        with self.assertRaisesRegex(C.C3ContractError, "one observation per provider"):
             P.compile_receipt(payload)
 
     def test_direct_backend_and_cli_emit_same_plan(self):
