@@ -914,6 +914,11 @@ class ArenaCellRunnerTest(unittest.TestCase):
         self.assertEqual(argv[argv.index("--timeout-seconds") + 1], "7200")
         self.assertEqual(
             argv[2], "kernel_rnd.autokernel.controller.k_search_arena")
+        pinned_arm = {"argv": list(KS.campaign_argv())}
+        self.assertEqual(
+            R._controller_pythonpath(pinned_arm, R.REPOSITORY_ROOT),
+            os.pathsep.join((str(R.REPOSITORY_ROOT / "scripts"),
+                             str(R.CONTROLLER_PACKAGE_ROOT))))
 
     def test_controller_argv_replaces_only_with_exact_audited_executable(self):
         arm = self.arm("k_search")
@@ -1425,7 +1430,7 @@ class ArenaCellRunnerTest(unittest.TestCase):
                         process_started):
             self.assertEqual(
                 prepared.environment["PYTHONPATH"],
-                str(R.REPOSITORY_ROOT / "scripts"))
+                R._controller_pythonpath(request["arm"], R.REPOSITORY_ROOT))
             process_started(os.getpid())
             broker_client = object.__new__(U.ArenaWorkspaceEvaluator)
             broker_client.workspace = Path(prepared.task.workspace)

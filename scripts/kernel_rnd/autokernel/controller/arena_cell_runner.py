@@ -61,6 +61,8 @@ CONTROLLER_ACTIVATION_RECEIPT = "controller-sandbox-activation.json"
 CONTROLLER_TEARDOWN_RECEIPT = "controller-sandbox-teardown.json"
 EVALUATOR_PYTHON = Path(
     "/mnt/raid0/llm/tools/geak-v1-rocm62-py312/bin/python")
+CONTROLLER_PACKAGE_ROOT = Path(
+    "/mnt/raid0/llm/tools/geak-v1-rocm62-py312/lib/python3.12/site-packages")
 EVALUATOR_PYTHON_SHA256 = (
     "9544d2a29138833e6177d45dbc57468d37710b5080c901fbb579d53f251cdd6f")
 EVALUATOR_PACKAGE_VERSIONS = {
@@ -1838,16 +1840,38 @@ def _controller_runtime_allowlist(
             if _sha256_file(path) != row["observed_sha256"]:
                 raise ArenaCellRunnerError(
                     "audited upstream controller source identity drifted")
+    module_roots = _controller_module_roots(arm)
     return arena_controller_sandbox.discover_runtime_allowlist(
         workspace=workspace, python_executable=executable,
         controller_source_roots=tuple(source_roots),
-        controller_entrypoint=entrypoint, repository_module_roots=(),
+        controller_entrypoint=entrypoint,
+        repository_module_roots=module_roots,
         codex_cli=cli["codex"], node_executable=node,
         codex_auth=codex_auth, ca_files=(ca_file,),
         additional_cli_executables=tuple(extra_clis),
         additional_cli_read_files=tuple(exact_read_files),
         forbidden_roots=(cell_root.parent.parent,),
     )
+
+
+def _controller_module_roots(arm: Mapping[str, Any]) -> tuple[Path, ...]:
+    """Return package roots bound by an exact declared controller launcher."""
+    argv = arm.get("argv")
+    if (isinstance(argv, list) and argv
+            and argv[0] == str(EVALUATOR_PYTHON)):
+        if (not CONTROLLER_PACKAGE_ROOT.is_dir()
+                or CONTROLLER_PACKAGE_ROOT.is_symlink()):
+            raise ArenaCellRunnerError(
+                "pinned controller package root is absent or unsafe")
+        return (CONTROLLER_PACKAGE_ROOT.resolve(strict=True),)
+    return ()
+
+
+def _controller_pythonpath(
+    arm: Mapping[str, Any], repository_root: Path,
+) -> str:
+    return os.pathsep.join(map(str, (
+        repository_root / "scripts", *_controller_module_roots(arm))))
 
 
 def _controller_process_start_ticks(pid: int) -> int:
@@ -2365,7 +2389,7 @@ def _run_worker_impl(
             "HIP_VISIBLE_DEVICES": "",
             "ROCR_VISIBLE_DEVICES": "",
             "CUDA_VISIBLE_DEVICES": "",
-            "PYTHONPATH": str(repository_root / "scripts"),
+            "PYTHONPATH": _controller_pythonpath(arm, repository_root),
             "SSL_CERT_FILE": "/etc/ssl/certs/ca-certificates.crt",
             "CODEX_HOME": "/home/node/.codex",
             "CLAUDE_CONFIG_DIR": "/home/node/.claude",
@@ -2455,7 +2479,8 @@ def _run_worker_impl(
                 prompt_sha256=prepared.prompt_sha256,
                 environment={
                     **prepared.environment,
-                    "PYTHONPATH": str(repository_root / "scripts"),
+                    "PYTHONPATH": _controller_pythonpath(
+                        arm, repository_root),
                 })
             stdout, controller_sandbox_execution = _launch_isolated_controller(
                 prepared=prepared, argv=argv,
