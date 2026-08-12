@@ -2517,9 +2517,34 @@ class HostOps:
                     + "; ".join(satisfies.reasons))
             self._claim_binding = binding
             for device_id in spec.devices:
+                # `max_hold_s` DECLARES the window, and declaring it is what writes
+                # `expires_at` into the claim payload. Without it,
+                # `check_claim_expiry()` returns COULD_NOT_CHECK forever rather than
+                # FAIL ("claim … declared no maximum hold, so expiry cannot be
+                # evaluated", device_claim.py) — so the one expiry check this fleet
+                # already owns was disarmed for exactly the claim that monopolised
+                # the MI210 through the night of 2026-08-11/12, while the CPU claim
+                # three lines above had been declaring its window all along.
+                #
+                # THE VALUE IS `spec.max_hold_s`, not a fresh constant, and that is
+                # the point: both claims are taken in this one transaction, for one
+                # campaign, and released together in `release_claim`. Two claims
+                # covering the same window that declare different deadlines are a
+                # defect by construction, so the window is declared ONCE on the spec
+                # (default 6 h, `CampaignSpec.max_hold_s`) and both acquirers quote
+                # it. A campaign that legitimately needs longer raises it in one
+                # place and both claims move together.
+                #
+                # It stays ADVISORY. An expired claim is never stolen: expiry is a
+                # declaration by the holder, not a fact about it, and a FAIL is a
+                # reason to call `request_revocation` — quiesce-and-drain, honoured
+                # by the holder at its own boundary — never a licence to reclaim.
+                # Arming the check changes what can be OBSERVED about a claim and
+                # nothing about who may take the device.
                 self._device_claims.append(device_claim.acquire_device_claim(
                     device_id, purpose=f"AutoKernel {spec.campaign_id}",
-                    campaign_id=spec.campaign_id, journal=journal))
+                    campaign_id=spec.campaign_id, journal=journal,
+                    max_hold_s=float(spec.max_hold_s)))
             region_receipt = claim.receipt().to_dict()
             device_receipts = [held.receipt().to_dict() for held in self._device_claims]
             self._claim_open_receipt = {
