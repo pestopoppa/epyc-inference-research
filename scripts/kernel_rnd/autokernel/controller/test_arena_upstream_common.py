@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import errno
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -31,6 +32,17 @@ class _CompletedProcess:
 
 
 class ArenaUpstreamCommonTest(unittest.TestCase):
+    def test_parent_declared_source_paths_are_exact_and_fail_closed(self):
+        value = json.dumps(["kernel.py", "support/kernel.py"])
+        self.assertEqual(
+            U.declared_arena_source_paths({U.ARENA_SOURCE_PATHS_ENV: value}),
+            ("kernel.py", "support/kernel.py"))
+        for environment in ({}, {U.ARENA_SOURCE_PATHS_ENV: "not-json"},
+                            {U.ARENA_SOURCE_PATHS_ENV: '["kernel.py", "kernel.py"]'}):
+            with self.subTest(environment=environment), self.assertRaises(
+                    U.UpstreamControllerError):
+                U.declared_arena_source_paths(environment)
+
     def test_gpu_probe_attempts_both_exact_nodes_in_both_modes(self):
         denied = OSError(errno.EACCES, "sandbox denied")
         with mock.patch.object(os, "open", side_effect=denied) as opened:

@@ -55,6 +55,35 @@ class ControllerBudgetExpired(UpstreamControllerError):
     """The matched controller wall-time budget has been exhausted."""
 
 
+def declared_arena_source_paths(
+    environment: Mapping[str, str] | None = None,
+) -> tuple[str, ...]:
+    """Load the exact parent-declared Arena mutation surface.
+
+    The worker derives this list from the pinned task config and places it in
+    the controller sandbox environment.  Upstream adapters must consume that
+    declaration; inferring a filename from controller output would create a
+    second, controller-owned mutation surface.
+    """
+    env = os.environ if environment is None else environment
+    raw = env.get(ARENA_SOURCE_PATHS_ENV)
+    if not raw:
+        raise UpstreamControllerError(
+            "controller lacks exact parent-declared Arena source paths")
+    try:
+        decoded = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise UpstreamControllerError(
+            "parent-declared Arena source paths are not valid JSON") from exc
+    if (not isinstance(decoded, list) or not decoded
+            or any(not isinstance(value, str) or not value.strip()
+                   for value in decoded)
+            or len(set(decoded)) != len(decoded)):
+        raise UpstreamControllerError(
+            "parent-declared Arena source paths must be a non-empty unique string list")
+    return tuple(decoded)
+
+
 _MODEL_BROKER_IO_LOCK = threading.Lock()
 
 
@@ -726,5 +755,6 @@ __all__ = [
     "REQUIRED_CLIS", "ArenaWorkspaceEvaluator", "CodexTextModel",
     "ModelBrokerClient",
     "ControllerBudget", "ControllerBudgetExpired", "EvaluationRecord",
-    "UpstreamControllerError", "build_controller_receipt", "workspace_root",
+    "UpstreamControllerError", "build_controller_receipt",
+    "declared_arena_source_paths", "workspace_root",
 ]

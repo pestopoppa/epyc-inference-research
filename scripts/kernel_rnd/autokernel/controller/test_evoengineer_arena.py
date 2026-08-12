@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
 import re
 import tempfile
@@ -75,10 +77,13 @@ TYPES = E.UpstreamTypes(
 
 
 class FixtureEvaluator:
-    def __init__(self, workspace, arena_root=None):
+    last = None
+
+    def __init__(self, workspace, arena_root=None, *, source_paths=("kernel.py",)):
+        type(self).last = self
         self.workspace = workspace
         self.arena_root = arena_root
-        self.source_paths = ("kernel.py",)
+        self.source_paths = tuple(source_paths)
         self.calls = []
         self.materialized = False
 
@@ -125,6 +130,10 @@ class EvoEngineerArenaTest(unittest.TestCase):
         self.workspace = Path(self.tmp.name)
         (self.workspace / "kernel.py").write_text(
             "baseline", encoding="utf-8")
+        self.source_env = mock.patch.dict(os.environ, {
+            common.ARENA_SOURCE_PATHS_ENV: json.dumps(["kernel.py"])})
+        self.source_env.start()
+        self.addCleanup(self.source_env.stop)
         self.evaluator = FixtureEvaluator(self.workspace)
         self.task = E.EvoEngineerArenaTask(
             prompt="optimize", evaluator=self.evaluator, types=TYPES)
@@ -274,6 +283,7 @@ class EvoEngineerArenaTest(unittest.TestCase):
         self.assertEqual(receipt["extra"]["policy"], E.policy_identity())
         self.assertEqual(receipt["extra"]["generation"], 3)
         self.assertEqual(receipt["extra"]["sample_count"], 9)
+        self.assertEqual(FixtureEvaluator.last.source_paths, ("kernel.py",))
 
     def test_campaign_argv_is_fully_pinned(self):
         argv = E.campaign_argv("/fixed/python")

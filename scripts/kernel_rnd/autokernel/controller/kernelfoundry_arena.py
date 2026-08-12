@@ -377,7 +377,8 @@ def run_controller(
     source = Path(source_root).resolve()
     model = model_factory(workspace=root, budget=budget)
     evaluator = evaluator_factory(
-        workspace=root, arena_root=Path(arena_root).resolve())
+        workspace=root, arena_root=Path(arena_root).resolve(),
+        source_paths=common.declared_arena_source_paths())
     upstream = upstream_loader(source)
     server = KernelFoundryTextServer(model)
     config = _build_config(
