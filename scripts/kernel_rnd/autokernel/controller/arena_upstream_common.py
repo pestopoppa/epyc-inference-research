@@ -10,6 +10,7 @@ workspace.  Importing it performs no model, compiler, evaluator, or GPU work.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import errno
 import hashlib
 import json
 import logging
@@ -19,6 +20,8 @@ from pathlib import Path, PurePosixPath
 import re
 import shutil
 import signal
+import socket
+import struct
 import subprocess
 import sys
 import threading
@@ -32,6 +35,12 @@ MODEL_EFFORT = "high"
 PINNED_MODEL_IDS = (f"{MODEL_ID}:{MODEL_EFFORT}:upstream-controller",)
 REQUIRED_CLIS = ("codex",)
 ARTIFACT_DIRNAME = ".autokernel-upstream-controller"
+BROKER_SOCKET_ENV = "AUTOKERNEL_ARENA_EVALUATION_BROKER_SOCKET"
+BROKER_TOKEN_ENV = "AUTOKERNEL_ARENA_EVALUATION_BROKER_TOKEN"
+BROKER_OWNER_PID_ENV = "AUTOKERNEL_ARENA_EVALUATION_BROKER_OWNER_PID"
+BROKER_REQUEST_SCHEMA = "epyc.autokernel.arena_controller_evaluation_request.v1"
+BROKER_RESULT_SCHEMA = "epyc.autokernel.arena_controller_evaluation.v1"
+_MAX_BROKER_MESSAGE_BYTES = 16 * 1024 * 1024
 _SAFE_FILE = re.compile(r"[A-Za-z_][A-Za-z0-9_./-]{0,255}")
 
 
@@ -99,6 +108,18 @@ def _canonical_sha256(payload: object) -> str:
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def _recv_exact(stream: socket.socket, length: int) -> bytes:
+    chunks: list[bytes] = []
+    remaining = length
+    while remaining:
+        chunk = stream.recv(remaining)
+        if not chunk:
+            raise UpstreamControllerError("Arena broker closed a partial message")
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
 def _atomic_json(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp-{os.getpid()}")
@@ -121,6 +142,25 @@ def workspace_root(value: str | Path) -> Path:
         raise UpstreamControllerError(
             "workspace must be an existing non-symlink directory")
     return root
+
+
+def _assert_gpu_devices_inaccessible() -> None:
+    """Prove controller deliberation cannot open either ROCm device surface."""
+    devices = [Path("/dev/kfd"), *sorted(Path("/dev/dri").glob("renderD*"))]
+    denied = {errno.EACCES, errno.EPERM, errno.ENOENT, errno.ENODEV}
+    for device in devices:
+        for flags in (os.O_RDONLY, os.O_RDWR):
+            try:
+                descriptor = os.open(device, flags)
+            except OSError as exc:
+                if exc.errno not in denied:
+                    raise UpstreamControllerError(
+                        f"controller device-isolation probe failed: {device}: "
+                        f"errno={exc.errno}") from exc
+            else:
+                os.close(descriptor)
+                raise UpstreamControllerError(
+                    f"controller is not device-isolated: opened {device}")
 
 
 @dataclass(frozen=True)
@@ -156,6 +196,12 @@ class CodexTextModel:
         self.budget = budget
         self.environment = arena_adapter.architecture_environment(
             os.environ if environment is None else environment)
+        self.environment.update({
+            "HIP_VISIBLE_DEVICES": "", "ROCR_VISIBLE_DEVICES": "",
+            "CUDA_VISIBLE_DEVICES": "",
+        })
+        for key in (BROKER_SOCKET_ENV, BROKER_TOKEN_ENV, BROKER_OWNER_PID_ENV):
+            self.environment.pop(key, None)
         executable = shutil.which("codex", path=self.environment.get("PATH"))
         if executable is None:
             raise UpstreamControllerError("required controller CLI not found: codex")
@@ -298,6 +344,7 @@ class ArenaWorkspaceEvaluator:
 
     def __init__(self, *, workspace: Path, arena_root: Path):
         self.workspace = workspace_root(workspace)
+        _assert_gpu_devices_inaccessible()
         self.arena_root = Path(arena_root).resolve()
         if not self.arena_root.is_dir():
             raise UpstreamControllerError("arena_root must be an existing directory")
@@ -326,17 +373,27 @@ class ArenaWorkspaceEvaluator:
         self.source_paths = self._discover_source_paths()
         self._starting = {
             path: (self.workspace / path).read_bytes() for path in self.source_paths}
-        passed, error = self.vendor.evaluate_compilation(
-            self.workspace, self.config, self.logger, None)
-        if not passed:
+        broker_socket = os.environ.get(BROKER_SOCKET_ENV)
+        broker_token = os.environ.get(BROKER_TOKEN_ENV)
+        broker_owner = os.environ.get(BROKER_OWNER_PID_ENV)
+        if not broker_socket or not broker_token or not broker_owner:
             raise UpstreamControllerError(
-                f"Arena starting task does not compile: {error}")
-        self.baseline_cases = self.vendor.measure_baseline(
-            self.workspace, self.config, self.logger, None)
+                "Arena evaluator lacks its governed GPU evaluation broker")
+        self.broker_socket = Path(broker_socket).resolve()
+        if not self.broker_socket.is_socket():
+            raise UpstreamControllerError(
+                "Arena evaluator broker socket is absent or unsafe")
+        self._broker_token = broker_token
+        try:
+            self._broker_owner_pid = int(broker_owner)
+        except ValueError as exc:
+            raise UpstreamControllerError(
+                "Arena evaluator broker owner identity is invalid") from exc
         self.best_files = dict(self._starting)
         self.best_score = 1.0
         self.last_record: EvaluationRecord | None = None
         self.evaluation_count = 0
+        self.broker_receipts: list[dict[str, Any]] = []
         # Upstream controllers may generate candidates concurrently, but the
         # Arena evaluator owns one mutable copied workspace and one physical
         # GPU. Serialize the materialize/evaluate/restore transaction while
@@ -426,10 +483,8 @@ class ArenaWorkspaceEvaluator:
             if isinstance(text, str) and text.strip()}
         if set(candidate) != set(self.source_paths):
             raise UpstreamControllerError("candidate source content must be non-empty")
-        self._materialize(candidate)
         self.evaluation_count += 1
-        raw = self.vendor.evaluate_kernel(
-            self.workspace, self.config, self.baseline_cases, self.logger, None)
+        raw = self._brokered_evaluation(self.evaluation_count, candidate)
         if not isinstance(raw, Mapping):
             raise UpstreamControllerError("Arena evaluator returned a non-object")
         passed = bool(raw.get("pass_compilation") and raw.get("pass_correctness")
@@ -453,6 +508,70 @@ class ArenaWorkspaceEvaluator:
         self.last_record = record
         return record
 
+    def _brokered_evaluation(
+        self, ordinal: int, candidate: Mapping[str, bytes],
+    ) -> Mapping[str, Any]:
+        """Ask the parent worker to own materialization, claim, and evaluation."""
+        root = self.workspace / ARTIFACT_DIRNAME / "brokered-evaluations"
+        root.mkdir(parents=True, exist_ok=True)
+        output_path = root / f"{ordinal:04d}-result.json"
+        request: dict[str, Any] = {
+            "schema": BROKER_REQUEST_SCHEMA,
+            "token": self._broker_token,
+            "owner_pid": self._broker_owner_pid,
+            "workspace": str(self.workspace),
+            "evaluation_ordinal": ordinal,
+            "source_files": {
+                path: content.decode("utf-8") for path, content in candidate.items()},
+        }
+        encoded = json.dumps(request, sort_keys=True, separators=(",", ":")).encode()
+        if len(encoded) > _MAX_BROKER_MESSAGE_BYTES:
+            raise UpstreamControllerError("Arena broker request exceeds its size limit")
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                client.connect(str(self.broker_socket))
+                server_pid, server_uid, _ = struct.unpack(
+                    "3i", client.getsockopt(
+                        socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+                if server_pid != self._broker_owner_pid or server_uid != os.getuid():
+                    raise UpstreamControllerError(
+                        "Arena broker server identity is invalid")
+                client.sendall(struct.pack("!Q", len(encoded)) + encoded)
+                header = _recv_exact(client, 8)
+                length = struct.unpack("!Q", header)[0]
+                if length > _MAX_BROKER_MESSAGE_BYTES:
+                    raise UpstreamControllerError(
+                        "Arena broker response exceeds its size limit")
+                receipt = json.loads(_recv_exact(client, length))
+        except (OSError, json.JSONDecodeError, struct.error) as exc:
+            raise UpstreamControllerError(
+                "Arena evaluation broker IPC failed") from exc
+        if isinstance(receipt, Mapping) and receipt.get("status") == "error":
+            raise UpstreamControllerError(
+                "Arena evaluation broker failed: " + str(receipt.get("error")))
+        claimed = receipt.get("receipt_sha256") if isinstance(receipt, dict) else None
+        without_hash = ({key: value for key, value in receipt.items()
+                         if key != "receipt_sha256"}
+                        if isinstance(receipt, dict) else {})
+        if (not isinstance(receipt, dict)
+                or receipt.get("schema") != BROKER_RESULT_SCHEMA
+                or claimed != _canonical_sha256(without_hash)
+                or receipt.get("evaluation_ordinal") != ordinal
+                or receipt.get("workspace") != str(self.workspace)
+                or receipt.get("source_sha256") != {
+                    path: hashlib.sha256(content).hexdigest()
+                    for path, content in candidate.items()}
+                or not isinstance(receipt.get("evaluation"), Mapping)):
+            raise UpstreamControllerError(
+                "Arena evaluation broker receipt identity is invalid")
+        self.broker_receipts.append({
+            "evaluation_ordinal": ordinal,
+            "receipt_sha256": claimed,
+            "path": str(output_path.relative_to(self.workspace)),
+        })
+        _atomic_json(output_path, receipt)
+        return dict(receipt["evaluation"])
+
     def materialize_best(self) -> None:
         self._materialize(self.best_files)
 
@@ -461,6 +580,8 @@ class ArenaWorkspaceEvaluator:
             "arena_root": str(self.arena_root),
             "source_paths": list(self.source_paths),
             "evaluation_count": self.evaluation_count,
+            "brokered_evaluation_count": len(self.broker_receipts),
+            "broker_receipts": list(self.broker_receipts),
             "best_score": self.best_score,
             "best_source_sha256": {
                 path: hashlib.sha256(content).hexdigest()
@@ -502,7 +623,9 @@ def build_controller_receipt(
 
 
 __all__ = [
-    "ARTIFACT_DIRNAME", "MODEL_EFFORT", "MODEL_ID", "PINNED_MODEL_IDS",
+    "ARTIFACT_DIRNAME", "BROKER_SOCKET_ENV", "BROKER_TOKEN_ENV",
+    "BROKER_OWNER_PID_ENV", "BROKER_REQUEST_SCHEMA", "BROKER_RESULT_SCHEMA",
+    "MODEL_EFFORT", "MODEL_ID", "PINNED_MODEL_IDS",
     "REQUIRED_CLIS", "ArenaWorkspaceEvaluator", "CodexTextModel",
     "ControllerBudget", "ControllerBudgetExpired", "EvaluationRecord",
     "UpstreamControllerError", "build_controller_receipt", "workspace_root",

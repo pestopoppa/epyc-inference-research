@@ -30,9 +30,9 @@ a module it never looked at.
 
 | | non-test lines |
 |---|---:|
-| **ON THE CAMPAIGN PATH** | **68,837** |
-| **DEFERRED** (provably unreachable) | **48,072** |
-| **TOTAL** | **116,909** |
+| **ON THE CAMPAIGN PATH** | **68,840** |
+| **DEFERRED** (provably unreachable) | **48,996** |
+| **TOTAL** | **117,836** |
 
 **The deferred plane is explicit.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -123,7 +123,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 
 | module | lines | campaign #1 | reason |
 |---|---:|:---:|---|
-| `campaign.py` | 4,578 | yes | THE ENTRYPOINT. Before it landed, `grep -rl "__main__|argparse|def main("` over every non-test module returned nothing: 94k lines, 5,695 passing tests, and no way to start it — which is the whole reason this package has produced no result |
+| `campaign.py` | 4,581 | yes | THE ENTRYPOINT. Before it landed, `grep -rl "__main__|argparse|def main("` over every non-test module returned nothing: 94k lines, 5,695 passing tests, and no way to start it — which is the whole reason this package has produced no result |
 | `dashboard.py` | 201 | yes | the terminal result was fsynced but the only dashboard exporter had been deleted, so active AutoKernel work remained permanently absent from the operator surface; this compact projection dates itself from the journal entry and cannot make an old campaign fresh |
 | `__init__.py` | 14 | yes | package docstring; `schemas` is declared here as the single source of record shape |
 | `schemas.py` | 3,783 | yes | one record shape — every module is written against it and none invents its own |
@@ -133,7 +133,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `least_commitment_archive_builder.py` | 429 | no | AK-WM-2a strict real-record projection; it reads hash-bound completed campaign evidence into an observe-only archive and cannot launch, rank, mutate, or promote |
 | `least_commitment_receipts.py` | 807 | no | AK-WM-2a governed offline producer; it copies only explicitly SHA-pinned journal fields into receipts and cannot launch, rank, mutate, or promote |
 | `least_commitment_capture.py` | 372 | yes | prospective hash-bound IQK diagnostic/control contract; live campaigns only reduce declared outcome functions and it exposes no selector, champion, release, process, or inference API |
-| `evidence_path_rehearsal.py` | 231 | no | architecture-only CLI proving proposal/capture/control/AP-WM/champion/readiness/T3/package producer coverage; emits no empirical evidence or live authority |
+| `evidence_path_rehearsal.py` | 271 | no | architecture-only CLI proving proposal/capture/control/AP-WM/champion/readiness/T3/package producer coverage; emits no empirical evidence or live authority |
 | `turn_productivity.py` | 481 | no | AK-PT-1/AK-X-6 archive reducer; it consumes completed refine-turn records and may only withhold future search advancement, so campaign #1 must not give it live rank or mutation authority |
 | `prior_art.py` | 597 | no | deterministic proposal-input compiler; it classifies findings before a proposal exists and has no place in the mutation/build process |
 | `profile_report.py` | 587 | no | RVP-1–7 deterministic offline C4 report; it consumes completed paired traces and has no mutation, build, profiler-launch or ranking authority |
@@ -203,18 +203,18 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `controller/champion.py` | 1,461 | no | AK4 lean lifecycle projection and composition transaction: consumes validated journal evidence, requires a real combined rebuild/evaluation through an injected runner, and carries no source-mutation, build, benchmark, process, release, or production-write capability |
 | `controller/sequencer.py` | 468 | no | AK4 deterministic outer ordering seam: consumes supplied proposals and injected execution capabilities, journals bounded stop states, and remains unbound from `controller.__init__` so campaign #1 cannot acquire a second live loop |
 | `controller/completed_campaign_adapter.py` | 105 | no | strict live-journal-to-sequencer join; banks only event-bound dispatch/mechanism-confirmed wins above floor and MDE and launches nothing |
-| `controller/arena_adapter.py` | 518 | no | INF-03 paper-pin GEAK/AgentKernelArena integration: validates clean vendor sources and physical gfx90a identity, binds C4 into a hygienic priced prompt, and launches registered whole-agent task adapters without entering campaign mutation or scoring |
+| `controller/arena_adapter.py` | 536 | no | INF-03 paper-pin GEAK/AgentKernelArena integration: validates clean vendor sources and physical gfx90a identity, binds C4 into a hygienic priced prompt, and launches registered whole-agent task adapters without entering campaign mutation or scoring |
 | `controller/claude_codex_actor_critic.py` | 664 | no | INF-03 bounded Claude-planner/critic + Codex-actor controller: exact three-argument Arena launcher, explicit model/effort pins, checkpoint process-group termination, single-candidate workspace confinement, and transcript/artifact hashing; its preflight invokes neither CLI |
 | `controller/codex_container_actor.py` | 219 | no | INF-03/AK-LE-3 host-compatible Codex actor boundary: pins a read-only container image, exposes exactly one writable host bind for the copied Arena workspace, stages auth only in an automatically erased temporary directory, and admits exactly the reviewed gpt-5.6-sol/gpt-5.6-terra high-effort model cells without granting host filesystem writes |
 | `controller/arena_campaign.py` | 1,046 | no | INF-03 matched-panel audit and injected-runner seam: binds the baseline plus seven controller arms to equal tasks and checkpoints, admits each governed arm only with exact adapter/upstream/CLI/model pins, refuses incomplete panels before execution, and remains outside live campaign mutation and scoring |
-| `controller/arena_cell_runner.py` | 1,435 | no | INF-03 concrete governed runner: re-audits every task/controller identity, runs independent fresh 2h/8h/32h cells under one sampled MI210 claim at a time, verifies and skips only exact completed checkpoints on restart, preserves incomplete attempts, refuses tamper or identity drift, delegates compile/correctness/timing to the pinned Arena evaluator, safely tears down captured worker groups, and publishes hash-bound non-promotional beliefs plus an aggregate only after the full ordered matrix completes |
-| `controller/arena_upstream_common.py` | 509 | no | INF-03 shared licensed-controller substrate: bounded read-only text-model calls and centralized Arena evaluation stay outside campaign mutation and carry no ranking or promotion authority |
+| `controller/arena_cell_runner.py` | 2,165 | no | INF-03 fail-closed runner groundwork: read-only validation traverses attempt-scoped checkpoints, claims, broker chains and beliefs; the parent-owned candidate broker remains non-runnable until controller and evaluator OS sandbox profiles are attested, so it cannot yet publish rankable controller cells |
+| `controller/arena_upstream_common.py` | 632 | no | INF-03 licensed-controller client: bounded read-only text-model calls are GPU-blind only after an OS-level device-open proof, and complete candidate bytes receive feedback solely through the authenticated parent-worker broker |
 | `controller/evoengineer_arena.py` | 358 | no | INF-03 exact-source EvoEngineer-Full admission and pending policy seam: pins the paper-era MIT source and preserves its named operators/parameters while exposing no executable CLI until a parent-worker evaluation broker and device-isolating launcher receipts exist |
 | `controller/k_search_arena.py` | 281 | no | INF-03 licensed K-Search world-model/tree port: injects the centralized Arena evaluator into the exact pinned upstream Task seam without entering campaign mutation or scoring |
 | `controller/geak_v1_arena.py` | 344 | no | INF-03 licensed GEAK-v1 OptimAgent port: maps its ROCm dataset and reflection loop onto centralized Arena evidence without entering campaign mutation or scoring |
 | `controller/xe_forge_arena.py` | 593 | no | INF-03 licensed Xe-Forge gfx90a port: retains the pinned DSPyEngine linear-CoVeR analysis/planning loop, replaces process-global device prompts with scoped AMD MI210 guidance, uses a no-shape executor gate, and routes initialized KernelBench execution through Arena |
 | `controller/kernelfoundry_arena.py` | 481 | no | INF-03 licensed KernelFoundry gfx90a port: retains inherited Controller.run_single MAP-Elites/island branching, strictly activates pinned Triton feature patterns, binds measured parent transitions to upstream QD tracking, and routes evaluation through Arena |
-| `controller/arena_roundtrip.py` | 203 | no | EVL-47 SC20/SC21 prospective GEAK/Arena receipt producer; emits only observed correctness/timing rates and retains preflight as non-ordinal dependency evidence, with no launch, mutation, or verdict authority |
+| `controller/arena_roundtrip.py` | 216 | no | EVL-47 SC20/SC21 prospective GEAK/Arena receipt producer; emits only observed correctness/timing rates and retains preflight as non-ordinal dependency evidence, with no launch, mutation, or verdict authority |
 | `controller/hip_authoring_arm.py` | 627 | no | governed raw-HIP compatibility seam: pins and hashes a true Torch2HIP task/candidate/toolchain, compiles GPU-blind for gfx90a, and scopes distinct MI210 claims to baseline/final evaluation; emits observation-only correctness/timing-validity rows with no ranking, campaign, production-tree, or promotion authority |
 | `controller/hip_decision_grade.py` | 516 | no | task-local raw-HIP decision evaluator: source-before-suite sealing, unseen hostile inputs, independent host-double reduction, static C6 scan, exact Torch-ROCm-compile C3 provider, per-arm gfx90a duration admission, paired e-process reduction, and no release/promotion authority |
 | `controller/hip_decision_grade_worker.py` | 232 | no | C6-contained raw-HIP child: receives inputs but never expected outputs, performs double-poison/determinism checks, and captures exact candidate/provider timings plus Torch-Inductor implementation identity |

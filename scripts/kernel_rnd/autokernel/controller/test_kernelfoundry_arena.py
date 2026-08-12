@@ -127,6 +127,12 @@ class KernelFoundryArenaTest(unittest.TestCase):
             evaluator.best_score = 1.0
             evaluator.last_record = None
             evaluator.evaluation_count = 0
+            evaluator.broker_receipts = []
+            def brokered(ordinal, candidate):
+                evaluator._materialize(candidate)
+                return evaluator.vendor.evaluate_kernel(
+                    evaluator.workspace, {}, {}, None, None)
+            evaluator._brokered_evaluation = brokered
             evaluator._evaluation_lock = threading.Lock()
             with ThreadPoolExecutor(max_workers=2) as executor:
                 results = list(executor.map(

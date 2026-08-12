@@ -100,6 +100,7 @@ def _measurement(
 
 def build_receipt(
     *, campaign_id: str, task_id: str, controller_id: str,
+    attempt_id: str | None = None, claim_campaign_id: str | None = None,
     started_at: str, ended_at: str,
     correctness: ScoredCount, timing_validity: ScoredCount,
     preflight_locator: str, preflight_sha256: str,
@@ -114,6 +115,16 @@ def build_receipt(
     campaign = _text(campaign_id, "campaign_id")
     task = _text(task_id, "task_id")
     controller = _text(controller_id, "controller_id")
+    attempt = (_text(attempt_id, "attempt_id")
+               if attempt_id is not None else None)
+    claim_scope = (_text(claim_campaign_id, "claim_campaign_id")
+                   if claim_campaign_id is not None else None)
+    if (attempt is None) != (claim_scope is None):
+        raise RoundTripReceiptError(
+            "attempt_id and claim_campaign_id must be supplied together")
+    if attempt is not None and claim_scope != attempt:
+        raise RoundTripReceiptError(
+            "claim_campaign_id must equal the campaign attempt")
     if controller not in arena_adapter.CONTROLLERS:
         raise RoundTripReceiptError(
             f"controller_id must be registered; observed {controller!r}"
@@ -139,6 +150,8 @@ def build_receipt(
         "status": "pass",
         "authority": "diagnostic_only",
         "campaign_id": campaign,
+        **({"attempt_id": attempt, "claim_campaign_id": claim_scope}
+           if attempt is not None else {}),
         "started_at": start,
         "ended_at": end,
         "task": {"task_id": task, "controller_id": controller},
