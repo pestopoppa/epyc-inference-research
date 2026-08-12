@@ -399,9 +399,10 @@ def launch(
             raise
         raise ArenaAdapterError("controller failed to start or finish") from exc
     if process.returncode != 0:
+        diagnostic = stderr.strip()[-4096:]
         raise ArenaAdapterError(
             f"controller {prepared.task.controller_id} exited {process.returncode}: "
-            f"{stderr.strip()[:500]}")
+            f"{diagnostic}")
     return stdout
 
 
