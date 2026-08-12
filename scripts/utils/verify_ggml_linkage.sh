@@ -43,10 +43,34 @@
 #   export LD_LIBRARY_PATH="$MY_BUILD/bin:$LD_LIBRARY_PATH"
 #   verify_ggml_linkage.sh "$MY_BUILD/bin/whisper-cli" "$MY_BUILD"
 #
+# NON-VACUITY IS INTRINSIC (2026-08-12). This script used to count matched ldd rows
+# into FOUND, and when FOUND was 0 it printed "(no ggml/whisper/llama libs in ldd
+# output — statically linked, or ldd failed)" as an INFORMATIONAL line and carried
+# on to PASS, exit 0. So `verify_ggml_linkage.sh /bin/true <tree>` printed PASS:
+# the strongest possible statement — "no library resolves outside this tree" — made
+# from having inspected nothing at all. That is the EMPTY-INPUT vacuous pass, and
+# a wrong path, a moved build dir, a stripped/static binary or an ldd that failed
+# all render as a clean run.
+#
+# Two conditions now FAIL, both with exit code 2 so a consumer can tell "wrong
+# tree" (1) from "this run proved nothing" (2):
+#   * zero ggml/whisper/llama libraries inspected;
+#   * libggml-base.so absent from the inspected set — EVERY ggml binary on this
+#     host links it (whisper-server, tts-server, llama-server), so its absence
+#     means the thing under test is not a ggml binary, however many other rows
+#     ldd produced.
+# scripts/session/verify_speech_kernels.sh (epyc-root) had to bolt exactly this
+# gate on from the outside; a check that must be wrapped to be trustworthy is
+# untrustworthy everywhere it is NOT wrapped. The `FAIL:`-prefixed output shape and
+# the binary/expect header are preserved so both existing consumers' verdict
+# regexes still parse (that wrapper, and autokernel's parse_linkage_report).
+#
 # Usage:  verify_ggml_linkage.sh <binary> [expected_tree_root]
 #         expected_tree_root defaults to the binary's own directory.
 # Exit:   0 = every ggml lib resolves inside the expected tree
 #         1 = at least one resolves elsewhere  (DO NOT TRUST THE MEASUREMENT)
+#         2 = VACUOUS / UNINSPECTABLE: nothing ggml was inspected, so this run is
+#             not evidence of anything  (DO NOT TRUST THE MEASUREMENT)
 set -uo pipefail
 
 BIN="${1:?usage: verify_ggml_linkage.sh <binary> [expected_tree_root]}"
@@ -63,6 +87,7 @@ echo
 # we check the linked set here and report the dlopen search dir separately.
 BAD=0
 FOUND=0
+CORE=0          # libggml-base.so sightings — the intrinsic non-vacuity witness
 while read -r name arrow path rest; do
   case "$name" in
     libggml*|libwhisper*|libllama*|libmtmd*) ;;
@@ -71,19 +96,38 @@ while read -r name arrow path rest; do
   [ "$arrow" = "=>" ] || continue
   [ -n "${path:-}" ] || continue
   FOUND=$((FOUND+1))
+  case "$name" in libggml-base.so*) CORE=$((CORE+1)) ;; esac
   case "$path" in
     "$EXPECT"/*) printf "  OK   %-28s -> %s\n" "$name" "$path" ;;
     *)           printf "  BAD  %-28s -> %s\n" "$name" "$path"; BAD=$((BAD+1)) ;;
   esac
 done < <(ldd "$BIN" 2>/dev/null)
 
-if [ "$FOUND" -eq 0 ]; then
-  echo "  (no ggml/whisper/llama libs in ldd output — statically linked, or ldd failed)"
-fi
-
 echo
 echo "LD_LIBRARY_PATH order as the loader sees it:"
 echo "$LD_LIBRARY_PATH" | tr ':' '\n' | nl -ba | sed 's/^/    /'
+
+# THE NON-VACUITY GATE, before any verdict. It runs BEFORE the BAD check on
+# purpose: "0 of 0 libraries resolved outside the tree" is not a weaker pass, it is
+# not a measurement, and it must not be reported as either.
+if [ "$FOUND" -eq 0 ] || [ "$CORE" -eq 0 ]; then
+  cat <<EOF
+
+FAIL: VACUOUS CHECK — nothing was inspected, so this run proves nothing.
+
+    ggml/whisper/llama libraries inspected : $FOUND
+    libggml-base.so seen                   : $CORE   (every ggml binary links it)
+
+This is NOT a pass with a caveat. Reporting "no library resolves outside
+$EXPECT" after inspecting $FOUND libraries would be the strongest possible claim
+made from the weakest possible evidence.
+
+Likely causes, in order: $BIN is not a ggml binary; it is statically linked; ldd
+failed or was denied; the build directory moved. Point this at the real binary
+(e.g. \$BUILD/bin/llama-server) and re-run before measuring anything.
+EOF
+  exit 2
+fi
 
 if [ "$BAD" -gt 0 ]; then
   cat <<EOF
