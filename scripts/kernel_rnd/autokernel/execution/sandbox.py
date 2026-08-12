@@ -166,10 +166,9 @@ _CONTROLLER_BLOCKED_SYSCALLS: Mapping[str, int] = {
     name: number for name, number in _BLOCKED_SYSCALLS.items()
     if name not in {"socket", "connect", "sendto", "sendmsg", "sendmmsg"}
 }
-_CONTROLLER_BLOCKED_SYSCALLS = {
-    **_CONTROLLER_BLOCKED_SYSCALLS,
-    "socketpair": 53,
-}
+# Unnamed socketpair IPC has no filesystem or external peer and is required by
+# Tokio's signal driver in the pinned Codex CLI.  New AF_UNIX sockets remain
+# denied by the family filter below; bind/listen/accept remain syscall-denied.
 
 _SECCOMP_DATA_NR_OFFSET = 0
 _SECCOMP_DATA_ARCH_OFFSET = 4
@@ -246,6 +245,7 @@ def install_landlock(
     writable_root: str, writable_device_paths: Sequence[str] = (), *,
     restrict_reads: bool = False, readable_roots: Sequence[str] = (),
     readable_files: Sequence[str] = (),
+    executable_files: Sequence[str] = (),
 ) -> tuple[int, int]:
     """Install write confinement and optional default-deny read/exec policy."""
     root = Path(writable_root).resolve(strict=True)
@@ -294,6 +294,15 @@ def install_landlock(
                 _syscall(
                     _SYS_LANDLOCK_ADD_RULE, ruleset_fd,
                     _LANDLOCK_RULE_PATH_BENEATH, ctypes.byref(read_attr), 0)
+            for raw_path in executable_files:
+                path_fd = os.open(raw_path, os.O_PATH | os.O_CLOEXEC)
+                path_fds.append(path_fd)
+                execute_attr = _LandlockPathBeneathAttr(
+                    _LANDLOCK_ACCESS_FS_READ_FILE | _LANDLOCK_ACCESS_FS_EXECUTE,
+                    path_fd, 0)
+                _syscall(
+                    _SYS_LANDLOCK_ADD_RULE, ruleset_fd,
+                    _LANDLOCK_RULE_PATH_BENEATH, ctypes.byref(execute_attr), 0)
         _prctl(_PR_SET_NO_NEW_PRIVS, 1)
         _syscall(_SYS_LANDLOCK_RESTRICT_SELF, ruleset_fd, 0)
     except OSError as exc:
@@ -424,6 +433,7 @@ class SandboxPolicy:
     profile: str = DEFAULT_PROFILE
     readable_roots: tuple[str, ...] = ()
     readable_files: tuple[str, ...] = ()
+    executable_files: tuple[str, ...] = ()
     broker_socket_path: str | None = None
     broker_peer_pid: int | None = None
     broker_peer_start_ticks: int | None = None
@@ -453,10 +463,14 @@ class SandboxPolicy:
             str(Path(path).resolve(strict=True)) for path in self.readable_roots)
         normalized_files = tuple(
             str(Path(path).resolve(strict=True)) for path in self.readable_files)
+        normalized_executables = tuple(
+            str(Path(path).resolve(strict=True)) for path in self.executable_files)
         if len(normalized_roots) != len(set(normalized_roots)):
             raise SandboxError("readable_roots must be unique")
         if len(normalized_files) != len(set(normalized_files)):
             raise SandboxError("readable_files must be unique")
+        if len(normalized_executables) != len(set(normalized_executables)):
+            raise SandboxError("executable_files must be unique")
         for path in normalized_roots:
             candidate = Path(path)
             if not candidate.is_dir():
@@ -468,6 +482,11 @@ class SandboxPolicy:
             mode = os.stat(path).st_mode
             if not stat.S_ISREG(mode):
                 raise SandboxError(f"readable file is not regular: {path}")
+        for path in normalized_executables:
+            mode = os.stat(path).st_mode
+            if not stat.S_ISREG(mode) or not os.access(path, os.X_OK):
+                raise SandboxError(
+                    f"executable file is not an executable regular file: {path}")
         broker_path: str | None = None
         if self.broker_socket_path is not None:
             broker = Path(self.broker_socket_path).resolve(strict=True)
@@ -482,11 +501,13 @@ class SandboxPolicy:
                     "broker socket must be outside controller-writable state")
             broker_path = str(broker)
         if self.profile == DEFAULT_PROFILE:
-            if normalized_roots or normalized_files or broker_path is not None:
+            if (normalized_roots or normalized_files or normalized_executables
+                    or broker_path is not None):
                 raise SandboxError(
                     "read allowlisting and broker sockets require controller profile")
         else:
-            if not normalized_roots and not normalized_files:
+            if not normalized_roots and not normalized_files \
+                    and not normalized_executables:
                 raise SandboxError(
                     "controller profile requires exact readable roots or files")
             if broker_path is None:
@@ -514,6 +535,7 @@ class SandboxPolicy:
         object.__setattr__(self, "writable_device_paths", normalized_devices)
         object.__setattr__(self, "readable_roots", normalized_roots)
         object.__setattr__(self, "readable_files", normalized_files)
+        object.__setattr__(self, "executable_files", normalized_executables)
         object.__setattr__(self, "broker_socket_path", broker_path)
         # Constructor is the fail-closed availability check.  No process is
         # launched merely to discover that containment is impossible.
@@ -540,6 +562,7 @@ class SandboxPolicy:
             "writable_device_paths": list(self.writable_device_paths),
             "readable_roots": list(self.readable_roots),
             "readable_files": list(self.readable_files),
+            "executable_files": list(self.executable_files),
             "broker_socket_path": self.broker_socket_path,
             "broker_peer_pid": self.broker_peer_pid,
             "broker_peer_start_ticks": self.broker_peer_start_ticks,
@@ -576,6 +599,7 @@ class SandboxPolicy:
             "profile": self.profile,
             "readable_roots": list(self.readable_roots),
             "readable_files": list(self.readable_files),
+            "executable_files": list(self.executable_files),
             "broker_socket_path": self.broker_socket_path,
             "broker_peer_pid": self.broker_peer_pid,
             "broker_peer_start_ticks": self.broker_peer_start_ticks,
@@ -604,6 +628,7 @@ def _decode_policy(encoded: str) -> tuple[SandboxPolicy, Path]:
             profile=raw.get("profile", DEFAULT_PROFILE),
             readable_roots=tuple(raw.get("readable_roots", ())),
             readable_files=tuple(raw.get("readable_files", ())),
+            executable_files=tuple(raw.get("executable_files", ())),
             broker_socket_path=raw.get("broker_socket_path"),
             broker_peer_pid=raw.get("broker_peer_pid"),
             broker_peer_start_ticks=raw.get("broker_peer_start_ticks"))
@@ -725,7 +750,8 @@ def launch(policy: SandboxPolicy, receipt_path: Path, argv: Sequence[str]) -> No
             policy.writable_root, policy.writable_device_paths,
             restrict_reads=policy.restrict_reads,
             readable_roots=policy.readable_roots,
-            readable_files=policy.readable_files)
+            readable_files=policy.readable_files,
+            executable_files=policy.executable_files)
         seccomp_sha256 = install_seccomp(policy.profile)
         blocked, deny_unix, network_profile = _network_policy(policy.profile)
         receipt = {
@@ -740,6 +766,7 @@ def launch(policy: SandboxPolicy, receipt_path: Path, argv: Sequence[str]) -> No
             "read_allowlist_enforced": policy.restrict_reads,
             "readable_roots": list(policy.readable_roots),
             "readable_files": list(policy.readable_files),
+            "executable_files": list(policy.executable_files),
             "seccomp_sha256": seccomp_sha256,
             "blocked_syscalls": sorted(blocked),
             "profile": policy.profile,
@@ -824,7 +851,8 @@ def read_receipt(path: str | Path) -> dict:
         "writable_root", "cgroup_path", "resource_limits", "argv_sha256",
         "writable_device_paths",
         "landlock_handled_rights", "read_allowlist_enforced",
-        "readable_roots", "readable_files", "profile", "network_profile",
+        "readable_roots", "readable_files", "executable_files",
+        "profile", "network_profile",
         "outbound_socket_families", "server_socket_operations_denied",
         "unix_socket_creation_denied", "broker_socket_path",
         "broker_fd_inherited", "policy_sha256",
@@ -867,6 +895,7 @@ def verify_receipt(document: Mapping[str, Any], *, policy: SandboxPolicy,
         "read_allowlist_enforced": policy.restrict_reads,
         "readable_roots": list(policy.readable_roots),
         "readable_files": list(policy.readable_files),
+        "executable_files": list(policy.executable_files),
         "network_profile": policy.network_profile,
         "broker_socket_path": policy.broker_socket_path,
         "broker_fd_inherited": policy.broker_socket_path is not None,

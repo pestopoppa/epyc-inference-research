@@ -114,15 +114,41 @@ logical campaign to the run-directory `attempt_id`, so device-claim journals
 cannot conflate repeated logical campaign IDs. Nested measurement-window and
 belief identities are checked semantically against their enclosing checkpoint.
 
-The broker groundwork is deliberately non-runnable until a reusable OS sandbox
-profile is provisioned. `HIP_VISIBLE_DEVICES=` is not an isolation boundary.
-Execution fails closed unless a transparent-exec controller sandbox is
-configured, and the controller itself proves that read-only and read-write
-opens of `/dev/kfd` and DRM render nodes are denied. The arbitrary prefix is not
-yet an attested production profile, and candidate evaluation still needs to
-move from the broker thread into the existing restricted evaluator subprocess.
-Until both are complete, no INF-03 run may claim GPU-blind deliberation, safe
-concurrency, ranking, aggregate, belief, champion, or release authority.
+`arena_controller_sandbox.py` now provisions the reusable controller half of
+that OS boundary. It copies one task into a new workspace, discovers a
+fail-closed runtime allowlist from an exact real Python, licensed controller and
+repository source roots, the exact Codex package/CLI and shebang chain, real
+Node executable, auth and CA files, exact DNS/NSS/hosts/OpenSSL configuration,
+ELF loader, and shared-library closure, and then constructs
+`execution.sandbox.CONTROLLER_PROFILE`. Broad roots, devices, production trees,
+campaign/evidence state, symlinks, and duplicate authority are refused. Exact
+executable files are a distinct Landlock capability: the interpreter and ELF
+loader can execute without granting their sibling directories. The adapter
+returns `command_prefix`, fixed startup environment overrides, the activation
+receipt path/policy, `process_started(pid)`, and strict activation-plus-cgroup
+teardown verification for `arena_adapter.launch`; it never accepts an arbitrary
+environment or command prefix.
+
+The controller permits unnamed `socketpair` IPC because the pinned Codex
+binary's Tokio signal driver requires it; such a pair has no filesystem or
+external peer. Creating a new AF_UNIX socket is still denied, as are
+bind/listen/accept, while only the wrapper-created peer-bound broker stream is
+inherited.
+
+The wrapper preconnects its one broker stream before Landlock/seccomp and before
+the launch callback can register its exec-stable PID. A broker therefore queues
+an accepted stream until that exact PID and procfs start time are registered,
+then authenticates `SO_PEERCRED`; ancestry and uid admission are forbidden. A
+live tiny-controller test proves this ordering, inherited broker use, denied
+KFD/render/campaign-sibling and sibling-executable access, and descendant
+cgroup cleanup. It uses a fake local Codex package and no model or GPU work.
+
+This does not complete the evaluator half. `HIP_VISIBLE_DEVICES=` remains
+insufficient, and candidate evaluation must move from the broker thread into a
+separate restricted-read GPU evaluator profile. Until that profile and the
+broker integration are complete, no INF-03 run may claim GPU-blind
+deliberation, safe concurrency, ranking, aggregate, belief, champion, or
+release authority.
 
 The 2026-08-12 available-source r4 attempt is immutable defect evidence, not a
 valid partial campaign. KernelFoundry performed 64 intermediate vendor
