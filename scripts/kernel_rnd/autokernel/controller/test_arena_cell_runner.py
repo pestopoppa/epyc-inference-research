@@ -34,8 +34,19 @@ class FakeReceipt:
             "schema": "epyc.autokernel.device_claim_receipt.v1",
             "claim_id": "akd-fixture0000001",
             "device_id": "mi210_0",
+            "lock_path": "/tmp/gpu_device.mi210_0.lock",
+            "state": "held",
+            "holder_pid": 1234,
+            "holder_start_ticks": 5678,
+            "holder_boot_id": "00000000-0000-0000-0000-000000000000",
+            "host": "fixture-host",
+            "holder_label": "fixture",
+            "purpose": "fixture test",
             "campaign_id": "fixture-campaign-v1",
             "acquired_at": "2026-08-11T00:00:00Z",
+            "expires_at": None,
+            "released_at": None,
+            "reclaimed_from": None,
         }
         if self.phase == "released":
             row["released_at"] = "2026-08-11T00:00:01Z"
@@ -254,7 +265,7 @@ class ArenaCellRunnerTest(unittest.TestCase):
             runner(request)
         self.assertTrue(claim.released)
 
-    def test_preflight_tamper_and_existing_output_fail_before_execution(self):
+    def test_preflight_tamper_and_existing_non_directory_fail_before_execution(self):
         payload = json.loads(self.preflight_path.read_text())
         payload["hardware"]["target_gfx_arch"] = "gfx942"
         self.preflight_path.write_text(json.dumps(payload), encoding="utf-8")
@@ -266,9 +277,227 @@ class ArenaCellRunnerTest(unittest.TestCase):
             "target_gfx_arch": "gfx90a"}}
         valid["receipt_sha256"] = canonical_sha(valid)
         self.preflight_path.write_text(json.dumps(valid), encoding="utf-8")
-        self.output.mkdir()
-        with self.assertRaisesRegex(R.ArenaCellRunnerError, "must not already exist"):
+        self.output.write_text("not a campaign directory\n", encoding="utf-8")
+        with self.assertRaisesRegex(R.ArenaCellRunnerError, "non-symlink directory"):
             self.config()
+
+    def test_resume_skips_complete_checkpoint_and_replaces_only_partial_attempt(self):
+        calls: list[float | None] = []
+
+        def interrupted_worker(request, timeout):
+            calls.append(request["checkpoint_hours"])
+            if request["checkpoint_hours"] == 8.0:
+                Path(request["cell_root"], "partial.txt").write_text(
+                    "interrupted\n", encoding="utf-8")
+                raise RuntimeError("planted interruption")
+            return self.worker(request, timeout)
+
+        request = C.CampaignCellRequest(
+            arm=self.arm("k_search"), task=self.task,
+            is_starting_state_baseline=False,
+            checkpoint_hours=C.MATCHED_BUDGET_HOURS,
+            maximum_wall_hours=32.0)
+        first = R.GovernedArenaCellRunner(
+            self.config(), worker=interrupted_worker,
+            claim_acquirer=lambda *args, **kwargs: FakeClaim(),
+            sampler_factory=FakeSampler)
+        with (
+            mock.patch.object(
+                C, "_implementation_audit",
+                return_value={"executable": True, "missing_artifacts": []}),
+            self.assertRaisesRegex(RuntimeError, "planted interruption"),
+        ):
+            first(request)
+        self.assertEqual(calls, [2.0, 8.0])
+
+        resumed_calls: list[float | None] = []
+
+        def resumed_worker(worker_request, timeout):
+            resumed_calls.append(worker_request["checkpoint_hours"])
+            return self.worker(worker_request, timeout)
+
+        resumed = R.GovernedArenaCellRunner(
+            self.config(), worker=resumed_worker,
+            claim_acquirer=lambda *args, **kwargs: FakeClaim(),
+            sampler_factory=FakeSampler)
+        with mock.patch.object(
+            C, "_implementation_audit",
+            return_value={"executable": True, "missing_artifacts": []},
+        ):
+            receipt = resumed(request)
+        self.assertEqual(resumed_calls, [8.0, 32.0])
+        self.assertEqual(resumed.resumed_checkpoints, 1)
+        self.assertEqual(resumed.executed_checkpoints, 2)
+        abandoned = list((self.output / "abandoned").glob("*8h.attempt-001"))
+        self.assertEqual(len(abandoned), 1)
+        self.assertTrue((abandoned[0] / "partial.txt").is_file())
+        self.assertEqual(
+            [row["checkpoint_hours"] for row in receipt["runs"]],
+            [2.0, 8.0, 32.0])
+
+    def test_tampered_complete_checkpoint_refuses_without_claim_or_worker(self):
+        request = C.CampaignCellRequest(
+            arm=self.arm(C.BASELINE_ARM_ID), task=self.task,
+            is_starting_state_baseline=True, checkpoint_hours=(),
+            maximum_wall_hours=0.0)
+        first = self.runner(
+            claim_acquirer=lambda *args, **kwargs: FakeClaim())
+        first(request)
+        checkpoint = next(self.output.glob("cells/*/checkpoint-receipt.json"))
+        payload = json.loads(checkpoint.read_text(encoding="utf-8"))
+        payload["device_claim_released"]["released_at"] = None
+        payload["receipt_sha256"] = canonical_sha({
+            key: value for key, value in payload.items()
+            if key != "receipt_sha256"})
+        checkpoint.write_text(json.dumps(payload), encoding="utf-8")
+        acquire = mock.Mock()
+        worker = mock.Mock()
+        resumed = R.GovernedArenaCellRunner(
+            self.config(), worker=worker, claim_acquirer=acquire,
+            sampler_factory=FakeSampler)
+        with self.assertRaisesRegex(
+                R.ArenaCellRunnerError, "not cleanly released"):
+            resumed(request)
+        acquire.assert_not_called()
+        worker.assert_not_called()
+
+    def test_artifact_mutation_refuses_instead_of_rerunning_complete_checkpoint(self):
+        request = C.CampaignCellRequest(
+            arm=self.arm(C.BASELINE_ARM_ID), task=self.task,
+            is_starting_state_baseline=True, checkpoint_hours=(),
+            maximum_wall_hours=0.0)
+        self.runner(claim_acquirer=lambda *args, **kwargs: FakeClaim())(request)
+        artifact = next(self.output.glob("cells/*/fixture.txt"))
+        artifact.write_text("mutated\n", encoding="utf-8")
+        acquire = mock.Mock()
+        worker = mock.Mock()
+        resumed = R.GovernedArenaCellRunner(
+            self.config(), worker=worker, claim_acquirer=acquire,
+            sampler_factory=FakeSampler)
+        with self.assertRaisesRegex(R.ArenaCellRunnerError, "artifact digest drifted"):
+            resumed(request)
+        acquire.assert_not_called()
+        worker.assert_not_called()
+
+    def test_source_mutation_during_worker_prevents_completed_receipt(self):
+        claim = FakeClaim()
+
+        def mutating_worker(request, timeout):
+            result = self.worker(request, timeout)
+            (self.arena / "tasks" / "fixture" / "config.yaml").write_text(
+                "task_type: mutated\n", encoding="utf-8")
+            return result
+
+        runner = R.GovernedArenaCellRunner(
+            self.config(), worker=mutating_worker,
+            claim_acquirer=lambda *args, **kwargs: claim,
+            sampler_factory=FakeSampler)
+        request = C.CampaignCellRequest(
+            arm=self.arm(C.BASELINE_ARM_ID), task=self.task,
+            is_starting_state_baseline=True, checkpoint_hours=(),
+            maximum_wall_hours=0.0)
+        with self.assertRaisesRegex(
+                R.ArenaCellRunnerError, "changed during checkpoint"):
+            runner(request)
+        self.assertTrue(claim.released)
+        self.assertEqual(
+            list(self.output.glob("cells/*/checkpoint-receipt.json")), [])
+
+    def test_campaign_root_resume_requires_exact_audit_and_manifest(self):
+        audit = R._self_hash({"schema": "audit.fixture", "campaign_id": "fixture"})
+        manifest = R._self_hash({
+            "schema": R.RUN_MANIFEST_SCHEMA, "campaign_id": "fixture"})
+        campaign_root = self.root / "campaign"
+        self.assertFalse(R._prepare_campaign_root(
+            campaign_root, audit=audit, manifest=manifest))
+        self.assertTrue(R._prepare_campaign_root(
+            campaign_root, audit=audit, manifest=manifest))
+        changed = R._self_hash({
+            "schema": R.RUN_MANIFEST_SCHEMA, "campaign_id": "other"})
+        with self.assertRaisesRegex(R.ArenaCellRunnerError, "identity drifted"):
+            R._prepare_campaign_root(
+                campaign_root, audit=audit, manifest=changed)
+
+    def test_aggregate_is_absent_until_atomic_complete_publication(self):
+        path = self.root / "campaign" / "execution-receipt.json"
+        path.parent.mkdir()
+        complete = R._self_hash({
+            "schema": R.AGGREGATE_SCHEMA,
+            "campaign_id": "fixture-campaign-v1",
+            "status": "complete",
+            "cells": [],
+        })
+        self.assertFalse(path.exists())
+        R._publish_or_verify_aggregate(path, complete)
+        self.assertEqual(json.loads(path.read_text(encoding="utf-8")), complete)
+        R._publish_or_verify_aggregate(path, complete)
+        tampered = dict(complete)
+        tampered["status"] = "partial"
+        tampered["receipt_sha256"] = canonical_sha({
+            key: value for key, value in tampered.items()
+            if key != "receipt_sha256"})
+        path.write_text(json.dumps(tampered), encoding="utf-8")
+        with self.assertRaisesRegex(R.ArenaCellRunnerError, "aggregate drifted"):
+            R._publish_or_verify_aggregate(path, complete)
+
+    def test_cli_fault_keeps_partial_matrix_non_aggregate_and_exact_retry_publishes(self):
+        config_path = self.root / "campaign.json"
+        config_path.write_text("{}\n", encoding="utf-8")
+        config_sha = hashlib.sha256(config_path.read_bytes()).hexdigest()
+        spec = types.SimpleNamespace(
+            config_path=str(config_path.resolve()), config_sha256=config_sha,
+            tasks=(self.task,), budget_hours=C.MATCHED_BUDGET_HOURS)
+        audit = R._self_hash({
+            "schema": C.AVAILABLE_SOURCE_AUDIT_SCHEMA,
+            "campaign_id": "fixture-campaign-v1",
+            "status": "ready",
+            "authority": "availability_conditioned_diagnostic_only",
+            "execution_identity": {
+                "implementation_module_sha256": hashlib.sha256(
+                    C.IMPLEMENTATION_MODULE.read_bytes()).hexdigest()},
+            "sources": {"agent_kernel_arena": {}, "geak_v1": {}},
+            "panel": {"arms": []},
+        })
+        output = self.root / "cli-campaign"
+        args = types.SimpleNamespace(
+            config=str(config_path), arena_root=str(self.arena.resolve()),
+            geak_root=str(self.arena.resolve()), preflight=str(self.preflight_path),
+            output_root=str(output), enumerator="fixture-enumerator",
+            claim_journal=str(self.root / "claims.jsonl"),
+            claim_timeout_seconds=0.0, available_source=True)
+        fake_runner = mock.Mock()
+        with (
+            mock.patch.object(R.arena_campaign, "load_spec", return_value=spec),
+            mock.patch.object(
+                R.arena_campaign, "audit_available_source_campaign",
+                return_value=audit),
+            mock.patch.object(R, "GovernedArenaCellRunner", return_value=fake_runner),
+            mock.patch.object(
+                R.arena_campaign, "execute_available_source_campaign",
+                side_effect=RuntimeError("planted campaign interruption")),
+            self.assertRaisesRegex(RuntimeError, "planted campaign interruption"),
+        ):
+            R.execute_from_cli(args)
+        self.assertTrue((output / "audit.json").is_file())
+        self.assertTrue((output / "campaign-manifest.json").is_file())
+        self.assertFalse((output / "execution-receipt.json").exists())
+
+        cells = [R._self_hash({"schema": R.RUNNER_SCHEMA, "cell": "complete"})]
+        with (
+            mock.patch.object(R.arena_campaign, "load_spec", return_value=spec),
+            mock.patch.object(
+                R.arena_campaign, "audit_available_source_campaign",
+                return_value=audit),
+            mock.patch.object(R, "GovernedArenaCellRunner", return_value=fake_runner),
+            mock.patch.object(
+                R.arena_campaign, "execute_available_source_campaign",
+                return_value=cells),
+        ):
+            status, aggregate = R.execute_from_cli(args)
+        self.assertEqual(status, 0)
+        self.assertEqual(aggregate["status"], "complete")
+        self.assertEqual(aggregate["cells"], cells)
+        self.assertTrue((output / "execution-receipt.json").is_file())
 
     def test_checkpoint_rewrites_only_declared_budget_flags(self):
         arm = self.arm("k_search")

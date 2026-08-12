@@ -860,6 +860,11 @@ def write_receipt(path: str | Path, receipt: Mapping[str, Any]) -> Path:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, output)
+        directory_fd = os.open(output.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
     finally:
         if temporary.exists():
             temporary.unlink()
