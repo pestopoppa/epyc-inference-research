@@ -340,6 +340,107 @@ def extract_exact_answer(response: str, scoring_config: dict) -> str:
     return stripped
 
 
+# ── Ordered-subsequence verification (instruction-following order axis) ──
+# From arXiv 2506.15629 (Sakai et al., ACL 2025 Main): given an ordered concept
+# list, check the concepts appear in the completion AS AN ORDERED SUBSEQUENCE.
+# Two metrics on purpose — they diverge by up to 26.5 pts on weak models and
+# converge only at 405B scale, so they carry distinct signal exactly in the
+# small/quantized regime this stack measures:
+#   coverage          — fraction of concepts present at all (order-blind)
+#   coverage_in_order — longest realizable in-order chain / len(concepts)
+#   all_in_order      — every concept present with an increasing assignment
+# Lemmatization is OPTIONAL and lazy (spaCy if importable, else surface-form
+# matching, flagged in the result). The fallback direction is conservative:
+# unlemmatized matching can only MISS inflected variants, never false-match.
+
+_SPACY_NLP = None
+_SPACY_TRIED = False
+
+
+def _lemma_tokens(text: str, lemmatizer) -> list:
+    """Tokenize (and lemmatize when available) into a lowercase token list."""
+    if lemmatizer is not None:
+        return [str(t).lower() for t in lemmatizer(text)]
+    global _SPACY_NLP, _SPACY_TRIED
+    if not _SPACY_TRIED:
+        _SPACY_TRIED = True
+        try:  # lazy + guarded, same contract as the sympy block above
+            import spacy
+            _SPACY_NLP = spacy.load("en_core_web_sm", disable=["parser", "ner"])
+        except Exception:
+            _SPACY_NLP = None
+    if _SPACY_NLP is not None:
+        # Same [a-z0-9]+ character class as the fallback, so punctuation
+        # lemmas never interpose inside a multi-word concept and hyphenated
+        # forms split identically on both paths.
+        toks = []
+        for t in _SPACY_NLP(text):
+            toks.extend(re.findall(r"[a-z0-9]+", t.lemma_.lower()))
+        return toks
+    return re.findall(r"[a-z0-9]+", text.lower())
+
+
+def score_ordered_subsequence(response: str, concepts: list,
+                              lemmatizer=None) -> dict:
+    """Verify `concepts` appear in `response` as an ordered subsequence.
+
+    Returns a dict: `coverage` [0,1] order-blind, `coverage_in_order` [0,1]
+    (longest in-order chain via DP over all occurrence positions, so an early
+    out-of-order mention never shadows a later in-order one), `all_in_order`
+    bool, `missing` (concepts absent entirely), and `lemmatized` bool.
+
+    An EMPTY concept list is refused, not vacuously passed: a verifier that
+    returns 1.0 on empty input scores every response perfect the day a suite
+    row ships with a bad config.
+    """
+    if not concepts:
+        raise ValueError("ordered_subsequence: empty concept list — a vacuous "
+                         "pass would score every response perfect; fix the "
+                         "suite config")
+    tokens = _lemma_tokens(response, lemmatizer)
+    lemmatized = lemmatizer is not None or _SPACY_NLP is not None
+
+    # All start positions of each (possibly multi-word) concept in the stream.
+    occurrences = []
+    for concept in concepts:
+        ctoks = _lemma_tokens(str(concept), lemmatizer)
+        starts = []
+        if ctoks:
+            span = len(ctoks)
+            starts = [i for i in range(len(tokens) - span + 1)
+                      if tokens[i:i + span] == ctoks]
+        occurrences.append(starts)
+
+    present = [bool(s) for s in occurrences]
+
+    # Longest in-order chain: DP over concepts; best[k] = smallest end-position
+    # achieving a chain of length k (patience-style, positions strictly increase).
+    best = []  # best[k-1] = minimal position at which a length-k chain can end
+    for starts in occurrences:
+        if not starts:
+            continue
+        # Walk existing chain lengths from longest to shortest so one concept
+        # extends each candidate chain at most once per pass.
+        for k in range(len(best), -1, -1):
+            floor = best[k - 1] if k else -1
+            nxt = next((p for p in sorted(starts) if p > floor), None)
+            if nxt is None:
+                continue
+            if k == len(best):
+                best.append(nxt)
+            elif nxt < best[k]:
+                best[k] = nxt
+    chain = len(best)
+
+    return {
+        "coverage": sum(present) / len(concepts),
+        "coverage_in_order": chain / len(concepts),
+        "all_in_order": chain == len(concepts),
+        "missing": [str(c) for c, ok in zip(concepts, present) if not ok],
+        "lemmatized": lemmatized,
+    }
+
+
 def score_response(response: str, expected: str, q: dict) -> bool:
     """Score one adapter question response."""
     scoring_method = q.get("scoring_method", "multiple_choice")
@@ -363,6 +464,13 @@ def score_response(response: str, expected: str, q: dict) -> bool:
     if scoring_method == "math_symbolic":
         # \boxed{} + numeric → set/tuple → sympy symbolic equivalence.
         return score_math_symbolic(response, expected)
+
+    if scoring_method == "ordered_subsequence":
+        # Binary arm = the paper's Ordered Rate; the graded coverage_in_order
+        # comes from calling score_ordered_subsequence directly (same shape as
+        # code_execution returning a dict the dispatch reduces to bool).
+        return score_ordered_subsequence(
+            response, scoring_config.get("concepts") or [])["all_in_order"]
 
     if scoring_method == "code_execution":
         # Run the model's code against the suite's tests in an isolated subprocess.

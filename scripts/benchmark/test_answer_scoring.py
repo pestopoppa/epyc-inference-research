@@ -49,6 +49,106 @@ def test_score_response_dispatch():
                             {"scoring_method": "math_numeric"})
 
 
+def _force_surface_matching():
+    """Pin the no-spaCy fallback so these tests mean the same thing on every host."""
+    s._SPACY_NLP = None
+    s._SPACY_TRIED = True
+
+
+def _naive_lemmas(text):
+    """Deterministic toy lemmatizer: clean tokenize + strip ing/ed/s suffixes."""
+    import re
+    return [re.sub(r"(ing|ed|s)$", "", w) for w in re.findall(r"[a-z]+", text.lower())]
+
+
+def test_ordered_subsequence_basic_directions():
+    _force_surface_matching()
+    # in order: both metrics saturate
+    r = s.score_ordered_subsequence(
+        "First we mix the acid, then we heat the flask, finally we titrate.",
+        ["acid", "heat", "titrate"])
+    assert r["all_in_order"] and r["coverage"] == 1.0 and r["coverage_in_order"] == 1.0
+    # all present but order broken: coverage stays 1.0, ordered metrics drop —
+    # the two-metric divergence the row exists to capture
+    r = s.score_ordered_subsequence(
+        "We titrate, after heating, having mixed the acid first.",
+        ["acid", "heat", "titrate"], lemmatizer=_naive_lemmas)
+    assert r["coverage"] == 1.0 and not r["all_in_order"] and r["coverage_in_order"] < 1.0
+
+
+def test_ordered_subsequence_partial_and_missing():
+    _force_surface_matching()
+    r = s.score_ordered_subsequence("only the acid appears", ["acid", "heat", "titrate"])
+    assert not r["all_in_order"] and r["missing"] == ["heat", "titrate"]
+    assert abs(r["coverage"] - 1 / 3) < 1e-9 and abs(r["coverage_in_order"] - 1 / 3) < 1e-9
+
+
+def test_ordered_subsequence_multiword_contiguous():
+    _force_surface_matching()
+    ok = s.score_ordered_subsequence(
+        "compute the energy level then the Larmor precession",
+        ["energy level", "larmor precession"])
+    assert ok["all_in_order"]
+    # split multi-word must NOT match; hyphens split like spaces on both paths
+    split = s.score_ordered_subsequence(
+        "the energy of this level", ["energy level"])
+    assert split["missing"] == ["energy level"] and split["coverage"] == 0.0
+    hyph = s.score_ordered_subsequence("the energy-level diagram", ["energy level"])
+    assert hyph["all_in_order"]
+
+
+def test_ordered_subsequence_early_mention_never_shadows():
+    _force_surface_matching()
+    # 'c' appears early (out of order) AND again after 'a' — the DP must find
+    # the in-order assignment, not greedily bind the first occurrence
+    r = s.score_ordered_subsequence("c comes early, then a, then c again", ["a", "c"])
+    assert r["all_in_order"]
+
+
+def test_ordered_subsequence_duplicates_need_repeats():
+    _force_surface_matching()
+    assert s.score_ordered_subsequence("a b a", ["a", "a"])["all_in_order"]
+    assert not s.score_ordered_subsequence("a b", ["a", "a"])["all_in_order"]
+
+
+def test_ordered_subsequence_empty_concepts_refused():
+    # the vacuity guard: empty config must raise, never score 1.0
+    _force_surface_matching()
+    try:
+        s.score_ordered_subsequence("anything", [])
+        assert False, "empty concept list must be refused"
+    except ValueError:
+        pass
+    # dispatch path fails closed too: a suite row missing its concepts raises
+    try:
+        s.score_response("anything", "", {"scoring_method": "ordered_subsequence",
+                                          "scoring_config": {}})
+        assert False, "dispatch must not silently pass a bad config"
+    except ValueError:
+        pass
+
+
+def test_ordered_subsequence_injected_lemmatizer_and_conservative_fallback():
+    _force_surface_matching()
+    text = "he runs the tests then ships the build"
+    naive = lambda t: [w[:-1] if w.endswith("s") else w
+                       for w in t.lower().replace(",", " ").split()]
+    assert s.score_ordered_subsequence(text, ["run", "test", "ship"],
+                                       lemmatizer=naive)["all_in_order"]
+    # without lemmatization the inflected forms miss — the CONSERVATIVE direction
+    # (never a false match), flagged so a reader can tell which regime scored
+    r = s.score_ordered_subsequence(text, ["run", "test", "ship"])
+    assert not r["all_in_order"] and r["lemmatized"] is False
+
+
+def test_ordered_subsequence_dispatch_binary_arm():
+    _force_surface_matching()
+    q = {"scoring_method": "ordered_subsequence",
+         "scoring_config": {"concepts": ["mix", "heat"]}}
+    assert s.score_response("mix then heat", "", q)
+    assert not s.score_response("heat then mix", "", q)
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
