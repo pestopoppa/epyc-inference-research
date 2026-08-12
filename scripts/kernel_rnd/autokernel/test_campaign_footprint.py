@@ -149,6 +149,9 @@ CAMPAIGN_ROOTS = {
     f"{ROOT_PKG}.source_prerequisite_package":
         "source candidates may rank only after archived raw sensitivity, hostile and "
         "checker CSV bytes are re-reduced and rebound to the exact live build identities",
+    f"{ROOT_PKG}.source_prerequisite_producer":
+        "a source candidate with no prior archive must produce sensitivity, hostile and "
+        "checker receipts under the campaign's already-held claims before behavioral T0",
     f"{ROOT_PKG}.evaluator.api":
         "a Verdict is constructible only via compute_verdict(); it cannot be stamped",
     f"{ROOT_PKG}.evaluator.correctness":

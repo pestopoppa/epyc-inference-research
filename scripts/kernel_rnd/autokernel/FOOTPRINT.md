@@ -30,9 +30,9 @@ a module it never looked at.
 
 | | non-test lines |
 |---|---:|
-| **ON THE CAMPAIGN PATH** | **67,467** |
+| **ON THE CAMPAIGN PATH** | **68,015** |
 | **DEFERRED** (provably unreachable) | **39,759** |
-| **TOTAL** | **107,226** |
+| **TOTAL** | **107,774** |
 
 **The deferred plane is explicit.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -123,7 +123,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 
 | module | lines | campaign #1 | reason |
 |---|---:|:---:|---|
-| `campaign.py` | 4,384 | yes | THE ENTRYPOINT. Before it landed, `grep -rl "__main__|argparse|def main("` over every non-test module returned nothing: 94k lines, 5,695 passing tests, and no way to start it — which is the whole reason this package has produced no result |
+| `campaign.py` | 4,460 | yes | THE ENTRYPOINT. Before it landed, `grep -rl "__main__|argparse|def main("` over every non-test module returned nothing: 94k lines, 5,695 passing tests, and no way to start it — which is the whole reason this package has produced no result |
 | `dashboard.py` | 201 | yes | the terminal result was fsynced but the only dashboard exporter had been deleted, so active AutoKernel work remained permanently absent from the operator surface; this compact projection dates itself from the journal entry and cannot make an old campaign fresh |
 | `__init__.py` | 14 | yes | package docstring; `schemas` is declared here as the single source of record shape |
 | `schemas.py` | 3,598 | yes | one record shape — every module is written against it and none invents its own |
@@ -143,7 +143,8 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `artifact_diff.py` | 200 | yes | AK-TR-6 must veto an unconfirmed GPU claim before the behavioral T0 provider can launch |
 | `candidate_record.py` | 243 | yes | every executed candidate is fsynced from the exact built snapshot and evaluation event identities before terminal STOP |
 | `source_candidate.py` | 443 | yes | source-changing proposals consume one immutable embedded patch bundle through the guarded worktree mutation boundary |
-| `source_prerequisite_package.py` | 414 | yes | source candidates may rank only after archived raw sensitivity, hostile and checker CSV bytes are re-reduced and rebound to the exact live build identities |
+| `source_prerequisite_package.py` | 534 | yes | source candidates may rank only after archived raw sensitivity, hostile and checker CSV bytes are re-reduced and rebound to the exact live build identities |
+| `source_prerequisite_producer.py` | 352 | yes | a source candidate with no prior archive must produce sensitivity, hostile and checker receipts under the campaign's already-held claims before behavioral T0 |
 | `storage.py` | 1,859 | yes | the 2026-07-04 async-prefetch win was written to `/mnt/raid0/llm/tmp/` and that directory no longer exists |
 | `adapters/__init__.py` | 21 | no | AK9 adapter namespace only; campaign #1 remains llama_cpu-only and imports no speech release surface |
 | `adapters/whisper_stt.py` | 1,843 | no | AK9 pure whisper.cpp tree, metric, linkage, protocol-prerequisite and release-binding declarations; no inference, build, mutation or freeze authority |
