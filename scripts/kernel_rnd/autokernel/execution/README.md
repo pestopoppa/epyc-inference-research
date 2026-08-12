@@ -118,12 +118,12 @@ Something else moved production and every anchor you are about to take is wrong.
 The reward instrument is a separate reviewed source anchor:
 
 ```
-/mnt/raid0/llm/llama.cpp-ak-controls-v9-final  a4cb04ca8f92fa4d665684490f609b380f9b5e96  experimental-v9-autokernel-t1-hardening-final
+/mnt/raid0/llm/llama.cpp-ak-controls-v9-final  b05a1618c3a1acb5253cf1f2c9813a6f43b0376b  experimental-v9-autokernel-t1-hardening-final
 ```
 
-That commit has exactly one parent, the production v9 commit above. It changes
-only the measurement tool and its README; serving remains frozen. The live
-preflight proves the branch, commit, clean source tree, and direct-parent edge.
+That commit has exactly one parent, the production v9 commit above. It is an
+experimental measurement instrument; serving remains frozen. The live preflight
+proves the branch, commit, clean source tree, and direct-parent edge.
 
 ### 1.2 The host is yours to measure on
 
@@ -256,8 +256,8 @@ Everything from here to Step 8 happens **inside** this claim.
 from autokernel.execution import worktree as WT
 
 repo = WT.GitRepo("/mnt/raid0/llm/llama.cpp-experimental") # READ-ONLY by construction
-anchor = WT.resolve_anchor(repo, "experimental-v9-autokernel-t1-hardening",
-                           expected_commit="a4cb04ca8f92fa4d665684490f609b380f9b5e96")
+anchor = WT.resolve_anchor(repo, "experimental-v9-autokernel-t1-hardening-final",
+                           expected_commit="b05a1618c3a1acb5253cf1f2c9813a6f43b0376b")
 wt, proof = WT.create_campaign_worktree(anchor, "ak-0001")   # /mnt/raid0/llm/llama.cpp-ak-0001
 assert proof.holds, proof.differences
 ```

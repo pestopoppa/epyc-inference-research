@@ -7,7 +7,7 @@ neutral pools, solves the campaign calibration, then drives all five controls
 through :mod:`execution.control_runner`'s candidate pipeline.
 
 The frozen production tree is read only. Both arms use the reviewed hardened
-measurement overlay, whose commit is a one-change child of production v9. A
+measurement overlay, whose commit is a direct child of production v9. A
 byte-for-byte copy of its ``llama-bench`` and ggml DSOs is made inside the
 evidence bundle so the candidate arm can execute A/A without mislabelling the
 serving tree or rebuilding the trusted instrument.
@@ -43,7 +43,7 @@ INSTRUMENT_BINARY = Path(os.environ.get(
     "AUTOKERNEL_INSTRUMENT_BINARY",
     str(INSTRUMENT_ROOT / "build-v9-cpu/bin/llama-bench")))
 INSTRUMENT_BRANCH = "experimental-v9-autokernel-t1-hardening-final"
-INSTRUMENT_COMMIT = "a4cb04ca8f92fa4d665684490f609b380f9b5e96"
+INSTRUMENT_COMMIT = "b05a1618c3a1acb5253cf1f2c9813a6f43b0376b"
 MODEL = Path(
     "/mnt/raid0/llm/models/lmstudio-community/"
     "Qwen2.5-Coder-0.5B-GGUF/Qwen2.5-Coder-0.5B-Q4_K_M.gguf")
