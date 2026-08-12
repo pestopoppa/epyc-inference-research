@@ -1,0 +1,33 @@
+
+
+Loading model... |-\|/-\ 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10125-0db32c06e
+model      : /mnt/raid0/llm/models/LFM2.5-1.2B-Instruct-Q4_K_M.gguf
+ftype      : Q4_K - Medium
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> Compute 17 * 23. Reply with only the number.
+4931
+
+[ Prompt: 919.4 t/s | Generation: 208.7 t/s ]
+
+
+Exiting...

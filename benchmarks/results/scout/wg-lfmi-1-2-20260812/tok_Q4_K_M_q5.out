@@ -1,0 +1,33 @@
+
+
+Loading model... |-\|/-\ 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10125-0db32c06e
+model      : /mnt/raid0/llm/models/LFM2.5-1.2B-Instruct-Q4_K_M.gguf
+ftype      : Q4_K - Medium
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> A shelf holds 3 boxes. Each box holds 4 jars. Each jar holds 6 marbles. How many marbles in total? Reply with only the number.
+360
+
+[ Prompt: 1743.8 t/s | Generation: 657.5 t/s ]
+
+
+Exiting...

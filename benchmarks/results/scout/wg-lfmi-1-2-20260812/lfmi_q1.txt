@@ -1,0 +1,3 @@
+<|im_start|>user
+What is the capital city of Japan? Reply with only the city name.<|im_end|>
+<|im_start|>assistant

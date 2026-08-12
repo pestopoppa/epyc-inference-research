@@ -1,0 +1,42 @@
+[
+  {
+    "q": 1,
+    "chars": 115,
+    "prompt": "What is the capital city of Japan? Reply with only the city name.",
+    "sha256": "c28b84784438de7bb6678fc2ab7aeb805329af759ca34a84504c27e8d0e525bc",
+    "repr": "'<|im_start|>user\\nWhat is the capital city of Japan? Reply with only the city name.<|im_end|>\\n<|im_start|>assistant\\n'",
+    "has_think_prefill": false
+  },
+  {
+    "q": 2,
+    "chars": 94,
+    "prompt": "Compute 17 * 23. Reply with only the number.",
+    "sha256": "c6b93238b975d41fb712c30e87a8debab1f1212f24375aae47742898a800d049",
+    "repr": "'<|im_start|>user\\nCompute 17 * 23. Reply with only the number.<|im_end|>\\n<|im_start|>assistant\\n'",
+    "has_think_prefill": false
+  },
+  {
+    "q": 3,
+    "chars": 124,
+    "prompt": "List the first five prime numbers as a comma-separated list, nothing else.",
+    "sha256": "0c5ec6a85f77f2f1a6dea5763e7c4e45e1375b019cd6a8c459a098cb00f38214",
+    "repr": "'<|im_start|>user\\nList the first five prime numbers as a comma-separated list, nothing else.<|im_end|>\\n<|im_start|>assistant\\n'",
+    "has_think_prefill": false
+  },
+  {
+    "q": 4,
+    "chars": 175,
+    "prompt": "Return ONLY a JSON object, no prose and no code fence, with keys \"name\" and \"age\" for a person named Ada who is 36 years old.",
+    "sha256": "c4560c849a797a6761ab288e29cdcb819851bbe501e0c52bae573333ee52b7c3",
+    "repr": "'<|im_start|>user\\nReturn ONLY a JSON object, no prose and no code fence, with keys \"name\" and \"age\" for a person named Ada who is 36 years old.<|im_end|>\\n<|im_start|>assistant\\n'",
+    "has_think_prefill": false
+  },
+  {
+    "q": 5,
+    "chars": 176,
+    "prompt": "A shelf holds 3 boxes. Each box holds 4 jars. Each jar holds 6 marbles. How many marbles in total? Reply with only the number.",
+    "sha256": "b32d53f96c9d9393e4170c8dfaecf39782fa316e4ff4ffb921722aaf65b0371f",
+    "repr": "'<|im_start|>user\\nA shelf holds 3 boxes. Each box holds 4 jars. Each jar holds 6 marbles. How many marbles in total? Reply with only the number.<|im_end|>\\n<|im_start|>assistant\\n'",
+    "has_think_prefill": false
+  }
+]

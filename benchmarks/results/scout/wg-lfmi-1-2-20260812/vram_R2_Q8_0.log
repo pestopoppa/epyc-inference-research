@@ -1,0 +1,5 @@
+21:30:26 pid_alive=1 mask=184-191 vram_used_B=13107200 gpu_use_pct=0 kfd_clients=1 kfd_pids=266842,
+21:30:28 pid_alive=1 mask=184-191 vram_used_B=1905000448 gpu_use_pct=98 kfd_clients=1 kfd_pids=266842,
+21:30:34 pid_alive=1 mask=184-191 vram_used_B=1905000448 gpu_use_pct=99 kfd_clients=1 kfd_pids=266842,
+21:30:38 pid_alive=1 mask=184-191 vram_used_B=1904205824 gpu_use_pct=98 kfd_clients=1 kfd_pids=266842,
+21:30:42 pid_alive=1 mask=184-191 vram_used_B=1904205824 gpu_use_pct=0 kfd_clients=0 kfd_pids=

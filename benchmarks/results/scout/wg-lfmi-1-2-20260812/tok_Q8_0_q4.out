@@ -1,0 +1,33 @@
+
+
+Loading model... |-\|/-\ 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10125-0db32c06e
+model      : /mnt/raid0/llm/models/LFM2.5-1.2B-Instruct-Q8_0.gguf
+ftype      : Q8_0
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> Return ONLY a JSON object, no prose and no code fence, with keys "name" and "age" for a person named Ada who is 36 years old.
+{"name": "Ada", "age": 36}
+
+[ Prompt: 2146.7 t/s | Generation: 317.4 t/s ]
+
+
+Exiting...

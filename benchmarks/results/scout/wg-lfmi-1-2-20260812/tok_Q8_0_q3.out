@@ -1,0 +1,33 @@
+
+
+Loading model... |-\|/-\ 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10125-0db32c06e
+model      : /mnt/raid0/llm/models/LFM2.5-1.2B-Instruct-Q8_0.gguf
+ftype      : Q8_0
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> List the first five prime numbers as a comma-separated list, nothing else.
+2, 3, 5, 7, 11
+
+[ Prompt: 1162.5 t/s | Generation: 347.6 t/s ]
+
+
+Exiting...

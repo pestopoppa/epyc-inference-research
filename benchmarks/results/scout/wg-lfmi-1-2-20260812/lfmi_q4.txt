@@ -1,0 +1,3 @@
+<|im_start|>user
+Return ONLY a JSON object, no prose and no code fence, with keys "name" and "age" for a person named Ada who is 36 years old.<|im_end|>
+<|im_start|>assistant

@@ -1,0 +1,112 @@
+[
+  {
+    "tag": "Q4_K_M",
+    "q": 1,
+    "pred": 3,
+    "ev": 25,
+    "pred_ms": 12.508,
+    "prompt_ms": 26.273,
+    "stop": "eos",
+    "gen_prompt": "<|im_start|>assistant\n",
+    "prompt": "<|startoftext|><|im_start|>user\nWhat is the capital city of Japan? Reply with only the city name.<|im_end|>\n<|im_start|>assistant\n"
+  },
+  {
+    "tag": "Q4_K_M",
+    "q": 2,
+    "pred": 3,
+    "ev": 24,
+    "pred_ms": 14.373,
+    "prompt_ms": 26.104,
+    "stop": "eos",
+    "gen_prompt": "<|im_start|>assistant\n",
+    "prompt": "<|startoftext|><|im_start|>user\nCompute 17 * 23. Reply with only the number.<|im_end|>\n<|im_start|>assistant\n"
+  },
+  {
+    "tag": "Q4_K_M",
+    "q": 3,
+    "pred": 14,
+    "ev": 27,
+    "pred_ms": 45.087,
+    "prompt_ms": 26.401,
+    "stop": "eos",
+    "gen_prompt": "<|im_start|>assistant\n",
+    "prompt": "<|startoftext|><|im_start|>user\nList the first five prime numbers as a comma-separated list, nothing else.<|im_end|>\n<|im_start|>assistant\n"
+  },
+  {
+    "tag": "Q4_K_M",
+    "q": 4,
+    "pred": 14,
+    "ev": 45,
+    "pred_ms": 51.436,
+    "prompt_ms": 27.009,
+    "stop": "eos",
+    "gen_prompt": "<|im_start|>assistant\n",
+    "prompt": "<|startoftext|><|im_start|>user\nReturn ONLY a JSON object, no prose and no code fence, with keys \"name\" and \"age\" for a person named Ada who is 36 years old.<|im_end|>\n<|im_start|>assistant\n"
+  },
+  {
+    "tag": "Q4_K_M",
+    "q": 5,
+    "pred": 2,
+    "ev": 45,
+    "pred_ms": 3.042,
+    "prompt_ms": 25.806,
+    "stop": "eos",
+    "gen_prompt": "<|im_start|>assistant\n",
+    "prompt": "<|startoftext|><|im_start|>user\nA shelf holds 3 boxes. Each box holds 4 jars. Each jar holds 6 marbles. How many marbles in total? Reply with only the number.<|im_end|>\n<|im_start|>assistant\n"
+  },
+  {
+    "tag": "Q8_0",
+    "q": 1,
+    "pred": 3,
+    "ev": 25,
+    "pred_ms": 13.182,
+    "prompt_ms": 19.617,
+    "stop": "eos",
+    "gen_prompt": "<|im_start|>assistant\n",
+    "prompt": "<|startoftext|><|im_start|>user\nWhat is the capital city of Japan? Reply with only the city name.<|im_end|>\n<|im_start|>assistant\n"
+  },
+  {
+    "tag": "Q8_0",
+    "q": 2,
+    "pred": 3,
+    "ev": 24,
+    "pred_ms": 14.558,
+    "prompt_ms": 18.807,
+    "stop": "eos",
+    "gen_prompt": "<|im_start|>assistant\n",
+    "prompt": "<|startoftext|><|im_start|>user\nCompute 17 * 23. Reply with only the number.<|im_end|>\n<|im_start|>assistant\n"
+  },
+  {
+    "tag": "Q8_0",
+    "q": 3,
+    "pred": 14,
+    "ev": 27,
+    "pred_ms": 40.281,
+    "prompt_ms": 23.225,
+    "stop": "eos",
+    "gen_prompt": "<|im_start|>assistant\n",
+    "prompt": "<|startoftext|><|im_start|>user\nList the first five prime numbers as a comma-separated list, nothing else.<|im_end|>\n<|im_start|>assistant\n"
+  },
+  {
+    "tag": "Q8_0",
+    "q": 4,
+    "pred": 14,
+    "ev": 45,
+    "pred_ms": 44.108,
+    "prompt_ms": 20.962,
+    "stop": "eos",
+    "gen_prompt": "<|im_start|>assistant\n",
+    "prompt": "<|startoftext|><|im_start|>user\nReturn ONLY a JSON object, no prose and no code fence, with keys \"name\" and \"age\" for a person named Ada who is 36 years old.<|im_end|>\n<|im_start|>assistant\n"
+  },
+  {
+    "tag": "Q8_0",
+    "q": 5,
+    "pred": 2,
+    "ev": 45,
+    "pred_ms": 3.395,
+    "prompt_ms": 22.148,
+    "stop": "eos",
+    "gen_prompt": "<|im_start|>assistant\n",
+    "prompt": "<|startoftext|><|im_start|>user\nA shelf holds 3 boxes. Each box holds 4 jars. Each jar holds 6 marbles. How many marbles in total? Reply with only the number.<|im_end|>\n<|im_start|>assistant\n"
+  }
+]
