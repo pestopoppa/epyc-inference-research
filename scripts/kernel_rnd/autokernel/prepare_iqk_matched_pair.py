@@ -20,7 +20,8 @@ import shutil
 import tempfile
 from typing import Any, Mapping, Sequence
 
-from . import campaign, least_commitment_capture as capture, schemas
+from . import campaign, least_commitment_capture as capture
+from . import least_commitment_heldout, schemas
 from .execution import physical_bounds
 
 
@@ -104,14 +105,26 @@ def _path(value: Any, label: str, *, file: bool = False) -> Path:
 def _branch(raw: Any, label: str) -> dict[str, Any]:
     required = {
         "campaign_id", "candidate_id", "capture_id", "intervention_id",
-        "diagnostic_source", "heldout_outcome", "output_dir",
+        "diagnostic_source", "heldout_outcome", "evidence_stage", "output_dir",
     }
     if not isinstance(raw, Mapping) or set(raw) != required:
         raise PreparationError(f"{label}: fields must be exactly {sorted(required)}")
     result = {key: _text(raw[key], f"{label}.{key}") for key in (
         "campaign_id", "candidate_id", "capture_id", "intervention_id")}
-    for key in ("diagnostic_source", "heldout_outcome"):
-        result[key] = _path(raw[key], f"{label}.{key}", file=True)
+    result["diagnostic_source"] = _path(
+        raw["diagnostic_source"], f"{label}.diagnostic_source", file=True)
+    result["evidence_stage"] = _text(raw["evidence_stage"], f"{label}.evidence_stage")
+    if result["evidence_stage"] not in capture.EVIDENCE_STAGES:
+        raise PreparationError(
+            f"{label}.evidence_stage must be one of {sorted(capture.EVIDENCE_STAGES)}")
+    heldout = raw["heldout_outcome"]
+    if result["evidence_stage"] == "bootstrap":
+        if heldout is not None:
+            raise PreparationError(f"{label}.bootstrap cannot name heldout_outcome")
+        result["heldout_outcome"] = None
+    else:
+        result["heldout_outcome"] = _path(
+            heldout, f"{label}.heldout_outcome", file=True)
     result["output_dir"] = _path(raw["output_dir"], f"{label}.output_dir")
     return result
 
@@ -138,16 +151,25 @@ def _build_plan(
 ) -> dict[str, Any]:
     diagnostic_path = staging / "least-commitment-diagnostic-source.json"
     heldout_path = staging / "least-commitment-heldout-outcome.json"
-    diagnostic_binding = _copy_bound_receipt(
-        Path(branch["diagnostic_source"]), diagnostic_path)
-    heldout_binding = _copy_bound_receipt(
-        Path(branch["heldout_outcome"]), heldout_path)
+    _copy_bound_receipt(Path(branch["diagnostic_source"]), diagnostic_path)
     source = _load(diagnostic_path, f"{role} diagnostic source")
+    expected_frame = least_commitment_heldout.candidate_frame_id(
+        least_commitment_heldout.candidate_frame_from_factors(factors, proposal))
+    # The source receipt owns quotient semantics, while the candidate frame is
+    # mechanically derived from this exact campaign.  Rebind it in the private
+    # transaction so stale preparation artifacts cannot select a frame by hand.
+    source["candidate_frame_id"] = expected_frame
+    source["proposal_sha256"] = schemas.content_hash(proposal)
+    _write_json(diagnostic_path, source)
+    diagnostic_binding = capture.source_binding(diagnostic_path)
+    heldout_binding = None
+    if branch["evidence_stage"] == "heldout_bound":
+        assert branch["heldout_outcome"] is not None
+        heldout_binding = _copy_bound_receipt(
+            Path(branch["heldout_outcome"]), heldout_path)
     diagnostics, recodings = capture.derive_diagnostics(
         source, proposal=proposal,
-        candidate_frame_id=_text(
-            _load(heldout_path, f"{role} heldout outcome").get(
-                "candidate_frame_id"), f"{role}.candidate_frame_id"))
+        candidate_frame_id=expected_frame)
     raw: dict[str, Any] = {
         "schema": capture.SCHEMA,
         "capture_id": branch["capture_id"],
@@ -157,7 +179,7 @@ def _build_plan(
         "matched_experiment_id": matched_experiment_id,
         "role": role,
         "matched_control_proposal_id": matched_control_proposal_id,
-        "candidate_frame_id": source["candidate_frame_id"],
+        "candidate_frame_id": expected_frame,
         "regime": proposal["target"]["regimes"][0],
         "surface": proposal["target"]["ops"][0],
         "intervention_id": branch["intervention_id"],
@@ -167,8 +189,11 @@ def _build_plan(
         "recodings": recodings,
         "diagnostic_source_receipts": {
             name: dict(diagnostic_binding) for name in capture.DIAGNOSTICS},
+        "evidence_stage": branch["evidence_stage"],
         "heldout_outcome_receipt": heldout_binding,
-        "outcome_reducers": dict(capture.OUTCOME_REDUCERS),
+        "outcome_reducers": dict(
+            capture.BOOTSTRAP_OUTCOME_REDUCERS
+            if branch["evidence_stage"] == "bootstrap" else capture.OUTCOME_REDUCERS),
         "capture_mode": "measured",
     }
     raw["plan_sha256"] = capture.plan_sha256(raw)
@@ -184,8 +209,9 @@ def _build_plan(
     for binding in durable["diagnostic_source_receipts"].values():
         binding["path"] = str(
             published / "least-commitment-diagnostic-source.json")
-    durable["heldout_outcome_receipt"]["path"] = str(
-        published / "least-commitment-heldout-outcome.json")
+    if durable["heldout_outcome_receipt"] is not None:
+        durable["heldout_outcome_receipt"]["path"] = str(
+            published / "least-commitment-heldout-outcome.json")
     durable["plan_sha256"] = capture.plan_sha256(durable)
     _write_json(staging / "least-commitment-capture-plan.json", durable)
     return durable
@@ -209,6 +235,7 @@ def prepare(raw: Mapping[str, Any]) -> dict[str, Any]:
     required = {
         "schema", "matched_experiment_id", "model", "calibration_bundle",
         "physical_envelope_template", "intervention_proposal",
+        "intervention_campaign_id", "intervention_proposal_id",
         "control_proposal_id", "intervention", "control", "blocks", "reps",
     }
     if set(raw) != required or raw.get("schema") != SCHEMA:
@@ -240,6 +267,12 @@ def prepare(raw: Mapping[str, Any]) -> dict[str, Any]:
            for value in (blocks, reps)):
         raise PreparationError("blocks and reps must be positive integers")
     proposal = _load(proposal_path, "intervention proposal")
+    # The source proposal is an immutable semantic template. Each real campaign
+    # gets fresh identities before every receipt is derived and bound.
+    proposal["campaign_id"] = _text(
+        raw["intervention_campaign_id"], "intervention_campaign_id")
+    proposal["proposal_id"] = _text(
+        raw["intervention_proposal_id"], "intervention_proposal_id")
     violations = schemas.validate_proposal(proposal)
     if violations:
         raise PreparationError("invalid intervention proposal: " + "; ".join(violations))
@@ -344,12 +377,14 @@ def prepare(raw: Mapping[str, Any]) -> dict[str, Any]:
                 "intervention_proposal": _sha256(proposal_path),
                 "intervention_diagnostic_source": _sha256(
                     Path(intervention["diagnostic_source"])),
-                "intervention_heldout_outcome": _sha256(
-                    Path(intervention["heldout_outcome"])),
+                "intervention_heldout_outcome": (
+                    None if intervention["heldout_outcome"] is None else _sha256(
+                        Path(intervention["heldout_outcome"]))),
                 "control_diagnostic_source": _sha256(
                     Path(control_branch["diagnostic_source"])),
-                "control_heldout_outcome": _sha256(
-                    Path(control_branch["heldout_outcome"])),
+                "control_heldout_outcome": (
+                    None if control_branch["heldout_outcome"] is None else _sha256(
+                        Path(control_branch["heldout_outcome"]))),
             },
             "outputs": {name: {
                 "path": str(path),

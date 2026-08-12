@@ -205,6 +205,7 @@ def plan(value: dict, *, role: str = "intervention",
         "diagnostics": diagnostics,
         "recodings": recodings,
         "diagnostic_source_receipts": receipts,
+        "evidence_stage": "heldout_bound",
         "heldout_outcome_receipt": C.source_binding(Path(heldout_handle.name)),
         "outcome_reducers": dict(C.OUTCOME_REDUCERS),
         "capture_mode": "measured",
@@ -214,6 +215,26 @@ def plan(value: dict, *, role: str = "intervention",
 
 
 class CapturePlanTest(unittest.TestCase):
+    def test_bootstrap_plan_binds_measurement_but_cannot_supply_holdout(self):
+        proposal_record = proposal()
+        raw = plan(proposal_record)
+        raw["evidence_stage"] = "bootstrap"
+        raw["heldout_outcome_receipt"] = None
+        raw["outcome_reducers"] = dict(C.BOOTSTRAP_OUTCOME_REDUCERS)
+        raw["plan_sha256"] = C.plan_sha256(raw)
+        capture = C.from_mapping(
+            raw, proposal=proposal_record,
+            campaign_id=proposal_record["campaign_id"],
+            candidate_id="akc-20260812-1001")
+        block = C.materialize(
+            capture,
+            decision=SimpleNamespace(
+                keep=True, median_relative=0.06, contribution_floor=0.03),
+            calibration=SimpleNamespace(noise_floor_phi=0.01),
+            executed_factors=capture.raw["factors"])
+        self.assertIsNone(block["heldout_outcome"])
+        self.assertIsNone(block["outcome"]["heldout_regime_transfer"])
+
     def test_measured_decision_produces_every_projector_field(self):
         proposal_record = proposal()
         capture = C.from_mapping(

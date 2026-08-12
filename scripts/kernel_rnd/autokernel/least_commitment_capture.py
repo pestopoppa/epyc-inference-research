@@ -24,6 +24,7 @@ SOURCE_SCHEMA = "epyc.autokernel.least_commitment_diagnostic_source.v1"
 HELDOUT_SCHEMA = least_commitment_heldout.SCHEMA
 FALSIFIER_SCHEMA = "epyc.autokernel.least_commitment_falsifier.v1"
 ROLES = frozenset({"control", "intervention"})
+EVIDENCE_STAGES = frozenset({"bootstrap", "heldout_bound"})
 DIAGNOSTICS = (
     "unsupported_scope_width", "compatible_future_mass", "k_rho",
     "information_gain", "novelty", "raw_impurity", "weighted_minority",
@@ -33,12 +34,17 @@ OUTCOME_REDUCERS = {
     "falsifier_resolution": "role_specific_falsifier.v1",
     "noise_floor": "calibration.noise_floor_phi",
 }
+BOOTSTRAP_OUTCOME_REDUCERS = {
+    "heldout_regime_transfer": "deferred_to_post_campaign_heldout_projection.v1",
+    "falsifier_resolution": "role_specific_falsifier.v1",
+    "noise_floor": "calibration.noise_floor_phi",
+}
 _FIELDS = frozenset({
     "schema", "capture_id", "campaign_id", "candidate_id", "proposal_id",
     "matched_experiment_id",
     "role", "matched_control_proposal_id", "candidate_frame_id", "regime",
     "surface", "intervention_id", "changed_factor", "factors", "diagnostics",
-    "recodings", "diagnostic_source_receipts", "heldout_outcome_receipt",
+    "recodings", "diagnostic_source_receipts", "evidence_stage", "heldout_outcome_receipt",
     "outcome_reducers",
     "capture_mode", "plan_sha256",
 })
@@ -189,7 +195,7 @@ def source_binding(path: str | Path) -> dict:
 @dataclass(frozen=True)
 class CapturePlan:
     raw: Mapping[str, Any]
-    heldout_outcome: Mapping[str, Any]
+    heldout_outcome: Mapping[str, Any] | None
     diagnostic_semantics_sha256: str
 
     @property
@@ -321,17 +327,29 @@ def from_mapping(raw: Any, *, proposal: Mapping[str, Any], campaign_id: str,
         raise CapturePlanError("diagnostics differ from the bound source derivation")
     if recodings != derived_recodings:
         raise CapturePlanError("recodings differ from the bound source derivation")
-    if raw.get("outcome_reducers") != OUTCOME_REDUCERS:
-        raise CapturePlanError("outcome_reducers must be the immutable live reducer set")
+    stage = raw.get("evidence_stage")
+    if stage not in EVIDENCE_STAGES:
+        raise CapturePlanError(
+            f"evidence_stage must be one of {sorted(EVIDENCE_STAGES)}")
+    expected_reducers = (BOOTSTRAP_OUTCOME_REDUCERS if stage == "bootstrap"
+                         else OUTCOME_REDUCERS)
+    if raw.get("outcome_reducers") != expected_reducers:
+        raise CapturePlanError("outcome_reducers do not match the evidence stage")
     target_regimes = set(proposal.get("target", {}).get("regimes", ()))
     if target_regimes and raw["regime"] not in target_regimes:
         raise CapturePlanError("regime is outside the proposal target vocabulary")
-    heldout_source = _bound_json_receipt(
-        raw.get("heldout_outcome_receipt"), label="heldout_outcome_receipt")
-    heldout = _validate_heldout_outcome(
-        heldout_source, proposal=proposal,
-        candidate_frame_id=raw["candidate_frame_id"],
-        target_regimes=target_regimes, factors=factors)
+    if stage == "bootstrap":
+        if raw.get("heldout_outcome_receipt") is not None:
+            raise CapturePlanError(
+                "bootstrap capture plans cannot pre-bind held-out evidence")
+        heldout = None
+    else:
+        heldout_source = _bound_json_receipt(
+            raw.get("heldout_outcome_receipt"), label="heldout_outcome_receipt")
+        heldout = _validate_heldout_outcome(
+            heldout_source, proposal=proposal,
+            candidate_frame_id=raw["candidate_frame_id"],
+            target_regimes=target_regimes, factors=factors)
     return CapturePlan(
         json.loads(schemas.canonical_json(raw)),
         json.loads(schemas.canonical_json(heldout)),
@@ -433,12 +451,18 @@ def materialize(plan: CapturePlan, *, decision: Any, calibration: Any,
         "recodings": {key: dict(value) for key, value in raw["recodings"].items()},
         "diagnostic_source_receipts": dict(raw["diagnostic_source_receipts"]),
         "diagnostic_semantics_sha256": plan.diagnostic_semantics_sha256,
-        "heldout_outcome_receipt": dict(raw["heldout_outcome_receipt"]),
-        "heldout_outcome": dict(plan.heldout_outcome),
-        "outcome_reducers": dict(OUTCOME_REDUCERS),
+        "evidence_stage": raw["evidence_stage"],
+        "heldout_outcome_receipt": (
+            None if raw["heldout_outcome_receipt"] is None
+            else dict(raw["heldout_outcome_receipt"])),
+        "heldout_outcome": (
+            None if plan.heldout_outcome is None else dict(plan.heldout_outcome)),
+        "outcome_reducers": dict(raw["outcome_reducers"]),
         "falsifier": falsifier,
         "outcome": {
-            "heldout_regime_transfer": plan.heldout_outcome["relative_effect"],
+            "heldout_regime_transfer": (
+                None if plan.heldout_outcome is None
+                else plan.heldout_outcome["relative_effect"]),
             "falsifier_resolution": falsifier_resolution,
             "noise_floor": noise,
         },
