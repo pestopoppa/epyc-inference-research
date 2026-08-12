@@ -177,12 +177,13 @@ def records(candidate_id: str, *, file_name: str, mechanism: str,
         "runtime_source_label_ref": evaluator_id.runtime_source_label_ref,
     }
     flags = {} if flag is None else {flag[0]: flag[1]}
+    candidate["dispatch"]["feature_flags"] = sorted(flags)
     candidate["composition_evidence"] = {
         "source_tree": "llama.cpp", "production_base_commit": anchor_id.commit,
         "candidate_source_commit": candidate["worktree"]["source_commit"],
         "patch_bundle_sha256": candidate["source_snapshot"]["patch_bundle_sha256"],
         "actual_files": [file_name],
-        "actual_hunk_ids": [sha(f"hunk-{file_name}-{candidate_id}")],
+        "actual_hunk_ids": [f"akhunk:{sha(f'hunk-{file_name}-{candidate_id}') }"],
         "actual_symbols": [f"{file_name}:symbol_{suffix}"],
         "derived_surface_tokens": [f"surface_{suffix}"],
         "traced_surface_tokens": [f"surface_{suffix}"],
