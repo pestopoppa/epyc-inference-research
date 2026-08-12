@@ -240,13 +240,18 @@ def discover_runtime_allowlist(
     repository_module_roots: Sequence[str | Path],
     codex_cli: str | Path, node_executable: str | Path,
     codex_auth: str | Path, ca_files: Sequence[str | Path],
+    additional_cli_executables: Sequence[str | Path] = (),
+    additional_cli_read_files: Sequence[str | Path] = (),
+    additional_cli_package_roots: Sequence[str | Path] = (),
     forbidden_roots: Sequence[str | Path] = (),
 ) -> RuntimeAllowlist:
     """Discover the exact controller runtime; never infer a parent-directory grant.
 
     Callers must pass real, non-symlink paths.  Python reports its own versioned
     stdlib/site roots.  Codex contributes only its package root, exact Node
-    runtime, auth file and CA file(s); no HOME or arbitrary environment prefix
+    runtime, auth file and CA file(s).  Another declared CLI contributes only
+    its exact executable, library closure, explicitly named read files, and
+    explicitly named package roots.  No HOME or arbitrary environment prefix
     is admitted.
     """
     work = _exact_path(workspace, directory=True)
@@ -254,6 +259,9 @@ def discover_runtime_allowlist(
     python = _exact_path(python_executable, directory=False)
     codex = _exact_path(codex_cli, directory=False)
     node = _exact_path(node_executable, directory=False)
+    additional_clis = _unique_exact(
+        additional_cli_executables, directory=False, workspace=work,
+        forbidden_roots=forbidden)
     entrypoint = _exact_path(controller_entrypoint, directory=False)
     auth = _exact_path(codex_auth, directory=False)
     sources = _unique_exact(
@@ -278,17 +286,24 @@ def discover_runtime_allowlist(
     except (json.JSONDecodeError, AttributeError) as exc:
         raise ControllerSandboxError("pinned Python emitted invalid runtime roots") from exc
     codex_package = codex.parent.parent
+    additional_packages = _unique_exact(
+        additional_cli_package_roots, directory=True, workspace=work,
+        forbidden_roots=forbidden)
     roots = _unique_exact(
-        (*sources, *modules, *python_roots, codex_package), directory=True,
+        (*sources, *modules, *python_roots, codex_package, *additional_packages),
+        directory=True,
         workspace=work, forbidden_roots=forbidden)
     ca_paths = _unique_exact(
         ca_files, directory=False, workspace=work, forbidden_roots=forbidden)
     network_config = _unique_exact(
         (path.resolve(strict=True) for path in _NETWORK_CONFIG_PATHS),
         directory=False, workspace=work, forbidden_roots=forbidden)
-    shebang_executables = _shebang_executables(codex)
+    declared_clis = (codex, *additional_clis)
+    shebang_executables = tuple(dict.fromkeys(
+        executable for cli in declared_clis
+        for executable in _shebang_executables(cli)))
     all_runtime_executables = tuple(dict.fromkeys(
-        (python, node, *shebang_executables)))
+        (python, node, *declared_clis, *shebang_executables)))
     library_closure = tuple(dict.fromkeys(
         path for executable in all_runtime_executables
         for path in _shared_libraries(executable)))
@@ -299,10 +314,14 @@ def discover_runtime_allowlist(
     # ELF interpreters are separately executed by the kernel.  Keep them exact
     # rather than admitting either executable's sibling directory.
     executables = _unique_exact(
-        (python, node, *shebang_executables, *elf_interpreters),
+        (python, node, *declared_clis, *shebang_executables, *elf_interpreters),
         directory=False, workspace=work,
         forbidden_roots=forbidden)
-    files_raw: list[str | Path] = [auth, *ca_paths, *network_config]
+    extra_read_files = _unique_exact(
+        additional_cli_read_files, directory=False, workspace=work,
+        forbidden_roots=forbidden)
+    files_raw: list[str | Path] = [
+        auth, *extra_read_files, *ca_paths, *network_config]
     loader_cache = Path("/etc/ld.so.cache")
     if loader_cache.is_file() and not loader_cache.is_symlink():
         files_raw.append(loader_cache)
@@ -323,7 +342,8 @@ def discover_runtime_allowlist(
     identities = {
         str(path): _sha256_file(path)
         for path in dict.fromkeys((
-            python, node, codex, entrypoint, auth, *ca_paths, *network_config,
+            python, node, *declared_clis, entrypoint, auth, *extra_read_files,
+            *ca_paths, *network_config,
             *shebang_executables, *readable_files, *executable_files))
     }
     return RuntimeAllowlist(
