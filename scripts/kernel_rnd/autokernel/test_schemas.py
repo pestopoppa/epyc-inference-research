@@ -1286,6 +1286,29 @@ class ProposalRuleTest(unittest.TestCase):
 # =============================================================================
 
 class CandidateRuleTest(unittest.TestCase):
+    def composed(self):
+        record = _candidate()
+        record["evaluator"]["runtime_source_label_ref"] = "ake-srclabel-1"
+        record["composition_evidence"] = {
+            "source_tree": "llama.cpp",
+            "production_base_commit": record["ancestry"]["production_base_commit"],
+            "candidate_source_commit": record["worktree"]["source_commit"],
+            "patch_bundle_sha256": record["source_snapshot"]["patch_bundle_sha256"],
+            "actual_files": ["ggml/src/kernel.cpp"],
+            "actual_hunk_ids": ["akhunk:" + _sha("hunk")],
+            "actual_symbols": ["ggml/src/kernel.cpp:kernel_step"],
+            "derived_surface_tokens": ["op:MUL_MAT"],
+            "traced_surface_tokens": [],
+            "feature_flag_assignments": {"GGML_AK_WIDE_TILE": 1},
+            "dispatch_predicates": ["K >= 4096"],
+            "mechanism_id": "ak.kernel-step/v1", "change_class": "arithmetic",
+            "evaluator_id": record["evaluator"]["id"],
+            "evaluator_bundle_sha256": record["evaluator"]["bundle_sha256"],
+            "evaluator_runtime_source_label_ref": "ake-srclabel-1",
+            "protocol_ids": ["P-AK-SEARCH-1/v1"],
+        }
+        return record
+
     def test_production_branch_is_refused_as_a_worktree(self):
         record = _candidate()
         record["worktree"]["branch"] = "production-consolidated-v8"
@@ -1329,6 +1352,55 @@ class CandidateRuleTest(unittest.TestCase):
         del record["artifacts"]["linkage_sha256"]
         with self.assertRaises(KeyError):
             S.candidate_natural_key(record)
+
+    def test_source_composition_requires_real_evidence_and_qualified_symbols(self):
+        for key in ("actual_files", "actual_hunk_ids", "actual_symbols",
+                    "derived_surface_tokens", "protocol_ids"):
+            record = self.composed()
+            record["composition_evidence"][key] = []
+            with self.subTest(key=key):
+                self.assertTrue(any(key in value for value in S.validate_candidate(record)))
+        record = self.composed()
+        record["composition_evidence"]["actual_symbols"] = ["kernel_step"]
+        self.assertTrue(any("file-qualified" in value for value in S.validate_candidate(record)))
+
+    def test_parameter_composition_requires_flags_and_forbids_source_hunks(self):
+        record = self.composed()
+        block = record["composition_evidence"]
+        block["change_class"] = "parameter"
+        block["actual_files"] = []
+        block["actual_hunk_ids"] = []
+        block["actual_symbols"] = ["<parameter>:GGML_IQK"]
+        self.assertEqual(S.validate_candidate(record), [])
+        block["feature_flag_assignments"] = {}
+        record["dispatch"]["feature_flags"] = []
+        self.assertTrue(any("require flags" in value for value in S.validate_candidate(record)))
+
+    def test_evaluator_runtime_source_label_is_cross_checked(self):
+        record = self.composed()
+        record["composition_evidence"]["evaluator_runtime_source_label_ref"] = "other"
+        self.assertTrue(any("contradicts" in value for value in S.validate_candidate(record)))
+
+    def test_new_banked_candidate_requires_event_bound_banking_verdict(self):
+        record = self.composed()
+        record["status"] = "banked"
+        self.assertTrue(any("banking_verdict" in value for value in S.validate_candidate(record)))
+        event_ids = ["ake-t0", "ake-sentinel", "ake-dispatch", "ake-mechanism", "ake-axis"]
+        record["evaluation_event_ids"] = event_ids
+        record["banking_verdict"] = {
+            "disposition": "banked", "t0": {"all_pass_event_id": "ake-t0"},
+            "sentinels": {"required_all_pass_event_ids": ["ake-sentinel"]},
+            "real_path_dispatch": {"resolution": "confirmed", "event_id": "ake-dispatch", "gate_id": "dispatch.real_path"},
+            "mechanism": {"resolution": "explained", "event_id": "ake-mechanism", "gate_id": "mechanism.profile"},
+            "qualifying_axis": {"axis": "throughput", "evaluation_event_id": "ake-axis",
+                                "resolution": "above_floor", "observed_effect": 0.04,
+                                "calibrated_floor": 0.03, "minimum_detectable_effect": 0.02,
+                                "non_dominated": None, "non_dominated_check_ref": None},
+        }
+        self.assertEqual(S.validate_candidate(record), [])
+        record["banking_verdict"]["qualifying_axis"]["evaluation_event_id"] = "ake-not-recorded"
+        self.assertTrue(any("absent from evaluation_event_ids" in value
+                            for value in S.validate_candidate(record)))
 
 
 class ChampionRuleTest(unittest.TestCase):
