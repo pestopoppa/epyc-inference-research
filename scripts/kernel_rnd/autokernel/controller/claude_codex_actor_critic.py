@@ -58,6 +58,7 @@ REQUIRED_CLIS = ("claude", "codex")
 ARTIFACT_DIRNAME = ".autokernel-claude-codex"
 MAX_FEEDBACK_ITEMS = 8
 MAX_FEEDBACK_REASON_CHARS = 4000
+MAX_STRUCTURED_OUTPUT_RETRIES = 1
 CONTROL_PLANE_DIRNAMES = frozenset({
     ARTIFACT_DIRNAME,
     ".autokernel-controller-claude-config",
@@ -488,6 +489,84 @@ def _claude_argv(identity: Mapping[str, str], config: ControllerConfig,
     )
 
 
+def _structured_output_retry_trigger(
+    capture: ProcessCapture,
+) -> dict[str, Any] | None:
+    """Recognize only Claude's exact exhausted structured-output failure."""
+    if capture.timed_out or capture.returncode in (None, 0):
+        return None
+    try:
+        payload = json.loads(capture.stdout)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    errors = payload.get("errors")
+    if (
+        payload.get("is_error") is not True
+        or payload.get("type") != "result"
+        or payload.get("subtype") != "error_max_structured_output_retries"
+        or payload.get("terminal_reason") != "structured_output_retry_exhausted"
+        or not isinstance(errors, list)
+        or not errors
+        or not all(isinstance(value, str) and value for value in errors)
+    ):
+        return None
+    return {
+        "type": payload["type"],
+        "subtype": payload["subtype"],
+        "terminal_reason": payload["terminal_reason"],
+        "errors": list(errors),
+    }
+
+
+def _run_structured_claude(
+    *, role: str, iteration: int, prompt: str, argv: Sequence[str],
+    root: Path, environment: Mapping[str, str], runner: CommandRunner,
+    journal: ArtifactJournal, deadline: float,
+    monotonic: Callable[[], float], expected_manifest: Mapping[str, str],
+    retry_rows: list[dict[str, Any]],
+) -> ProcessCapture:
+    """Run one structured Claude call and retry its exact transient once."""
+    remaining = deadline - monotonic()
+    if remaining <= 0:
+        return ProcessCapture(tuple(argv), None, "", "", True)
+    capture = runner(argv, root, environment, prompt, remaining)
+    journal.record(role, iteration, prompt, capture)
+    if _workspace_manifest(root) != expected_manifest:
+        raise ActorCriticError(
+            f"{role} changed the isolated Arena workspace")
+    trigger = _structured_output_retry_trigger(capture)
+    if trigger is None:
+        return capture
+
+    # The retry is deliberately one-shot, uses byte-identical prompt/argv/schema,
+    # and consumes the original campaign deadline rather than extending it.
+    remaining = deadline - monotonic()
+    if remaining <= 0:
+        return capture
+    retry_capture = runner(argv, root, environment, prompt, remaining)
+    journal.record(f"{role}_structured_retry", iteration, prompt, retry_capture)
+    if _workspace_manifest(root) != expected_manifest:
+        raise ActorCriticError(
+            f"{role} structured-output retry changed the isolated Arena workspace")
+    retry_rows.append({
+        "role": role,
+        "iteration": iteration,
+        "retry_limit": MAX_STRUCTURED_OUTPUT_RETRIES,
+        "trigger": trigger,
+        "first": {
+            "returncode": capture.returncode,
+            "timed_out": capture.timed_out,
+        },
+        "retry": {
+            "returncode": retry_capture.returncode,
+            "timed_out": retry_capture.timed_out,
+        },
+    })
+    return retry_capture
+
+
 def _codex_argv(identity: Mapping[str, str], config: ControllerConfig,
                 workspace: Path) -> tuple[str, ...]:
     return (
@@ -579,6 +658,7 @@ def run_controller(
     proposals: list[dict[str, Any]] = []
     candidate_rows: list[dict[str, Any]] = []
     feedback_memory: list[dict[str, Any]] = []
+    structured_output_retries: list[dict[str, Any]] = []
     stop_reason = "max_iterations"
 
     for iteration in range(1, config.max_iterations + 1):
@@ -602,12 +682,13 @@ def run_controller(
                if prior_feedback else "")
         )
         before_planner = _workspace_manifest(root)
-        capture = runner(
-            _claude_argv(cli["claude"], config, PROPOSAL_JSON_SCHEMA),
-            root, env, planner_prompt, remaining)
-        journal.record("planner", iteration, planner_prompt, capture)
-        if _workspace_manifest(root) != before_planner:
-            raise ActorCriticError("planner changed the isolated Arena workspace")
+        capture = _run_structured_claude(
+            role="planner", iteration=iteration, prompt=planner_prompt,
+            argv=_claude_argv(cli["claude"], config, PROPOSAL_JSON_SCHEMA),
+            root=root, environment=env, runner=runner, journal=journal,
+            deadline=deadline, monotonic=monotonic,
+            expected_manifest=before_planner,
+            retry_rows=structured_output_retries)
         if capture.timed_out:
             stop_reason = "campaign_checkpoint"
             break
@@ -672,14 +753,15 @@ def run_controller(
         if remaining <= 0:
             stop_reason = "campaign_checkpoint"
             break
-        capture = runner(
-            _claude_argv(
+        capture = _run_structured_claude(
+            role="critic", iteration=iteration, prompt=critic_prompt,
+            argv=_claude_argv(
                 cli["claude"], config,
                 _critique_json_schema(proposal["proposal_id"])),
-            root, env, critic_prompt, remaining)
-        journal.record("critic", iteration, critic_prompt, capture)
-        if _workspace_manifest(root) != before_critic:
-            raise ActorCriticError("critic changed the isolated Arena workspace")
+            root=root, environment=env, runner=runner, journal=journal,
+            deadline=deadline, monotonic=monotonic,
+            expected_manifest=before_critic,
+            retry_rows=structured_output_retries)
         if capture.timed_out:
             stop_reason = "campaign_checkpoint"
             break
@@ -720,6 +802,7 @@ def run_controller(
         "candidate_artifacts": candidate_rows,
         "feedback_memory": feedback_memory,
         "feedback_memory_sha256": _canonical_sha256(feedback_memory),
+        "structured_output_retries": structured_output_retries,
         **({"evaluation": evaluator.receipt_fields()}
            if evaluator is not None else {}),
         "constraints": {

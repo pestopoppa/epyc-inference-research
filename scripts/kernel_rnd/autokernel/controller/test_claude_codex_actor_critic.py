@@ -27,7 +27,10 @@ class FakeRunner:
                  malformed_planner: bool = False, change_extra: bool = False,
                  timeout_role: str | None = None,
                  planner_extra_fields: bool = False,
-                 critic_decisions: tuple[str, ...] = ("accept",)):
+                 critic_decisions: tuple[str, ...] = ("accept",),
+                 structured_failure_role: str | None = None,
+                 structured_failure_count: int = 0,
+                 nonstructured_failure_role: str | None = None):
         self.workspace = workspace
         self.planner_path = planner_path
         self.malformed_planner = malformed_planner
@@ -35,8 +38,12 @@ class FakeRunner:
         self.timeout_role = timeout_role
         self.planner_extra_fields = planner_extra_fields
         self.critic_decisions = critic_decisions
+        self.structured_failure_role = structured_failure_role
+        self.structured_failure_count = structured_failure_count
+        self.nonstructured_failure_role = nonstructured_failure_role
         self.planner_count = 0
         self.critic_count = 0
+        self.role_calls = {"planner": 0, "critic": 0}
         self.last_proposal_id = "proposal-001"
         self.calls = []
 
@@ -44,6 +51,11 @@ class FakeRunner:
         self.calls.append((tuple(argv), cwd, dict(env), input_text, timeout_seconds))
         executable = Path(argv[0]).name
         if executable == "claude" and "You are the planner" in input_text:
+            self.role_calls["planner"] += 1
+            if self._structured_failure("planner"):
+                return self._structured_failure_capture(argv)
+            if self.nonstructured_failure_role == "planner":
+                return A.ProcessCapture(tuple(argv), 1, "provider unavailable", "")
             self.planner_count += 1
             self.last_proposal_id = f"proposal-{self.planner_count:03d}"
             if self.timeout_role == "planner":
@@ -81,6 +93,11 @@ class FakeRunner:
                 (self.workspace / "escaped.py").write_text("changed\n", encoding="utf-8")
             return A.ProcessCapture(tuple(argv), 0, '{"type":"turn.completed"}\n', "")
         if executable == "claude" and "You are the critic" in input_text:
+            self.role_calls["critic"] += 1
+            if self._structured_failure("critic"):
+                return self._structured_failure_capture(argv)
+            if self.nonstructured_failure_role == "critic":
+                return A.ProcessCapture(tuple(argv), 1, "provider unavailable", "")
             decision = self.critic_decisions[min(
                 self.critic_count, len(self.critic_decisions) - 1)]
             self.critic_count += 1
@@ -93,6 +110,22 @@ class FakeRunner:
             return A.ProcessCapture(
                 tuple(argv), 0, json.dumps({"result": json.dumps(critique)}), "")
         raise AssertionError(f"unexpected command: {argv}")
+
+    def _structured_failure(self, role: str) -> bool:
+        return (
+            self.structured_failure_role == role
+            and self.role_calls[role] <= self.structured_failure_count
+        )
+
+    @staticmethod
+    def _structured_failure_capture(argv) -> A.ProcessCapture:
+        return A.ProcessCapture(tuple(argv), 1, json.dumps({
+            "is_error": True,
+            "type": "result",
+            "subtype": "error_max_structured_output_retries",
+            "terminal_reason": "structured_output_retry_exhausted",
+            "errors": ["Failed to provide valid structured output after 5 attempts"],
+        }), "")
 
 
 class ActorCriticControllerTest(unittest.TestCase):
@@ -389,6 +422,72 @@ class ActorCriticControllerTest(unittest.TestCase):
         transcript = (workspace / A.ARTIFACT_DIRNAME / "transcript.jsonl")
         event = json.loads(transcript.read_text(encoding="utf-8").strip())
         self.assertTrue(event["timed_out"])
+        self.assertEqual(receipt["structured_output_retries"], [])
+
+    def test_planner_structured_output_exhaustion_retries_once_and_records_it(self):
+        workspace = self.workspace("planner-structured-retry")
+        runner = FakeRunner(
+            workspace, structured_failure_role="planner",
+            structured_failure_count=1)
+        receipt = A.run_controller(
+            prompt="task", workspace=workspace, config=self.config(),
+            environment=self.environment(), runner=runner)
+        self.assertEqual(len(runner.calls), 4)
+        self.assertEqual(runner.role_calls["planner"], 2)
+        self.assertEqual(receipt["stop_reason"], "critic_accept")
+        retry = receipt["structured_output_retries"]
+        self.assertEqual(len(retry), 1)
+        self.assertEqual(retry[0]["role"], "planner")
+        self.assertEqual(
+            retry[0]["trigger"]["terminal_reason"],
+            "structured_output_retry_exhausted")
+        transcript = [json.loads(line) for line in (
+            workspace / A.ARTIFACT_DIRNAME / "transcript.jsonl"
+        ).read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(
+            [row["role"] for row in transcript],
+            ["planner", "planner_structured_retry", "actor", "critic"])
+        self.assertEqual(transcript[0]["argv"], transcript[1]["argv"])
+        self.assertEqual(
+            transcript[0]["prompt_sha256"], transcript[1]["prompt_sha256"])
+
+    def test_critic_structured_output_exhaustion_retries_once(self):
+        workspace = self.workspace("critic-structured-retry")
+        runner = FakeRunner(
+            workspace, structured_failure_role="critic",
+            structured_failure_count=1)
+        receipt = A.run_controller(
+            prompt="task", workspace=workspace, config=self.config(),
+            environment=self.environment(), runner=runner)
+        self.assertEqual(len(runner.calls), 4)
+        self.assertEqual(runner.role_calls["critic"], 2)
+        self.assertEqual(receipt["structured_output_retries"][0]["role"], "critic")
+
+    def test_repeated_structured_output_exhaustion_fails_after_one_retry(self):
+        workspace = self.workspace("structured-retry-exhausted")
+        runner = FakeRunner(
+            workspace, structured_failure_role="planner",
+            structured_failure_count=2)
+        with self.assertRaisesRegex(A.ActorCriticError, "planner CLI exited 1"):
+            A.run_controller(
+                prompt="task", workspace=workspace, config=self.config(),
+                environment=self.environment(), runner=runner)
+        self.assertEqual(len(runner.calls), 2)
+        transcript = [json.loads(line) for line in (
+            workspace / A.ARTIFACT_DIRNAME / "transcript.jsonl"
+        ).read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(
+            [row["role"] for row in transcript],
+            ["planner", "planner_structured_retry"])
+
+    def test_arbitrary_nonzero_claude_exit_is_not_retried(self):
+        workspace = self.workspace("nonstructured-failure")
+        runner = FakeRunner(workspace, nonstructured_failure_role="planner")
+        with self.assertRaisesRegex(A.ActorCriticError, "planner CLI exited 1"):
+            A.run_controller(
+                prompt="task", workspace=workspace, config=self.config(),
+                environment=self.environment(), runner=runner)
+        self.assertEqual(len(runner.calls), 1)
 
     def test_process_timeout_defers_to_parent_cgroup_without_signals(self):
         sleeper = self.root / "sleeper"
