@@ -26,7 +26,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from .. import schemas
 from ..evaluator import api, controls, recipes, statistics
@@ -70,6 +70,10 @@ HARDWARE_PEAK_REF = (
     "wiki/hardware-optimization.md:1706: EPYC 9655, 12 DDR5-6400 channels, "
     "614.4 GB/s theoretical; compute ceiling intentionally over-permissive at "
     "110.8 TFLOP/s"
+)
+CURRENT_SOURCE_CORRECTNESS_REASON = (
+    f"frozen v9 source {PRODUCTION_COMMIT} plus exact binary copy; historical v8 "
+    "real-model correctness evidence replayed"
 )
 CONTROL_PROMPT_BY_LABEL = {
     "aa_calibration": PROMPT_TOKENS,
@@ -358,6 +362,107 @@ class LiveMaterial:
         return self.run.paired_blocks()
 
 
+@dataclass(frozen=True)
+class _RecordedRun:
+    """Minimal immutable replay of a completed raw vector.
+
+    This is intentionally not a second microbench deserializer.  It exposes only
+    the fields deterministic control composition consumes after measurement, and
+    construction is available solely through ``_load_recorded_material``'s
+    receipt, schedule, arm-parameter, and completeness checks.
+    """
+
+    blocks: tuple
+    started_at: str
+    ended_at: str
+    refusals: tuple
+    raw_sha256: str
+
+    @property
+    def complete(self) -> bool:
+        return not self.refusals and bool(self.blocks)
+
+    def paired_blocks(self) -> tuple:
+        if not self.complete:
+            raise RuntimeError("recorded control material is incomplete")
+        return self.blocks
+
+
+def _paired_block_from_raw(value: Any) -> statistics.PairedBlock:
+    if not isinstance(value, list) or len(value) != 9:
+        raise ValueError("raw paired_block must be the canonical nine-field list")
+    return statistics.PairedBlock(
+        block_index=value[0], unit_id=value[1], stratum=value[2], order=value[3],
+        segment=value[4], extension_round=value[5], measured_at=value[6],
+        anchor_samples=tuple(value[7]), candidate_samples=tuple(value[8]))
+
+
+def _load_json(path: Path) -> Mapping[str, Any]:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{path}: expected a JSON object")
+    return value
+
+
+def _load_recorded_material(
+        output_root: Path, *, identity: LiveCampaignIdentity, label: str,
+        expected_blocks: int, prompt: int, candidate_iqk: str,
+        anchor_iqk: str) -> tuple[LiveMaterial, Mapping[str, Any]]:
+    """Rebuild composition-only material from one fully attested raw vector."""
+    path = output_root / "raw" / f"{label}.json"
+    raw = _load_json(path)
+    expected_seed = hashlib.sha256(
+        f"{identity.campaign_seed}/{label}".encode("utf-8")).hexdigest()
+    expected_candidate = f"akc-control-{label}"
+    checks = {
+        "schema": raw.get("schema") == "epyc.autokernel.microbench_raw_vector.v1",
+        "recipe_id": raw.get("recipe_id") == RECIPE_ID,
+        "candidate_id": raw.get("candidate_id") == expected_candidate,
+        "campaign_seed": raw.get("campaign_seed_sha256") == expected_seed,
+        "complete": raw.get("complete") is True,
+        "refusals": raw.get("refusals") == [],
+        "order_control": (
+            isinstance(raw.get("order_control"), Mapping)
+            and raw["order_control"].get("outcome") == schemas.PASS),
+    }
+    failed = sorted(name for name, passed in checks.items() if not passed)
+    if failed:
+        raise ValueError(f"{path}: receipt checks failed: {failed}")
+    block_rows = raw.get("blocks")
+    if not isinstance(block_rows, list) or len(block_rows) != expected_blocks:
+        raise ValueError(
+            f"{path}: expected {expected_blocks} blocks, got "
+            f"{len(block_rows) if isinstance(block_rows, list) else 'non-list'}")
+    blocks = []
+    for index, block_row in enumerate(block_rows):
+        if not isinstance(block_row, Mapping) or block_row.get("complete") is not True \
+                or block_row.get("refusals") != []:
+            raise ValueError(f"{path}: block {index} is not complete and refusal-free")
+        block = _paired_block_from_raw(block_row.get("paired_block"))
+        if block.block_index != index:
+            raise ValueError(f"{path}: block index {block.block_index} != {index}")
+        if block.unit_id != _unit_id(label=label, prompt=prompt):
+            raise ValueError(f"{path}: block {index} carries the wrong unit id")
+        blocks.append(block)
+    schedule = raw.get("order_schedule")
+    if not isinstance(schedule, Mapping) or schedule.get("orders") != [
+            block.order for block in blocks]:
+        raise ValueError(f"{path}: recorded orders do not match the committed schedule")
+    for arm, expected_iqk in (
+            ("candidate_receipt", candidate_iqk),
+            ("anchor_receipt", anchor_iqk)):
+        receipt = raw.get(arm)
+        params = receipt.get("params") if isinstance(receipt, Mapping) else None
+        if not isinstance(params, Mapping) or params.get("ggml_iqk") != expected_iqk \
+                or params.get("n_prompt") != prompt or params.get("model") != str(MODEL):
+            raise ValueError(f"{path}: {arm} does not match the declared arm parameters")
+    run = _RecordedRun(
+        blocks=tuple(blocks), started_at=str(raw.get("started_at")),
+        ended_at=str(raw.get("ended_at")), refusals=tuple(raw["refusals"]),
+        raw_sha256=_sha256_file(path))
+    return LiveMaterial(label, run), raw
+
+
 def _params(*, prompt: int) -> dict:
     return {"model": str(MODEL), "n_prompt": prompt, "reps": 1,
             "autokernel_seed": 2026081101,
@@ -516,8 +621,7 @@ class _EvidenceGateRunner:
              "pp512; the candidate changed the work and is ineligible for a speed rank",)
         ) if mismatch else schemas.Check(
             schemas.PASS,
-            ("frozen v8 source plus exact binary copy; historical v8 real-model "
-             "correctness evidence replayed",))
+            (CURRENT_SOURCE_CORRECTNESS_REASON,))
         return (
             api.GateResult(
                 gate_id="live.recipe_and_correctness", gate_class=api.GATE_CORRECTNESS,
@@ -608,7 +712,8 @@ def _evaluate_controls(*, solve: statistics.CalibrationSolve,
             machine_subset="full", numa_nodes=(), devices=(), cores=96),
         scope_manifest_sha256=schemas.content_hash({"cpu_list": CPU_LIST}),
         co_residency="single", metric="prefill_tokens_per_s",
-        metric_direction="higher_better", reps=1, anchor=anchor,
+        metric_direction="higher_better", reps=1, change_class="parameter",
+        anchor=anchor,
         campaign_controls=declared, calibration=outputs)
     runner = control_runner.ExecutedControlRunner(
         pipeline=pipeline, fixtures=fixture_set, binding=binding,
@@ -697,6 +802,58 @@ def _evaluate_controls(*, solve: statistics.CalibrationSolve,
     return sweep.run(
         run_context=run_context, context=context, window=window,
         aa_cadence=window.aa_cadence, windows_completed=0, last_rotation_epoch=0)
+
+
+def _compose_measured_controls(
+        *, output_root: Path, identity: LiveCampaignIdentity,
+        solve: statistics.CalibrationSolve, declared: api.CampaignControls,
+        rule: statistics.StoppingRule,
+        construction: statistics.EProcessConstruction,
+        split: statistics.StratumSplitRule,
+        materials: Mapping[str, LiveMaterial], anchor: api.AnchorIdentity,
+        recipe_receipt: api.RecipeReceipt,
+        claim_receipt: cpu_region_claim.RegionClaimReceipt,
+        source_sha: str, binary_sha: str, linkage_sha: str,
+        measured_at: str) -> control_runner.SweepResult:
+    """Pure post-measurement composition shared by live and recovery paths."""
+    aa = materials["aa_calibration"]
+    neutral = materials["neutral_calibration"]
+    positive = materials["positive"]
+    historical = materials["historical_win_replay"]
+    negative_anchor = materials["negative_committed_cell"]
+    negative_wrong = materials["negative_wrong_cell"]
+    control_blocks = rule.max_total_blocks(solve.require_accepted().b_min_blocks)
+    negative_blocks = tuple(
+        statistics.PairedBlock(
+            block_index=i, unit_id=f"negative-work-mismatch-{i}",
+            stratum=api.STRATUM_SELECTION, order=a.order,
+            anchor_samples=a.anchor_samples,
+            candidate_samples=w.candidate_samples, measured_at=measured_at)
+        for i, (a, w) in enumerate(zip(negative_anchor.blocks,
+                                       negative_wrong.blocks)))
+    fixtures = (
+        _fixture(controls.CONTROL_POSITIVE, positive.blocks, tier="T1",
+                 source_sha=source_sha, binary_sha=binary_sha,
+                 linkage_sha=linkage_sha, measured_at=positive.run.ended_at),
+        _fixture(controls.CONTROL_NEUTRAL, neutral.blocks[:control_blocks], tier="T1",
+                 source_sha=source_sha, binary_sha=binary_sha,
+                 linkage_sha=linkage_sha, measured_at=neutral.run.ended_at),
+        _fixture(controls.CONTROL_DEGRADED_NEGATIVE, negative_blocks, tier="T1",
+                 source_sha=source_sha, binary_sha=binary_sha,
+                 linkage_sha=linkage_sha, measured_at=measured_at),
+        _fixture(controls.CONTROL_AA, aa.blocks[:control_blocks], tier="T1",
+                 source_sha=source_sha, binary_sha=binary_sha,
+                 linkage_sha=linkage_sha, measured_at=aa.run.ended_at),
+        _fixture(controls.CONTROL_HISTORICAL_WIN_REPLAY, historical.blocks,
+                 tier="T2", source_sha=source_sha, binary_sha=binary_sha,
+                 linkage_sha=linkage_sha, measured_at=historical.run.ended_at),
+    )
+    return _evaluate_controls(
+        solve=solve, declared=declared, rule=rule,
+        construction=construction, split=split, fixtures=fixtures,
+        anchor=anchor, recipe_receipt=recipe_receipt,
+        claim_receipt=claim_receipt, source_sha=source_sha,
+        measured_at=measured_at, output_root=output_root, identity=identity)
 
 
 def execute(output_root: Path, *, campaign_id: str,
@@ -802,40 +959,16 @@ def execute(output_root: Path, *, campaign_id: str,
         _write_json(output_root / "summary.json", summary)
         return summary
 
-    negative_blocks = tuple(
-        statistics.PairedBlock(
-            block_index=i, unit_id=f"negative-work-mismatch-{i}",
-            stratum=api.STRATUM_SELECTION, order=a.order,
-            anchor_samples=a.anchor_samples,
-            candidate_samples=w.candidate_samples, measured_at=ended)
-        for i, (a, w) in enumerate(zip(negative_anchor.blocks,
-                                       negative_wrong.blocks)))
-    fixtures = (
-        _fixture(controls.CONTROL_POSITIVE, positive.blocks, tier="T1",
-                 source_sha=source_sha, binary_sha=copy_sha,
-                 linkage_sha=copy_linkage, measured_at=positive.run.ended_at),
-        _fixture(controls.CONTROL_NEUTRAL, neutral.blocks[:control_blocks], tier="T1",
-                 source_sha=source_sha, binary_sha=copy_sha,
-                 linkage_sha=copy_linkage, measured_at=neutral.run.ended_at),
-        _fixture(controls.CONTROL_DEGRADED_NEGATIVE, negative_blocks, tier="T1",
-                 source_sha=source_sha, binary_sha=copy_sha,
-                 linkage_sha=copy_linkage, measured_at=ended),
-        _fixture(controls.CONTROL_AA, aa.blocks[:control_blocks], tier="T1",
-                 source_sha=source_sha, binary_sha=copy_sha,
-                 linkage_sha=copy_linkage, measured_at=aa.run.ended_at),
-        _fixture(controls.CONTROL_HISTORICAL_WIN_REPLAY, historical.blocks,
-                 tier="T2", source_sha=source_sha, binary_sha=copy_sha,
-                 linkage_sha=copy_linkage, measured_at=historical.run.ended_at),
-    )
     receipt = positive.run.candidate_receipt
     if receipt is None:
         raise RuntimeError("positive run emitted no recipe receipt")
-    result = _evaluate_controls(
-        solve=solve, declared=declared, rule=rule,
-        construction=construction, split=split, fixtures=fixtures,
+    result = _compose_measured_controls(
+        output_root=output_root, identity=identity, solve=solve,
+        declared=declared, rule=rule, construction=construction, split=split,
+        materials={material.label: material for material in materials},
         anchor=anchor, recipe_receipt=receipt.recipe_receipt,
         claim_receipt=claim_receipt, source_sha=source_sha,
-        measured_at=ended, output_root=output_root, identity=identity)
+        binary_sha=copy_sha, linkage_sha=copy_linkage, measured_at=ended)
     _write_json(output_root / "control_sweep.json", result.to_dict())
     summary = {
         "campaign_id": identity.campaign_id, "measured_at": _utc_now(),
@@ -852,6 +985,192 @@ def execute(output_root: Path, *, campaign_id: str,
     return summary
 
 
+def evaluate_existing(output_root: Path, *, campaign_id: str) -> dict:
+    """Compose a terminal sweep from completed, receipt-bound raw vectors.
+
+    This path performs no inference, takes no claim, and cannot accept partial
+    material.  It exists for the narrow failure mode where all governed legs and
+    teardown completed but deterministic post-processing raised.  Re-running the
+    benchmark would create a second experiment, not repair the first one.
+    """
+    output_root = output_root.resolve()
+    identity = LiveCampaignIdentity(campaign_id=campaign_id,
+                                    evidence_ref=str(output_root))
+    if not output_root.is_dir():
+        raise ValueError(f"completed evidence directory does not exist: {output_root}")
+    for terminal in ("summary.json", "control_sweep.json"):
+        if (output_root / terminal).exists():
+            raise ValueError(
+                f"{terminal} already exists; completed composition is immutable")
+
+    declaration = _load_json(output_root / "campaign_declaration.json")
+    declared_checks = {
+        "schema": declaration.get("schema")
+                  == "epyc.autokernel.live_control_campaign_declaration.v1",
+        "campaign_id": declaration.get("campaign_id") == identity.campaign_id,
+        "campaign_seed": declaration.get("campaign_seed_sha256") == hashlib.sha256(
+            identity.campaign_seed.encode("utf-8")).hexdigest(),
+        "window_id": declaration.get("window_id") == identity.window_id,
+        "recipe_id": declaration.get("recipe_id") == RECIPE_ID,
+        "cpu_list": declaration.get("cpu_list") == CPU_LIST,
+        "model": declaration.get("model") == str(MODEL),
+        "calibration_blocks": declaration.get("calibration_blocks")
+                              == CALIBRATION_BLOCKS,
+        "neutral_blocks": declaration.get("neutral_blocks") == NEUTRAL_BLOCKS,
+        "contribution_floor": declaration.get("contribution_floor")
+                              == CONTRIBUTION_FLOOR,
+    }
+    failed = sorted(name for name, passed in declared_checks.items() if not passed)
+    if failed:
+        raise ValueError(f"campaign declaration checks failed: {failed}")
+
+    runtime = _load_json(output_root / "runtime-source-label.json")
+    source_sha = runtime.get("source_sha256")
+    runtime_body = {key: value for key, value in runtime.items()
+                    if key != "source_sha256"}
+    if source_sha != schemas.content_hash(runtime_body) \
+            or declaration.get("source_sha256") != source_sha:
+        raise ValueError("runtime source label does not hash to the declared source")
+    copy_sha = str(runtime.get("copied_binary_sha256"))
+    linkage_sha = str(runtime.get("copied_linkage_sha256"))
+    if runtime.get("binary_copy_exact") is not True \
+            or runtime.get("production_source_commit") != PRODUCTION_COMMIT \
+            or runtime.get("measurement_instrument_commit") != INSTRUMENT_COMMIT:
+        raise ValueError("runtime source label is not the declared v9 instrument")
+    copied_binary = output_root / "anchor_binary_copy" / "llama-bench"
+    if _sha256_file(copied_binary) != copy_sha \
+            or _sha256_file(INSTRUMENT_BINARY) != runtime.get("measurement_binary_sha256"):
+        raise ValueError("measurement binary or its evidence copy changed after capture")
+
+    preflight = _load_json(output_root / "preflight.json")
+    preflight_checks = preflight.get("checks")
+    if not isinstance(preflight_checks, Mapping) or not preflight_checks \
+            or any(not isinstance(check, Mapping)
+                   or check.get("outcome") != schemas.PASS
+                   for check in preflight_checks.values()):
+        raise ValueError("recorded live-control preflight is not all-PASS")
+    claim_payload = _load_json(output_root / "claim_receipt.json")
+    claim_receipt = cpu_region_claim.RegionClaimReceipt.from_dict(claim_payload)
+    if claim_receipt.campaign_id != identity.campaign_id \
+            or claim_receipt.cpu_list != CPU_LIST or not claim_receipt.released_at:
+        raise ValueError("recorded CPU claim is not released and bound to this campaign")
+
+    host = _load_json(output_root / "host.json")
+    legs = host.get("legs")
+    if host.get("claim_receipt") != claim_payload or not isinstance(legs, list):
+        raise ValueError("host receipt does not bind the terminal claim receipt")
+    expected_labels = {
+        "aa_calibration", "neutral_calibration", "positive",
+        "historical_win_replay", "negative_committed_cell", "negative_wrong_cell",
+    }
+    by_label = {leg.get("label"): leg for leg in legs if isinstance(leg, Mapping)}
+    if set(by_label) != expected_labels:
+        raise ValueError("host receipt does not cover exactly the six declared legs")
+    for label, leg in by_label.items():
+        expected_ref = str(output_root / "raw" / f"{label}.json")
+        if leg.get("complete") is not True or leg.get("refusals") != [] \
+                or leg.get("raw_ref") != expected_ref:
+            raise ValueError(f"host receipt leg {label!r} is incomplete or misbound")
+
+    aa, aa_raw = _load_recorded_material(
+        output_root, identity=identity, label="aa_calibration",
+        expected_blocks=CALIBRATION_BLOCKS, prompt=PROMPT_TOKENS,
+        candidate_iqk="1", anchor_iqk="1")
+    neutral, neutral_raw = _load_recorded_material(
+        output_root, identity=identity, label="neutral_calibration",
+        expected_blocks=NEUTRAL_BLOCKS, prompt=PROMPT_TOKENS,
+        candidate_iqk="1", anchor_iqk="1")
+    declared, rule, construction, split, solve = _campaign_inputs(
+        aa, neutral, identity)
+    stored_calibration = _load_json(output_root / "calibration.json")
+    if schemas.content_hash(stored_calibration) != schemas.content_hash(solve.to_dict()):
+        raise ValueError("stored calibration does not re-derive from the raw A/A pools")
+    control_blocks = rule.max_total_blocks(solve.require_accepted().b_min_blocks)
+    configs = (
+        ("positive", PROMPT_TOKENS, "1", "0"),
+        ("historical_win_replay", PROMPT_TOKENS, "1", "0"),
+        ("negative_committed_cell", PROMPT_TOKENS, "1", "1"),
+        ("negative_wrong_cell", WRONG_PROMPT_TOKENS, "1", "1"),
+    )
+    materials = {aa.label: aa, neutral.label: neutral}
+    raw_by_label = {aa.label: aa_raw, neutral.label: neutral_raw}
+    for label, prompt, candidate_iqk, anchor_iqk in configs:
+        material, raw = _load_recorded_material(
+            output_root, identity=identity, label=label,
+            expected_blocks=control_blocks, prompt=prompt,
+            candidate_iqk=candidate_iqk, anchor_iqk=anchor_iqk)
+        materials[label] = material
+        raw_by_label[label] = raw
+
+    anchor_payload = raw_by_label["positive"].get("anchor_identity")
+    if not isinstance(anchor_payload, Mapping):
+        raise ValueError("positive raw vector carries no anchor identity")
+    if any(raw.get("anchor_identity") != anchor_payload
+           for raw in raw_by_label.values()):
+        raise ValueError("raw vectors do not share one anchor identity")
+    anchor = api.AnchorIdentity(
+        source_commit=anchor_payload["source_commit"],
+        binary_sha256=anchor_payload["binary_sha256"],
+        linkage_sha256=anchor_payload["linkage_sha256"],
+        measurement_event_ids=tuple(anchor_payload["measurement_event_ids"]),
+        tool=anchor_payload.get("tool"))
+    if anchor.source_commit != INSTRUMENT_COMMIT \
+            or anchor.binary_sha256 != runtime.get("measurement_binary_sha256"):
+        raise ValueError("raw-vector anchor is not the declared hardened instrument")
+    candidate_receipt = raw_by_label["positive"].get("candidate_receipt")
+    if not isinstance(candidate_receipt, Mapping):
+        raise ValueError("positive raw vector carries no candidate recipe receipt")
+    recipe_receipt = api.RecipeReceipt(
+        constructor_id=candidate_receipt["constructor_id"],
+        constructor_sha256=candidate_receipt["constructor_sha256"],
+        argv_sha256=candidate_receipt["argv_sha256"])
+    measured_at = materials["negative_wrong_cell"].run.ended_at
+    result = _compose_measured_controls(
+        output_root=output_root, identity=identity, solve=solve,
+        declared=declared, rule=rule, construction=construction, split=split,
+        materials=materials, anchor=anchor, recipe_receipt=recipe_receipt,
+        claim_receipt=claim_receipt, source_sha=str(source_sha),
+        binary_sha=copy_sha, linkage_sha=linkage_sha,
+        measured_at=measured_at)
+
+    input_paths = (
+        "campaign_declaration.json", "runtime-source-label.json", "preflight.json",
+        "claim_receipt.json", "host.json", "calibration.json",
+        *(f"raw/{label}.json" for label in sorted(expected_labels)),
+    )
+    evaluator_commit = subprocess.run(
+        ("git", "-C", str(Path(__file__).resolve().parents[4]), "rev-parse", "HEAD"),
+        text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        check=True).stdout.strip()
+    composition = {
+        "schema": "epyc.autokernel.control_composition_attestation.v1",
+        "campaign_id": identity.campaign_id,
+        "composed_at": _utc_now(),
+        "mode": "existing_completed_raw_vectors",
+        "inference_executed": False,
+        "evaluator_commit": evaluator_commit,
+        "evaluator_source_sha256": _sha256_file(Path(__file__)),
+        "inputs": {name: _sha256_file(output_root / name) for name in input_paths},
+    }
+    _write_json(output_root / "composition_attestation.json", composition)
+    _write_json(output_root / "control_sweep.json", result.to_dict())
+    summary = {
+        "campaign_id": identity.campaign_id, "measured_at": _utc_now(),
+        "state": "controls_complete", "controls_started": True,
+        "production_source_commit": PRODUCTION_COMMIT,
+        "measurement_instrument_commit": INSTRUMENT_COMMIT,
+        "measurement_binary_sha256": runtime.get("measurement_binary_sha256"),
+        "copied_binary_sha256": copy_sha,
+        "binary_copy_exact": True,
+        "composition_mode": composition["mode"],
+        "composition_attestation_sha256": schemas.content_hash(composition),
+        "calibration": solve.to_dict(), "controls": result.to_dict(),
+        "may_rank": result.may_rank,
+    }
+    _write_json(output_root / "summary.json", summary)
+    return summary
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -860,7 +1179,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output", type=Path, required=True,
         help="fresh absolute evidence directory; execution refuses reuse")
-    parser.add_argument("--execute", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--execute", action="store_true")
+    mode.add_argument(
+        "--evaluate-existing", action="store_true",
+        help="compose already-completed receipt-bound raw vectors; runs no inference")
     parser.add_argument("--i-hold-the-host", action="store_true")
     return parser
 
@@ -877,16 +1200,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         "neutral_blocks": NEUTRAL_BLOCKS,
         "contribution_floor": CONTRIBUTION_FLOOR,
         "output": str(args.output), "execute": args.execute,
+        "evaluate_existing": args.evaluate_existing,
     }
-    if not args.execute:
+    if not args.execute and not args.evaluate_existing:
         print(json.dumps(plan, indent=2, sort_keys=True))
         return 0
-    if not args.i_hold_the_host:
+    if args.execute and not args.i_hold_the_host:
         raise SystemExit("--execute requires --i-hold-the-host")
-    with powercap_broker.PowercapBroker() as broker:
-        summary = execute(
-            args.output.resolve(), campaign_id=args.campaign_id,
-            host_state=broker.read_host_state)
+    if args.evaluate_existing:
+        summary = evaluate_existing(
+            args.output.resolve(), campaign_id=args.campaign_id)
+    else:
+        with powercap_broker.PowercapBroker() as broker:
+            summary = execute(
+                args.output.resolve(), campaign_id=args.campaign_id,
+                host_state=broker.read_host_state)
     print(json.dumps({
         "campaign_id": summary["campaign_id"],
         "calibration_accepted": summary["calibration"]["accepted"],

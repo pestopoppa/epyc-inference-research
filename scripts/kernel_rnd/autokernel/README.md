@@ -33,9 +33,9 @@ asserted, and the operator acted on it: those planes were removed, about 79,600
 lines including their tests, recoverable from the tag
 `autokernel-preserve-20260804`. Later the same day the surviving controller
 memory was opened *module by module* — see **A question, or an exploration**
-below. Three small pure analysis modules are deliberately off the campaign import
-path: prior-art classification, screening-lane planning, and offline
-least-commitment evaluation. They cannot launch or mutate anything, and become
+below. Four small pure analysis modules are deliberately off the campaign import
+path: prior-art classification, screening-lane planning, real-archive
+construction, and offline least-commitment evaluation. They cannot launch or mutate anything, and become
 reachable only when their owning workflow supplies evidence. The campaign-path
 boundary still guards every new import. [`FOOTPRINT.md`](FOOTPRINT.md) carries the current totals and every
 module's reachability row by row, and `test_campaign_footprint.py` turns the
@@ -120,6 +120,14 @@ completed proposal archives. It reports direction, conditional predictive value,
 robust sign error, effective pairs/noise exclusions, and recoding stability. Its
 only authority label is `observe_only`; it is intentionally outside the campaign
 import path and exposes no selector, champion, T2, or T3 mutation API.
+
+`least_commitment_archive_builder.py` is the strict AK-WM-2a join in front of that
+evaluator. Every row must resolve to a real proposal-v3 journal event and an exact
+clean `decided` terminal event with samples, released resources, and a passing
+production immutability proof. Hash-pinned diagnostic, outcome, and matched
+one-factor receipts must agree on representation, empirical-demand, candidate,
+regime, surface, and metric-direction frames. A preflight refusal or synthetic
+fixture therefore cannot be relabelled as an empirical archive row.
 
 For the CPU known-win diagnostic, a `change_class: "parameter"` proposal must
 declare `change.parameter_surface` with exact `candidate` and `anchor` mappings.
@@ -222,6 +230,7 @@ calibration exists. Source-changing campaigns additionally require their own
 | `lanes.py` | The lane registry, historical 4/8/16/32/48-way CPU shapes, isolation checks, change-class-specific rank calibration, and full-instance verification rule. |
 | `artifact_diff.py` | The compile-only VGPR/SGPR/scratch/instruction-mix comparison that vetoes an unconfirmed GPU claim before behavioral T0 can launch. |
 | `offline_least_commitment.py` | The observe-only AK-WM-2/AP-WM-1 diagnostic over matched completed-proposal archives; it has no live selection authority. |
+| `least_commitment_archive_builder.py` | The AK-WM-2a real-record join: resolves proposal-v3 and clean terminal journal events, verifies hash-bound diagnostic/outcome/matched-one-factor receipts, and emits only protocol-valid observe-only archives. |
 | `turn_productivity.py` | **AK-PT-1 / AK-X-6.** Immutable per-refine-turn `(turn, task, correct?, speedup)` records, mechanically derived rescued/persistent classes, and a campaign-calibration-derived e-process rule. It may label a turn repair-only and withhold search advancement; it has no ranking, retention, promotion, or deployment authority. |
 | `dashboard.py` | **AK6.** The compact `/kernel` contract-v2 producer retained by the campaign path after the old `surface/` plane was deleted. It projects only the already-fsynced terminal `STOP_STATE`: campaign and backend standing are observed; champion, headroom and release package are explicitly `not_reported`; journal time drives freshness; and the atomic export is refused under scratch, a production tree, or any checkout. |
 
