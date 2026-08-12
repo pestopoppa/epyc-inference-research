@@ -26,6 +26,7 @@ class MatchedPairPreparationTest(unittest.TestCase):
         self.intervention = proposal()
         self.intervention["provider_reference"]["target_backend"] = \
             campaign.BACKEND_CPU
+        P._rebind_provider_reference(self.intervention, self.calibration)
         self.proposal_path = self.root / "proposal-v4.json"
         self.proposal_path.write_text(
             json.dumps(self.intervention), encoding="utf-8")
@@ -128,6 +129,24 @@ class MatchedPairPreparationTest(unittest.TestCase):
             frames.append(raw["factors"])
         changed = [key for key in frames[0] if frames[0][key] != frames[1][key]]
         self.assertEqual(changed, ["ggml_iqk"])
+
+    def test_provider_is_rebound_to_current_calibration_anchor(self):
+        result = P.prepare(self.manifest())
+        proposal_out = json.loads(
+            (Path(result["outputs"]["intervention"]["path"]) /
+             "proposal-v4.json").read_text())
+        provider = proposal_out["provider_reference"]
+        anchor = json.loads(
+            (self.calibration / "runtime-source-label.json").read_text())
+        self.assertEqual(provider["source_commit"], campaign.MEASUREMENT_COMMIT)
+        self.assertEqual(provider["source_commit"],
+                         anchor["measurement_instrument_commit"])
+        self.assertEqual(provider["artifact_sha256"],
+                         anchor["measurement_binary_sha256"])
+        self.assertEqual(provider["linkage_manifest_sha256"],
+                         anchor["measurement_linkage_sha256"])
+        self.assertEqual(provider["toolchain_manifest_sha256"],
+                         anchor["measurement_toolchain_manifest_sha256"])
 
     def test_existing_output_refuses_before_mutation(self):
         manifest = self.manifest()

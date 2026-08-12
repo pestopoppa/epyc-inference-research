@@ -145,6 +145,37 @@ def _matched_envelope(
     return physical_bounds.PhysicalEnvelope.from_mapping(raw)
 
 
+def _rebind_provider_reference(
+        proposal: dict[str, Any], calibration_path: Path) -> None:
+    """Bind the proposal provider to the accepted calibration instrument.
+
+    Proposal templates are routinely copied between campaign eras.  Provider
+    identity is therefore never trusted from that template: all four
+    load-bearing hashes are taken from the calibration anchor, and a missing
+    anchor field refuses preparation.
+    """
+    source_path = calibration_path / "runtime-source-label.json"
+    source = _load(source_path, "calibration runtime source label")
+    required = ("measurement_instrument_commit", "measurement_binary_sha256",
+                "measurement_linkage_sha256", "measurement_toolchain_manifest_sha256")
+    missing = [key for key in required if not source.get(key)]
+    if missing:
+        raise PreparationError(
+            "calibration anchor lacks provider evidence: " + ", ".join(missing))
+    if source["measurement_instrument_commit"] != campaign.MEASUREMENT_COMMIT:
+        raise PreparationError("calibration anchor measurement commit is not current")
+    provider = proposal.get("provider_reference")
+    if not isinstance(provider, dict):
+        raise PreparationError("proposal provider_reference must be an object")
+    provider.update({
+        "source_ref": campaign.MEASUREMENT_REPO,
+        "source_commit": campaign.MEASUREMENT_COMMIT,
+        "artifact_sha256": source["measurement_binary_sha256"],
+        "linkage_manifest_sha256": source["measurement_linkage_sha256"],
+        "toolchain_manifest_sha256": source["measurement_toolchain_manifest_sha256"],
+    })
+
+
 def _copy_bound_receipt(source: Path, destination: Path) -> dict[str, Any]:
     shutil.copyfile(source, destination)
     return capture.source_binding(destination)
@@ -307,6 +338,8 @@ def prepare(raw: Mapping[str, Any]) -> dict[str, Any]:
         raw["intervention_campaign_id"], "intervention_campaign_id")
     proposal["proposal_id"] = _text(
         raw["intervention_proposal_id"], "intervention_proposal_id")
+    calibration = campaign.load_calibration_bundle(calibration_path)
+    _rebind_provider_reference(proposal, calibration_path)
     violations = schemas.validate_proposal(proposal)
     if violations:
         raise PreparationError("invalid intervention proposal: " + "; ".join(violations))
@@ -316,7 +349,6 @@ def prepare(raw: Mapping[str, Any]) -> dict[str, Any]:
     control = capture.make_iqk_control_proposal(
         proposal, campaign_id=str(control_branch["campaign_id"]),
         proposal_id=control_proposal_id)
-    calibration = campaign.load_calibration_bundle(calibration_path)
     template = physical_bounds.PhysicalEnvelope.from_mapping(
         _load(template_path, "physical envelope template"))
     # The A/A control is intentionally uninstantiable without its typed control
