@@ -259,6 +259,31 @@ def linkage_identity(binary: Path, *, env: dict[str, str]) -> dict[str, Any]:
     return {"resolved_libraries": ggml, "ldd_stdout": completed.stdout}
 
 
+def producer_identity() -> dict[str, Any]:
+    """Bind this producer to one clean, tracked research revision."""
+    path = Path(__file__).resolve()
+    relative = path.relative_to(REPO_ROOT)
+    commit = subprocess.run(
+        ("git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"), check=True,
+        text=True, capture_output=True, timeout=30.0).stdout.strip()
+    tracked = subprocess.run(
+        ("git", "-C", str(REPO_ROOT), "ls-files", "--error-unmatch", str(relative)),
+        text=True, capture_output=True, timeout=30.0)
+    dirty = subprocess.run(
+        ("git", "-C", str(REPO_ROOT), "status", "--porcelain",
+         "--untracked-files=no"), text=True, capture_output=True, timeout=30.0,
+        check=True).stdout
+    if tracked.returncode != 0 or dirty.strip():
+        raise RuntimeError(
+            "rocprof attribution producer requires a clean tracked research checkout")
+    return {
+        "repository_root": str(REPO_ROOT),
+        "repository_commit": commit,
+        "path": str(path),
+        "sha256": sha256_file(path),
+    }
+
+
 def identity(binary: Path, model: Path, source_root: Path,
              args: argparse.Namespace, *, env: dict[str, str]) -> dict[str, Any]:
     profiler = Path(args.profiler_prefix).resolve() / "bin" / "rocprof"
@@ -269,6 +294,7 @@ def identity(binary: Path, model: Path, source_root: Path,
     return {
         "source_root": str(source_root),
         "source_commit": commit,
+        "producer": producer_identity(),
         "binary": str(binary),
         "binary_sha256": sha256_file(binary),
         "model": str(model),

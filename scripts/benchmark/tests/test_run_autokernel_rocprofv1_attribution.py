@@ -131,6 +131,7 @@ class RocprofV1AttributionTest(unittest.TestCase):
 
     def test_runner_writes_prospective_belief_measurements_only(self):
         text = Path(R.__file__).read_text(encoding="utf-8")
+        self.assertIn('"producer": producer_identity()', text)
         self.assertIn('"belief_measurements": belief_measurements', text)
         self.assertIn('"metric_direction": "lower_better"', text)
         self.assertIn('"reps_basis": "scored:llama-bench prompt repetitions"', text)
