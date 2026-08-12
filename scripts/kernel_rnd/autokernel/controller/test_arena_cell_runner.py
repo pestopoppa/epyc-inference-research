@@ -9,10 +9,12 @@ import os
 from pathlib import Path
 import signal
 import socket
+import struct
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 import types
 import unittest
 from unittest import mock
@@ -27,6 +29,148 @@ from . import k_search_arena as KS
 def canonical_sha(payload: object) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode()).hexdigest()
+
+
+def fake_evaluator_execution(
+    workspace: Path, evidence_root: Path, identity: dict,
+    phase: str, baseline_receipt_sha256: str,
+) -> dict:
+    workspace.mkdir(parents=True, exist_ok=True)
+    evidence_root.mkdir(parents=True, exist_ok=True)
+    config_path = workspace / "config.yaml"
+    if not config_path.exists():
+        config_path.write_text("task_type: fixture\n", encoding="utf-8")
+    baseline = {"schema": R.arena_evaluator_child.BASELINE_SCHEMA, "cases": []}
+    baseline["receipt_sha256"] = canonical_sha(baseline)
+    request = {
+        "schema": R.arena_evaluator_child.REQUEST_SCHEMA,
+        **identity, "workspace": str(workspace.resolve()), "phase": phase,
+        "config_sha256": hashlib.sha256(config_path.read_bytes()).hexdigest(),
+        "vendor_evaluator_sha256": hashlib.sha256(
+            (Path(identity["arena_root"]) / "src" / "evaluator.py").read_bytes()
+        ).hexdigest(),
+        "evaluator_python": R._declared_evaluator_python_identity(),
+        "baseline_cases": baseline,
+        "outer_baseline_receipt_sha256": baseline_receipt_sha256,
+    }
+    request["receipt_sha256"] = canonical_sha(request)
+    (workspace / "evaluator-request.json").write_text(
+        json.dumps(request), encoding="utf-8")
+    activation = {
+        "profile": R.sandbox.EVALUATOR_PROFILE, "pid": 12345,
+        "process_start_ticks": 67890,
+        "writable_root": str(workspace.resolve()),
+        "writable_device_paths": ["/dev/kfd", "/dev/dri/renderD128", "/dev/null"],
+        "read_allowlist_enforced": True, "readable_roots": ["/usr/lib"],
+        "network_profile": R.sandbox.NETWORK_DENY_ALL,
+        "outbound_socket_families": [], "unix_socket_creation_denied": False,
+        "broker_socket_path": None, "broker_fd_inherited": False,
+        "broker_peer": None, "cgroup_path": "/sys/fs/cgroup/autokernel-fixture",
+        "blocked_syscalls": [
+            "connect", "socket", "process_vm_readv", "process_vm_writev",
+            "io_uring_setup", "io_uring_enter", "io_uring_register",
+            "pidfd_getfd", "process_madvise"],
+    }
+    evaluation = {
+        "pass_compilation": True, "pass_correctness": True,
+        "valid_baseline_cases": 3, "valid_optimized_cases": 3,
+        "average_speedup": 1.1,
+    }
+    result = {
+        "schema": R.arena_evaluator_child.RESULT_SCHEMA,
+        "request_receipt_sha256": request["receipt_sha256"],
+        "baseline_cases_sha256": baseline["receipt_sha256"],
+        "outer_baseline_receipt_sha256": baseline_receipt_sha256,
+        "evaluation": evaluation,
+    }
+    result["receipt_sha256"] = canonical_sha(result)
+    stdout = json.dumps(result, sort_keys=True) + "\n"
+    (evidence_root / "evaluator.stdout").write_text(stdout, encoding="utf-8")
+    (evidence_root / "evaluator.stderr").write_text("", encoding="utf-8")
+    (evidence_root / "evaluator-result.json").write_text(
+        json.dumps(result), encoding="utf-8")
+    execution = {
+        "schema": "epyc.autokernel.arena_evaluator_execution.v1",
+        "request_receipt_sha256": request["receipt_sha256"],
+        "result_receipt_sha256": result["receipt_sha256"],
+        "pid": 12345, "process_start_ticks": 67890,
+        "process_group_id": 12345, "session_id": 12345,
+        "activation_receipt": activation,
+        "teardown_receipt": {
+            "cgroup_path": activation["cgroup_path"],
+            "verified_empty": True, "removed": True,
+            "descendants_killed": False},
+        "stdout_sha256": hashlib.sha256(stdout.encode()).hexdigest(),
+        "stderr_sha256": hashlib.sha256(b"").hexdigest(),
+    }
+    execution["receipt_sha256"] = canonical_sha(execution)
+    (evidence_root / "execution-receipt.json").write_text(
+        json.dumps(execution), encoding="utf-8")
+    return execution
+
+
+def fake_controller_sandbox_execution(cell_root: Path) -> dict:
+    workspace = (cell_root / "workspace").resolve()
+    readable_roots = [str(Path(sys.executable).resolve().parent)]
+    runtime = {
+        "readable_roots": readable_roots, "readable_files": [],
+        "executable_files": [str(Path(sys.executable).resolve())],
+        "identities": {str(Path(sys.executable).resolve()):
+                       R._sha256_file(Path(sys.executable).resolve())},
+    }
+    runtime["sha256"] = canonical_sha(runtime)
+    policy_sha = "b" * 64
+    cgroup = "/sys/fs/cgroup/autokernel-fixture-controller"
+    blocked = sorted(R.sandbox._network_policy(
+        R.sandbox.CONTROLLER_PROFILE)[0])
+    activation = {
+        "schema": R.sandbox.RECEIPT_SCHEMA,
+        "sandbox_id": R.sandbox.SANDBOX_ID,
+        "pid": 12346, "process_start_ticks": 67891, "euid": 1000,
+        "landlock_abi": 3, "landlock_write_rights": 0,
+        "landlock_handled_rights": 0, "seccomp_sha256": "c" * 64,
+        "blocked_syscalls": blocked, "writable_root": str(workspace),
+        "writable_device_paths": ["/dev/null"], "cgroup_path": cgroup,
+        "resource_limits": {}, "argv_sha256": "d" * 64,
+        "read_allowlist_enforced": True,
+        "readable_roots": readable_roots, "readable_files": [],
+        "executable_files": [str(Path(sys.executable).resolve())],
+        "profile": R.sandbox.CONTROLLER_PROFILE,
+        "network_profile": R.sandbox.NETWORK_OUTBOUND_CLIENT,
+        "outbound_socket_families": ["AF_INET", "AF_INET6"],
+        "server_socket_operations_denied": ["listen", "accept", "accept4"],
+        "unix_socket_creation_denied": True,
+        "broker_socket_path": "/tmp/fake-broker.sock",
+        "broker_fd_inherited": True,
+        "broker_peer": {"pid": os.getpid(), "start_ticks": 1,
+                        "uid": os.getuid(), "gid": os.getgid()},
+        "policy_sha256": policy_sha,
+    }
+    activation_path = cell_root / R.CONTROLLER_ACTIVATION_RECEIPT
+    activation_path.write_text(json.dumps(activation), encoding="utf-8")
+    teardown = {
+        "schema": R.arena_controller_sandbox.TEARDOWN_SCHEMA,
+        "pid": 12346, "process_start_ticks": 67891,
+        "policy_sha256": policy_sha,
+        "runtime_allowlist_sha256": runtime["sha256"],
+        "activation_receipt": str(activation_path),
+        "activation_receipt_sha256": R._sha256_file(activation_path),
+        "teardown": {"cgroup_path": cgroup, "verified_empty": True,
+                     "removed": True, "descendants_killed": False},
+    }
+    teardown["receipt_sha256"] = canonical_sha(teardown)
+    (cell_root / R.CONTROLLER_TEARDOWN_RECEIPT).write_text(
+        json.dumps(teardown), encoding="utf-8")
+    execution = {
+        "schema": "epyc.autokernel.arena_controller_sandbox_execution.v1",
+        "pid": 12346, "policy_sha256": policy_sha,
+        "runtime_allowlist": runtime,
+        "activation_receipt": activation, "teardown_receipt": teardown,
+    }
+    execution["receipt_sha256"] = canonical_sha(execution)
+    (cell_root / "controller-sandbox-execution.json").write_text(
+        json.dumps(execution), encoding="utf-8")
+    return execution
 
 
 class FakeReceipt:
@@ -97,6 +241,9 @@ class ArenaCellRunnerTest(unittest.TestCase):
         self.arena = self.root / "arena"
         task = self.arena / "tasks" / "fixture"
         task.mkdir(parents=True)
+        (self.arena / "src").mkdir()
+        (self.arena / "src" / "evaluator.py").write_text(
+            "# pinned fixture evaluator\n", encoding="utf-8")
         (task / "config.yaml").write_text("task_type: fixture\n", encoding="utf-8")
         self.preflight_path = self.root / "preflight.json"
         preflight = {
@@ -196,12 +343,32 @@ class ArenaCellRunnerTest(unittest.TestCase):
                 "gpu_action_executed_only_while_claim_held": True,
                 "failure": None,
             }
+            if phase == "centralized_final_evaluation" \
+                    and not request["baseline"]:
+                identity = {
+                    "campaign_id": request["campaign_id"],
+                    **({"attempt_id": request["attempt_id"]}
+                       if request.get("attempt_id") is not None else {}),
+                    "claim_campaign_id": request.get(
+                        "claim_campaign_id", request["campaign_id"]),
+                    "task_id": request["task"]["task_id"],
+                    "arm_id": request["arm"]["arm_id"],
+                    "checkpoint_hours": request["checkpoint_hours"],
+                    "arena_root": str(Path(request["arena_root"]).resolve()),
+                }
+                window["evaluator_execution_receipt"] = fake_evaluator_execution(
+                    cell_root / "final-evaluation-workspace",
+                    cell_root / "final-evaluator-evidence", identity, phase,
+                    windows[0]["receipt_sha256"])
             window["receipt_sha256"] = canonical_sha(window)
             path = cell_root / "measurement-windows" / f"{ordinal:02d}-{phase}.json"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(window), encoding="utf-8")
             windows.append(window)
-        return {
+        controller_execution = (
+            None if request["baseline"]
+            else fake_controller_sandbox_execution(cell_root))
+        result = {
             "schema": R.CHECKPOINT_SCHEMA,
             "authority": "whole_agent_task_only",
             "campaign_id": request["campaign_id"],
@@ -219,9 +386,15 @@ class ArenaCellRunnerTest(unittest.TestCase):
                 "average_speedup": 1.1,
             },
             "measurement_windows": windows,
+            "controller_sandbox_execution": controller_execution,
             "artifacts": {"fixture.txt": hashlib.sha256(
                 artifact.read_bytes()).hexdigest()},
         }
+        if controller_execution is not None:
+            result["broker_evaluation_chain"] = {
+                "controller_sandbox_execution_receipt_sha256":
+                    controller_execution["receipt_sha256"]}
+        return result
 
     def runner(self):
         return R.GovernedArenaCellRunner(self.config(), worker=self.worker)
@@ -271,6 +444,73 @@ class ArenaCellRunnerTest(unittest.TestCase):
                 persisted["receipt_sha256"],
                 canonical_sha({key: value for key, value in persisted.items()
                                if key != "receipt_sha256"}))
+
+    def test_diagnostic_pilot_runs_one_governed_checkpoint_without_authority(self):
+        runner = self.runner()
+        argv = list(self.arm("k_search").argv)
+        argv[argv.index("--max-rounds") + 1] = "1"
+        request = R.DiagnosticPilotCellRequest(
+            arm=self.arm("k_search"), task=self.task, checkpoint_hours=2.0,
+            controller_argv=tuple(argv))
+        with mock.patch.object(
+            C, "_implementation_audit",
+            return_value={"executable": True, "missing_artifacts": []},
+        ):
+            receipt = runner.run_diagnostic_pilot(request)
+        self.assertEqual(receipt["schema"], R.DIAGNOSTIC_PILOT_SCHEMA)
+        self.assertEqual(receipt["authority"],
+                         "compatibility_only_no_ranking_or_promotion_authority")
+        self.assertEqual(receipt["checkpoint_hours"], 2.0)
+        self.assertEqual(receipt["checkpoint"]["checkpoint_hours"], 2.0)
+        self.assertEqual(receipt["controller_argv"][
+            receipt["controller_argv"].index("--max-rounds") + 1], "1")
+        self.assertFalse(receipt["constraints"]["matched_campaign_result_implied"])
+        self.assertFalse(receipt["constraints"]["belief_update_authority"])
+        self.assertEqual(
+            receipt["checkpoint_receipt_sha256"],
+            receipt["checkpoint"]["receipt_sha256"])
+        self.assertTrue((self.output / "diagnostic-pilot-receipt.json").is_file())
+
+    def test_diagnostic_pilot_refuses_baseline_and_nonmatched_budget(self):
+        with self.assertRaisesRegex(R.ArenaCellRunnerError, "ready controller"):
+            R.DiagnosticPilotCellRequest(
+                arm=self.arm(C.BASELINE_ARM_ID), task=self.task)
+        with self.assertRaisesRegex(R.ArenaCellRunnerError, "matched budget"):
+            R.DiagnosticPilotCellRequest(
+                arm=self.arm("k_search"), task=self.task,
+                checkpoint_hours=0.01)
+        argv = list(self.arm("k_search").argv)
+        argv[argv.index("--max-rounds") + 1] = "2"
+        with self.assertRaisesRegex(R.ArenaCellRunnerError, "may only set"):
+            R.DiagnosticPilotCellRequest(
+                arm=self.arm("k_search"), task=self.task,
+                controller_argv=tuple(argv))
+
+    def test_instruction_task_source_is_uniquely_discovered_from_kernel_target(self):
+        workspace = self.root / "instruction-workspace"
+        workspace.mkdir()
+        (workspace / "helper.py").write_text("def helper(): pass\n", encoding="utf-8")
+        (workspace / "kernel.py").write_text(
+            "def add_kernel(x):\n    return x\n", encoding="utf-8")
+        self.assertEqual(
+            R._declared_task_sources({
+                "source_file_path": [],
+                "target_kernel_functions": ["add_kernel"],
+            }, workspace),
+            ("kernel.py",))
+
+    def test_instruction_task_source_discovery_refuses_ambiguity(self):
+        workspace = self.root / "ambiguous-instruction-workspace"
+        workspace.mkdir()
+        for name in ("one.py", "two.py"):
+            (workspace / name).write_text(
+                "def add_kernel(x):\n    return x\n", encoding="utf-8")
+        with self.assertRaisesRegex(
+                R.ArenaCellRunnerError, "uniquely discover"):
+            R._declared_task_sources({
+                "source_file_path": [],
+                "target_kernel_functions": ["add_kernel"],
+            }, workspace)
 
     def test_identity_drift_refuses_before_claim_or_worker(self):
         acquire = mock.Mock()
@@ -672,13 +912,40 @@ class ArenaCellRunnerTest(unittest.TestCase):
         argv = R._controller_argv({"argv": list(arm.argv)}, 2.0)
         self.assertEqual(argv[argv.index("--checkpoint-hours") + 1], "2")
         self.assertEqual(argv[argv.index("--timeout-seconds") + 1], "7200")
+        self.assertEqual(
+            argv[2], "kernel_rnd.autokernel.controller.k_search_arena")
+        pinned_arm = {"argv": list(KS.campaign_argv())}
+        self.assertEqual(
+            R._controller_pythonpath(pinned_arm, R.REPOSITORY_ROOT),
+            os.pathsep.join((str(R.REPOSITORY_ROOT / "scripts"),
+                             str(R.CONTROLLER_PACKAGE_ROOT))))
 
-    def test_controller_execution_fails_closed_without_device_sandbox(self):
-        with mock.patch.dict(
-                os.environ, {"AUTOKERNEL_CONTROLLER_SANDBOX_PREFIX_JSON": ""}):
-            with self.assertRaisesRegex(
-                    R.ArenaCellRunnerError, "device-isolation sandbox"):
-                R._controller_isolation_prefix()
+    def test_controller_argv_replaces_only_with_exact_audited_executable(self):
+        arm = self.arm("k_search")
+        argv = R._controller_argv(
+            {"argv": list(arm.argv)}, 2.0,
+            executable_path=str(Path(sys.executable).resolve()))
+        self.assertEqual(argv[0], str(Path(sys.executable).resolve()))
+        with self.assertRaisesRegex(R.ArenaCellRunnerError, "exact executable"):
+            R._controller_argv(
+                {"argv": list(arm.argv)}, 2.0,
+                executable_path=str(self.root / "missing-python"))
+
+    def test_evaluator_startup_is_deterministic_without_device_randomness(self):
+        workspace = self.root / "evaluator-workspace"
+        environment = R.SandboxedEvaluatorRunner._environment(
+            workspace, self.arena)
+        self.assertEqual(environment["PYTHONHASHSEED"], "0")
+        self.assertEqual(environment["PYTHONDONTWRITEBYTECODE"], "1")
+        self.assertNotIn("LD_LIBRARY_PATH", environment)
+
+    def test_evaluator_policy_admits_ephemeral_package_parent_not_proc(self):
+        runner = R.SandboxedEvaluatorRunner(arena_root=self.arena)
+        roots = (*runner._readable_roots(), str(runner.arena_root))
+        self.assertIn(str(self.arena.resolve()), roots)
+        self.assertNotIn(str((self.arena / "src").resolve()), roots)
+        self.assertNotIn("/proc", roots)
+        self.assertIn("/usr/libexec", roots)
 
     def test_parent_broker_is_short_private_fresh_and_hash_chained(self):
         cell = self.root / "broker-cell"
@@ -689,14 +956,22 @@ class ArenaCellRunnerTest(unittest.TestCase):
         (workspace / "kernel.hip").write_text("// original\n", encoding="utf-8")
         seen = []
 
-        def evaluate(ordinal, evaluation_root):
+        def evaluate(ordinal, evaluation_root, cancel_event):
+            self.assertFalse(cancel_event.is_set())
             seen.append((ordinal, (evaluation_root / "kernel.hip").read_text()))
             claim_id = f"akd-broker0000000{ordinal}"
-            window = R._self_hash({
-                "schema": R.MEASUREMENT_WINDOW_SCHEMA,
+            identity = {
                 "campaign_id": "fixture-campaign-v1", "attempt_id": "attempt-r1",
                 "claim_campaign_id": "attempt-r1", "task_id": "fixture.task",
                 "arm_id": "kernelfoundry", "checkpoint_hours": 2.0,
+                "arena_root": str(self.arena.resolve())}
+            execution = fake_evaluator_execution(
+                evaluation_root,
+                evaluation_root.with_name(f"{ordinal:04d}-evaluator-evidence"),
+                identity, "controller_intermediate_evaluation", "b" * 64)
+            window = R._self_hash({
+                "schema": R.MEASUREMENT_WINDOW_SCHEMA,
+                **identity,
                 "phase": "controller_intermediate_evaluation", "ordinal": ordinal,
                 "status": "complete", "started_at": "2026-08-12T00:00:00Z",
                 "ended_at": "2026-08-12T00:00:01Z",
@@ -706,13 +981,15 @@ class ArenaCellRunnerTest(unittest.TestCase):
                     "released", claim_id, "attempt-r1").to_dict(),
                 "device_sampling": {"sample_count": 2},
                 "gpu_action_executed_only_while_claim_held": True,
-                "failure": None})
+                "failure": None,
+                "evaluator_execution_receipt": execution})
             _path = cell / "controller-evaluation-windows" / \
                 f"{ordinal:04d}-measurement.json"
             _path.parent.mkdir(parents=True, exist_ok=True)
             _path.write_text(json.dumps(window), encoding="utf-8")
             return ({"pass_compilation": True, "pass_correctness": True,
-                     "valid_optimized_cases": 1, "average_speedup": 1.1},
+                     "valid_baseline_cases": 3, "valid_optimized_cases": 3,
+                     "average_speedup": 1.1},
                     window)
 
         request = {
@@ -762,7 +1039,8 @@ class ArenaCellRunnerTest(unittest.TestCase):
         checkpoint["broker_evaluation_chain"]["baseline_receipt_sha256"] = "b" * 64
         checkpoint["measurement_windows"] = [{"receipt_sha256": "b" * 64}]
         R._validate_broker_chain(
-            checkpoint, cell_root=cell, claim_scope="attempt-r1")
+            checkpoint, cell_root=cell, claim_scope="attempt-r1",
+            arena_root=self.arena)
         second_path = cell / "controller-evaluation-windows" / "0002-result.json"
         broken = json.loads(second_path.read_text())
         broken["previous_receipt_sha256"] = "f" * 64
@@ -771,7 +1049,8 @@ class ArenaCellRunnerTest(unittest.TestCase):
         second_path.write_text(json.dumps(broken), encoding="utf-8")
         with self.assertRaisesRegex(R.ArenaCellRunnerError, "semantic identity"):
             R._validate_broker_chain(
-                checkpoint, cell_root=cell, claim_scope="attempt-r1")
+                checkpoint, cell_root=cell, claim_scope="attempt-r1",
+                arena_root=self.arena)
 
     def test_parent_broker_rejects_bad_token_before_evaluation(self):
         cell = self.root / "broker-reject"
@@ -798,6 +1077,91 @@ class ArenaCellRunnerTest(unittest.TestCase):
                 evaluator._brokered_evaluation(
                     1, {"kernel.hip": b"// candidate\n"})
         evaluated.assert_not_called()
+
+    def test_evaluator_execution_validation_rehashes_stdout_and_vendor_source(self):
+        workspace = self.root / "validated-evaluator-workspace"
+        evidence = self.root / "validated-evaluator-evidence"
+        identity = {
+            "campaign_id": "fixture-campaign-v1", "attempt_id": "attempt-r1",
+            "claim_campaign_id": "attempt-r1", "task_id": "fixture.task",
+            "arm_id": "k_search", "checkpoint_hours": 2.0,
+            "arena_root": str(self.arena.resolve()),
+        }
+        execution = fake_evaluator_execution(
+            workspace, evidence, identity, "centralized_final_evaluation",
+            "c" * 64)
+        evaluation = json.loads(
+            (evidence / "evaluator-result.json").read_text())["evaluation"]
+        R._validate_evaluator_execution(
+            execution, expected_workspace=workspace,
+            expected_phase="centralized_final_evaluation",
+            expected_identity=identity,
+            persisted_path=evidence / "execution-receipt.json",
+            expected_evaluation=evaluation,
+            expected_baseline_receipt_sha256="c" * 64,
+            arena_root=self.arena)
+        (evidence / "evaluator.stdout").write_text("{}\n", encoding="utf-8")
+        with self.assertRaisesRegex(R.ArenaCellRunnerError, "output identity"):
+            R._validate_evaluator_execution(
+                execution, expected_workspace=workspace,
+                expected_phase="centralized_final_evaluation",
+                expected_identity=identity,
+                persisted_path=evidence / "execution-receipt.json",
+                expected_evaluation=evaluation,
+                expected_baseline_receipt_sha256="c" * 64,
+                arena_root=self.arena)
+
+    def test_broker_queues_pre_registration_and_reuses_one_stream(self):
+        cell = self.root / "broker-race"
+        workspace = cell / "workspace"
+        workspace.mkdir(parents=True)
+        (workspace / "config.yaml").write_text("x: y\n", encoding="utf-8")
+        (workspace / "kernel.hip").write_text("// original\n", encoding="utf-8")
+        calls = []
+
+        def evaluate(ordinal, evaluation_root, cancel_event):
+            calls.append(ordinal)
+            self.assertFalse(cancel_event.is_set())
+            return ({"pass_compilation": True, "pass_correctness": True,
+                     "valid_optimized_cases": 1, "average_speedup": 1.0},
+                    {"receipt_sha256": f"{ordinal:064x}"})
+
+        request = {"campaign_id": "fixture-campaign-v1",
+                   "task": {"task_id": "fixture.task"},
+                   "arm": {"arm_id": "kernelfoundry"},
+                   "checkpoint_hours": 2.0}
+        broker = R._ControllerEvaluationBroker(
+            request=request, workspace=workspace, cell_root=cell,
+            source_paths=("kernel.hip",), evaluate=evaluate,
+            baseline_receipt_sha256="b" * 64)
+
+        def send(stream, ordinal):
+            payload = json.dumps({
+                "schema": U.BROKER_REQUEST_SCHEMA, "token": broker.token,
+                "owner_pid": os.getpid(), "workspace": str(workspace),
+                "evaluation_ordinal": ordinal,
+                "source_files": {"kernel.hip": f"// {ordinal}\n"}},
+                sort_keys=True, separators=(",", ":")).encode()
+            stream.sendall(struct.pack("!Q", len(payload)) + payload)
+            size = struct.unpack("!Q", U._recv_exact(stream, 8))[0]
+            return json.loads(U._recv_exact(stream, size))
+
+        with broker:
+            client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            client.connect(str(broker.socket_path))
+            output = []
+            thread = threading.Thread(target=lambda: output.append(send(client, 1)))
+            thread.start()
+            time.sleep(0.1)
+            self.assertTrue(thread.is_alive())
+            self.assertEqual(calls, [])
+            broker.register_controller(os.getpid())
+            thread.join(timeout=2)
+            self.assertFalse(thread.is_alive())
+            self.assertEqual(output[0]["evaluation_ordinal"], 1)
+            self.assertEqual(send(client, 2)["evaluation_ordinal"], 2)
+            client.close()
+        self.assertEqual(calls, [1, 2])
 
     def test_broker_client_rejects_replacement_server_pid(self):
         evaluator = object.__new__(U.ArenaWorkspaceEvaluator)
@@ -855,7 +1219,13 @@ class ArenaCellRunnerTest(unittest.TestCase):
         (task_config.parent / "kernel.hip").write_text("// original\n", encoding="utf-8")
         evaluator = types.ModuleType("src.evaluator")
         evaluator.evaluate_compilation = mock.Mock(return_value=(True, None))
-        evaluator.measure_baseline = mock.Mock(return_value=[object(), object()])
+        baseline_type = types.SimpleNamespace
+        evaluator.measure_baseline = mock.Mock(return_value=[
+            baseline_type(test_case_id="case-1", shape=[1],
+                          execution_time_ms=1.0, metadata={}),
+            baseline_type(test_case_id="case-2", shape=[2],
+                          execution_time_ms=2.0, metadata={}),
+        ])
         evaluator.evaluate_kernel = mock.Mock(return_value={
             "pass_compilation": True, "pass_correctness": True,
             "valid_baseline_cases": 2, "valid_optimized_cases": 2,
@@ -949,7 +1319,7 @@ class ArenaCellRunnerTest(unittest.TestCase):
             mock.patch.object(
                 R, "_assert_worker_evaluator_identity",
                 return_value=R._evaluator_python_identity()),
-            self.assertRaisesRegex(R.ArenaCellRunnerError, "sandbox is not implemented"),
+            self.assertRaisesRegex(R.ArenaCellRunnerError, "exact arm audit"),
         ):
             R.run_worker(
                 refused, claim_acquirer=acquire, sampler_factory=FakeSampler)
@@ -957,6 +1327,165 @@ class ArenaCellRunnerTest(unittest.TestCase):
         evaluator.measure_baseline.assert_not_called()
         evaluator.evaluate_kernel.assert_not_called()
         self.assertEqual(claims, [])
+
+    def test_nonbaseline_routes_intermediate_and_final_evaluation_only_to_child(self):
+        cell_root = self.root / "cells" / "003-brokered"
+        cell_root.mkdir(parents=True)
+        task_config = self.arena / "tasks" / "fixture" / "config.yaml"
+        task_config.write_text(
+            "task_type: hip2hip\nsource_file_path: [kernel.hip]\n"
+            "target_kernel_functions: [kernel]\ncompile_command: [true]\n"
+            "correctness_command: [true]\nperformance_command: [true]\n",
+            encoding="utf-8")
+        (task_config.parent / "kernel.hip").write_text(
+            "// original\n", encoding="utf-8")
+        evaluator = types.ModuleType("src.evaluator")
+        evaluator.evaluate_compilation = mock.Mock(return_value=(True, None))
+        evaluator.measure_baseline = mock.Mock(return_value=[
+            types.SimpleNamespace(test_case_id="case-1", shape=[1],
+                                  execution_time_ms=1.0, metadata={})])
+        evaluator.evaluate_kernel = mock.Mock(
+            side_effect=AssertionError("candidate evaluator ran in parent"))
+        evaluator.write_task_result = lambda workspace, *args, **kwargs: (
+            workspace / "task_result.yaml").write_text(
+                "pass: true\n", encoding="utf-8")
+        prompt_builder = types.ModuleType("src.prompt_builder")
+        prompt_builder.prompt_builder = mock.Mock(return_value="Optimize.")
+        src = types.ModuleType("src")
+        src.evaluator = evaluator
+        src.prompt_builder = prompt_builder
+        request = {
+            "schema": R.CHECKPOINT_SCHEMA,
+            "campaign_id": "fixture-campaign-v1", "attempt_id": "attempt-r1",
+            "claim_campaign_id": "attempt-r1",
+            "arena_root": str(self.arena.resolve()),
+            "repository_root": str(R.REPOSITORY_ROOT),
+            "cell_root": str(cell_root.resolve()),
+            "task": {"task_id": "fixture.task", "relative_root": "tasks/fixture",
+                     "file_sha256": {}},
+            "arm": {"arm_id": "k_search", "argv": [sys.executable, "controller.py",
+                    "--checkpoint-hours", "32", "--timeout-seconds", "115200"],
+                    "source_root": str(self.root), "source_commit": "a" * 40,
+                    "entrypoint_path": "controller.py", "entrypoint_sha256": "b" * 64,
+                    "model_ids": ["fixture"]},
+            "baseline": False, "checkpoint_hours": 2.0, "visible_device": "0",
+            "claim_journal": str((self.root / "claims.jsonl").resolve()),
+            "claim_timeout_seconds": 0.0,
+            "evaluator_python": R._evaluator_python_identity(),
+            "arm_audit": {
+                "arm_id": "k_search", "executable": True,
+                "executable_path": str(Path(sys.executable).resolve()),
+                "executable_sha256": R._sha256_file(Path(sys.executable).resolve()),
+            },
+        }
+        claims: list[FakeClaim] = []
+        child_sources: list[str] = []
+
+        def acquire(*args, **kwargs):
+            claim = FakeClaim(f"akd-child00000000{len(claims) + 1}")
+            claim.receipt = lambda claim=claim: FakeReceipt(
+                "opened", claim.claim_id, "attempt-r1")
+            claim.release = lambda claim=claim: FakeReceipt(
+                "released", claim.claim_id, "attempt-r1")
+            claims.append(claim)
+            return claim
+
+        class FakeChildRunner:
+            def __init__(inner_self, *, arena_root):
+                inner_self.arena_root = arena_root
+
+            def run(inner_self, *, request, evaluation_root, evidence_root,
+                    timeout_s, cancel_event):
+                child_sources.append((evaluation_root / "kernel.hip").read_text())
+                evaluation = {
+                    "average_speedup": 1.25,
+                    "best_optimized_execution_time": 0.8,
+                    "compilation_error_message": None,
+                    "correctness_error_message": None,
+                    "pass_compilation": True, "pass_correctness": True,
+                    "valid_baseline_cases": 1, "valid_optimized_cases": 1,
+                }
+                result = R.arena_evaluator_child.self_hash({
+                    "schema": R.arena_evaluator_child.RESULT_SCHEMA,
+                    "request_receipt_sha256": request["receipt_sha256"],
+                    "baseline_cases_sha256": request["baseline_cases"][
+                        "receipt_sha256"],
+                    "outer_baseline_receipt_sha256": request[
+                        "outer_baseline_receipt_sha256"],
+                    "evaluation": evaluation})
+                stdout = json.dumps(result, sort_keys=True) + "\n"
+                (evidence_root / "evaluator.stdout").write_text(
+                    stdout, encoding="utf-8")
+                (evidence_root / "evaluator.stderr").write_text(
+                    "", encoding="utf-8")
+                return R.EvaluatorChildResult(
+                    result=result, pid=22222, process_start_ticks=33333,
+                    process_group_id=22222, session_id=22222,
+                    activation_receipt={"fixture": True},
+                    teardown_receipt={"verified_empty": True, "removed": True},
+                    stdout_sha256=hashlib.sha256(stdout.encode()).hexdigest(),
+                    stderr_sha256=hashlib.sha256(b"").hexdigest())
+
+        def fake_launch(prepared, argv, *, timeout_seconds, command_prefix,
+                        process_started):
+            self.assertEqual(
+                prepared.environment["PYTHONPATH"],
+                R._controller_pythonpath(request["arm"], R.REPOSITORY_ROOT))
+            codex_home = Path(prepared.environment["CODEX_HOME"])
+            self.assertTrue(codex_home.is_relative_to(
+                Path(prepared.task.workspace)))
+            self.assertTrue((codex_home / "auth.json").is_file())
+            self.assertTrue((codex_home / "config.toml").is_file())
+            process_started(os.getpid())
+            broker_client = object.__new__(U.ArenaWorkspaceEvaluator)
+            broker_client.workspace = Path(prepared.task.workspace)
+            broker_client.broker_receipts = []
+            broker_client.broker_socket = Path(
+                prepared.environment[U.BROKER_SOCKET_ENV])
+            broker_client._broker_token = prepared.environment[U.BROKER_TOKEN_ENV]
+            broker_client._broker_owner_pid = int(
+                prepared.environment[U.BROKER_OWNER_PID_ENV])
+            candidate = "// candidate\n"
+            broker_client._brokered_evaluation(
+                1, {"kernel.hip": candidate.encode()})
+            digest = hashlib.sha256(candidate.encode()).hexdigest()
+            return json.dumps({"evaluation": {
+                "best_source_sha256": {"kernel.hip": digest}}}) + "\n"
+
+        def fake_isolated_launch(*, prepared, argv, timeout_seconds, broker,
+                                 invocation, cell_root):
+            stdout = fake_launch(
+                prepared, argv, timeout_seconds=timeout_seconds,
+                command_prefix=(), process_started=broker.register_controller)
+            return stdout, fake_controller_sandbox_execution(cell_root)
+
+        with (
+            mock.patch.dict(sys.modules, {
+                "src": src, "src.evaluator": evaluator,
+                "src.prompt_builder": prompt_builder}),
+            mock.patch.object(R, "_assert_worker_evaluator_identity",
+                              return_value=R._evaluator_python_identity()),
+            mock.patch.object(R, "_controller_runtime_allowlist",
+                              return_value=mock.sentinel.runtime),
+            mock.patch.object(
+                R.arena_controller_sandbox, "prepare_controller_sandbox",
+                return_value=types.SimpleNamespace(environment_overrides={})),
+            mock.patch.object(R, "_launch_isolated_controller",
+                              side_effect=fake_isolated_launch),
+        ):
+            receipt = R.run_worker(
+                request, claim_acquirer=acquire, sampler_factory=FakeSampler,
+                evaluator_runner_factory=FakeChildRunner)
+        evaluator.evaluate_kernel.assert_not_called()
+        self.assertEqual(child_sources, ["// candidate\n", "// candidate\n"])
+        self.assertEqual(len(claims), 3)
+        self.assertEqual(receipt["evaluation"]["average_speedup"], 1.25)
+        self.assertIn(
+            "evaluator_execution_receipt",
+            receipt["measurement_windows"][1])
+        self.assertFalse(
+            (cell_root / "workspace" /
+             ".autokernel-controller-codex-home").exists())
 
     def test_exact_group_teardown_kills_a_planted_descendant(self):
         child_pid_path = self.root / "descendant.pid"

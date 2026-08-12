@@ -64,6 +64,10 @@ class ArenaCampaignTest(unittest.TestCase):
         self.kernelfoundry_entrypoint.parent.mkdir(parents=True, exist_ok=True)
         self.kernelfoundry_entrypoint.write_text(
             "raise SystemExit(0)\n# kernelfoundry fixture\n", encoding="utf-8")
+        self.evoengineer_entrypoint = self.source / EVO.ENTRYPOINT_RELATIVE
+        self.evoengineer_entrypoint.parent.mkdir(parents=True, exist_ok=True)
+        self.evoengineer_entrypoint.write_text(
+            "raise SystemExit(0)\n# evoengineer fixture\n", encoding="utf-8")
         for command in (
             ("git", "init", "-q"),
             ("git", "add", "."),
@@ -80,10 +84,31 @@ class ArenaCampaignTest(unittest.TestCase):
         arms = []
         for arm_id in C.PRIMARY_PANEL_IDS:
             is_actor_critic = arm_id == AC.CONTROLLER_ID
+            is_evoengineer = arm_id == EVO.CONTROLLER_ID
             is_k_search = arm_id == KS.CONTROLLER_ID
             is_geak = arm_id == GEAK.CONTROLLER_ID
             is_xe_forge = arm_id == "xe_forge"
             is_kernelfoundry = arm_id == KF.CONTROLLER_ID
+            if is_evoengineer:
+                arms.append(C.ArmImplementation(
+                    arm_id=arm_id, availability="ready",
+                    adapter_kind=EVO.ADAPTER_KIND, missing_artifacts=(),
+                    argv=EVO.campaign_argv(sys.executable),
+                    source_root=str(self.source),
+                    source_commit=self.source_commit,
+                    entrypoint_path=EVO.ENTRYPOINT_RELATIVE,
+                    entrypoint_sha256=sha(self.evoengineer_entrypoint),
+                    model_ids=EVO.PINNED_MODEL_IDS,
+                    required_clis=EVO.REQUIRED_CLIS,
+                    upstream_source_root="vendor://evoengineer",
+                    upstream_source_commit=EVO.SOURCE_COMMIT,
+                    upstream_entrypoint_path=EVO.UPSTREAM_ENTRYPOINT,
+                    upstream_entrypoint_sha256=EVO.EXPECTED_SOURCE_SHA256[
+                        EVO.UPSTREAM_ENTRYPOINT],
+                    upstream_license_path="LICENSE",
+                    upstream_license_sha256=EVO.EXPECTED_SOURCE_SHA256["LICENSE"],
+                ))
+                continue
             argv = (() if arm_id == C.BASELINE_ARM_ID else
                     (AC.campaign_argv(sys.executable) if is_actor_critic else
                      (KS.campaign_argv(sys.executable) if is_k_search else
@@ -260,7 +285,7 @@ class ArenaCampaignTest(unittest.TestCase):
         k_search = next(arm for arm in spec.arms if arm.arm_id == KS.CONTROLLER_ID)
         self.assertEqual(k_search.availability, "ready")
         self.assertEqual(k_search.adapter_kind, "k_search_world_model_arena_v1")
-        self.assertEqual(k_search.argv, KS.campaign_argv("python3"))
+        self.assertEqual(k_search.argv, KS.campaign_argv())
         self.assertEqual(k_search.source_root, C.IN_TREE_SOURCE_ROOT)
         self.assertEqual(k_search.entrypoint_path, KS.ENTRYPOINT_RELATIVE)
         self.assertEqual(k_search.model_ids, KS.PINNED_MODEL_IDS)
@@ -302,9 +327,13 @@ class ArenaCampaignTest(unittest.TestCase):
         self.assertEqual(kernelfoundry.upstream_source_commit,
                          KF.SOURCE_COMMIT)
         self.assertEqual(kernelfoundry.missing_artifacts, ())
+        k_search = next(
+            arm for arm in spec.arms if arm.arm_id == KS.CONTROLLER_ID)
+        self.assertEqual(k_search.argv, KS.campaign_argv())
+        self.assertEqual(k_search.required_clis, KS.REQUIRED_CLIS)
         for arm in spec.arms[2:]:
             if arm.arm_id in {
-                    KF.CONTROLLER_ID, KS.CONTROLLER_ID,
+                    EVO.CONTROLLER_ID, KF.CONTROLLER_ID, KS.CONTROLLER_ID,
                     GEAK.CONTROLLER_ID, "xe_forge"}:
                 continue
             self.assertEqual(arm.availability, "missing")
@@ -315,7 +344,13 @@ class ArenaCampaignTest(unittest.TestCase):
         self.assertIn("gfx90a", " ".join(argus.missing_artifacts))
         evoengineer = next(
             arm for arm in spec.arms if arm.arm_id == EVO.CONTROLLER_ID)
-        self.assertEqual(evoengineer.adapter_kind, EVO.PENDING_ADAPTER_KIND)
+        self.assertEqual(evoengineer.availability, "ready")
+        self.assertEqual(evoengineer.adapter_kind, EVO.ADAPTER_KIND)
+        self.assertEqual(evoengineer.argv, EVO.campaign_argv())
+        self.assertEqual(evoengineer.source_root, C.IN_TREE_SOURCE_ROOT)
+        self.assertEqual(evoengineer.entrypoint_path, EVO.ENTRYPOINT_RELATIVE)
+        self.assertEqual(evoengineer.model_ids, EVO.PINNED_MODEL_IDS)
+        self.assertEqual(evoengineer.required_clis, EVO.REQUIRED_CLIS)
         self.assertEqual(evoengineer.upstream_source_commit, EVO.SOURCE_COMMIT)
         self.assertEqual(
             evoengineer.upstream_entrypoint_sha256,
@@ -323,7 +358,7 @@ class ArenaCampaignTest(unittest.TestCase):
         self.assertEqual(
             evoengineer.upstream_license_sha256,
             EVO.EXPECTED_SOURCE_SHA256["LICENSE"])
-        self.assertFalse(evoengineer.argv)
+        self.assertEqual(evoengineer.missing_artifacts, ())
 
     def test_controller_coverage_is_two_only_when_both_clis_are_present(self):
         actor = C.ArmImplementation(
@@ -416,15 +451,12 @@ class ArenaCampaignTest(unittest.TestCase):
         self.assertTrue(all(row["executable_sha256"] for row in controller_rows))
         self.assertTrue(all(row["source_identity"]["clean"] for row in controller_rows))
         self.assertEqual(controller_rows[0]["model_ids"], list(AC.PINNED_MODEL_IDS))
+        self.assertEqual(controller_rows[1]["model_ids"], list(EVO.PINNED_MODEL_IDS))
         self.assertEqual(controller_rows[2]["model_ids"], list(KF.PINNED_MODEL_IDS))
         self.assertEqual(controller_rows[3]["model_ids"], list(KS.PINNED_MODEL_IDS))
         self.assertEqual(controller_rows[4]["model_ids"], list(XF.PINNED_MODEL_IDS))
         self.assertEqual(controller_rows[5]["model_ids"], list(GEAK.PINNED_MODEL_IDS))
-        self.assertEqual(
-            [row["model_ids"] for index, row in enumerate(controller_rows[1:], 1)
-             if index not in {2, 3, 4, 5}],
-            [["fixture-model"]] * 2,
-        )
+        self.assertEqual(controller_rows[6]["model_ids"], ["fixture-model"])
         self.assertEqual(
             [row["name"] for row in controller_rows[0]["required_cli_identities"]],
             list(AC.REQUIRED_CLIS),
@@ -512,10 +544,10 @@ class ArenaCampaignTest(unittest.TestCase):
             self.assertEqual(request.checkpoint_hours, (2.0, 8.0, 32.0))
             self.assertEqual(request.maximum_wall_hours, 32.0)
 
-    def test_available_source_panel_is_separate_six_arm_diagnostic(self):
+    def test_available_source_panel_is_separate_seven_arm_diagnostic(self):
         spec = self.ready_spec()
         arms = list(spec.arms)
-        for index, arm_id in ((2, "evoengineer"), (7, "argus")):
+        for index, arm_id in ((7, "argus"),):
             arms[index] = C.ArmImplementation(
                 arm_id, "missing", "external_source_unavailable_v1",
                 ("licensed source artifact", "gfx90a evaluator port",
@@ -540,7 +572,7 @@ class ArenaCampaignTest(unittest.TestCase):
                 geak_root=self.geak)
         self.assertEqual(receipt["status"], "ready")
         self.assertEqual(receipt["schema"], C.AVAILABLE_SOURCE_AUDIT_SCHEMA)
-        self.assertEqual(receipt["panel"]["executable_arm_count"], 6)
+        self.assertEqual(receipt["panel"]["executable_arm_count"], 7)
         self.assertEqual(receipt["panel"]["primary_arm_ids"],
                          list(C.AVAILABLE_SOURCE_PANEL_IDS))
         self.assertEqual(

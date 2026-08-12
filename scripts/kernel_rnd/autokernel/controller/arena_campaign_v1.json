@@ -1,6 +1,6 @@
 {
   "schema": "epyc.autokernel.arena_controller_campaign.v1",
-  "campaign_id": "inf03-mi210-controller-ab-v1",
+  "campaign_id": "inf03-mi210-controller-ab-v2",
   "target_gpu_model": "MI210",
   "target_gfx_arch": "gfx90a",
   "budget": {
@@ -79,9 +79,9 @@
         "."
       ],
       "source_root": "repository://.",
-      "source_commit": "298bab0c2e78ecf3eb52c119ef0ed0556410e59c",
+      "source_commit": "9a17e638968665b44697497408330bf0353654f8",
       "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/claude_codex_actor_critic.py",
-      "entrypoint_sha256": "5ed4829b66f12519ff82f5c4085d1d251d144483457d87121f96ef2c21e8d0f5",
+      "entrypoint_sha256": "13c1f874e93ce4807ab043a6d377e892a3e06ffc9464fffb6917327f60fe8986",
       "model_ids": [
         "claude-opus-5:high:planner+critic",
         "gpt-5.6-sol:high:actor"
@@ -93,21 +93,39 @@
     },
     {
       "arm_id": "evoengineer",
-      "availability": "missing",
-      "adapter_kind": "evoengineer_full_arena_pending_v1",
-      "missing_artifacts": [
-        "an exact clean pgg3/evotoolkit checkout at 1649715a975b9022c84b5279c88aaef0b73b28dc under the vendor controller root",
-        "a parent-worker AF_UNIX evaluation broker behind ArenaWorkspaceEvaluator.evaluate(files)",
-        "launcher-enforced device isolation with no controller-side vendor measure/evaluate path",
-        "a hash-bound EvoEngineer-Full campaign launcher and receipt integration validated after the evaluation broker lands"
+      "availability": "ready",
+      "adapter_kind": "evoengineer_full_arena_v1",
+      "missing_artifacts": [],
+      "argv": [
+        "/mnt/raid0/llm/tools/geak-v1-rocm62-py312/bin/python",
+        "-m",
+        "scripts.kernel_rnd.autokernel.controller.evoengineer_arena",
+        "--model",
+        "gpt-5.6-sol",
+        "--effort",
+        "high",
+        "--checkpoint-hours",
+        "32",
+        "--timeout-seconds",
+        "115200",
+        "--workspace",
+        ".",
+        "--arena-root",
+        "/mnt/raid0/llm/autokernel/vendor/agent-kernel-arena",
+        "--source-root",
+        "/mnt/raid0/llm/autokernel/vendor/arena-controllers/evoengineer"
       ],
+      "source_root": "repository://.",
+      "source_commit": "f42b35403b71684d043db4ee0b4a8670e12c4727",
+      "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/evoengineer_arena.py",
+      "entrypoint_sha256": "d87a8e3ac5726daace00979da211d130c96869b55751158c165c5a1937b2bc1d",
       "model_ids": [
         "gpt-5.6-sol:high:upstream-controller"
       ],
       "required_clis": [
         "codex"
       ],
-      "upstream_source_root": "vendor://evotoolkit",
+      "upstream_source_root": "vendor://evoengineer",
       "upstream_source_commit": "1649715a975b9022c84b5279c88aaef0b73b28dc",
       "upstream_entrypoint_path": "src/evotoolkit/evo_method/evoengineer/evoengineer.py",
       "upstream_entrypoint_sha256": "28c56fbeb8663c9084734c8682dea39df4a539e1680eee782a8553046963e50d",
@@ -165,7 +183,7 @@
       "adapter_kind": "k_search_world_model_arena_v1",
       "missing_artifacts": [],
       "argv": [
-        "python3",
+        "/mnt/raid0/llm/tools/geak-v1-rocm62-py312/bin/python",
         "-m",
         "scripts.kernel_rnd.autokernel.controller.k_search_arena",
         "--model",
@@ -186,9 +204,9 @@
         "/mnt/raid0/llm/autokernel/vendor/arena-controllers/k-search"
       ],
       "source_root": "repository://.",
-      "source_commit": "832f6833c2d6e3ed0067e54375b633fa87c6bc36",
+      "source_commit": "c7feb0563e2137861d440e224781cce591ca3785",
       "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/k_search_arena.py",
-      "entrypoint_sha256": "ae4b88990e849dc45067bb848d3b6f833bae087ee8a625408211c0cfac9456cf",
+      "entrypoint_sha256": "ee22372047bf0e62403812220f9dca19dfbfa7bda8125e19777bcdde10ed6283",
       "model_ids": [
         "gpt-5.6-sol:high:upstream-controller"
       ],

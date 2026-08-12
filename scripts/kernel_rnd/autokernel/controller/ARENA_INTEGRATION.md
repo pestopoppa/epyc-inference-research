@@ -41,13 +41,14 @@ primary INF-03 comparison is exactly eight arms:
 7. GEAK-v1; and
 8. ARGUS.
 
-EvoEngineer and ARGUS are unavailable, not omitted. EvoEngineer now has an
-admitted exact source and a pending policy adapter, but remains non-executable
-until claim-scoped intermediate Arena feedback and its campaign launcher are
-integrated. ARGUS still has no official licensed source artifact. A controller
-reconstructed from the ARGUS paper would be ``ARGUS-inspired``, not the
-published system. No MI300X/gfx942 result transfers into this prospective MI210
-comparison.
+ARGUS is unavailable, not omitted. EvoEngineer is now source-admitted and
+executable through the same parent-worker broker, controller sandbox, and
+isolated evaluator boundary as the other licensed upstream arms. The
+availability-conditioned diagnostic panel is therefore seven arms; it is not a
+substitute for the primary eight-arm comparison. ARGUS still has no official
+licensed source artifact. A controller reconstructed from the ARGUS paper would
+be ``ARGUS-inspired``, not the published system. No MI300X/gfx942 result
+transfers into this prospective MI210 comparison.
 
 `arena_campaign_v1.json` fixes the comparison task, file digests, one-at-a-time
 MI210 use, and the adopted RE-Bench elapsed-wall-time checkpoints of exactly 2,
@@ -65,20 +66,36 @@ file and campaign-driver module SHA-256 values, and execution rechecks both to
 prevent a ready receipt from being replayed after either input changes.
 
 `arena_cell_runner.py` is the concrete governed implementation of that typed
-executor seam. It does not patch the pinned Arena checkout. Instead, each cell
-loads Arena's workspace/evaluator modules in an isolated child process. The
-child acquires AutoKernel's cross-process `mi210_0` claim and 250 ms device
-sampler separately around Arena's starting-state baseline measurement and its
-final centralized evaluation. It releases the first claim and hides the GPU
-before launching the controller. Licensed upstream controllers send every
-intermediate candidate to a parent-worker-owned Unix-socket broker: the parent
-materializes complete, bounded candidate bytes in a fresh task copy and owns a
-separate short claim/sampler window around compilation, correctness, and timing
-against the immutable starting-state baseline cases and receipt. The socket
-uses an in-memory nonce, exact `SO_PEERCRED` PID plus
-procfs start-time binding, contiguous ordinals, and a durable hash chain. Model
-subprocesses receive no broker credential. Each measurement window has its own
-atomic, self-hashed open/release/sampling receipt. The
+executor seam. It does not patch the pinned Arena checkout. The parent worker
+loads Arena only for the immutable starting-state compilation/baseline. Every
+candidate compilation, correctness check, and timing pass—intermediate and
+final—runs in a fresh subprocess under the `candidate_evaluator_gpu_v1`
+profile. That profile default-denies read/exec outside the copied task, pinned
+Python/ROCm/Arena inputs, and exact system runtime roots; grants read/write only
+to `/dev/kfd`, `/dev/dri/renderD128`, `/dev/null`, and the copied task, plus
+read-only access to exact `/dev/urandom` for PyTorch initialization; denies all networking,
+broker inheritance, cross-process memory, io_uring, signals, ptrace, namespaces,
+modules, BPF, and mounts; and owns a fresh process group/session and cgroup.
+The parent alone owns AutoKernel's cross-process `mi210_0` claim and 250 ms
+device sampler around each child lifetime. `/proc` remains absent from the read
+allowlist; the first claim-scoped isolated probe must fail closed if ROCr needs
+a narrower evidenced exception.
+
+Licensed upstream controllers send every intermediate candidate to a
+parent-worker-owned Unix-socket broker. The parent materializes complete,
+bounded candidate bytes in a fresh task copy and serializes all evaluations
+against the immutable, strictly JSON-serialized starting-state baseline cases.
+The socket uses an in-memory nonce, exact `SO_PEERCRED` PID plus procfs
+start-time binding, a persistent descriptor connected before controller sandbox
+activation, contiguous ordinals, and a durable hash chain. A bounded
+pre-registration wait closes the connect-before-`Popen`-callback race. Peer
+disconnect, timeout, signal, or broker teardown cancels the exact child process
+group, drains/removes its cgroup, releases the claim, and emits no result.
+Model subprocesses receive no broker descriptor or credential. Each measurement
+window has its own atomic, self-hashed open/release/sampling receipt and embeds
+the child activation/teardown receipt. Durable validation rehashes the pinned
+Arena evaluator source, child request, serialized baseline, stdout/stderr,
+persisted child result, exact evaluation value, and cgroup lifecycle. The
 baseline runs once without authoring. Every controller runs three
 independent fresh workspaces at 2 h, 8 h, and 32 h; the runner rewrites only the
 two declared budget flags and refuses an adapter that does not expose them.
@@ -114,15 +131,141 @@ logical campaign to the run-directory `attempt_id`, so device-claim journals
 cannot conflate repeated logical campaign IDs. Nested measurement-window and
 belief identities are checked semantically against their enclosing checkpoint.
 
-The broker groundwork is deliberately non-runnable until a reusable OS sandbox
-profile is provisioned. `HIP_VISIBLE_DEVICES=` is not an isolation boundary.
-Execution fails closed unless a transparent-exec controller sandbox is
-configured, and the controller itself proves that read-only and read-write
-opens of `/dev/kfd` and DRM render nodes are denied. The arbitrary prefix is not
-yet an attested production profile, and candidate evaluation still needs to
-move from the broker thread into the existing restricted evaluator subprocess.
-Until both are complete, no INF-03 run may claim GPU-blind deliberation, safe
-concurrency, ranking, aggregate, belief, champion, or release authority.
+`arena_controller_sandbox.py` now provisions the reusable controller half of
+that OS boundary. It copies one task into a new workspace, discovers a
+fail-closed runtime allowlist from an exact real Python, licensed controller and
+repository source roots, the exact Codex package/CLI and shebang chain, real
+Node executable, auth and CA files, exact DNS/NSS/hosts/OpenSSL configuration,
+ELF loader, and shared-library closure, and then constructs
+`execution.sandbox.CONTROLLER_PROFILE`. Broad roots, devices, production trees,
+campaign/evidence state, symlinks, and duplicate authority are refused. Exact
+executable files are a distinct Landlock capability: the interpreter and ELF
+loader can execute without granting their sibling directories. The adapter
+returns `command_prefix`, fixed startup environment overrides, the activation
+receipt path/policy, `process_started(pid)`, and strict activation-plus-cgroup
+teardown verification for `arena_adapter.launch`; it never accepts an arbitrary
+environment or command prefix.
+
+The controller permits unnamed `socketpair` IPC because the pinned Codex
+binary's Tokio signal driver requires it; such a pair has no filesystem or
+external peer. Creating a new AF_UNIX socket is still denied. The pinned Codex
+client also requires client-side `bind` before outbound traffic, while
+`listen`/`accept` remain denied; only the wrapper-created peer-bound broker
+stream is inherited.
+
+The wrapper preconnects its one broker stream before Landlock/seccomp and before
+the launch callback can register its exec-stable PID. A broker therefore queues
+an accepted stream until that exact PID and procfs start time are registered,
+then authenticates `SO_PEERCRED`; ancestry and uid admission are forbidden. A
+live tiny-controller test proves this ordering, inherited broker use, denied
+KFD/render/campaign-sibling and sibling-executable access, and descendant
+cgroup cleanup. It uses a fake local Codex package and no model or GPU work.
+
+Candidate evaluation isolation is also implemented. Every intermediate and
+final candidate now runs in a fresh restricted-read GPU evaluator subprocess,
+with exact device admission, networking denied, and request/result/baseline,
+activation, teardown, and current vendor-evaluator identities durably
+revalidated. The controller adapter is wired into the cell runner, and the
+first claim-scoped evaluator compatibility probe has succeeded. Those facts
+close the implementation gates for isolated execution; they do not grant the
+compatibility probe ranking, aggregate, belief, champion, or release authority,
+and the primary campaign remains refused while ARGUS leaves it at 7/8.
+
+### Isolated evaluator compatibility sequence — 2026-08-12
+
+The attempts under
+`/mnt/raid0/llm/autokernel/probes/inf03-isolated-evaluator-compatibility-20260812-r*`
+are a compatibility-debug sequence, not six performance repetitions. R1-r5
+are immutable **invalid compatibility defect attempts**:
+
+- r1 reached no child result because Python startup could not obtain hash
+  randomness (activation file SHA-256
+  `386881fb1b700dd8d0fc488f3f3bb7114b46c310077ba265d2ea8ca1b8c149b0`);
+- r2 reached no durable execution result because the pinned Arena package root
+  was outside the read allowlist (activation file SHA-256
+  `82011249f50a99873af2efeede05b5c804ca99954bdd3498f865c96aadd4d213`);
+- r3 emitted terminal receipt SHA-256
+  `ea03ff11164bba0af2cb16374927fb867383ced38b456ee193339786e2694a19`
+  but its result receipt
+  `f948ae2148e91c8b3b73916047ddd998505567302118f61dac4b756ae2126421`
+  records `pass_correctness=false` because `/dev/null` was denied;
+- r4 emitted failed result receipt
+  `8537f488cd45ce09bf0396e0e1cdefa39763af90306df2c466a58dc1d66257d4`
+  and no terminal receipt because PyTorch could not open `/dev/urandom`; and
+- r5 emitted failed result receipt
+  `0306d543e07edd588622421f0bea8a8f7e2058466d1f19dd6a3da487cc937516`
+  and no terminal receipt because Triton's runtime helper build could not
+  execute the exact GCC `cc1` helper.
+
+None of r1-r5 is a valid compatibility pass, measurement comparison, or input
+to ranking or belief. Each defect led to a narrow evidenced allowlist change;
+no attempt widened the evaluator to `/dev`, `/proc`, or a broad filesystem
+root.
+
+R6 is the first and only compatibility pass. Its terminal receipt is
+`/mnt/raid0/llm/autokernel/probes/inf03-isolated-evaluator-compatibility-20260812-r6/receipt.json`,
+with receipt SHA-256
+`cc129a4a5e0424ae17d284e43b06425e386f5f6e6c29d929666699ede81c2405`
+and file SHA-256
+`ac8027a2d052d455ff042a0fe34916485a749fff5f6094f799ab2b976cb604e6`.
+The isolated evaluator execution receipt is
+`ee15214bbc4516849316176dd54bf9193f3074d13191231a0e64e949cdd076e1`;
+its child result is
+`d21b086ad659ddb882f05af782b75b60baa64657cc201a8e51956d7074682c4d`;
+and its baseline/final measurement-window receipts are respectively
+`5d949c2dda9d370ea9569119a81327494996c21f86365da9c4d8525c5665d603`
+and `c484ad66794b89d7f714d13292f6e22ef0d4e659791f74a634c40965af100321`.
+Both windows held and released `mi210_0`; the evaluator passed compilation and
+correctness with 4/4 baseline and 4/4 optimized cases, denied networking, kept
+`/proc` outside the read allowlist, and verified its cgroup empty and removed.
+The observed `0.9991096842915198` starting-state/self speedup is deliberately
+**compatibility-only**: the receipt says
+`compatibility_only_no_ranking_or_promotion_authority`, no model inference ran,
+and the value must not be used as a kernel or controller performance claim.
+
+### Governed K-Search diagnostic pilot — 2026-08-12
+
+The attempts under
+`/mnt/raid0/llm/autokernel/probes/inf03-mi210-isolated-k-search-pilot-20260812-r*`
+are one evolving compatibility-debug sequence, not repeated measurements. R1-r12
+closed missing task-source discovery, exact module/runtime/ELF/Git/null/config
+allowlisting, and ephemeral Codex-home projection. R12 reached the real Codex
+client but the controller seccomp policy rejected client-side `bind(2)`. A
+seccomp-only differential reproduced that failure and showed that admitting
+only `bind` while retaining denied `listen`/`accept`, denied AF_UNIX creation,
+and exact filesystem/device allowlists was sufficient. R13 then completed the
+worker but exposed a stale parent validator that expected no controller
+`/dev/null`; r14 exposed the symmetric stale deny-all evaluator-network receipt
+expectation. R1-r14 are immutable invalid diagnostic attempts and must not be
+resumed, ranked, aggregated, or banked.
+
+R15 is the first terminal pass. Its receipt is
+`/mnt/raid0/llm/autokernel/probes/inf03-mi210-isolated-k-search-pilot-20260812-r15/diagnostic-pilot-receipt.json`,
+with internal receipt SHA-256
+`3425cf579a9d6fb06f5ed76b480ae652eaed3b3685eec9116299d253528a8771`
+and file SHA-256
+`eb53de389450ba6ef800528a0da6f54c8508eabc39b4357f0cd9beff64aacefa`.
+The exact one-task, one-round, `gpt-5.6-sol:high` K-Search controller made six
+governed model calls. Its brokered intermediate candidate passed compilation
+and correctness with 4/4 optimized cases and diagnostic ratio
+`1.0033912745189357`; the final isolated evaluator also passed 4/4 and reported
+`1.0019039030109136`. These ratios prove plumbing and candidate round-trip only;
+the pilot explicitly denies matched-campaign, cross-controller ranking, belief,
+promotion, and release authority.
+
+The intermediate broker result file SHA-256 is
+`c910243c8f7e11988f0246db30a4d1ad58a10928144f6d1b62ef3cb7ef522090`;
+the final evaluator execution receipt is
+`2d9fa2b575a021be8f385064b12f0ff665f1d0b136eedbdea99dc4cd171d7116`.
+Baseline, intermediate, and final GPU windows held and released identical claim
+IDs and captured 11, 21, and 21 samples respectively. The controller admitted
+only `/dev/null`, remained KFD/render blind, denied `listen`/`accept` and new
+AF_UNIX sockets, and inherited one peer-bound broker stream. Both evaluator
+invocations denied all networking and admitted exactly `/dev/kfd`,
+`/dev/dri/renderD128`, and `/dev/null`. Every cgroup was verified empty and
+removed, and the ephemeral controller Codex home was scrubbed before success
+publication. The warning-strict controller suite passed 578 tests plus 202
+subtests after the terminal pilot.
 
 The 2026-08-12 available-source r4 attempt is immutable defect evidence, not a
 valid partial campaign. KernelFoundry performed 64 intermediate vendor
@@ -374,7 +517,7 @@ and driver SHA-256
 `b839a35cb79627bb27c7f1be6902e91365a1ce8beb0fc26edff58bae5d003866`;
 neither audit executed a controller or GPU command.
 
-## EvoEngineer source admission and integration order — 2026-08-12
+## EvoEngineer source admission and executable integration — 2026-08-12
 
 `evoengineer_arena.py` binds the historical source release rather than the later
 generic EvoToolkit `master`. It declares `EvoEngineer-Full` explicitly—Free and
@@ -383,36 +526,29 @@ Insight are distinct upstream variants—and pins the paper-matched population 4
 retains upstream `EvoEngineer.run`, rank-probability parent selection, operators
 `init(0)`, `crossover(2)`, `mutation(1)`, elite trimming, and random sampling of
 up to three prior thoughts. Only the task, AMD prompt, model, and evaluator
-boundaries are translated.
+boundaries are translated. The implementation now exposes a fixed
+`campaign_argv`, a stdin CLI, the exact source/runtime identities, and the
+paper-matched `EvoEngineer.run` loop. Every candidate crosses
+`ArenaWorkspaceEvaluator.evaluate(files)` into the authenticated parent broker;
+the controller has no direct evaluator/device authority.
 
-The module intentionally exposes no CLI or `campaign_argv`. Integration order is:
-
-1. materialize a clean `vendor://evotoolkit` checkout at the exact admitted
-   commit and revalidate all policy-bearing file digests;
-2. merge the parent-worker AF_UNIX evaluation broker behind the existing
-   `ArenaWorkspaceEvaluator.evaluate(files)` protocol;
-3. add the hash-bound launcher, enforce controller device isolation with no
-   controller-side vendor measure/evaluate path, and validate nested windows;
-4. change the arm to `ready` only after fake-policy tests and a no-inference
-   source/campaign audit pass, then use a fresh campaign identity.
-
-Until all four occur, `arena_campaign_v1.json` keeps the arm `missing`, the
-available-source diagnostic remains six arms, and no EvoEngineer result exists.
-
-An arena-side launcher should:
-
-1. import `register_agentkernelarena_adapter()` in a tiny
-   `agents/epyc_autokernel/launch_agent.py` module;
-2. pass AgentKernelArena's `register_agent` decorator and a three-argument
-   wrapper around its normal prompt builder;
-3. add `epyc_autokernel` to the vendor `AgentType`, import dispatch,
-   prompt-builder dispatch, and general postprocessor list (the preflight records
-   why these four paper-pin overlay edits are required);
-4. provide `eval_config.epyc_autokernel` with a registered `controller_id`, an
-   argv that reads the prompt from stdin, and optionally a C4 report path plus
-   its SHA-256;
-5. leave compile, correctness, timing, held-out shapes, and scoring to the
-   arena/evaluator.
+The admission sequence is complete: the clean exact checkout is present, the
+broker backs the evaluator protocol, the campaign runner launches the arm under
+the controller sandbox, and the no-execution campaign audit declares it ready.
+The latest seven-arm available-source audit is
+`/mnt/raid0/llm/autokernel/probes/inf03-isolation-available-source-reaudit-20260812-r3/receipt.json`
+(receipt SHA-256
+`5fa93695f021b869010f880ba90d265ac2a157d7c3ac4c6e50c3f5c69f1fd46d`;
+file SHA-256
+`082d977fa99b6f83e2d2b32583757340729c6c9014cbadf920b08025e169c990`).
+It is ready at 7/7 with authority
+`availability_conditioned_diagnostic_only`; its embedded primary-panel audit
+remains refused at 7/8 with receipt SHA-256
+`3a43cd35044da9301a1d39996e365f3e6321f4ffa8a72dfb374df1e936a0c555`
+because ARGUS alone is unavailable. The audit executed neither a controller nor
+a GPU command. Consequently an EvoEngineer **result** still does not exist:
+source and execution-path admission are complete, but controller quality can be
+measured only by a fresh governed campaign.
 
 The returned arena score remains `whole_agent_task_only`; C4 input remains
 `diagnostic_only`. Neither is an AutoKernel promotion verdict.

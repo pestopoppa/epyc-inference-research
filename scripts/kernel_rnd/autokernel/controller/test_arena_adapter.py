@@ -107,6 +107,25 @@ class ArenaAdapterTest(unittest.TestCase):
             A.launch(prepared, (sys.executable, "-c", "raise SystemExit(7)"),
                      timeout_seconds=5)
 
+    def test_launch_callback_failure_reaps_the_exact_controller_group(self):
+        prepared = A.prepare_task(
+            self.task(),
+            base_environment={"PATH": os.environ["PATH"], "PYTHONPATH": ""})
+        captured = []
+
+        def fail_registration(pid):
+            captured.append(pid)
+            raise RuntimeError("registration failed")
+
+        with self.assertRaisesRegex(A.ArenaAdapterError, "start or finish"):
+            A.launch(
+                prepared,
+                (sys.executable, "-c", "import time; time.sleep(30)"),
+                timeout_seconds=5, process_started=fail_registration)
+        self.assertEqual(len(captured), 1)
+        with self.assertRaises(ProcessLookupError):
+            os.kill(captured[0], 0)
+
     def test_vendor_shape_registration_reaches_the_hygienic_launcher(self):
         registry = {}
 

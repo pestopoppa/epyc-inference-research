@@ -24,7 +24,8 @@ class SandboxKernelProbeTest(unittest.TestCase):
         evaluator = Path(policy.writable_root).parent / "evaluator"
         evaluator.mkdir(exist_ok=True)
         receipt = evaluator / "receipt.json"
-        env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+        env = dict(
+            os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONHASHSEED="0")
         proc = subprocess.Popen(
             policy.wrap(command, receipt_path=str(receipt)),
             env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
@@ -117,6 +118,65 @@ class SandboxKernelProbeTest(unittest.TestCase):
                 S.os.environ, {S.CGROUP_ROOT_ENV: "/delegated/cgroup"}, clear=True):
             self.assertEqual(S.default_cgroup_root(), "/delegated/cgroup")
 
+    def test_evaluator_profile_is_read_restricted_gpu_exact_and_network_denied(self):
+        with tempfile.TemporaryDirectory(prefix="ak-eval-profile-") as outer:
+            root = Path(outer, "candidate")
+            evidence = Path(outer, "evidence")
+            root.mkdir()
+            evidence.mkdir()
+            policy = S.SandboxPolicy(
+                str(root), token="evalprofile1", profile=S.EVALUATOR_PROFILE,
+                readable_roots=("/usr/bin", "/usr/lib"),
+                readable_files=("/etc/ld.so.cache", "/dev/urandom"),
+                writable_device_paths=("/dev/kfd", "/dev/dri/renderD128", "/dev/null"))
+            probe = (
+                "import errno,os,socket; "
+                "fds=[os.open(p,os.O_RDWR) for p in "
+                "('/dev/kfd','/dev/dri/renderD128','/dev/null')]; "
+                "[os.close(fd) for fd in fds]; "
+                "random_fd=os.open('/dev/urandom',os.O_RDONLY); "
+                "assert len(os.read(random_fd,8)) == 8; os.close(random_fd); "
+                "denied=[]; "
+                "\ntry: open('/etc/passwd').close()\n"
+                "except PermissionError: denied.append('read')\n"
+                "try: socket.socket()\n"
+                "except PermissionError: denied.append('socket')\n"
+                "assert denied == ['read','socket']; print('isolated',end='')")
+            command = ["/usr/bin/python3", "-c", probe]
+            receipt_path = evidence / "activation.json"
+            process = subprocess.Popen(
+                policy.wrap(command, receipt_path=str(receipt_path)),
+                cwd=root, env={"PATH": "/usr/bin:/bin", "HOME": str(root)},
+                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True, close_fds=True,
+                start_new_session=True)
+            stdout, stderr = process.communicate(timeout=10)
+            receipt = S.read_receipt(receipt_path)
+            S.verify_receipt(receipt, policy=policy, pid=process.pid, argv=command)
+            teardown = S.cleanup_cgroup(policy, process.pid)
+            self.assertEqual((process.returncode, stdout, stderr), (0, "isolated", ""))
+            self.assertEqual(receipt["profile"], S.EVALUATOR_PROFILE)
+            self.assertEqual(receipt["network_profile"], S.NETWORK_DENY_ALL)
+            self.assertTrue(receipt["read_allowlist_enforced"])
+            self.assertEqual(set(receipt["writable_device_paths"]),
+                    {"/dev/kfd", "/dev/dri/renderD128", "/dev/null"})
+            self.assertIn("/dev/urandom", receipt["readable_files"])
+            self.assertTrue(teardown["verified_empty"])
+
+    def test_evaluator_profile_rejects_partial_devices_and_broker_identity(self):
+        with tempfile.TemporaryDirectory(prefix="ak-eval-profile-") as root:
+            with self.assertRaisesRegex(S.SandboxError, "exact MI210 pair and /dev/null"):
+                S.SandboxPolicy(
+                    root, profile=S.EVALUATOR_PROFILE,
+                    readable_roots=("/usr/bin",),
+                    writable_device_paths=("/dev/kfd",))
+            with self.assertRaisesRegex(S.SandboxError, "cannot name a broker peer"):
+                S.SandboxPolicy(
+                    root, profile=S.EVALUATOR_PROFILE,
+                    readable_roots=("/usr/bin",), broker_peer_pid=123,
+                    broker_peer_start_ticks=456,
+                    writable_device_paths=("/dev/kfd", "/dev/dri/renderD128", "/dev/null"))
+
     def test_controller_profile_enforces_read_devices_signals_and_client_network(self):
         with tempfile.TemporaryDirectory(prefix="ak-controller-profile-") as outer:
             root = Path(outer)
@@ -159,6 +219,7 @@ class SandboxKernelProbeTest(unittest.TestCase):
             tcp_thread = threading.Thread(target=serve_tcp, daemon=True)
             tcp_thread.start()
             roots, files = self._controller_read_surface(allowed)
+            controller_python = str(Path(sys.executable).resolve())
             policy = S.SandboxPolicy(
                 str(controller), token="controller1",
                 profile=S.CONTROLLER_PROFILE,
@@ -191,6 +252,7 @@ class SandboxKernelProbeTest(unittest.TestCase):
                 " 'inet_listen': probe_call(lambda: inet.listen(1)),",
                 " 'inet_accept': probe_call(lambda: inet.accept()),",
                 " 'unix_socket': probe_call(lambda: socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)),",
+                " 'unnamed_socketpair': probe_call(lambda: socket.socketpair()),",
                 " 'netlink_socket': probe_call(lambda: socket.socket(socket.AF_NETLINK, socket.SOCK_RAW)),",
                 " 'render_nodes': render,",
                 " 'broker': broker.recv(32).decode(),",
@@ -199,7 +261,7 @@ class SandboxKernelProbeTest(unittest.TestCase):
             ))
             try:
                 rc, stdout, stderr, receipt, teardown = self._run(
-                    policy, [sys.executable, "-c", code])
+                    policy, [controller_python, "-c", code])
             finally:
                 server.close()
                 tcp_server.close()
@@ -217,17 +279,18 @@ class SandboxKernelProbeTest(unittest.TestCase):
             self.assertEqual(result["signal_parent"], ["denied", errno.EPERM])
             self.assertTrue(result["inet_socket_created"])
             self.assertEqual(result["inet_connect"], "tcp-ok")
-            self.assertEqual(result["inet_bind"], ["denied", errno.EPERM])
+            self.assertEqual(result["inet_bind"], ["allowed", None])
             self.assertEqual(result["inet_listen"], ["denied", errno.EPERM])
             self.assertEqual(result["inet_accept"], ["denied", errno.EPERM])
             self.assertEqual(result["unix_socket"], ["denied", errno.EPERM])
+            self.assertEqual(result["unnamed_socketpair"], ["allowed", None])
             self.assertEqual(result["netlink_socket"], ["denied", errno.EPERM])
             self.assertEqual(result["broker"], "broker-ok")
             self.assertEqual(receipt["network_profile"], S.NETWORK_OUTBOUND_CLIENT)
             self.assertEqual(receipt["outbound_socket_families"],
                              ["AF_INET", "AF_INET6"])
             self.assertEqual(receipt["server_socket_operations_denied"],
-                             ["bind", "listen", "accept", "accept4"])
+                             ["listen", "accept", "accept4"])
             self.assertTrue(receipt["unix_socket_creation_denied"])
             self.assertTrue(receipt["read_allowlist_enforced"])
             self.assertEqual(receipt["readable_files"], list(files))
@@ -235,7 +298,7 @@ class SandboxKernelProbeTest(unittest.TestCase):
             self.assertEqual(receipt["policy_sha256"], policy.policy_sha256)
             S.verify_receipt(
                 receipt, policy=policy, pid=receipt["pid"],
-                argv=[sys.executable, "-c", code])
+                argv=[controller_python, "-c", code])
             self.assertTrue(teardown["verified_empty"])
 
     def test_controller_receipt_policy_digest_detects_allowlist_drift(self):

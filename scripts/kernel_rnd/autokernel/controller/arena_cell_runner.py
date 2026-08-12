@@ -37,8 +37,10 @@ import threading
 import time
 from typing import Any, Callable, Mapping, Sequence
 
-from . import arena_adapter, arena_campaign, arena_roundtrip, arena_upstream_common
-from ..execution import device_sampler
+from . import (arena_adapter, arena_campaign, arena_controller_sandbox,
+               arena_evaluator_child,
+               arena_roundtrip, arena_upstream_common)
+from ..execution import device_sampler, sandbox
 from ..resource import device_claim
 
 
@@ -48,14 +50,19 @@ AGGREGATE_SCHEMA = "epyc.autokernel.arena_campaign_execution.v2"
 RUN_MANIFEST_SCHEMA = "epyc.autokernel.arena_campaign_run_manifest.v2"
 LEGACY_RUN_MANIFEST_SCHEMA = "epyc.autokernel.arena_campaign_run_manifest.v1"
 VALIDATION_SCHEMA = "epyc.autokernel.arena_campaign_validation.v1"
+DIAGNOSTIC_PILOT_SCHEMA = "epyc.autokernel.arena_diagnostic_pilot.v1"
 MEASUREMENT_WINDOW_SCHEMA = "epyc.autokernel.arena_gpu_measurement_window.v1"
 IMPLEMENTATION_MODULE = Path(__file__).resolve()
 REPOSITORY_ROOT = IMPLEMENTATION_MODULE.parents[4]
 DEFAULT_CLAIM_JOURNAL = "/mnt/raid0/llm/ak-claims/device.jsonl"
 DEFAULT_DEVICE_ID = "mi210_0"
 EVALUATION_RESERVE_SECONDS = 7200
+CONTROLLER_ACTIVATION_RECEIPT = "controller-sandbox-activation.json"
+CONTROLLER_TEARDOWN_RECEIPT = "controller-sandbox-teardown.json"
 EVALUATOR_PYTHON = Path(
     "/mnt/raid0/llm/tools/geak-v1-rocm62-py312/bin/python")
+CONTROLLER_PACKAGE_ROOT = Path(
+    "/mnt/raid0/llm/tools/geak-v1-rocm62-py312/lib/python3.12/site-packages")
 EVALUATOR_PYTHON_SHA256 = (
     "9544d2a29138833e6177d45dbc57468d37710b5080c901fbb579d53f251cdd6f")
 EVALUATOR_PACKAGE_VERSIONS = {
@@ -614,6 +621,37 @@ class RunnerConfig:
 WorkerRunner = Callable[[Mapping[str, Any], float], Mapping[str, Any]]
 
 
+@dataclass(frozen=True)
+class DiagnosticPilotCellRequest:
+    """One explicitly non-rankable controller checkpoint compatibility pilot."""
+
+    arm: arena_campaign.ArmImplementation
+    task: arena_campaign.TaskArtifact
+    checkpoint_hours: float = 2.0
+    is_starting_state_baseline: bool = False
+    controller_argv: tuple[str, ...] | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.arm, arena_campaign.ArmImplementation):
+            raise TypeError("pilot arm must be an ArmImplementation")
+        if not isinstance(self.task, arena_campaign.TaskArtifact):
+            raise TypeError("pilot task must be a TaskArtifact")
+        if self.arm.arm_id == arena_campaign.BASELINE_ARM_ID \
+                or self.arm.availability != "ready":
+            raise ArenaCellRunnerError("pilot requires one ready controller arm")
+        if self.is_starting_state_baseline is not False:
+            raise ArenaCellRunnerError("pilot cannot masquerade as a baseline cell")
+        if (isinstance(self.checkpoint_hours, bool)
+                or not isinstance(self.checkpoint_hours, (int, float))
+                or float(self.checkpoint_hours)
+                not in arena_campaign.MATCHED_BUDGET_HOURS):
+            raise ArenaCellRunnerError("pilot checkpoint must use a matched budget")
+        override = self.controller_argv
+        if override is not None:
+            _validate_diagnostic_pilot_argv(
+                self.arm.arm_id, self.arm.argv, override)
+
+
 class GovernedArenaCellRunner:
     """Callable concrete implementation of ``arena_campaign.run_cell``."""
 
@@ -692,6 +730,56 @@ class GovernedArenaCellRunner:
             _atomic_json(receipt_path, receipt)
         return receipt
 
+    def run_diagnostic_pilot(
+        self, request: DiagnosticPilotCellRequest,
+    ) -> dict[str, Any]:
+        """Run one arm/task checkpoint without creating campaign authority.
+
+        The method deliberately reuses the complete checkpoint path (controller
+        sandbox, brokered intermediate evaluations, isolated final evaluator,
+        claims, samplers, teardown validation, and belief receipt) while
+        publishing a separate receipt that cannot be consumed as a matched
+        campaign cell or aggregate.
+        """
+        if not isinstance(request, DiagnosticPilotCellRequest):
+            raise TypeError("request must be a DiagnosticPilotCellRequest")
+        self._cell_ordinal += 1
+        run = self._run_checkpoint(
+            request, checkpoint_hours=float(request.checkpoint_hours))
+        receipt = _self_hash({
+            "schema": DIAGNOSTIC_PILOT_SCHEMA,
+            "status": "pass",
+            "authority": "compatibility_only_no_ranking_or_promotion_authority",
+            "campaign_id": self.config.campaign_id,
+            **({"attempt_id": self.attempt_id}
+               if self.attempt_id is not None else {}),
+            "claim_campaign_id": self.claim_campaign_id,
+            "task_id": request.task.task_id,
+            "arm_id": request.arm.arm_id,
+            "checkpoint_hours": float(request.checkpoint_hours),
+            "controller_argv": list(
+                request.controller_argv or request.arm.argv),
+            "checkpoint_receipt_sha256": run["receipt_sha256"],
+            "checkpoint": run,
+            "constraints": {
+                "one_task": True,
+                "one_controller_arm": True,
+                "matched_campaign_result_implied": False,
+                "cross_controller_ranking_authority": False,
+                "belief_update_authority": False,
+                "promotion_authority": False,
+            },
+        })
+        path = self.output_root / "diagnostic-pilot-receipt.json"
+        if path.exists():
+            observed = _load_json_object(path, "diagnostic pilot receipt")
+            _verify_self_hash(observed, "diagnostic pilot receipt")
+            if observed != receipt:
+                raise ArenaCellRunnerError("completed diagnostic pilot drifted")
+        else:
+            _atomic_json(path, receipt)
+        return receipt
+
     def _run_checkpoint(
         self, request: arena_campaign.CampaignCellRequest,
         *, checkpoint_hours: float | None,
@@ -759,6 +847,16 @@ class GovernedArenaCellRunner:
         artifact_map = worker_result.get("artifacts")
         if not isinstance(artifact_map, Mapping) or not artifact_map:
             raise ArenaCellRunnerError("Arena worker returned no hash-bound artifacts")
+        controller_sandbox_execution = worker_result.get(
+            "controller_sandbox_execution")
+        if request.is_starting_state_baseline:
+            if controller_sandbox_execution is not None:
+                raise ArenaCellRunnerError(
+                    "starting-state baseline carries controller sandbox evidence")
+        else:
+            _validate_controller_sandbox_execution(
+                controller_sandbox_execution, cell_root=cell_root,
+                expected=worker_result)
         self._verify_measurement_windows(
             worker_result.get("measurement_windows"), cell_root=cell_root,
             expected=worker_result)
@@ -914,7 +1012,13 @@ class GovernedArenaCellRunner:
         if request.is_starting_state_baseline:
             if belief is not None:
                 raise ArenaCellRunnerError("baseline checkpoint carries a belief receipt")
+            if receipt.get("controller_sandbox_execution") is not None:
+                raise ArenaCellRunnerError(
+                    "baseline checkpoint carries controller sandbox evidence")
         else:
+            _validate_controller_sandbox_execution(
+                receipt.get("controller_sandbox_execution"),
+                cell_root=cell_root, expected=receipt)
             if not isinstance(belief, Mapping):
                 raise ArenaCellRunnerError("controller checkpoint lacks its belief receipt")
             self._verify_belief_receipt(
@@ -1003,6 +1107,18 @@ class GovernedArenaCellRunner:
                     "GPU measurement window has no numeric samples")
             self._verify_released_claim(
                 window, expected_claim_campaign_id=expected_claim_scope)
+            if phase == "centralized_final_evaluation" \
+                    and expected.get("baseline") is False:
+                _validate_evaluator_execution(
+                    window.get("evaluator_execution_receipt"),
+                    expected_workspace=cell_root / "final-evaluation-workspace",
+                    expected_phase=phase, expected_identity=expected,
+                    persisted_path=(cell_root / "final-evaluator-evidence"
+                                    / "execution-receipt.json"),
+                    expected_evaluation=expected["evaluation"],
+                    expected_baseline_receipt_sha256=str(
+                        windows[0]["receipt_sha256"]),
+                    arena_root=self.arena_root)
             claim_ids.append(str(window["device_claim_open"]["claim_id"]))
             persisted = _load_json_object(
                 cell_root / "measurement-windows" / f"{ordinal:02d}-{phase}.json",
@@ -1080,7 +1196,11 @@ class GovernedArenaCellRunner:
         self, request: arena_campaign.CampaignCellRequest,
         *, checkpoint_hours: float | None, cell_root: Path,
     ) -> dict[str, Any]:
-        return {
+        arm_audit = arena_campaign._implementation_audit(request.arm)
+        if not arm_audit["executable"]:
+            raise ArenaCellRunnerError(
+                "cannot construct worker request from a non-executable arm audit")
+        payload = {
             "schema": CHECKPOINT_SCHEMA,
             "campaign_id": self.config.campaign_id,
             **({"attempt_id": self.attempt_id}
@@ -1091,6 +1211,7 @@ class GovernedArenaCellRunner:
             "cell_root": str(cell_root),
             "task": asdict(request.task),
             "arm": asdict(request.arm),
+            "arm_audit": arm_audit,
             "baseline": request.is_starting_state_baseline,
             "checkpoint_hours": checkpoint_hours,
             "visible_device": self.config.visible_device,
@@ -1098,6 +1219,11 @@ class GovernedArenaCellRunner:
             "claim_timeout_seconds": float(self.config.claim_timeout_seconds),
             "evaluator_python": self.evaluator_python,
         }
+        if isinstance(request, DiagnosticPilotCellRequest) \
+                and request.controller_argv is not None:
+            payload["diagnostic_pilot_controller_argv"] = list(
+                request.controller_argv)
+        return payload
 
     @staticmethod
     def _run_worker_subprocess(
@@ -1158,11 +1284,27 @@ class GovernedArenaCellRunner:
         return result
 
 
-def _controller_argv(arm: Mapping[str, Any], checkpoint_hours: float) -> tuple[str, ...]:
+def _controller_argv(
+    arm: Mapping[str, Any], checkpoint_hours: float,
+    *, executable_path: str | None = None,
+    diagnostic_pilot_override: Sequence[str] | None = None,
+) -> tuple[str, ...]:
     raw = arm.get("argv")
     if not isinstance(raw, list) or not raw or any(not isinstance(x, str) for x in raw):
         raise ArenaCellRunnerError("controller arm lacks a valid argv")
-    argv = list(raw)
+    if diagnostic_pilot_override is not None:
+        _validate_diagnostic_pilot_argv(
+            str(arm.get("arm_id")), tuple(raw), diagnostic_pilot_override)
+        argv = list(diagnostic_pilot_override)
+    else:
+        argv = list(raw)
+    if executable_path is not None:
+        executable = Path(executable_path)
+        if (not executable.is_absolute() or executable.is_symlink()
+                or not executable.is_file() or not os.access(executable, os.X_OK)):
+            raise ArenaCellRunnerError(
+                "audited controller executable is not an exact executable file")
+        argv[0] = str(executable)
     for flag, value in (
         ("--checkpoint-hours", f"{checkpoint_hours:g}"),
         ("--timeout-seconds", str(int(checkpoint_hours * 3600))),
@@ -1175,7 +1317,37 @@ def _controller_argv(arm: Mapping[str, Any], checkpoint_hours: float) -> tuple[s
         if index + 1 >= len(argv):
             raise ArenaCellRunnerError(f"controller argv has no value after {flag}")
         argv[index + 1] = value
+    if len(argv) >= 3 and argv[1] == "-m" \
+            and argv[2].startswith("scripts.kernel_rnd."):
+        # The controller sandbox admits the exact scripts/ source tree but not
+        # its repository parent.  Import the identical package below that
+        # boundary rather than broadening Landlock to the whole checkout.
+        argv[2] = argv[2].removeprefix("scripts.")
     return tuple(argv)
+
+
+def _validate_diagnostic_pilot_argv(
+    arm_id: str, declared: Sequence[str], override: Sequence[str],
+) -> None:
+    """Allow exactly one bounded K-Search round in a non-authoritative pilot."""
+    if arm_id != "k_search":
+        raise ArenaCellRunnerError(
+            "diagnostic argv override is currently admitted only for k_search")
+    if (not isinstance(override, (tuple, list)) or not override
+            or any(not isinstance(value, str) for value in override)):
+        raise ArenaCellRunnerError("diagnostic pilot argv must be strings")
+    expected = list(declared)
+    try:
+        index = expected.index("--max-rounds")
+    except ValueError as exc:
+        raise ArenaCellRunnerError(
+            "k_search pilot argv lacks its exact max-rounds seam") from exc
+    if index + 1 >= len(expected):
+        raise ArenaCellRunnerError("k_search max-rounds has no declared value")
+    expected[index + 1] = "1"
+    if list(override) != expected:
+        raise ArenaCellRunnerError(
+            "diagnostic pilot argv may only set k_search --max-rounds to 1")
 
 
 def _worker_command(cell_root: Path, output: Path) -> tuple[str, ...]:
@@ -1197,50 +1369,281 @@ def _copy_task(source: Path, destination: Path) -> None:
     shutil.copytree(source, destination)
 
 
-def _declared_task_sources(config: Mapping[str, Any]) -> tuple[str, ...]:
+@contextmanager
+def _staged_controller_codex_home(workspace: Path):
+    """Provide writable ephemeral CLI state without mutating host credentials."""
+    target = workspace / ".autokernel-controller-codex-home"
+    if target.exists() or target.is_symlink():
+        raise ArenaCellRunnerError("controller Codex home must be new")
+    target.mkdir(mode=0o700)
+    try:
+        for name in ("auth.json", "config.toml"):
+            source = Path("/home/node/.codex") / name
+            if source.is_symlink() or not source.is_file():
+                raise ArenaCellRunnerError(
+                    f"controller Codex credential input is absent or unsafe: {name}")
+            destination = target / name
+            with destination.open("xb") as handle:
+                handle.write(source.read_bytes())
+            destination.chmod(0o600)
+        yield target
+    finally:
+        if target.is_symlink():
+            target.unlink()
+        elif target.exists():
+            shutil.rmtree(target)
+
+
+def _declared_task_sources(
+    config: Mapping[str, Any], workspace: Path,
+) -> tuple[str, ...]:
     declared = config.get("source_file_path")
     rows = ([declared] if isinstance(declared, str)
             else declared if isinstance(declared, list) else [])
-    if (not rows or any(not isinstance(row, str) or not row.strip()
-                        for row in rows)):
-        raise ArenaCellRunnerError(
-            "brokered Arena tasks must declare source_file_path")
-    paths = tuple(sorted(row.strip() for row in rows))
+    rows = [row.strip() for row in rows
+            if isinstance(row, str) and row.strip()]
+    if not rows:
+        targets = config.get("target_kernel_functions")
+        names = ([str(value) for value in targets]
+                 if isinstance(targets, list) else [str(targets or "")])
+        candidates = []
+        for path in sorted(workspace.glob("*.py")):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            if names and all(re.search(
+                    rf"\bdef\s+{re.escape(name)}\s*\(", text)
+                    for name in names if name):
+                candidates.append(path.name)
+        if len(candidates) != 1:
+            raise ArenaCellRunnerError(
+                "could not uniquely discover brokered Arena source file: "
+                f"{candidates}")
+        rows = candidates
+    paths = tuple(sorted(rows))
     if any(Path(row).is_absolute() or ".." in Path(row).parts for row in paths):
         raise ArenaCellRunnerError("brokered Arena source path is unsafe")
+    for row in paths:
+        path = _assert_contained(workspace / row, workspace, "Arena source file")
+        if path.is_symlink() or not path.is_file():
+            raise ArenaCellRunnerError("brokered Arena source file is absent or unsafe")
     return paths
 
 
-def _controller_isolation_prefix() -> tuple[str, ...]:
-    """Return a transparent exec sandbox or fail closed.
+@dataclass(frozen=True)
+class EvaluatorChildResult:
+    result: Mapping[str, Any]
+    pid: int
+    process_start_ticks: int
+    process_group_id: int
+    session_id: int
+    activation_receipt: Mapping[str, Any]
+    teardown_receipt: Mapping[str, Any]
+    stdout_sha256: str
+    stderr_sha256: str
 
-    Environment-only GPU hiding is not isolation.  The configured wrapper must
-    hide /dev/kfd and DRM render nodes, then exec the controller so Popen.pid is
-    also the AF_UNIX peer PID.  The controller performs an independent open(2)
-    denial proof before constructing its evaluator.
-    """
-    raw = os.environ.get("AUTOKERNEL_CONTROLLER_SANDBOX_PREFIX_JSON")
-    if not raw:
-        raise ArenaCellRunnerError(
-            "controller device-isolation sandbox is not configured")
+
+class SandboxedEvaluatorRunner:
+    """Run one Arena evaluation in a fresh deny-network GPU sandbox."""
+
+    DEVICE_PATHS = ("/dev/kfd", "/dev/dri/renderD128", "/dev/null")
+
+    def __init__(self, *, arena_root: Path):
+        self.arena_root = arena_root.resolve()
+
+    @staticmethod
+    def _environment(evaluation_root: Path, arena_root: Path) -> dict[str, str]:
+        """Return the fixed startup environment admitted by the read policy."""
+        return {
+            "PATH": "/opt/rocm/bin:/usr/bin:/bin",
+            "PYTHONPATH": str(arena_root),
+            "HOME": str(evaluation_root), "TMPDIR": str(evaluation_root),
+            "XDG_CACHE_HOME": str(evaluation_root / ".cache"),
+            "TRITON_CACHE_DIR": str(evaluation_root / ".triton"),
+            "TORCH_EXTENSIONS_DIR": str(evaluation_root / ".torch-extensions"),
+            "HIP_VISIBLE_DEVICES": "0", "ROCR_VISIBLE_DEVICES": "0",
+            "CUDA_VISIBLE_DEVICES": "0", "PYTHONDONTWRITEBYTECODE": "1",
+            # The evaluator read policy intentionally excludes /dev.  CPython
+            # otherwise opens /dev/urandom during preinitialization before the
+            # child can emit its activation-bound result.
+            "PYTHONHASHSEED": "0",
+        }
+
+    @staticmethod
+    def _readable_roots() -> tuple[str, ...]:
+        candidates = (
+            EVALUATOR_PYTHON.resolve().parents[1], EVALUATOR_PYTHON.parents[1],
+            Path("/opt/rocm"), Path("/usr/bin"), Path("/usr/lib"),
+            Path("/usr/libexec"),
+            Path("/usr/share"), Path("/usr/include"),
+            Path("/sys/devices/virtual/kfd/kfd/topology"),
+            Path("/sys/devices/system/node"), Path("/sys/devices/system/cpu"),
+            Path("/sys/class/drm/renderD128/device").resolve(),
+        )
+        return tuple(dict.fromkeys(str(path.resolve()) for path in candidates
+                                   if path.exists()))
+
+    def run(
+        self, *, request: Mapping[str, Any], evaluation_root: Path,
+        evidence_root: Path, timeout_s: float,
+        cancel_event: threading.Event | None = None,
+    ) -> EvaluatorChildResult:
+        if evaluation_root.parent != evidence_root.parent:
+            raise ArenaCellRunnerError("evaluator root/evidence ownership drifted")
+        request_path = evaluation_root / "evaluator-request.json"
+        _atomic_json(request_path, request)
+        activation_path = evidence_root / "sandbox-activation.json"
+        stdout_path = evidence_root / "evaluator.stdout"
+        stderr_path = evidence_root / "evaluator.stderr"
+        policy = sandbox.SandboxPolicy(
+            writable_root=str(evaluation_root),
+            writable_device_paths=self.DEVICE_PATHS,
+            profile=sandbox.EVALUATOR_PROFILE,
+            # Importing the ``src`` package requires listing its ephemeral
+            # parent.  The parent contains only the copied, hash-bound vendor
+            # ``src`` tree and is removed immediately after this evaluation.
+            readable_roots=(*self._readable_roots(), str(self.arena_root)),
+            readable_files=("/etc/ld.so.cache",
+                            "/dev/urandom",
+                            str(arena_evaluator_child.__file__)),
+            token=f"eval{secrets.token_hex(8)}")
+        child_argv = (
+            str(EVALUATOR_PYTHON), str(arena_evaluator_child.__file__),
+            "--request", str(request_path))
+        spawn_argv = policy.wrap(child_argv, receipt_path=str(activation_path))
+        environment = self._environment(evaluation_root, self.arena_root)
+        for path in (".cache", ".triton", ".torch-extensions"):
+            (evaluation_root / path).mkdir()
+        process: subprocess.Popen[str] | None = None
+        timed_out = False
+        cleanup_error: Exception | None = None
+        with stdout_path.open("w", encoding="utf-8") as stdout_handle, \
+                stderr_path.open("w", encoding="utf-8") as stderr_handle:
+            try:
+                process = subprocess.Popen(
+                    spawn_argv, cwd=evaluation_root, env=environment,
+                    stdin=subprocess.DEVNULL, stdout=stdout_handle,
+                    stderr=stderr_handle, text=True, close_fds=True,
+                    start_new_session=True)
+                pid = process.pid
+                stat_text = Path(f"/proc/{pid}/stat").read_text(encoding="ascii")
+                start_ticks = int(stat_text[stat_text.rfind(")") + 2:].split()[19])
+                pgid, sid = os.getpgid(pid), os.getsid(pid)
+                if pid != pgid or pid != sid:
+                    raise ArenaCellRunnerError(
+                        "evaluator child lacks an exact owned session")
+                deadline = time.monotonic() + timeout_s
+                while process.poll() is None:
+                    if cancel_event is not None and cancel_event.wait(0.05):
+                        timed_out = True
+                        break
+                    if time.monotonic() >= deadline:
+                        timed_out = True
+                        break
+                    time.sleep(0.05)
+            finally:
+                if process is not None and (timed_out or process.poll() is None):
+                    try:
+                        _terminate_captured_process_group(process.pid)
+                    except Exception as exc:
+                        cleanup_error = exc
+                if process is not None and process.poll() is None:
+                    process.kill()
+                    process.wait()
+        if process is None:
+            raise ArenaCellRunnerError("evaluator child did not start")
+        activation: Mapping[str, Any] | None = None
+        teardown: Mapping[str, Any] | None = None
+        try:
+            activation = sandbox.read_receipt(activation_path)
+            sandbox.verify_receipt(
+                activation, policy=policy, pid=process.pid, argv=child_argv)
+            if activation.get("process_start_ticks") != start_ticks:
+                raise ArenaCellRunnerError("evaluator child PID identity drifted")
+        finally:
+            if policy.cgroup_path(process.pid).exists():
+                teardown = sandbox.cleanup_cgroup(policy, process.pid)
+        if cleanup_error is not None:
+            raise cleanup_error
+        if timed_out:
+            reason = "cancelled" if cancel_event is not None \
+                and cancel_event.is_set() else "timed out"
+            raise ArenaCellRunnerError(f"evaluator child {reason}")
+        if process.returncode != 0:
+            raise ArenaCellRunnerError(
+                "evaluator child failed: " + stderr_path.read_text(
+                    encoding="utf-8", errors="replace")[-1000:])
+        try:
+            output = json.loads(stdout_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ArenaCellRunnerError("evaluator child emitted invalid JSON") from exc
+        if not isinstance(output, Mapping):
+            raise ArenaCellRunnerError("evaluator child result is not an object")
+        arena_evaluator_child.verify_self_hash(output, "evaluator child result")
+        if (output.get("schema") != arena_evaluator_child.RESULT_SCHEMA
+                or output.get("request_receipt_sha256")
+                != request.get("receipt_sha256")):
+            raise ArenaCellRunnerError("evaluator child result identity drifted")
+        assert activation is not None and teardown is not None
+        return EvaluatorChildResult(
+            result=output, pid=process.pid, process_start_ticks=start_ticks,
+            process_group_id=pgid, session_id=sid,
+            activation_receipt=activation, teardown_receipt=teardown,
+            stdout_sha256=_sha256_file(stdout_path),
+            stderr_sha256=_sha256_file(stderr_path))
+
+
+def _run_sandboxed_arena_evaluation(
+    *, evaluator_runner_factory: Callable[..., Any], arena_root: Path,
+    evaluation_root: Path, evidence_root: Path,
+    identity: Mapping[str, Any], evaluator_python: Mapping[str, Any],
+    baseline_document: Mapping[str, Any], baseline_receipt_sha256: str,
+    ordinal: int, timeout_s: float, cancel_event: threading.Event,
+) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
+    runtime_root = evaluation_root.with_name(
+        f"{ordinal:04d}-evaluator-runtime")
+    runtime_root.mkdir(mode=0o700)
+    shutil.copytree(arena_root / "src", runtime_root / "src")
+    runner = evaluator_runner_factory(arena_root=runtime_root)
+    request = _self_hash({
+        "schema": arena_evaluator_child.REQUEST_SCHEMA,
+        **dict(identity), "evaluation_ordinal": ordinal,
+        "workspace": str(evaluation_root),
+        "config_sha256": _sha256_file(evaluation_root / "config.yaml"),
+        "arena_root": str(runtime_root),
+        "vendor_evaluator_sha256": _sha256_file(
+            runtime_root / "src" / "evaluator.py"),
+        "evaluator_python": dict(evaluator_python),
+        "baseline_cases": dict(baseline_document),
+        "outer_baseline_receipt_sha256": baseline_receipt_sha256,
+        "authority": "parent_claimed_sandboxed_evaluator_only",
+    })
     try:
-        prefix = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise ArenaCellRunnerError("controller sandbox prefix is invalid JSON") from exc
-    if (not isinstance(prefix, list) or not prefix
-            or any(not isinstance(part, str) or not part for part in prefix)):
-        raise ArenaCellRunnerError("controller sandbox prefix is invalid")
-    executable = Path(prefix[0]).resolve()
-    if not executable.is_file() or not os.access(executable, os.X_OK):
-        raise ArenaCellRunnerError("controller sandbox executable is unavailable")
-    return tuple(prefix)
-
-
-def _require_candidate_evaluator_sandbox() -> None:
-    """Keep controller campaigns non-executable until evaluator isolation lands."""
-    raise ArenaCellRunnerError(
-        "broker candidate-evaluator sandbox is not implemented; "
-        "INF-03 execution remains fail-closed")
+        child = runner.run(
+            request=request, evaluation_root=evaluation_root,
+            evidence_root=evidence_root, timeout_s=timeout_s,
+            cancel_event=cancel_event)
+    finally:
+        shutil.rmtree(runtime_root)
+    child_result = child.result
+    if (child_result.get("baseline_cases_sha256")
+            != baseline_document["receipt_sha256"]
+            or child_result.get("outer_baseline_receipt_sha256")
+            != baseline_receipt_sha256):
+        raise ArenaCellRunnerError("evaluator child baseline identity drifted")
+    _atomic_json(evidence_root / "evaluator-result.json", child_result)
+    execution = _self_hash({
+        "schema": "epyc.autokernel.arena_evaluator_execution.v1",
+        "request_receipt_sha256": request["receipt_sha256"],
+        "result_receipt_sha256": child_result["receipt_sha256"],
+        "pid": child.pid, "process_start_ticks": child.process_start_ticks,
+        "process_group_id": child.process_group_id,
+        "session_id": child.session_id,
+        "activation_receipt": dict(child.activation_receipt),
+        "teardown_receipt": dict(child.teardown_receipt),
+        "stdout_sha256": child.stdout_sha256,
+        "stderr_sha256": child.stderr_sha256,
+    })
+    _atomic_json(evidence_root / "execution-receipt.json", execution)
+    return dict(child_result["evaluation"]), execution
 
 
 def _artifact_hashes(root: Path) -> dict[str, str]:
@@ -1251,6 +1654,419 @@ def _artifact_hashes(root: Path) -> dict[str, str]:
     if not rows:
         raise ArenaCellRunnerError("checkpoint produced no artifacts")
     return rows
+
+
+def _validate_evaluator_execution(
+    execution: object, *, expected_workspace: Path, expected_phase: str,
+    expected_identity: Mapping[str, Any], persisted_path: Path,
+    expected_evaluation: Mapping[str, Any],
+    expected_baseline_receipt_sha256: str, arena_root: Path,
+) -> None:
+    """Validate one candidate evaluator's process/sandbox evidence chain."""
+    if not isinstance(execution, Mapping):
+        raise ArenaCellRunnerError("candidate evaluation lacks sandbox evidence")
+    _verify_self_hash(execution, "evaluator execution receipt")
+    if execution.get("schema") != "epyc.autokernel.arena_evaluator_execution.v1":
+        raise ArenaCellRunnerError("evaluator execution receipt schema drifted")
+    pid = execution.get("pid")
+    start_ticks = execution.get("process_start_ticks")
+    if (isinstance(pid, bool) or not isinstance(pid, int) or pid <= 1
+            or isinstance(start_ticks, bool) or not isinstance(start_ticks, int)
+            or start_ticks <= 0
+            or execution.get("process_group_id") != pid
+            or execution.get("session_id") != pid):
+        raise ArenaCellRunnerError("evaluator process ownership is invalid")
+    for field in ("request_receipt_sha256", "result_receipt_sha256",
+                  "stdout_sha256", "stderr_sha256"):
+        if not _SHA256_RE.fullmatch(str(execution.get(field))):
+            raise ArenaCellRunnerError(f"evaluator execution {field} is invalid")
+    activation = execution.get("activation_receipt")
+    teardown = execution.get("teardown_receipt")
+    if not isinstance(activation, Mapping) or not isinstance(teardown, Mapping):
+        raise ArenaCellRunnerError("evaluator sandbox lifecycle evidence is absent")
+    workspace = expected_workspace.resolve()
+    required_syscalls = {
+        "connect", "socket", "process_vm_readv", "process_vm_writev",
+        "io_uring_setup", "io_uring_enter", "io_uring_register",
+        "pidfd_getfd", "process_madvise",
+    }
+    readable_roots = activation.get("readable_roots")
+    if (activation.get("profile") != sandbox.EVALUATOR_PROFILE
+            or activation.get("pid") != pid
+            or activation.get("process_start_ticks") != start_ticks
+            or Path(str(activation.get("writable_root"))).resolve() != workspace
+            or set(activation.get("writable_device_paths", ()))
+            != set(SandboxedEvaluatorRunner.DEVICE_PATHS)
+            or activation.get("read_allowlist_enforced") is not True
+            or not isinstance(readable_roots, list)
+            or any(Path(str(root)).resolve() in {Path("/"), Path("/proc")}
+                   for root in readable_roots)
+            or activation.get("network_profile") != sandbox.NETWORK_DENY_ALL
+            or activation.get("outbound_socket_families") != []
+            or activation.get("unix_socket_creation_denied") is not False
+            or activation.get("broker_socket_path") is not None
+            or activation.get("broker_fd_inherited") is not False
+            or activation.get("broker_peer") is not None
+            or not required_syscalls.issubset(set(
+                activation.get("blocked_syscalls", ())))):
+        raise ArenaCellRunnerError("evaluator sandbox activation is invalid")
+    if (teardown.get("cgroup_path") != activation.get("cgroup_path")
+            or teardown.get("verified_empty") is not True
+            or teardown.get("removed") is not True):
+        raise ArenaCellRunnerError("evaluator sandbox teardown is incomplete")
+    request = _load_json_object(
+        workspace / "evaluator-request.json", "evaluator child request")
+    _verify_self_hash(request, "evaluator child request")
+    baseline = request.get("baseline_cases")
+    if not isinstance(baseline, Mapping):
+        raise ArenaCellRunnerError("evaluator baseline serialization is absent")
+    try:
+        arena_evaluator_child.verify_self_hash(baseline, "baseline cases")
+    except arena_evaluator_child.EvaluatorChildError as exc:
+        raise ArenaCellRunnerError(
+            "evaluator baseline serialization drifted") from exc
+    vendor_path = arena_root.resolve() / "src" / "evaluator.py"
+    if (request.get("schema") != arena_evaluator_child.REQUEST_SCHEMA
+            or request.get("receipt_sha256")
+            != execution.get("request_receipt_sha256")
+            or request.get("workspace") != str(workspace)
+            or request.get("phase") != expected_phase
+            or request.get("config_sha256")
+            != _sha256_file(workspace / "config.yaml")
+            or request.get("vendor_evaluator_sha256")
+            != _sha256_file(vendor_path)
+            or request.get("evaluator_python")
+            != _declared_evaluator_python_identity()
+            or request.get("outer_baseline_receipt_sha256")
+            != expected_baseline_receipt_sha256
+            or any(request.get(key) != expected_identity.get(key) for key in (
+                "campaign_id", "attempt_id", "claim_campaign_id", "task_id",
+                "arm_id", "checkpoint_hours"))):
+        raise ArenaCellRunnerError("evaluator child request identity drifted")
+    evidence_root = persisted_path.parent
+    stdout_path = evidence_root / "evaluator.stdout"
+    stderr_path = evidence_root / "evaluator.stderr"
+    if (_sha256_file(stdout_path) != execution.get("stdout_sha256")
+            or _sha256_file(stderr_path) != execution.get("stderr_sha256")):
+        raise ArenaCellRunnerError("evaluator output identity drifted")
+    result = _load_json_object(
+        evidence_root / "evaluator-result.json", "evaluator child result")
+    try:
+        arena_evaluator_child.verify_self_hash(result, "evaluator child result")
+    except arena_evaluator_child.EvaluatorChildError as exc:
+        raise ArenaCellRunnerError("evaluator child result drifted") from exc
+    try:
+        stdout_result = json.loads(stdout_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ArenaCellRunnerError("evaluator stdout is not its JSON result") from exc
+    if (result != stdout_result
+            or result.get("schema") != arena_evaluator_child.RESULT_SCHEMA
+            or result.get("receipt_sha256")
+            != execution.get("result_receipt_sha256")
+            or result.get("request_receipt_sha256")
+            != request.get("receipt_sha256")
+            or result.get("baseline_cases_sha256")
+            != baseline.get("receipt_sha256")
+            or result.get("outer_baseline_receipt_sha256")
+            != expected_baseline_receipt_sha256
+            or result.get("evaluation") != expected_evaluation):
+        raise ArenaCellRunnerError("evaluator result/evaluation identity drifted")
+    persisted = _load_json_object(persisted_path, "evaluator execution receipt")
+    if persisted != execution:
+        raise ArenaCellRunnerError("persisted evaluator execution receipt drifted")
+
+
+def _controller_runtime_allowlist(
+    *, request: Mapping[str, Any], arm: Mapping[str, Any], workspace: Path,
+    cell_root: Path, arena_root: Path, repository_root: Path,
+) -> arena_controller_sandbox.RuntimeAllowlist:
+    """Reify the parent-audited arm into one exact controller runtime."""
+    audit = request.get("arm_audit")
+    if not isinstance(audit, Mapping) or audit.get("arm_id") != arm.get("arm_id"):
+        raise ArenaCellRunnerError("worker request lacks its exact arm audit")
+    if audit.get("executable") is not True:
+        raise ArenaCellRunnerError("worker arm audit is not executable")
+    executable_raw = audit.get("executable_path")
+    if not isinstance(executable_raw, str):
+        raise ArenaCellRunnerError("worker arm audit lacks an executable path")
+    executable = Path(executable_raw)
+    if (not executable.is_absolute() or executable.is_symlink()
+            or not executable.is_file()
+            or _sha256_file(executable) != audit.get("executable_sha256")):
+        raise ArenaCellRunnerError("audited controller executable identity drifted")
+    source = audit.get("source_identity")
+    if not isinstance(source, Mapping) or source.get("clean") is not True:
+        raise ArenaCellRunnerError("audited controller source is absent or dirty")
+    source_root = Path(str(source.get("root"))).resolve()
+    entrypoint_relative = source.get("entrypoint_path")
+    if not isinstance(entrypoint_relative, str):
+        raise ArenaCellRunnerError("audited controller entrypoint is absent")
+    entrypoint = (source_root / entrypoint_relative).resolve()
+    scripts_root = (repository_root / "scripts").resolve()
+    try:
+        entrypoint.relative_to(scripts_root)
+    except ValueError as exc:
+        raise ArenaCellRunnerError(
+            "in-tree controller entrypoint escaped the scripts source root") from exc
+    if (_sha256_file(entrypoint) != source.get("observed_entrypoint_sha256")
+            or source.get("observed_entrypoint_sha256")
+            != source.get("expected_entrypoint_sha256")):
+        raise ArenaCellRunnerError("audited controller entrypoint identity drifted")
+    cli_rows = audit.get("required_cli_identities")
+    if not isinstance(cli_rows, list):
+        raise ArenaCellRunnerError("worker arm audit lacks CLI identities")
+    cli: dict[str, Path] = {}
+    for row in cli_rows:
+        if (not isinstance(row, Mapping) or row.get("available") is not True
+                or not isinstance(row.get("name"), str)
+                or not isinstance(row.get("path"), str)):
+            raise ArenaCellRunnerError("audited controller CLI is unavailable")
+        path = Path(str(row["path"]))
+        if (not path.is_absolute() or path.is_symlink() or not path.is_file()
+                or _sha256_file(path) != row.get("sha256")):
+            raise ArenaCellRunnerError("audited controller CLI identity drifted")
+        cli[str(row["name"])] = path
+    if "codex" not in cli:
+        raise ArenaCellRunnerError("controller runtime lacks its audited Codex CLI")
+    node_raw = shutil.which("node")
+    if node_raw is None:
+        raise ArenaCellRunnerError("controller runtime lacks Node")
+    node = Path(node_raw).resolve(strict=True)
+    codex_auth = Path("/home/node/.codex/auth.json")
+    codex_config = Path("/home/node/.codex/config.toml")
+    ca_file = Path("/etc/ssl/certs/ca-certificates.crt")
+    exact_read_files = [codex_config]
+    git_raw = shutil.which("git")
+    if git_raw is None:
+        raise ArenaCellRunnerError("controller runtime lacks Git source verifier")
+    extra_clis: list[Path] = [Path(git_raw).resolve(strict=True)]
+    if "claude" in cli:
+        extra_clis.append(cli["claude"])
+        exact_read_files.extend((
+            Path("/home/node/.claude/.credentials.json"),
+            Path("/home/node/.claude/.claude.json"),
+        ))
+    upstream = audit.get("upstream_source_identity")
+    source_roots = [scripts_root, arena_root]
+    if upstream is not None:
+        if not isinstance(upstream, Mapping) or upstream.get("clean") is not True:
+            raise ArenaCellRunnerError("audited upstream controller source is invalid")
+        upstream_root = Path(str(upstream.get("root"))).resolve()
+        source_roots.append(upstream_root)
+        files = upstream.get("files")
+        if not isinstance(files, Mapping) or not files:
+            raise ArenaCellRunnerError(
+                "audited upstream controller file identities are absent")
+        for row in files.values():
+            if (not isinstance(row, Mapping)
+                    or not isinstance(row.get("path"), str)
+                    or not isinstance(row.get("observed_sha256"), str)
+                    or row.get("observed_sha256") != row.get("expected_sha256")):
+                raise ArenaCellRunnerError(
+                    "audited upstream controller file identity is invalid")
+            path = (upstream_root / str(row["path"])).resolve()
+            if _sha256_file(path) != row["observed_sha256"]:
+                raise ArenaCellRunnerError(
+                    "audited upstream controller source identity drifted")
+    module_roots = _controller_module_roots(arm)
+    return arena_controller_sandbox.discover_runtime_allowlist(
+        workspace=workspace, python_executable=executable,
+        controller_source_roots=tuple(source_roots),
+        controller_entrypoint=entrypoint,
+        repository_module_roots=module_roots,
+        codex_cli=cli["codex"], node_executable=node,
+        codex_auth=codex_auth, ca_files=(ca_file,),
+        additional_cli_executables=tuple(extra_clis),
+        additional_cli_read_files=tuple(exact_read_files),
+        forbidden_roots=(cell_root.parent.parent,),
+    )
+
+
+def _controller_module_roots(arm: Mapping[str, Any]) -> tuple[Path, ...]:
+    """Return package roots bound by an exact declared controller launcher."""
+    argv = arm.get("argv")
+    if (isinstance(argv, list) and argv
+            and argv[0] == str(EVALUATOR_PYTHON)):
+        if (not CONTROLLER_PACKAGE_ROOT.is_dir()
+                or CONTROLLER_PACKAGE_ROOT.is_symlink()):
+            raise ArenaCellRunnerError(
+                "pinned controller package root is absent or unsafe")
+        return (CONTROLLER_PACKAGE_ROOT.resolve(strict=True),)
+    return ()
+
+
+def _controller_pythonpath(
+    arm: Mapping[str, Any], repository_root: Path,
+) -> str:
+    return os.pathsep.join(map(str, (
+        repository_root / "scripts", *_controller_module_roots(arm))))
+
+
+def _controller_process_start_ticks(pid: int) -> int:
+    try:
+        text = Path(f"/proc/{pid}/stat").read_text(encoding="ascii")
+        ticks = int(text[text.rfind(")") + 2:].split()[19])
+    except (OSError, ValueError, IndexError) as exc:
+        raise ArenaCellRunnerError(
+            f"cannot bind controller broker process identity: {exc}") from exc
+    if ticks <= 0:
+        raise ArenaCellRunnerError("controller broker process start time is invalid")
+    return ticks
+
+
+def _controller_sandbox_execution(
+    *, invocation: arena_controller_sandbox.ControllerSandboxInvocation,
+    cell_root: Path,
+) -> dict[str, Any]:
+    teardown = invocation.verify_and_teardown(
+        cell_root / CONTROLLER_TEARDOWN_RECEIPT)
+    activation = sandbox.read_receipt(cell_root / CONTROLLER_ACTIVATION_RECEIPT)
+    runtime = {
+        "readable_roots": list(invocation.runtime.readable_roots),
+        "readable_files": list(invocation.runtime.readable_files),
+        "executable_files": list(invocation.runtime.executable_files),
+        "identities": dict(invocation.runtime.identities),
+        "sha256": invocation.runtime.sha256,
+    }
+    execution = _self_hash({
+        "schema": "epyc.autokernel.arena_controller_sandbox_execution.v1",
+        "pid": invocation.pid,
+        "policy_sha256": invocation.policy.policy_sha256,
+        "runtime_allowlist": runtime,
+        "activation_receipt": activation,
+        "teardown_receipt": teardown,
+    })
+    _atomic_json(cell_root / "controller-sandbox-execution.json", execution)
+    return execution
+
+
+def _launch_isolated_controller(
+    *, prepared: arena_adapter.PreparedArenaTask, argv: Sequence[str],
+    timeout_seconds: int, broker: "_ControllerEvaluationBroker",
+    invocation: arena_controller_sandbox.ControllerSandboxInvocation,
+    cell_root: Path,
+) -> tuple[str, dict[str, Any]]:
+    """Launch one controller and always empty/remove its exact cgroup."""
+    output: str | None = None
+    launch_error: BaseException | None = None
+    try:
+        def started(pid: int) -> None:
+            invocation.process_started(pid)
+            broker.register_controller(pid)
+
+        output = arena_adapter.launch(
+            prepared, argv, timeout_seconds=timeout_seconds,
+            command_prefix=invocation.command_prefix,
+            process_started=started)
+    except BaseException as exc:
+        launch_error = exc
+    cleanup_error: BaseException | None = None
+    execution: dict[str, Any] | None = None
+    if invocation.pid is not None:
+        try:
+            execution = _controller_sandbox_execution(
+                invocation=invocation, cell_root=cell_root)
+        except BaseException as exc:
+            cleanup_error = exc
+    elif launch_error is None:
+        cleanup_error = ArenaCellRunnerError(
+            "controller launch returned without capturing its PID")
+    if cleanup_error is not None:
+        if launch_error is not None:
+            raise ArenaCellRunnerError(
+                "controller launch failed and sandbox teardown also failed: "
+                f"launch={launch_error}; teardown={cleanup_error}") from cleanup_error
+        raise cleanup_error
+    if launch_error is not None:
+        raise launch_error
+    assert output is not None and execution is not None
+    return output, execution
+
+
+def _validate_controller_sandbox_execution(
+    execution: object, *, cell_root: Path, expected: Mapping[str, Any],
+) -> None:
+    if not isinstance(execution, Mapping):
+        raise ArenaCellRunnerError("controller checkpoint lacks sandbox evidence")
+    _verify_self_hash(execution, "controller sandbox execution receipt")
+    if execution.get("schema") != \
+            "epyc.autokernel.arena_controller_sandbox_execution.v1":
+        raise ArenaCellRunnerError("controller sandbox execution schema drifted")
+    activation = execution.get("activation_receipt")
+    teardown = execution.get("teardown_receipt")
+    runtime = execution.get("runtime_allowlist")
+    if not all(isinstance(row, Mapping) for row in (activation, teardown, runtime)):
+        raise ArenaCellRunnerError("controller sandbox lifecycle evidence is malformed")
+    assert isinstance(activation, Mapping)
+    assert isinstance(teardown, Mapping)
+    assert isinstance(runtime, Mapping)
+    runtime_without_hash = {
+        key: runtime.get(key) for key in (
+            "readable_roots", "readable_files", "executable_files", "identities")}
+    if _canonical_sha256(runtime_without_hash) != runtime.get("sha256"):
+        raise ArenaCellRunnerError("controller runtime allowlist hash drifted")
+    identities = runtime.get("identities")
+    if not isinstance(identities, Mapping) or not identities:
+        raise ArenaCellRunnerError("controller runtime identities are absent")
+    for raw_path, expected_sha256 in identities.items():
+        if (not isinstance(raw_path, str)
+                or not _SHA256_RE.fullmatch(str(expected_sha256))):
+            raise ArenaCellRunnerError("controller runtime identity is malformed")
+        path = Path(raw_path)
+        if (not path.is_absolute() or path.is_symlink() or not path.is_file()
+                or _sha256_file(path) != expected_sha256):
+            raise ArenaCellRunnerError("controller runtime identity drifted")
+    if (activation.get("profile") != sandbox.CONTROLLER_PROFILE
+            or activation.get("writable_device_paths") != ["/dev/null"]
+            or activation.get("read_allowlist_enforced") is not True
+            or activation.get("broker_socket_path") is None
+            or activation.get("broker_fd_inherited") is not True
+            or not isinstance(activation.get("broker_peer"), Mapping)
+            or activation.get("network_profile") != sandbox.NETWORK_OUTBOUND_CLIENT
+            or Path(str(activation.get("writable_root"))).resolve()
+            != (cell_root / "workspace").resolve()
+            or activation.get("policy_sha256") != execution.get("policy_sha256")
+            or teardown.get("policy_sha256") != execution.get("policy_sha256")
+            or teardown.get("runtime_allowlist_sha256") != runtime.get("sha256")):
+        raise ArenaCellRunnerError("controller sandbox activation is invalid")
+    teardown_state = teardown.get("teardown")
+    teardown_without_hash = {
+        key: value for key, value in teardown.items() if key != "receipt_sha256"}
+    activation_path = cell_root / CONTROLLER_ACTIVATION_RECEIPT
+    teardown_path = cell_root / CONTROLLER_TEARDOWN_RECEIPT
+    if (teardown.get("schema")
+            != arena_controller_sandbox.TEARDOWN_SCHEMA
+            or teardown.get("receipt_sha256")
+            != _canonical_sha256(teardown_without_hash)
+            or teardown.get("pid") != activation.get("pid")
+            or teardown.get("process_start_ticks")
+            != activation.get("process_start_ticks")
+            or teardown.get("activation_receipt") != str(activation_path)
+            or teardown.get("activation_receipt_sha256")
+            != _sha256_file(activation_path)
+            or not isinstance(teardown_state, Mapping)
+            or teardown_state.get("cgroup_path") != activation.get("cgroup_path")
+            or teardown_state.get("verified_empty") is not True
+            or teardown_state.get("removed") is not True):
+        raise ArenaCellRunnerError("controller sandbox teardown is incomplete")
+    if runtime.get("readable_roots") != activation.get("readable_roots") \
+            or runtime.get("readable_files") != activation.get("readable_files") \
+            or runtime.get("executable_files") != activation.get("executable_files"):
+        raise ArenaCellRunnerError("controller runtime and activation disagree")
+    chain = expected.get("broker_evaluation_chain")
+    if (not isinstance(chain, Mapping)
+            or chain.get("controller_sandbox_execution_receipt_sha256")
+            != execution.get("receipt_sha256")):
+        raise ArenaCellRunnerError(
+            "controller broker chain is not bound to sandbox execution")
+    persisted = _load_json_object(
+        cell_root / "controller-sandbox-execution.json",
+        "controller sandbox execution receipt")
+    if persisted != execution:
+        raise ArenaCellRunnerError("persisted controller sandbox evidence drifted")
+    if (sandbox.read_receipt(activation_path) != activation
+            or _load_json_object(teardown_path, "controller teardown receipt") != teardown):
+        raise ArenaCellRunnerError("controller sandbox lifecycle files drifted")
 
 
 def _recv_exact(stream: socket.socket, length: int) -> bytes:
@@ -1270,7 +2086,8 @@ class _ControllerEvaluationBroker:
     def __init__(
         self, *, request: Mapping[str, Any], workspace: Path, cell_root: Path,
         source_paths: Sequence[str],
-        evaluate: Callable[[int, Path], tuple[Mapping[str, Any], Mapping[str, Any]]],
+        evaluate: Callable[[int, Path, threading.Event],
+                           tuple[Mapping[str, Any], Mapping[str, Any]]],
         baseline_receipt_sha256: str,
     ):
         self.request, self.workspace, self.cell_root = request, workspace, cell_root
@@ -1297,8 +2114,10 @@ class _ControllerEvaluationBroker:
         self._ordinal = 0
         self._controller_pid: int | None = None
         self._controller_starttime: str | None = None
+        self._controller_registered = threading.Event()
         self._previous_receipt_sha256: str | None = None
         self._thread: threading.Thread | None = None
+        self._active_peer: socket.socket | None = None
 
     def __enter__(self) -> "_ControllerEvaluationBroker":
         if self.socket_path.exists():
@@ -1324,9 +2143,16 @@ class _ControllerEvaluationBroker:
         stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
         self._controller_pid = pid
         self._controller_starttime = stat[stat.rfind(")") + 2:].split()[19]
+        self._controller_registered.set()
 
     def __exit__(self, *_: object) -> None:
         self._stop.set()
+        self._controller_registered.set()
+        if self._active_peer is not None:
+            try:
+                self._active_peer.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as wake:
                 wake.connect(str(self.socket_path))
@@ -1348,28 +2174,42 @@ class _ControllerEvaluationBroker:
             except TimeoutError:
                 continue
             with peer:
+                self._active_peer = peer
                 try:
-                    self._handle(peer)
+                    self._handle_connection(peer)
                 except Exception as exc:  # response is diagnostic, never authority
                     try:
                         self._send(peer, {"status": "error", "error": str(exc)})
                     except OSError:
                         pass
+                finally:
+                    self._active_peer = None
 
     @staticmethod
     def _send(peer: socket.socket, payload: Mapping[str, Any]) -> None:
         encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
         peer.sendall(struct.pack("!Q", len(encoded)) + encoded)
 
-    def _handle(self, peer: socket.socket) -> None:
+    def _handle_connection(self, peer: socket.socket) -> None:
         peer_pid, peer_uid, _ = struct.unpack(
             "3i", peer.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+        if not self._controller_registered.wait(timeout=10) or self._stop.is_set():
+            raise ArenaCellRunnerError("controller broker registration timed out")
         if (peer_uid != os.getuid() or self._controller_pid is None
                 or peer_pid != self._controller_pid):
             raise ArenaCellRunnerError("controller broker rejected peer identity")
         stat = Path(f"/proc/{peer_pid}/stat").read_text(encoding="utf-8")
         if stat[stat.rfind(")") + 2:].split()[19] != self._controller_starttime:
             raise ArenaCellRunnerError("controller broker rejected PID reuse")
+        while not self._stop.is_set():
+            try:
+                self._handle_frame(peer)
+            except ArenaCellRunnerError as exc:
+                if "partial message" in str(exc):
+                    return
+                raise
+
+    def _handle_frame(self, peer: socket.socket) -> None:
         length = struct.unpack("!Q", _recv_exact(peer, 8))[0]
         if length > 16 * 1024 * 1024:
             raise ArenaCellRunnerError("controller broker request is too large")
@@ -1404,7 +2244,38 @@ class _ControllerEvaluationBroker:
                 raise ArenaCellRunnerError("controller candidate target is unsafe")
             target.write_text(text, encoding="utf-8")
             hashes[relative] = _sha256_file(target)
-        evaluation, window = self.evaluate(self._ordinal, evaluation_root)
+        cancel = threading.Event()
+        outcome: list[Any] = []
+
+        def invoke() -> None:
+            try:
+                outcome.append(self.evaluate(self._ordinal, evaluation_root, cancel))
+            except BaseException as exc:
+                outcome.append(exc)
+
+        worker = threading.Thread(target=invoke, daemon=True)
+        worker.start()
+        disconnected = False
+        while worker.is_alive():
+            if self._stop.wait(0.05):
+                cancel.set()
+            try:
+                if peer.recv(1, socket.MSG_PEEK | socket.MSG_DONTWAIT) == b"":
+                    disconnected = True
+                    cancel.set()
+            except BlockingIOError:
+                pass
+            except OSError:
+                disconnected = True
+                cancel.set()
+        worker.join()
+        if not outcome:
+            raise ArenaCellRunnerError("controller evaluation produced no outcome")
+        if isinstance(outcome[0], BaseException):
+            raise outcome[0]
+        if disconnected:
+            raise ArenaCellRunnerError("controller disconnected during evaluation")
+        evaluation, window = outcome[0]
         receipt = _self_hash({
             "schema": arena_upstream_common.BROKER_RESULT_SCHEMA,
             "campaign_id": self.request["campaign_id"],
@@ -1431,12 +2302,13 @@ class _ControllerEvaluationBroker:
         self._send(peer, receipt)
 
 
-def run_worker(
+def _run_worker_impl(
     request: Mapping[str, Any], *,
     claim_acquirer: Callable[..., Any] = device_claim.acquire_device_claim,
     sampler_factory: Callable[..., Any] = device_sampler.RocmSmiSampler,
+    evaluator_runner_factory: Callable[..., Any] = SandboxedEvaluatorRunner,
 ) -> dict[str, Any]:
-    """Execute one checkpoint, claiming only its two GPU measurements."""
+    """Implement one checkpoint behind :func:`run_worker` cleanup."""
     if request.get("schema") != CHECKPOINT_SCHEMA:
         raise ArenaCellRunnerError("worker request has the wrong schema")
     evaluator_python = _assert_worker_evaluator_identity(request)
@@ -1486,27 +2358,32 @@ def run_worker(
     if not isinstance(task_config, dict):
         raise ArenaCellRunnerError("Arena task config must be an object")
     baseline = bool(request.get("baseline"))
-    isolation_prefix: tuple[str, ...] | None = None
+    controller_runtime: arena_controller_sandbox.RuntimeAllowlist | None = None
     if not baseline:
         checkpoint = request.get("checkpoint_hours")
         if (isinstance(checkpoint, bool) or not isinstance(checkpoint, (int, float))
                 or float(checkpoint) not in arena_campaign.MATCHED_BUDGET_HOURS):
             raise ArenaCellRunnerError("worker checkpoint is not a matched budget")
-        # These gates precede compilation and the first GPU claim. A campaign
-        # cannot leave another misleading partial baseline before discovering
-        # that controller/candidate isolation is unavailable.
-        _require_candidate_evaluator_sandbox()
-        isolation_prefix = _controller_isolation_prefix()
+        # Resolve and hash the full controller runtime before compilation and
+        # before the first GPU claim.  An incomplete isolation closure must not
+        # leave a misleading partial baseline.
+        controller_runtime = _controller_runtime_allowlist(
+            request=request, arm=arm, workspace=workspace,
+            cell_root=cell_root, arena_root=arena_root,
+            repository_root=repository_root)
     elif request.get("checkpoint_hours") is not None:
         raise ArenaCellRunnerError(
             "starting-state baseline cannot have a checkpoint budget")
 
     log_path = cell_root / "arena.log"
     logger = logging.getLogger(f"autokernel.arena.{task_id}.{arm_id}")
-    logger.handlers.clear()
+    for existing_handler in logger.handlers[:]:
+        existing_handler.close()
+        logger.removeHandler(existing_handler)
     logger.setLevel(logging.INFO)
     logger.propagate = False
-    logger.addHandler(logging.FileHandler(log_path, encoding="utf-8"))
+    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    logger.addHandler(file_handler)
     environment = arena_adapter.architecture_environment(os.environ)
     environment.update({
         "HIP_VISIBLE_DEVICES": str(request.get("visible_device")),
@@ -1525,8 +2402,11 @@ def run_worker(
         action=lambda: vendor_evaluator.measure_baseline(
             workspace, task_config, logger, None),
         claim_acquirer=claim_acquirer, sampler_factory=sampler_factory)
+    baseline_document = arena_evaluator_child.serialize_baseline_cases(
+        baseline_cases)
     controller_stdout_sha256 = None
     broker_chain = None
+    controller_sandbox_execution = None
     if not baseline:
         checkpoint = request.get("checkpoint_hours")
         raw_prompt = vendor_prompt.prompt_builder(
@@ -1537,67 +2417,104 @@ def run_worker(
             "HIP_VISIBLE_DEVICES": "",
             "ROCR_VISIBLE_DEVICES": "",
             "CUDA_VISIBLE_DEVICES": "",
+            "PYTHONPATH": _controller_pythonpath(arm, repository_root),
+            "SSL_CERT_FILE": "/etc/ssl/certs/ca-certificates.crt",
+            "CLAUDE_CONFIG_DIR": "/home/node/.claude",
         })
-        assert isolation_prefix is not None
-        source_paths = _declared_task_sources(task_config)
+        source_paths = _declared_task_sources(task_config, workspace)
 
         def broker_evaluate(
-            ordinal: int, evaluation_root: Path,
+            ordinal: int, evaluation_root: Path, cancel_event: threading.Event,
         ) -> tuple[Mapping[str, Any], Mapping[str, Any]]:
-            evaluation_config = yaml.safe_load(
-                (evaluation_root / "config.yaml").read_text(encoding="utf-8"))
-            if not isinstance(evaluation_config, dict):
-                raise ArenaCellRunnerError("broker evaluation config is malformed")
+            evidence_root = evaluation_root.with_name(
+                f"{ordinal:04d}-evaluator-evidence")
+            evidence_root.mkdir(mode=0o700)
+            identity = {
+                "campaign_id": campaign_id,
+                **({"attempt_id": attempt_id} if attempt_id is not None else {}),
+                "claim_campaign_id": claim_campaign_id,
+                "task_id": task_id, "arm_id": arm_id,
+                "checkpoint_hours": checkpoint,
+                "phase": "controller_intermediate_evaluation",
+            }
 
-            def action() -> Mapping[str, Any]:
-                passed, error = vendor_evaluator.evaluate_compilation(
-                    evaluation_root, evaluation_config, logger, None)
-                if not passed:
-                    return {
-                        "pass_compilation": False, "pass_correctness": False,
-                        "valid_baseline_cases": 0, "valid_optimized_cases": 0,
-                        "average_speedup": 0.0,
-                        "compilation_error_message": str(error or ""),
-                    }
-                result = vendor_evaluator.evaluate_kernel(
-                    evaluation_root, evaluation_config, baseline_cases,
-                    logger, None)
-                if not isinstance(result, Mapping):
-                    raise ArenaCellRunnerError(
-                        "broker evaluator returned a non-object")
-                return dict(result)
+            def action() -> tuple[Mapping[str, Any], Mapping[str, Any]]:
+                return _run_sandboxed_arena_evaluation(
+                    evaluator_runner_factory=evaluator_runner_factory,
+                    arena_root=arena_root, evaluation_root=evaluation_root,
+                    evidence_root=evidence_root, identity=identity,
+                    evaluator_python=evaluator_python,
+                    baseline_document=baseline_document,
+                    baseline_receipt_sha256=baseline_window["receipt_sha256"],
+                    ordinal=ordinal,
+                    timeout_s=min(3600.0, float(checkpoint) * 3600),
+                    cancel_event=cancel_event)
 
-            return _run_gpu_measurement_window(
+            child_payload, window = _run_gpu_measurement_window(
                 request=request, cell_root=cell_root, ordinal=ordinal,
                 phase="controller_intermediate_evaluation", action=action,
                 window_path=(cell_root / "controller-evaluation-windows"
                              / f"{ordinal:04d}-measurement.json"),
                 claim_acquirer=claim_acquirer, sampler_factory=sampler_factory)
+            evaluation, execution = child_payload
+            window = _self_hash({
+                **{key: value for key, value in window.items()
+                   if key != "receipt_sha256"},
+                "evaluator_execution_receipt": execution,
+            })
+            _atomic_json(
+                cell_root / "controller-evaluation-windows"
+                / f"{ordinal:04d}-measurement.json", window)
+            return evaluation, window
 
         broker = _ControllerEvaluationBroker(
             request=request, workspace=workspace, cell_root=cell_root,
             source_paths=source_paths, evaluate=broker_evaluate,
             baseline_receipt_sha256=baseline_window["receipt_sha256"])
-        prepared = arena_adapter.prepare_task(arena_adapter.ArenaTask(
-            task_id=task_id,
-            task_prompt=raw_prompt,
-            workspace=str(workspace),
-            controller_id=arm_id,
-            round_id=f"{claim_campaign_id}-{checkpoint:g}h",
-            actual_gfx_arch=arena_adapter.TARGET_GFX_ARCH,
-        ), base_environment=controller_environment)
-        # This is the deliberately unclaimed gap.  The controller receives a
-        # GPU-blind environment and may spend its remote-model budget while
-        # another host tenant uses the MI210.
-        with broker:
-            controller_environment.update(broker.environment())
-            prepared = arena_adapter.prepare_task(
-                prepared.task, base_environment=controller_environment)
-            stdout = arena_adapter.launch(
-                prepared, _controller_argv(arm, float(checkpoint)),
-                timeout_seconds=int(float(checkpoint) * 3600),
-                command_prefix=isolation_prefix,
-                process_started=broker.register_controller)
+        with _staged_controller_codex_home(workspace) as codex_home:
+            controller_environment["CODEX_HOME"] = str(codex_home)
+            prepared = arena_adapter.prepare_task(arena_adapter.ArenaTask(
+                task_id=task_id,
+                task_prompt=raw_prompt,
+                workspace=str(workspace),
+                controller_id=arm_id,
+                round_id=f"{claim_campaign_id}-{checkpoint:g}h",
+                actual_gfx_arch=arena_adapter.TARGET_GFX_ARCH,
+            ), base_environment=controller_environment)
+            # This is the deliberately unclaimed gap.  The controller receives a
+            # GPU-blind environment and may spend its remote-model budget while
+            # another host tenant uses the MI210.
+            with broker:
+                argv = _controller_argv(
+                    arm, float(checkpoint),
+                    executable_path=str(request["arm_audit"]["executable_path"]),
+                    diagnostic_pilot_override=request.get(
+                        "diagnostic_pilot_controller_argv"))
+                assert controller_runtime is not None
+                invocation = arena_controller_sandbox.prepare_controller_sandbox(
+                    workspace=workspace,
+                    receipt_path=cell_root / CONTROLLER_ACTIVATION_RECEIPT,
+                    expected_argv=argv, runtime=controller_runtime,
+                    broker_socket_path=broker.socket_path,
+                    broker_peer_pid=broker.owner_pid,
+                    broker_peer_start_ticks=_controller_process_start_ticks(
+                        broker.owner_pid))
+                controller_environment.update(invocation.environment_overrides)
+                controller_environment.update(broker.environment())
+                prepared = arena_adapter.prepare_task(
+                    prepared.task, base_environment=controller_environment)
+                prepared = arena_adapter.PreparedArenaTask(
+                    task=prepared.task, prompt=prepared.prompt,
+                    prompt_sha256=prepared.prompt_sha256,
+                    environment={
+                        **prepared.environment,
+                        "PYTHONPATH": _controller_pythonpath(
+                            arm, repository_root),
+                    })
+                stdout, controller_sandbox_execution = _launch_isolated_controller(
+                    prepared=prepared, argv=argv,
+                    timeout_seconds=int(float(checkpoint) * 3600),
+                    broker=broker, invocation=invocation, cell_root=cell_root)
         controller_output = cell_root / "controller.stdout"
         controller_output.write_text(stdout, encoding="utf-8")
         controller_stdout_sha256 = _sha256_file(controller_output)
@@ -1631,16 +2548,70 @@ def run_worker(
             "selected_receipt_sha256": selected["receipt_sha256"],
             "source_paths": list(source_paths),
             "baseline_receipt_sha256": baseline_window["receipt_sha256"],
+            "controller_sandbox_execution_receipt_sha256":
+                controller_sandbox_execution["receipt_sha256"],
         }
 
-    evaluation, evaluation_window = _run_gpu_measurement_window(
-        request=request, cell_root=cell_root, ordinal=2,
-        phase="centralized_final_evaluation",
-        action=lambda: vendor_evaluator.evaluate_kernel(
-            workspace, task_config, baseline_cases, logger, None),
-        claim_acquirer=claim_acquirer, sampler_factory=sampler_factory)
+    result_workspace = workspace
+    if baseline:
+        evaluation, evaluation_window = _run_gpu_measurement_window(
+            request=request, cell_root=cell_root, ordinal=2,
+            phase="centralized_final_evaluation",
+            action=lambda: vendor_evaluator.evaluate_kernel(
+                workspace, task_config, baseline_cases, logger, None),
+            claim_acquirer=claim_acquirer, sampler_factory=sampler_factory)
+    else:
+        assert broker_chain is not None
+        result_workspace = cell_root / "final-evaluation-workspace"
+        _copy_task(broker.template, result_workspace)
+        for relative in source_paths:
+            source = _assert_contained(
+                workspace / relative, workspace, "selected candidate")
+            target = _assert_contained(
+                result_workspace / relative, result_workspace,
+                "selected candidate final target")
+            shutil.copyfile(source, target)
+        final_evidence_root = cell_root / "final-evaluator-evidence"
+        final_evidence_root.mkdir(mode=0o700)
+        final_cancel = threading.Event()
+        final_ordinal = broker._ordinal + 1
+
+        def final_action() -> tuple[Mapping[str, Any], Mapping[str, Any]]:
+            return _run_sandboxed_arena_evaluation(
+                evaluator_runner_factory=evaluator_runner_factory,
+                arena_root=arena_root, evaluation_root=result_workspace,
+                evidence_root=final_evidence_root,
+                identity={
+                    "campaign_id": campaign_id,
+                    **({"attempt_id": attempt_id}
+                       if attempt_id is not None else {}),
+                    "claim_campaign_id": claim_campaign_id,
+                    "task_id": task_id, "arm_id": arm_id,
+                    "checkpoint_hours": request.get("checkpoint_hours"),
+                    "phase": "centralized_final_evaluation",
+                },
+                evaluator_python=evaluator_python,
+                baseline_document=baseline_document,
+                baseline_receipt_sha256=baseline_window["receipt_sha256"],
+                ordinal=final_ordinal,
+                timeout_s=EVALUATION_RESERVE_SECONDS,
+                cancel_event=final_cancel)
+
+        final_payload, evaluation_window = _run_gpu_measurement_window(
+            request=request, cell_root=cell_root, ordinal=2,
+            phase="centralized_final_evaluation", action=final_action,
+            claim_acquirer=claim_acquirer, sampler_factory=sampler_factory)
+        evaluation, execution = final_payload
+        evaluation_window = _self_hash({
+            **{key: value for key, value in evaluation_window.items()
+               if key != "receipt_sha256"},
+            "evaluator_execution_receipt": execution,
+        })
+        _atomic_json(
+            cell_root / "measurement-windows"
+            / "02-centralized_final_evaluation.json", evaluation_window)
     vendor_evaluator.write_task_result(
-        workspace, evaluation, baseline_cases, task_id, arm_id, logger,
+        result_workspace, evaluation, baseline_cases, task_id, arm_id, logger,
         create_plots=False)
     artifacts = _artifact_hashes(cell_root)
     return {
@@ -1653,14 +2624,18 @@ def run_worker(
         "arm_id": arm_id,
         "baseline": baseline,
         "checkpoint_hours": request.get("checkpoint_hours"),
-        "evaluation": {
-            "pass_compilation": bool(evaluation.get("pass_compilation")),
-            "pass_correctness": bool(evaluation.get("pass_correctness")),
-            "valid_baseline_cases": int(evaluation.get("valid_baseline_cases", 0)),
-            "valid_optimized_cases": int(evaluation.get("valid_optimized_cases", 0)),
-            "average_speedup": float(evaluation.get("average_speedup", 0.0)),
-        },
+        "evaluation": (
+            dict(evaluation) if not baseline else {
+                "pass_compilation": bool(evaluation.get("pass_compilation")),
+                "pass_correctness": bool(evaluation.get("pass_correctness")),
+                "valid_baseline_cases": int(
+                    evaluation.get("valid_baseline_cases", 0)),
+                "valid_optimized_cases": int(
+                    evaluation.get("valid_optimized_cases", 0)),
+                "average_speedup": float(evaluation.get("average_speedup", 0.0)),
+            }),
         "controller_stdout_sha256": controller_stdout_sha256,
+        "controller_sandbox_execution": controller_sandbox_execution,
         "broker_evaluation_chain": broker_chain,
         "measurement_windows": [baseline_window, evaluation_window],
         "artifacts": artifacts,
@@ -1674,6 +2649,31 @@ def run_worker(
             "promotion_authority": False,
         },
     }
+
+
+def run_worker(
+    request: Mapping[str, Any], *,
+    claim_acquirer: Callable[..., Any] = device_claim.acquire_device_claim,
+    sampler_factory: Callable[..., Any] = device_sampler.RocmSmiSampler,
+    evaluator_runner_factory: Callable[..., Any] = SandboxedEvaluatorRunner,
+) -> dict[str, Any]:
+    """Execute one checkpoint and close its invocation-owned log handler."""
+    logger: logging.Logger | None = None
+    try:
+        task = request.get("task")
+        arm = request.get("arm")
+        if isinstance(task, Mapping) and isinstance(arm, Mapping):
+            logger = logging.getLogger(
+                f"autokernel.arena.{task.get('task_id')}.{arm.get('arm_id')}")
+        return _run_worker_impl(
+            request, claim_acquirer=claim_acquirer,
+            sampler_factory=sampler_factory,
+            evaluator_runner_factory=evaluator_runner_factory)
+    finally:
+        if logger is not None:
+            for handler in logger.handlers[:]:
+                handler.close()
+                logger.removeHandler(handler)
 
 
 def _run_manifest(
@@ -1782,6 +2782,7 @@ def _publish_or_verify_aggregate(
 
 def _validate_broker_chain(
     checkpoint: Mapping[str, Any], *, cell_root: Path, claim_scope: str,
+    arena_root: Path,
 ) -> None:
     chain = checkpoint.get("broker_evaluation_chain")
     if not isinstance(chain, Mapping):
@@ -1836,6 +2837,22 @@ def _validate_broker_chain(
                     "campaign_id", "task_id", "arm_id", "checkpoint_hours"))
                 or window.get("claim_campaign_id") != claim_scope):
             raise ArenaCellRunnerError("broker measurement semantic identity drifted")
+        evaluation_root = Path(str(result.get("evaluation_root"))).resolve()
+        expected_evaluation_root = (
+            cell_root / "controller-evaluation-windows"
+            / f"{ordinal:04d}-workspace").resolve()
+        if evaluation_root != expected_evaluation_root:
+            raise ArenaCellRunnerError("broker evaluation root identity drifted")
+        _validate_evaluator_execution(
+            window.get("evaluator_execution_receipt"),
+            expected_workspace=evaluation_root,
+            expected_phase="controller_intermediate_evaluation",
+            expected_identity=checkpoint,
+            persisted_path=evaluation_root.with_name(
+                f"{ordinal:04d}-evaluator-evidence") / "execution-receipt.json",
+            expected_evaluation=result["evaluation"],
+            expected_baseline_receipt_sha256=str(
+                chain["baseline_receipt_sha256"]), arena_root=arena_root)
         opened, released = window.get("device_claim_open"), window.get(
             "device_claim_released")
         if (not isinstance(opened, Mapping) or not isinstance(released, Mapping)
@@ -1940,8 +2957,14 @@ def validate_campaign_receipts(output_root: str | Path) -> dict[str, Any]:
             if belief is not None:
                 raise ArenaCellRunnerError("baseline carries a belief receipt")
         else:
+            sources = manifest.get("sources")
+            if not isinstance(sources, Mapping) \
+                    or not isinstance(sources.get("arena_root"), str):
+                raise ArenaCellRunnerError(
+                    "campaign manifest lacks pinned Arena source root")
             _validate_broker_chain(
-                receipt, cell_root=cell_root, claim_scope=claim_scope)
+                receipt, cell_root=cell_root, claim_scope=claim_scope,
+                arena_root=Path(sources["arena_root"]))
             if not isinstance(belief, Mapping):
                 raise ArenaCellRunnerError("controller checkpoint lacks belief evidence")
             _verify_self_hash(belief, "belief receipt")
@@ -2153,9 +3176,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 __all__ = [
     "AGGREGATE_SCHEMA", "CHECKPOINT_SCHEMA", "MEASUREMENT_WINDOW_SCHEMA",
-    "RUNNER_SCHEMA",
+    "DIAGNOSTIC_PILOT_SCHEMA", "RUNNER_SCHEMA",
     "RUN_MANIFEST_SCHEMA",
     "ArenaCampaignInterrupted", "ArenaCellRunnerError",
+    "DiagnosticPilotCellRequest",
     "GovernedArenaCellRunner", "RunnerConfig",
     "execute_from_cli", "run_worker", "validate_campaign_receipts",
 ]

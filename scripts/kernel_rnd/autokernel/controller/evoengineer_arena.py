@@ -1,23 +1,26 @@
 #!/usr/bin/env python3
-"""Paper-faithful EvoEngineer-Full policy seam for AgentKernelArena.
+"""Paper-faithful EvoEngineer-Full controller for AgentKernelArena.
 
 This module admits the exact MIT-licensed, paper-era EvoToolkit source and
 defines the two host-specific bridges its unchanged ``EvoEngineer.run`` loop
 will consume: a text model and a one-file AgentKernelArena task/interface.
 
-It deliberately has no CLI or campaign launcher.  The shared Arena runtime
-must first provide claim-scoped intermediate evaluation through
-``ArenaWorkspaceEvaluator.evaluate(files)``.  Until then the campaign arm is
-``missing`` and importing this module performs no model, evaluator, compiler,
-or GPU work.
+Every candidate is evaluated only through the parent-owned broker behind
+``ArenaWorkspaceEvaluator.evaluate(files)``.  Importing this module performs no
+model, evaluator, compiler, or GPU work; the campaign runner independently
+enforces controller and evaluator process isolation before launching it.
 """
 
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
+import json
+import os
 from pathlib import Path
+import re
 import sys
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from . import arena_adapter
 from . import arena_upstream_common as common
@@ -59,9 +62,15 @@ SOURCE_PIN = arena_adapter.VendorPin(
                          if path != "LICENSE"),
 )
 DEFAULT_SOURCE_ROOT = Path(
-    "/mnt/raid0/llm/autokernel/vendor/arena-controllers/evotoolkit")
+    "/mnt/raid0/llm/autokernel/vendor/arena-controllers/evoengineer")
+RUNTIME_PYTHON = Path(
+    "/mnt/raid0/llm/tools/geak-v1-rocm62-py312/bin/python")
 ENTRYPOINT_RELATIVE = (
     "scripts/kernel_rnd/autokernel/controller/evoengineer_arena.py")
+EXECUTABLE_MODULE = "scripts.kernel_rnd.autokernel.controller.evoengineer_arena"
+ADAPTER_KIND = "evoengineer_full_arena_v1"
+# Kept until the campaign manifest is advanced in its self-pinning follow-up
+# commit; the current manifest must remain loadable at every intermediate tip.
 PENDING_ADAPTER_KIND = "evoengineer_full_arena_pending_v1"
 PINNED_MODEL_IDS = common.PINNED_MODEL_IDS
 REQUIRED_CLIS = common.REQUIRED_CLIS
@@ -76,17 +85,6 @@ NUM_EVALUATORS = 4
 INIT_OPERATORS = (("init", 0),)
 OFFSPRING_OPERATORS = (("crossover", 2), ("mutation", 1))
 
-PENDING_RUNTIME_DEPENDENCIES = (
-    "an exact clean vendor checkout at the admitted paper-era commit",
-    "a parent-worker AF_UNIX evaluation broker behind "
-    "ArenaWorkspaceEvaluator.evaluate(files)",
-    "launcher-enforced controller device isolation with no controller-side "
-    "vendor measure/evaluate path",
-    "a hash-bound campaign launcher and receipt integration validated after "
-    "the evaluation broker lands",
-)
-
-
 class EvoEngineerArenaError(common.UpstreamControllerError):
     """The EvoEngineer source or policy seam is not exactly admissible."""
 
@@ -100,7 +98,7 @@ class UpstreamTypes:
     operator_type: Any
     solution_type: Any
     evaluation_result_type: Any
-    full_interface_type: Any
+    full_interface_type: Any | None = None
 
 
 def inspect_source(source_root: str | Path) -> dict[str, Any]:
@@ -139,17 +137,13 @@ def load_upstream(source_root: str | Path) -> UpstreamTypes:
         from evotoolkit.core import EvaluationResult, Operator, Solution
         from evotoolkit.evo_method.evoengineer.evoengineer import EvoEngineer
         from evotoolkit.evo_method.evoengineer.run_config import EvoEngineerConfig
-        from evotoolkit.task.cuda_engineering.method_interface.evoengineer_full_interface import (
-            EvoEngineerFullCudaInterface,
-        )
     except ImportError as exc:
         raise EvoEngineerArenaError(
             "cannot import the admitted EvoEngineer paper source") from exc
     return UpstreamTypes(
         controller_type=EvoEngineer, config_type=EvoEngineerConfig,
         operator_type=Operator, solution_type=Solution,
-        evaluation_result_type=EvaluationResult,
-        full_interface_type=EvoEngineerFullCudaInterface)
+        evaluation_result_type=EvaluationResult)
 
 
 def policy_identity() -> dict[str, Any]:
@@ -169,13 +163,6 @@ def policy_identity() -> dict[str, Any]:
         "insight_sampling": "upstream random sample of up to three thoughts",
         "score_direction": "higher_is_better",
     }
-
-
-def execution_refusal() -> None:
-    """Fail closed until the shared broker and launcher are integrated."""
-    raise EvoEngineerArenaError(
-        "EvoEngineer is source-admitted but not executable: "
-        + "; ".join(PENDING_RUNTIME_DEPENDENCIES))
 
 
 class EvoEngineerTextModel:
@@ -254,9 +241,6 @@ class EvoEngineerFullArenaInterface:
     def __init__(self, *, task: EvoEngineerArenaTask, types: UpstreamTypes):
         self.task = task
         self.types = types
-        # Parsing is policy-bearing and target-independent, so retain the exact
-        # upstream Full parser instead of reconstructing it in the AMD port.
-        self._upstream_parser = object.__new__(types.full_interface_type)
 
     def make_init_sol(self) -> Any:
         solution = self.task.make_init_sol_wo_other_info()
@@ -320,7 +304,67 @@ class EvoEngineerFullArenaInterface:
         return [{"role": "user", "content": "\n\n".join(sections)}]
 
     def parse_response(self, response: str) -> Any:
-        return self._upstream_parser.parse_response(response)
+        """Retain the upstream Full parser's four ordered fallbacks."""
+        content = response.strip() if isinstance(response, str) else ""
+        if not content:
+            return self.types.solution_type("")
+
+        def any_code_block(text: str) -> str:
+            language = re.search(
+                r"```(?:triton|cpp|c\+\+|cuda|python)\n(.*?)```",
+                text, re.DOTALL | re.IGNORECASE)
+            if language:
+                return language.group(1).strip()
+            generic = re.search(r"```[^\n]*\n(.*?)```", text, re.DOTALL)
+            if generic:
+                return generic.group(1).strip()
+            section = re.search(
+                r"code:\s*\n*(.*?)(?=\n(?:thought|$))", text,
+                re.DOTALL | re.IGNORECASE)
+            if section:
+                code = re.sub(
+                    r"^```[^\n]*\n?", "", section.group(1).strip())
+                return re.sub(r"\n?```\s*$", "", code).strip()
+            return ""
+
+        name_match = re.search(
+            r"^name:\s*([^\n\r]+?)(?:\n|\r|$)", content,
+            re.MULTILINE | re.IGNORECASE)
+        code_match = re.search(
+            r"code:\s*\n*```(?:triton|cpp|c\+\+|cuda|python)?\n(.*?)```",
+            content, re.DOTALL | re.IGNORECASE)
+        thought_match = re.search(
+            r"thought:\s*(.*?)$", content, re.DOTALL | re.IGNORECASE)
+        if code_match:
+            return self.types.solution_type(
+                code_match.group(1).strip(), other_info={
+                    "name": (name_match.group(1).strip()
+                             if name_match else "extracted"),
+                    "thought": (thought_match.group(1).strip()
+                                if thought_match else ""),
+                })
+        flexible_name = re.search(
+            r"(?:name|Name|NAME)\s*:?\s*([^\n\r]+)", content,
+            re.IGNORECASE)
+        flexible_thought = re.search(
+            r"(?:thought|Thought|THOUGHT)\s*:?\s*(.*?)(?=\n(?:name|code)|$)",
+            content, re.DOTALL | re.IGNORECASE)
+        flexible_code = any_code_block(content)
+        if flexible_code:
+            return self.types.solution_type(
+                flexible_code, other_info={
+                    "name": (flexible_name.group(1).strip()
+                             if flexible_name else "extracted"),
+                    "thought": (flexible_thought.group(1).strip()
+                                if flexible_thought else ""),
+                })
+        fallback_code = any_code_block(content)
+        if fallback_code:
+            return self.types.solution_type(
+                fallback_code, other_info={
+                    "name": "extracted", "thought": "Fallback parsing"})
+        return self.types.solution_type(
+            content, other_info={"name": "raw", "thought": "Failed to parse"})
 
 
 def build_controller(
@@ -343,16 +387,101 @@ def build_controller(
     return types.controller_type(config)
 
 
+def run_controller(
+    *, prompt: str, workspace: str | Path, arena_root: str | Path,
+    source_root: str | Path, budget: common.ControllerBudget,
+    model_factory: Callable[..., Any] = common.CodexTextModel,
+    evaluator_factory: Callable[..., Any] = common.ArenaWorkspaceEvaluator,
+    upstream_loader: Callable[[str | Path], UpstreamTypes] = load_upstream,
+) -> dict[str, Any]:
+    """Run the exact upstream ``EvoEngineer.run`` policy over broker feedback."""
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise EvoEngineerArenaError("Arena prompt must be non-empty")
+    root = common.workspace_root(workspace)
+    source = Path(source_root).resolve()
+    source_receipt = inspect_source(source)
+    model = model_factory(workspace=root, budget=budget)
+    evaluator = evaluator_factory(
+        workspace=root, arena_root=Path(arena_root).resolve())
+    output = root / common.ARTIFACT_DIRNAME / "evoengineer-runtime"
+    output.mkdir(parents=True, exist_ok=False)
+    controller = build_controller(
+        prompt=prompt, evaluator=evaluator, model=model, output_path=output,
+        types=upstream_loader(source))
+    stop_reason = "upstream_complete"
+    try:
+        controller.run()
+    except common.ControllerBudgetExpired:
+        stop_reason = "campaign_checkpoint"
+    evaluator.materialize_best()
+    state = getattr(controller, "run_state_dict", None)
+    return common.build_controller_receipt(
+        controller_id=CONTROLLER_ID, source_root=source,
+        source_commit=SOURCE_COMMIT, entrypoint=source / UPSTREAM_ENTRYPOINT,
+        model=model, evaluator=evaluator, stop_reason=stop_reason,
+        extra={
+            "upstream_callable": "EvoEngineer.run",
+            "variant": VARIANT,
+            "policy": policy_identity(),
+            "source_admission": source_receipt,
+            "generation": getattr(state, "generation", None),
+            "sample_count": getattr(state, "tot_sample_nums", None),
+            "safe_runtime_root": str(output),
+        })
+
+
+def campaign_argv(executable: str | None = None) -> tuple[str, ...]:
+    python = str(RUNTIME_PYTHON if executable is None else executable)
+    source_root = Path(os.environ.get(
+        "AUTOKERNEL_ARENA_CONTROLLER_ROOT",
+        str(DEFAULT_SOURCE_ROOT.parent))) / DEFAULT_SOURCE_ROOT.name
+    return (
+        python, "-m", EXECUTABLE_MODULE,
+        "--model", common.MODEL_ID, "--effort", common.MODEL_EFFORT,
+        "--checkpoint-hours", "32", "--timeout-seconds", "115200",
+        "--workspace", ".",
+        "--arena-root", os.environ.get(
+            "AUTOKERNEL_AGENT_KERNEL_ARENA_ROOT",
+            "/mnt/raid0/llm/autokernel/vendor/agent-kernel-arena"),
+        "--source-root", str(source_root),
+    )
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--model", required=True)
+    parser.add_argument("--effort", required=True)
+    parser.add_argument("--checkpoint-hours", required=True, type=float)
+    parser.add_argument("--timeout-seconds", required=True, type=int)
+    parser.add_argument("--workspace", required=True)
+    parser.add_argument("--arena-root", required=True)
+    parser.add_argument("--source-root", required=True)
+    args = parser.parse_args(argv)
+    if args.model != common.MODEL_ID or args.effort != common.MODEL_EFFORT:
+        parser.error("model and effort must match the fixed campaign pins")
+    receipt = run_controller(
+        prompt=sys.stdin.read(), workspace=args.workspace,
+        arena_root=args.arena_root, source_root=args.source_root,
+        budget=common.ControllerBudget(
+            args.checkpoint_hours, args.timeout_seconds))
+    print(json.dumps(receipt, sort_keys=True))
+    return 0
+
+
 __all__ = [
-    "CONTROLLER_ID", "DEFAULT_SOURCE_ROOT", "ENTRYPOINT_RELATIVE",
+    "ADAPTER_KIND", "CONTROLLER_ID", "DEFAULT_SOURCE_ROOT", "ENTRYPOINT_RELATIVE",
+    "EXECUTABLE_MODULE",
     "EXPECTED_SOURCE_SHA256", "EvoEngineerArenaError",
     "EvoEngineerArenaTask", "EvoEngineerFullArenaInterface",
     "EvoEngineerTextModel", "INIT_OPERATORS", "MAX_GENERATIONS",
     "MAX_SAMPLE_NUMS", "NUM_EVALUATORS", "NUM_SAMPLERS",
-    "OFFSPRING_OPERATORS", "PENDING_ADAPTER_KIND",
-    "PENDING_RUNTIME_DEPENDENCIES", "PINNED_MODEL_IDS", "POPULATION_SIZE",
-    "REQUIRED_CLIS", "SOURCE_COMMIT", "SOURCE_PIN", "SOURCE_RELEASE",
+    "OFFSPRING_OPERATORS", "PENDING_ADAPTER_KIND", "PINNED_MODEL_IDS", "POPULATION_SIZE",
+    "REQUIRED_CLIS", "RUNTIME_PYTHON", "SOURCE_COMMIT", "SOURCE_PIN", "SOURCE_RELEASE",
     "SOURCE_RELEASE_ASSET_SHA256", "UPSTREAM_ENTRYPOINT", "UpstreamTypes",
-    "VARIANT", "build_controller", "execution_refusal", "inspect_source",
-    "load_upstream", "policy_identity",
+    "VARIANT", "build_controller", "campaign_argv", "inspect_source",
+    "load_upstream", "policy_identity", "run_controller",
 ]
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -19,7 +19,6 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
-import signal
 import socket
 import struct
 import subprocess
@@ -30,6 +29,7 @@ from types import SimpleNamespace
 from typing import Any, Mapping
 
 from . import arena_adapter
+from ..execution import sandbox
 MODEL_ID = "gpt-5.6-sol"
 MODEL_EFFORT = "high"
 PINNED_MODEL_IDS = (f"{MODEL_ID}:{MODEL_EFFORT}:upstream-controller",)
@@ -50,49 +50,6 @@ class UpstreamControllerError(RuntimeError):
 
 class ControllerBudgetExpired(UpstreamControllerError):
     """The matched controller wall-time budget has been exhausted."""
-
-
-def _live_process_group_members(process_group_id: int) -> tuple[int, ...]:
-    members: list[int] = []
-    for entry in Path("/proc").iterdir():
-        if not entry.name.isdigit():
-            continue
-        try:
-            stat = (entry / "stat").read_text(encoding="utf-8")
-            fields = stat[stat.rfind(")") + 2:].split()
-            state = fields[0]
-            group = int(fields[2])
-        except (FileNotFoundError, IndexError, PermissionError, ValueError):
-            continue
-        if group == process_group_id and state != "Z":
-            members.append(int(entry.name))
-    return tuple(sorted(members))
-
-
-def _terminate_captured_process_group(
-    process_group_id: int, *, grace_seconds: float = 5.0,
-) -> None:
-    if process_group_id <= 1 or process_group_id == os.getpgrp():
-        raise UpstreamControllerError("refusing an unsafe process-group target")
-    members = _live_process_group_members(process_group_id)
-    if not members:
-        return
-    for sig in (signal.SIGTERM, signal.SIGKILL):
-        try:
-            os.killpg(process_group_id, sig)
-        except ProcessLookupError:
-            return
-        deadline = time.monotonic() + grace_seconds
-        while time.monotonic() < deadline:
-            members = _live_process_group_members(process_group_id)
-            if not members:
-                return
-            time.sleep(0.05)
-    members = _live_process_group_members(process_group_id)
-    if members:
-        raise UpstreamControllerError(
-            f"model process group {process_group_id} survived teardown: "
-            f"{list(members)}")
 
 
 def _sha256_file(path: Path) -> str:
@@ -146,8 +103,8 @@ def workspace_root(value: str | Path) -> Path:
 
 def _assert_gpu_devices_inaccessible() -> None:
     """Prove controller deliberation cannot open either ROCm device surface."""
-    devices = [Path("/dev/kfd"), *sorted(Path("/dev/dri").glob("renderD*"))]
-    denied = {errno.EACCES, errno.EPERM, errno.ENOENT, errno.ENODEV}
+    devices = (Path("/dev/kfd"), Path("/dev/dri/renderD128"))
+    denied = {errno.EACCES, errno.EPERM}
     for device in devices:
         for flags in (os.O_RDONLY, os.O_RDWR):
             try:
@@ -161,6 +118,33 @@ def _assert_gpu_devices_inaccessible() -> None:
                 os.close(descriptor)
                 raise UpstreamControllerError(
                     f"controller is not device-isolated: opened {device}")
+
+
+def _timeout_text(value: str | bytes | None) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return ""
+
+
+def _defer_timed_out_child(process: subprocess.Popen[str]) -> None:
+    """Release pipes and let the parent controller cgroup own final teardown.
+
+    A sandboxed controller cannot inspect ``/proc`` or send signals.  The
+    launcher-side lifecycle verifier owns the controller cgroup and removes
+    any descendants after the controller exits.  A daemon waiter keeps the
+    ``Popen`` object live long enough to reap a child that exits on its own,
+    without delaying controller exit when the cgroup must do the cleanup.
+    """
+    for stream in (process.stdin, process.stdout, process.stderr):
+        if stream is not None and not stream.closed:
+            stream.close()
+    threading.Thread(
+        target=process.wait,
+        name=f"autokernel-controller-child-{process.pid}",
+        daemon=True,
+    ).start()
 
 
 @dataclass(frozen=True)
@@ -200,7 +184,8 @@ class CodexTextModel:
             "HIP_VISIBLE_DEVICES": "", "ROCR_VISIBLE_DEVICES": "",
             "CUDA_VISIBLE_DEVICES": "",
         })
-        for key in (BROKER_SOCKET_ENV, BROKER_TOKEN_ENV, BROKER_OWNER_PID_ENV):
+        for key in (BROKER_SOCKET_ENV, BROKER_TOKEN_ENV, BROKER_OWNER_PID_ENV,
+                    sandbox.BROKER_FD_ENV):
             self.environment.pop(key, None)
         executable = shutil.which("codex", path=self.environment.get("PATH"))
         if executable is None:
@@ -256,19 +241,14 @@ class CodexTextModel:
         stderr = ""
         try:
             stdout, stderr = process.communicate(input=prompt, timeout=remaining)
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as exc:
             timed_out = True
-        finally:
-            cleanup_error: Exception | None = None
-            try:
-                _terminate_captured_process_group(process.pid)
-            except Exception as exc:  # reap the exact child before surfacing teardown
-                cleanup_error = exc
-            if process.poll() is None:
-                process.kill()
-            stdout, stderr = process.communicate(timeout=5)
-            if cleanup_error is not None:
-                raise cleanup_error
+            stdout = _timeout_text(exc.stdout)
+            stderr = _timeout_text(exc.stderr)
+            _defer_timed_out_child(process)
+        except BaseException:
+            _defer_timed_out_child(process)
+            raise
         stderr_path.write_text(stderr, encoding="utf-8")
         event = {
             "ordinal": ordinal,
@@ -394,6 +374,17 @@ class ArenaWorkspaceEvaluator:
         self.last_record: EvaluationRecord | None = None
         self.evaluation_count = 0
         self.broker_receipts: list[dict[str, Any]] = []
+        inherited_fd = os.environ.get(sandbox.BROKER_FD_ENV)
+        self._broker_stream: socket.socket | None = None
+        if inherited_fd is not None:
+            try:
+                descriptor = int(inherited_fd)
+                self._broker_stream = socket.socket(fileno=os.dup(descriptor))
+            except (OSError, ValueError) as exc:
+                raise UpstreamControllerError(
+                    "Arena evaluator inherited broker descriptor is invalid") from exc
+            finally:
+                os.environ.pop(sandbox.BROKER_FD_ENV, None)
         # Upstream controllers may generate candidates concurrently, but the
         # Arena evaluator owns one mutable copied workspace and one physical
         # GPU. Serialize the materialize/evaluate/restore transaction while
@@ -528,8 +519,16 @@ class ArenaWorkspaceEvaluator:
         if len(encoded) > _MAX_BROKER_MESSAGE_BYTES:
             raise UpstreamControllerError("Arena broker request exceeds its size limit")
         try:
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-                client.connect(str(self.broker_socket))
+            broker_stream = getattr(self, "_broker_stream", None)
+            if broker_stream is None:
+                client_context = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                client_context.connect(str(self.broker_socket))
+                close_after = True
+            else:
+                client_context = broker_stream
+                close_after = False
+            client = client_context
+            try:
                 server_pid, server_uid, _ = struct.unpack(
                     "3i", client.getsockopt(
                         socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
@@ -543,6 +542,9 @@ class ArenaWorkspaceEvaluator:
                     raise UpstreamControllerError(
                         "Arena broker response exceeds its size limit")
                 receipt = json.loads(_recv_exact(client, length))
+            finally:
+                if close_after:
+                    client.close()
         except (OSError, json.JSONDecodeError, struct.error) as exc:
             raise UpstreamControllerError(
                 "Arena evaluation broker IPC failed") from exc

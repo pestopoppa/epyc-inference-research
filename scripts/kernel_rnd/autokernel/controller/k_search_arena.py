@@ -33,6 +33,8 @@ EXECUTABLE_MODULE = (
 UPSTREAM_ENTRYPOINT = "k_search/kernel_generators/kernel_generator_world_model.py"
 PINNED_MODEL_IDS = common.PINNED_MODEL_IDS
 REQUIRED_CLIS = common.REQUIRED_CLIS
+CONTROLLER_PYTHON = (
+    "/mnt/raid0/llm/tools/geak-v1-rocm62-py312/bin/python")
 
 
 class KSearchArenaError(common.UpstreamControllerError):
@@ -229,7 +231,7 @@ def run_controller(
     )
 
 
-def campaign_argv(executable: str = "python3") -> tuple[str, ...]:
+def campaign_argv(executable: str = CONTROLLER_PYTHON) -> tuple[str, ...]:
     source_root = Path(os.environ.get(
         "AUTOKERNEL_ARENA_CONTROLLER_ROOT",
         str(DEFAULT_SOURCE_ROOT.parent))) / DEFAULT_SOURCE_ROOT.name
@@ -270,7 +272,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 __all__ = [
-    "CONTROLLER_ID", "DEFAULT_SOURCE_ROOT", "ENTRYPOINT_RELATIVE",
+    "CONTROLLER_ID", "CONTROLLER_PYTHON", "DEFAULT_SOURCE_ROOT", "ENTRYPOINT_RELATIVE",
     "EXECUTABLE_MODULE", "KSearchArenaError", "KSearchArenaTask",
     "PINNED_MODEL_IDS", "REQUIRED_CLIS", "SOURCE_COMMIT", "SOURCE_PIN",
     "UPSTREAM_ENTRYPOINT", "campaign_argv", "run_controller",

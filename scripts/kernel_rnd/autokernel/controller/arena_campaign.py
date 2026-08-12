@@ -15,9 +15,9 @@ gap for the prospective MI210 comparison:
   refusal receipt before any controller or GPU command can start.
 
 The repository carries ``claude_codex_actor_critic`` plus governed adapters for
-the pinned upstream KernelFoundry, K-Search, Xe-Forge, and GEAK-v1
-implementations. The other two controller names remain exact refusals; a similarly named command does
-not count as their implementation.
+the pinned upstream EvoEngineer-Full, KernelFoundry, K-Search, Xe-Forge, and
+GEAK-v1 implementations. ARGUS remains an exact refusal; a similarly named
+command does not count as its implementation.
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ from ..evaluator import rebench_scoring
 CAMPAIGN_SCHEMA = "epyc.autokernel.arena_controller_campaign.v1"
 AUDIT_SCHEMA = "epyc.autokernel.arena_controller_campaign_audit.v1"
 AVAILABLE_SOURCE_AUDIT_SCHEMA = (
-    "epyc.autokernel.arena_available_source_campaign_audit.v1")
+    "epyc.autokernel.arena_available_source_campaign_audit.v2")
 BASELINE_ARM_ID = "starting_state_baseline"
 PRIMARY_CONTROLLER_IDS = (
     "claude_codex_actor_critic",
@@ -62,9 +62,9 @@ PRIMARY_CONTROLLER_IDS = (
 )
 PRIMARY_PANEL_IDS = (BASELINE_ARM_ID, *PRIMARY_CONTROLLER_IDS)
 AVAILABLE_SOURCE_PANEL_IDS = (
-    BASELINE_ARM_ID, "claude_codex_actor_critic", "kernelfoundry",
+    BASELINE_ARM_ID, "claude_codex_actor_critic", "evoengineer", "kernelfoundry",
     "k_search", "xe_forge", "geak_v1")
-AVAILABLE_SOURCE_EXCLUDED_IDS = ("evoengineer", "argus")
+AVAILABLE_SOURCE_EXCLUDED_IDS = ("argus",)
 DISCOVERY_ONLY_CONTROLLER_IDS: tuple[str, ...] = ()
 MATCHED_BUDGET_HOURS = rebench_scoring.DEFAULT_BUDGET_HOURS
 IMPLEMENTATION_MODULE = Path(__file__).resolve()
@@ -225,6 +225,33 @@ class ArmImplementation:
             if tuple(upstream_values) != expected_upstream:
                 raise ArenaCampaignError(
                     "the pending EvoEngineer arm must bind the exact paper-era source")
+        if (self.availability == "ready"
+                and self.arm_id == evoengineer_arena.CONTROLLER_ID):
+            expected_tail = evoengineer_arena.campaign_argv("python3")[1:]
+            if self.adapter_kind != evoengineer_arena.ADAPTER_KIND:
+                raise ArenaCampaignError(
+                    "evoengineer requires its exact Full Arena adapter")
+            if len(self.argv) < 2 or self.argv[1:] != expected_tail:
+                raise ArenaCampaignError(
+                    "evoengineer argv differs from its pinned executable")
+            if self.entrypoint_path != evoengineer_arena.ENTRYPOINT_RELATIVE:
+                raise ArenaCampaignError(
+                    "evoengineer entrypoint differs from its implementation")
+            if self.model_ids != evoengineer_arena.PINNED_MODEL_IDS:
+                raise ArenaCampaignError(
+                    "evoengineer model_ids differ from exact model/effort pins")
+            if self.required_clis != evoengineer_arena.REQUIRED_CLIS:
+                raise ArenaCampaignError("evoengineer requires the Codex CLI")
+            expected_upstream = (
+                "vendor://evoengineer", evoengineer_arena.SOURCE_COMMIT,
+                evoengineer_arena.UPSTREAM_ENTRYPOINT,
+                evoengineer_arena.EXPECTED_SOURCE_SHA256[
+                    evoengineer_arena.UPSTREAM_ENTRYPOINT],
+                "LICENSE", evoengineer_arena.EXPECTED_SOURCE_SHA256["LICENSE"],
+            )
+            if tuple(upstream_values) != expected_upstream:
+                raise ArenaCampaignError(
+                    "evoengineer must bind the exact paper-era source")
         if self.availability == "ready" and self.arm_id == claude_codex_actor_critic.CONTROLLER_ID:
             expected_tail = claude_codex_actor_critic.campaign_argv("python3")[1:]
             if self.adapter_kind != "agentkernelarena_three_arg_v1":
@@ -795,7 +822,7 @@ def audit_available_source_campaign(
     enumerator: str = "/opt/rocm/bin/rocm_agent_enumerator",
     inspect_hardware: bool = True,
 ) -> dict[str, Any]:
-    """Audit a separately labelled six-arm available-source diagnostic panel."""
+    """Audit a separately labelled seven-arm available-source diagnostic panel."""
     full = audit_campaign(
         spec, arena_root=arena_root, geak_root=geak_root,
         enumerator=enumerator, inspect_hardware=inspect_hardware)
@@ -825,7 +852,7 @@ def audit_available_source_campaign(
         failures.extend(f"parent audit: {item}" for item in unexpected)
     if absent:
         failures.extend(f"expected parent refusal absent: {item}" for item in absent)
-    campaign_id = f"{spec.campaign_id}-available-source-six-arm-v1"
+    campaign_id = f"{spec.campaign_id}-available-source-seven-arm-v2"
     receipt: dict[str, Any] = {
         "schema": AVAILABLE_SOURCE_AUDIT_SCHEMA,
         "campaign_id": campaign_id,
@@ -967,8 +994,8 @@ def execute_available_source_campaign(
     spec: CampaignSpec, audit: Mapping[str, Any], *,
     run_cell: Callable[["CampaignCellRequest"], Any],
 ) -> list[Any]:
-    """Execute only the explicitly labelled available-source six-arm panel."""
-    expected_id = f"{spec.campaign_id}-available-source-six-arm-v1"
+    """Execute only the explicitly labelled available-source seven-arm panel."""
+    expected_id = f"{spec.campaign_id}-available-source-seven-arm-v2"
     if (audit.get("schema") != AVAILABLE_SOURCE_AUDIT_SCHEMA
             or audit.get("campaign_id") != expected_id):
         raise ArenaCampaignError("audit does not bind the available-source panel")
