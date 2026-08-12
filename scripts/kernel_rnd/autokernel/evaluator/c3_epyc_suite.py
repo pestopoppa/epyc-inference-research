@@ -31,8 +31,23 @@ EPYC_EXPERIMENTAL_BINARY = "epyc_experimental_binary"
 TORCH_ROCM_COMPILE = "torch_rocm_compile"
 ROCBLAS = "rocblas"
 HIPBLASLT = "hipblaslt"
-VENDOR_PROVIDERS = frozenset({TORCH_ROCM_COMPILE, ROCBLAS, HIPBLASLT})
+LLAMA_CPP_PRODUCTION_V9 = "llama_cpp_production_v9"
+BASELINE_PROVIDERS = frozenset({
+    TORCH_ROCM_COMPILE, ROCBLAS, HIPBLASLT, LLAMA_CPP_PRODUCTION_V9,
+})
+# Compatibility name for callers written before the EPYC-native exact baseline
+# joined the plan.  The set now contains every governed baseline provider, not
+# only external compiler/library vendors.
+VENDOR_PROVIDERS = BASELINE_PROVIDERS
 CANDIDATE_PROVIDER = "autokernel_candidate"
+
+PRODUCTION_V9_BRANCH = "production-consolidated-v9"
+PRODUCTION_V9_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
+PRODUCTION_V9_VERSION = "10125 (0db32c06e)"
+PRODUCTION_V9_FREEZE_ATTESTATION_REF = (
+    "artifacts/operator/ratify_v9_final_freeze_20260811.json")
+PRODUCTION_V9_FREEZE_ATTESTATION_SHA256 = (
+    "21c396477c1cdcc71dbaffd7452dd43e7bbf5941b1f199c8a5d217da830945ed")
 
 SEARCH_EXIT_AUTHORITY = "search_exit_diagnostic_only"
 NO_PROMOTION_AUTHORITY = "no_release_or_promotion_authority"
@@ -102,8 +117,8 @@ class EpycOpCase:
         providers = tuple(self.required_baseline_providers)
         if not providers or len(providers) != len(set(providers)):
             raise C3ContractError("required baseline providers must be non-empty and unique")
-        if set(providers) - VENDOR_PROVIDERS:
-            raise C3ContractError("EPYC suite baseline plan names a non-vendor provider")
+        if set(providers) - BASELINE_PROVIDERS:
+            raise C3ContractError("EPYC suite baseline plan names an unsupported provider")
         if not self.whole_model_exit_required:
             raise C3ContractError("every selected EPYC op requires the whole-model exit gate")
 
@@ -167,7 +182,7 @@ def epyc_op_suite() -> tuple[EpycOpCase, ...]:
             source_ref="epyc-native/q4_k-dequant-gemv/v1",
             source_revision="prospective_contract_v1",
             source_artifact_sha256=_DEQUANT_CONTRACT_SHA256,
-            required_baseline_providers=(TORCH_ROCM_COMPILE,),
+            required_baseline_providers=(LLAMA_CPP_PRODUCTION_V9,),
         ),
     )
 
@@ -221,6 +236,51 @@ class ExactOpSurface:
 
 
 @dataclass(frozen=True)
+class FrozenProductionBaseline:
+    """Exact frozen llama.cpp identity behind an EPYC-native observation.
+
+    A provider label alone is not provenance.  This record binds the timing
+    binary and its linkage closure to the operator-ratified v9 source identity.
+    No constructor default is provided because omission must fail closed.
+    """
+
+    branch: str
+    source_commit: str
+    version: str
+    binary_sha256: str
+    linkage_sha256: str
+    attestation_ref: str
+    attestation_sha256: str
+
+    def __post_init__(self) -> None:
+        expected = {
+            "branch": PRODUCTION_V9_BRANCH,
+            "source_commit": PRODUCTION_V9_COMMIT,
+            "version": PRODUCTION_V9_VERSION,
+            "attestation_ref": PRODUCTION_V9_FREEZE_ATTESTATION_REF,
+            "attestation_sha256": PRODUCTION_V9_FREEZE_ATTESTATION_SHA256,
+        }
+        drift = [name for name, value in expected.items()
+                 if getattr(self, name) != value]
+        if drift:
+            raise IdentityMismatch(
+                f"frozen production-v9 baseline identity drifted at {drift}")
+        _sha256(self.binary_sha256, "production_baseline.binary_sha256")
+        _sha256(self.linkage_sha256, "production_baseline.linkage_sha256")
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "branch": self.branch,
+            "source_commit": self.source_commit,
+            "version": self.version,
+            "binary_sha256": self.binary_sha256,
+            "linkage_sha256": self.linkage_sha256,
+            "attestation_ref": self.attestation_ref,
+            "attestation_sha256": self.attestation_sha256,
+        }
+
+
+@dataclass(frozen=True)
 class TimingObservation:
     provider: str
     surface: ExactOpSurface
@@ -228,9 +288,10 @@ class TimingObservation:
     samples_ns: tuple[float, ...]
     evidence_ref: str
     evidence_sha256: str
+    production_baseline: FrozenProductionBaseline | None = None
 
     def __post_init__(self) -> None:
-        if self.provider not in VENDOR_PROVIDERS | {CANDIDATE_PROVIDER}:
+        if self.provider not in BASELINE_PROVIDERS | {CANDIDATE_PROVIDER}:
             raise C3ContractError(f"unsupported timing provider {self.provider!r}")
         if not isinstance(self.surface, ExactOpSurface):
             raise TypeError("surface must be ExactOpSurface")
@@ -239,6 +300,17 @@ class TimingObservation:
             self.samples_ns, "timing observation"))
         _text(self.evidence_ref, "evidence_ref")
         _sha256(self.evidence_sha256, "evidence_sha256")
+        if self.provider == LLAMA_CPP_PRODUCTION_V9:
+            if not isinstance(self.production_baseline, FrozenProductionBaseline):
+                raise C3ContractError(
+                    "llama_cpp_production_v9 observation requires the exact frozen-v9 "
+                    "production_baseline identity")
+            if self.implementation_sha256 != self.production_baseline.binary_sha256:
+                raise IdentityMismatch(
+                    "timing implementation_sha256 differs from the frozen-v9 binary")
+        elif self.production_baseline is not None:
+            raise C3ContractError(
+                "production_baseline identity is valid only for llama_cpp_production_v9")
 
     @property
     def median_ns(self) -> float:
@@ -301,8 +373,8 @@ class FastPGate:
         if self.check.outcome == schemas.PASS:
             if self.speedup is None or self.speedup < self.p:
                 raise C3ContractError("a PASS fast_p gate must carry speedup >= p")
-            if self.baseline_provider not in VENDOR_PROVIDERS:
-                raise C3ContractError("a PASS fast_p gate must name its vendor provider")
+            if self.baseline_provider not in BASELINE_PROVIDERS:
+                raise C3ContractError("a PASS fast_p gate must name its baseline provider")
             _text(self.baseline_evidence_ref, "baseline_evidence_ref")
             _text(self.candidate_evidence_ref, "candidate_evidence_ref")
             _sha256(self.candidate_implementation_sha256,
@@ -598,11 +670,16 @@ def audit_no_execution_paths() -> schemas.Check:
 
 __all__ = [
     "APEX_PYTHON_OVERLAY", "CANDIDATE_PROVIDER", "EPYC_EXPERIMENTAL_BINARY",
-    "HIPBLASLT", "NO_PROMOTION_AUTHORITY",
+    "BASELINE_PROVIDERS", "HIPBLASLT", "LLAMA_CPP_PRODUCTION_V9",
+    "NO_PROMOTION_AUTHORITY",
     "PINNED_APEX_REVISION", "ROCBLAS", "SCHEMA", "SEARCH_EXIT_AUTHORITY",
     "TARGET_ARCH", "TARGET_DEVICE", "TORCH_ROCM_COMPILE", "VENDOR_PROVIDERS",
+    "PRODUCTION_V9_BRANCH", "PRODUCTION_V9_COMMIT", "PRODUCTION_V9_VERSION",
+    "PRODUCTION_V9_FREEZE_ATTESTATION_REF",
+    "PRODUCTION_V9_FREEZE_ATTESTATION_SHA256",
     "C3ContractError", "IdentityMismatch", "EpycOpCase", "ExactOpSurface",
-    "TimingObservation", "VendorFloor", "FastPGate", "FastPSuiteReport",
+    "FrozenProductionBaseline", "TimingObservation", "VendorFloor", "FastPGate",
+    "FastPSuiteReport",
     "CapturedWorkload", "WholeModelSurface", "CandidateIntegrationBinding",
     "HotPatchBinding",
     "WholeModelObservation", "WholeModelExitReport", "ExternalArtifactRequirement",

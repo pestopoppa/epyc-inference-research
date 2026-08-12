@@ -37,13 +37,25 @@ class C3EpycSuiteTest(unittest.TestCase):
 
     def observation(self, provider: str, samples=(100.0, 101.0, 99.0), *,
                     surface=None, suffix="baseline") -> C.TimingObservation:
+        implementation = digest(f"implementation-{suffix}")
+        production_baseline = None
+        if provider == C.LLAMA_CPP_PRODUCTION_V9:
+            production_baseline = C.FrozenProductionBaseline(
+                branch=C.PRODUCTION_V9_BRANCH,
+                source_commit=C.PRODUCTION_V9_COMMIT,
+                version=C.PRODUCTION_V9_VERSION,
+                binary_sha256=implementation,
+                linkage_sha256=digest("production-v9-linkage"),
+                attestation_ref=C.PRODUCTION_V9_FREEZE_ATTESTATION_REF,
+                attestation_sha256=C.PRODUCTION_V9_FREEZE_ATTESTATION_SHA256)
         return C.TimingObservation(
             provider=provider,
             surface=self.surface if surface is None else surface,
-            implementation_sha256=digest(f"implementation-{suffix}"),
+            implementation_sha256=implementation,
             samples_ns=tuple(samples),
             evidence_ref=f"evidence://{suffix}",
             evidence_sha256=digest(f"evidence-{suffix}"),
+            production_baseline=production_baseline,
         )
 
     def floor(self) -> C.VendorFloor:
@@ -62,10 +74,41 @@ class C3EpycSuiteTest(unittest.TestCase):
         self.assertEqual(self.cases[1].source_ref, "hyra-sol-execbench/k175")
         self.assertEqual(self.cases[2].source_kind, "epyc_native_contract")
         self.assertNotIn("hyra", self.cases[2].source_ref)
-        for case in self.cases:
+        for case in self.cases[:2]:
             self.assertEqual(case.required_baseline_providers,
                              (C.TORCH_ROCM_COMPILE,))
             self.assertFalse(case.to_dict()["baseline"]["eager_allowed"])
+        self.assertEqual(self.cases[2].required_baseline_providers,
+                         (C.LLAMA_CPP_PRODUCTION_V9,))
+
+    def test_dequant_requires_exact_frozen_v9_baseline_identity(self):
+        case = self.cases[2]
+        surface = C.ExactOpSurface.create(
+            case_id=case.case_id, device_id="ROCm0", model_sha256=digest("model"),
+            quant="Q4_K", operation=case.operator_family, shape=(1, 256), dtype="f32",
+            tensor_manifest_sha256=digest("q4-tensors"), recipe_id="q4.v1",
+            recipe_sha256=digest("q4-recipe"), harness_build_sha256=digest("harness"),
+            factors={"graphs": "off", "warmup": 10})
+        with self.assertRaisesRegex(C.C3ContractError, "exact frozen-v9"):
+            C.TimingObservation(
+                provider=C.LLAMA_CPP_PRODUCTION_V9, surface=surface,
+                implementation_sha256=digest("v9-binary"), samples_ns=(1.0, 1.1, 0.9),
+                evidence_ref="evidence://v9", evidence_sha256=digest("v9-evidence"))
+        with self.assertRaisesRegex(C.IdentityMismatch, "identity drifted"):
+            C.FrozenProductionBaseline(
+                branch=C.PRODUCTION_V9_BRANCH, source_commit="f" * 40,
+                version=C.PRODUCTION_V9_VERSION, binary_sha256=digest("v9-binary"),
+                linkage_sha256=digest("v9-linkage"),
+                attestation_ref=C.PRODUCTION_V9_FREEZE_ATTESTATION_REF,
+                attestation_sha256=C.PRODUCTION_V9_FREEZE_ATTESTATION_SHA256)
+        with self.assertRaisesRegex(C.C3ContractError, "one observation per provider"):
+            C.select_vendor_floor(
+                case, surface,
+                (C.TimingObservation(
+                    provider=C.TORCH_ROCM_COMPILE, surface=surface,
+                    implementation_sha256=digest("torch"), samples_ns=(1.0, 1.1, 0.9),
+                    evidence_ref="evidence://torch",
+                    evidence_sha256=digest("torch-evidence")),))
 
     def test_eager_or_candidate_baseline_is_refused(self):
         with self.assertRaisesRegex(C.C3ContractError, "unsupported timing provider"):

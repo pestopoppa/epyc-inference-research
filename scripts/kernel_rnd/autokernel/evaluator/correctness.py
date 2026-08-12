@@ -128,6 +128,7 @@ __all__ = [
     "BoundaryShapeEvidence", "DispatchTraceEvidence", "StateSafetyEvidence",
     "CoherenceEvidence", "DeterminismEvidence", "LinkageEvidence",
     "AntiRewardHackingEvidence", "T0Evidence",
+    "SOURCE_PREREQUISITE_IDS", "SourcePrerequisiteEvidence",
     # coherence
     "CoherenceVerdict", "compute_coherence",
     # sanitizer construction
@@ -1833,6 +1834,68 @@ class AntiRewardHackingEvidence:
 _Maybe = Union[Any, NotApplicable, None]
 
 
+SOURCE_PREREQUISITE_IDS = (
+    "input_sensitivity", "hostile_distributions", "checker_isolation",
+)
+
+
+@dataclass(frozen=True)
+class SourcePrerequisiteEvidence:
+    """Hash-bound pre-campaign correctness evidence for one source candidate.
+
+    The offline reducers do not gain verdict authority merely by returning a
+    report.  A report enters T0 only through this binding, which names the exact
+    candidate source, evaluator bundle, producer, evidence object and capture
+    mode.  ``dry_run`` is representable but can never carry a PASS.
+    """
+
+    prerequisite_id: str
+    candidate_source_sha256: str
+    evaluator_bundle_sha256: str
+    suite_version: str
+    producer_id: str
+    capture_mode: str
+    evidence_ref: str
+    evidence_sha256: str
+    check: schemas.Check
+
+    def __post_init__(self) -> None:
+        if self.prerequisite_id not in SOURCE_PREREQUISITE_IDS:
+            raise ValueError(
+                f"source prerequisite {self.prerequisite_id!r} is not one of "
+                f"{list(SOURCE_PREREQUISITE_IDS)}")
+        _req_sha256(self.candidate_source_sha256,
+                    "source_prerequisite.candidate_source_sha256")
+        _req_sha256(self.evaluator_bundle_sha256,
+                    "source_prerequisite.evaluator_bundle_sha256")
+        _req_str(self.suite_version, "source_prerequisite.suite_version")
+        if self.producer_id != "trusted_evaluator":
+            raise ValueError(
+                "source prerequisite must be produced by trusted_evaluator")
+        if self.capture_mode not in ("measured", "dry_run"):
+            raise ValueError("source prerequisite capture_mode must be measured or dry_run")
+        _req_str(self.evidence_ref, "source_prerequisite.evidence_ref")
+        _req_sha256(self.evidence_sha256, "source_prerequisite.evidence_sha256")
+        if not isinstance(self.check, schemas.Check):
+            raise TypeError("source_prerequisite.check must be a schemas.Check")
+        if self.capture_mode == "dry_run" and self.check.outcome == schemas.PASS:
+            raise ValueError("dry-run source prerequisite cannot carry PASS")
+
+    def measurement(self) -> dict:
+        return {
+            "schema": "epyc.autokernel.source_prerequisite.v1",
+            "prerequisite_id": self.prerequisite_id,
+            "candidate_source_sha256": self.candidate_source_sha256,
+            "evaluator_bundle_sha256": self.evaluator_bundle_sha256,
+            "suite_version": self.suite_version,
+            "producer_id": self.producer_id,
+            "capture_mode": self.capture_mode,
+            "evidence_ref": self.evidence_ref,
+            "evidence_sha256": self.evidence_sha256,
+            "outcome": self.check.outcome,
+        }
+
+
 @dataclass(frozen=True)
 class T0Evidence:
     """Everything T0 examines, for one candidate. No field has a default.
@@ -1859,6 +1922,10 @@ class T0Evidence:
     determinism: Optional[DeterminismEvidence]
     linkage: Optional[LinkageEvidence]
     anti_reward_hacking: Optional[AntiRewardHackingEvidence]
+    #: Source-changing candidates require all three hash-bound prerequisites.
+    #: Parameter-only candidates leave this false and carry no bindings.
+    source_candidate: bool = False
+    source_prerequisites: tuple = ()
     #: Non-PASS findings made while projecting parsed artifact evidence into
     #: the records above. Entries are ``(gate_id, check_name, Check)`` and are
     #: folded into existing integrity gates by ``evaluate_t0``. Empty is honest
@@ -1872,6 +1939,8 @@ class T0Evidence:
                              f"{list(CONTROL_ROLES)}")
         if not isinstance(self.change_surface, ChangeSurface):
             raise TypeError("evidence.change_surface must be a ChangeSurface")
+        if not isinstance(self.source_candidate, bool):
+            raise TypeError("evidence.source_candidate must be a bool")
         typed = (
             ("symbols", SymbolTableDiff), ("build", BuildProvenance),
             ("diff", DiffPolicyEvidence), ("static_analysis", StaticAnalysisEvidence),
@@ -1891,6 +1960,18 @@ class T0Evidence:
             if value is not None and not isinstance(value, (klass, NotApplicable)):
                 raise TypeError(
                     f"evidence.{name} must be a {klass.__name__}, a NotApplicable, or None")
+        prerequisite_ids = []
+        for item in self.source_prerequisites:
+            if not isinstance(item, SourcePrerequisiteEvidence):
+                raise TypeError(
+                    "evidence.source_prerequisites entries must be "
+                    "SourcePrerequisiteEvidence")
+            prerequisite_ids.append(item.prerequisite_id)
+        if len(prerequisite_ids) != len(set(prerequisite_ids)):
+            raise ValueError("evidence.source_prerequisites contains duplicate ids")
+        if not self.source_candidate and self.source_prerequisites:
+            raise ValueError(
+                "parameter/no-source evidence cannot carry source prerequisites")
         allowed_projection_gates = {
             GID_SYMBOLS, GID_SEMANTIC_DIFF, GID_SURFACE_RECONCILIATION,
         }
@@ -3633,10 +3714,40 @@ def evaluate_t0(request: api.EvaluationRequest,
     # Merge it into the existing constitutional gate instead of minting an
     # eighteenth gate or demoting it to an advisory note. This preserves report
     # coverage while ensuring FAIL/COULD_NOT_CHECK cannot disappear at a seam.
-    if evidence.projection_checks:
+    if evidence.projection_checks or evidence.source_candidate:
         grouped = {}
         for gate_id, check_name, check in evidence.projection_checks:
-            grouped.setdefault(gate_id, []).append((check_name, check))
+            grouped.setdefault(gate_id, []).append((check_name, check, None))
+        if evidence.source_candidate:
+            prerequisite_gate = {
+                "input_sensitivity": GID_OP_UNITS,
+                "hostile_distributions": GID_OP_UNITS,
+                "checker_isolation": GID_EXACT_REFERENCE,
+            }
+            supplied = {item.prerequisite_id: item
+                        for item in evidence.source_prerequisites}
+            for prerequisite_id in SOURCE_PREREQUISITE_IDS:
+                item = supplied.get(prerequisite_id)
+                measurement = None
+                if item is None:
+                    check = schemas.Check(
+                        schemas.COULD_NOT_CHECK,
+                        (f"source candidate has no hash-bound {prerequisite_id} evidence",))
+                else:
+                    measurement = item.measurement()
+                    reasons = []
+                    if item.candidate_source_sha256 != request.artifact.source_sha256:
+                        reasons.append(
+                            "prerequisite names a different candidate source SHA-256")
+                    if item.evaluator_bundle_sha256 != request.evaluator.bundle_sha256:
+                        reasons.append(
+                            "prerequisite names a different evaluator bundle SHA-256")
+                    if item.capture_mode != "measured":
+                        reasons.append("dry-run prerequisite is not correctness evidence")
+                    check = (schemas.Check(schemas.COULD_NOT_CHECK, tuple(reasons))
+                             if reasons else item.check)
+                grouped.setdefault(prerequisite_gate[prerequisite_id], []).append(
+                    (f"source_prerequisite.{prerequisite_id}", check, measurement))
         merged = []
         for gate in gates:
             extras = grouped.get(gate.gate_id, ())
@@ -3644,7 +3755,7 @@ def evaluate_t0(request: api.EvaluationRequest,
                 merged.append(gate)
                 continue
             labelled = [gate.check]
-            for check_name, check in extras:
+            for check_name, check, _measurement in extras:
                 reasons = check.reasons or (
                     f"projection check {check_name!r} returned {check.outcome}",)
                 labelled.append(schemas.Check(
@@ -3658,7 +3769,10 @@ def evaluate_t0(request: api.EvaluationRequest,
                 evidence_ref=gate.evidence_ref,
                 notes=gate.notes + tuple(
                     f"projection_check={name}:{check.outcome}"
-                    for name, check in extras),
+                    for name, check, _measurement in extras),
+                measurements=gate.measurements + tuple(
+                    measurement for _name, _check, measurement in extras
+                    if measurement is not None),
             ))
         gates = merged
 
