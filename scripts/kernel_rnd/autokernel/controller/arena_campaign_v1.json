@@ -79,9 +79,9 @@
         "."
       ],
       "source_root": "repository://.",
-      "source_commit": "f625b828f72d2d0248e9472f4886081ee6614a07",
+      "source_commit": "4b516e9fbbfd096fa27c94dc3b4f1d1a93f8bea8",
       "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/claude_codex_actor_critic.py",
-      "entrypoint_sha256": "a581d40b4b22e1185477f9616b22994f30c650d20f1397e9e7ebce840663fec1",
+      "entrypoint_sha256": "0af88d44be638c297a03bb60b73639f9f53c516e90c64e1837082ec66bf258d7",
       "model_ids": [
         "claude-opus-5:high:planner+critic",
         "gpt-5.6-sol:high:actor"
