@@ -119,6 +119,69 @@ published atomically. `execution-receipt.json` does not exist until the entire
 declared matrix has been reconstructed in order, and partial evidence never
 acquires ranking authority.
 
+### Controller-overlap implementation contract
+
+The current campaign runner is intentionally sequential: it walks
+task → declared arm → checkpoint, and one `GovernedArenaCellRunner` owns the
+mutable cell/checkpoint ordinals and the single execution root. This leaves the
+MI210 unclaimed during remote model deliberation, but it also prevents another
+controller cell from using that gap. Wrapping the existing callback in threads
+is unsafe: ordinals become completion-race dependent and the sibling-manifest
+containment check treats an honest peer write as an escape.
+
+The smallest admissible overlap architecture is one immutable schedule plus one
+deterministic, isolated runner lane per `(task_id, arm_id)`. Baseline lanes run
+serially. Controller lanes may then overlap up to a manifest-bound worker width;
+checkpoints remain sequential within each lane. Results are stored and published
+by immutable schedule index, never future-completion order. Every baseline,
+intermediate, and final evaluator window continues to acquire the existing exact
+`mi210_0` device claim, so GPU execution stays serial even while GPU-blind model
+deliberation overlaps.
+
+That architecture is **not yet enabled**. A 2026-08-12 adversarial audit found
+the following implementation gates; enabling overlap before all of them close
+would make the campaign less restart-safe or its ranking evidence less
+comparable:
+
+- A concurrent run cannot retain the current zero-second claim timeout. The
+  manifest must bind a positive bounded wait, and the worker ceiling must include
+  both outer claim waits as well as its checkpoint and evaluation reserve.
+- The campaign attempt needs an exclusive `flock` inherited by checkpoint
+  workers. A second launcher or restart must refuse while an orphaned worker
+  still holds that lease; it must never move a live partial lane to `abandoned/`.
+- Each captured worker process group must be bound to its `/proc` start ticks.
+  Cancellation must poll, signal only those exact identities, and escalate
+  TERM → KILL within a bounded interval rather than waiting inside a multi-hour
+  `communicate()`.
+- Per-lane roots narrow the old sibling-manifest proof. The checkpoint worker
+  must be OS-confined to its exact cell root (plus the already declared claim,
+  cgroup, and broker objects), or a campaign-level watcher must reject a write
+  into a peer lane. Merely checking siblings inside one lane is insufficient.
+- Manifest v3 must bind the resolved claim journal, claim timeout, controller
+  width, deterministic lane names, and timeout formula. Read-only validation
+  must reject missing, extra, swapped, symlink/file, duplicate-receipt, or
+  multi-cell lanes while retaining v1/v2 historical validation.
+- Receipt language must distinguish configured overlap from observed overlap.
+  Width one cannot claim concurrency; an observed peak of at least two live
+  controller lanes is required to state that overlap occurred.
+- GPU exclusivity alone does not guarantee matched timing conditions. A lane's
+  baseline can run before peer controllers start, while its intermediate/final
+  evaluator can run amid their CPU and model-client load. Evaluator workers need
+  a fixed reserved CPU set and controllers disjoint CPUs, or controller lanes
+  must pause at every claim window. A governed overlap A/A must establish the
+  resulting noise bound before concurrent results become rankable.
+
+The required regression matrix is equally explicit: reverse future completion
+must retain canonical receipt order; exact restart must retain lane/checkpoint
+identities; first failure and TERM-during-claim-wait must leave no live captured
+group; a duplicate launcher and orphan-worker restart must refuse; a peer-lane
+write must be caught; claim contention must wait rather than fail; v3 lane
+validation must reject all malformed shapes above; observed overlap must be
+truthful at widths one and greater than one; and baseline/final overlap A/A must
+stay inside the predeclared noise bound. Until those checks pass, the safe way
+to use idle MI210 windows is to schedule separately claimed campaigns, not to
+alter a live INF-03 campaign's execution semantics.
+
 Validation is independently read-only and does not resume a campaign:
 
 ```bash
