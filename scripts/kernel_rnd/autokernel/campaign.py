@@ -2329,8 +2329,9 @@ def render_bench_commands(spec: CampaignSpec, *,
         # its own source root so that no arm can pick up another tree's ggml.
         # `bench_binding` in the reference composition binds it the same way.
         bindir = os.path.join(root, "bin")
-        binding = recipes.ToolBinding(binary=os.path.join(bindir, tool),
-                                      source_root=root, library_path=bindir)
+        binding = recipes.ToolBinding.for_external_build(
+            binary=os.path.join(bindir, tool), source_root=root,
+            build_root=artifact_root, library_path=bindir)
         payload = recipes.dry_run(spec.recipe_id, binding=binding,
                                   params=spec.params_for_arm(arm, params=params),
                                   arm=arm,

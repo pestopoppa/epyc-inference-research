@@ -754,6 +754,9 @@ class ToolBinding:
     binary: str
     source_root: str
     library_path: str
+    # A clean out-of-tree build is allowed only through this explicit proof.
+    # Callers must name the build root; the legacy constructor remains strict.
+    external_build_root: Optional[str] = None
 
     def __post_init__(self) -> None:
         for name in ("binary", "source_root", "library_path"):
@@ -761,6 +764,18 @@ class ToolBinding:
         binary = Path(self.binary)
         library_path = Path(self.library_path)
         source_root = Path(self.source_root)
+        build_root = (Path(self.external_build_root)
+                      if self.external_build_root is not None else None)
+        if build_root is not None:
+            _require_abs_path(self.external_build_root, "binding.external_build_root")
+            if not build_root.name.startswith("build"):
+                raise RecipeBindingError(
+                    "binding.external_build_root must use a build-prefixed directory")
+            for name, path in (("binary", binary), ("library_path", library_path)):
+                if build_root != path and build_root not in path.parents:
+                    raise RecipeBindingError(
+                        f"binding.{name} ({path}) is outside external build root "
+                        f"({build_root})")
         if binary.parent != library_path:
             raise RecipeBindingError(
                 f"binding.library_path must be the binary's own directory:\n"
@@ -773,8 +788,7 @@ class ToolBinding:
                 # inside) the snapshot worktree.  The worktree remains the
                 # source identity; the build closure is independently pinned
                 # by its own library path and build receipt.
-                if (source_root.joinpath(".git").exists()
-                        and path.parent.name.startswith("build")):
+                if (build_root is not None and source_root.joinpath(".git").exists()):
                     continue
                 raise RecipeBindingError(
                     f"binding.{name} ({path}) is outside binding.source_root "
@@ -782,7 +796,16 @@ class ToolBinding:
 
     def to_dict(self) -> dict:
         return {"binary": self.binary, "source_root": self.source_root,
-                "library_path": self.library_path}
+                "library_path": self.library_path,
+                **({"external_build_root": self.external_build_root}
+                   if self.external_build_root is not None else {})}
+
+    @classmethod
+    def for_external_build(cls, *, source_root: str, build_root: str,
+                           binary: str, library_path: str) -> "ToolBinding":
+        """Bind a git worktree to its explicitly named clean build closure."""
+        return cls(binary=binary, source_root=source_root,
+                   library_path=library_path, external_build_root=build_root)
 
 
 # =============================================================================

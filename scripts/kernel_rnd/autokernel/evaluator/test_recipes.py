@@ -710,6 +710,25 @@ class BindingTest(FakeTreeMixin, unittest.TestCase):
                           library_path=str(other))
         self.assertIn("outside binding.source_root", str(ctx.exception))
 
+    def test_external_build_binding_requires_explicit_build_proof(self):
+        build = self.tmp / "build-r7" / "bin"
+        build.mkdir(parents=True)
+        binary = build / "llama-bench"
+        binary.write_text("#!/bin/sh\n")
+        binary.chmod(0o755)
+        binding = R.ToolBinding.for_external_build(
+            source_root=str(self.root), build_root=str(build.parent),
+            binary=str(binary), library_path=str(build))
+        self.assertEqual(binding.external_build_root, str(build.parent))
+
+    def test_external_build_binding_rejects_unproved_external_path(self):
+        build = self.tmp / "outputs" / "bin"
+        build.mkdir(parents=True)
+        with self.assertRaises(R.RecipeBindingError):
+            R.ToolBinding.for_external_build(
+                source_root=str(self.root), build_root=str(build.parent),
+                binary=str(build / "llama-bench"), library_path=str(build))
+
     def test_relative_binding_paths_are_refused(self):
         with self.assertRaises(R.RecipeParameterError):
             R.ToolBinding(binary="build/bin/llama-bench", source_root="build",
