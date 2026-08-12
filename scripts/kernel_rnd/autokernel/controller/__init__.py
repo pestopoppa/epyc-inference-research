@@ -56,6 +56,14 @@ AgentKernelArena sources, proves the physical gfx90a identity, binds C4 through
 the authoring contract, and registers whole-agent task launchers. It never
 imports into campaign #1 and never converts an arena score into a verdict.
 
+`champion` and `sequencer` restore only the narrow AK4 lifecycle seam: project
+validated banked candidates, reject incompatible source evidence, request one
+real combined rebuild/evaluation through an injected runner, and preserve exact
+champion/production-anchor lineage. They contain no proposal strategy, source
+mutation, build, benchmark, process, release, or production-write capability and
+remain deliberately unbound here, so campaign #1 cannot import them through the
+controller package.
+
 ON THE CAMPAIGN PATH SINCE 2026-08-04
 -------------------------------------
 `campaign.py` imports both. It had not, and that was the defect:

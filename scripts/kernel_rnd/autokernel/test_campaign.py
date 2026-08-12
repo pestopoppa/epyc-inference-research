@@ -2878,8 +2878,16 @@ class TestProspectiveEvaluationDurability(unittest.TestCase):
         self.assertEqual(result.state, campaign.STATE_COMPOSED)
         self.assertNotIn("journal_evaluation", ops.calls)
 
+    def test_dry_run_writes_zero_candidate_records(self):
+        durable_parent = Path(campaign.__file__).resolve().parents[3] / "data"
+        durable_parent.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=durable_parent) as root:
+            ops = campaign.DryRunOps(out=io.StringIO())
+            campaign.run_campaign(spec(journal_root=root), ops)
+            self.assertFalse(Path(root, journal_module.BASE_SHARD_NAME).exists())
+
     def test_idempotent_append_reuses_identical_record_and_refuses_collision(self):
-        from .test_journal import _event
+        from .test_journal import _candidate, _event
 
         durable_parent = Path(campaign.__file__).resolve().parents[3] / "data"
         durable_parent.mkdir(exist_ok=True)
@@ -2889,19 +2897,26 @@ class TestProspectiveEvaluationDurability(unittest.TestCase):
             record = _event("live-writer")
             record["campaign_id"] = run_spec.campaign_id
             record["candidate_id"] = run_spec.candidate_id
-            with mock.patch.object(ops, "_evaluation_events", return_value=(record,)):
-                first = ops.journal_evaluation(run_spec, None)
-                second = ops.journal_evaluation(run_spec, None)
+            candidate = _candidate("live-writer")
+            candidate["campaign_id"] = run_spec.campaign_id
+            candidate["candidate_id"] = run_spec.candidate_id
+            candidate["proposal_id"] = run_spec.proposal_id or "akp-test-0001"
+            candidate["evaluation_event_ids"] = [record["event_id"]]
+            ops._cached_evaluation_events = (record,)
+            ops._cached_candidate_record = candidate
+            first = ops.journal_evaluation(run_spec, None)
+            second = ops.journal_evaluation(run_spec, None)
             self.assertEqual(first, second)
             book = journal_module.Journal(root, campaign_id=run_spec.campaign_id)
-            entries = [entry for entry in book.read_all()
-                       if entry.kind == journal_module.KIND_EVALUATION_EVENT]
-            self.assertEqual(len(entries), 1)
+            entries = book.read_all()
+            self.assertEqual([entry.kind for entry in entries], [
+                journal_module.KIND_EVALUATION_EVENT,
+                journal_module.KIND_CANDIDATE_RECORDED])
             mutated = json.loads(json.dumps(record))
             mutated["status"] = "fail"
-            with mock.patch.object(ops, "_evaluation_events", return_value=(mutated,)):
-                with self.assertRaisesRegex(RuntimeError, "different bytes"):
-                    ops.journal_evaluation(run_spec, None)
+            ops._cached_evaluation_events = (mutated,)
+            with self.assertRaisesRegex(RuntimeError, "different bytes"):
+                ops.journal_evaluation(run_spec, None)
 
     def test_every_pre_behavioural_t0_refusal_emits_a_schema_valid_non_rate_event(self):
         sha = lambda value: __import__("hashlib").sha256(value.encode()).hexdigest()

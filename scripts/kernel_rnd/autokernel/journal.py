@@ -218,6 +218,9 @@ KIND_PROPOSAL_SKIPPED = "PROPOSAL_SKIPPED"
 KIND_STOP_STATE = "STOP_STATE"
 KIND_MICROBENCH_RUN_COMPLETED = "MICROBENCH_RUN_COMPLETED"
 KIND_T0_REFUSAL = "T0_REFUSAL"
+KIND_COMPOSITION_REQUESTED = "COMPOSITION_REQUESTED"
+KIND_COMPOSITION_FAILED = "COMPOSITION_FAILED"
+KIND_COMPOSITION_REJECTED = "COMPOSITION_REJECTED"
 # §3.5 preflight attestation. `resource/preflight.py` builds the verdict and its
 # own docstring instructs the caller to journal `exc.result.to_dict()` verbatim
 # on FAIL and COULD_NOT_CHECK — "a precondition that was checked but not recorded
@@ -244,6 +247,8 @@ NATIVE_KINDS = frozenset({
     KIND_PROPOSAL_SKIPPED, KIND_STOP_STATE, KIND_PREFLIGHT_ATTESTATION,
     KIND_MICROBENCH_RUN_COMPLETED,
     KIND_T0_REFUSAL,
+    KIND_COMPOSITION_REQUESTED,
+    KIND_COMPOSITION_FAILED, KIND_COMPOSITION_REJECTED,
 }) | BOOTSTRAP_KNOWLEDGE_KINDS
 
 KINDS = frozenset(SCHEMA_BOUND_KINDS) | NATIVE_KINDS
@@ -259,6 +264,9 @@ RECORD_ID_KEY_BY_KIND = {
     KIND_CHAMPION_UPDATED: "branch",
     KIND_RELEASE_PACKAGE_PREPARED: "package_id",
     KIND_OPERATOR_WAIVER_RECORDED: "waiver_id",
+    KIND_COMPOSITION_REQUESTED: "request_sha256",
+    KIND_COMPOSITION_FAILED: "request_sha256",
+    KIND_COMPOSITION_REJECTED: "attempt_sha256",
 }
 
 # §5.8 storage classes. Only the expirable class may ever be tombstoned:
@@ -1101,6 +1109,40 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
             value = payload.get(key)
             if not isinstance(value, str) or not value.strip():
                 out.append(f"{key}: required and non-empty")
+    elif kind == KIND_COMPOSITION_REQUESTED:
+        for key in ("request_sha256", "combined_candidate_id", "source_tree",
+                    "mode"):
+            value = payload.get(key)
+            if not isinstance(value, str) or not value.strip():
+                out.append(f"{key}: required and non-empty")
+        if not isinstance(payload.get("member_candidates"), list) \
+                or not payload.get("member_candidates"):
+            out.append("member_candidates: required non-empty list")
+        if not isinstance(payload.get("anchor"), Mapping):
+            out.append("anchor: required mapping")
+        if not isinstance(payload.get("evaluator"), Mapping):
+            out.append("evaluator: required mapping")
+        if not isinstance(payload.get("required_t2_cells"), list) \
+                or not payload.get("required_t2_cells"):
+            out.append("required_t2_cells: required non-empty list")
+    elif kind == KIND_COMPOSITION_FAILED:
+        for key in ("request_sha256", "request_event_id", "source_tree",
+                    "failure_class", "failure_detail"):
+            value = payload.get(key)
+            if not isinstance(value, str) or not value.strip():
+                out.append(f"{key}: required and non-empty")
+    elif kind == KIND_COMPOSITION_REJECTED:
+        for key in ("attempt_sha256", "source_tree", "anchor_sha256",
+                    "compatibility_sha256"):
+            value = payload.get(key)
+            if not isinstance(value, str) or not value.strip():
+                out.append(f"{key}: required and non-empty")
+        candidates = payload.get("candidate_ids")
+        conflicts = payload.get("conflicts")
+        if not isinstance(candidates, list) or not candidates:
+            out.append("candidate_ids: required non-empty list")
+        if not isinstance(conflicts, list) or not conflicts:
+            out.append("conflicts: required non-empty list")
     elif kind in BOOTSTRAP_KNOWLEDGE_KINDS:
         if not payload:
             out.append("payload: must not be empty for a bootstrap-knowledge event")
@@ -2184,6 +2226,8 @@ __all__ = [
     "KIND_TORN_APPEND_DISCARDED", "KIND_OPERATOR_CONTROL_ACK", "KIND_VIEW_REBASED",
     "KIND_PROPOSAL_SKIPPED", "KIND_STOP_STATE", "KIND_PREFLIGHT_ATTESTATION",
     "KIND_MICROBENCH_RUN_COMPLETED", "KIND_T0_REFUSAL",
+    "KIND_COMPOSITION_REQUESTED",
+    "KIND_COMPOSITION_FAILED", "KIND_COMPOSITION_REJECTED",
     "tombstone_view_key",
     "Journal", "JournalEntry", "JournalDefect", "ShardRef", "TornTail",
     "ReadReport", "Cursor", "Views",

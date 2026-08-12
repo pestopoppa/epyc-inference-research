@@ -30,9 +30,9 @@ a module it never looked at.
 
 | | non-test lines |
 |---|---:|
-| **ON THE CAMPAIGN PATH** | **64,086** |
-| **DEFERRED** (provably unreachable) | **21,694** |
-| **TOTAL** | **85,780** |
+| **ON THE CAMPAIGN PATH** | **66,201** |
+| **DEFERRED** (provably unreachable) | **23,609** |
+| **TOTAL** | **89,810** |
 
 **The deferred plane is explicit.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -123,11 +123,11 @@ incident or a measured fact; "reduced rigour" is not a reason.
 
 | module | lines | campaign #1 | reason |
 |---|---:|:---:|---|
-| `campaign.py` | 3,509 | yes | THE ENTRYPOINT. Before it landed, `grep -rl "__main__|argparse|def main("` over every non-test module returned nothing: 94k lines, 5,695 passing tests, and no way to start it — which is the whole reason this package has produced no result |
+| `campaign.py` | 4,282 | yes | THE ENTRYPOINT. Before it landed, `grep -rl "__main__|argparse|def main("` over every non-test module returned nothing: 94k lines, 5,695 passing tests, and no way to start it — which is the whole reason this package has produced no result |
 | `dashboard.py` | 201 | yes | the terminal result was fsynced but the only dashboard exporter had been deleted, so active AutoKernel work remained permanently absent from the operator surface; this compact projection dates itself from the journal entry and cannot make an old campaign fresh |
 | `__init__.py` | 14 | yes | package docstring; `schemas` is declared here as the single source of record shape |
-| `schemas.py` | 3,372 | yes | one record shape — every module is written against it and none invents its own |
-| `journal.py` | 2,181 | yes | AutoPilot lost 232 trials and ~16 days when a restart came up empty and nothing objected |
+| `schemas.py` | 3,598 | yes | one record shape — every module is written against it and none invents its own |
+| `journal.py` | 2,238 | yes | AutoPilot lost 232 trials and ~16 days when a restart came up empty and nothing objected |
 | `offline_least_commitment.py` | 345 | no | AP-WM-1 observe-only archive analysis; importing an offline hypothesis diagnostic into the mutation/build path would give it accidental live authority |
 | `least_commitment_archive_builder.py` | 368 | no | AK-WM-2a strict real-record projection; it reads hash-bound completed campaign evidence into an observe-only archive and cannot launch, rank, mutate, or promote |
 | `turn_productivity.py` | 481 | no | AK-PT-1/AK-X-6 archive reducer; it consumes completed refine-turn records and may only withhold future search advancement, so campaign #1 must not give it live rank or mutation authority |
@@ -141,6 +141,8 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `substrate.py` | 340 | no | validated planning facts; it reads checked-in measured/datasheet receipts before proposal construction and never joins the mutation/build path |
 | `lanes.py` | 314 | no | screening declarations and rank-transfer calibration; without measured calibration campaign #1 stays on the full verified path |
 | `artifact_diff.py` | 200 | yes | AK-TR-6 must veto an unconfirmed GPU claim before the behavioral T0 provider can launch |
+| `candidate_record.py` | 243 | yes | every executed candidate is fsynced from the exact built snapshot and evaluation event identities before terminal STOP |
+| `source_candidate.py` | 443 | yes | source-changing proposals consume one immutable embedded patch bundle through the guarded worktree mutation boundary |
 | `storage.py` | 1,859 | yes | the 2026-07-04 async-prefetch win was written to `/mnt/raid0/llm/tmp/` and that directory no longer exists |
 | `adapters/__init__.py` | 21 | no | AK9 adapter namespace only; campaign #1 remains llama_cpu-only and imports no speech release surface |
 | `adapters/whisper_stt.py` | 1,843 | no | AK9 pure whisper.cpp tree, metric, linkage, protocol-prerequisite and release-binding declarations; no inference, build, mutation or freeze authority |
@@ -165,7 +167,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `evaluator/integrity.py` | 3,661 | yes | **provenance primitives only** — `sha256_file`, `hash_source_tree`, `EMPTY_TREE_SHA256`, the clean-build snapshot check. Its §8.5.1 gate runner is fenced off |
 | `evaluator/surface.py` | 3,195 | yes | **change-class constants only** — `AffectedSurface`, the core/shared-header fanout classes. `SurfaceGateRunner` is fenced off |
 | `execution/__init__.py` | 24 | yes | docstring only; states the deny-8 limits every executor inherits |
-| `execution/worktree.py` | 2,773 | yes | no candidate exists without it: production-tip anchoring, campaign worktree, build, build-identity receipt |
+| `execution/worktree.py` | 2,883 | yes | no candidate exists without it: production-tip anchoring, campaign worktree, build, build-identity receipt |
 | `execution/microbench.py` | 4,345 | yes | paired ALTERNATING blocks plus C6-10 ranked hard cases — each hostile unit changes the receipted recipe and contributes blocks to the same rank instead of living only in a correctness gate |
 | `execution/device_sampler.py` | 410 | yes | RVP-C3-4 numeric 250 ms ROCm state producer; it brackets the exact captured benchmark-process lifetime and fails closed on missing fields, failed probes, empty traces, or cadence gaps |
 | `execution/instrument_integrity.py` | 111 | yes | RVP-C6-1: a candidate binary is built from candidate-controlled source, so every live T1 invocation must re-pin its reward-bearing translation unit to the named anchor before it can emit a number |
@@ -174,7 +176,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `execution/reward_hack_scan.py` | 186 | yes | RVP-C6-6/C6-9 plus static C6-2/C6-3 detectors: protected-frame, pointer-memo, structured-shortcut, environment/timing and stream/thread findings; the named 10 planted/15 clean corpus states sensitivity/specificity/FPR, not arbitrary-program coverage |
 | `execution/sandbox.py` | 606 | yes | C6 candidate boundary: Landlock write confinement, seccomp signal/network/namespace denials, non-root finite rlimits, discoverable host cgroup delegation, per-invocation membership and verified empty teardown |
 | `execution/t0_provider.py` | 3,676 | yes | the predecessor harness tested MUL_MAT only, so a kernel that broke MUL_MAT_ID — MoE dispatch, every token in production — passed it cleanly |
-| `execution/control_runner.py` | 1,550 | yes | runs the neutral / A-A controls that the measured drift makes mandatory rather than optional |
+| `execution/control_runner.py` | 1,805 | yes | runs the neutral / A-A controls that the measured drift makes mandatory rather than optional |
 | `execution/live_controls.py` | 1,413 | no | standalone, operator-invoked calibration producer for the fixed five controls; it prepares the instrument before campaign #1 and is deliberately not imported by the mutation/build entrypoint |
 | `execution/cpu_region_claim.py` | 2,408 | yes | 2026-08-04: two A/A runs were destroyed by a legitimate co-tenant because the loop held no claim. Before this module a claim could be READ but never acquired |
 | `execution/chain.py` | 1,928 | yes | holds the seams — four mismatches between executors and evaluator, one of them a field whose meaning INVERTS across the seam |
@@ -182,7 +184,9 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `resource/device_claim.py` | 1,826 | yes | §2.6's first row of substrate that exists nowhere in the project: a cross-process GPU device claim someone actually holds |
 | `resource/preflight.py` | 1,788 | yes | INC-20260731: a name-pattern kill took out another agent's `llama-server` twice, and `earlyoom`, whose argv names what it guards |
 | `resource/claim_witness.py` | 325 | yes | invariant 9 — idle sensing is never a claim, and the witness is what tells the two apart |
-| `controller/__init__.py` | 81 | yes | binds every surviving controller module, so importing one reaches both — which is why `controller.do_not_repeat` is on the path whether or not the driver names it, and why `CONTROLLER_ALLOWED` lists this file rather than leaving the edge unexplained |
+| `controller/__init__.py` | 89 | yes | binds every surviving controller module, so importing one reaches both — which is why `controller.do_not_repeat` is on the path whether or not the driver names it, and why `CONTROLLER_ALLOWED` lists this file rather than leaving the edge unexplained |
+| `controller/champion.py` | 1,447 | no | AK4 lean lifecycle projection and composition transaction: consumes validated journal evidence, requires a real combined rebuild/evaluation through an injected runner, and carries no source-mutation, build, benchmark, process, release, or production-write capability |
+| `controller/sequencer.py` | 468 | no | AK4 deterministic outer ordering seam: consumes supplied proposals and injected execution capabilities, journals bounded stop states, and remains unbound from `controller.__init__` so campaign #1 cannot acquire a second live loop |
 | `controller/arena_adapter.py` | 518 | no | INF-03 paper-pin GEAK/AgentKernelArena integration: validates clean vendor sources and physical gfx90a identity, binds C4 into a hygienic priced prompt, and launches registered whole-agent task adapters without entering campaign mutation or scoring |
 | `controller/claude_codex_actor_critic.py` | 624 | no | INF-03 bounded Claude-planner/critic + Codex-actor controller: exact three-argument Arena launcher, explicit model/effort pins, checkpoint process-group termination, single-candidate workspace confinement, and transcript/artifact hashing; its preflight invokes neither CLI |
 | `controller/codex_container_actor.py` | 216 | no | INF-03 host-compatible Codex actor boundary: pins a read-only container image, exposes exactly one writable host bind for the copied Arena workspace, stages auth only in an automatically erased temporary directory, and retains model networking without granting host filesystem writes |
