@@ -1,0 +1,25 @@
+                    continue
+    
+                try:
+                    eval_data = load_json_file(eval_path)
+                except Exception as e:
+                    log(f"{e}. Error loading evaluation data for {problem_name}_{lang}, unlinking...", fg="red")
+                    eval_path.unlink(missing_ok=True)
+                    model_stats[problem_name][lang] = None
+                    continue
+    
+>               eval_data = [r for r in eval_data if r["runtime"] < 10_000_000_000]
+                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               TypeError: '<' not supported between instances of 'NoneType' and 'int'
+
+/workspace/tmp/effibench-x-upstream/evaluate_solution.py:271: TypeError
+----------------------------- Captured stderr call -----------------------------
+model_x:Processing 1 problems:   0%|          | 0/1 [00:00<?, ?it/s]model_x:Processing 1 problems:   0%|          | 0/1 [00:00<?, ?it/s]
+=========================== short test summary info ============================
+FAILED test_fail_open_patch.py::test_no_deprecated_openjdk_image - AssertionE...
+FAILED test_fail_open_patch.py::test_generate_solution_time_sleep_resolves - ...
+FAILED test_fail_open_patch.py::test_docker_stats_parse_failure_raises - Asse...
+FAILED test_fail_open_patch.py::test_done_without_metrics_fails_closed - Asse...
+FAILED test_fail_open_patch.py::test_local_backend_shape_fails_closed - Asser...
+FAILED test_fail_open_patch.py::test_compute_model_stats_handles_none_runtime
+========================= 6 failed, 1 passed in 0.57s ==========================

@@ -1,0 +1,26 @@
+rootdir: /mnt/raid0/llm/epyc-inference-research
+configfile: pyproject.toml
+plugins: anyio-4.14.2
+collecting ... collected 7 items
+
+test_fail_open_patch.py::test_no_deprecated_openjdk_image PASSED         [ 14%]
+test_fail_open_patch.py::test_generate_solution_time_sleep_resolves PASSED [ 28%]
+test_fail_open_patch.py::test_docker_stats_parse_failure_raises PASSED   [ 42%]
+test_fail_open_patch.py::test_docker_stats_parse_success_still_works PASSED [ 57%]
+test_fail_open_patch.py::test_done_without_metrics_fails_closed PASSED   [ 71%]
+test_fail_open_patch.py::test_local_backend_shape_fails_closed PASSED    [ 85%]
+test_fail_open_patch.py::test_compute_model_stats_handles_none_runtime PASSED [100%]
+
+============================== 7 passed in 0.47s ===============================
+collecting ... collected 8 items
+
+test_fail_open_patch.py::test_no_deprecated_openjdk_image PASSED         [ 12%]
+test_fail_open_patch.py::test_generate_solution_time_sleep_resolves PASSED [ 25%]
+test_fail_open_patch.py::test_docker_stats_parse_failure_raises PASSED   [ 37%]
+test_fail_open_patch.py::test_docker_stats_parse_success_still_works PASSED [ 50%]
+test_fail_open_patch.py::test_done_without_metrics_fails_closed PASSED   [ 62%]
+test_fail_open_patch.py::test_local_backend_shape_fails_closed PASSED    [ 75%]
+test_fail_open_patch.py::test_compute_model_stats_handles_none_runtime PASSED [ 87%]
+test_fail_open_patch.py::test_is_passed_empty_output_not_rescued PASSED  [100%]
+
+============================== 8 passed in 0.50s ===============================

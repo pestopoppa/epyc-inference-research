@@ -1,0 +1,64 @@
+=== Counts by reason ===
+canonical_memory: 308 problems
+  canonical-pass: 285
+  fail-closed-measurement-error: 2
+    - leetcode_3451_string-compression-iii
+    - leetcode_3469_maximum-height-of-a-triangle
+  runtime-error: 12
+    - leetcode_3231_minimum-number-of-coins-to-be-added
+    - leetcode_3308_apply-operations-to-make-string-empty
+    - leetcode_3435_block-placement-queries
+    - leetcode_3466_number-of-subarrays-with-and-value-of-k
+    - leetcode_3485_maximize-score-of-numbers-in-ranges
+    - leetcode_3388_right-triangles
+    - leetcode_3527_alternating-groups-iii
+    - leetcode_3355_minimum-levels-to-gain-more-points
+    - leetcode_3405_count-the-number-of-special-characters-ii
+    - leetcode_3475_minimum-operations-to-make-binary-array-elements-equal-to-one-i
+    - leetcode_3495_k-th-nearest-obstacle-queries
+    - leetcode_3516_design-neighbor-sum-service
+  wrong-answer: 9
+    - leetcode_3264_maximum-points-after-enemy-battles
+    - leetcode_3298_maximize-consecutive-elements-in-an-array-after-modification
+    - leetcode_3360_minimum-deletions-to-make-string-k-special
+    - leetcode_3380_shortest-subarray-with-or-at-least-k-ii
+    - leetcode_3383_taking-maximum-energy-from-the-mystic-dungeon
+    - leetcode_3395_minimum-length-of-anagram-concatenation
+    - leetcode_3402_minimum-cost-to-equalize-array
+    - leetcode_3525_maximum-energy-boost-from-two-drinks
+    - leetcode_3567_convert-date-to-binary
+canonical_runtime: 308 problems
+  canonical-pass: 293
+  runtime-error: 10
+    - leetcode_3225_length-of-longest-subarray-with-at-most-k-frequency
+    - leetcode_3239_minimum-number-of-operations-to-make-x-and-y-equal
+    - leetcode_3509_k-th-largest-perfect-subtree-size-in-binary-tree
+    - leetcode_3542_maximum-value-sum-by-placing-three-rooks-ii
+    - leetcode_3622_maximum-frequency-of-an-element-after-performing-operations-i
+    - leetcode_3528_reach-end-of-array-with-max-score
+    - leetcode_3519_find-the-number-of-winning-players
+    - leetcode_3630_total-characters-in-string-after-transformations-ii
+    - leetcode_3633_maximize-the-number-of-target-nodes-after-connecting-trees-i
+    - leetcode_3649_minimum-time-to-break-locks-i
+  wrong-answer: 5
+    - leetcode_3264_maximum-points-after-enemy-battles
+    - leetcode_3353_existence-of-a-substring-in-a-string-and-its-reverse
+    - leetcode_3451_string-compression-iii
+    - leetcode_3436_find-subarray-with-bitwise-or-closest-to-k
+    - leetcode_3581_the-two-sneaky-numbers-of-digitville
+
+=== Fail-open scan (status=done with runtime None/0.0) ===
+records scanned: 61600
+fail-open hits: 0
+min runtime among done records: 17851403.0 ns (17.851 ms)
+
+=== Cross-arm scoring (harness's own stats/metrics code) ===
+[32mcanonical_memory:Saved evaluation statistics to /workspace/tmp/effibench-gate/data/evaluation/gatestats_canonical_memory.json[0m
+[32mcanonical_runtime:Saved evaluation statistics to /workspace/tmp/effibench-gate/data/evaluation/gatestats_canonical_runtime.json[0m
+problems evaluated in both arms: 308; both passed: 272
+canonical_memory scored against canonical_runtime (runtime_sum ratio, clipped):
+  n=272 min=0.4245 p25=0.9753 median=1.0000 p75=1.0000 max=1.0000
+  degenerate/zero cases: 0
+canonical_runtime scored against canonical_memory (runtime_sum ratio, clipped):
+  n=272 min=0.2149 p25=0.9835 median=1.0000 p75=1.0000 max=1.0000
+  degenerate/zero cases: 0

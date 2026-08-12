@@ -1,0 +1,19 @@
+diff --git a/evaluate_solution.py b/evaluate_solution.py
+index b9e6f42..fb50ce2 100644
+--- a/evaluate_solution.py
++++ b/evaluate_solution.py
+@@ -233,8 +233,12 @@ def is_passed(results: list[dict], return_stats: bool = False) -> bool:
+     def is_passed_item(r: dict) -> bool:
+         if r.get("passed", False):
+             return True
+-        if r["status"] == "done" and r["text"] == "" and r["exit_code"] == 0:
+-            return True
++        # FAIL-CLOSED (acceptance-gate patch): a "done" record with empty output
++        # and exit 0 was auto-counted as a pass here even when the evaluator
++        # judged it failed — converting "produced no output" into a pass
++        # (observed live on leetcode_3264: 0/100 evaluator-passed, is_passed
++        # True). Removed; the evaluator's verdict and the tty-echo clause below
++        # are the only rescues.
+         if postprocess_text(r["text"]) == postprocess_text(r["input"] + r["output"]):
+             return True
+         return False

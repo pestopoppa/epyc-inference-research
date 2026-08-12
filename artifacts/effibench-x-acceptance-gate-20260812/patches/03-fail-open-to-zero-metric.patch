@@ -1,0 +1,118 @@
+diff --git a/effibench/backends/backend_utils.py b/effibench/backends/backend_utils.py
+index f6e0812..8d2a71e 100755
+--- a/effibench/backends/backend_utils.py
++++ b/effibench/backends/backend_utils.py
+@@ -512,35 +512,42 @@ class BaseExecutionManager(ABC):
+             logging.error(f"Error executing code: {e}")
+             res = None  # Ensure res is defined even in case of exception
+         
++        # FAIL-CLOSED (acceptance-gate patch): a "done" execution with missing
++        # metrics is an unmeasured execution — it must surface as an error and
++        # must NEVER be scored with fabricated 0.0 metrics. This is the only
++        # guard for the "local" backend, whose sessions never set metrics at all
++        # (upstream issue #4: "runtime and memory always return 0.0").
++        if status == "done" and res is not None:
++            missing = [k for k in ("runtime", "memory", "integral")
++                       if getattr(res, k, None) is None]
++            if missing:
++                status = "error"
++                if not exit_code:
++                    exit_code = 1
++                text = (
++                    f"MeasurementError: sandbox returned no {'/'.join(missing)} for a "
++                    f"successful execution; refusing to fabricate 0.0 metrics.\n{text or ''}"
++                )
++                logging.error(
++                    f"Measurement missing ({missing}) for submission {record.id}; "
++                    "marking as error instead of fabricating 0.0"
++                )
++
+         with record.lock:
+             record.status = status
+             record.exit_code = exit_code
+             record.text = text if text is not None else ""
+-            
++
+             # Set metrics from sandbox response if available
+             if status == "done" and res is not None:
+-                # Runtime (convert from ns to seconds if needed)
+-                if hasattr(res, 'runtime') and res.runtime is not None:
+-                    record.runtime = res.runtime
+-                else:
+-                    record.runtime = 0.0
+-                
+-                # Memory
+-                if hasattr(res, 'memory') and res.memory is not None:
+-                    record.memory = res.memory
+-                else:
+-                    record.memory = 0.0
+-                
+-                # Integral
+-                if hasattr(res, 'integral') and res.integral is not None:
+-                    record.integral = res.integral
+-                else:
+-                    record.integral = 0.0
++                record.runtime = res.runtime
++                record.memory = res.memory
++                record.integral = res.integral
+             else:
+-                # Set defaults for failed executions
+-                record.runtime = 0.0
+-                record.memory = 0.0
+-                record.integral = 0.0
++                # Failed or unmeasured executions carry no metrics — None, not 0.0.
++                record.runtime = None
++                record.memory = None
++                record.integral = None
+ 
+     
+ # -------------------------------------------------------------------
+diff --git a/third_party/llm-sandbox/llm_sandbox/docker.py b/third_party/llm-sandbox/llm_sandbox/docker.py
+index bb09224..3f5d4c4 100644
+--- a/third_party/llm-sandbox/llm_sandbox/docker.py
++++ b/third_party/llm-sandbox/llm_sandbox/docker.py
+@@ -370,18 +370,22 @@ class SandboxDockerSession(Session):
+             stats_output = self.execute_command(stats_cmd, workdir=self.session_dir)
+             
+             # Parse statistics output (format: "runtime_ns max_memory_kb integral")
++            # FAIL-CLOSED (acceptance-gate patch): a successful execution whose
++            # statistics cannot be parsed is an unmeasured execution. Raising here
++            # propagates through the manager's error path so it surfaces as
++            # status="error" — it must NEVER be silently scored as 0.0.
+             try:
+                 runtime_ns, max_memory_kb, integral = map(float, stats_output.text.strip().split())
+                 output.runtime = runtime_ns
+                 output.memory = max_memory_kb
+                 output.integral = integral
+             except Exception as e:
+-                if self.verbose:
+-                    print(f"Failed to parse statistics: {e} - {stats_output.text}")
+-                output.runtime = 0.0
+-                output.memory = 0.0
+-                output.integral = 0.0
+-                
++                raise RuntimeError(
++                    "Failed to parse execution statistics "
++                    f"(exit_code={stats_output.exit_code}): {e} - "
++                    f"raw statistics output: {stats_output.text!r}"
++                ) from e
++
+         return output
+     
+     def copy_from_runtime(self, src: str, dest: str):
+diff --git a/evaluate_solution.py b/evaluate_solution.py
+index b9e6f42..fb50ce2 100644
+--- a/evaluate_solution.py
++++ b/evaluate_solution.py
+@@ -268,7 +272,10 @@ def compute_model_stats(problem_names, langs, model_eval_dir, stats_file):
+                 model_stats[problem_name][lang] = None
+                 continue
+                 
+-            eval_data = [r for r in eval_data if r["runtime"] < 10_000_000_000]
++            # FAIL-CLOSED (acceptance-gate patch): failed/unmeasured records now
++            # carry runtime=None instead of a fabricated 0.0. Keep them (they
++            # count as failures in is_passed); only drop true >=10s outliers.
++            eval_data = [r for r in eval_data if not (r["runtime"] is not None and r["runtime"] >= 10_000_000_000)]
+             passed, num_passed = is_passed(eval_data, return_stats=True)
+             stats = {"passed": passed, "pass_rate": num_passed / len(eval_data) if eval_data else 0.0, "runtime_max": None, "runtime_sum": None, "memory": None, "integral_max": None, "integral_sum": None}
+             if passed:

@@ -1,0 +1,13 @@
+diff --git a/generate_solution.py b/generate_solution.py
+index 70a6df1..fa5a13d 100644
+--- a/generate_solution.py
++++ b/generate_solution.py
+@@ -2,7 +2,7 @@ import json
+ from pathlib import Path
+ from collections import defaultdict
+ from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+-from time import time
++import time
+ 
+ import click
+ from ruamel.yaml import YAML
