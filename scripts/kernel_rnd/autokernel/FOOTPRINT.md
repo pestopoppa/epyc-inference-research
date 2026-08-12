@@ -31,8 +31,8 @@ a module it never looked at.
 | | non-test lines |
 |---|---:|
 | **ON THE CAMPAIGN PATH** | **66,201** |
-| **DEFERRED** (provably unreachable) | **23,609** |
-| **TOTAL** | **89,810** |
+| **DEFERRED** (provably unreachable) | **39,047** |
+| **TOTAL** | **105,248** |
 
 **The deferred plane is explicit.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -147,8 +147,12 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `adapters/__init__.py` | 21 | no | AK9 adapter namespace only; campaign #1 remains llama_cpu-only and imports no speech release surface |
 | `adapters/whisper_stt.py` | 1,843 | no | AK9 pure whisper.cpp tree, metric, linkage, protocol-prerequisite and release-binding declarations; no inference, build, mutation or freeze authority |
 | `adapters/qwentts_tts.py` | 1,981 | no | AK9 pure qwentts.cpp declarations; pins the STT intelligibility instrument and requires ggml-submodule closure traversal without inference, build, mutation or freeze authority |
-| `release/__init__.py` | 31 | no | AK9 release namespace; it binds no implementation and remains outside the campaign mutation path |
+| `release/__init__.py` | 36 | no | AK9 release namespace; binds only the read-only plan compiler while readiness, T3, packager and preflight require explicit operator-side imports, all outside campaign #1 |
 | `release/plan.py` | 2,539 | no | AK9 read-only release-plan compiler; derives exact per-tree cells and fails closed on missing evidence or single-backend no-op candidates, but cannot run or promote one |
+| `release/preflight.py` | 184 | no | AK5 release-local pure preflight decisions over caller-supplied host, resource-claim and storage receipts; restores no controller guard or autonomous state machine and performs no observation or action |
+| `release/readiness.py` | 4,312 | no | AK5/AK6 operator-facing readiness reducer; preserves per-backend and per-phase outcomes without a cross-device scalar, and has no mutation, execution, freeze or cutover authority |
+| `release/t3.py` | 6,661 | no | AK5 dry-run release gate and sealed evidence receipt compiler; release mode refuses while P-KERNEL-FREEZE-1 is unratified, and the module cannot write, build, launch, signal, freeze or cut over |
+| `release/packager.py` | 4,276 | no | AK6 operator package renderer over completed T3 evidence; emits only in-memory drafts and terminal `RELEASE_PACKAGE_READY`, never freeze eligibility or an executed production transaction |
 | `evaluator/__init__.py` | 41 | yes | docstring only — it binds no submodule, so importing `evaluator.api` does not drag the plane in |
 | `evaluator/api.py` | 3,320 | yes | a `Verdict` is constructible only via `compute_verdict()`; `kernel_eval.sh` stamped `"status":"OK"` unconditionally |
 | `evaluator/correctness.py` | 3,838 | yes | throughput is reward-hackable: deleting the computation is the fastest kernel there is |

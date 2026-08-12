@@ -21,6 +21,11 @@ row, or applies an AutoPilot baseline is a defect, not a feature (design §1.3,
 Nothing in this package writes any file, starts, stops or signals any process,
 builds anything, or runs inference.
 
+Only the read-only plan compiler is bound here. The readiness, T3, packager and
+release-local preflight modules are operator-triggered explicit imports; keeping
+them out of this package initializer prevents Campaign #1 from acquiring release
+authority through an incidental ``release`` import.
+
 Owning design: `epyc-root/handoffs/active/autokernel-research-loop.md`, phase AK5
 (§3.2, §10, §11).
 """
