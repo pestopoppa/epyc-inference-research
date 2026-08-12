@@ -283,6 +283,24 @@ class EvoEngineerArenaTest(unittest.TestCase):
         self.assertEqual(argv[argv.index("--effort") + 1], common.MODEL_EFFORT)
         self.assertEqual(argv[argv.index("--checkpoint-hours") + 1], "32")
 
+    @unittest.skipUnless(E.DEFAULT_SOURCE_ROOT.is_dir(),
+                         "exact admitted EvoEngineer checkout is absent")
+    def test_exact_upstream_run_completes_full_policy_with_fixture_bridges(self):
+        """Exercise the real historical loop without model, GPU, or inference."""
+        output = self.workspace / "exact-upstream-run"
+        output.mkdir()
+        model = FixtureModel(self.workspace, common.ControllerBudget(2, 7200))
+        evaluator = FixtureEvaluator(self.workspace)
+        controller = E.build_controller(
+            prompt="optimize", evaluator=evaluator, model=model,
+            output_path=output, types=E.load_upstream(E.DEFAULT_SOURCE_ROOT))
+        controller.run()
+        self.assertTrue(controller.run_state_dict.is_done)
+        self.assertEqual(controller.run_state_dict.generation, E.MAX_GENERATIONS)
+        self.assertEqual(controller.run_state_dict.tot_sample_nums, 40)
+        self.assertEqual(len(model.prompts), 40)
+        self.assertEqual(len(evaluator.calls), 41)
+
 
 if __name__ == "__main__":
     unittest.main()
