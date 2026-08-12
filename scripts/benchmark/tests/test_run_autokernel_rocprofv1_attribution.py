@@ -32,6 +32,45 @@ class RocprofV1AttributionTest(unittest.TestCase):
                 "--model", "/model", "--output-dir", "/evidence",
             ])))
 
+    def test_profile_command_defaults_to_explicit_prefill(self):
+        command = R.profile_command(
+            Path("/bin/bench"), Path("/model.gguf"), tokens=2048,
+            repetitions=1, profiler=Path("/bin/rocprof"),
+            input_file=Path("/evidence/timestamps.txt"),
+            output_file=Path("/evidence/p2048.csv"))
+        self.assertEqual(command[command.index("-n") + 1], "0")
+
+    def test_profile_command_threads_decode_tokens_to_llama_bench(self):
+        command = R.profile_command(
+            Path("/bin/bench"), Path("/model.gguf"), tokens=2048,
+            repetitions=1, profiler=Path("/bin/rocprof"),
+            input_file=Path("/evidence/timestamps.txt"),
+            output_file=Path("/evidence/p2048.csv"), gen_tokens=128)
+        self.assertEqual(command[command.index("-n") + 1], "128")
+
+    def test_generation_tokens_must_be_non_negative(self):
+        with self.assertRaisesRegex(ValueError, "non-negative"):
+            R.bench_command(
+                Path("/bin/bench"), Path("/model.gguf"), tokens=2048,
+                repetitions=1, gen_tokens=-1)
+
+    def test_workload_phase_matches_generation_surface(self):
+        self.assertEqual(R.workload_phase(0), "prefill")
+        self.assertEqual(R.workload_phase(128), "prefill+decode")
+
+    def test_receipt_workload_binds_generation_tokens_and_phase(self):
+        text = Path(R.__file__).read_text(encoding="utf-8")
+        self.assertIn('"gen_tokens": args.gen_tokens', text)
+        self.assertIn('"phase": workload_phase(args.gen_tokens)', text)
+
+    def test_parser_exposes_generation_tokens(self):
+        args = R.parser().parse_args([
+            "--source-root", "/source", "--binary", "/bin/bench",
+            "--model", "/model", "--output-dir", "/evidence",
+            "--gen-tokens", "128",
+        ])
+        self.assertEqual(args.gen_tokens, 128)
+
     def test_bench_result_requires_mi210_and_complete_samples(self):
         row = {
             "n_prompt": 32, "backends": "ROCm", "gpu_info": "AMD Instinct MI210",
