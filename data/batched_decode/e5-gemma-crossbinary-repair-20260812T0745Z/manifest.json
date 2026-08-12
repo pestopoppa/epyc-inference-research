@@ -421,8 +421,9 @@
     "declared_by": "mainA",
     "measurements_present": false,
     "note": "Rows in summary.csv/cells.jsonl are the driver's record of a FAILURE. error_rate=1.0 there is computed from 0/0 \u2014 an empty denominator, not an observed rate.",
-    "reason": "gemma4 MTP draft could not create a context on production v9 (10125/0db32c06e): 'Gemma4Assistant requires ctx_other to be set'; llama-server exited ~1.7s after binding. 9 of 9 cell logs.",
-    "reason_code": "gemma4-mtp-fails-on-v9-10125-ctx_other",
+    "reason": "affinity_preflight.py exited 1 on all 8 cells (absolute-import sys.path bug, fixed in orchestrator efbbbbe9). NOT an MTP defect \u2014 the earlier gemma4-mtp-fails-on-v9 reason_code is RETRACTED; MTP is verified working on v9.",
+    "reason_code": "affinity-preflight-import-exit1",
+    "retracted_reason_code": "gemma4-mtp-fails-on-v9-10125-ctx_other",
     "superseded_by": null
   }
 }

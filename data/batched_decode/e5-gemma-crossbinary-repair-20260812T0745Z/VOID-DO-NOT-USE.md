@@ -14,3 +14,21 @@ Root cause in logs/*.log (9 of 9):
     Gemma4Assistant requires ctx_other to be set
   W srv load_model: [spec] failed to measure draft model memory:
     failed to create llama_context from model
+
+
+## RETRACTION 2026-08-12 — the stated cause above is WRONG
+
+This run is still VOID (zero measurements), but NOT for the reason given. The driver recorded
+the real cause in `events.jsonl`: `affinity preflight exited 1` on all 8 cells — mainA's own
+absolute-import sys.path bug in affinity_preflight.py, fixed in orchestrator `efbbbbe9`.
+
+The `Gemma4Assistant requires ctx_other to be set` line quoted above is a BENIGN probe warning
+— its own text says *(this warning is normal during memory fitting)* — and it appears in a
+healthy MTP run too, immediately followed by `model loaded`.
+
+**gemma4 MTP is verified working on production v9**: launched with the full 8-parameter recipe,
+loaded and bound in 5.4s, served a correct completion, and speculative decoding engaged with
+`draft acceptance = 1.00000 (4 accepted / 4 generated), mean len = 3.00`.
+
+Diagnosed from the most alarming line in the server log instead of the cause the driver had
+already recorded. The manifest's `void_detail.reason_code` is corrected alongside this note.
