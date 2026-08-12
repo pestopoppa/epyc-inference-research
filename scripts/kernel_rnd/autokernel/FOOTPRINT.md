@@ -30,9 +30,9 @@ a module it never looked at.
 
 | | non-test lines |
 |---|---:|
-| **ON THE CAMPAIGN PATH** | **66,336** |
-| **DEFERRED** (provably unreachable) | **39,239** |
-| **TOTAL** | **105,575** |
+| **ON THE CAMPAIGN PATH** | **66,386** |
+| **DEFERRED** (provably unreachable) | **39,721** |
+| **TOTAL** | **106,107** |
 
 **The deferred plane is explicit.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -127,7 +127,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `dashboard.py` | 201 | yes | the terminal result was fsynced but the only dashboard exporter had been deleted, so active AutoKernel work remained permanently absent from the operator surface; this compact projection dates itself from the journal entry and cannot make an old campaign fresh |
 | `__init__.py` | 14 | yes | package docstring; `schemas` is declared here as the single source of record shape |
 | `schemas.py` | 3,598 | yes | one record shape — every module is written against it and none invents its own |
-| `journal.py` | 2,238 | yes | AutoPilot lost 232 trials and ~16 days when a restart came up empty and nothing objected |
+| `journal.py` | 2,288 | yes | AutoPilot lost 232 trials and ~16 days when a restart came up empty and nothing objected |
 | `offline_least_commitment.py` | 345 | no | AP-WM-1 observe-only archive analysis; importing an offline hypothesis diagnostic into the mutation/build path would give it accidental live authority |
 | `least_commitment_archive_builder.py` | 368 | no | AK-WM-2a strict real-record projection; it reads hash-bound completed campaign evidence into an observe-only archive and cannot launch, rank, mutate, or promote |
 | `turn_productivity.py` | 481 | no | AK-PT-1/AK-X-6 archive reducer; it consumes completed refine-turn records and may only withhold future search advancement, so campaign #1 must not give it live rank or mutation authority |
@@ -153,6 +153,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `release/readiness.py` | 4,312 | no | AK5/AK6 operator-facing readiness reducer; preserves per-backend and per-phase outcomes without a cross-device scalar, and has no mutation, execution, freeze or cutover authority |
 | `release/t3.py` | 6,661 | no | AK5 dry-run release gate and sealed evidence receipt compiler; release mode refuses while P-KERNEL-FREEZE-1 is unratified, and the module cannot write, build, launch, signal, freeze or cut over |
 | `release/packager.py` | 4,276 | no | AK6 operator package renderer over completed T3 evidence; emits only in-memory drafts and terminal `RELEASE_PACKAGE_READY`, never freeze eligibility or an executed production transaction |
+| `release/closeout.py` | 482 | no | AK6 operator-triggered integration seam: joins the lean journaled champion to readiness, dry-run T3 and a validated package with crash/preemption/tamper terminal records, but has no build, inference, process or production-write capability |
 | `evaluator/__init__.py` | 41 | yes | docstring only — it binds no submodule, so importing `evaluator.api` does not drag the plane in |
 | `evaluator/api.py` | 3,320 | yes | a `Verdict` is constructible only via `compute_verdict()`; `kernel_eval.sh` stamped `"status":"OK"` unconditionally |
 | `evaluator/correctness.py` | 3,952 | yes | throughput is reward-hackable: deleting the computation is the fastest kernel there is |

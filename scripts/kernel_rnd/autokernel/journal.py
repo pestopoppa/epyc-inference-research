@@ -221,6 +221,8 @@ KIND_T0_REFUSAL = "T0_REFUSAL"
 KIND_COMPOSITION_REQUESTED = "COMPOSITION_REQUESTED"
 KIND_COMPOSITION_FAILED = "COMPOSITION_FAILED"
 KIND_COMPOSITION_REJECTED = "COMPOSITION_REJECTED"
+KIND_OPERATOR_RELEASE_DRY_RUN_REQUESTED = "OPERATOR_RELEASE_DRY_RUN_REQUESTED"
+KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED = "OPERATOR_RELEASE_DRY_RUN_TERMINATED"
 # §3.5 preflight attestation. `resource/preflight.py` builds the verdict and its
 # own docstring instructs the caller to journal `exc.result.to_dict()` verbatim
 # on FAIL and COULD_NOT_CHECK — "a precondition that was checked but not recorded
@@ -249,6 +251,8 @@ NATIVE_KINDS = frozenset({
     KIND_T0_REFUSAL,
     KIND_COMPOSITION_REQUESTED,
     KIND_COMPOSITION_FAILED, KIND_COMPOSITION_REJECTED,
+    KIND_OPERATOR_RELEASE_DRY_RUN_REQUESTED,
+    KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED,
 }) | BOOTSTRAP_KNOWLEDGE_KINDS
 
 KINDS = frozenset(SCHEMA_BOUND_KINDS) | NATIVE_KINDS
@@ -267,6 +271,8 @@ RECORD_ID_KEY_BY_KIND = {
     KIND_COMPOSITION_REQUESTED: "request_sha256",
     KIND_COMPOSITION_FAILED: "request_sha256",
     KIND_COMPOSITION_REJECTED: "attempt_sha256",
+    KIND_OPERATOR_RELEASE_DRY_RUN_REQUESTED: "request_id",
+    KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED: "terminal_sha256",
 }
 
 # §5.8 storage classes. Only the expirable class may ever be tombstoned:
@@ -1143,6 +1149,48 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
             out.append("candidate_ids: required non-empty list")
         if not isinstance(conflicts, list) or not conflicts:
             out.append("conflicts: required non-empty list")
+    elif kind == KIND_OPERATOR_RELEASE_DRY_RUN_REQUESTED:
+        for key in ("request_id", "request_sha256", "source_tree", "requested_by",
+                    "requested_at", "champion_event_id", "combined_candidate_id",
+                    "evidence_class"):
+            value = payload.get(key)
+            if not isinstance(value, str) or not value.strip():
+                out.append(f"{key}: required and non-empty")
+        request_id = payload.get("request_id")
+        if isinstance(request_id, str) and not request_id.startswith("akfr-"):
+            out.append("request_id: must start with 'akfr-'")
+        request_sha = payload.get("request_sha256")
+        if isinstance(request_sha, str) and not _SHA256_RE.match(request_sha):
+            out.append("request_sha256: must be a lowercase hex sha256")
+        source_tree = payload.get("source_tree")
+        if isinstance(source_tree, str) and source_tree not in schemas.SOURCE_TREES:
+            out.append(f"source_tree: {source_tree!r} is not a known source tree")
+        candidate_id = payload.get("combined_candidate_id")
+        if isinstance(candidate_id, str) and not candidate_id.startswith("akc-"):
+            out.append("combined_candidate_id: must start with 'akc-'")
+        freeze_request = payload.get("freeze_request")
+        if not isinstance(freeze_request, Mapping):
+            out.append("freeze_request: required mapping")
+        elif freeze_request.get("request_id") != request_id:
+            out.append("freeze_request.request_id: must equal request_id")
+    elif kind == KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED:
+        for key in ("terminal_sha256", "request_sha256", "request_event_id",
+                    "source_tree", "state", "failure_class", "failure_detail"):
+            value = payload.get(key)
+            if not isinstance(value, str) or not value.strip():
+                out.append(f"{key}: required and non-empty")
+        for key in ("terminal_sha256", "request_sha256"):
+            value = payload.get(key)
+            if isinstance(value, str) and not _SHA256_RE.match(value):
+                out.append(f"{key}: must be a lowercase hex sha256")
+        if payload.get("state") not in {
+                "RESOURCE_PREEMPTED", "TAMPER_REFUSED", "FAILED"}:
+            out.append(
+                "state: must be one of ['FAILED', 'RESOURCE_PREEMPTED', "
+                "'TAMPER_REFUSED']")
+        source_tree = payload.get("source_tree")
+        if isinstance(source_tree, str) and source_tree not in schemas.SOURCE_TREES:
+            out.append(f"source_tree: {source_tree!r} is not a known source tree")
     elif kind in BOOTSTRAP_KNOWLEDGE_KINDS:
         if not payload:
             out.append("payload: must not be empty for a bootstrap-knowledge event")
@@ -2228,6 +2276,8 @@ __all__ = [
     "KIND_MICROBENCH_RUN_COMPLETED", "KIND_T0_REFUSAL",
     "KIND_COMPOSITION_REQUESTED",
     "KIND_COMPOSITION_FAILED", "KIND_COMPOSITION_REJECTED",
+    "KIND_OPERATOR_RELEASE_DRY_RUN_REQUESTED",
+    "KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED",
     "tombstone_view_key",
     "Journal", "JournalEntry", "JournalDefect", "ShardRef", "TornTail",
     "ReadReport", "Cursor", "Views",
