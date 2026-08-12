@@ -14,6 +14,7 @@ from unittest import mock
 
 from . import arena_campaign as C
 from . import claude_codex_actor_critic as AC
+from . import evoengineer_arena as EVO
 from . import geak_v1_arena as GEAK
 from . import kernelfoundry_arena as KF
 from . import k_search_arena as KS
@@ -312,6 +313,17 @@ class ArenaCampaignTest(unittest.TestCase):
         argus = spec.arms[-1]
         self.assertIn("licensed", " ".join(argus.missing_artifacts))
         self.assertIn("gfx90a", " ".join(argus.missing_artifacts))
+        evoengineer = next(
+            arm for arm in spec.arms if arm.arm_id == EVO.CONTROLLER_ID)
+        self.assertEqual(evoengineer.adapter_kind, EVO.PENDING_ADAPTER_KIND)
+        self.assertEqual(evoengineer.upstream_source_commit, EVO.SOURCE_COMMIT)
+        self.assertEqual(
+            evoengineer.upstream_entrypoint_sha256,
+            EVO.EXPECTED_SOURCE_SHA256[EVO.UPSTREAM_ENTRYPOINT])
+        self.assertEqual(
+            evoengineer.upstream_license_sha256,
+            EVO.EXPECTED_SOURCE_SHA256["LICENSE"])
+        self.assertFalse(evoengineer.argv)
 
     def test_controller_coverage_is_two_only_when_both_clis_are_present(self):
         actor = C.ArmImplementation(
