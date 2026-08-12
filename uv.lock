@@ -525,6 +525,7 @@ name = "epyc-inference-research"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "httpx" },
     { name = "numpy" },
     { name = "pyyaml" },
     { name = "requests" },
@@ -580,6 +581,7 @@ requires-dist = [
     { name = "epyc-inference-research", extras = ["benchmark", "tuning", "knowledge", "graph"], marker = "extra == 'all'" },
     { name = "gguf", marker = "extra == 'benchmark'", specifier = ">=0.17.0" },
     { name = "google-api-python-client", marker = "extra == 'knowledge'", specifier = ">=2.100.0" },
+    { name = "httpx", specifier = ">=0.27.0" },
     { name = "kuzu", marker = "extra == 'graph'", specifier = ">=0.3.0" },
     { name = "mwclient", marker = "extra == 'knowledge'", specifier = ">=0.10.1" },
     { name = "next-plaid-client", marker = "extra == 'retrieval'", specifier = ">=0.1.0" },

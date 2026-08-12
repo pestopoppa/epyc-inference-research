@@ -73,6 +73,53 @@ class DeviceSamplingReceiptTest(unittest.TestCase):
         self.assertEqual(M.check_gpu_device_sampling(
             throttled, n_gpu_layers=99, live_subprocess=True).outcome, "FAIL")
 
+    def test_ranked_gpu_duration_floor_comes_from_local_gfx90a_receipt(self):
+        floor = devices.GFX90A_RANKED_DURATION_ADMISSION
+        self.assertEqual(floor.architecture, "gfx90a")
+        self.assertEqual(floor.device_id, "ROCm0")
+        self.assertEqual(floor.min_window_ns, 250_090_903)
+        self.assertIn(
+            "07788e1d488ecec062e8133dd9e11d379e5075afbcc20f80b6da37e345533431",
+            floor.evidence_ref)
+        self.assertEqual(
+            floor.check((floor.min_window_ns,), device_id="ROCm0").outcome,
+            "PASS")
+
+    def test_sub_floor_live_gpu_window_is_unrankable(self):
+        floor = devices.GFX90A_RANKED_DURATION_ADMISSION.min_window_ns
+        check = M.check_gpu_ranked_duration_windows(
+            (floor // 4, floor // 4), self.receipt(),
+            n_gpu_layers=99, live_subprocess=True)
+        self.assertEqual(check.outcome, "COULD_NOT_CHECK")
+        self.assertIn("receives no speed rank", check.reasons[0])
+        self.assertEqual(M.check_gpu_ranked_duration_windows(
+            (floor // 2, floor - floor // 2), self.receipt(),
+            n_gpu_layers=99, live_subprocess=True).outcome, "PASS")
+        self.assertEqual(M.check_gpu_ranked_duration_windows(
+            (floor,), self.receipt(), n_gpu_layers=0,
+            live_subprocess=True).outcome, "PASS")
+        self.assertEqual(M.check_gpu_ranked_duration_windows(
+            (floor,), self.receipt(), n_gpu_layers=99,
+            live_subprocess=False).outcome, "PASS")
+
+    def test_gpu_duration_floor_refuses_foreign_or_missing_device_evidence(self):
+        floor = devices.GFX90A_RANKED_DURATION_ADMISSION.min_window_ns
+        foreign = S.DeviceSamplingReceipt(
+            sampler_id=S.MODULE_ID, device_id="ROCm1",
+            source="amdgpu-hwmon/numeric-250ms/v1",
+            started_at="2026-08-11T00:00:00Z",
+            ended_at="2026-08-11T00:00:01Z", interval_s=0.25,
+            duration_s=1.0,
+            command=(S.DEFAULT_ROCM_SMI, "-d", "1", "--showclocks",
+                     "--showpower", "--showtemp"),
+            samples=(self.sample(0.0), self.sample(0.25)))
+        self.assertEqual(M.check_gpu_ranked_duration_windows(
+            (floor,), foreign, n_gpu_layers=99,
+            live_subprocess=True).outcome, "COULD_NOT_CHECK")
+        self.assertEqual(M.check_gpu_ranked_duration_windows(
+            (floor,), None, n_gpu_layers=99,
+            live_subprocess=True).outcome, "COULD_NOT_CHECK")
+
 
 class RocmSmiSamplingSessionTest(unittest.TestCase):
     def test_live_thread_samples_numeric_fields_on_declared_cadence(self):

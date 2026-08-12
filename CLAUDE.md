@@ -73,7 +73,7 @@ Agent files, hooks, and handoffs live in `epyc-root` — not here. Orchestrator 
 <!-- gitnexus:keep -->
 # GitNexus — Code Intelligence
 
-Indexed as **epyc-inference-research** (26449 symbols, 44136 relationships, 300 execution flows). Use the `gitnexus` CLI; `gitnexus-*` skills auto-surface in the Skill tool.
+Indexed as **epyc-inference-research** (74504 symbols, 117339 relationships, 300 execution flows). Use the `gitnexus` CLI; `gitnexus-*` skills auto-surface in the Skill tool.
 
 **Re-index when stale:** `scripts/gitnexus-analyze.sh` — NOT bare `gitnexus analyze` (re-installs skills into a nested subdir).
 
