@@ -1,3 +1,9 @@
+# RETIRED FOR DISCRIMINATION at the >=27B tier (2026-08-12): in the 2026-08-02
+# judge-suite head-to-head (data/judge_suite_headtohead_20260802) 8/9 questions
+# scored a perfect 3 for BOTH arms — 89% saturated, no usable keep/drop signal.
+# Binding metadata + fail-closed consumer guard:
+#   benchmarks/prompts/v1/suite_retirements.json
+#   (read by scripts/benchmark/score_with_claude.py and rebuild_summary.py)
 version: 2
 domain: math
 description: "Mathematical reasoning benchmark - hardened for graduate/research level"

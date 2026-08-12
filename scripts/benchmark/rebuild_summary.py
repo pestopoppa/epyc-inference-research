@@ -35,12 +35,59 @@ from collections import defaultdict
 from pathlib import Path
 from datetime import datetime
 
+try:
+    from score_with_claude import (
+        SuiteRetirementError,
+        load_suite_retirements,
+        parse_model_params_b,
+    )
+except ImportError:
+    from .score_with_claude import (
+        SuiteRetirementError,
+        load_suite_retirements,
+        parse_model_params_b,
+    )
+
 BASE_DIR = "/mnt/raid0/llm/epyc-inference-research/benchmarks/results"
 RUNS_DIR = os.path.join(BASE_DIR, "runs")
 REVIEWS_DIR = os.path.join(BASE_DIR, "reviews")
 OUTPUT_FILE = os.path.join(REVIEWS_DIR, "summary.csv")
 
 SUITES = ["thinking", "general", "math", "agentic", "coder", "instruction_precision", "long_context"]
+
+# Loud cell marker for suites retired-for-discrimination at the model's tier
+# (benchmarks/prompts/v1/suite_retirements.json, fail-closed in main()).
+RETIRED_CELL_STAMP = "!RETIRED-NONDISCRIMINATING"
+
+
+def retired_suite_stamp(suite: str, model_name: str, retirements: dict) -> str:
+    """Return the non-discriminating stamp when ``suite`` is retired at this
+    model's tier, else "".
+
+    Fail-closed on tier: a model whose parameter count cannot be parsed from
+    its name is treated as at-tier, because an unresolved tier cannot certify
+    the suite as discriminating.
+    """
+    entry = retirements.get(suite)
+    if entry is None:
+        return ""
+    params_b = parse_model_params_b(model_name)
+    if params_b is not None and params_b < float(entry["min_params_b"]):
+        return ""
+    return f"{RETIRED_CELL_STAMP}@{entry['tier']}"
+
+
+def aggregate_totals(suite_scores: dict) -> tuple[int, int]:
+    """Comparative totals over discriminating suites only.
+
+    Suites carrying a retirement stamp are recorded in their own cells but
+    excluded here: a cross-suite total that silently includes a saturated
+    suite is exactly the clean-looking comparative number the retirement
+    forbids.
+    """
+    correct = sum(s["correct"] for s in suite_scores.values() if not s.get("stamp"))
+    total = sum(s["total"] for s in suite_scores.values() if not s.get("stamp"))
+    return correct, total
 
 
 def load_review_scores(review_name: str) -> dict | None:
@@ -224,7 +271,7 @@ def get_row_key(model_name: str, config: dict) -> tuple:
         return (model_name, "baseline")
 
 
-def process_all_results() -> list[dict]:
+def process_all_results(retirements: dict) -> list[dict]:
     """Process all result files and return aggregated rows."""
     pattern = os.path.join(RUNS_DIR, "*", "*.json")
     result_files = sorted(glob.glob(pattern))
@@ -259,19 +306,26 @@ def process_all_results() -> list[dict]:
         suite_scores = {}
         if review_scores:
             for suite in SUITES:
+                stamp = retired_suite_stamp(suite, model_name, retirements)
                 if suite in review_scores:
                     c = review_scores[suite]["correct"]
                     t = review_scores[suite]["total"]
-                    suite_scores[suite] = {"correct": c, "total": t, "str": f"{c}/{t}"}
+                    cell = f"{c}/{t} {stamp}" if stamp else f"{c}/{t}"
+                    suite_scores[suite] = {"correct": c, "total": t,
+                                           "str": cell, "stamp": stamp}
                 else:
-                    suite_scores[suite] = {"correct": 0, "total": 0, "str": "-"}
+                    suite_scores[suite] = {"correct": 0, "total": 0,
+                                           "str": "-", "stamp": stamp}
         else:
             # No Claude-as-Judge review - show as unscored
             for suite in SUITES:
-                suite_scores[suite] = {"correct": 0, "total": 0, "str": "-"}
+                suite_scores[suite] = {"correct": 0, "total": 0, "str": "-",
+                                       "stamp": retired_suite_stamp(
+                                           suite, model_name, retirements)}
 
-        total_correct = sum(s["correct"] for s in suite_scores.values())
-        total_questions = sum(s["total"] for s in suite_scores.values())
+        # Comparative totals cover discriminating suites only (retired cells
+        # remain visible above, stamped).
+        total_correct, total_questions = aggregate_totals(suite_scores)
         pct = (total_correct / total_questions * 100) if total_questions > 0 else 0
 
         row_key = get_row_key(model_name, config)
@@ -423,12 +477,22 @@ def process_all_results() -> list[dict]:
 
 
 def main():
+    # FAIL-CLOSED retirement gate: a summary rebuilt without the retirement
+    # sidecar would silently present saturated suites as comparative signal.
+    # Refuse to write anything instead.
+    try:
+        retirements = load_suite_retirements()
+    except SuiteRetirementError as exc:
+        raise SystemExit(f"ERROR: {exc}")
+
     print(f"Scanning results from: {RUNS_DIR}")
     print(f"Reviews directory: {REVIEWS_DIR}")
     print(f"Output file: {OUTPUT_FILE}")
+    print(f"Retired-for-discrimination suites: {sorted(retirements)} "
+          f"(cells stamped {RETIRED_CELL_STAMP!r} at tier; excluded from totals)")
     print()
 
-    rows = process_all_results()
+    rows = process_all_results(retirements)
 
     print(f"Generated {len(rows)} unique model entries")
 

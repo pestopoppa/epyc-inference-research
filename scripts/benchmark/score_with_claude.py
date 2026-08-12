@@ -14,6 +14,7 @@ import csv
 import hashlib
 import json
 import os
+import re
 import urllib.request
 from pathlib import Path
 
@@ -63,6 +64,110 @@ Respond with ONLY a JSON object: {{"score": <0-3>, "reason": "<1-2 sentence expl
 Do not include any other text."""
 
 CURRENT_CAPTURE_SCHEMA = "v7_quality_gate_capture.v4"
+
+# --- Suite retirement (binding, machine-readable) ---------------------------
+# Origin: 2026-08-02 judge-suite head-to-head (data/judge_suite_headtohead_20260802):
+# 50 of 68 questions scored a perfect 3 for BOTH arms; `general` was 10/10
+# both-perfect, `thinking` 9/10, `math` 8/9. That is a ceiling artifact, not
+# model equivalence (published benchmarks separate the same pair on 8 of 8
+# axes). Those suites carry no discriminating information at the >=27B tier and
+# are RETIRED for any comparative/keep-drop read there. The retirement data
+# lives in SUITE_RETIREMENTS_PATH; consumption is FAIL-CLOSED: a missing or
+# invalid sidecar is an error, never an implicit "nothing is retired".
+RETIREMENT_SCHEMA = "suite_retirement.v1"
+SUITE_RETIREMENTS_PATH = (
+    Path(__file__).resolve().parents[2] / "benchmarks/prompts/v1/suite_retirements.json"
+)
+
+
+class SuiteRetirementError(RuntimeError):
+    """The suite-retirement sidecar is missing or invalid (fail-closed)."""
+
+
+def load_suite_retirements(path: Path | None = None) -> dict[str, dict]:
+    """Load the suite-retirement sidecar, refusing loudly on any defect.
+
+    Returns the ``retired_for_discrimination`` mapping (suite name -> entry).
+    An absent, unreadable, or malformed sidecar raises SuiteRetirementError:
+    without the sidecar no suite can be certified as discriminating, so the
+    caller must refuse to present comparative output rather than silently
+    treat every suite as live.
+    """
+    path = Path(path) if path is not None else SUITE_RETIREMENTS_PATH
+    refusal = (
+        "FAIL-CLOSED: without a valid retirement sidecar no suite can be "
+        "certified as discriminating; refusing to produce comparative output. "
+        f"Expected sidecar: {path}"
+    )
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise SuiteRetirementError(
+            f"suite-retirement sidecar unreadable ({exc}). {refusal}") from exc
+    except json.JSONDecodeError as exc:
+        raise SuiteRetirementError(
+            f"suite-retirement sidecar is not valid JSON ({exc}). {refusal}") from exc
+    if not isinstance(data, dict) or data.get("schema") != RETIREMENT_SCHEMA:
+        raise SuiteRetirementError(
+            f"suite-retirement sidecar schema is not {RETIREMENT_SCHEMA!r}. {refusal}")
+    retired = data.get("retired_for_discrimination")
+    if not isinstance(retired, dict):
+        raise SuiteRetirementError(
+            f"suite-retirement sidecar has no retired_for_discrimination map. {refusal}")
+    for suite, entry in retired.items():
+        if not isinstance(entry, dict):
+            raise SuiteRetirementError(
+                f"retirement entry for {suite!r} is not an object. {refusal}")
+        if not isinstance(entry.get("min_params_b"), (int, float)):
+            raise SuiteRetirementError(
+                f"retirement entry for {suite!r} lacks numeric min_params_b. {refusal}")
+        for field in ("tier", "both_perfect", "measured", "reason"):
+            if not isinstance(entry.get(field), str) or not entry[field]:
+                raise SuiteRetirementError(
+                    f"retirement entry for {suite!r} lacks {field}. {refusal}")
+        evidence = entry.get("evidence")
+        if not isinstance(evidence, list) or not evidence:
+            raise SuiteRetirementError(
+                f"retirement entry for {suite!r} lacks an evidence list. {refusal}")
+    return retired
+
+
+# Total-parameter count from a model path/name: take the LARGEST `<num>B` token
+# not preceded by a letter/digit, so active-expert suffixes like `-A10B` in
+# `122B-A10B` are ignored while `122B` is kept.
+_PARAMS_B_RE = re.compile(r"(?<![A-Za-z0-9.])(\d+(?:\.\d+)?)[bB](?![A-Za-z0-9])")
+
+
+def parse_model_params_b(name: str) -> float | None:
+    """Best-effort total-parameter count (billions) from a model path or name."""
+    if not name:
+        return None
+    matches = _PARAMS_B_RE.findall(os.path.basename(str(name)))
+    if not matches:
+        return None
+    return max(float(m) for m in matches)
+
+
+def retirement_stamp(suite: str, retirements: dict[str, dict],
+                     params_b: float | None) -> str:
+    """Return the loud non-discriminating stamp for a retired suite, else "".
+
+    Tier handling is fail-closed: a model whose parameter count cannot be
+    resolved is treated as at-tier, because an unknown tier cannot certify the
+    suite as discriminating.
+    """
+    entry = retirements.get(suite)
+    if entry is None:
+        return ""
+    if params_b is not None and params_b < float(entry["min_params_b"]):
+        return ""
+    tier_note = "" if params_b is not None else " model-tier-unresolved:fail-closed"
+    return (
+        f"RETIRED_NON_DISCRIMINATING tier={entry['tier']} "
+        f"both_perfect={entry['both_perfect']} measured={entry['measured']} "
+        f"evidence={entry['evidence'][0]}{tier_note}"
+    )
+
 
 def text_identity(text: str) -> dict[str, int | str]:
     """Return lossless UTF-8 identity metadata for an input string."""
@@ -229,6 +334,14 @@ def main() -> int:
     if args.judge_input_budget_bytes is not None and args.judge_input_budget_bytes <= 0:
         parser.error("--judge-input-budget-bytes must be positive")
 
+    # FAIL-CLOSED retirement gate: refuse to score at all when the sidecar is
+    # missing or invalid. Deleting the retirement metadata must be loud, never
+    # a silent return to "every suite is discriminating".
+    try:
+        suite_retirements = load_suite_retirements()
+    except SuiteRetirementError as exc:
+        parser.error(str(exc))
+
     # Load results
     with open(args.result_json) as f:
         data = json.load(f)
@@ -253,6 +366,14 @@ def main() -> int:
 
     role = data["model_role"]
     config = data["config_name"]
+    # Model tier for retirement scoping: model_path first, then role/config as
+    # weaker hints. None (unresolvable) is treated as at-tier by
+    # retirement_stamp (fail-closed).
+    params_b = None
+    for tier_source in (data.get("model_path"), role, config):
+        params_b = parse_model_params_b(str(tier_source or ""))
+        if params_b is not None:
+            break
 
     if not args.output:
         args.output = f"/mnt/raid0/llm/epyc-inference-research/benchmarks/results/reviews/{role}_{config}.csv"
@@ -279,6 +400,8 @@ def main() -> int:
                 "finish_reason": qdata.get("finish_reason"),
                 "usage": qdata.get("usage"),
                 "capture_status": capture_status,
+                "suite_retirement": retirement_stamp(
+                    suite_name, suite_retirements, params_b),
             })
 
     print(f"Scoring {len(questions)} responses for {role}/{config}")
@@ -294,6 +417,7 @@ def main() -> int:
                 "tokens_per_second": round(q["tokens_per_second"], 1),
                 "claude_score": -1, "score_reason": q["capture_status"],
                 "score_eligibility": q["capture_status"],
+                "suite_retirement": q["suite_retirement"],
                 "prompt_utf8_chars": "", "prompt_utf8_bytes": "", "prompt_sha256": "",
                 "response_utf8_chars": "", "response_utf8_bytes": "", "response_sha256": "",
                 "scorer_input_utf8_bytes": "", "scorer_input_sha256": "",
@@ -320,6 +444,7 @@ def main() -> int:
                 "provisional_input_over_budget" if reason.startswith(
                     "provisional_input_over_budget:") else "scoring_error"
             ),
+            "suite_retirement": q["suite_retirement"],
             "prompt_utf8_chars": scorer_input["prompt_identity"]["utf8_chars"],
             "prompt_utf8_bytes": scorer_input["prompt_identity"]["utf8_bytes"],
             "prompt_sha256": scorer_input["prompt_identity"]["sha256"],
@@ -340,7 +465,8 @@ def main() -> int:
     with open(args.output, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=[
             "suite", "question_id", "tokens_per_second", "claude_score", "score_reason",
-            "score_eligibility", "prompt_utf8_chars", "prompt_utf8_bytes", "prompt_sha256",
+            "score_eligibility", "suite_retirement",
+            "prompt_utf8_chars", "prompt_utf8_bytes", "prompt_sha256",
             "response_utf8_chars", "response_utf8_bytes", "response_sha256",
             "scorer_input_utf8_bytes", "scorer_input_sha256", "finish_reason", "usage",
         ])
@@ -362,14 +488,23 @@ def main() -> int:
 
     valid = results
     if valid:
-        total_score = sum(r["claude_score"] for r in valid)
-        total_max = len(valid) * 3
-        passed = sum(1 for r in valid if r["claude_score"] >= 2)
+        # Retired suites are still scored and recorded, but they carry no
+        # discriminating information at this model tier: they are excluded
+        # from the comparative aggregate and every mention is stamped.
+        discriminating = [r for r in valid if not r["suite_retirement"]]
+        retired_stamps = {r["suite"]: r["suite_retirement"]
+                          for r in valid if r["suite_retirement"]}
         print(f"\n{'='*60}")
         print(f"SCORING COMPLETE: {role}/{config}")
         print(f"{'='*60}")
-        print(f"Total: {total_score}/{total_max} ({total_score/total_max*100:.0f}%)")
-        print(f"Passed (≥2): {passed}/{len(valid)} ({passed/len(valid)*100:.0f}%)")
+        if discriminating:
+            total_score = sum(r["claude_score"] for r in discriminating)
+            total_max = len(discriminating) * 3
+            passed = sum(1 for r in discriminating if r["claude_score"] >= 2)
+            scope = " (discriminating suites only)" if retired_stamps else ""
+            print(f"Total{scope}: {total_score}/{total_max} ({total_score/total_max*100:.0f}%)")
+            print(f"Passed (≥2){scope}: {passed}/{len(discriminating)} "
+                  f"({passed/len(discriminating)*100:.0f}%)")
 
         # Per-suite
         from collections import defaultdict
@@ -380,7 +515,26 @@ def main() -> int:
             s = sum(scores)
             m = len(scores) * 3
             p = sum(1 for x in scores if x >= 2)
-            print(f"  {suite}: {s}/{m} ({s/m*100:.0f}%) | {p}/{len(scores)} pass")
+            line = f"  {suite}: {s}/{m} ({s/m*100:.0f}%) | {p}/{len(scores)} pass"
+            if suite in retired_stamps:
+                line += f"  *** NON-DISCRIMINATING: {retired_stamps[suite]} ***"
+            print(line)
+
+        if retired_stamps:
+            print("\n*** SUITE RETIREMENT ***")
+            print("Retired suites present: " + ", ".join(sorted(retired_stamps)))
+            print("Their scores are recorded but carry NO discriminating information")
+            print("at this model tier and MUST NOT feed any comparative/keep-drop read.")
+            print(f"Metadata: {SUITE_RETIREMENTS_PATH}")
+
+        if not discriminating:
+            print("\n" + "!" * 60)
+            print("NO DISCRIMINATING SUITES IN THIS RUN: every scored suite is")
+            print("RETIRED at this model tier. This output supports NO")
+            print("comparative/keep-drop read.")
+            print("!" * 60)
+            print(f"\nResults written to {args.output}")
+            return 3
 
     print(f"\nResults written to {args.output}")
     return 0

@@ -1,0 +1,48 @@
+{
+  "schema": "suite_retirement.v1",
+  "note": "Binding, machine-readable retirement of judge suites that carry no discriminating information at a model tier. Consumed FAIL-CLOSED by scripts/benchmark/score_with_claude.py and scripts/benchmark/rebuild_summary.py: if this file is missing or invalid those consumers refuse to run rather than assume nothing is retired. Retirement is forward-looking only: suites remain runnable and scores are still recorded, but any comparative/keep-drop presentation of a retired suite at (or above, or at unresolvable) tier is stamped NON-DISCRIMINATING and excluded from comparative aggregates. Historical result artifacts are untouched. Amending this file is a governance act: cite evidence in the entry you add or remove.",
+  "retired_for_discrimination": {
+    "general": {
+      "tier": "27B+",
+      "min_params_b": 27,
+      "both_perfect": "10/10",
+      "both_perfect_rate": 1.0,
+      "measured": "2026-08-02",
+      "retired": "2026-08-12",
+      "evidence": [
+        "data/judge_suite_headtohead_20260802/README.md",
+        "research commit 7d7bc8d3 (suite v2 + ceiling measurement)",
+        "epyc-root handoffs/active/architect-model-selection-bench.md (2026-08-02 ceiling finding)"
+      ],
+      "reason": "10/10 questions scored a perfect 3 for BOTH arms in the paired 27B-vs-35B-A3B head-to-head (identical questions, matched budgets, one independent judge). 100% saturated: zero discriminating information at this tier. Ceiling artifact, not model equivalence - published benchmarks separate the same pair on 8 of 8 axes."
+    },
+    "thinking": {
+      "tier": "27B+",
+      "min_params_b": 27,
+      "both_perfect": "9/10",
+      "both_perfect_rate": 0.9,
+      "measured": "2026-08-02",
+      "retired": "2026-08-12",
+      "evidence": [
+        "data/judge_suite_headtohead_20260802/README.md",
+        "research commit 7d7bc8d3 (suite v2 + ceiling measurement)",
+        "epyc-root handoffs/active/architect-model-selection-bench.md (2026-08-02 ceiling finding)"
+      ],
+      "reason": "9/10 questions scored a perfect 3 for BOTH arms in the paired 27B-vs-35B-A3B head-to-head. 90% saturated: effectively no discriminating information at this tier. Ceiling artifact, not model equivalence."
+    },
+    "math": {
+      "tier": "27B+",
+      "min_params_b": 27,
+      "both_perfect": "8/9",
+      "both_perfect_rate": 0.89,
+      "measured": "2026-08-02",
+      "retired": "2026-08-12",
+      "evidence": [
+        "data/judge_suite_headtohead_20260802/README.md",
+        "research commit 7d7bc8d3 (suite v2 + ceiling measurement)",
+        "epyc-root handoffs/active/architect-model-selection-bench.md (2026-08-02 ceiling finding)"
+      ],
+      "reason": "8/9 questions scored a perfect 3 for BOTH arms in the paired 27B-vs-35B-A3B head-to-head (measured on suite v1; the 2026-08-02 v2 fix corrected one false question but does not change the ceiling). 89% saturated: effectively no discriminating information at this tier. Ceiling artifact, not model equivalence."
+    }
+  }
+}
