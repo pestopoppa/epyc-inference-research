@@ -308,7 +308,10 @@ def _measurement_window(
     claim_acquirer: Callable[..., Any] = device_claim.acquire_device_claim,
     sampler_factory: Callable[..., Any] = device_sampler.RocmSmiSampler,
 ) -> tuple[Any, dict[str, Any]]:
-    if phase not in {"vendor_baseline", "centralized_final_evaluation"}:
+    if phase not in {
+        "vendor_baseline", "centralized_final_evaluation",
+        "sealed_correctness", "exact_provider_timing",
+    }:
         raise HipAuthoringError(f"unsupported HIP measurement phase: {phase}")
     window_path = output_root / "measurement-windows" / f"{phase}.json"
     if window_path.exists():
