@@ -1,0 +1,131 @@
+{
+  "generated_at": "2026-08-12T08:21:24",
+  "mode": "cell",
+  "schema_version": "e5-cell-manifest/1",
+  "manifest_path": "data/batched_decode/e5_manifests/gemma4_26b_a4b_q4km_nomtp_v9/gemma4_26b_a4b_q4km_mtp-C1-np8.json",
+  "cell_id": "gemma4_26b_a4b_q4km_mtp-C1-np8",
+  "live_affinity_verified": true,
+  "live_memory_placement_verified": true,
+  "memory_locality_required": false,
+  "memory_locality_threshold": 0.85,
+  "live_memory_placement_checked": false,
+  "memory_locality_vacuous": false,
+  "memory_required_entries": 0,
+  "memory_mismatches": 0,
+  "foreign_llama_overlaps": [],
+  "gpu_tenant_overlaps": [
+    {
+      "pid": "199621",
+      "args": "/usr/bin/gnome-shell",
+      "logical_overlap_cpus": "0-95",
+      "physical_overlap_cores": "0-95",
+      "smt_only": false,
+      "allowed_by_pattern": false
+    },
+    {
+      "pid": "199954",
+      "args": "/usr/bin/gnome-software --gapplication-service",
+      "logical_overlap_cpus": "0-95",
+      "physical_overlap_cores": "0-95",
+      "smt_only": false,
+      "allowed_by_pattern": false
+    },
+    {
+      "pid": "200268",
+      "args": "/usr/libexec/xdg-desktop-portal-gnome",
+      "logical_overlap_cpus": "0-95",
+      "physical_overlap_cores": "0-95",
+      "smt_only": false,
+      "allowed_by_pattern": false
+    },
+    {
+      "pid": "201108",
+      "args": "/snap/snapd-desktop-integration/391/usr/bin/snapd-desktop-integration",
+      "logical_overlap_cpus": "0-95",
+      "physical_overlap_cores": "0-95",
+      "smt_only": false,
+      "allowed_by_pattern": false
+    },
+    {
+      "pid": "204272",
+      "args": "/usr/bin/Xwayland :0 -rootless -noreset -accessx -core -auth /run/user/1000/.mutter-Xwaylandauth.QOEWS3 -listenfd 4 -listenfd 5 -displayfd 6 -initfd 7 -byteswappedclients",
+      "logical_overlap_cpus": "0-95",
+      "physical_overlap_cores": "0-95",
+      "smt_only": false,
+      "allowed_by_pattern": false
+    },
+    {
+      "pid": "204302",
+      "args": "/usr/libexec/mutter-x11-frames",
+      "logical_overlap_cpus": "0-95",
+      "physical_overlap_cores": "0-95",
+      "smt_only": false,
+      "allowed_by_pattern": false
+    },
+    {
+      "pid": "768522",
+      "args": "/snap/firefox/8736/usr/lib/firefox/firefox --new-window",
+      "logical_overlap_cpus": "0-95",
+      "physical_overlap_cores": "0-95",
+      "smt_only": false,
+      "allowed_by_pattern": false
+    },
+    {
+      "pid": "1937980",
+      "args": "/usr/bin/nautilus --gapplication-service",
+      "logical_overlap_cpus": "0-95",
+      "physical_overlap_cores": "0-95",
+      "smt_only": false,
+      "allowed_by_pattern": false
+    }
+  ],
+  "smt_only_contention": [],
+  "contention_gate_semantics": "llama-family processes on a LOGICAL cpu intersection gate the cell; GPU/training tenants and SMT-sibling-only overlap are RECORDED and do not gate \u2014 see batched-decode-measurement.md, E5 protection defect",
+  "foreign_allowed_overlaps": [],
+  "foreign_allow_pattern": "build-hip",
+  "instances": [
+    {
+      "source": "cell-manifest",
+      "cell_index": 0,
+      "port": 19380,
+      "pid": "2896846",
+      "pid_on_port": "2896846",
+      "expected_cpus": "0-95",
+      "observed_thread_union": "0-95",
+      "expected_numa_nodes": "N0,N1,N2,N3",
+      "n_expected": 96,
+      "n_observed": 96,
+      "match": true,
+      "memory_placement": {
+        "checked": true,
+        "required": false,
+        "match": null,
+        "threshold": 0.85,
+        "no_mmap": false,
+        "signal_kind": "mmap_gguf_pages",
+        "expected_nodes": "N0,N1,N2,N3",
+        "pages_by_node": {
+          "N0": 688997,
+          "N1": 1442073,
+          "N2": 982695,
+          "N3": 982963
+        },
+        "total_pages": 4096728,
+        "expected_node_pages": 4096728,
+        "local_fraction": 1.0,
+        "model_files": [
+          "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf"
+        ],
+        "largest_anon_pages_by_node": {
+          "N0": 92481,
+          "N1": 92481,
+          "N2": 92480,
+          "N3": 92480
+        },
+        "largest_anon_total_pages": 369922,
+        "note": "shared mmap placement observed"
+      },
+      "note": "ok"
+    }
+  ]
+}
