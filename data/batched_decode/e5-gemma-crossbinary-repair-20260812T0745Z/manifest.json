@@ -414,5 +414,15 @@
   },
   "protocol_id": "P-BENCH-3",
   "run_id": "e5-gemma-crossbinary-repair-20260812T0745Z",
-  "schema_version": "e5-cell-manifest/1"
+  "schema_version": "e5-cell-manifest/1",
+  "void": true,
+  "void_detail": {
+    "declared_at": "2026-08-12T09:10:00+00:00",
+    "declared_by": "mainA",
+    "measurements_present": false,
+    "note": "Rows in summary.csv/cells.jsonl are the driver's record of a FAILURE. error_rate=1.0 there is computed from 0/0 \u2014 an empty denominator, not an observed rate.",
+    "reason": "gemma4 MTP draft could not create a context on production v9 (10125/0db32c06e): 'Gemma4Assistant requires ctx_other to be set'; llama-server exited ~1.7s after binding. 9 of 9 cell logs.",
+    "reason_code": "gemma4-mtp-fails-on-v9-10125-ctx_other",
+    "superseded_by": null
+  }
 }

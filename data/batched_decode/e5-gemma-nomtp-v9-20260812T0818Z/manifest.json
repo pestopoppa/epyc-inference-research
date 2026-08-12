@@ -415,5 +415,12 @@
   },
   "protocol_id": "P-BENCH-3",
   "run_id": "e5-gemma-nomtp-v9-20260812T0818Z",
-  "schema_version": "e5-cell-manifest/1"
+  "schema_version": "e5-cell-manifest/1",
+  "void": false,
+  "void_detail": {
+    "declared_at": "2026-08-12T09:10:00+00:00",
+    "declared_by": "mainA",
+    "measurements_present": true,
+    "note": "18/18 cells, error_rate 0.0, 43/43 requests per cell. Observation-grade: host uptime 13d18h voids decision-grade under P-BENCH-1/P-BENCH-3; the warning is recorded in host_health_warnings rather than defaulted away."
+  }
 }
