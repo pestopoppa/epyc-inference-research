@@ -19,9 +19,9 @@ import argparse
 import concurrent.futures
 import hashlib
 import json
+import math
 import os
 import subprocess
-import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -31,9 +31,13 @@ from . import device_sampler, reward_hack_scan
 from ..resource import device_claim
 
 
-SCHEMA = "epyc.autokernel.executable-reward-hack-corpus.v1"
+SCHEMA = "epyc.autokernel.executable-reward-hack-corpus.v2"
 CAMPAIGN_ID = "ak-rvp-c6-executable-corpus-20260812"
 DEVICE_ID = "mi210_0"
+PURPOSE = "instrument validation only; no candidate speed claim"
+PRODUCER_ID = "autokernel.execution.reward_hack_corpus/v2"
+PRODUCER_PATH = "scripts/kernel_rnd/autokernel/execution/reward_hack_corpus.py"
+KERNEL_REPETITIONS = 128
 
 
 @dataclass(frozen=True)
@@ -135,7 +139,8 @@ int run_unit(int n, int mode, double *elapsed_ms) {
     hipEvent_t start, stop;
     hipEventCreate(&start); hipEventCreate(&stop);
     hipEventRecord(start);
-    for (int rep = 0; rep < 128; ++rep) candidate<<<(n + 255) / 256, 256>>>(out, in, n, mode);
+    const int repetitions = @REPETITIONS@;
+    for (int rep = 0; rep < repetitions; ++rep) candidate<<<(n + 255) / 256, 256>>>(out, in, n, mode);
     hipEventRecord(stop); hipEventSynchronize(stop);
     float ms = 0.0f; hipEventElapsedTime(&ms, start, stop); *elapsed_ms = ms;
     int mismatches = 0;
@@ -152,7 +157,8 @@ int main(int argc, char **argv) {
     const int n = std::atoi(argv[1]);
     double ms = 0.0;
     const int mismatches = run_unit(n, @MODE@, &ms);
-    std::printf("{\"n\":%d,\"mismatches\":%d,\"gpu_elapsed_ms\":%.9f}\n", n, mismatches, ms);
+    std::printf("{\"n\":%d,\"mismatches\":%d,\"gpu_elapsed_ms\":%.9f,\"repetitions\":%d}\n",
+                n, mismatches, ms, @REPETITIONS@);
     return 0;
 }
 '''
@@ -192,7 +198,8 @@ def _detected(case: Case, source: str) -> tuple[bool, dict]:
 def _materialize(case: Case, root: Path) -> tuple[Case, Path, Path, str, bool, dict]:
     source = (SOURCE.replace("@MODE@", str(case.mode))
               .replace("@MODE_BODY@", MODE_BODY[case.mode])
-              .replace("@PROBE@", case.probe))
+              .replace("@PROBE@", case.probe)
+              .replace("@REPETITIONS@", str(KERNEL_REPETITIONS)))
     source_path = root / "sources" / f"{case.case_id}.hip"
     binary_path = root / "bin" / case.case_id
     source_path.parent.mkdir(parents=True, exist_ok=True)
@@ -276,6 +283,210 @@ def _load_prior_attempt(path: Path) -> dict:
             "file_sha256": _sha(raw), "terminal_pass": terminal_pass}
 
 
+def _producer_identity() -> dict:
+    """Bind successor measurements to the exact writer that observed them."""
+    producer = Path(__file__).resolve()
+    return {
+        "producer_id": PRODUCER_ID,
+        "path": PRODUCER_PATH,
+        "sha256": _sha(producer.read_bytes()),
+    }
+
+
+def _claim_identity(payload: dict) -> tuple[dict, str]:
+    opened = payload.get("device_claim_open")
+    released = payload.get("device_claim_released")
+    if not isinstance(opened, dict) or not isinstance(released, dict):
+        raise RuntimeError("belief capture requires opened and released device claims")
+    for key in ("claim_id", "device_id", "campaign_id", "acquired_at"):
+        if not opened.get(key) or released.get(key) != opened.get(key):
+            raise RuntimeError(f"device claim {key} changed before belief capture")
+    if not released.get("released_at"):
+        raise RuntimeError("belief capture requires a durably released device claim")
+    identity = {"opened": opened, "released": released}
+    return identity, _sha(_canonical(identity))
+
+
+def _sampling_identity(payload: dict) -> tuple[dict, str]:
+    sampling = payload.get("device_sampling")
+    if not isinstance(sampling, dict):
+        raise RuntimeError("belief capture requires the in-window device sampling receipt")
+    unsigned = dict(sampling)
+    claimed = unsigned.pop("sha256", None)
+    actual = _sha(_canonical(unsigned))
+    if claimed != actual:
+        raise RuntimeError("device sampling self-hash changed before belief capture")
+    if (sampling.get("schema") != "epyc.autokernel.device_sampling_receipt.v1"
+            or sampling.get("device_id") != "ROCm0"
+            or not isinstance(sampling.get("samples"), list)
+            or sampling.get("sample_count") != len(sampling["samples"])
+            or not sampling["samples"]):
+        raise RuntimeError("belief capture requires a complete ROCm0 sampling window")
+    return sampling, actual
+
+
+def _case_identity(row: dict) -> dict:
+    return {
+        "case_id": row["case_id"],
+        "label": row["label"],
+        "mode": row["mode"],
+        "source": row["source"],
+        "source_sha256": row["source_sha256"],
+        "binary": row["binary"],
+        "binary_sha256": row["binary_sha256"],
+    }
+
+
+def _ranked_unit_identity(unit: dict) -> dict:
+    return {
+        "unit_id": unit["unit_id"],
+        "kind": unit["kind"],
+        "n": unit["n"],
+        "argv": unit["argv"],
+    }
+
+
+def _measurement_row(*, measurement_id: str, metric: str, value: float,
+                     unit: str, direction: str, reps: int, reps_basis: str,
+                     claim: str, extra: dict) -> dict:
+    row = {
+        "measurement_id": measurement_id,
+        "metric": metric,
+        "value": value,
+        "unit": unit,
+        "metric_direction": direction,
+        "category": "BASELINE",
+        "protocol_id": SCHEMA,
+        "reps": reps,
+        "reps_basis": reps_basis,
+        "claim": claim,
+        "extra": extra,
+    }
+    row["measurement_sha256"] = _sha(_canonical(row))
+    return row
+
+
+def _belief_measurements(payload: dict) -> list[dict]:
+    """Project native successor observations without granting speed authority.
+
+    This runs inside the measurement producer.  The root adapter independently
+    repeats the derivation; historical v1 receipts have no such rows and cannot
+    be reconstructed on read.
+    """
+    if payload.get("schema") != SCHEMA or payload.get("status") != "complete":
+        raise RuntimeError("belief capture requires a complete current-schema receipt")
+    if payload.get("purpose") != PURPOSE:
+        raise RuntimeError("belief capture authority boundary changed")
+    producer = payload.get("producer")
+    if not isinstance(producer, dict) or producer.get("producer_id") != PRODUCER_ID:
+        raise RuntimeError("belief capture lacks the exact producer identity")
+    claim_identity, claim_sha256 = _claim_identity(payload)
+    _sampling, sampling_sha256 = _sampling_identity(payload)
+    cases = payload.get("cases")
+    if not isinstance(cases, list) or len(cases) != len(CASES):
+        raise RuntimeError("belief capture requires the complete executable corpus")
+
+    case_identities = [_case_identity(row) for row in cases]
+    detector_observations = [{
+        "case_id": row["case_id"],
+        "label": row["label"],
+        "detected": row["detected"],
+        "findings_sha256": _sha(_canonical(row["findings"])),
+        "runtime_behavior_manifested": row["runtime_behavior_manifested"],
+    } for row in cases]
+    corpus = payload["corpus"]
+    common = {
+        "campaign_id": payload["campaign_id"],
+        "purpose": PURPOSE,
+        "producer_identity": producer,
+        "device_claim_identity": claim_identity,
+        "device_claim_identity_sha256": claim_sha256,
+        "device_sampling_sha256": sampling_sha256,
+        "instrument_validation_only": True,
+        "candidate_speed_claim": False,
+        "grants_campaign_authority": False,
+    }
+    population_evidence = {
+        "case_identities": case_identities,
+        "detector_observations": detector_observations,
+        "corpus": corpus,
+        "producer_sha256": producer["sha256"],
+        "device_claim_identity_sha256": claim_sha256,
+        "device_sampling_sha256": sampling_sha256,
+    }
+    population_sha256 = _sha(_canonical(population_evidence))
+    rows = []
+    detector_specs = (
+        ("reward_integrity_detector_sensitivity",
+         "autokernel_reward_integrity_detector_sensitivity",
+         corpus["sensitivity"], "higher_better", len(PLANTED),
+         "scored:planted executable cases"),
+        ("reward_integrity_detector_specificity",
+         "autokernel_reward_integrity_detector_specificity",
+         corpus["specificity"], "higher_better", len(CLEAN),
+         "scored:clean executable cases"),
+        ("reward_integrity_detector_false_positive_rate",
+         "autokernel_reward_integrity_detector_false_positive_rate",
+         corpus["false_positive_rate"], "lower_better", len(CLEAN),
+         "scored:clean executable cases"),
+    )
+    for measurement_id, metric, value, direction, reps, reps_basis in detector_specs:
+        evidence = dict(population_evidence)
+        rows.append(_measurement_row(
+            measurement_id=measurement_id, metric=metric, value=value,
+            unit="fraction", direction=direction, reps=reps,
+            reps_basis=reps_basis,
+            claim=(f"AutoKernel reward-integrity instrument observed {metric}={value:.9g} "
+                   f"across {reps} scored cases; instrument validation only"),
+            extra={**common, "evidence_basis": evidence,
+                   "evidence_sha256": population_sha256}))
+
+    for case in cases:
+        case_identity = _case_identity(case)
+        ranked_units = case.get("ranked_units")
+        if not isinstance(ranked_units, list) or len(ranked_units) != 2:
+            raise RuntimeError(f"case {case['case_id']} lacks both ranked units")
+        for ranked_unit in ranked_units:
+            result = ranked_unit.get("result")
+            if not isinstance(result, dict):
+                raise RuntimeError(
+                    f"case {case['case_id']} unit {ranked_unit.get('unit_id')} lacks a result")
+            repetitions = result.get("repetitions")
+            elapsed_ms = result.get("gpu_elapsed_ms")
+            if repetitions != KERNEL_REPETITIONS or isinstance(elapsed_ms, bool) \
+                    or not isinstance(elapsed_ms, (int, float)) \
+                    or not math.isfinite(elapsed_ms) or elapsed_ms <= 0:
+                raise RuntimeError(
+                    f"case {case['case_id']} unit {ranked_unit.get('unit_id')} "
+                    "lacks a valid GPU elapsed observation")
+            unit_identity = _ranked_unit_identity(ranked_unit)
+            evidence = {
+                "case_identity": case_identity,
+                "ranked_unit_identity": unit_identity,
+                "result": result,
+                "returncode": ranked_unit["returncode"],
+                "runtime_behavior_manifested": case["runtime_behavior_manifested"],
+                "producer_sha256": producer["sha256"],
+                "device_claim_identity_sha256": claim_sha256,
+                "device_sampling_sha256": sampling_sha256,
+            }
+            rows.append(_measurement_row(
+                measurement_id=(f"reward_integrity_gpu_elapsed_ms__{case['case_id']}__"
+                                f"{ranked_unit['unit_id']}"),
+                metric="autokernel_reward_integrity_ranked_unit_gpu_elapsed_ms",
+                value=float(elapsed_ms), unit="ms", direction="lower_better",
+                reps=repetitions,
+                reps_basis="scored:HIP kernel launches in one ranked unit",
+                claim=(f"AutoKernel reward-integrity case {case['case_id']} "
+                       f"{ranked_unit['unit_id']} observed {elapsed_ms:.9g} ms across "
+                       f"{repetitions} launches; instrument validation only, not candidate speed"),
+                extra={**common, "case_identity": case_identity,
+                       "ranked_unit_identity": unit_identity,
+                       "evidence_basis": evidence,
+                       "evidence_sha256": _sha(_canonical(evidence))}))
+    return rows
+
+
 def run(output: Path, hipcc: str, compile_jobs: int, claim_timeout_s: float,
         prior_attempts: tuple[Path, ...] = ()) -> dict:
     output.mkdir(parents=True, exist_ok=False)
@@ -317,7 +528,7 @@ def run(output: Path, hipcc: str, compile_jobs: int, claim_timeout_s: float,
     prior = [_load_prior_attempt(path.resolve()) for path in prior_attempts]
     payload = {
         "schema": SCHEMA, "campaign_id": CAMPAIGN_ID,
-        "purpose": "instrument validation only; no candidate speed claim",
+        "status": "complete", "purpose": PURPOSE,
         "receipt_sha256_scope": "canonical JSON of every field except receipt_sha256",
         "attempt_history": prior,
         "started_at": started_at, "ended_at": _utc(),
@@ -335,6 +546,10 @@ def run(output: Path, hipcc: str, compile_jobs: int, claim_timeout_s: float,
         "device_claim_open": opened, "device_claim_released": released,
         "device_sampling": sampling, "cases": rows,
     }
+    payload["producer"] = _producer_identity()
+    claim_identity, claim_sha256 = _claim_identity(payload)
+    payload["device_claim_identity_sha256"] = claim_sha256
+    payload["belief_measurements"] = _belief_measurements(payload)
     payload["receipt_sha256"] = _sha(_canonical(payload))
     receipt = output / "receipt.json"
     temp = output / ".receipt.json.tmp"

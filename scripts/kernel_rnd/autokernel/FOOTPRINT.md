@@ -31,8 +31,8 @@ a module it never looked at.
 | | non-test lines |
 |---|---:|
 | **ON THE CAMPAIGN PATH** | **70,045** |
-| **DEFERRED** (provably unreachable) | **52,634** |
-| **TOTAL** | **122,679** |
+| **DEFERRED** (provably unreachable) | **52,849** |
+| **TOTAL** | **122,894** |
 
 **The deferred plane is explicit.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -190,7 +190,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `execution/physical_bounds.py` | 197 | yes | RVP-C6-4 physical impossibility screen: per-shape conservative work floors and hardware peak ceilings are bound to the exact delivered unit and recipe/model/parameter frame, then every live sample is checked before ranking |
 | `execution/powercap_broker.py` | 248 | yes | the v9 CPU preflight could not read root-owned 0400 package counters, while running the campaign as root correctly failed the non-root candidate sandbox; a captured networkless read-only container now exposes only exact package-energy integers |
 | `execution/reward_hack_scan.py` | 186 | yes | RVP-C6-6/C6-9 plus static C6-2/C6-3 detectors: protected-frame, pointer-memo, structured-shortcut, environment/timing and stream/thread findings; the named 10 planted/15 clean corpus states sensitivity/specificity/FPR, not arbitrary-program coverage |
-| `execution/reward_hack_corpus.py` | 370 | no | operator-invoked instrument producer that compiles and runs the named 10 planted/15 clean HIP corpus on gfx90a under the shared device claim, with normal and anti-short-circuit units both timed in the ranked stream |
+| `execution/reward_hack_corpus.py` | 585 | no | operator-invoked instrument producer that compiles and runs the named 10 planted/15 clean HIP corpus on gfx90a under the shared device claim, then prospectively writes 3 detector and 50 exact case×ranked-unit observations with no candidate-speed or campaign authority |
 | `execution/sandbox.py` | 1,076 | yes | C6/INF-03 process boundary: default candidate profile retains Landlock write confinement; broker-only controller profile default-denies networking and read/exec outside exact roots/files/executables while inheriting one peer-bound broker UDS; direct model profile binds fixed Claude/Bun self/kernel reads to the actual model PID, permits outbound INET clients, and denies broker/GPU/new AF_UNIX/server authority; evaluator profile exposes only exact ROCm devices and pinned runtime inputs while denying networking, broker inheritance, cross-process memory and io_uring; all retain signal/ptrace/namespace denials, finite limits, owned cgroup and policy-hashed receipts |
 | `execution/t0_provider.py` | 3,697 | yes | the predecessor harness tested MUL_MAT only, so a kernel that broke MUL_MAT_ID — MoE dispatch, every token in production — passed it cleanly |
 | `execution/control_runner.py` | 1,805 | yes | runs the neutral / A-A controls that the measured drift makes mandatory rather than optional |
