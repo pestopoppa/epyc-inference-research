@@ -129,11 +129,11 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `schemas.py` | 3,783 | yes | one record shape — every module is written against it and none invents its own |
 | `journal.py` | 2,289 | yes | AutoPilot lost 232 trials and ~16 days when a restart came up empty and nothing objected |
 | `fault_rehearsal.py` | 1,080 | no | governed process-only acceptance producer; real crash/restart, advisory revocation and tamper evidence must remain operator-invoked and cannot gain campaign mutation, inference, benchmark, kernel, stack or release authority |
-| `offline_least_commitment.py` | 345 | no | AP-WM-1 observe-only archive analysis; importing an offline hypothesis diagnostic into the mutation/build path would give it accidental live authority |
+| `offline_least_commitment.py` | 465 | no | AP-WM-1 observe-only archive analysis; importing an offline hypothesis diagnostic into the mutation/build path would give it accidental live authority |
 | `least_commitment_archive_builder.py` | 429 | no | AK-WM-2a strict real-record projection; it reads hash-bound completed campaign evidence into an observe-only archive and cannot launch, rank, mutate, or promote |
-| `least_commitment_receipts.py` | 807 | no | AK-WM-2a governed offline producer; it copies only explicitly SHA-pinned journal fields into receipts and cannot launch, rank, mutate, or promote |
-| `least_commitment_capture.py` | 372 | yes | prospective hash-bound IQK diagnostic/control contract; live campaigns only reduce declared outcome functions and it exposes no selector, champion, release, process, or inference API |
-| `evidence_path_rehearsal.py` | 271 | no | architecture-only CLI proving proposal/capture/control/AP-WM/champion/readiness/T3/package producer coverage; emits no empirical evidence or live authority |
+| `least_commitment_receipts.py` | 815 | no | AK-WM-2a governed offline producer; it copies only explicitly SHA-pinned journal fields into receipts and cannot launch, rank, mutate, or promote |
+| `least_commitment_capture.py` | 471 | yes | prospective hash-bound IQK diagnostic/control contract; live campaigns only reduce declared outcome functions and it exposes no selector, champion, release, process, or inference API |
+| `evidence_path_rehearsal.py` | 277 | no | architecture-only CLI proving proposal/capture/control/AP-WM/champion/readiness/T3/package producer coverage; emits no empirical evidence or live authority |
 | `turn_productivity.py` | 481 | no | AK-PT-1/AK-X-6 archive reducer; it consumes completed refine-turn records and may only withhold future search advancement, so campaign #1 must not give it live rank or mutation authority |
 | `prior_art.py` | 597 | no | deterministic proposal-input compiler; it classifies findings before a proposal exists and has no place in the mutation/build process |
 | `profile_report.py` | 587 | no | RVP-1–7 deterministic offline C4 report; it consumes completed paired traces and has no mutation, build, profiler-launch or ranking authority |

@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import copy
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 try:
     from . import offline_least_commitment as L
@@ -141,6 +144,10 @@ class OfflineLeastCommitmentTest(unittest.TestCase):
         report = L.evaluate_archive(archive)
         self.assertEqual(report["pair_count"], 6)
         self.assertFalse(report["live_authority"])
+        self.assertEqual(report["evidence_label"], "fixture_or_unlabelled")
+        self.assertEqual(report["power"]["status"], "adequately_powered")
+        self.assertEqual(report["matched_validation"]["status"], "PASS")
+        self.assertEqual(len(report["pair_noise_floors"]), 6)
         self.assertEqual(report["recommendation"], "retain_simpler_baseline")
         self.assertEqual(
             set(report["by_regime_surface"]),
@@ -180,6 +187,25 @@ class OfflineLeastCommitmentTest(unittest.TestCase):
         archive = _archive()
         archive["authority"] = "selector"
         self.assertIn("authority: must be 'observe_only'", L.validate_archive(archive))
+
+    def test_underpowered_archive_is_explicit(self):
+        archive = _archive()
+        archive["rows"] = archive["rows"][:2]
+        report = L.evaluate_archive(archive)
+        self.assertEqual(report["power"]["status"], "underpowered")
+        self.assertEqual(report["recommendation"], "underpowered_retain_observe_only")
+
+    def test_synthetic_fixture_cannot_emit_real_label(self):
+        archive = _archive()
+        with self.assertRaisesRegex(ValueError, "real provenance"):
+            L.evaluate_archive(archive, projection={}, real_label=True)
+
+    def test_cli_requires_projection_result(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive_path = Path(temp) / "archive.json"
+            archive_path.write_text(json.dumps(_archive()), encoding="utf-8")
+            with self.assertRaises(SystemExit):
+                L.main([str(archive_path)])
 
 
 if __name__ == "__main__":

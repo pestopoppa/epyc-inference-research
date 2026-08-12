@@ -436,6 +436,10 @@ def _project_row(row: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "evidence": evidence, "diagnostic": diagnostic, "outcome": outcome,
         "factors": factors, "factor_sources": factor_sources,
+        "diagnostic_semantics_sha256": _need_text(
+            evidence.candidate["derived_verdicts"]["least_commitment"].get(
+                "diagnostic_semantics_sha256"),
+            "least_commitment.diagnostic_semantics_sha256"),
         "matched_control_id": row.get("matched_control_id"),
     }
 
@@ -620,6 +624,10 @@ def project(plan: Mapping[str, Any], output_dir: Path) -> dict[str, Any]:
             raise ReceiptProjectionError(
                 f"{proposal_id}: matched_control_id does not resolve to another row")
         control = by_id[control_id]
+        if item["diagnostic_semantics_sha256"] \
+                == control["diagnostic_semantics_sha256"]:
+            raise ReceiptProjectionError(
+                f"{proposal_id}: control diagnostic semantics equal intervention semantics")
         intervention_outcome = item["outcome"]
         control_outcome = control["outcome"]
         for key in ("candidate_frame_id", "metric", "regime", "surface"):

@@ -155,7 +155,13 @@ fixture therefore cannot be relabelled as an empirical archive row.
 steps. Executing IQK parameter campaigns require a hash-bound
 `--least-commitment-capture-plan`; diagnostics and recoding controls are fixed
 before the claim, while held-out transfer, falsifier margin, and noise floor are
-mechanically reduced from the completed decision and accepted calibration. A
+mechanically reduced from a separately hash-bound measured held-out-regime
+receipt, the role-specific falsifier, and accepted calibration. The held-out
+regime must be outside the proposal target regimes; missing or target-regime
+evidence refuses live materialization. A control falsifies on KEEP or when its
+absolute measured effect exceeds the accepted noise floor. Control diagnostic
+semantics must come from an independently bound source and cannot be copied from
+the intervention under a new receipt id. A
 `role=control` plan is the only capability that permits the generated production-
 setting A/A control proposal to use identical arms. Architecture fixtures are
 accepted for rehearsal but refused by `--execute`.
@@ -181,8 +187,17 @@ python3 -m scripts.kernel_rnd.autokernel.least_commitment_receipts \
   projection-plan.json --output-dir /absolute/new/output-directory
 
 python3 -m scripts.kernel_rnd.autokernel.offline_least_commitment \
-  /absolute/new/output-directory/archive.json --output ap-wm-report.json
+  /absolute/new/output-directory/archive.json \
+  --projection-result /absolute/new/output-directory/projection-result.json \
+  --output ap-wm-report.json
 ```
+
+The AP-WM CLI emits a `real` evidence label only after validating both strict
+builder provenance in the archive and the journal projector result. Direct
+library evaluation remains available for regression fixtures, but labels those
+reports `fixture_or_unlabelled`. Reports expose both members' noise floors,
+explicit matched validation, and an `underpowered` state below five effective
+pairs. Neither path has live selection or promotion authority.
 
 `evidence_path_rehearsal.py` is a no-inference dress rehearsal. It derives the
 matched A/A control proposal, validates both prospective capture plans, proves

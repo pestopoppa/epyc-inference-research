@@ -21,14 +21,16 @@ from . import schemas
 SCHEMA = "epyc.autokernel.least_commitment_capture_plan.v2"
 BLOCK_SCHEMA = "epyc.autokernel.least_commitment_capture.v2"
 SOURCE_SCHEMA = "epyc.autokernel.least_commitment_diagnostic_source.v1"
+HELDOUT_SCHEMA = "epyc.autokernel.least_commitment_heldout_outcome.v1"
+FALSIFIER_SCHEMA = "epyc.autokernel.least_commitment_falsifier.v1"
 ROLES = frozenset({"control", "intervention"})
 DIAGNOSTICS = (
     "unsupported_scope_width", "compatible_future_mass", "k_rho",
     "information_gain", "novelty", "raw_impurity", "weighted_minority",
 )
 OUTCOME_REDUCERS = {
-    "heldout_regime_transfer": "decision.median_relative",
-    "falsifier_resolution": "decision.median_relative_minus_contribution_floor",
+    "heldout_regime_transfer": "heldout_outcome_receipt.relative_effect",
+    "falsifier_resolution": "role_specific_falsifier.v1",
     "noise_floor": "calibration.noise_floor_phi",
 }
 _FIELDS = frozenset({
@@ -36,7 +38,8 @@ _FIELDS = frozenset({
     "matched_experiment_id",
     "role", "matched_control_proposal_id", "candidate_frame_id", "regime",
     "surface", "intervention_id", "changed_factor", "factors", "diagnostics",
-    "recodings", "diagnostic_source_receipts", "outcome_reducers",
+    "recodings", "diagnostic_source_receipts", "heldout_outcome_receipt",
+    "outcome_reducers",
     "capture_mode", "plan_sha256",
 })
 
@@ -186,6 +189,8 @@ def source_binding(path: str | Path) -> dict:
 @dataclass(frozen=True)
 class CapturePlan:
     raw: Mapping[str, Any]
+    heldout_outcome: Mapping[str, Any]
+    diagnostic_semantics_sha256: str
 
     @property
     def role(self) -> str:
@@ -197,6 +202,64 @@ class CapturePlan:
 
     def to_dict(self) -> dict:
         return json.loads(schemas.canonical_json(self.raw))
+
+def _bound_json_receipt(binding: Any, *, label: str) -> Mapping[str, Any]:
+    if not isinstance(binding, Mapping) or set(binding) != {
+            "path", "receipt_id", "sha256"}:
+        raise CapturePlanError(f"{label} must be {{path, receipt_id, sha256}}")
+    path = Path(_text(binding.get("path"), f"{label}.path"))
+    if not path.is_absolute():
+        raise CapturePlanError(f"{label}.path must be absolute")
+    receipt_id = _text(binding.get("receipt_id"), f"{label}.receipt_id")
+    schemas.require.sha256(
+        binding.get("sha256"), f"{label}.sha256", error=CapturePlanError)
+    try:
+        observed = _sha256_file(path)
+        source = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise CapturePlanError(f"{label}: cannot read source: {exc}") from exc
+    if observed != binding["sha256"]:
+        raise CapturePlanError(f"{label}: source SHA-256 differs")
+    if not isinstance(source, Mapping) or source.get("receipt_id") != receipt_id:
+        raise CapturePlanError(f"{label}: receipt identity differs")
+    return source
+
+
+def _validate_heldout_outcome(
+        source: Mapping[str, Any], *, proposal: Mapping[str, Any],
+        candidate_frame_id: str, target_regimes: set[str]) -> dict[str, Any]:
+    required = {
+        "schema", "authority", "receipt_id", "proposal_id", "proposal_sha256",
+        "candidate_frame_id", "regime", "surface", "metric", "metric_direction",
+        "relative_effect", "measurement_record_sha256", "capture_mode",
+    }
+    if set(source) != required:
+        raise CapturePlanError("heldout outcome fields differ from the closed schema")
+    if source.get("schema") != HELDOUT_SCHEMA \
+            or source.get("authority") != "observe_only_measurement" \
+            or source.get("capture_mode") != "measured":
+        raise CapturePlanError("heldout outcome schema/authority/capture_mode differs")
+    if source.get("proposal_id") != proposal.get("proposal_id") \
+            or source.get("proposal_sha256") != schemas.content_hash(proposal):
+        raise CapturePlanError("heldout outcome proposal binding differs")
+    if source.get("candidate_frame_id") != candidate_frame_id:
+        raise CapturePlanError("heldout outcome candidate frame differs")
+    regime = _text(source.get("regime"), "heldout outcome regime")
+    if regime in target_regimes:
+        raise CapturePlanError(
+            "heldout outcome regime must be outside the proposal target regimes")
+    for key in ("surface", "metric"):
+        _text(source.get(key), f"heldout outcome {key}")
+    if source.get("metric_direction") not in {"higher", "lower"}:
+        raise CapturePlanError("heldout outcome metric_direction must be higher or lower")
+    schemas.require.sha256(
+        source.get("measurement_record_sha256"),
+        "heldout outcome measurement_record_sha256", error=CapturePlanError)
+    return {
+        **dict(source),
+        "relative_effect": _finite(
+            source.get("relative_effect"), "heldout outcome relative_effect"),
+    }
 
 
 def from_mapping(raw: Any, *, proposal: Mapping[str, Any], campaign_id: str,
@@ -266,34 +329,9 @@ def from_mapping(raw: Any, *, proposal: Mapping[str, Any], campaign_id: str,
         raise CapturePlanError("diagnostic_source_receipts must bind every diagnostic")
     source_records: dict[tuple[str, str, str], Mapping[str, Any]] = {}
     for key, receipt in receipts.items():
-        if not isinstance(receipt, Mapping) or set(receipt) != {
-                "path", "receipt_id", "sha256"}:
-            raise CapturePlanError(
-                f"diagnostic_source_receipts.{key} must be {{path, receipt_id, sha256}}")
-        path = Path(_text(receipt.get("path"),
-                          f"diagnostic_source_receipts.{key}.path"))
-        if not path.is_absolute():
-            raise CapturePlanError(f"diagnostic_source_receipts.{key}.path must be absolute")
-        _text(receipt.get("receipt_id"), f"diagnostic_source_receipts.{key}.receipt_id")
-        schemas.require.sha256(
-            receipt.get("sha256"),
-            f"diagnostic_source_receipts.{key}.sha256",
-            error=CapturePlanError,
-        )
-        try:
-            observed = _sha256_file(path)
-            source = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise CapturePlanError(
-                f"diagnostic_source_receipts.{key}: cannot read source: {exc}") from exc
-        if observed != receipt["sha256"]:
-            raise CapturePlanError(
-                f"diagnostic_source_receipts.{key}: source SHA-256 differs")
-        if not isinstance(source, Mapping) \
-                or source.get("receipt_id") != receipt["receipt_id"]:
-            raise CapturePlanError(
-                f"diagnostic_source_receipts.{key}: receipt identity differs")
-        source_records[(str(path), receipt["receipt_id"], observed)] = source
+        label = f"diagnostic_source_receipts.{key}"
+        source = _bound_json_receipt(receipt, label=label)
+        source_records[(receipt["path"], receipt["receipt_id"], receipt["sha256"])] = source
     if len(source_records) != 1:
         raise CapturePlanError(
             "all diagnostics must come from one mechanically reduced source receipt")
@@ -309,7 +347,19 @@ def from_mapping(raw: Any, *, proposal: Mapping[str, Any], campaign_id: str,
     target_regimes = set(proposal.get("target", {}).get("regimes", ()))
     if target_regimes and raw["regime"] not in target_regimes:
         raise CapturePlanError("regime is outside the proposal target vocabulary")
-    return CapturePlan(json.loads(schemas.canonical_json(raw)))
+    heldout_source = _bound_json_receipt(
+        raw.get("heldout_outcome_receipt"), label="heldout_outcome_receipt")
+    heldout = _validate_heldout_outcome(
+        heldout_source, proposal=proposal,
+        candidate_frame_id=raw["candidate_frame_id"],
+        target_regimes=target_regimes)
+    return CapturePlan(
+        json.loads(schemas.canonical_json(raw)),
+        json.loads(schemas.canonical_json(heldout)),
+        schemas.content_hash({
+            "do_not_repeat_match_ids": source["do_not_repeat_match_ids"],
+            "quotients": source["quotients"],
+        }))
 
 
 def bind_executed_factor_frame(
@@ -357,10 +407,36 @@ def materialize(plan: CapturePlan, *, decision: Any, calibration: Any,
                     "decision.contribution_floor", non_negative=True)
     noise = _finite(getattr(calibration, "noise_floor_phi", None),
                     "calibration.noise_floor_phi", non_negative=True)
+    keep = getattr(decision, "keep", None)
+    if not isinstance(keep, bool):
+        raise CapturePlanError("decision.keep must be a boolean")
     raw = plan.raw
     bind_executed_factor_frame(
         plan, matched_experiment_id=raw["matched_experiment_id"],
         factors=executed_factors)
+    if raw["role"] == "control":
+        decision_triggered = keep
+        noise_triggered = abs(median) > noise
+        falsifier_resolution = noise - abs(median)
+        trigger_rule = "decision.keep OR abs(decision.median_relative) > noise_floor"
+    else:
+        decision_triggered = not keep
+        noise_triggered = False
+        falsifier_resolution = median - floor
+        trigger_rule = "NOT decision.keep"
+    falsifier = {
+        "schema": FALSIFIER_SCHEMA,
+        "role": raw["role"],
+        "trigger_rule": trigger_rule,
+        "triggered": decision_triggered or noise_triggered,
+        "predicates": {
+            "keep_decision": keep,
+            "absolute_effect": abs(median),
+            "noise_floor": noise,
+            "decision_triggered": decision_triggered,
+            "noise_exceeded": noise_triggered,
+        },
+    }
     return {
         "schema": BLOCK_SCHEMA,
         "capture_id": raw["capture_id"],
@@ -377,20 +453,43 @@ def materialize(plan: CapturePlan, *, decision: Any, calibration: Any,
         "diagnostics": dict(raw["diagnostics"]),
         "recodings": {key: dict(value) for key, value in raw["recodings"].items()},
         "diagnostic_source_receipts": dict(raw["diagnostic_source_receipts"]),
+        "diagnostic_semantics_sha256": plan.diagnostic_semantics_sha256,
+        "heldout_outcome_receipt": dict(raw["heldout_outcome_receipt"]),
+        "heldout_outcome": dict(plan.heldout_outcome),
         "outcome_reducers": dict(OUTCOME_REDUCERS),
+        "falsifier": falsifier,
         "outcome": {
-            "heldout_regime_transfer": median,
-            "falsifier_resolution": median - floor,
+            "heldout_regime_transfer": plan.heldout_outcome["relative_effect"],
+            "falsifier_resolution": falsifier_resolution,
             "noise_floor": noise,
         },
     }
+
+
+def require_independent_control_diagnostics(
+        intervention: CapturePlan, control: CapturePlan) -> None:
+    """Refuse a control whose diagnostic semantics were copied from its intervention."""
+    if intervention.role != "intervention" or control.role != "control":
+        raise CapturePlanError("diagnostic independence requires intervention/control roles")
+    intervention_binding = next(iter(
+        intervention.raw["diagnostic_source_receipts"].values()))
+    control_binding = next(iter(control.raw["diagnostic_source_receipts"].values()))
+    if (intervention_binding["receipt_id"] == control_binding["receipt_id"]
+            or intervention_binding["sha256"] == control_binding["sha256"]):
+        raise CapturePlanError(
+            "control diagnostic source must be independently bound")
+    if intervention.diagnostic_semantics_sha256 == control.diagnostic_semantics_sha256:
+        raise CapturePlanError(
+            "control diagnostic semantics are identical to the intervention source")
 
 
 def make_iqk_control_proposal(intervention: Mapping[str, Any], *, campaign_id: str,
                               proposal_id: str) -> dict:
     """Create the exact current-schema A/A control for an IQK intervention.
 
-    The control holds both arms at the production setting.  It is not executable
+    The control holds both arms at the production setting.  This function creates
+    only the proposal shell: it intentionally does not derive or copy a diagnostic
+    source.  It is not executable
     without a bound ``role=control`` capture plan, which is the campaign-side
     capability that distinguishes a predeclared control from an accidental no-op.
     """
