@@ -35,9 +35,10 @@ from ..execution import device_sampler
 from ..resource import device_claim
 
 
-RUNNER_SCHEMA = "epyc.autokernel.arena_cell_runner.v1"
+RUNNER_SCHEMA = "epyc.autokernel.arena_cell_runner.v2"
 CHECKPOINT_SCHEMA = "epyc.autokernel.arena_checkpoint.v1"
-AGGREGATE_SCHEMA = "epyc.autokernel.arena_campaign_execution.v1"
+AGGREGATE_SCHEMA = "epyc.autokernel.arena_campaign_execution.v2"
+RUN_MANIFEST_SCHEMA = "epyc.autokernel.arena_campaign_run_manifest.v1"
 IMPLEMENTATION_MODULE = Path(__file__).resolve()
 REPOSITORY_ROOT = IMPLEMENTATION_MODULE.parents[4]
 DEFAULT_CLAIM_JOURNAL = "/mnt/raid0/llm/ak-claims/device.jsonl"
@@ -87,6 +88,11 @@ def _atomic_json(path: Path, payload: Mapping[str, Any]) -> Path:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)
+        directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
     finally:
         if temporary.exists():
             temporary.unlink()
@@ -97,6 +103,37 @@ def _self_hash(payload: Mapping[str, Any]) -> dict[str, Any]:
     result = dict(payload)
     result["receipt_sha256"] = _canonical_sha256(result)
     return result
+
+
+def _load_json_object(path: Path, label: str) -> dict[str, Any]:
+    if path.is_symlink() or not path.is_file():
+        raise ArenaCellRunnerError(
+            f"{label} is absent or not a regular non-symlink file: {path}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ArenaCellRunnerError(f"cannot read {label}: {path}") from exc
+    if not isinstance(payload, dict):
+        raise ArenaCellRunnerError(f"{label} must be a JSON object")
+    return payload
+
+
+def _verify_self_hash(payload: Mapping[str, Any], label: str) -> None:
+    claimed = payload.get("receipt_sha256")
+    if not isinstance(claimed, str) or not _SHA256_RE.fullmatch(claimed):
+        raise ArenaCellRunnerError(f"{label} lacks its internal SHA-256")
+    without_hash = {key: value for key, value in payload.items()
+                    if key != "receipt_sha256"}
+    if _canonical_sha256(without_hash) != claimed:
+        raise ArenaCellRunnerError(f"{label} internal SHA-256 does not verify")
+
+
+def _fsync_directory(path: Path) -> None:
+    directory_fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
 
 
 @lru_cache(maxsize=1)
@@ -238,6 +275,12 @@ class RunnerConfig:
     claim_timeout_seconds: float = 0.0
     device_id: str = DEFAULT_DEVICE_ID
     visible_device: str = "0"
+    expected_runner_sha256: str | None = None
+    config_path: str | None = None
+    expected_config_sha256: str | None = None
+    expected_campaign_module_sha256: str | None = None
+    geak_root: str | None = None
+    expected_vendor_sources: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         _safe_id(self.campaign_id, "campaign_id")
@@ -250,8 +293,39 @@ class RunnerConfig:
             raise ArenaCellRunnerError("preflight_path must be an existing absolute file")
         if not output.is_absolute():
             raise ArenaCellRunnerError("output_root must be absolute")
-        if output.exists():
-            raise ArenaCellRunnerError("output_root must not already exist")
+        if output.exists() and (not output.is_dir() or output.is_symlink()):
+            raise ArenaCellRunnerError(
+                "output_root must be absent or an existing non-symlink directory")
+        if self.expected_runner_sha256 is not None:
+            if (not isinstance(self.expected_runner_sha256, str)
+                    or not _SHA256_RE.fullmatch(self.expected_runner_sha256)):
+                raise ArenaCellRunnerError(
+                    "expected_runner_sha256 must be a lowercase SHA-256")
+        if (self.config_path is None) != (self.expected_config_sha256 is None):
+            raise ArenaCellRunnerError(
+                "config_path and expected_config_sha256 must be supplied together")
+        if self.config_path is not None:
+            config_path = Path(self.config_path)
+            if not config_path.is_absolute() or not config_path.is_file():
+                raise ArenaCellRunnerError("config_path must be an existing absolute file")
+            _sha256_text = self.expected_config_sha256
+            if (not isinstance(_sha256_text, str)
+                    or not _SHA256_RE.fullmatch(_sha256_text)):
+                raise ArenaCellRunnerError(
+                    "expected_config_sha256 must be a lowercase SHA-256")
+        if self.expected_campaign_module_sha256 is not None:
+            if not _SHA256_RE.fullmatch(self.expected_campaign_module_sha256):
+                raise ArenaCellRunnerError(
+                    "expected_campaign_module_sha256 must be a lowercase SHA-256")
+        if (self.geak_root is None) != (self.expected_vendor_sources is None):
+            raise ArenaCellRunnerError(
+                "geak_root and expected_vendor_sources must be supplied together")
+        if self.geak_root is not None:
+            geak = Path(self.geak_root)
+            if not geak.is_absolute() or not geak.is_dir():
+                raise ArenaCellRunnerError("geak_root must be an existing absolute directory")
+            if not isinstance(self.expected_vendor_sources, Mapping):
+                raise ArenaCellRunnerError("expected_vendor_sources must be an object")
         if (isinstance(self.claim_timeout_seconds, bool)
                 or not isinstance(self.claim_timeout_seconds, (int, float))
                 or not math.isfinite(self.claim_timeout_seconds)
@@ -278,20 +352,30 @@ class GovernedArenaCellRunner:
         self.preflight, self.preflight_file_sha256 = _load_preflight(
             config.preflight_path)
         self.evaluator_python = _evaluator_python_identity()
+        self.expected_runner_sha256 = (
+            config.expected_runner_sha256 or _sha256_file(IMPLEMENTATION_MODULE))
+        self.expected_campaign_module_sha256 = (
+            config.expected_campaign_module_sha256
+            or _sha256_file(arena_campaign.IMPLEMENTATION_MODULE))
         self._worker = worker or self._run_worker_subprocess
         self._claim_acquirer = claim_acquirer
         self._sampler_factory = sampler_factory
         self._ordinal = 0
+        self._cell_ordinal = 0
+        self.resumed_checkpoints = 0
+        self.executed_checkpoints = 0
+        self._assert_static_identities()
 
     def __call__(self, request: arena_campaign.CampaignCellRequest) -> dict[str, Any]:
         if not isinstance(request, arena_campaign.CampaignCellRequest):
             raise TypeError("request must be a CampaignCellRequest")
+        self._cell_ordinal += 1
         if request.is_starting_state_baseline:
             runs = [self._run_checkpoint(request, checkpoint_hours=None)]
         else:
             runs = [self._run_checkpoint(request, checkpoint_hours=hours)
                     for hours in request.checkpoint_hours]
-        return _self_hash({
+        receipt = _self_hash({
             "schema": RUNNER_SCHEMA,
             "authority": "whole_agent_task_only",
             "campaign_id": self.config.campaign_id,
@@ -306,11 +390,25 @@ class GovernedArenaCellRunner:
                 "promotion_authority": False,
             },
         })
+        receipt_path = (
+            self.output_root / "cell-receipts" /
+            f"{self._cell_ordinal:03d}-{request.task.task_id}-{request.arm.arm_id}.json"
+        )
+        if receipt_path.exists():
+            observed = _load_json_object(receipt_path, "cell receipt")
+            _verify_self_hash(observed, "cell receipt")
+            if observed != receipt:
+                raise ArenaCellRunnerError(
+                    f"completed cell receipt drifted: {receipt_path}")
+        else:
+            _atomic_json(receipt_path, receipt)
+        return receipt
 
     def _run_checkpoint(
         self, request: arena_campaign.CampaignCellRequest,
         *, checkpoint_hours: float | None,
     ) -> dict[str, Any]:
+        self._assert_static_identities()
         task_audit = arena_campaign._task_audit(self.arena_root, request.task)
         if not task_audit["ready"]:
             raise ArenaCellRunnerError(
@@ -328,8 +426,14 @@ class GovernedArenaCellRunner:
         )
         cell_root = self.output_root / "cells" / cell_id
         if cell_root.exists():
-            raise ArenaCellRunnerError(f"cell output already exists: {cell_root}")
+            restored = self._restore_checkpoint(
+                cell_root, request=request, checkpoint_hours=checkpoint_hours)
+            if restored is not None:
+                self.resumed_checkpoints += 1
+                return restored
+            self._abandon_partial_checkpoint(cell_root)
         cell_root.mkdir(parents=True)
+        self.executed_checkpoints += 1
         started_at = _utc_now()
         worker_request = self._worker_request(
             request, checkpoint_hours=checkpoint_hours, cell_root=cell_root)
@@ -362,6 +466,12 @@ class GovernedArenaCellRunner:
                 released = claim.release().to_dict()
         if worker_result is None or sampling is None:
             raise ArenaCellRunnerError("Arena worker completed without durable result or sampling")
+        self._assert_static_identities()
+        completed_task_audit = arena_campaign._task_audit(self.arena_root, request.task)
+        completed_arm_audit = arena_campaign._implementation_audit(request.arm)
+        if not completed_task_audit["ready"] or not completed_arm_audit["executable"]:
+            raise ArenaCellRunnerError(
+                "task or controller source identity changed during checkpoint execution")
         if worker_result.get("schema") != CHECKPOINT_SCHEMA:
             raise ArenaCellRunnerError("Arena worker returned the wrong checkpoint schema")
         artifact_map = worker_result.get("artifacts")
@@ -415,12 +525,147 @@ class GovernedArenaCellRunner:
             },
             "runner": {
                 "path": str(IMPLEMENTATION_MODULE),
-                "sha256": _sha256_file(IMPLEMENTATION_MODULE),
+                "sha256": self.expected_runner_sha256,
             },
             "belief_receipt": belief_receipt,
         })
         _atomic_json(cell_root / "checkpoint-receipt.json", receipt)
         return receipt
+
+    def _assert_static_identities(self) -> None:
+        if _sha256_file(IMPLEMENTATION_MODULE) != self.expected_runner_sha256:
+            raise ArenaCellRunnerError("Arena runner identity changed during execution")
+        if (_sha256_file(arena_campaign.IMPLEMENTATION_MODULE)
+                != self.expected_campaign_module_sha256):
+            raise ArenaCellRunnerError(
+                "Arena campaign module identity changed during execution")
+        if _sha256_file(Path(self.config.preflight_path)) != self.preflight_file_sha256:
+            raise ArenaCellRunnerError("Arena preflight identity changed during execution")
+        if self.config.config_path is not None:
+            if (_sha256_file(Path(self.config.config_path))
+                    != self.config.expected_config_sha256):
+                raise ArenaCellRunnerError(
+                    "Arena campaign config identity changed during execution")
+        if self.config.expected_vendor_sources is not None:
+            observed_sources = {
+                "agent_kernel_arena": arena_adapter.inspect_vendor_source(
+                    self.arena_root, arena_adapter.AGENT_KERNEL_ARENA_PIN),
+                "geak_v1": arena_adapter.inspect_vendor_source(
+                    Path(str(self.config.geak_root)), arena_adapter.GEAK_V1_PIN),
+            }
+            if observed_sources != self.config.expected_vendor_sources:
+                raise ArenaCellRunnerError(
+                    "Arena vendor source identity changed during execution")
+
+    def _restore_checkpoint(
+        self, cell_root: Path, *, request: arena_campaign.CampaignCellRequest,
+        checkpoint_hours: float | None,
+    ) -> dict[str, Any] | None:
+        """Return one exact complete checkpoint; never reuse partial evidence."""
+        if not cell_root.is_dir() or cell_root.is_symlink():
+            raise ArenaCellRunnerError(
+                f"checkpoint output is not a non-symlink directory: {cell_root}")
+        receipt_path = cell_root / "checkpoint-receipt.json"
+        if not receipt_path.exists():
+            return None
+        receipt = _load_json_object(receipt_path, "checkpoint receipt")
+        _verify_self_hash(receipt, "checkpoint receipt")
+        expected_fields = {
+            "schema": CHECKPOINT_SCHEMA,
+            "campaign_id": self.config.campaign_id,
+            "task_id": request.task.task_id,
+            "arm_id": request.arm.arm_id,
+            "baseline": request.is_starting_state_baseline,
+            "checkpoint_hours": checkpoint_hours,
+        }
+        for field, expected in expected_fields.items():
+            if receipt.get(field) != expected:
+                raise ArenaCellRunnerError(
+                    f"checkpoint receipt {field} drifted in {cell_root}")
+        runner = receipt.get("runner")
+        if (not isinstance(runner, Mapping)
+                or runner.get("path") != str(IMPLEMENTATION_MODULE)
+                or runner.get("sha256") != self.expected_runner_sha256):
+            raise ArenaCellRunnerError("checkpoint runner identity drifted")
+        expected_preflight = {
+            "path": str(Path(self.config.preflight_path).resolve()),
+            "file_sha256": self.preflight_file_sha256,
+            "receipt_sha256": self.preflight["receipt_sha256"],
+        }
+        if receipt.get("preflight") != expected_preflight:
+            raise ArenaCellRunnerError("checkpoint preflight identity drifted")
+        self._verify_released_claim(receipt)
+        worker_request = _load_json_object(
+            cell_root / "worker-request.json", "worker request")
+        expected_request = self._worker_request(
+            request, checkpoint_hours=checkpoint_hours, cell_root=cell_root)
+        if _canonical_sha256(worker_request) != _canonical_sha256(expected_request):
+            raise ArenaCellRunnerError("completed checkpoint request identity drifted")
+        artifacts = receipt.get("artifacts")
+        if not isinstance(artifacts, Mapping) or not artifacts:
+            raise ArenaCellRunnerError("completed checkpoint has no artifact manifest")
+        for relative, expected_digest in artifacts.items():
+            if not isinstance(relative, str) or not isinstance(expected_digest, str):
+                raise ArenaCellRunnerError("checkpoint artifact manifest is malformed")
+            path = Path(relative)
+            if path.is_absolute() or ".." in path.parts:
+                raise ArenaCellRunnerError("checkpoint artifact path escapes its cell")
+            artifact = cell_root / path
+            if artifact.is_symlink() or not artifact.is_file():
+                raise ArenaCellRunnerError(
+                    f"checkpoint artifact is absent or unsafe: {relative}")
+            if _sha256_file(artifact) != expected_digest:
+                raise ArenaCellRunnerError(
+                    f"checkpoint artifact digest drifted: {relative}")
+        belief = receipt.get("belief_receipt")
+        if request.is_starting_state_baseline:
+            if belief is not None:
+                raise ArenaCellRunnerError("baseline checkpoint carries a belief receipt")
+        else:
+            if not isinstance(belief, Mapping):
+                raise ArenaCellRunnerError("controller checkpoint lacks its belief receipt")
+            _verify_self_hash(belief, "belief receipt")
+            persisted_belief = _load_json_object(
+                cell_root / "belief-receipt.json", "persisted belief receipt")
+            if persisted_belief != belief:
+                raise ArenaCellRunnerError("persisted belief receipt drifted")
+        return receipt
+
+    def _verify_released_claim(self, receipt: Mapping[str, Any]) -> None:
+        opened = receipt.get("device_claim_open")
+        released = receipt.get("device_claim_released")
+        if not isinstance(opened, Mapping) or not isinstance(released, Mapping):
+            raise ArenaCellRunnerError("checkpoint lacks device claim receipts")
+        try:
+            opened_receipt = device_claim.ClaimReceipt.from_dict(opened)
+            released_receipt = device_claim.ClaimReceipt.from_dict(released)
+        except (TypeError, ValueError) as exc:
+            raise ArenaCellRunnerError(
+                "checkpoint device claim receipt is malformed") from exc
+        exact_fields = ("schema", "claim_id", "device_id", "campaign_id",
+                        "acquired_at")
+        if any(opened.get(field) != released.get(field) for field in exact_fields):
+            raise ArenaCellRunnerError("opened and released device claims disagree")
+        if (released_receipt.schema != device_claim.RECEIPT_SCHEMA
+                or released_receipt.device_id != self.config.device_id
+                or released_receipt.campaign_id != self.config.campaign_id
+                or not isinstance(released_receipt.released_at, str)
+                or not released_receipt.released_at
+                or opened_receipt.released_at is not None):
+            raise ArenaCellRunnerError("checkpoint device claim was not cleanly released")
+
+    def _abandon_partial_checkpoint(self, cell_root: Path) -> None:
+        abandoned = self.output_root / "abandoned"
+        abandoned.mkdir(parents=True, exist_ok=True)
+        suffix = 1
+        while True:
+            destination = abandoned / f"{cell_root.name}.attempt-{suffix:03d}"
+            if not destination.exists():
+                break
+            suffix += 1
+        os.replace(cell_root, destination)
+        _fsync_directory(cell_root.parent)
+        _fsync_directory(abandoned)
 
     def _worker_request(
         self, request: arena_campaign.CampaignCellRequest,
@@ -668,6 +913,99 @@ def run_worker(request: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _run_manifest(
+    args: argparse.Namespace, spec: arena_campaign.CampaignSpec,
+    audit: Mapping[str, Any], *, available_source: bool,
+) -> dict[str, Any]:
+    preflight, preflight_file_sha256 = _load_preflight(args.preflight)
+    selected_arms = (
+        arena_campaign.AVAILABLE_SOURCE_PANEL_IDS
+        if available_source else arena_campaign.PRIMARY_PANEL_IDS)
+    return _self_hash({
+        "schema": RUN_MANIFEST_SCHEMA,
+        "campaign_id": audit["campaign_id"],
+        "available_source": available_source,
+        "authority": audit["authority"],
+        "audit_receipt_sha256": audit["receipt_sha256"],
+        "audit_schema": audit["schema"],
+        "config": {
+            "path": str(Path(spec.config_path).resolve()),
+            "sha256": spec.config_sha256,
+        },
+        "preflight": {
+            "path": str(Path(args.preflight).resolve()),
+            "file_sha256": preflight_file_sha256,
+            "receipt_sha256": preflight["receipt_sha256"],
+        },
+        "sources": {
+            "arena_root": str(Path(args.arena_root).resolve()),
+            "geak_root": str(Path(args.geak_root).resolve()),
+            "audit_sources": audit["sources"],
+            "controller_arms": audit["panel"]["arms"],
+        },
+        "runner": {
+            "path": str(IMPLEMENTATION_MODULE),
+            "sha256": _sha256_file(IMPLEMENTATION_MODULE),
+        },
+        "matrix": {
+            "task_ids": [task.task_id for task in spec.tasks],
+            "arm_ids": list(selected_arms),
+            "checkpoint_hours": list(spec.budget_hours),
+            "ordering": "task_then_declared_arm_then_checkpoint",
+        },
+        "constraints": {
+            "resume_exact_complete_checkpoints_only": True,
+            "partial_or_inflight_work_reused": False,
+            "tampered_completed_work_reused": False,
+            "partial_results_rankable": False,
+            "aggregate_atomic_after_complete_matrix_only": True,
+            "promotion_authority": False,
+        },
+    })
+
+
+def _prepare_campaign_root(
+    output_root: Path, *, audit: Mapping[str, Any],
+    manifest: Mapping[str, Any] | None,
+) -> bool:
+    """Create or verify one immutable campaign root; return True on resume."""
+    if not output_root.exists():
+        output_root.mkdir(parents=True)
+        arena_campaign.write_receipt(output_root / "audit.json", audit)
+        if manifest is not None:
+            _atomic_json(output_root / "campaign-manifest.json", manifest)
+        return False
+    if not output_root.is_dir() or output_root.is_symlink():
+        raise ArenaCellRunnerError(
+            "output_root must be an existing non-symlink campaign directory")
+    stored_audit = _load_json_object(output_root / "audit.json", "stored audit")
+    _verify_self_hash(stored_audit, "stored audit")
+    if stored_audit != audit:
+        raise ArenaCellRunnerError(
+            "live audit/config/source identity differs from the stored campaign audit")
+    if manifest is None:
+        raise ArenaCellRunnerError("a refused campaign directory cannot be resumed")
+    stored_manifest = _load_json_object(
+        output_root / "campaign-manifest.json", "campaign manifest")
+    _verify_self_hash(stored_manifest, "campaign manifest")
+    if stored_manifest != manifest:
+        raise ArenaCellRunnerError(
+            "campaign manifest/config/source/runner identity drifted")
+    return True
+
+
+def _publish_or_verify_aggregate(
+    path: Path, aggregate: Mapping[str, Any],
+) -> None:
+    if path.exists():
+        observed = _load_json_object(path, "campaign aggregate")
+        _verify_self_hash(observed, "campaign aggregate")
+        if observed != aggregate:
+            raise ArenaCellRunnerError("completed campaign aggregate drifted")
+        return
+    _atomic_json(path, aggregate)
+
+
 def execute_from_cli(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     spec = arena_campaign.load_spec(args.config)
     available_source = bool(getattr(args, "available_source", False))
@@ -678,8 +1016,11 @@ def execute_from_cli(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         spec, arena_root=args.arena_root, geak_root=args.geak_root,
         enumerator=args.enumerator)
     output_root = Path(args.output_root).resolve()
-    output_root.mkdir(parents=True, exist_ok=False)
-    arena_campaign.write_receipt(output_root / "audit.json", audit)
+    manifest = None
+    if audit["status"] == "ready":
+        manifest = _run_manifest(
+            args, spec, audit, available_source=available_source)
+    _prepare_campaign_root(output_root, audit=audit, manifest=manifest)
     if audit["status"] != "ready":
         return 3, {
             "schema": AGGREGATE_SCHEMA,
@@ -698,6 +1039,13 @@ def execute_from_cli(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         output_root=str(cells_root),
         claim_journal=args.claim_journal,
         claim_timeout_seconds=args.claim_timeout_seconds,
+        expected_runner_sha256=manifest["runner"]["sha256"],
+        config_path=str(Path(spec.config_path).resolve()),
+        expected_config_sha256=spec.config_sha256,
+        expected_campaign_module_sha256=(
+            audit["execution_identity"]["implementation_module_sha256"]),
+        geak_root=str(Path(args.geak_root).resolve()),
+        expected_vendor_sources=audit["sources"],
     ))
     execute_function = (
         arena_campaign.execute_available_source_campaign
@@ -710,6 +1058,8 @@ def execute_from_cli(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         "authority": "whole_agent_task_only",
         "audit": str(output_root / "audit.json"),
         "audit_receipt_sha256": audit["receipt_sha256"],
+        "campaign_manifest": str(output_root / "campaign-manifest.json"),
+        "campaign_manifest_receipt_sha256": manifest["receipt_sha256"],
         "cells": cells,
         "constraints": {
             "partial_results_rankable": False,
@@ -717,7 +1067,7 @@ def execute_from_cli(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
             "full_eight_arm_result_implied": False,
             "promotion_authority": False},
     })
-    _atomic_json(output_root / "execution-receipt.json", aggregate)
+    _publish_or_verify_aggregate(output_root / "execution-receipt.json", aggregate)
     return 0, aggregate
 
 
@@ -768,6 +1118,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 __all__ = [
     "AGGREGATE_SCHEMA", "CHECKPOINT_SCHEMA", "RUNNER_SCHEMA",
+    "RUN_MANIFEST_SCHEMA",
     "ArenaCellRunnerError", "GovernedArenaCellRunner", "RunnerConfig",
     "execute_from_cli", "run_worker",
 ]

@@ -73,6 +73,20 @@ the runner writes hash-bound cell evidence plus separate Vidya-compatible
 correctness and timing-validity beliefs. Partial campaign evidence is retained
 but is explicitly non-rankable.
 
+The executor is restart-safe at the expensive-checkpoint boundary. Its first
+invocation writes an immutable, self-hashed campaign manifest binding the audit,
+config, preflight, source/controller identities, runner digest, task order, arm
+order, and checkpoint order. Repeating the exact command with the same output
+root re-audits those inputs, verifies every durable checkpoint receipt, artifact
+digest, belief receipt, and released device claim, then skips only checkpoints
+whose complete evidence still matches. A directory left in flight without its
+atomic checkpoint receipt is preserved under `execution/abandoned/` and rerun
+from a fresh workspace; a completed-but-tampered receipt refuses the resume
+instead of being reused or overwritten. Per-task/arm cell receipts are also
+published atomically. `execution-receipt.json` does not exist until the entire
+declared matrix has been reconstructed in order, and partial evidence never
+acquires ranking authority.
+
 The no-execution audit command is:
 
 ```bash
@@ -92,11 +106,14 @@ python3 -m scripts.kernel_rnd.autokernel.controller.arena_cell_runner \
   --arena-root /path/to/AgentKernelArena-at-2dbbf1d3 \
   --geak-root /path/to/GEAK-at-4ffba15a \
   --preflight /path/to/preflight-receipt.json \
-  --output-root /new/write-once/campaign-directory
+  --output-root /durable/campaign-directory
 ```
 
 If any arm remains unavailable, this command writes the refusal audit and exits
 before a device claim, model, compiler, or GPU command is started.
+For a ready campaign the directory must initially be absent. After interruption,
+run the identical command against that same directory; changing any bound input
+or attempting to reuse a different pre-existing directory fails closed.
 
 The separately labelled available-source diagnostic uses the same pinned task,
 identities, evaluator, and matched budgets, but selects only the baseline plus
@@ -109,7 +126,7 @@ python3 -m scripts.kernel_rnd.autokernel.controller.arena_cell_runner \
   --arena-root /path/to/AgentKernelArena-at-2dbbf1d3 \
   --geak-root /path/to/GEAK-at-4ffba15a \
   --preflight /path/to/preflight-receipt.json \
-  --output-root /new/write-once/available-source-campaign-directory
+  --output-root /durable/available-source-campaign-directory
 ```
 
 This produces an availability-conditioned diagnostic only. It records
