@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import tempfile
@@ -264,6 +265,100 @@ class ArenaCellRunnerTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "sampler failed"):
             runner(request)
         self.assertTrue(claim.released)
+
+    def test_sigterm_unwinds_worker_and_journals_claim_release_boundary(self):
+        claim = FakeClaim()
+
+        def interrupted_worker(request, timeout):
+            os.kill(os.getpid(), signal.SIGTERM)
+            self.fail("SIGTERM handler did not interrupt the worker")
+
+        runner = R.GovernedArenaCellRunner(
+            self.config(), worker=interrupted_worker,
+            claim_acquirer=lambda *args, **kwargs: claim,
+            sampler_factory=FakeSampler)
+        request = C.CampaignCellRequest(
+            arm=self.arm(C.BASELINE_ARM_ID), task=self.task,
+            is_starting_state_baseline=True, checkpoint_hours=(),
+            maximum_wall_hours=0.0)
+        with (
+            R._graceful_campaign_signals(),
+            self.assertRaisesRegex(R.ArenaCampaignInterrupted, "SIGTERM"),
+        ):
+            runner(request)
+        self.assertTrue(claim.released)
+        self.assertEqual(
+            list(self.output.glob("cells/*/checkpoint-receipt.json")), [])
+
+    def test_sigterm_during_claim_acquisition_is_deferred_until_handle_assignment(self):
+        claim = FakeClaim()
+
+        def acquire(*args, **kwargs):
+            os.kill(os.getpid(), signal.SIGTERM)
+            return claim
+
+        runner = self.runner(claim_acquirer=acquire)
+        request = C.CampaignCellRequest(
+            arm=self.arm(C.BASELINE_ARM_ID), task=self.task,
+            is_starting_state_baseline=True, checkpoint_hours=(),
+            maximum_wall_hours=0.0)
+        with (
+            R._graceful_campaign_signals(),
+            self.assertRaisesRegex(R.ArenaCampaignInterrupted, "SIGTERM"),
+        ):
+            runner(request)
+        self.assertTrue(claim.released)
+        self.assertEqual(
+            list(self.output.glob("cells/*/checkpoint-receipt.json")), [])
+
+    def test_dotted_task_id_gets_collision_bound_dot_free_cell_path(self):
+        native = "instruction2triton.rocmbench.test_add_kernel"
+        normalized = R._path_id(native, "task_id")
+        self.assertNotIn(".", normalized)
+        self.assertRegex(normalized, r"^[a-z0-9_-]+-[0-9a-f]{12}$")
+        self.assertNotEqual(
+            normalized, R._path_id(native.replace(".", "_"), "task_id"))
+
+        cell_root = self.root / "cells" / f"001-{normalized}-baseline"
+        workspace = cell_root / "workspace"
+        workspace.mkdir(parents=True)
+        source = workspace / "test_add_kernel.py"
+        source.write_text("# fixture\n", encoding="utf-8")
+        # Exact transform pinned in AgentKernelArena's test_add_kernel.py.
+        transformed = Path(str(source).replace(".", "_") + ".pt")
+        transformed.write_text("cache\n", encoding="utf-8")
+        self.assertEqual(transformed.parent, workspace)
+        self.assertEqual(
+            transformed.relative_to(cell_root).as_posix(),
+            "workspace/test_add_kernel_py.pt")
+        R._assert_worker_tree_contained(cell_root)
+
+    def test_sibling_write_is_detected_even_when_worker_raises(self):
+        claim = FakeClaim()
+
+        def escaping_worker(request, timeout):
+            cell_root = Path(request["cell_root"])
+            escaped = cell_root.with_name(cell_root.name + "-escaped")
+            escaped.mkdir()
+            (escaped / "test_add_kernel_py.pt").write_text(
+                "escaped\n", encoding="utf-8")
+            raise RuntimeError("worker failed after escape")
+
+        runner = R.GovernedArenaCellRunner(
+            self.config(), worker=escaping_worker,
+            claim_acquirer=lambda *args, **kwargs: claim,
+            sampler_factory=FakeSampler)
+        request = C.CampaignCellRequest(
+            arm=self.arm(C.BASELINE_ARM_ID), task=self.task,
+            is_starting_state_baseline=True, checkpoint_hours=(),
+            maximum_wall_hours=0.0)
+        with self.assertRaisesRegex(
+                R.ArenaCellRunnerError, "wrote outside its exact cell root"):
+            runner(request)
+        self.assertTrue(claim.released)
+        self.assertTrue(next(self.output.glob("cells/*-escaped")).is_dir())
+        self.assertEqual(
+            list(self.output.glob("cells/*/checkpoint-receipt.json")), [])
 
     def test_preflight_tamper_and_existing_non_directory_fail_before_execution(self):
         payload = json.loads(self.preflight_path.read_text())

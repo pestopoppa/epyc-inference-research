@@ -13,6 +13,7 @@ Importing this module performs no model, compiler, evaluator, or GPU work.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -59,6 +60,10 @@ _SHA256_RE = re.compile(r"[0-9a-f]{64}")
 
 class ArenaCellRunnerError(RuntimeError):
     """A campaign cell cannot be executed with its declared evidence bounds."""
+
+
+class ArenaCampaignInterrupted(ArenaCellRunnerError):
+    """The campaign received a graceful termination request."""
 
 
 def _utc_now() -> str:
@@ -190,6 +195,33 @@ def _safe_id(value: str, label: str) -> str:
     return value
 
 
+def _path_id(value: str, label: str) -> str:
+    """Return a dot-free, collision-resistant component for one governed ID.
+
+    AgentKernelArena's pinned ``test_add_kernel.py`` derives a cache name with
+    ``__file__.replace('.', '_')``.  A dotted parent component therefore moves
+    its write into a sibling directory.  Human-readable normalization alone is
+    not injective, so retain a short digest of the native ID as the collision
+    witness.
+    """
+    native = _safe_id(value, label)
+    readable = re.sub(r"[^a-z0-9_-]", "_", native)
+    digest = hashlib.sha256(native.encode("utf-8")).hexdigest()[:12]
+    component = f"{readable}-{digest}"
+    if "." in component or not re.fullmatch(r"[a-z0-9_-]+", component):
+        raise ArenaCellRunnerError(f"{label} did not normalize to a safe path ID")
+    return component
+
+
+def _assert_dot_safe_directory_path(path: Path, label: str) -> None:
+    """Refuse a worker root whose directory components change under dot rewrite."""
+    dotted = [part for part in path.resolve().parts if "." in part]
+    if dotted:
+        raise ArenaCellRunnerError(
+            f"{label} has dot-bearing directory components unsafe for the pinned "
+            f"Arena filename transform: {dotted}")
+
+
 def _assert_contained(path: Path, root: Path, label: str) -> Path:
     resolved = path.resolve()
     try:
@@ -197,6 +229,89 @@ def _assert_contained(path: Path, root: Path, label: str) -> Path:
     except ValueError as exc:
         raise ArenaCellRunnerError(f"{label} escapes its governed root") from exc
     return resolved
+
+
+def _outside_cell_manifest(cell_root: Path) -> dict[str, str]:
+    """Hash every governed sibling object while excluding the active cell."""
+    cells_root = cell_root.parent.resolve()
+    active = cell_root.resolve()
+    if active.parent != cells_root:
+        raise ArenaCellRunnerError("cell_root is not a direct child of cells root")
+    rows: dict[str, str] = {}
+    for path in sorted(cells_root.rglob("*")):
+        try:
+            path.resolve().relative_to(active)
+        except ValueError:
+            pass
+        else:
+            continue
+        relative = path.relative_to(cells_root).as_posix()
+        if path.is_symlink():
+            rows[relative] = f"symlink:{os.readlink(path)}"
+        elif path.is_file():
+            rows[relative] = f"file:{_sha256_file(path)}"
+        elif path.is_dir():
+            rows[relative] = "directory"
+        else:
+            rows[relative] = "special"
+    return rows
+
+
+def _assert_worker_tree_contained(cell_root: Path) -> None:
+    """Prove the worker left only ordinary objects inside its exact cell root."""
+    resolved_root = cell_root.resolve()
+    workspace = resolved_root / "workspace"
+    if workspace.exists() and (workspace.is_symlink() or not workspace.is_dir()):
+        raise ArenaCellRunnerError("Arena workspace is not an exact regular directory")
+    for path in resolved_root.rglob("*"):
+        if path.is_symlink():
+            raise ArenaCellRunnerError(
+                f"Arena worker left a symlink in its cell: {path.relative_to(resolved_root)}")
+        _assert_contained(path, resolved_root, "worker artifact")
+        if not path.is_file() and not path.is_dir():
+            raise ArenaCellRunnerError(
+                f"Arena worker left a special file in its cell: "
+                f"{path.relative_to(resolved_root)}")
+
+
+@contextmanager
+def _graceful_campaign_signals():
+    """Turn TERM/INT into an exception so claim and worker finally blocks run."""
+    watched = (signal.SIGTERM, signal.SIGINT)
+    previous = {sig: signal.getsignal(sig) for sig in watched}
+    received: list[int] = []
+
+    def interrupt(signum: int, _frame: object) -> None:
+        if received:
+            return
+        received.append(signum)
+        # Protect the finite worker teardown and claim journal append from a
+        # duplicate polite signal. SIGKILL remains the operator's hard stop.
+        for watched_signal in watched:
+            signal.signal(watched_signal, signal.SIG_IGN)
+        raise ArenaCampaignInterrupted(
+            f"campaign interrupted by {signal.Signals(signum).name}")
+
+    try:
+        for watched_signal in watched:
+            signal.signal(watched_signal, interrupt)
+        yield
+    finally:
+        for watched_signal, handler in previous.items():
+            signal.signal(watched_signal, handler)
+
+
+@contextmanager
+def _defer_campaign_signals():
+    """Defer polite termination across claim acquisition's return boundary."""
+    watched = {signal.SIGTERM, signal.SIGINT}
+    previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, watched)
+    try:
+        yield
+    finally:
+        # A pending signal is delivered here, after the caller has assigned the
+        # returned claim handle, so its enclosing finally can journal release.
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
 
 
 def _load_preflight(path: str | Path) -> tuple[dict[str, Any], str]:
@@ -387,6 +502,8 @@ class GovernedArenaCellRunner:
             "constraints": {
                 "independent_checkpoint_workspaces": True,
                 "one_mi210_cell_at_a_time": True,
+                "dot_free_collision_bound_cell_paths": True,
+                "post_worker_sibling_manifest_verified": True,
                 "promotion_authority": False,
             },
         })
@@ -421,10 +538,12 @@ class GovernedArenaCellRunner:
         self._ordinal += 1
         checkpoint_name = "baseline" if checkpoint_hours is None else f"{checkpoint_hours:g}h"
         cell_id = (
-            f"{self._ordinal:03d}-{request.task.task_id}-{request.arm.arm_id}-"
+            f"{self._ordinal:03d}-{_path_id(request.task.task_id, 'task_id')}-"
+            f"{_path_id(request.arm.arm_id, 'arm_id')}-"
             f"{checkpoint_name}"
         )
         cell_root = self.output_root / "cells" / cell_id
+        _assert_dot_safe_directory_path(cell_root, "cell_root")
         if cell_root.exists():
             restored = self._restore_checkpoint(
                 cell_root, request=request, checkpoint_hours=checkpoint_hours)
@@ -438,34 +557,54 @@ class GovernedArenaCellRunner:
         worker_request = self._worker_request(
             request, checkpoint_hours=checkpoint_hours, cell_root=cell_root)
         _atomic_json(cell_root / "worker-request.json", worker_request)
+        outside_before = _outside_cell_manifest(cell_root)
         max_runtime = ((checkpoint_hours or 0.0) * 3600
                        + EVALUATION_RESERVE_SECONDS)
-        claim = self._claim_acquirer(
-            self.config.device_id,
-            purpose=(f"INF-03 Arena {request.arm.arm_id} {request.task.task_id} "
-                     f"{checkpoint_name}"),
-            campaign_id=self.config.campaign_id,
-            journal=device_claim.ClaimJournal(self.config.claim_journal),
-            holder_label="arena_cell_runner.py",
-            timeout_s=float(self.config.claim_timeout_seconds),
-            max_hold_s=max_runtime + 120.0,
-        )
-        opened = claim.receipt().to_dict()
+        claim = None
+        opened = None
         sampler = None
         sampling = None
         worker_result: Mapping[str, Any] | None = None
         try:
+            with _defer_campaign_signals():
+                claim = self._claim_acquirer(
+                    self.config.device_id,
+                    purpose=(
+                        f"INF-03 Arena {request.arm.arm_id} {request.task.task_id} "
+                        f"{checkpoint_name}"),
+                    campaign_id=self.config.campaign_id,
+                    journal=device_claim.ClaimJournal(self.config.claim_journal),
+                    holder_label="arena_cell_runner.py",
+                    timeout_s=float(self.config.claim_timeout_seconds),
+                    max_hold_s=max_runtime + 120.0,
+                )
+            opened = claim.receipt().to_dict()
             sampler = self._sampler_factory(
                 device_index=int(self.config.visible_device), interval_s=0.250).start()
-            worker_result = self._worker(worker_request, max_runtime)
+            try:
+                worker_result = self._worker(worker_request, max_runtime)
+            finally:
+                _assert_worker_tree_contained(cell_root)
+                outside_after = _outside_cell_manifest(cell_root)
+                if outside_after != outside_before:
+                    added = sorted(outside_after.keys() - outside_before.keys())
+                    removed = sorted(outside_before.keys() - outside_after.keys())
+                    changed = sorted(
+                        key for key in outside_before.keys() & outside_after.keys()
+                        if outside_before[key] != outside_after[key])
+                    raise ArenaCellRunnerError(
+                        "Arena worker wrote outside its exact cell root; "
+                        f"added={added}, removed={removed}, changed={changed}")
         finally:
             try:
                 if sampler is not None:
                     sampling = sampler.stop().to_dict()
             finally:
-                released = claim.release().to_dict()
+                released = claim.release().to_dict() if claim is not None else None
         if worker_result is None or sampling is None:
             raise ArenaCellRunnerError("Arena worker completed without durable result or sampling")
+        if opened is None or released is None:
+            raise ArenaCellRunnerError("Arena checkpoint lacked a complete device claim")
         self._assert_static_identities()
         completed_task_audit = arena_campaign._task_audit(self.arena_root, request.task)
         completed_arm_audit = arena_campaign._implementation_audit(request.arm)
@@ -526,6 +665,12 @@ class GovernedArenaCellRunner:
             "runner": {
                 "path": str(IMPLEMENTATION_MODULE),
                 "sha256": self.expected_runner_sha256,
+            },
+            "write_containment": {
+                "exact_cell_root": str(cell_root.resolve()),
+                "dot_free_directory_path": True,
+                "cell_tree_symlink_free": True,
+                "sibling_manifest_unchanged": True,
             },
             "belief_receipt": belief_receipt,
         })
@@ -803,6 +948,7 @@ def run_worker(request: Mapping[str, Any]) -> dict[str, Any]:
     repository_root = Path(str(request.get("repository_root"))).resolve()
     cell_root = Path(str(request.get("cell_root"))).resolve()
     _assert_contained(cell_root, cell_root.parent.parent, "cell_root")
+    _assert_dot_safe_directory_path(cell_root, "cell_root")
     if repository_root != REPOSITORY_ROOT:
         raise ArenaCellRunnerError("worker repository identity drifted")
     task = request.get("task")
@@ -957,6 +1103,9 @@ def _run_manifest(
             "resume_exact_complete_checkpoints_only": True,
             "partial_or_inflight_work_reused": False,
             "tampered_completed_work_reused": False,
+            "dot_free_collision_bound_cell_paths": True,
+            "post_worker_sibling_manifest_required": True,
+            "sigterm_sigint_unwind_claims": True,
             "partial_results_rankable": False,
             "aggregate_atomic_after_complete_matrix_only": True,
             "promotion_authority": False,
@@ -1006,7 +1155,7 @@ def _publish_or_verify_aggregate(
     _atomic_json(path, aggregate)
 
 
-def execute_from_cli(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+def _execute_from_cli(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     spec = arena_campaign.load_spec(args.config)
     available_source = bool(getattr(args, "available_source", False))
     audit_function = (
@@ -1071,6 +1220,12 @@ def execute_from_cli(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     return 0, aggregate
 
 
+def execute_from_cli(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    """Execute a campaign with graceful TERM/INT claim cleanup."""
+    with _graceful_campaign_signals():
+        return _execute_from_cli(args)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--worker-request")
@@ -1119,7 +1274,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 __all__ = [
     "AGGREGATE_SCHEMA", "CHECKPOINT_SCHEMA", "RUNNER_SCHEMA",
     "RUN_MANIFEST_SCHEMA",
-    "ArenaCellRunnerError", "GovernedArenaCellRunner", "RunnerConfig",
+    "ArenaCampaignInterrupted", "ArenaCellRunnerError",
+    "GovernedArenaCellRunner", "RunnerConfig",
     "execute_from_cli", "run_worker",
 ]
 
