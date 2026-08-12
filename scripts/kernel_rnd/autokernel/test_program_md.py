@@ -266,6 +266,9 @@ class TestTheDocumentedCommandsAreTheRealCommands(unittest.TestCase):
                 campaign_id = argv[argv.index("--campaign-id") + 1]
                 proposal["campaign_id"] = campaign_id
                 proposal["proposal_id"] = "akp-documented-command"
+                proposal["provider_reference"]["target_backend"] = (
+                    argv[argv.index("--backend") + 1]
+                    if "--backend" in argv else campaign.BACKEND_CPU)
                 manifest = Path(tempdir.name) / "proposal.json"
                 manifest.write_text(json.dumps(proposal), encoding="utf-8")
                 argv[argv.index("--proposal-manifest") + 1] = str(manifest)

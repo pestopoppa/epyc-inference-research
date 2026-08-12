@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from .. import c5_seed_corpus, schemas
+from ..execution import provider as provider_isolation
 
 
 SCHEMA = "epyc.autokernel.c3_epyc_suite.v1"
@@ -490,7 +491,9 @@ class WholeModelSurface:
 
 
 @dataclass(frozen=True)
-class CandidateIntegrationBinding:
+class DiagnosticProviderBinding:
+    """An isolated provider/oracle binding with no champion authority."""
+
     runner_id: str
     runner_revision: str
     patch_bundle_sha256: str
@@ -518,8 +521,59 @@ class CandidateIntegrationBinding:
         _text(self.receipt_ref, "receipt_ref")
 
 
-# Compatibility name for callers written against the first prospective draft.
-HotPatchBinding = CandidateIntegrationBinding
+@dataclass(frozen=True)
+class IntegratedLlamaGpuBinding:
+    """A clean committed llama.cpp/llama_gpu integration, not a provider overlay."""
+
+    candidate_branch: str
+    production_base_commit: str
+    candidate_source_commit: str
+    patch_bundle_sha256: str
+    candidate_source_sha256: str
+    candidate_build_sha256: str
+    candidate_binary_sha256: str
+    candidate_linkage_sha256: str
+    toolchain_manifest_sha256: str
+    isolation_root: str
+    receipt_ref: str
+    receipt_sha256: str
+    source_tree: str = "llama.cpp"
+    backend: str = "llama_gpu"
+    tree_clean: bool = True
+    ancestry_clean: bool = True
+
+    def __post_init__(self) -> None:
+        if self.source_tree != "llama.cpp" or self.backend != "llama_gpu":
+            raise C3ContractError(
+                "bankable integration must target llama.cpp through llama_gpu")
+        if not isinstance(self.candidate_branch, str) or not self.candidate_branch.startswith("ak/"):
+            raise C3ContractError("integrated candidate branch must use the ak/ namespace")
+        if not schemas.COMMIT_RE.fullmatch(self.production_base_commit) \
+                or not schemas.COMMIT_RE.fullmatch(self.candidate_source_commit):
+            raise C3ContractError("integrated candidate requires full base and source commits")
+        if self.production_base_commit == self.candidate_source_commit:
+            raise C3ContractError("integrated candidate cannot equal the production base")
+        if self.tree_clean is not True or self.ancestry_clean is not True:
+            raise C3ContractError("integrated candidate must have clean tree and ancestry")
+        for name in (
+            "patch_bundle_sha256", "candidate_source_sha256",
+            "candidate_build_sha256", "candidate_binary_sha256",
+            "candidate_linkage_sha256", "toolchain_manifest_sha256",
+            "receipt_sha256",
+        ):
+            _sha256(getattr(self, name), name)
+        _text(self.receipt_ref, "receipt_ref")
+        try:
+            isolated = provider_isolation.IsolatedProviderPrefix.create(self.isolation_root)
+        except provider_isolation.ProviderIsolationError as exc:
+            raise C3ContractError(str(exc)) from exc
+        object.__setattr__(self, "isolation_root", isolated.path)
+
+
+# Compatibility names retain the old diagnostic meaning.  Callers must opt in
+# to IntegratedLlamaGpuBinding to satisfy the whole-model integration exit.
+CandidateIntegrationBinding = DiagnosticProviderBinding
+HotPatchBinding = DiagnosticProviderBinding
 
 
 @dataclass(frozen=True)
@@ -560,7 +614,8 @@ class WholeModelExitReport:
 
 
 def evaluate_whole_model_exit(*, operator_gate: FastPGate | None,
-                              integration: CandidateIntegrationBinding | None,
+                              integration: DiagnosticProviderBinding |
+                                           IntegratedLlamaGpuBinding | None,
                               anchor: WholeModelObservation | None,
                               candidate: WholeModelObservation | None,
                               correctness: schemas.Check,
@@ -592,6 +647,14 @@ def evaluate_whole_model_exit(*, operator_gate: FastPGate | None,
             schemas.Check(schemas.COULD_NOT_CHECK,
                           ("candidate integration and matched whole-model observations "
                            "are required",)))
+    if isinstance(integration, DiagnosticProviderBinding):
+        return WholeModelExitReport(
+            None, float(minimum_speedup),
+            schemas.Check(schemas.COULD_NOT_CHECK, (
+                "diagnostic provider overlay cannot satisfy the integrated llama_gpu "
+                "whole-model exit",)))
+    if not isinstance(integration, IntegratedLlamaGpuBinding):
+        raise TypeError("integration must be an IntegratedLlamaGpuBinding")
     if operator_gate.candidate_implementation_sha256 != integration.candidate_source_sha256:
         raise IdentityMismatch(
             "operator gate and integration name different candidate source")
@@ -629,9 +692,9 @@ def external_artifact_requirements() -> tuple[ExternalArtifactRequirement, ...]:
             "k228/k175 C5 artifacts; name similarity is insufficient"),
         ExternalArtifactRequirement(
             "candidate_integration_receipt", "whole_model_exit",
-            f"Apex at {PINNED_APEX_REVISION} plus a hash-bound integration receipt "
-            "for attention/MoE, or an immutable EPYC experimental-binary binding "
-            "for dequant"),
+            "a hash-bound clean experimental llama.cpp/llama_gpu commit, build, "
+            "linkage, toolchain, and isolated-prefix receipt; Apex overlays and "
+            "standalone EPYC binaries remain diagnostic providers only"),
         ExternalArtifactRequirement(
             "captured_epyc_tensor_manifests", "operator_and_whole_model_surfaces",
             "exact attention, MoE-dispatch, and Q4_K dequant workload tensor manifests"),
@@ -680,8 +743,8 @@ __all__ = [
     "C3ContractError", "IdentityMismatch", "EpycOpCase", "ExactOpSurface",
     "FrozenProductionBaseline", "TimingObservation", "VendorFloor", "FastPGate",
     "FastPSuiteReport",
-    "CapturedWorkload", "WholeModelSurface", "CandidateIntegrationBinding",
-    "HotPatchBinding",
+    "CapturedWorkload", "WholeModelSurface", "DiagnosticProviderBinding",
+    "IntegratedLlamaGpuBinding", "CandidateIntegrationBinding", "HotPatchBinding",
     "WholeModelObservation", "WholeModelExitReport", "ExternalArtifactRequirement",
     "epyc_op_suite", "select_vendor_floor", "score_fast_p", "aggregate_fast_p",
     "evaluate_whole_model_exit", "external_artifact_requirements",

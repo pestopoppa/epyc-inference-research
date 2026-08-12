@@ -594,6 +594,20 @@ def _candidate_snapshot(snapshot: JournalSnapshot, candidate_id: str) -> Candida
     campaign = snapshot.views.campaigns.get(record.get("campaign_id"))
     if not isinstance(campaign, Mapping):
         raise EvidenceRefused(f"candidate {candidate_id!r} has no campaign record")
+    proposal = snapshot.views.proposals.get(record.get("proposal_id"))
+    if not isinstance(proposal, Mapping):
+        raise EvidenceRefused(f"candidate {candidate_id!r} has no proposal record")
+    if proposal.get("schema") == schemas.SCHEMA_PROPOSAL_V4:
+        provider_reference = proposal.get("provider_reference")
+        if record.get("provider_reference") != provider_reference:
+            raise EvidenceRefused(
+                f"candidate {candidate_id!r} does not carry its proposal's provider identity")
+        target_backend = provider_reference.get("target_backend") \
+            if isinstance(provider_reference, Mapping) else None
+        if campaign.get("backend") != target_backend:
+            raise EvidenceRefused(
+                f"candidate {candidate_id!r} provider targets {target_backend!r} but "
+                f"campaign backend is {campaign.get('backend')!r}")
     referenced = record.get("evaluation_event_ids")
     if not isinstance(referenced, list):
         raise EvidenceRefused(f"candidate {candidate_id!r} has no evaluation id list")

@@ -49,6 +49,26 @@ class CandidateRecordCase(unittest.TestCase):
                            "prompt_bundle_sha256": schemas.content_hash({"prompt": 1})},
         }
 
+    def proposal_v4(self, **provider_overrides):
+        proposal = self.proposal()
+        provider = {
+            "schema": schemas.SCHEMA_PROVIDER_REFERENCE_V1,
+            "kind": "llama_source", "source_mode": "source",
+            "source_ref": "https://github.com/ggml-org/llama.cpp",
+            "source_commit": self.instrument,
+            "artifact_sha256": schemas.content_hash({"provider": "source"}),
+            "license_check": "MIT, verified",
+            "isolation_root": os.path.join(self.tmp.name, "provider"),
+            "toolchain_manifest_sha256": schemas.content_hash({"provider": "toolchain"}),
+            "linkage_manifest_sha256": schemas.content_hash({"provider": "linkage"}),
+            "target_backend": "llama_cpu",
+            "evidence_authority": "candidate_eligible",
+        }
+        provider.update(provider_overrides)
+        proposal.update(schema=schemas.SCHEMA_PROPOSAL_V4,
+                        provider_reference=provider)
+        return proposal
+
     def failed_build(self, actor=None):
         actor = actor or self.actor
         plan = SimpleNamespace(
@@ -83,6 +103,33 @@ class CandidateRecordCase(unittest.TestCase):
         self.assertEqual(record["composition_evidence"]["actual_symbols"],
                          ["<parameter>:GGML_IQK"])
         self.assertEqual(schemas.validate_candidate(record), [])
+
+    def test_v4_provider_identity_survives_a_truthful_build_failure(self):
+        proposal = self.proposal_v4()
+        record = self.record(proposal=proposal)
+        self.assertEqual(record["provider_reference"], proposal["provider_reference"])
+        self.assertNotIn("provider_integration", record)
+        self.assertEqual(schemas.validate_candidate(record), [])
+
+    def test_v4_missing_provider_identity_fails_closed(self):
+        proposal = self.proposal_v4()
+        del proposal["provider_reference"]
+        with self.assertRaisesRegex(C.CandidateRecordError, "requires a provider"):
+            self.record(proposal=proposal)
+
+    def test_opaque_provider_cannot_be_banked(self):
+        proposal = self.proposal_v4(
+            kind="rocm_library", source_mode="opaque_binary", source_commit=None,
+            evidence_authority="diagnostic_only")
+        with self.assertRaisesRegex(C.CandidateRecordError, "cannot be banked"):
+            self.record(proposal=proposal, status="banked")
+
+    def test_provider_symlink_into_shared_rocm_fails_before_build_record(self):
+        link = Path(self.tmp.name, "shared-rocm")
+        link.symlink_to("/opt/rocm", target_is_directory=True)
+        proposal = self.proposal_v4(isolation_root=str(link))
+        with self.assertRaisesRegex(C.CandidateRecordError, "provider isolation"):
+            self.record(proposal=proposal)
 
     def test_verified_ancestry_refuses_non_descendant_source(self):
         tree = _git("rev-parse", f"{self.production}^{{tree}}", cwd=self.repo.path)

@@ -152,6 +152,7 @@ def records(candidate_id: str, *, file_name: str, mechanism: str,
     proposal.update({"proposal_id": f"akp-{suffix}",
                      "campaign_id": campaign["campaign_id"],
                      "change_class": "dispatcher"})
+    proposal["provider_reference"]["target_backend"] = campaign["backend"]
     candidate = copy.deepcopy(fixtures._candidate())
     candidate.update({
         "candidate_id": candidate_id, "campaign_id": campaign["campaign_id"],
@@ -193,6 +194,21 @@ def records(candidate_id: str, *, file_name: str, mechanism: str,
         "evaluator_bundle_sha256": evaluator_id.bundle_sha256,
         "evaluator_runtime_source_label_ref": evaluator_id.runtime_source_label_ref,
         "protocol_ids": list(evaluator_id.protocol_ids),
+    }
+    candidate["provider_reference"] = copy.deepcopy(proposal["provider_reference"])
+    candidate["provider_integration"] = {
+        "schema": S.SCHEMA_PROVIDER_INTEGRATION_V1,
+        "provider_reference_sha256": S.content_hash(candidate["provider_reference"]),
+        "source_tree": "llama.cpp", "backend": campaign["backend"],
+        "production_base_commit": anchor_id.commit,
+        "candidate_source_commit": candidate["worktree"]["source_commit"],
+        "candidate_branch": candidate["worktree"]["branch"],
+        "patch_bundle_sha256": candidate["source_snapshot"]["patch_bundle_sha256"],
+        "binary_sha256": candidate["artifacts"]["binary_sha256"],
+        "linkage_sha256": candidate["artifacts"]["linkage_sha256"],
+        "toolchain_manifest_sha256": sha(f"toolchain-{candidate_id}"),
+        "isolation_root": candidate["worktree"]["path"],
+        "tree_clean": True, "ancestry_clean": True,
     }
     events = (
         _evaluation(candidate, campaign, anchor_id, evaluator_id,

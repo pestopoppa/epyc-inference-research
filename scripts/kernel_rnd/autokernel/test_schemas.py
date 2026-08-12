@@ -137,6 +137,25 @@ def _campaign() -> dict:
     }
 
 
+def _provider_reference(**overrides) -> dict:
+    value = {
+        "schema": S.SCHEMA_PROVIDER_REFERENCE_V1,
+        "kind": "llama_source",
+        "source_mode": "source",
+        "source_ref": "https://github.com/ggml-org/llama.cpp",
+        "source_commit": V7_COMMIT,
+        "artifact_sha256": _sha("provider-source"),
+        "license_check": "MIT, verified",
+        "isolation_root": "/mnt/raid0/llm/autokernel/providers/ak-test",
+        "toolchain_manifest_sha256": _sha("provider-toolchain"),
+        "linkage_manifest_sha256": _sha("provider-linkage"),
+        "target_backend": "llama_gpu",
+        "evidence_authority": "candidate_eligible",
+    }
+    value.update(overrides)
+    return value
+
+
 def _proposal() -> dict:
     return {
         "schema": S.SCHEMA_PROPOSAL,
@@ -166,6 +185,7 @@ def _proposal() -> dict:
         "declared_symbol_deltas": {"added": [], "removed": [], "arity_changed": []},
         "campaign_kind": "source_change",
         "oracle_reference": {"oracle": None, "commit": None, "license_check": None},
+        "provider_reference": _provider_reference(),
         "novelty_basis": {
             "prior_event_ids": [],
             "source_receipts": [],
@@ -221,6 +241,14 @@ def _proposal_v2() -> dict:
     record["schema"] = S.SCHEMA_PROPOSAL_V2
     del record["representation_contract"]
     del record["external_numbers"]
+    del record["provider_reference"]
+    return record
+
+
+def _proposal_v3() -> dict:
+    record = _proposal()
+    record["schema"] = S.SCHEMA_PROPOSAL_V3
+    del record["provider_reference"]
     return record
 
 
@@ -515,6 +543,7 @@ def _waiver() -> dict:
 FIXTURES = {
     S.SCHEMA_CAMPAIGN: _campaign,
     S.SCHEMA_PROPOSAL_V2: _proposal_v2,
+    S.SCHEMA_PROPOSAL_V3: _proposal_v3,
     S.SCHEMA_PROPOSAL: _proposal,
     S.SCHEMA_CANDIDATE: _candidate,
     S.SCHEMA_EVALUATION_EVENT_V2: _event,
@@ -1259,6 +1288,57 @@ class ProposalRuleTest(unittest.TestCase):
         }
         self.assertEqual(S.validate_proposal(record), [])
 
+    def test_opaque_provider_is_diagnostic_only(self):
+        record = _proposal()
+        record["provider_reference"] = _provider_reference(
+            kind="rocm_library", source_mode="opaque_binary", source_commit=None,
+            evidence_authority="candidate_eligible")
+        violations = S.validate_proposal(record)
+        self.assertTrue(any("opaque binaries are diagnostic_only" in item
+                            for item in violations), violations)
+        record["provider_reference"]["evidence_authority"] = "diagnostic_only"
+        self.assertEqual(S.validate_proposal(record), [])
+
+    def test_candidate_eligible_provider_requires_source_and_identity(self):
+        record = _proposal()
+        record["provider_reference"]["source_commit"] = None
+        violations = S.validate_proposal(record)
+        self.assertTrue(any("full commit" in item for item in violations), violations)
+        record = _proposal()
+        record["provider_reference"]["linkage_manifest_sha256"] = "unknown"
+        self.assertTrue(any("linkage_manifest_sha256" in item
+                            for item in S.validate_proposal(record)))
+
+    def test_provider_reference_required_fields_fail_closed_under_deletion(self):
+        required = tuple(_provider_reference())
+        for field in required:
+            record = _proposal()
+            del record["provider_reference"][field]
+            with self.subTest(field=field):
+                self.assertTrue(S.validate_proposal(record))
+
+    def test_shared_provider_prefixes_are_refused_without_string_prefix_false_positive(self):
+        for path in ("/opt/rocm", "/opt/rocm/lib", "/usr/local/rocm",
+                     "/mnt/raid0/llm/llama.cpp/build", "/opt",
+                     "/mnt/raid0/llm", "/workspace"):
+            record = _proposal()
+            record["provider_reference"]["isolation_root"] = path
+            with self.subTest(path=path):
+                self.assertTrue(any("prohibited shared prefix" in item
+                                    for item in S.validate_proposal(record)))
+        record = _proposal()
+        record["provider_reference"]["isolation_root"] = "/opt/rocm-ak-candidate"
+        self.assertEqual(S.validate_proposal(record), [])
+
+    def test_v3_stays_readable_but_cannot_gain_provider_authority(self):
+        record = _proposal()
+        record["schema"] = S.SCHEMA_PROPOSAL_V3
+        record.pop("provider_reference")
+        self.assertEqual(S.validate_proposal_v3(record), [])
+        record["provider_reference"] = _provider_reference()
+        self.assertTrue(any("belongs to proposal.v4" in item
+                            for item in S.validate_proposal_v3(record)))
+
     def test_unbounded_resource_request_is_rejected(self):
         record = _proposal()
         record["resource_request"]["expected_storage_gb"] = -1
@@ -1286,6 +1366,28 @@ class ProposalRuleTest(unittest.TestCase):
 # =============================================================================
 
 class CandidateRuleTest(unittest.TestCase):
+    def provider_backed(self, **provider_overrides):
+        record = _candidate()
+        provider = _provider_reference(**provider_overrides)
+        record["provider_reference"] = provider
+        record["provider_integration"] = {
+            "schema": S.SCHEMA_PROVIDER_INTEGRATION_V1,
+            "provider_reference_sha256": S.content_hash(provider),
+            "source_tree": "llama.cpp",
+            "backend": "llama_gpu",
+            "production_base_commit": record["ancestry"]["production_base_commit"],
+            "candidate_source_commit": record["worktree"]["source_commit"],
+            "candidate_branch": record["worktree"]["branch"],
+            "patch_bundle_sha256": record["source_snapshot"]["patch_bundle_sha256"],
+            "binary_sha256": record["artifacts"]["binary_sha256"],
+            "linkage_sha256": record["artifacts"]["linkage_sha256"],
+            "toolchain_manifest_sha256": _sha("candidate-toolchain-manifest"),
+            "isolation_root": record["worktree"]["path"],
+            "tree_clean": True,
+            "ancestry_clean": True,
+        }
+        return record
+
     def composed(self):
         record = _candidate()
         record["evaluator"]["runtime_source_label_ref"] = "ake-srclabel-1"
@@ -1352,6 +1454,34 @@ class CandidateRuleTest(unittest.TestCase):
         del record["artifacts"]["linkage_sha256"]
         with self.assertRaises(KeyError):
             S.candidate_natural_key(record)
+
+    def test_provider_candidate_binds_the_integrated_llama_artifact(self):
+        record = self.provider_backed()
+        self.assertEqual(S.validate_candidate(record), [])
+        for field in ("provider_reference_sha256", "backend",
+                      "candidate_source_commit", "binary_sha256", "linkage_sha256"):
+            mutated = self.provider_backed()
+            mutated["provider_integration"][field] = (
+                "llama_cpu" if field == "backend" else _sha("wrong-" + field))
+            with self.subTest(field=field):
+                self.assertTrue(S.validate_candidate(mutated))
+
+    def test_provider_reference_cannot_be_laundered_without_integration(self):
+        record = self.provider_backed()
+        record["status"] = "banked"
+        del record["provider_integration"]
+        self.assertTrue(any("required to bank" in value
+                            for value in S.validate_candidate(record)))
+
+    def test_opaque_diagnostic_provider_cannot_be_banked(self):
+        record = self.provider_backed(
+            kind="rocm_library", source_mode="opaque_binary", source_commit=None,
+            evidence_authority="diagnostic_only")
+        record["provider_integration"]["provider_reference_sha256"] = S.content_hash(
+            record["provider_reference"])
+        record["status"] = "banked"
+        self.assertTrue(any("source-transparent" in value
+                            for value in S.validate_candidate(record)))
 
     def test_source_composition_requires_real_evidence_and_qualified_symbols(self):
         for key in ("actual_files", "actual_hunk_ids", "actual_symbols",
@@ -1567,6 +1697,7 @@ class RegistryDispatchTest(unittest.TestCase):
             S.SCHEMA_CAMPAIGN: S.validate_campaign,
             S.SCHEMA_PROPOSAL_V2: S.validate_proposal_v2,
             S.SCHEMA_PROPOSAL_V3: S.validate_proposal_v3,
+            S.SCHEMA_PROPOSAL_V4: S.validate_proposal_v4,
             S.SCHEMA_CANDIDATE: S.validate_candidate,
             S.SCHEMA_EVALUATION_EVENT_V2: S.validate_evaluation_event_v2,
             S.SCHEMA_EVALUATION_EVENT_V3: S.validate_evaluation_event_v3,

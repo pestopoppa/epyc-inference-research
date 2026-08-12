@@ -87,11 +87,6 @@ class C3EpycCompilerTest(unittest.TestCase):
 
     def whole_model(self, target_index: int = 0) -> dict:
         target = self.cases[target_index]
-        runner = (C.EPYC_EXPERIMENTAL_BINARY if target_index == 2
-                  else C.APEX_PYTHON_OVERLAY)
-        revision = digest("source-commit")[:40]
-        if runner == C.APEX_PYTHON_OVERLAY:
-            revision = C.PINNED_APEX_REVISION
         surface = {
             "workload": {
                 "workload_id": "epyc.production.capture.v1",
@@ -109,13 +104,20 @@ class C3EpycCompilerTest(unittest.TestCase):
             "state": "observed", "target_case_id": target.case_id,
             "surface": surface,
             "integration": {
-                "runner_id": runner, "runner_revision": revision,
+                "candidate_branch": "ak/c3-integrated-test",
+                "production_base_commit": C.PRODUCTION_V9_COMMIT,
+                "candidate_source_commit": digest("source-commit")[:40],
                 "patch_bundle_sha256": digest("patch"),
                 "candidate_source_sha256": digest(f"candidate-{target_index}"),
                 "candidate_build_sha256": digest("candidate-build"),
                 "candidate_binary_sha256": digest("candidate-binary"),
+                "candidate_linkage_sha256": digest("candidate-linkage"),
+                "toolchain_manifest_sha256": digest("candidate-toolchain"),
+                "isolation_root": "/mnt/raid0/llm/autokernel/c3/test-candidate",
                 "receipt_ref": "evidence://integration",
                 "receipt_sha256": digest("integration-receipt"),
+                "source_tree": "llama.cpp", "backend": "llama_gpu",
+                "tree_clean": True, "ancestry_clean": True,
             },
             "anchor": {
                 "arm": "unpatched_anchor",
@@ -221,10 +223,20 @@ class C3EpycCompilerTest(unittest.TestCase):
         self.assertEqual(receipt["whole_model_exit"]["target_case_id"],
                          "epyc.dequant.q4_k_decode_gemv")
         payload = self.observed_input(target_index=2)
-        payload["whole_model"]["integration"]["runner_id"] = C.APEX_PYTHON_OVERLAY
-        payload["whole_model"]["integration"]["runner_revision"] = C.PINNED_APEX_REVISION
-        with self.assertRaisesRegex(P.C3CompilerError, "conflicts with target"):
-            P.compile_receipt(payload)
+        payload["whole_model"]["integration"] = {
+            "runner_id": C.EPYC_EXPERIMENTAL_BINARY,
+            "runner_revision": digest("source-commit")[:40],
+            "patch_bundle_sha256": digest("patch"),
+            "candidate_source_sha256": digest("candidate-2"),
+            "candidate_build_sha256": digest("candidate-build"),
+            "candidate_binary_sha256": digest("candidate-binary"),
+            "receipt_ref": "evidence://diagnostic-integration",
+            "receipt_sha256": digest("diagnostic-integration"),
+        }
+        receipt = P.compile_receipt(payload)
+        self.assertIsNone(receipt["whole_model_exit"]["speedup"])
+        self.assertEqual(receipt["whole_model_exit"]["check"]["outcome"],
+                         schemas.COULD_NOT_CHECK)
 
     def test_plan_case_and_evidence_identity_tampering_refuse(self):
         payload = self.observed_input()

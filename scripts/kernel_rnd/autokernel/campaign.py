@@ -169,7 +169,7 @@ from .controller import do_not_repeat, hypotheses
 from .evaluator import api, correctness, devices, recipes
 from .execution import (chain, control_runner, cpu_region_claim, device_sampler,
                         instrument_integrity, microbench, physical_bounds,
-                        powercap_broker, sandbox, t0_provider, worktree)
+                        powercap_broker, provider, sandbox, t0_provider, worktree)
 from .resource import claim_witness, device_claim, preflight
 
 __all__ = [
@@ -285,6 +285,8 @@ MODULES_THE_DRIVER_USES: Mapping[str, str] = {
     "execution.powercap_broker": "root-owned package counters are read by one captured, "
                                  "networkless read-only container; candidate code remains "
                                  "non-root and cannot reach its control plane",
+    "execution.provider": "provider roots are realpath-resolved and must not overlap "
+                          "shared ROCm/system prefixes or frozen production trees",
     "execution.sandbox": "C6: code authored by the loop executes under Landlock, seccomp, "
                          "non-root finite rlimits and an owned cgroup whose empty teardown "
                          "is verified; an agent tool allowlist does not constrain a binary",
@@ -1343,13 +1345,24 @@ class CampaignSpec:
             raise ValueError("least_commitment_plan requires a proposal")
         if self.proposal is not None:
             proposal = json.loads(schemas.canonical_json(self.proposal))
-            violations = schemas.validate_proposal_v3(proposal)
+            violations = schemas.validate_proposal(proposal)
             if violations:
                 raise ValueError("proposal manifest is invalid: " + "; ".join(violations))
             if proposal["campaign_id"] != self.campaign_id:
                 raise ValueError(
                     f"proposal campaign_id {proposal['campaign_id']!r} does not match "
                     f"campaign {self.campaign_id!r}"
+                )
+            provider_reference = proposal["provider_reference"]
+            try:
+                provider.IsolatedProviderPrefix.create(
+                    provider_reference["isolation_root"])
+            except provider.ProviderIsolationError as exc:
+                raise ValueError(f"proposal provider isolation is invalid: {exc}") from exc
+            if provider_reference["target_backend"] != self.backend:
+                raise ValueError(
+                    f"proposal provider target {provider_reference['target_backend']!r} "
+                    f"does not match campaign backend {self.backend!r}"
                 )
             object.__setattr__(self, "proposal", proposal)
             self._validate_arm_parameter_surface(proposal)

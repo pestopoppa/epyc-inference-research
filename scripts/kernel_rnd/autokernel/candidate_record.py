@@ -6,6 +6,7 @@ import os
 from typing import Any, Mapping, Optional, Sequence
 
 from . import schemas
+from .execution import provider as provider_isolation
 from .execution import worktree
 from .source_candidate import AppliedSourceCandidate, parameter_patch_bundle_sha256
 
@@ -61,6 +62,24 @@ def build_candidate_record(*, proposal: Mapping[str, Any], candidate_id: str,
     """
     if status not in schemas.CANDIDATE_STATUSES:
         raise CandidateRecordError(f"unknown candidate status {status!r}")
+    provider_reference = proposal.get("provider_reference")
+    if provider_reference is not None:
+        provider_violations = schemas.validate_provider_reference(provider_reference)
+        if provider_violations:
+            raise CandidateRecordError(
+                "proposal provider identity is invalid: " + "; ".join(provider_violations))
+        try:
+            provider_isolation.IsolatedProviderPrefix.create(
+                provider_reference["isolation_root"])
+        except provider_isolation.ProviderIsolationError as exc:
+            raise CandidateRecordError(f"provider isolation is invalid: {exc}") from exc
+        if status == "banked" and (
+                provider_reference.get("source_mode") != "source"
+                or provider_reference.get("evidence_authority") != "candidate_eligible"):
+            raise CandidateRecordError(
+                "opaque or diagnostic-only provider evidence cannot be banked")
+    elif proposal.get("schema") == schemas.SCHEMA_PROPOSAL_V4:
+        raise CandidateRecordError("proposal.v4 requires a provider_reference")
     if not isinstance(actor, worktree.Worktree):
         raise TypeError("actor must be a Worktree")
     if actor.head_commit() != source_commit or not actor.is_clean():
@@ -219,10 +238,37 @@ def build_candidate_record(*, proposal: Mapping[str, Any], candidate_id: str,
         "status": status, "supersession_reason": None,
         "created_at": created_at,
     }
+    if provider_reference is not None:
+        record["provider_reference"] = dict(provider_reference)
     if banking_verdict is not None:
         record["banking_verdict"] = dict(banking_verdict)
     if artifacts is not None:
         record["artifacts"] = artifacts
+        if provider_reference is not None \
+                and provider_reference.get("source_mode") == "source" \
+                and provider_reference.get("evidence_authority") == "candidate_eligible":
+            record["provider_integration"] = {
+                "schema": schemas.SCHEMA_PROVIDER_INTEGRATION_V1,
+                "provider_reference_sha256": schemas.content_hash(provider_reference),
+                "source_tree": schemas.SOURCE_TREE_BY_BACKEND[
+                    provider_reference["target_backend"]],
+                "backend": provider_reference["target_backend"],
+                "production_base_commit": production_base_commit,
+                "candidate_source_commit": source_commit,
+                "candidate_branch": record["worktree"]["branch"],
+                "patch_bundle_sha256": patch_sha,
+                "binary_sha256": artifacts["binary_sha256"],
+                "linkage_sha256": artifacts["linkage_sha256"],
+                "toolchain_manifest_sha256": schemas.content_hash({
+                    "toolchain": build_block["toolchain"],
+                    "compiler": build_block["compiler"],
+                    "command": build_block["command"],
+                }),
+                "isolation_root": actor.path.path,
+                "tree_clean": actor.is_clean(),
+                "ancestry_clean": actor.is_ancestor(
+                    production_base_commit, source_commit),
+            }
     violations = schemas.validate_candidate(record)
     if violations:
         raise CandidateRecordError("candidate record is invalid: " + "; ".join(violations))

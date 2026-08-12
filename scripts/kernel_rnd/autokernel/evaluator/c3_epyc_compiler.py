@@ -328,13 +328,24 @@ def _whole_surface(payload: Mapping[str, Any]) -> c3.WholeModelSurface:
         factors=_mapping(payload["factors"], "whole_model.surface.factors"))
 
 
-def _integration(payload: Mapping[str, Any]) -> c3.CandidateIntegrationBinding:
+def _integration(payload: Mapping[str, Any]) -> (
+        c3.DiagnosticProviderBinding | c3.IntegratedLlamaGpuBinding):
     payload = _mapping(payload, "whole_model.integration")
-    required = {"runner_id", "runner_revision", "patch_bundle_sha256",
-                "candidate_source_sha256", "candidate_build_sha256",
-                "candidate_binary_sha256", "receipt_ref", "receipt_sha256"}
-    _exact_keys(payload, required=required, label="whole_model.integration")
-    return c3.CandidateIntegrationBinding(**payload)
+    diagnostic = {"runner_id", "runner_revision", "patch_bundle_sha256",
+                  "candidate_source_sha256", "candidate_build_sha256",
+                  "candidate_binary_sha256", "receipt_ref", "receipt_sha256"}
+    integrated = {
+        "candidate_branch", "production_base_commit", "candidate_source_commit",
+        "patch_bundle_sha256", "candidate_source_sha256", "candidate_build_sha256",
+        "candidate_binary_sha256", "candidate_linkage_sha256",
+        "toolchain_manifest_sha256", "isolation_root", "receipt_ref",
+        "receipt_sha256", "source_tree", "backend", "tree_clean",
+        "ancestry_clean",
+    }
+    if set(payload) == diagnostic:
+        return c3.DiagnosticProviderBinding(**payload)
+    _exact_keys(payload, required=integrated, label="whole_model.integration")
+    return c3.IntegratedLlamaGpuBinding(**payload)
 
 
 def _whole_observation(payload: Mapping[str, Any], surface: c3.WholeModelSurface,
@@ -367,11 +378,6 @@ def _compile_whole(payload: Mapping[str, Any], gates: Mapping[str, c3.FastPGate]
         raise C3CompilerError("whole-model target is not one of the exact suite cases")
     surface = _whole_surface(payload["surface"])
     integration = _integration(payload["integration"])
-    expected_runner = (c3.EPYC_EXPERIMENTAL_BINARY
-                       if target == "epyc.dequant.q4_k_decode_gemv"
-                       else c3.APEX_PYTHON_OVERLAY)
-    if integration.runner_id != expected_runner:
-        raise C3CompilerError("whole-model integration runner conflicts with target case")
     anchor = _whole_observation(payload["anchor"], surface, "whole_model.anchor")
     candidate = _whole_observation(
         payload["candidate"], surface, "whole_model.candidate")

@@ -199,16 +199,30 @@ class C3EpycSuiteTest(unittest.TestCase):
             recipe_sha256=digest("whole-model-recipe"),
             factors={"graphs": "off", "stage": "prefill", "warmup": 10})
 
-    def integration(self) -> C.CandidateIntegrationBinding:
-        return C.CandidateIntegrationBinding(
-            runner_id=C.APEX_PYTHON_OVERLAY,
-            runner_revision=C.PINNED_APEX_REVISION,
+    def diagnostic_integration(self) -> C.DiagnosticProviderBinding:
+        return C.DiagnosticProviderBinding(
+            runner_id=C.APEX_PYTHON_OVERLAY, runner_revision=C.PINNED_APEX_REVISION,
             patch_bundle_sha256=digest("patch"),
             candidate_source_sha256=digest("implementation-candidate"),
             candidate_build_sha256=digest("candidate-build"),
             candidate_binary_sha256=digest("candidate-binary"),
             receipt_ref="evidence://hot-patch",
             receipt_sha256=digest("hot-patch-receipt"))
+
+    def integration(self) -> C.IntegratedLlamaGpuBinding:
+        return C.IntegratedLlamaGpuBinding(
+            candidate_branch="ak/c3-integrated/source",
+            production_base_commit="1" * 40,
+            candidate_source_commit="2" * 40,
+            patch_bundle_sha256=digest("patch"),
+            candidate_source_sha256=digest("implementation-candidate"),
+            candidate_build_sha256=digest("candidate-build"),
+            candidate_binary_sha256=digest("candidate-binary"),
+            candidate_linkage_sha256=digest("candidate-linkage"),
+            toolchain_manifest_sha256=digest("toolchain"),
+            isolation_root="/mnt/raid0/llm/autokernel/providers/c3-test",
+            receipt_ref="evidence://integrated-llama-gpu",
+            receipt_sha256=digest("integrated-receipt"))
 
     def whole_observation(self, arm: str, samples, *, surface=None,
                           build="anchor-build", binary="anchor-binary"):
@@ -271,6 +285,30 @@ class C3EpycSuiteTest(unittest.TestCase):
             C.evaluate_whole_model_exit(
                 operator_gate=self.passed_operator_gate(), integration=self.integration(),
                 anchor=anchor, candidate=candidate, correctness=PASS, integrity=PASS)
+
+    def test_diagnostic_provider_cannot_satisfy_integrated_exit(self):
+        surface = self.whole_surface()
+        anchor = self.whole_observation(
+            "unpatched_anchor", (1000.0, 1001.0, 999.0), surface=surface)
+        candidate = self.whole_observation(
+            "integrated_candidate", (900.0, 901.0, 899.0), surface=surface,
+            build="candidate-build", binary="candidate-binary")
+        report = C.evaluate_whole_model_exit(
+            operator_gate=self.passed_operator_gate(),
+            integration=self.diagnostic_integration(), anchor=anchor,
+            candidate=candidate, correctness=PASS, integrity=PASS)
+        self.assertEqual(report.check.outcome, schemas.COULD_NOT_CHECK)
+        self.assertIn("diagnostic provider", report.check.reasons[0])
+
+    def test_integrated_binding_refuses_shared_rocm_and_wrong_backend(self):
+        values = dict(self.integration().__dict__)
+        values["isolation_root"] = "/opt/rocm"
+        with self.assertRaisesRegex(C.C3ContractError, "prohibited prefix"):
+            C.IntegratedLlamaGpuBinding(**values)
+        values = dict(self.integration().__dict__)
+        values["backend"] = "llama_cpu"
+        with self.assertRaisesRegex(C.C3ContractError, "through llama_gpu"):
+            C.IntegratedLlamaGpuBinding(**values)
 
     def test_pinned_apex_and_no_execution_authority_are_mechanical(self):
         with self.assertRaisesRegex(C.C3ContractError, "pinned revision"):

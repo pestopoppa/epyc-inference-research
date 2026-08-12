@@ -57,6 +57,7 @@ def proposal_manifest(campaign_id: str = "ak-test") -> dict:
     proposal = _proposal_fixture()
     proposal["campaign_id"] = campaign_id
     proposal["proposal_id"] = "akp-test-0001"
+    proposal["provider_reference"]["target_backend"] = campaign.BACKEND_CPU
     return proposal
 
 
@@ -1035,7 +1036,7 @@ class TestTheSpecIsAPreCommitment(unittest.TestCase):
         self.assertNotEqual(first.suite_seed, different.suite_seed)
         self.assertEqual(first.to_dict()["suite_seed"], first.suite_seed)
 
-    def test_proposal_v3_is_validated_and_frozen_by_value(self):
+    def test_proposal_v4_is_validated_and_frozen_by_value(self):
         proposal = proposal_manifest()
         built = spec(proposal=proposal)
         proposal["hypothesis"] = "mutated after validation"
@@ -1052,6 +1053,21 @@ class TestTheSpecIsAPreCommitment(unittest.TestCase):
     def test_proposal_cannot_cross_campaigns(self):
         with self.assertRaisesRegex(ValueError, "does not match campaign"):
             spec(proposal=proposal_manifest("ak-other"))
+
+    def test_proposal_provider_cannot_target_a_different_backend(self):
+        proposal = proposal_manifest()
+        proposal["provider_reference"]["target_backend"] = campaign.BACKEND_GPU
+        with self.assertRaisesRegex(ValueError, "provider target.*does not match"):
+            spec(proposal=proposal)
+
+    def test_proposal_provider_symlink_into_shared_rocm_is_refused(self):
+        with tempfile.TemporaryDirectory(prefix="ak-provider-link-") as root:
+            link = Path(root, "rocm")
+            link.symlink_to("/opt/rocm", target_is_directory=True)
+            proposal = proposal_manifest()
+            proposal["provider_reference"]["isolation_root"] = str(link)
+            with self.assertRaisesRegex(ValueError, "provider isolation"):
+                spec(proposal=proposal)
 
     def test_parameter_proposal_binds_the_registered_iqk_arm_variant(self):
         built = spec(proposal=iqk_parameter_proposal())

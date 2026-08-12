@@ -15,7 +15,7 @@ python3 -m scripts.kernel_rnd.autokernel.campaign --model /path/to/model.gguf
 the exact argv and env both arms would be spawned with, and executes nothing.
 `--execute` additionally requires `--i-hold-the-host`, a validated
 `--proposal-manifest`, an exact-unit physical envelope and a current
-identity-bound calibration bundle; proposal-v3 is fsynced before any host work.
+identity-bound calibration bundle; proposal-v4 is fsynced before any host work.
 
 **Status: no candidate has ever been built, and no benchmark has ever been run
 by this package.** Not one. The loop above has been composed end to end and
@@ -107,9 +107,31 @@ than borrowing BF16's target or converting a relative speedup into a roofline.
 | What is on the path and what is not | [`FOOTPRINT.md`](FOOTPRINT.md) |
 | GEAK / AgentKernelArena on MI210 | [`controller/ARENA_INTEGRATION.md`](controller/ARENA_INTEGRATION.md) |
 
+### Provider is not champion (AK-D39)
+
+New proposals use `epyc.autokernel.proposal.v4` and carry an exact
+`provider_reference.v1`: provider kind, source-versus-opaque mode, immutable
+source/artifact identity, licence check, isolated prefix, toolchain and linkage
+manifests, target backend, and evidence authority. Opaque binaries are
+`diagnostic_only`; they can answer an exact-operation question but cannot be
+banked as a candidate.
+
+Provider acquisition and builds must use `execution.provider.IsolatedProviderPrefix`.
+It resolves symlinks and refuses `/opt/rocm`, `/usr`, and every frozen production
+kernel tree. A provider-backed candidate becomes bankable only after
+`provider_integration.v1` binds it to a clean, production-descended commit and
+artifact built in the experimental `llama.cpp` tree, including the exact patch,
+binary, linkage, and toolchain hashes. `DiagnosticProviderBinding` therefore
+cannot satisfy the C3 whole-model exit; only `IntegratedLlamaGpuBinding` can.
+Baseline comparisons independently bind the diagnostic ROCm library through a
+`baseline_provider_manifest.v1`; a provider name alone is not provenance.
+
+Proposal v2 and v3 records remain readable, but they cannot acquire provider
+authority retroactively.
+
 ### Representation-bound proposal comparisons (AK-WM-1)
 
-New proposal records use `epyc.autokernel.proposal.v3`. They bind the vocabulary,
+Proposal v3 and v4 records bind the vocabulary,
 source receipts, alternatives, empirical-demand weights, abstraction cost,
 canonical encoding, and semantics-preserving recoding fixtures into one derived
 `frame_sha256`. Proposal v2 remains readable, but new candidate orderings are
@@ -122,7 +144,7 @@ only authority label is `observe_only`; it is intentionally outside the campaign
 import path and exposes no selector, champion, T2, or T3 mutation API.
 
 `least_commitment_archive_builder.py` is the strict AK-WM-2a join in front of that
-evaluator. Every row must resolve to a real proposal-v3 journal event and an exact
+evaluator. Every row must resolve to a real proposal-v3 or proposal-v4 journal event and an exact
 clean `decided` terminal event with samples, released resources, and a passing
 production immutability proof. Hash-pinned diagnostic, outcome, and matched
 one-factor receipts must agree on representation, empirical-demand, candidate,
@@ -220,7 +242,7 @@ calibration exists. Source-changing campaigns additionally require their own
 
 | Module | What it owns |
 |---|---|
-| `schemas.py` | The §7 record contracts (`v2`–`v4` remain readable; evaluation-event `v5` adds parsed device state to v4's transfer surface), canonical JSON/content hashing, the `PASS`/`FAIL`/`COULD_NOT_CHECK` `Check` type, and record-level checkers. Proposal v3 requires a structured `external_numbers` list with source revision and independently re-derived same-quant/same-basis roofline utilization. **Single source of truth: every other module is written against these and must not invent a record shape.** |
+| `schemas.py` | The §7 record contracts (`v2`–`v4` remain readable; proposal v4 adds the provider identity boundary, and evaluation-event `v5` adds parsed device state to v4's transfer surface), canonical JSON/content hashing, the `PASS`/`FAIL`/`COULD_NOT_CHECK` `Check` type, and record-level checkers. Proposal v3+ requires a structured `external_numbers` list with source revision and independently re-derived same-quant/same-basis roofline utilization. **Single source of truth: every other module is written against these and must not invent a record shape.** |
 | `journal.py` | The append-only, fsynced, **sharded** primary record. Shard ordering, torn-tail repair, cursors, archiving, supersession (record-scope and retrieval-scope), tombstones, preflight attestations, derived views, and `check_view_consistency`. |
 | `fault_rehearsal.py` | **Process-only empirical acceptance producer (off campaign path).** Launches two exact private-session Python children to plant a journal crash and replay it after restart, then a third exact child holding a disposable fake-device claim to prove revocation is advisory rather than preemptive. It records PID/PGID/start-time identities, uses TERM→optional-KILL only on captured groups, verifies death, refuses changed hash-bound artifact bytes, and atomically publishes a versioned receipt with no inference/build/GPU/kernel/stack/release authority. |
 | `storage.py` | §3.7 durability classes, §5.8 retention classes and rule-bound tombstoned expiry, per-campaign quota and `DISK_PRESSURE`, the `data/<campaign>/` evidence root with `SHA256SUMS` + README, and `verify_durability`. |
@@ -238,6 +260,7 @@ calibration exists. Source-changing campaigns additionally require their own
 | `evaluator/historical_tasks.py` | **RVP-C5-R/C3-2.** Validates sealed local historical-task descriptors that expose only the pre-optimization parent to the actor, preserve whether the original argv was recovered, and pin the model, full benchmark surface, metric direction, repeats, parent, and human expert. The expert-ceiling reducer reports candidate-to-parent and candidate-to-human deltas only when a terminal candidate exists; an archive with no candidate is `COULD_NOT_CHECK`, never a stamped win. |
 | `evaluator/recipes.py` | **AK3.** The codified recipe constructors — every measurement argv is emitted by one, carrying its constructor id and content hash — for `test-backend-ops`, `test-quantize-perf` and `llama-bench`, CPU and GPU. Every T1a recipe requires a typed local A/A timing floor; a bare numeric or foreign floor is refused. |
 | `execution/worktree.py` | **AK2.** Fresh worktrees from the reviewed one-commit measurement overlay on current production v9, pathspec commits, clean candidate-local builds, and build identities. Candidate-controlled CMake configure/build is C6-sandboxed and returns evaluator-owned activation plus verified-cgroup-teardown receipts. |
+| `execution/provider.py` | **AK-D39 provider isolation.** Resolves candidate provider prefixes and refuses shared ROCm/system locations, frozen production trees, symlink aliases into either, and child-path escape. |
 | `execution/sandbox.py` | **C6.** Native Landlock write confinement, seccomp signal/network/namespace denial, non-root identity, finite rlimits, per-invocation cgroup-v2 containment, candidate-proof activation receipts, and descendant-draining teardown. Startup is fail-closed. |
 | `execution/provision_cgroup.sh` | **C6 host setup.** Root-only, explicit UID/GID provisioning of the narrow `/sys/fs/cgroup/autokernel` parent. The candidate still runs unprivileged and receives only a fresh per-invocation child leaf. |
 | `execution/t0_provider.py` | **AK3 T0.** Real correctness invocations. The live campaign constructs it only with a C6 policy; recorded replay starts no process. |
@@ -291,7 +314,7 @@ calibration exists. Source-changing campaigns additionally require their own
 | `lanes.py` | The lane registry, historical 4/8/16/32/48-way CPU shapes, isolation checks, change-class-specific rank calibration, and full-instance verification rule. |
 | `artifact_diff.py` | The compile-only VGPR/SGPR/scratch/instruction-mix comparison that vetoes an unconfirmed GPU claim before behavioral T0 can launch. |
 | `offline_least_commitment.py` | The observe-only AK-WM-2/AP-WM-1 diagnostic over matched completed-proposal archives; it has no live selection authority. |
-| `least_commitment_archive_builder.py` | The AK-WM-2a real-record join: resolves proposal-v3 and clean terminal journal events, verifies hash-bound diagnostic/outcome/matched-one-factor receipts, and emits only protocol-valid observe-only archives. |
+| `least_commitment_archive_builder.py` | The AK-WM-2a real-record join: resolves proposal-v3 or proposal-v4 and clean terminal journal events, verifies hash-bound diagnostic/outcome/matched-one-factor receipts, and emits only protocol-valid observe-only archives. |
 | `least_commitment_capture.py` | The prospective live IQK/control capture: binds pre-run diagnostics and recodings, reduces only declared measured outcomes, and gives no selector or release authority. |
 | `least_commitment_receipts.py` | The AK-WM-2a governed receipt producer: derives SHA-pinned journal bindings from distinct clean completed campaigns, proves the sole matched intervention factor, rejects non-real evidence, and publishes the validated archive. |
 | `evidence_path_rehearsal.py` | No-inference control/proposal/AP-WM/champion/readiness/T3/package producer inventory; architecture fixture only. |

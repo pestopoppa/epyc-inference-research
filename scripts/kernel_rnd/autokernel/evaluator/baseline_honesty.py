@@ -4,9 +4,58 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping, Sequence
 
+from .. import schemas
+from ..execution import provider as provider_isolation
+
 
 VENDOR_PREFILL_PROVIDERS = frozenset(("rocblas", "hipblaslt"))
 EXPLICIT_FACTOR_NAMES = frozenset(("flash_attention", "mmq_mfma", "rocwmma_fattn"))
+PROVIDER_MANIFEST_SCHEMA = "epyc.autokernel.baseline_provider_manifest.v1"
+
+
+@dataclass(frozen=True)
+class ProviderManifest:
+    """Exact library identity; a provider label is not provenance."""
+
+    schema: str
+    provider: str
+    package_version: str
+    library_binary_sha256: str
+    reference: Mapping[str, object]
+
+    def __post_init__(self) -> None:
+        if self.schema != PROVIDER_MANIFEST_SCHEMA:
+            raise ValueError(f"provider manifest schema must be {PROVIDER_MANIFEST_SCHEMA!r}")
+        if self.provider not in VENDOR_PREFILL_PROVIDERS:
+            raise ValueError(f"unsupported provider manifest: {self.provider!r}")
+        if not isinstance(self.package_version, str) or not self.package_version.strip():
+            raise ValueError("provider package_version is required")
+        if not schemas.SHA256_RE.fullmatch(self.library_binary_sha256) \
+                or schemas.is_placeholder_digest(self.library_binary_sha256):
+            raise ValueError("provider library_binary_sha256 must be a real SHA-256")
+        violations = schemas.validate_provider_reference(
+            self.reference, "provider_manifest.reference.")
+        if violations:
+            raise ValueError("invalid provider reference: " + "; ".join(violations))
+        try:
+            provider_isolation.IsolatedProviderPrefix.create(
+                str(self.reference["isolation_root"]))
+        except provider_isolation.ProviderIsolationError as exc:
+            raise ValueError(f"invalid provider isolation: {exc}") from exc
+        if self.reference.get("kind") != "rocm_library" \
+                or self.reference.get("target_backend") != "llama_gpu" \
+                or self.reference.get("evidence_authority") != "diagnostic_only":
+            raise ValueError(
+                "baseline provider reference must be a diagnostic-only llama_gpu "
+                "ROCm library")
+
+    def to_dict(self) -> dict:
+        return {
+            "schema": self.schema, "provider": self.provider,
+            "package_version": self.package_version,
+            "library_binary_sha256": self.library_binary_sha256,
+            "reference": dict(self.reference),
+        }
 
 
 @dataclass(frozen=True)
@@ -58,6 +107,7 @@ class BaselineObservation:
     metric: float
     metric_id: str
     evidence_ref: str
+    provider_manifest: ProviderManifest
 
     def __post_init__(self) -> None:
         if self.provider not in VENDOR_PREFILL_PROVIDERS:
@@ -66,6 +116,10 @@ class BaselineObservation:
             raise TypeError("baseline metric must be numeric")
         if not self.metric_id or not self.evidence_ref:
             raise ValueError("baseline metric_id and evidence_ref are required")
+        if not isinstance(self.provider_manifest, ProviderManifest):
+            raise TypeError("provider_manifest is required")
+        if self.provider_manifest.provider != self.provider:
+            raise ValueError("observation provider differs from provider manifest")
 
 
 @dataclass(frozen=True)
@@ -89,7 +143,10 @@ class BaselineSelection:
             "metric_id": self.selected.metric_id,
             "metric_direction": self.metric_direction,
             "evidence_ref": self.selected.evidence_ref,
+            "selected_provider_manifest": self.selected.provider_manifest.to_dict(),
             "compared_providers": [item.provider for item in self.compared],
+            "compared_provider_manifests": [
+                item.provider_manifest.to_dict() for item in self.compared],
         }
 
 

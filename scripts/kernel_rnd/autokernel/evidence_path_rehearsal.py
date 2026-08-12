@@ -166,7 +166,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--report-output", type=Path, required=True)
     args = parser.parse_args(argv)
     intervention = _load(args.intervention_proposal)
-    violations = schemas.validate_proposal_v3(intervention)
+    violations = schemas.validate_proposal(intervention)
     if violations:
         raise RehearsalError("invalid intervention proposal: " + "; ".join(violations))
     control = capture.make_iqk_control_proposal(

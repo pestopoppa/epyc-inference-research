@@ -107,11 +107,12 @@ def _completed_proposal(row: Mapping[str, Any]) -> CompletedProposal:
         raise ValueError(
             f"{campaign_id}/{proposal_id}: expected one proposal event, got {len(proposals)}")
     proposal = proposals[0].payload
-    if proposal.get("schema") != schemas.SCHEMA_PROPOSAL_V3:
-        raise ValueError(f"{proposal_id}: only proposal.v3 is archive-eligible")
-    violations = schemas.validate_proposal_v3(proposal)
+    if proposal.get("schema") not in {
+            schemas.SCHEMA_PROPOSAL_V3, schemas.SCHEMA_PROPOSAL_V4}:
+        raise ValueError(f"{proposal_id}: only proposal.v3/v4 is archive-eligible")
+    violations = schemas.validate_record(proposal)
     if violations:
-        raise ValueError(f"{proposal_id}: invalid proposal.v3: {'; '.join(violations)}")
+        raise ValueError(f"{proposal_id}: invalid proposal: {'; '.join(violations)}")
     terminals = [
         entry for entry in entries
         if entry.kind == journal.KIND_STOP_STATE and entry.event_id == completion_id

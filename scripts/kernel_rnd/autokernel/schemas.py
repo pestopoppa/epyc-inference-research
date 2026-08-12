@@ -81,8 +81,11 @@ from typing import Any, Callable, Iterable, Mapping, Optional
 SCHEMA_CAMPAIGN = "epyc.autokernel.campaign.v2"
 SCHEMA_PROPOSAL_V2 = "epyc.autokernel.proposal.v2"
 SCHEMA_PROPOSAL_V3 = "epyc.autokernel.proposal.v3"
-#: The CURRENT proposal contract. v2 remains readable under its original rules.
-SCHEMA_PROPOSAL = SCHEMA_PROPOSAL_V3
+SCHEMA_PROPOSAL_V4 = "epyc.autokernel.proposal.v4"
+SCHEMA_PROVIDER_REFERENCE_V1 = "epyc.autokernel.provider_reference.v1"
+SCHEMA_PROVIDER_INTEGRATION_V1 = "epyc.autokernel.provider_integration.v1"
+#: The CURRENT proposal contract. v2/v3 remain readable under their original rules.
+SCHEMA_PROPOSAL = SCHEMA_PROPOSAL_V4
 SCHEMA_CANDIDATE = "epyc.autokernel.candidate.v1"
 
 # The evaluation event exists in two versions AT THE SAME TIME, and both names
@@ -205,6 +208,18 @@ CAMPAIGN_KINDS = frozenset({
     "oracle_port", "source_change",
 })
 
+PROVIDER_KINDS = frozenset({
+    "llama_source", "rocm_library", "third_party_source", "compiler_toolchain",
+})
+PROVIDER_SOURCE_MODES = frozenset({"source", "opaque_binary"})
+PROVIDER_EVIDENCE_AUTHORITIES = frozenset({"diagnostic_only", "candidate_eligible"})
+PROHIBITED_PROVIDER_PREFIXES = (
+    "/opt/rocm", "/usr", "/mnt/raid0/llm/llama.cpp",
+    "/mnt/raid0/llm/whisper.cpp", "/mnt/raid0/llm/qwentts.cpp",
+    "/workspace/repos/epyc-llama", "/workspace/repos/epyc-whisper",
+    "/workspace/repos/epyc-qwentts",
+)
+
 # §5.7: the exclusion source is a CPU region claim or a GPU device claim.
 # `stack` is the serving-runtime lane (§11.6), which never travels the
 # kernel-freeze path.
@@ -275,6 +290,7 @@ NON_RETRIEVABLE_FIELDS = {
     SCHEMA_CAMPAIGN: frozenset(),
     SCHEMA_PROPOSAL_V2: frozenset({"narrative"}),
     SCHEMA_PROPOSAL_V3: frozenset({"narrative"}),
+    SCHEMA_PROPOSAL_V4: frozenset({"narrative"}),
     SCHEMA_CANDIDATE: frozenset({"narrative"}),
     SCHEMA_EVALUATION_EVENT_V2: frozenset({"narrative"}),
     SCHEMA_EVALUATION_EVENT_V3: frozenset({"narrative"}),
@@ -1793,6 +1809,115 @@ def validate_external_number(obj: Any, prefix: str = "") -> list:
     return out
 
 
+def _provider_root_violations(value: Any, prefix: str) -> list[str]:
+    if not isinstance(value, str) or not value.startswith("/"):
+        return [f"{prefix}: must be an absolute isolated prefix"]
+    normalized = posixpath.normpath(value)
+    if normalized == "/":
+        return [f"{prefix}: filesystem root is not an isolated prefix"]
+    for prohibited in PROHIBITED_PROVIDER_PREFIXES:
+        root = posixpath.normpath(prohibited)
+        if (normalized == root or normalized.startswith(root + "/")
+                or root.startswith(normalized + "/")):
+            return [f"{prefix}: {normalized!r} overlaps prohibited shared prefix {root!r}"]
+    return []
+
+
+def validate_provider_reference(obj: Any, prefix: str = "provider_reference.") -> list:
+    """Validate the provider-not-champion input identity contract."""
+    out: list = []
+    if not isinstance(obj, Mapping):
+        return [f"{prefix[:-1]}: expected a mapping"]
+    required = {
+        "schema", "kind", "source_mode", "source_ref", "source_commit",
+        "artifact_sha256", "license_check", "isolation_root",
+        "toolchain_manifest_sha256", "linkage_manifest_sha256", "target_backend",
+        "evidence_authority",
+    }
+    if set(obj) != required:
+        out.append(f"{prefix[:-1]}: fields must be exactly {sorted(required)}")
+    schema = _need_str(obj, "schema", out, prefix)
+    if schema is not _MISSING and schema != SCHEMA_PROVIDER_REFERENCE_V1:
+        out.append(f"{prefix}schema: expected {SCHEMA_PROVIDER_REFERENCE_V1!r}")
+    kind = _need_str(obj, "kind", out, prefix, choices=PROVIDER_KINDS)
+    mode = _need_str(obj, "source_mode", out, prefix, choices=PROVIDER_SOURCE_MODES)
+    _need_str(obj, "source_ref", out, prefix)
+    commit = _fetch(obj, "source_commit", out, prefix)
+    if mode == "source":
+        if not isinstance(commit, str) or not COMMIT_RE.fullmatch(commit):
+            out.append(f"{prefix}source_commit: source providers require a full commit")
+    elif mode == "opaque_binary" and commit is not None:
+        out.append(f"{prefix}source_commit: opaque providers must use null")
+    for key in ("artifact_sha256", "toolchain_manifest_sha256",
+                "linkage_manifest_sha256"):
+        _need_sha256(obj, key, out, prefix)
+    _need_str(obj, "license_check", out, prefix)
+    root = _fetch(obj, "isolation_root", out, prefix)
+    if root is not _MISSING:
+        out.extend(_provider_root_violations(root, prefix + "isolation_root"))
+    backend = _need_str(obj, "target_backend", out, prefix, choices=BACKENDS)
+    authority = _need_str(obj, "evidence_authority", out, prefix,
+                          choices=PROVIDER_EVIDENCE_AUTHORITIES)
+    if mode == "opaque_binary" and authority != "diagnostic_only":
+        out.append(f"{prefix}evidence_authority: opaque binaries are diagnostic_only")
+    if authority == "candidate_eligible" and mode != "source":
+        out.append(f"{prefix}source_mode: candidate-eligible providers require source")
+    if authority == "candidate_eligible" and backend not in SOURCE_TREE_BY_BACKEND:
+        out.append(
+            f"{prefix}target_backend: candidate-eligible providers require a kernel "
+            "source-tree backend")
+    if kind == "llama_source" and backend not in ("llama_cpu", "llama_gpu"):
+        out.append(f"{prefix}target_backend: llama_source requires a llama backend")
+    if kind in {"rocm_library", "third_party_source", "compiler_toolchain"} \
+            and authority == "candidate_eligible" and backend != "llama_gpu":
+        out.append(
+            f"{prefix}target_backend: external candidate providers must integrate "
+            "through llama_gpu")
+    return out
+
+
+def validate_provider_integration(obj: Any,
+                                  prefix: str = "provider_integration.") -> list:
+    """Validate the clean llama-tree artifact that may leave provider search."""
+    out: list = []
+    if not isinstance(obj, Mapping):
+        return [f"{prefix[:-1]}: expected a mapping"]
+    required = {
+        "schema", "provider_reference_sha256", "source_tree", "backend",
+        "production_base_commit", "candidate_source_commit", "candidate_branch",
+        "patch_bundle_sha256", "binary_sha256", "linkage_sha256",
+        "toolchain_manifest_sha256", "isolation_root", "tree_clean",
+        "ancestry_clean",
+    }
+    if set(obj) != required:
+        out.append(f"{prefix[:-1]}: fields must be exactly {sorted(required)}")
+    schema = _need_str(obj, "schema", out, prefix)
+    if schema is not _MISSING and schema != SCHEMA_PROVIDER_INTEGRATION_V1:
+        out.append(f"{prefix}schema: expected {SCHEMA_PROVIDER_INTEGRATION_V1!r}")
+    _need_sha256(obj, "provider_reference_sha256", out, prefix)
+    tree = _need_str(obj, "source_tree", out, prefix, choices=SOURCE_TREES)
+    backend = _need_str(obj, "backend", out, prefix, choices=BACKENDS)
+    if backend is not _MISSING and SOURCE_TREE_BY_BACKEND.get(backend) != tree:
+        out.append(f"{prefix}source_tree: backend {backend!r} is not served by {tree!r}")
+    for key in ("production_base_commit", "candidate_source_commit"):
+        _need_commit(obj, key, out, prefix)
+    if obj.get("production_base_commit") == obj.get("candidate_source_commit"):
+        out.append(f"{prefix}candidate_source_commit: cannot equal production base")
+    branch = _need_str(obj, "candidate_branch", out, prefix)
+    if branch is not _MISSING and (not branch.startswith("ak/")
+                                  or _PRODUCTION_BRANCH_RE.match(branch)):
+        out.append(f"{prefix}candidate_branch: must use the experimental ak/ namespace")
+    for key in ("patch_bundle_sha256", "binary_sha256", "linkage_sha256",
+                "toolchain_manifest_sha256"):
+        _need_sha256(obj, key, out, prefix)
+    root = _fetch(obj, "isolation_root", out, prefix)
+    if root is not _MISSING:
+        out.extend(_provider_root_violations(root, prefix + "isolation_root"))
+    _need_bool(obj, "tree_clean", out, prefix, must_be=True)
+    _need_bool(obj, "ancestry_clean", out, prefix, must_be=True)
+    return out
+
+
 def _validate_proposal(obj: Any, schema: str) -> list:
     """Shared proposal validation; ``schema`` fixes the versioned contract."""
     out: list = []
@@ -1860,7 +1985,7 @@ def _validate_proposal(obj: Any, schema: str) -> list:
     # §8.4 ranks expected information gain FIRST, so it is not optional.
     _need_number(obj, "expected_information_gain", out, "", minimum=0)
 
-    if schema == SCHEMA_PROPOSAL_V3:
+    if schema in (SCHEMA_PROPOSAL_V3, SCHEMA_PROPOSAL_V4):
         representation = _need_dict(obj, "representation_contract", out, "")
         if representation is not _MISSING:
             out.extend(validate_representation_contract(representation))
@@ -1879,6 +2004,14 @@ def _validate_proposal(obj: Any, schema: str) -> list:
             out.append(
                 "external_numbers: belongs to proposal.v3; historical proposal.v2 "
                 "cannot acquire the current external-number contract by relabelling")
+
+    provider = obj.get("provider_reference")
+    if schema == SCHEMA_PROPOSAL_V4:
+        out.extend(validate_provider_reference(provider))
+    elif provider is not None:
+        out.append(
+            "provider_reference: belongs to proposal.v4; historical proposals cannot "
+            "acquire provider authority by relabelling")
 
     for key in ("target", "non_target"):
         block = _need_dict(obj, key, out, "")
@@ -1967,7 +2100,12 @@ def validate_proposal_v3(obj: Any) -> list:
     return _validate_proposal(obj, SCHEMA_PROPOSAL_V3)
 
 
-validate_proposal = validate_proposal_v3
+def validate_proposal_v4(obj: Any) -> list:
+    """Validate current proposals with an explicit provider identity."""
+    return _validate_proposal(obj, SCHEMA_PROPOSAL_V4)
+
+
+validate_proposal = validate_proposal_v4
 
 
 # =============================================================================
@@ -2093,6 +2231,39 @@ def validate_candidate(obj: Any) -> list:
                 or not evaluator.get("runtime_source_label_ref"):
             out.append("evaluator.runtime_source_label_ref: required with composition_evidence")
 
+    provider_reference = obj.get("provider_reference")
+    provider_integration = obj.get("provider_integration")
+    if provider_reference is not None:
+        out.extend(validate_provider_reference(
+            provider_reference, "provider_reference."))
+    if provider_integration is not None:
+        out.extend(validate_provider_integration(
+            provider_integration, "provider_integration."))
+    if isinstance(provider_reference, Mapping) \
+            and isinstance(provider_integration, Mapping):
+        if provider_integration.get("provider_reference_sha256") != \
+                content_hash(provider_reference):
+            out.append(
+                "provider_integration.provider_reference_sha256: does not bind the "
+                "candidate provider_reference")
+        if provider_integration.get("backend") != provider_reference.get("target_backend"):
+            out.append(
+                "provider_integration.backend: contradicts provider target_backend")
+        cross_checks = (
+            ("candidate_source_commit", worktree, "source_commit"),
+            ("candidate_branch", worktree, "branch"),
+            ("production_base_commit", ancestry, "production_base_commit"),
+            ("patch_bundle_sha256", snapshot, "patch_bundle_sha256"),
+            ("binary_sha256", artifacts, "binary_sha256"),
+            ("linkage_sha256", artifacts, "linkage_sha256"),
+            ("source_tree", composition, "source_tree"),
+        )
+        for field, parent, parent_field in cross_checks:
+            if isinstance(parent, Mapping) and provider_integration.get(field) != \
+                    parent.get(parent_field):
+                out.append(
+                    f"provider_integration.{field}: contradicts {parent_field}")
+
     banking = obj.get("banking_verdict")
     if banking is not None:
         _validate_candidate_banking_verdict(obj, banking, out)
@@ -2124,6 +2295,15 @@ def validate_candidate(obj: Any) -> list:
 
     _need_str(obj, "champion_status", out, "", choices=CHAMPION_STATUSES)
     status = _need_str(obj, "status", out, "", choices=CANDIDATE_STATUSES)
+    if status == "banked" and isinstance(provider_reference, Mapping):
+        if provider_reference.get("source_mode") != "source" \
+                or provider_reference.get("evidence_authority") != "candidate_eligible":
+            out.append(
+                "provider_reference: banked candidates require source-transparent "
+                "candidate-eligible provider evidence")
+        if not isinstance(provider_integration, Mapping):
+            out.append(
+                "provider_integration: required to bank a provider-backed candidate")
     if status == "banked" and composition is not None and banking is None:
         out.append("banking_verdict: required for a newly composed banked candidate")
     if status == "banked" and isinstance(banking, Mapping) \
@@ -3490,6 +3670,7 @@ SCHEMA_REGISTRY = {
     SCHEMA_CAMPAIGN: validate_campaign,
     SCHEMA_PROPOSAL_V2: validate_proposal_v2,
     SCHEMA_PROPOSAL_V3: validate_proposal_v3,
+    SCHEMA_PROPOSAL_V4: validate_proposal_v4,
     SCHEMA_CANDIDATE: validate_candidate,
     # All evaluation-event versions are registered. Older versions are not retired or
     # rewritten: a journal shard written last week still validates, under its own
@@ -3547,13 +3728,16 @@ __all__ = [
     "SCHEMA_EVALUATION_EVENT_V3", "SCHEMA_EVALUATION_EVENT_V4",
     "SCHEMA_EVALUATION_EVENT_V5",
     "EVALUATION_EVENT_VALIDATORS",
-    "SCHEMA_PROPOSAL_V2", "SCHEMA_PROPOSAL_V3",
+    "SCHEMA_PROPOSAL_V2", "SCHEMA_PROPOSAL_V3", "SCHEMA_PROPOSAL_V4",
+    "SCHEMA_PROVIDER_REFERENCE_V1", "SCHEMA_PROVIDER_INTEGRATION_V1",
     "SCHEMA_CHAMPION", "SCHEMA_RELEASE_PACKAGE",
     "SCHEMA_OPERATOR_WAIVER", "SCHEMA_REGISTRY", "KNOWN_SCHEMAS",
     "BACKENDS", "SOURCE_TREES", "SOURCE_TREE_BY_BACKEND", "OBJECTIVE_RULES",
     "LLAMA_PHASES", "WHISPER_STT_PHASES", "QWENTTS_TTS_PHASES",
     "PHASES_BY_BACKEND", "RECIPE_CLASSES", "CHANGE_CLASSES",
     "CHANGE_CLASS_CHEAP_SUITE", "CAMPAIGN_KINDS", "RESOURCE_LANES",
+    "PROVIDER_KINDS", "PROVIDER_SOURCE_MODES", "PROVIDER_EVIDENCE_AUTHORITIES",
+    "PROHIBITED_PROVIDER_PREFIXES",
     "CRITIC_STATUSES", "TIERS", "CLAIM_CATEGORIES", "METRIC_DIRECTIONS",
     "EVENT_STATUSES", "DETERMINISM_CLASSES", "MACHINE_SUBSETS",
     "DURABILITY_CLASSES", "CANDIDATE_STATUSES", "CHAMPION_STATUSES",
@@ -3573,7 +3757,8 @@ __all__ = [
     "is_placeholder_digest", "declared_anchor_void_reasons",
     "require", "EVIDENCE_PRODUCERS", "SHA256_RE", "COMMIT_RE",
     "validate_campaign", "validate_proposal", "validate_proposal_v2",
-    "validate_proposal_v3", "validate_external_number", "validate_candidate",
+    "validate_proposal_v3", "validate_proposal_v4", "validate_provider_reference",
+    "validate_external_number", "validate_candidate",
     "validate_evaluation_event", "validate_evaluation_event_v2",
     "validate_evaluation_event_v3", "validate_evaluation_event_v4",
     "validate_evaluation_event_v5",

@@ -203,6 +203,7 @@ ACCEPTED_SCHEMAS_BY_KIND = {
     KIND_PROPOSAL_RECORDED: frozenset({
         schemas.SCHEMA_PROPOSAL_V2,
         schemas.SCHEMA_PROPOSAL_V3,
+        schemas.SCHEMA_PROPOSAL_V4,
     }),
 }
 

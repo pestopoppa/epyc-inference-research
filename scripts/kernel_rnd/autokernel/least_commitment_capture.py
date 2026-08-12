@@ -201,7 +201,7 @@ def materialize(plan: CapturePlan, *, decision: Any, calibration: Any) -> dict:
 
 def make_iqk_control_proposal(intervention: Mapping[str, Any], *, campaign_id: str,
                               proposal_id: str) -> dict:
-    """Create the exact proposal-v3 A/A control for an IQK intervention.
+    """Create the exact current-schema A/A control for an IQK intervention.
 
     The control holds both arms at the production setting.  It is not executable
     without a bound ``role=control`` capture plan, which is the campaign-side
@@ -216,7 +216,7 @@ def make_iqk_control_proposal(intervention: Mapping[str, Any], *, campaign_id: s
     control["hypothesis"] = "Matched A/A control for " + intervention["proposal_id"]
     if isinstance(control.get("narrative"), str):
         control["narrative"] = "Matched A/A control; no performance claim. " + control["narrative"]
-    violations = schemas.validate_proposal_v3(control)
+    violations = schemas.validate_proposal(control)
     if violations:
         raise CapturePlanError("derived control proposal is invalid: " + "; ".join(violations))
     return control
