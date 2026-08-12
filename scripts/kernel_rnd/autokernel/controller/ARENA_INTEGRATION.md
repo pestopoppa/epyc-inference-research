@@ -41,13 +41,14 @@ primary INF-03 comparison is exactly eight arms:
 7. GEAK-v1; and
 8. ARGUS.
 
-EvoEngineer and ARGUS are unavailable, not omitted. EvoEngineer now has an
-admitted exact source and a pending policy adapter, but remains non-executable
-until claim-scoped intermediate Arena feedback and its campaign launcher are
-integrated. ARGUS still has no official licensed source artifact. A controller
-reconstructed from the ARGUS paper would be ``ARGUS-inspired``, not the
-published system. No MI300X/gfx942 result transfers into this prospective MI210
-comparison.
+ARGUS is unavailable, not omitted. EvoEngineer is now source-admitted and
+executable through the same parent-worker broker, controller sandbox, and
+isolated evaluator boundary as the other licensed upstream arms. The
+availability-conditioned diagnostic panel is therefore seven arms; it is not a
+substitute for the primary eight-arm comparison. ARGUS still has no official
+licensed source artifact. A controller reconstructed from the ARGUS paper would
+be ``ARGUS-inspired``, not the published system. No MI300X/gfx942 result
+transfers into this prospective MI210 comparison.
 
 `arena_campaign_v1.json` fixes the comparison task, file digests, one-at-a-time
 MI210 use, and the adopted RE-Bench elapsed-wall-time checkpoints of exactly 2,
@@ -163,10 +164,63 @@ Candidate evaluation isolation is also implemented. Every intermediate and
 final candidate now runs in a fresh restricted-read GPU evaluator subprocess,
 with exact device admission, networking denied, and request/result/baseline,
 activation, teardown, and current vendor-evaluator identities durably
-revalidated. The campaign remains fail-closed until the controller adapter is
-wired into the cell runner and the first claim-scoped evaluator compatibility
-probe succeeds; until then no INF-03 run may claim GPU-blind deliberation, safe
-concurrency, ranking, aggregate, belief, champion, or release authority.
+revalidated. The controller adapter is wired into the cell runner, and the
+first claim-scoped evaluator compatibility probe has succeeded. Those facts
+close the implementation gates for isolated execution; they do not grant the
+compatibility probe ranking, aggregate, belief, champion, or release authority,
+and the primary campaign remains refused while ARGUS leaves it at 7/8.
+
+### Isolated evaluator compatibility sequence — 2026-08-12
+
+The attempts under
+`/mnt/raid0/llm/autokernel/probes/inf03-isolated-evaluator-compatibility-20260812-r*`
+are a compatibility-debug sequence, not six performance repetitions. R1-r5
+are immutable **invalid compatibility defect attempts**:
+
+- r1 reached no child result because Python startup could not obtain hash
+  randomness (activation file SHA-256
+  `386881fb1b700dd8d0fc488f3f3bb7114b46c310077ba265d2ea8ca1b8c149b0`);
+- r2 reached no durable execution result because the pinned Arena package root
+  was outside the read allowlist (activation file SHA-256
+  `82011249f50a99873af2efeede05b5c804ca99954bdd3498f865c96aadd4d213`);
+- r3 emitted terminal receipt SHA-256
+  `ea03ff11164bba0af2cb16374927fb867383ced38b456ee193339786e2694a19`
+  but its result receipt
+  `f948ae2148e91c8b3b73916047ddd998505567302118f61dac4b756ae2126421`
+  records `pass_correctness=false` because `/dev/null` was denied;
+- r4 emitted failed result receipt
+  `8537f488cd45ce09bf0396e0e1cdefa39763af90306df2c466a58dc1d66257d4`
+  and no terminal receipt because PyTorch could not open `/dev/urandom`; and
+- r5 emitted failed result receipt
+  `0306d543e07edd588622421f0bea8a8f7e2058466d1f19dd6a3da487cc937516`
+  and no terminal receipt because Triton's runtime helper build could not
+  execute the exact GCC `cc1` helper.
+
+None of r1-r5 is a valid compatibility pass, measurement comparison, or input
+to ranking or belief. Each defect led to a narrow evidenced allowlist change;
+no attempt widened the evaluator to `/dev`, `/proc`, or a broad filesystem
+root.
+
+R6 is the first and only compatibility pass. Its terminal receipt is
+`/mnt/raid0/llm/autokernel/probes/inf03-isolated-evaluator-compatibility-20260812-r6/receipt.json`,
+with receipt SHA-256
+`cc129a4a5e0424ae17d284e43b06425e386f5f6e6c29d929666699ede81c2405`
+and file SHA-256
+`ac8027a2d052d455ff042a0fe34916485a749fff5f6094f799ab2b976cb604e6`.
+The isolated evaluator execution receipt is
+`ee15214bbc4516849316176dd54bf9193f3074d13191231a0e64e949cdd076e1`;
+its child result is
+`d21b086ad659ddb882f05af782b75b60baa64657cc201a8e51956d7074682c4d`;
+and its baseline/final measurement-window receipts are respectively
+`5d949c2dda9d370ea9569119a81327494996c21f86365da9c4d8525c5665d603`
+and `c484ad66794b89d7f714d13292f6e22ef0d4e659791f74a634c40965af100321`.
+Both windows held and released `mi210_0`; the evaluator passed compilation and
+correctness with 4/4 baseline and 4/4 optimized cases, denied networking, kept
+`/proc` outside the read allowlist, and verified its cgroup empty and removed.
+The observed `0.9991096842915198` starting-state/self speedup is deliberately
+**compatibility-only**: the receipt says
+`compatibility_only_no_ranking_or_promotion_authority`, no model inference ran,
+and the value must not be used as a kernel or controller performance claim.
 
 The 2026-08-12 available-source r4 attempt is immutable defect evidence, not a
 valid partial campaign. KernelFoundry performed 64 intermediate vendor
@@ -418,7 +472,7 @@ and driver SHA-256
 `b839a35cb79627bb27c7f1be6902e91365a1ce8beb0fc26edff58bae5d003866`;
 neither audit executed a controller or GPU command.
 
-## EvoEngineer source admission and integration order — 2026-08-12
+## EvoEngineer source admission and executable integration — 2026-08-12
 
 `evoengineer_arena.py` binds the historical source release rather than the later
 generic EvoToolkit `master`. It declares `EvoEngineer-Full` explicitly—Free and
@@ -427,36 +481,29 @@ Insight are distinct upstream variants—and pins the paper-matched population 4
 retains upstream `EvoEngineer.run`, rank-probability parent selection, operators
 `init(0)`, `crossover(2)`, `mutation(1)`, elite trimming, and random sampling of
 up to three prior thoughts. Only the task, AMD prompt, model, and evaluator
-boundaries are translated.
+boundaries are translated. The implementation now exposes a fixed
+`campaign_argv`, a stdin CLI, the exact source/runtime identities, and the
+paper-matched `EvoEngineer.run` loop. Every candidate crosses
+`ArenaWorkspaceEvaluator.evaluate(files)` into the authenticated parent broker;
+the controller has no direct evaluator/device authority.
 
-The module intentionally exposes no CLI or `campaign_argv`. Integration order is:
-
-1. materialize a clean `vendor://evotoolkit` checkout at the exact admitted
-   commit and revalidate all policy-bearing file digests;
-2. merge the parent-worker AF_UNIX evaluation broker behind the existing
-   `ArenaWorkspaceEvaluator.evaluate(files)` protocol;
-3. add the hash-bound launcher, enforce controller device isolation with no
-   controller-side vendor measure/evaluate path, and validate nested windows;
-4. change the arm to `ready` only after fake-policy tests and a no-inference
-   source/campaign audit pass, then use a fresh campaign identity.
-
-Until all four occur, `arena_campaign_v1.json` keeps the arm `missing`, the
-available-source diagnostic remains six arms, and no EvoEngineer result exists.
-
-An arena-side launcher should:
-
-1. import `register_agentkernelarena_adapter()` in a tiny
-   `agents/epyc_autokernel/launch_agent.py` module;
-2. pass AgentKernelArena's `register_agent` decorator and a three-argument
-   wrapper around its normal prompt builder;
-3. add `epyc_autokernel` to the vendor `AgentType`, import dispatch,
-   prompt-builder dispatch, and general postprocessor list (the preflight records
-   why these four paper-pin overlay edits are required);
-4. provide `eval_config.epyc_autokernel` with a registered `controller_id`, an
-   argv that reads the prompt from stdin, and optionally a C4 report path plus
-   its SHA-256;
-5. leave compile, correctness, timing, held-out shapes, and scoring to the
-   arena/evaluator.
+The admission sequence is complete: the clean exact checkout is present, the
+broker backs the evaluator protocol, the campaign runner launches the arm under
+the controller sandbox, and the no-execution campaign audit declares it ready.
+The latest seven-arm available-source audit is
+`/mnt/raid0/llm/autokernel/probes/inf03-isolation-available-source-reaudit-20260812-r3/receipt.json`
+(receipt SHA-256
+`5fa93695f021b869010f880ba90d265ac2a157d7c3ac4c6e50c3f5c69f1fd46d`;
+file SHA-256
+`082d977fa99b6f83e2d2b32583757340729c6c9014cbadf920b08025e169c990`).
+It is ready at 7/7 with authority
+`availability_conditioned_diagnostic_only`; its embedded primary-panel audit
+remains refused at 7/8 with receipt SHA-256
+`3a43cd35044da9301a1d39996e365f3e6321f4ffa8a72dfb374df1e936a0c555`
+because ARGUS alone is unavailable. The audit executed neither a controller nor
+a GPU command. Consequently an EvoEngineer **result** still does not exist:
+source and execution-path admission are complete, but controller quality can be
+measured only by a fresh governed campaign.
 
 The returned arena score remains `whole_agent_task_only`; C4 input remains
 `diagnostic_only`. Neither is an AutoKernel promotion verdict.
