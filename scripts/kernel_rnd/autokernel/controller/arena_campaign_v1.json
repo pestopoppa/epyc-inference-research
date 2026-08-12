@@ -116,9 +116,9 @@
         "/mnt/raid0/llm/autokernel/vendor/arena-controllers/evoengineer"
       ],
       "source_root": "repository://.",
-      "source_commit": "f42b35403b71684d043db4ee0b4a8670e12c4727",
+      "source_commit": "381bc55e5eadb58763d86e0043da0884b26eea3a",
       "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/evoengineer_arena.py",
-      "entrypoint_sha256": "d87a8e3ac5726daace00979da211d130c96869b55751158c165c5a1937b2bc1d",
+      "entrypoint_sha256": "d5544c2397da53770bb77897fdd0fdbff72baabd9839adca2a3f8350c58d4ef4",
       "model_ids": [
         "gpt-5.6-sol:high:upstream-controller"
       ],
@@ -161,9 +161,9 @@
         "/mnt/raid0/llm/autokernel/vendor/arena-controllers/kernelfoundry"
       ],
       "source_root": "repository://.",
-      "source_commit": "7654383ca79bcd1d9694dec17d21ebf7bc71ebcf",
+      "source_commit": "381bc55e5eadb58763d86e0043da0884b26eea3a",
       "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/kernelfoundry_arena.py",
-      "entrypoint_sha256": "2f04cbc60891d898b4d294d2b52d3e7b77e61e77cf4e38e42c77e0341e217084",
+      "entrypoint_sha256": "98a89b745eb32a9f067020615878ead2820672cdd27b387d951a80c5c0e4ec98",
       "model_ids": [
         "gpt-5.6-sol:high:upstream-controller"
       ],
@@ -204,9 +204,9 @@
         "/mnt/raid0/llm/autokernel/vendor/arena-controllers/k-search"
       ],
       "source_root": "repository://.",
-      "source_commit": "c7feb0563e2137861d440e224781cce591ca3785",
+      "source_commit": "381bc55e5eadb58763d86e0043da0884b26eea3a",
       "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/k_search_arena.py",
-      "entrypoint_sha256": "ee22372047bf0e62403812220f9dca19dfbfa7bda8125e19777bcdde10ed6283",
+      "entrypoint_sha256": "abf5a2a5d0e6efd18ac6e5563f9a24012ce47cb5cd290fc20e356159683acbde",
       "model_ids": [
         "gpt-5.6-sol:high:upstream-controller"
       ],
@@ -247,9 +247,9 @@
         "/mnt/raid0/llm/autokernel/vendor/arena-controllers/xe-forge"
       ],
       "source_root": "repository://.",
-      "source_commit": "1bd5ec75003a5d2048414e5d9969b9afb503f1ee",
+      "source_commit": "381bc55e5eadb58763d86e0043da0884b26eea3a",
       "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/xe_forge_arena.py",
-      "entrypoint_sha256": "78cbfa81e8ef864e4dd20f35eea04b83e1dbdaec5ecc060d2721405d2815eca2",
+      "entrypoint_sha256": "7ecaf2139872ed0c3ca0561bf509393ce49ea862876472460874b725fc9971ca",
       "model_ids": [
         "gpt-5.6-sol:high:upstream-controller"
       ],
@@ -292,9 +292,9 @@
         "/mnt/raid0/llm/autokernel/vendor/arena-controllers/geak-v1"
       ],
       "source_root": "repository://.",
-      "source_commit": "743f59df33642cd38e631357772345250919d5f0",
+      "source_commit": "381bc55e5eadb58763d86e0043da0884b26eea3a",
       "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/geak_v1_arena.py",
-      "entrypoint_sha256": "7418493b4322f1be0df76be21686a6e0d48f43f27e0198a0db55b915f27516a7",
+      "entrypoint_sha256": "a7ad925b293110d12e7ff9a64fa09e2aebcd3bebacf11a2c26ce09ef8f847df9",
       "model_ids": [
         "gpt-5.6-sol:high:upstream-controller"
       ],
