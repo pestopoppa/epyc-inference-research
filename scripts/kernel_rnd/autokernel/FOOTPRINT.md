@@ -31,8 +31,13 @@ a module it never looked at.
 | | non-test lines |
 |---|---:|
 | **ON THE CAMPAIGN PATH** | **70,045** |
-| **DEFERRED** (provably unreachable) | **52,849** |
-| **TOTAL** | **122,894** |
+<<<<<<< HEAD
+| **DEFERRED** (provably unreachable) | **53,718** |
+| **TOTAL** | **123,763** |
+=======
+| **DEFERRED** (provably unreachable) | **53,718** |
+| **TOTAL** | **123,763** |
+>>>>>>> cf89cb24 (autokernel: govern C3 EPYC capture mappings)
 
 **The deferred plane is explicit.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -170,9 +175,10 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `evaluator/devices.py` | 813 | yes | a GPU cell must not be satisfied by `Device 0: CPU` |
 | `evaluator/controls.py` | 2,406 | yes | the A/A control plane — 2026-08-04 measured 1.62% / 1.88% between-run CV over four identical runs |
 | `evaluator/baseline_honesty.py` | 186 | no | AK-BH-4 exact-surface strongest-provider selector; it rejects AUTO and cross-surface transfer before a campaign can claim an honest floor |
-| `evaluator/c3_epyc_suite.py` | 752 | no | INF-48 offline C3/C5 contract reducer; it binds EPYC op cases to exact vendor evidence and a captured-workload whole-model exit without launch, mutation, release, or promotion authority |
-| `evaluator/c3_epyc_compiler.py` | 510 | no | INF-48 offline JSON plan/receipt compiler; it is the callable controller/backend seam but cannot launch captures, benchmarks, builds, patches, inference, or promotion |
-| `evaluator/c3_apex_runner.py` | 960 | no | INF-48 selected-entry Apex seam: avoids the pinned CLI's unrelated-registry-file refusal, requires exact C5 mapping and environment/source/workload identities, and stays outside campaign mutation and candidate authoring |
+| `evaluator/c3_epyc_suite.py` | 754 | no | INF-48 offline C3/C5 contract reducer; it binds EPYC op cases to exact vendor evidence and a captured-workload whole-model exit without launch, mutation, release, or promotion authority |
+| `evaluator/c3_epyc_compiler.py` | 519 | no | INF-48 offline JSON plan/receipt compiler; it is the callable controller/backend seam but cannot launch captures, benchmarks, builds, patches, inference, or promotion |
+| `evaluator/c3_epyc_tensor_capture.py` | 599 | no | INF-48 governed real-model tensor-capture producer; only its explicitly authorized execution seam may invoke a workload, while its receipts carry tensor identity and no correctness, timing, ranking, or promotion authority |
+| `evaluator/c3_apex_runner.py` | 1,219 | no | INF-48 exact Apex mapping seam: binds one reviewed gfx90a k228 trace or the ordered branch-aware k175 composite plus governed tensor/source/model/toolchain identities, and remains outside campaign mutation and candidate authoring |
 | `evaluator/sensitivity.py` | 333 | yes | RVP-C2-7/C2-11/C5-2 offline two-axis reducer; its report has no live authority until `source_candidate_authority.py` binds exact candidate/evaluator/evidence provenance, and missing or insensitive populations remain unscoreable |
 | `evaluator/oracle_integrity.py` | 145 | yes | RVP-C2-8/C2-9 offline reducers; hostile/checker results gain T0 authority only through the exact provenance bridge and never independently rank a candidate |
 | `evaluator/source_candidate_authority.py` | 87 | yes | fail-closed bridge from offline sensitivity/hostile/checker outputs to live T0: binds source, evaluator bundle, suite, capture mode and evidence hashes without launching or mutating anything |
@@ -207,7 +213,11 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `controller/completed_campaign_adapter.py` | 105 | no | strict live-journal-to-sequencer join; banks only event-bound dispatch/mechanism-confirmed wins above floor and MDE and launches nothing |
 | `controller/arena_adapter.py` | 546 | no | INF-03 paper-pin GEAK/AgentKernelArena integration: validates clean vendor sources and physical gfx90a identity, binds C4 into a hygienic priced prompt, and launches registered whole-agent task adapters without entering campaign mutation or scoring; callback failures reap the exact captured process group |
 | `controller/arena_controller_sandbox.py` | 687 | no | INF-03 controller/model isolation adapter: exact copied workspace plus pinned Python/Codex/Claude/Node/source/CA runtime discovery and fixed Bun volatile reads, broad/device/production/campaign/symlink refusal, broker-only controller prefix, per-model-PID outbound-client prefix, exact activation verification, and descendant-draining cgroup teardown; no direct GPU or evaluator profile |
+<<<<<<< HEAD
 | `controller/claude_codex_actor_critic.py` | 882 | no | INF-03 bounded Claude-planner/critic + Codex-actor controller: exact three-argument Arena launcher, explicit model/effort pins, brokered model and candidate-evaluation calls, measured starting-state fallback and best-candidate materialization, eight-item measurement/critic revision memory projected into each next planner and fully receipt-bound, semantic task-manifest confinement with four exact receipt-bound/scrubbed control-plane roots excluded and refused as candidates, launcher-cgroup-owned timeout teardown, and transcript/outcome/artifact hashing; its preflight invokes neither CLI |
+=======
+| `controller/claude_codex_actor_critic.py` | 882 | no | INF-03 bounded Claude-planner/critic + Codex-actor controller: exact three-argument Arena launcher, explicit model/effort pins, brokered model and candidate-evaluation calls, measured starting-state fallback and best-candidate materialization, eight-item measurement/critic revision memory projected into each next planner and fully receipt-bound, semantic task-manifest confinement with four exact receipt-bound/scrubbed control-plane roots excluded and refused as candidates, launcher-cgroup-owned timeout teardown, and transcript/outcome/artifact hashing; its preflight invokes neither CLI |
+>>>>>>> cf89cb24 (autokernel: govern C3 EPYC capture mappings)
 | `controller/codex_container_actor.py` | 219 | no | INF-03/AK-LE-3 host-compatible Codex actor boundary: pins a read-only container image, exposes exactly one writable host bind for the copied Arena workspace, stages auth only in an automatically erased temporary directory, and admits exactly the reviewed gpt-5.6-sol/gpt-5.6-terra high-effort model cells without granting host filesystem writes |
 | `controller/arena_campaign.py` | 1,073 | no | INF-03 matched-panel audit and injected-runner seam: binds the baseline plus seven controller arms to equal tasks and checkpoints, admits each governed arm only with exact adapter/upstream/CLI/model pins, refuses incomplete panels before execution, and remains outside live campaign mutation and scoring |
 | `controller/arena_cell_runner.py` | 3,505 | no | INF-03 fail-closed runner: parent-owned authenticated broker serializes model and evaluation frames; direct model CLIs receive fresh per-PID outbound-client sandboxes, writable Codex actors retain an attested digest-pinned single-bind container, and every candidate evaluation enters a fresh GPU evaluator sandbox under exact claims; persistent model/child/request/result/lifecycle evidence is rehashed on restore |
