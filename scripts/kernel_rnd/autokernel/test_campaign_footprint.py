@@ -226,10 +226,11 @@ DEFERRED = {
         "The prefix stays banned so that a module ADDED under `controller/` later is a "
         "finding rather than a silent re-admission",
     f"{ROOT_PKG}.release":
-        "needed to SHIP a champion, never to FIND one; committed the day before the code "
-        "that can compile a candidate",
+        "restored for AK9 speech release-plan compilation, but still needed only to SHIP "
+        "a champion and deliberately unreachable from campaign #1",
     f"{ROOT_PKG}.adapters":
-        "backends a kernel search is not searching",
+        "restored as pure AK9 speech declarations and release bindings; campaign #1 "
+        "still searches llama_cpu and must not import them",
     f"{ROOT_PKG}.surface":
         "a freshness contract so a dead loop cannot read as fresh; the loop has never "
         "been alive",
@@ -240,13 +241,13 @@ DEFERRED = {
 #: absent module is unreachable), and `test_the_deferred_half_is_still_on_disk`
 #: stops requiring the files. Nothing else in this file changes.
 DELETED_BY_OPERATOR: tuple = (
-    f"{ROOT_PKG}.release",
-    f"{ROOT_PKG}.adapters",
     f"{ROOT_PKG}.surface",
 )
 
 #: Removed 2026-08-04 on the operator's approval; recoverable from the tag
-#: `autokernel-preserve-20260804`. ~79,600 lines including tests.
+#: `autokernel-preserve-20260804`. The selected `release` compiler and speech
+#: `adapters` were restored on 2026-08-12 for AK9 and remain DEFERRED above;
+#: `surface` remains deleted.
 #:
 #: The edit above is the entire cost of acting on this boundary, exactly as this
 #: file promised — but the removal was NOT free, and the bill is worth recording
@@ -1565,8 +1566,8 @@ class TestTheBoundaryCatchesRealTreeViolations(unittest.TestCase):
     def test_re_adding_a_deleted_plane_and_importing_it_is_caught(self):
         """The DELETED prefixes, and the only honest assertion left about them.
 
-        `release`, `adapters` and `surface` are in `DEFERRED` *and* in
-        `DELETED_BY_OPERATOR`, which is a pair of claims that would otherwise go
+        Every prefix in `DELETED_BY_OPERATOR` is also in `DEFERRED`, which is a pair
+        of claims that would otherwise go
         unchecked forever: an absent module is trivially unreachable, so nothing
         distinguishes "the ban holds" from "the ban is dead text". What CAN be
         checked is the case the ban is for — someone puts the plane back and

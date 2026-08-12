@@ -154,11 +154,22 @@ SOURCE_TREES = frozenset(SOURCE_TREE_BY_BACKEND.values())
 # event, not a validator relaxation.
 OBJECTIVE_RULES = frozenset({"per_phase_non_inferiority_plus_improvement"})
 
-# §1.6 enumerates the llama phases. The speech backends' phase vocabulary and
-# protocols are explicitly "to be defined" (§13.3, §13.4), so their phase names
-# are only checked for being non-empty strings.
+# §1.6 enumerates the llama phases. Annex S, ratified 2026-08-03, supplies the
+# speech phase vocabularies: whisper's encoder/decoder split and qwentts's three
+# required stage-attribution coordinates plus the end-to-end cell. These are the
+# single source of truth consumed by schemas, release-plan bindings and T3; an
+# adapter-local vocabulary would let one conjunct disappear from the release rule.
 LLAMA_PHASES = frozenset({"prefill", "decode"})
-PHASES_BY_BACKEND = {"llama_cpu": LLAMA_PHASES, "llama_gpu": LLAMA_PHASES}
+WHISPER_STT_PHASES = frozenset({"encode", "decode", "end_to_end"})
+QWENTTS_TTS_PHASES = frozenset({
+    "talker", "code_predictor", "codec_decode", "end_to_end",
+})
+PHASES_BY_BACKEND = {
+    "llama_cpu": LLAMA_PHASES,
+    "llama_gpu": LLAMA_PHASES,
+    "whisper_stt": WHISPER_STT_PHASES,
+    "qwentts_tts": QWENTTS_TTS_PHASES,
+}
 
 # Invariant 15: baseline/off-recipe cells are diagnostic and never justify a
 # release, so a campaign's recipe class is pinned to the production-optimal one.
@@ -3314,7 +3325,8 @@ __all__ = [
     "SCHEMA_CHAMPION", "SCHEMA_RELEASE_PACKAGE",
     "SCHEMA_OPERATOR_WAIVER", "SCHEMA_REGISTRY", "KNOWN_SCHEMAS",
     "BACKENDS", "SOURCE_TREES", "SOURCE_TREE_BY_BACKEND", "OBJECTIVE_RULES",
-    "LLAMA_PHASES", "PHASES_BY_BACKEND", "RECIPE_CLASSES", "CHANGE_CLASSES",
+    "LLAMA_PHASES", "WHISPER_STT_PHASES", "QWENTTS_TTS_PHASES",
+    "PHASES_BY_BACKEND", "RECIPE_CLASSES", "CHANGE_CLASSES",
     "CHANGE_CLASS_CHEAP_SUITE", "CAMPAIGN_KINDS", "RESOURCE_LANES",
     "CRITIC_STATUSES", "TIERS", "CLAIM_CATEGORIES", "METRIC_DIRECTIONS",
     "EVENT_STATUSES", "DETERMINISM_CLASSES", "MACHINE_SUBSETS",
