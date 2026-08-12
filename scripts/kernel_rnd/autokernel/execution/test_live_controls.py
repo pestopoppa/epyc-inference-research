@@ -76,6 +76,12 @@ class CampaignIdentity(unittest.TestCase):
         self.assertEqual(args.campaign_id, "ak-controls-v9-parser")
         self.assertEqual(args.output, Path("/tmp/ak-controls-v9-parser"))
 
+    def test_current_source_claim_names_v9_and_exact_commit(self):
+        reason = live_controls.CURRENT_SOURCE_CORRECTNESS_REASON
+        self.assertIn("frozen v9 source", reason)
+        self.assertIn(live_controls.PRODUCTION_COMMIT, reason)
+        self.assertNotIn("frozen v8 source", reason)
+
 
 class ControlEffectReachability(unittest.TestCase):
 

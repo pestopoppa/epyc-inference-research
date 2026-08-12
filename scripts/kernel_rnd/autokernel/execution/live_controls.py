@@ -71,6 +71,10 @@ HARDWARE_PEAK_REF = (
     "614.4 GB/s theoretical; compute ceiling intentionally over-permissive at "
     "110.8 TFLOP/s"
 )
+CURRENT_SOURCE_CORRECTNESS_REASON = (
+    f"frozen v9 source {PRODUCTION_COMMIT} plus exact binary copy; historical v8 "
+    "real-model correctness evidence replayed"
+)
 CONTROL_PROMPT_BY_LABEL = {
     "aa_calibration": PROMPT_TOKENS,
     "neutral_calibration": PROMPT_TOKENS,
@@ -516,8 +520,7 @@ class _EvidenceGateRunner:
              "pp512; the candidate changed the work and is ineligible for a speed rank",)
         ) if mismatch else schemas.Check(
             schemas.PASS,
-            ("frozen v8 source plus exact binary copy; historical v8 real-model "
-             "correctness evidence replayed",))
+            (CURRENT_SOURCE_CORRECTNESS_REASON,))
         return (
             api.GateResult(
                 gate_id="live.recipe_and_correctness", gate_class=api.GATE_CORRECTNESS,
