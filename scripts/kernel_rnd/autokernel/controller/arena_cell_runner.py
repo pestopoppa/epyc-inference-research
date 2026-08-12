@@ -50,6 +50,7 @@ AGGREGATE_SCHEMA = "epyc.autokernel.arena_campaign_execution.v2"
 RUN_MANIFEST_SCHEMA = "epyc.autokernel.arena_campaign_run_manifest.v2"
 LEGACY_RUN_MANIFEST_SCHEMA = "epyc.autokernel.arena_campaign_run_manifest.v1"
 VALIDATION_SCHEMA = "epyc.autokernel.arena_campaign_validation.v1"
+DIAGNOSTIC_PILOT_SCHEMA = "epyc.autokernel.arena_diagnostic_pilot.v1"
 MEASUREMENT_WINDOW_SCHEMA = "epyc.autokernel.arena_gpu_measurement_window.v1"
 IMPLEMENTATION_MODULE = Path(__file__).resolve()
 REPOSITORY_ROOT = IMPLEMENTATION_MODULE.parents[4]
@@ -618,6 +619,32 @@ class RunnerConfig:
 WorkerRunner = Callable[[Mapping[str, Any], float], Mapping[str, Any]]
 
 
+@dataclass(frozen=True)
+class DiagnosticPilotCellRequest:
+    """One explicitly non-rankable controller checkpoint compatibility pilot."""
+
+    arm: arena_campaign.ArmImplementation
+    task: arena_campaign.TaskArtifact
+    checkpoint_hours: float = 2.0
+    is_starting_state_baseline: bool = False
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.arm, arena_campaign.ArmImplementation):
+            raise TypeError("pilot arm must be an ArmImplementation")
+        if not isinstance(self.task, arena_campaign.TaskArtifact):
+            raise TypeError("pilot task must be a TaskArtifact")
+        if self.arm.arm_id == arena_campaign.BASELINE_ARM_ID \
+                or self.arm.availability != "ready":
+            raise ArenaCellRunnerError("pilot requires one ready controller arm")
+        if self.is_starting_state_baseline is not False:
+            raise ArenaCellRunnerError("pilot cannot masquerade as a baseline cell")
+        if (isinstance(self.checkpoint_hours, bool)
+                or not isinstance(self.checkpoint_hours, (int, float))
+                or float(self.checkpoint_hours)
+                not in arena_campaign.MATCHED_BUDGET_HOURS):
+            raise ArenaCellRunnerError("pilot checkpoint must use a matched budget")
+
+
 class GovernedArenaCellRunner:
     """Callable concrete implementation of ``arena_campaign.run_cell``."""
 
@@ -694,6 +721,55 @@ class GovernedArenaCellRunner:
                     f"completed cell receipt drifted: {receipt_path}")
         else:
             _atomic_json(receipt_path, receipt)
+        return receipt
+
+    def run_diagnostic_pilot(
+        self, request: DiagnosticPilotCellRequest,
+    ) -> dict[str, Any]:
+        """Run one arm/task checkpoint without creating campaign authority.
+
+        The method deliberately reuses the complete checkpoint path (controller
+        sandbox, brokered intermediate evaluations, isolated final evaluator,
+        claims, samplers, teardown validation, and belief receipt) while
+        publishing a separate receipt that cannot be consumed as a matched
+        campaign cell or aggregate.
+        """
+        if not isinstance(request, DiagnosticPilotCellRequest):
+            raise TypeError("request must be a DiagnosticPilotCellRequest")
+        self._cell_ordinal += 1
+        run = self._run_checkpoint(
+            request, checkpoint_hours=float(request.checkpoint_hours))
+        receipt = _self_hash({
+            "schema": DIAGNOSTIC_PILOT_SCHEMA,
+            "status": "pass",
+            "authority": "compatibility_only_no_ranking_or_promotion_authority",
+            "campaign_id": self.config.campaign_id,
+            **({"attempt_id": self.attempt_id}
+               if self.attempt_id is not None else {}),
+            "claim_campaign_id": self.claim_campaign_id,
+            "task_id": request.task.task_id,
+            "arm_id": request.arm.arm_id,
+            "checkpoint_hours": float(request.checkpoint_hours),
+            "controller_argv": list(request.arm.argv),
+            "checkpoint_receipt_sha256": run["receipt_sha256"],
+            "checkpoint": run,
+            "constraints": {
+                "one_task": True,
+                "one_controller_arm": True,
+                "matched_campaign_result_implied": False,
+                "cross_controller_ranking_authority": False,
+                "belief_update_authority": False,
+                "promotion_authority": False,
+            },
+        })
+        path = self.output_root / "diagnostic-pilot-receipt.json"
+        if path.exists():
+            observed = _load_json_object(path, "diagnostic pilot receipt")
+            _verify_self_hash(observed, "diagnostic pilot receipt")
+            if observed != receipt:
+                raise ArenaCellRunnerError("completed diagnostic pilot drifted")
+        else:
+            _atomic_json(path, receipt)
         return receipt
 
     def _run_checkpoint(
@@ -2969,9 +3045,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 __all__ = [
     "AGGREGATE_SCHEMA", "CHECKPOINT_SCHEMA", "MEASUREMENT_WINDOW_SCHEMA",
-    "RUNNER_SCHEMA",
+    "DIAGNOSTIC_PILOT_SCHEMA", "RUNNER_SCHEMA",
     "RUN_MANIFEST_SCHEMA",
     "ArenaCampaignInterrupted", "ArenaCellRunnerError",
+    "DiagnosticPilotCellRequest",
     "GovernedArenaCellRunner", "RunnerConfig",
     "execute_from_cli", "run_worker", "validate_campaign_receipts",
 ]

@@ -445,6 +445,36 @@ class ArenaCellRunnerTest(unittest.TestCase):
                 canonical_sha({key: value for key, value in persisted.items()
                                if key != "receipt_sha256"}))
 
+    def test_diagnostic_pilot_runs_one_governed_checkpoint_without_authority(self):
+        runner = self.runner()
+        request = R.DiagnosticPilotCellRequest(
+            arm=self.arm("k_search"), task=self.task, checkpoint_hours=2.0)
+        with mock.patch.object(
+            C, "_implementation_audit",
+            return_value={"executable": True, "missing_artifacts": []},
+        ):
+            receipt = runner.run_diagnostic_pilot(request)
+        self.assertEqual(receipt["schema"], R.DIAGNOSTIC_PILOT_SCHEMA)
+        self.assertEqual(receipt["authority"],
+                         "compatibility_only_no_ranking_or_promotion_authority")
+        self.assertEqual(receipt["checkpoint_hours"], 2.0)
+        self.assertEqual(receipt["checkpoint"]["checkpoint_hours"], 2.0)
+        self.assertFalse(receipt["constraints"]["matched_campaign_result_implied"])
+        self.assertFalse(receipt["constraints"]["belief_update_authority"])
+        self.assertEqual(
+            receipt["checkpoint_receipt_sha256"],
+            receipt["checkpoint"]["receipt_sha256"])
+        self.assertTrue((self.output / "diagnostic-pilot-receipt.json").is_file())
+
+    def test_diagnostic_pilot_refuses_baseline_and_nonmatched_budget(self):
+        with self.assertRaisesRegex(R.ArenaCellRunnerError, "ready controller"):
+            R.DiagnosticPilotCellRequest(
+                arm=self.arm(C.BASELINE_ARM_ID), task=self.task)
+        with self.assertRaisesRegex(R.ArenaCellRunnerError, "matched budget"):
+            R.DiagnosticPilotCellRequest(
+                arm=self.arm("k_search"), task=self.task,
+                checkpoint_hours=0.01)
+
     def test_identity_drift_refuses_before_claim_or_worker(self):
         acquire = mock.Mock()
         worker = mock.Mock()
