@@ -20,12 +20,33 @@ DEFAULT_MAX_BYTES = 2_000_000
 
 
 @dataclass(frozen=True)
+class SubFieldRule:
+    """One mandatory sub-field of a composite rule.
+
+    Every sub-field of a composite rule must match independently — the rule is a
+    CONJUNCTION, not an any-one-of. See ``binary_model_identity`` below.
+    """
+
+    key: str
+    label: str
+    patterns: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class FieldRule:
     key: str
     label: str
     required: bool
-    patterns: tuple[str, ...]
+    patterns: tuple[str, ...] = ()
     near_patterns: tuple[str, ...] = ()
+    # When set, the rule is satisfied only if EVERY sub-rule matches.
+    subfields: tuple[SubFieldRule, ...] = ()
+    # "all"          -> scan every readable file in the artifact directory
+    # "run_metadata" -> scan only recorded run metadata (JSON/YAML receipts and
+    #                   recorded command transcripts). Harness/source files are
+    #                   excluded so that code which merely MENTIONS a variable
+    #                   cannot stand in for a recorded value.
+    scope: str = "all"
 
 
 FIELD_RULES: tuple[FieldRule, ...] = (
@@ -69,17 +90,62 @@ FIELD_RULES: tuple[FieldRule, ...] = (
             r"\bgpu use",
         ),
     ),
+    # P-GPU-1 field 3 (measurement/protocols/gpu-cross-device.md:36-38) is a
+    # CONJUNCTION of mandatory sub-fields, and it is the field the ggml-linkage
+    # audit exists to enforce. It used to OR six loose patterns, so an artifact
+    # banking no LD_LIBRARY_PATH at all passed on a bare `llama-server` hit, and
+    # the string `ld_library_path` inside a harness SOURCE file counted as a
+    # recorded value (docs/reviews/gpu-linkage-retro-certification-20260812.md
+    # §3.2a-bis; the "KEY too wide" member of the vacuous-verification family).
+    # Two independent defences now apply: the scan is restricted to recorded run
+    # metadata, and every sub-pattern demands a VALUE rather than a mention.
     FieldRule(
         key="binary_model_identity",
-        label="binary, git, model, and backend identity",
+        label="binary path, git commit, LD_LIBRARY_PATH value, and backend list (all mandatory)",
         required=True,
-        patterns=(
-            r"llama-server",
-            r"llama\.cpp-experimental",
-            r"\.gguf\b",
-            r"rev-parse",
-            r"ld_library_path",
-            r"rocm0",
+        scope="run_metadata",
+        subfields=(
+            SubFieldRule(
+                key="ld_library_path_value",
+                label="recorded LD_LIBRARY_PATH value (not merely the variable name)",
+                patterns=(
+                    # JSON/YAML: "LD_LIBRARY_PATH": "/some/path..."
+                    r'["\']ld_library_path["\']\s*[:=]\s*["\'][^"\'\n]*/[^"\'\n]*["\']',
+                    # argv element or shell assignment: LD_LIBRARY_PATH=/some/path
+                    r"\bld_library_path=[^\s\"',\]]*/",
+                ),
+            ),
+            SubFieldRule(
+                key="backend_device_list",
+                label="enumerated backend/device list from the running binary or runtime",
+                # Enumeration OUTPUT only. A hand-written device string such as
+                # `"host_gpu": "AMD Instinct MI210 gfx90a"` is an assertion, not
+                # an enumeration, and must not satisfy this sub-field.
+                patterns=(
+                    r"--list-devices",
+                    r"available devices:",
+                    r"\brocm[0-9]:\s",
+                    r"\brocminfo\b",
+                    r"\bhsa agents\b",
+                    r"amdgcn-amd-amdhsa--gfx",
+                    r'["\']backends["\']\s*:\s*[\[{"]',
+                ),
+            ),
+            SubFieldRule(
+                key="binary_path",
+                label="absolute path of the binary that produced the measurement",
+                patterns=(r"/[a-z0-9._/-]*bin/llama-(?:server|bench|cli)\b",),
+            ),
+            SubFieldRule(
+                key="kernel_commit",
+                label="recorded kernel commit/build id (a value, not a `rev-parse` mention)",
+                patterns=(
+                    r'["\'](?:commit|head|git_head|git_commit|revision|binary_version)["\']\s*[:=]\s*["\']?[0-9a-f]{7,40}\b',
+                    r'["\']build_info["\']\s*[:=]\s*["\']?b[0-9]+-[0-9a-f]{7,40}\b',
+                    r"\bb[0-9]{4,}-[0-9a-f]{7,40}\b",
+                    r'rev-parse[\s\S]{0,600}?["\']stdout["\']\s*:\s*["\'][0-9a-f]{7,40}\b',
+                ),
+            ),
         ),
     ),
     FieldRule(
@@ -169,6 +235,73 @@ FIELD_RULES: tuple[FieldRule, ...] = (
 )
 
 
+# --- run-metadata scoping -------------------------------------------------
+#
+# Recorded run metadata = structured receipts plus recorded command
+# transcripts. Source files (a harness, a helper module) are NEVER run
+# metadata: code that SETS an environment variable is not an artifact that
+# RECORDS its value.
+_METADATA_SUFFIXES = frozenset({".json", ".jsonl", ".yaml", ".yml"})
+_SOURCE_SUFFIXES = frozenset(
+    {".py", ".pyi", ".c", ".cc", ".cpp", ".h", ".hpp", ".ipynb", ".md", ".rst", ".js", ".ts"}
+)
+_METADATA_NAME_RE = re.compile(
+    r"^(?:commands|command|cmd|operator_run|run|env|environment|linkage[a-z0-9._-]*"
+    r"|[a-z0-9._-]*receipt[a-z0-9._-]*|[a-z0-9._-]*argv[a-z0-9._-]*)"
+    r"\.(?:sh|txt|log|env)$",
+    re.IGNORECASE,
+)
+
+
+def _is_run_metadata(path: Path) -> bool:
+    suffix = path.suffix.lower()
+    if suffix in _SOURCE_SUFFIXES:
+        return False
+    if suffix in _METADATA_SUFFIXES:
+        return True
+    return bool(_METADATA_NAME_RE.match(path.name))
+
+
+# --- kernel provenance ----------------------------------------------------
+#
+# measurement/protocols/gpu-cross-device.md:16-21,49-53 — a decision-grade claim
+# MAY ONLY be produced on a production-named kernel. A measurement produced from
+# a `llama.cpp-experimental` (or any other suffixed) tree is an OBSERVATION and
+# can never be retro-certified, however complete its fields are.
+#
+# The reference must be to a BUILD/BINARY directory of the non-production tree.
+# A bare mention of the tree (e.g. `git -C /mnt/raid0/llm/llama.cpp-experimental
+# rev-parse HEAD`, which the v9 cert run banks as a guard-hygiene side probe)
+# does not mean the measured binary came from there.
+_NONPRODUCTION_KERNEL_RE = re.compile(
+    r"/(llama\.cpp-([a-z0-9][a-z0-9._-]*))/(?=build|bin\b)", re.IGNORECASE
+)
+_PRODUCTION_KERNEL_SUFFIX_RE = re.compile(r"^production(?:[-_.]|$)", re.IGNORECASE)
+
+
+def _kernel_provenance(text: str) -> list[dict[str, str]]:
+    """Return one disqualification record per non-production kernel build tree."""
+    seen: dict[str, dict[str, str]] = {}
+    for match in _NONPRODUCTION_KERNEL_RE.finditer(text):
+        tree, suffix = match.group(1), match.group(2)
+        if _PRODUCTION_KERNEL_SUFFIX_RE.match(suffix):
+            continue
+        if tree in seen:
+            continue
+        seen[tree] = {
+            "rule": "kernel_provenance",
+            "kernel_tree": tree,
+            "evidence": match.group(0),
+            "reason": (
+                f"measurement binaries resolve from non-production kernel tree '{tree}'; "
+                "measurement/protocols/gpu-cross-device.md:16-21 makes such a run "
+                "OBSERVATION-ONLY and :49-53 bars retro-certification regardless of "
+                "field completeness"
+            ),
+        }
+    return list(seen.values())
+
+
 def _load_text(path: Path, max_bytes: int) -> str:
     if not path.is_file():
         return ""
@@ -195,10 +328,13 @@ def _candidate_files(path: Path, max_bytes: int) -> list[Path]:
     return files
 
 
-def _artifact_text(path: Path, max_bytes: int) -> tuple[str, list[str], list[str]]:
+def _artifact_text(path: Path, max_bytes: int) -> tuple[str, str, list[str], list[str], list[str]]:
+    """Return (all-file text, run-metadata-only text, files, metadata files, skipped)."""
     files = _candidate_files(path, max_bytes)
     chunks: list[str] = []
+    meta_chunks: list[str] = []
     names: list[str] = []
+    meta_names: list[str] = []
     skipped: list[str] = []
     for file_path in files:
         names.append(str(file_path))
@@ -206,8 +342,18 @@ def _artifact_text(path: Path, max_bytes: int) -> tuple[str, list[str], list[str
         text = _load_text(file_path, max_bytes)
         if "__skipped_large_file__" in text:
             skipped.append(str(file_path))
-        chunks.append(f"\n__file__:{rel_name}\n__path__:{file_path}\n{text}\n")
-    return "\n".join(chunks).lower(), names, skipped
+        chunk = f"\n__file__:{rel_name}\n__path__:{file_path}\n{text}\n"
+        chunks.append(chunk)
+        if _is_run_metadata(file_path):
+            meta_names.append(str(file_path))
+            meta_chunks.append(chunk)
+    return (
+        "\n".join(chunks).lower(),
+        "\n".join(meta_chunks).lower(),
+        names,
+        meta_names,
+        skipped,
+    )
 
 
 def _match_patterns(text: str, patterns: Iterable[str]) -> list[str]:
@@ -234,42 +380,75 @@ def _summary_status(path: Path) -> str:
 
 def audit_artifact(path: Path, max_bytes: int = DEFAULT_MAX_BYTES) -> dict[str, Any]:
     path = path.expanduser()
-    text, files, skipped = _artifact_text(path, max_bytes)
+    text, metadata_text, files, metadata_files, skipped = _artifact_text(path, max_bytes)
     field_results: dict[str, dict[str, Any]] = {}
     missing: list[str] = []
     near_misses: list[str] = []
     present: list[str] = []
 
     for rule in FIELD_RULES:
-        matches = _match_patterns(text, rule.patterns)
+        scan_text = metadata_text if rule.scope == "run_metadata" else text
+        matches = _match_patterns(scan_text, rule.patterns)
         near = _match_patterns(text, rule.near_patterns)
-        state = "present" if matches else "missing"
-        if matches:
+        subfield_results: dict[str, dict[str, Any]] = {}
+        missing_subfields: list[str] = []
+        if rule.subfields:
+            for sub in rule.subfields:
+                sub_matches = _match_patterns(scan_text, sub.patterns)
+                subfield_results[sub.key] = {
+                    "label": sub.label,
+                    "state": "present" if sub_matches else "missing",
+                    "matched_patterns": sub_matches,
+                }
+                if sub_matches:
+                    matches = matches + sub_matches
+                else:
+                    missing_subfields.append(sub.key)
+            satisfied = not missing_subfields
+        else:
+            satisfied = bool(matches)
+        state = "present" if satisfied else "missing"
+        if satisfied:
             present.append(rule.key)
         elif rule.required:
             missing.append(rule.key)
-        if near and not matches:
+        if near and not satisfied:
             near_misses.append(rule.key)
-        field_results[rule.key] = {
+        entry: dict[str, Any] = {
             "label": rule.label,
             "required": rule.required,
+            "scope": rule.scope,
             "state": state,
             "matched_patterns": matches,
             "near_miss_patterns": near,
         }
+        if rule.subfields:
+            entry["subfields"] = subfield_results
+            entry["missing_subfields"] = missing_subfields
+        field_results[rule.key] = entry
 
+    disqualifications = _kernel_provenance(text)
     status = "complete" if not missing else "incomplete"
-    recommendation = "retro_cert_candidate" if status == "complete" else "rerun_required"
+    if disqualifications:
+        # Never a silent downgrade: the reason travels with the verdict.
+        recommendation = "retro_cert_disqualified"
+    elif status == "complete":
+        recommendation = "retro_cert_candidate"
+    else:
+        recommendation = "rerun_required"
     return {
         "artifact": str(path),
         "summary_status": _summary_status(path),
         "status": status,
         "recommendation": recommendation,
+        "retro_cert_eligible": status == "complete" and not disqualifications,
+        "disqualifications": disqualifications,
         "present_required_fields": present,
         "missing_required_fields": missing,
         "near_miss_fields": near_misses,
         "files_scanned_n": len(files),
         "files_scanned": files,
+        "run_metadata_files": metadata_files,
         "files_skipped_large": skipped,
         "field_results": field_results,
     }
@@ -278,13 +457,24 @@ def audit_artifact(path: Path, max_bytes: int = DEFAULT_MAX_BYTES) -> dict[str, 
 def audit_artifacts(paths: Iterable[Path], max_bytes: int = DEFAULT_MAX_BYTES) -> dict[str, Any]:
     artifacts = [audit_artifact(path, max_bytes=max_bytes) for path in paths]
     incomplete = [item for item in artifacts if item["status"] != "complete"]
+    disqualified = [item for item in artifacts if item["disqualifications"]]
     return {
+        "disqualified_artifacts": [item["artifact"] for item in disqualified],
+        "disqualification_reasons": [
+            {"artifact": item["artifact"], **record}
+            for item in disqualified
+            for record in item["disqualifications"]
+        ],
         "schema": SCHEMA,
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "scope": "artifact-only; no inference, server, benchmark, build, or ROCm command executed",
         "policy": "draft P-GPU-1 mandatory-field audit",
         "status": "complete" if not incomplete else "incomplete",
-        "recommendation": "retro_cert_candidates_present" if not incomplete else "rerun_required_for_incomplete_artifacts",
+        "recommendation": (
+            "retro_cert_candidates_present"
+            if not incomplete and not disqualified
+            else "rerun_required_for_incomplete_artifacts"
+        ),
         "artifacts": artifacts,
     }
 
@@ -308,10 +498,20 @@ def _markdown(report: dict[str, Any]) -> str:
         lines.append(
             f"| `{item['artifact']}` | `{item['status']}` | `{item['recommendation']}` | {missing} | {near} |"
         )
+    if report.get("disqualification_reasons"):
+        lines.extend(["", "## Retro-certification disqualifications", ""])
+        for record in report["disqualification_reasons"]:
+            lines.append(f"- `{record['artifact']}` — {record['reason']} (evidence: `{record['evidence']}`)")
     lines.extend(
         [
             "",
             "## Field Semantics",
+            "",
+            "`binary_model_identity` is a CONJUNCTION: an artifact must independently record a",
+            "LD_LIBRARY_PATH *value*, an enumerated backend/device list, the binary path, and the",
+            "kernel commit. Those sub-fields are matched only against recorded run metadata",
+            "(JSON/YAML receipts, recorded command transcripts) — a harness source file that merely",
+            "mentions `LD_LIBRARY_PATH` is not evidence that the value was recorded.",
             "",
             "A near miss means related evidence exists but does not satisfy the explicit P-GPU-1 field.",
             "For example, `process_blockers: []` is not the same as an explicit CPU-stack interference policy.",
