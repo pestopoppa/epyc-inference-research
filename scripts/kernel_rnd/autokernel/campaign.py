@@ -165,9 +165,9 @@ from . import artifact_diff, dashboard, journal as journal_module
 from . import schemas, storage
 from .controller import do_not_repeat, hypotheses
 from .evaluator import api, correctness, devices, recipes
-from .execution import (chain, cpu_region_claim, device_sampler, instrument_integrity,
-                        microbench, physical_bounds, powercap_broker, sandbox,
-                        t0_provider, worktree)
+from .execution import (chain, control_runner, cpu_region_claim, device_sampler,
+                        instrument_integrity, microbench, physical_bounds,
+                        powercap_broker, sandbox, t0_provider, worktree)
 from .resource import claim_witness, device_claim, preflight
 
 __all__ = [
@@ -250,6 +250,9 @@ MODULES_THE_DRIVER_USES: Mapping[str, str] = {
     "evaluator.devices": "a GPU cell must not be satisfied by 'Device 0: CPU'",
     "evaluator.recipes": "argv from a hashed constructor. Production once drifted off "
                          "NUMA interleave and the front door ended up at 46% of canonical",
+    "execution.control_runner": "the accepted five-control/calibration bundle is the "
+                                "authority for prospective EVALUATION_EVENT reductions; "
+                                "the live loop may not invent its own e-value or panel",
     "execution.chain": "the seams; a hand-written evidence record is what T0 exists to refuse",
     "execution.instrument_integrity": "RVP-C6-1: candidate reward translation units "
                                       "must equal the reviewed measurement overlay before "
@@ -356,6 +359,7 @@ class LeanCalibration:
     production_commit: str
     measurement_commit: str
     evidence_ref: str
+    evaluation_authority: Optional[control_runner.LiveEvaluationAuthority] = None
 
     def to_dict(self) -> dict:
         return {
@@ -635,6 +639,9 @@ class T0Outcome:
     all_pass: bool
     gates: tuple = ()          # ((gate_id, outcome, (reason, ...)), ...)
     report_ref: Optional[str] = None
+    # The evaluator-native records are retained for the prospective journal
+    # writer.  The flattened triples above remain the small accept-loop seam.
+    gate_results: tuple = ()
 
     @property
     def failures(self) -> tuple:
@@ -1100,6 +1107,19 @@ def load_calibration_bundle(path: os.PathLike[str] | str) -> LeanCalibration:
         raise ValueError("calibration B_min exceeds the declared candidate ceiling")
     if float(values["mde"]) > float(values["contribution_floor"]):
         raise ValueError("calibration MDE exceeds the declared contribution floor")
+    authority = None
+    # Legacy/synthetic loader fixtures intentionally carry only the three files
+    # above. They remain valid arithmetic fixtures, but cannot drive the live
+    # prospective writer. A real executing HostOps run requires these files and
+    # refuses later at the request boundary if they are absent.
+    if (root / "calibration.json").is_file() or (root / "control_sweep.json").is_file():
+        authority = control_runner.load_live_evaluation_authority(root)
+        if authority.campaign_controls.contribution_floor != float(values["contribution_floor"]) \
+                or authority.calibration.b_min_blocks != int(values["b_min_blocks"]) \
+                or authority.campaign_controls.max_blocks_per_candidate != int(values["max_blocks"]) \
+                or authority.calibration.noise_floor_phi != float(values["noise_floor_phi"]) \
+                or authority.mde != float(values["mde"]):
+            raise ValueError("calibration summary disagrees with live evaluation authority")
     return LeanCalibration(
         recipe_id=recipe_id,
         contribution_floor=float(values["contribution_floor"]),
@@ -1110,6 +1130,7 @@ def load_calibration_bundle(path: os.PathLike[str] | str) -> LeanCalibration:
         production_commit=PRODUCTION_COMMIT,
         measurement_commit=MEASUREMENT_COMMIT,
         evidence_ref=str(root),
+        evaluation_authority=authority,
     )
 
 RANKED_UNITS_SCHEMA = "epyc.autokernel.ranked-units.v1"
@@ -1802,6 +1823,8 @@ class CampaignOps(Protocol):
     def keep_or_revert(self, spec: CampaignSpec, tree: Any,
                        decision: Optional[AcceptDecision]) -> Any: ...
     def prove_production_unchanged(self, spec: CampaignSpec) -> schemas.Check: ...
+    def close_evaluation_window(self, spec: CampaignSpec, tree: Any) -> Any: ...
+    def journal_evaluation(self, spec: CampaignSpec, result: Any) -> Any: ...
     def journal(self, spec: CampaignSpec, payload: Mapping[str, Any]) -> Any: ...
 
 
@@ -2052,6 +2075,16 @@ def render_bench_commands(spec: CampaignSpec, *,
     return out
 
 
+class _RecordedGateRunner:
+    """Evaluator gate seam over gates already produced by the executed T0."""
+
+    def __init__(self, gates: Sequence[api.GateResult]) -> None:
+        self._gates = tuple(gates)
+
+    def run_gates(self, request: api.EvaluationRequest) -> tuple:
+        return self._gates
+
+
 class HostOps:
     """The real one. Touches the host, spends the claim, spawns the benchmarks.
 
@@ -2137,6 +2170,32 @@ class HostOps:
         self._build_state: dict = {}
         self._fingerprints: dict = {}
         self._t0_anchor_binding: Optional[Any] = None
+        self._preflight_check: Optional[schemas.Check] = None
+        self._preflight_open_receipt: Optional[Mapping[str, Any]] = None
+        self._preflight_close_receipt: Optional[Mapping[str, Any]] = None
+        self._host_open: Optional[Any] = None
+        self._claim_release_receipt: Optional[Mapping[str, Any]] = None
+        self._claim_open_receipt: Optional[Mapping[str, Any]] = None
+        self._claim_close_receipt: Optional[Mapping[str, Any]] = None
+        self._claim_open_check: Optional[schemas.Check] = None
+        self._claim_close_check: Optional[schemas.Check] = None
+        self._claim_same_holder_check: Optional[schemas.Check] = None
+        self._no_concurrent_close: Optional[schemas.Check] = None
+        self._t0_request: Optional[api.EvaluationRequest] = None
+        self._t0_report: Optional[correctness.T0Report] = None
+        self._t0_gate_results: tuple = ()
+        self._t0_started = False
+        self._microbench_run: Optional[microbench.MicrobenchRun] = None
+        self._t1_request: Optional[api.EvaluationRequest] = None
+        self._storage_open: Optional[schemas.Check] = None
+        self._storage_close: Optional[schemas.Check] = None
+        self._host_close: Optional[Any] = None
+        self._host_health_close: Optional[schemas.Check] = None
+        self._anchors_at_close: dict[str, api.AnchorIdentity] = {}
+        self._anchor_close_checks: dict[str, schemas.Check] = {}
+        self._evaluator_close_check: Optional[schemas.Check] = None
+        self._runtime_close_check: Optional[schemas.Check] = None
+        self._recipe_receipts: dict[tuple[str, str], api.RecipeReceipt] = {}
 
     def calibration_gate(self, spec: CampaignSpec) -> schemas.Check:
         """Refuse live ranking outside the accepted cell-local calibration."""
@@ -2151,6 +2210,25 @@ class HostOps:
                 f"[{calibration.b_min_blocks}, {calibration.max_blocks}] from "
                 f"{calibration.evidence_ref}",))
         return schemas.Check(schemas.PASS, ())
+
+    @staticmethod
+    def _storage_check(spec: CampaignSpec) -> schemas.Check:
+        if spec.calibration is None or spec.calibration.evaluation_authority is None \
+                or not spec.journal_root:
+            return schemas.Check(schemas.COULD_NOT_CHECK, (
+                "storage floor or journal root was not available",))
+        try:
+            stat = os.statvfs(spec.journal_root)
+        except OSError as exc:
+            return schemas.Check(schemas.COULD_NOT_CHECK, (
+                f"could not read journal filesystem headroom: {exc}",))
+        free = stat.f_bavail * stat.f_frsize
+        floor = spec.calibration.evaluation_authority.campaign_controls.storage_floor_bytes_free
+        if free < floor:
+            return schemas.Check(schemas.FAIL, (
+                f"journal filesystem has {free} bytes free, below floor {floor}",))
+        return schemas.Check(schemas.PASS, (
+            f"journal filesystem has {free} bytes free, at or above floor {floor}",))
 
     # -- 0. preflight ------------------------------------------------------
 
@@ -2188,6 +2266,7 @@ class HostOps:
                 "an executing campaign requires --journal-root before any claim or T0 "
                 "inference; completed benchmark attempts cannot be machine-enforced in "
                 "volatile memory",))
+        self._storage_open = self._storage_check(spec)
         reasons: list = []
         outcome = schemas.PASS
 
@@ -2268,10 +2347,13 @@ class HostOps:
         sources = claim_witness.gpu_claim_sources(
             spec.devices, region_lock_dir=str(cpu_region_claim.default_region_lock_dir()))
         result = preflight.preflight(scope, sources)
-        fold(schemas.Check(result.verdict, tuple(result.reasons)), "concurrent_inference",
+        self._preflight_open_receipt = result.to_dict()
+        self._preflight_check = result.as_check()
+        fold(self._preflight_check, "concurrent_inference",
              hard=True)
 
         state = self._read_host_state(cpu_list=spec.cpu_list)
+        self._host_open = state
         fold(check_host_uptime(getattr(state, "uptime_s", None)), "host_uptime")
         boosting = sum(1 for _cpu, khz in state.khz_by_cpu if khz >= BOOST_THRESHOLD_KHZ)
         boost = check_boost_under_load(boosting_cores=boosting, load1=state.load1,
@@ -2350,6 +2432,19 @@ class HostOps:
                 self._device_claims.append(device_claim.acquire_device_claim(
                     device_id, purpose=f"AutoKernel {spec.campaign_id}",
                     campaign_id=spec.campaign_id, journal=journal))
+            region_receipt = claim.receipt().to_dict()
+            device_receipts = [held.receipt().to_dict() for held in self._device_claims]
+            self._claim_open_receipt = {
+                "region": region_receipt, "devices": device_receipts}
+            self._claim_open_check = schemas.Check.worst_of((
+                claim.verify_held(),
+                *(device_claim.check_device_claim_held(receipt)
+                  for receipt in device_receipts),
+            ))
+            if self._claim_open_check.outcome != schemas.PASS:
+                raise RuntimeError(
+                    "resource claim could not be verified immediately after acquisition: "
+                    + "; ".join(self._claim_open_check.reasons))
         except BaseException:
             self._release_device_claims()
             self._claim_binding = None
@@ -2359,6 +2454,182 @@ class HostOps:
                 pass
             raise
         return claim
+
+    @staticmethod
+    def _claim_holder_identity(receipt: Mapping[str, Any]) -> tuple:
+        """Stable identities for every claim plane in one window snapshot."""
+        region = receipt.get("region")
+        devices = receipt.get("devices", ())
+        values = []
+        if isinstance(region, Mapping):
+            identity = (region.get("claim_id"), region.get("holder_pid"),
+                        region.get("holder_start_ticks"), region.get("holder_boot_id"))
+            if any(value is None or value == "" for value in identity):
+                return ()
+            values.append(("region", *identity))
+        for item in devices if isinstance(devices, (list, tuple)) else ():
+            if isinstance(item, Mapping):
+                identity = (item.get("device_id"), item.get("claim_id"),
+                            item.get("holder_pid"), item.get("holder_start_ticks"),
+                            item.get("holder_boot_id"))
+                if any(value is None or value == "" for value in identity):
+                    return ()
+                values.append(identity)
+            else:
+                return ()
+        return tuple(sorted(values, key=lambda value: str(value[0])))
+
+    @classmethod
+    def _check_same_claim_holder(cls, opened_receipt: Mapping[str, Any],
+                                 closed_receipt: Mapping[str, Any]) -> schemas.Check:
+        opened = cls._claim_holder_identity(opened_receipt)
+        closed = cls._claim_holder_identity(closed_receipt)
+        return schemas.Check(
+            schemas.PASS if opened and opened == closed else schemas.FAIL,
+            () if opened and opened == closed else
+            (f"claim holder identity incomplete or moved: "
+             f"open={opened!r}, close={closed!r}",))
+
+    def close_evaluation_window(self, spec: CampaignSpec, tree: Any) -> None:
+        """Re-attest the live window while every claim is still held.
+
+        This method deliberately performs fresh reads.  A release receipt can
+        prove that locks were eventually dropped, but it cannot prove that the
+        same locks, anchor, evaluator, and host remained valid through the last
+        measured block.
+        """
+        unknown = lambda reason: schemas.Check(schemas.COULD_NOT_CHECK, (reason,))
+
+        claim = None if self._claim_binding is None else self._claim_binding.claim
+        claim_checks = []
+        close_devices = []
+        if claim is None:
+            claim_checks.append(unknown("CPU region claim was unavailable at window close"))
+            close_region = None
+        else:
+            claim_checks.append(claim.verify_held())
+            close_region = claim.receipt().to_dict()
+        for held in self._device_claims:
+            receipt = held.receipt().to_dict()
+            close_devices.append(receipt)
+            claim_checks.append(device_claim.check_device_claim_held(receipt))
+        self._claim_close_receipt = {"region": close_region, "devices": close_devices}
+        self._claim_close_check = schemas.Check.worst_of(claim_checks)
+        if self._claim_open_receipt is None:
+            self._claim_same_holder_check = unknown(
+                "claim identity was not retained at window open")
+        else:
+            self._claim_same_holder_check = self._check_same_claim_holder(
+                self._claim_open_receipt, self._claim_close_receipt)
+
+        try:
+            scope = (preflight.PreflightScope.gpu(spec.campaign_id, spec.devices)
+                     if spec.backend == BACKEND_GPU else
+                     preflight.PreflightScope.whole_machine_cpu(spec.campaign_id))
+            sources = claim_witness.gpu_claim_sources(
+                spec.devices,
+                region_lock_dir=str(cpu_region_claim.default_region_lock_dir()))
+            result = preflight.preflight(scope, sources)
+            self._preflight_close_receipt = result.to_dict()
+            self._no_concurrent_close = result.as_check()
+        except BaseException as exc:  # noqa: BLE001 - becomes three-valued evidence
+            self._no_concurrent_close = unknown(
+                f"concurrent-inference close preflight raised: {type(exc).__name__}: {exc}")
+
+        host_checks = []
+        try:
+            state = self._read_host_state(cpu_list=spec.cpu_list)
+            self._host_close = state
+            policy = microbench.HostStatePolicy(
+                nominal_khz=self._nominal_khz,
+                require_package_power=(spec.backend == BACKEND_CPU))
+            # Do not apply the idle/open load policy here: load1 still includes
+            # this campaign's own just-finished benchmark.  The runner's actual
+            # pre-spawn load check below is the contention observation; close
+            # contributes uptime and counter availability.
+            host_checks.append(check_host_uptime(getattr(state, "uptime_s", None)))
+            if spec.backend == BACKEND_CPU:
+                host_checks.append(policy.check_package_power_available(state))
+        except BaseException as exc:  # noqa: BLE001
+            host_checks.append(unknown(
+                f"host close-state read raised: {type(exc).__name__}: {exc}"))
+        if self._microbench_run is not None:
+            host_checks.extend(
+                check for name, check in self._microbench_run.checks
+                if name == "host_load_open")
+            for block in self._microbench_run.blocks:
+                host_checks.extend(
+                    check for name, check in block.checks
+                    if name in ("host_frequency_block_close",
+                                "host_package_power_block"))
+                for invocation in block.invocations:
+                    host_checks.extend(
+                        check for name, check in invocation.checks
+                        if name == "gpu_device_state_window")
+            host_checks.append(self._microbench_run.order_control)
+            host_checks.append(schemas.Check(
+                schemas.PASS if self._microbench_run.complete else schemas.FAIL,
+                () if self._microbench_run.complete else
+                ("microbench run was incomplete at window close",)))
+        self._host_health_close = schemas.Check.worst_of(host_checks)
+        self._storage_close = self._storage_check(spec)
+
+        requests = tuple(request for request in (self._t0_request, self._t1_request)
+                         if request is not None)
+        if not requests:
+            self._evaluator_close_check = unknown(
+                "no executed evaluator identity was available at window close")
+        else:
+            for request in requests:
+                tool = request.anchor.tool or "llama-cli"
+                try:
+                    capture = t0_provider.capture_anchor_identity(
+                        anchor=self._measurement_anchor_build(tool), tools=self._t0_tools(),
+                        runner=t0_provider.SubprocessRunner(),
+                        base_env=tuple(sorted(
+                            self._construct(spec, arm="anchor").env.items())),
+                        parameter_env=spec.t0_parameter_env_for_arm("anchor"))
+                    binding = chain.bind_anchor(capture, tool=tool)
+                    self._anchors_at_close[tool] = binding.identity
+                    self._anchor_close_checks[tool] = request.anchor.identity_matches(
+                        binding.identity)
+                except BaseException as exc:  # noqa: BLE001
+                    self._anchor_close_checks[tool] = unknown(
+                        f"anchor close capture for {tool} raised: "
+                        f"{type(exc).__name__}: {exc}")
+
+        authority = (None if spec.calibration is None else
+                     spec.calibration.evaluation_authority)
+        if authority is None:
+            self._runtime_close_check = unknown(
+                "typed live evaluation authority was unavailable at window close")
+            if self._evaluator_close_check is None:
+                self._evaluator_close_check = unknown(
+                    "typed live evaluation authority was unavailable at window close")
+        else:
+            try:
+                current = control_runner.load_live_evaluation_authority(
+                    authority.evidence_ref)
+                same_authority = current == authority
+                self._runtime_close_check = schemas.Check(
+                    schemas.PASS if same_authority else schemas.FAIL,
+                    () if same_authority else
+                    ("live calibration/control authority changed during the window",))
+            except BaseException as exc:  # noqa: BLE001
+                self._runtime_close_check = unknown(
+                    f"runtime authority close read raised: {type(exc).__name__}: {exc}")
+            if requests:
+                try:
+                    current_evaluator = self._evaluator_identity(authority)
+                    same_evaluator = all(
+                        current_evaluator == request.evaluator for request in requests)
+                    self._evaluator_close_check = schemas.Check(
+                        schemas.PASS if same_evaluator else schemas.FAIL,
+                        () if same_evaluator else
+                        ("evaluator identity changed during the evaluation window",))
+                except BaseException as exc:  # noqa: BLE001
+                    self._evaluator_close_check = unknown(
+                        f"evaluator close hash raised: {type(exc).__name__}: {exc}")
 
     def _release_device_claims(self) -> list:
         """Release every device claim, in reverse, past a failing one."""
@@ -2383,7 +2654,9 @@ class HostOps:
         self._claim_binding = None
         devices_released = self._release_device_claims()
         region = claim.release().to_dict() if claim is not None else None
-        return {"region": region, "devices": devices_released}
+        receipt = {"region": region, "devices": devices_released}
+        self._claim_release_receipt = receipt
+        return receipt
 
     # -- 2. worktree -------------------------------------------------------
 
@@ -2476,6 +2749,24 @@ class HostOps:
             worktree=MEASUREMENT_REPO, source_commit=MEASUREMENT_COMMIT,
             binary=os.path.join(bindir, tool), library_path=bindir)
 
+    @staticmethod
+    def _evaluator_identity(authority: control_runner.LiveEvaluationAuthority
+                            ) -> api.EvaluatorIdentity:
+        """Hash the exact prospective evaluator bundle used by this driver."""
+        files = (
+            Path(__file__), Path(api.__file__), Path(correctness.__file__),
+            Path(schemas.__file__), Path(recipes.__file__),
+            Path(control_runner.__file__),
+        )
+        bundle_sha = schemas.content_hash({
+            str(path): storage.hash_file(path) for path in sorted(files)
+        })
+        return api.EvaluatorIdentity(
+            id="autokernel.campaign-live-evaluation/v1",
+            bundle_sha256=bundle_sha,
+            runtime_source_label_ref=authority.runtime_source_label_ref,
+        )
+
     def _parameter_t0_evidence(self, spec: CampaignSpec, *, identity: Any,
                                build_evidence: Any) -> dict:
         """Derive every non-behavioural T0 surface for a no-source IQK arm."""
@@ -2542,6 +2833,23 @@ class HostOps:
         return chain.t0_plan_evidence(
             symbols=symbols, diff=diff, change_surface=surface_evidence)
 
+    def _stop_t0_early(self, request: api.EvaluationRequest, gate_id: str,
+                       check: schemas.Check) -> T0Outcome:
+        """Retain a typed non-rate gate for a refusal before behavioural T0."""
+        gate = api.GateResult(
+            gate_id=gate_id, gate_class=api.GATE_INTEGRITY, check=check,
+            requires_anchor=False,
+            evidence_ref="sha256:" + schemas.content_hash({
+                "gate_id": gate_id, "outcome": check.outcome,
+                "reasons": list(check.reasons)}),
+            notes=("pre-behavioural T0 refusal; no rate measurement exists",))
+        self._t0_request = request
+        self._t0_gate_results = (gate,)
+        return T0Outcome(
+            all_pass=False,
+            gates=((gate_id, check.outcome, tuple(check.reasons)),),
+            report_ref=gate.evidence_ref, gate_results=(gate,))
+
     def run_t0(self, spec: CampaignSpec, build: Any) -> T0Outcome:
         """T0 first, and its failure ENDS the campaign — see `run_campaign`.
 
@@ -2551,18 +2859,12 @@ class HostOps:
         disk (or the clean-build gate becomes `x == x`), the anchor is bound PER
         TOOL, and the claim is bound for both Protocols.
         """
+        self._t0_started = True
         if self._claim_binding is None:
             raise RuntimeError("run_t0 was reached without a bound claim")
         result = self._build_state["result"]
         tree = self._build_state["tree"]
         plan = self._build_state["plan"]
-
-        source_pin = instrument_integrity.compare_manifest_to_anchor(
-            candidate_root=tree.path.path, anchor_root=MEASUREMENT_REPO)
-        if source_pin.outcome != schemas.PASS:
-            return T0Outcome(all_pass=False, gates=((
-                "t0.measurement_source_pin", source_pin.outcome,
-                tuple(source_pin.reasons)),))
 
         snapshot = _source_tree_digest(tree.path.path)
         identity = worktree.build_identity(
@@ -2574,10 +2876,37 @@ class HostOps:
                        os.path.join(plan.build_dir.path, "bin", "libggml.so.0"),
                        "libggml-base.so.0":
                        os.path.join(plan.build_dir.path, "bin", "libggml-base.so.0")})
+        candidate_capture = t0_provider.capture_anchor_identity(
+            anchor=t0_provider.AnchorBuild(
+                worktree=tree.path.path, source_commit=tree.head_commit(),
+                binary=os.path.join(plan.build_dir.path, "bin", "llama-cli"),
+                library_path=os.path.join(plan.build_dir.path, "bin")),
+            tools=self._t0_tools(), runner=t0_provider.SubprocessRunner(),
+            base_env=tuple(sorted(self._construct(spec, arm="candidate").env.items())),
+            parameter_env=spec.t0_parameter_env_for_arm("candidate"))
+        early_anchor_capture = t0_provider.capture_anchor_identity(
+            anchor=self._measurement_anchor_build("llama-cli"),
+            tools=self._t0_tools(), runner=t0_provider.SubprocessRunner(),
+            base_env=tuple(sorted(self._construct(spec, arm="anchor").env.items())),
+            parameter_env=spec.t0_parameter_env_for_arm("anchor"))
+        early_anchor = chain.bind_anchor(early_anchor_capture, tool="llama-cli")
+        early_request = self._evaluation_request(
+            spec, identity=identity, anchor_identity=early_anchor.identity,
+            device_state=None,
+            candidate_linkage_sha256=candidate_capture.linkage_sha256,
+            determinism=api.DeterminismReport(
+                determinism_class="not_measured", same_seed_repeat_runs=0))
+
+        source_pin = instrument_integrity.compare_manifest_to_anchor(
+            candidate_root=tree.path.path, anchor_root=MEASUREMENT_REPO)
+        if source_pin.outcome != schemas.PASS:
+            return self._stop_t0_early(
+                early_request, "t0.measurement_source_pin", source_pin)
+
         build_ev = chain.build_evidence(identity)                       # seam 1
         if build_ev.worst.outcome != schemas.PASS:
-            return T0Outcome(all_pass=False, gates=(
-                ("build_evidence", build_ev.worst.outcome, tuple(build_ev.worst.reasons)),))
+            return self._stop_t0_early(
+                early_request, "t0.build_evidence", build_ev.worst)
 
         candidate = chain.candidate_build_for(identity)                 # seam 3
         extra = dict(self._t0_evidence(spec=spec, identity=identity,
@@ -2591,9 +2920,8 @@ class HostOps:
         device_state = extra.pop("device_state", None)
         artifact_check = artifact_diff.require_confirmed_for_t1(artifact_evidence)
         if spec.backend == BACKEND_GPU and artifact_check.outcome != schemas.PASS:
-            return T0Outcome(all_pass=False, gates=((
-                "t0.compile_artifact_diff", artifact_check.outcome,
-                tuple(artifact_check.reasons)),))
+            return self._stop_t0_early(
+                early_request, "t0.compile_artifact_diff", artifact_check)
         anchor_capture = extra.pop("anchor_capture", None)
         if anchor_capture is None:
             anchor_plan = t0_provider.T0ExecutionPlan(
@@ -2663,18 +2991,36 @@ class HostOps:
                 sandbox_policy=self._candidate_sandbox_policy(spec)),
             claim=self._claim_binding.t0_claim,
             anchor_capture=t0_anchor.capture)
-        request = self._evaluation_request(
-            spec, identity=identity, anchor=t0_anchor, device_state=device_state)
-        report = correctness.T0CorrectnessRunner(
-            provider=provider, policy=correctness.T0Policy()).evaluate(request)
+        provisional = self._evaluation_request(
+            spec, identity=identity, anchor_identity=t0_anchor.identity,
+            device_state=device_state,
+            candidate_linkage_sha256=candidate_capture.linkage_sha256,
+            determinism=api.DeterminismReport(
+                determinism_class="not_measured", same_seed_repeat_runs=0))
+        evidence = provider.evidence_for(provisional)
+        measured_determinism = (
+            api.DeterminismReport(
+                determinism_class=evidence.determinism.measured_class(),
+                same_seed_repeat_runs=evidence.determinism.runs)
+            if evidence.determinism is not None else api.DeterminismReport(
+                determinism_class="not_measured", same_seed_repeat_runs=0)
+        )
+        request = replace(provisional, determinism=measured_determinism)
+        report = correctness.evaluate_t0(request, evidence, correctness.T0Policy())
+        self._t0_request = request
+        self._t0_report = report
+        self._t0_gate_results = report.gates
         gates = tuple((g.gate_id, g.check.outcome, tuple(g.check.reasons))
                       for g in report.gates)
         return T0Outcome(
             all_pass=all(outcome == schemas.PASS for _gid, outcome, _r in gates),
-            gates=gates, report_ref=report.policy_ref)
+            gates=gates, report_ref=report.policy_ref, gate_results=report.gates)
 
     def _evaluation_request(self, spec: CampaignSpec, *, identity: Any,
-                            anchor: Any, device_state: Any = None) -> api.EvaluationRequest:
+                            anchor_identity: api.AnchorIdentity,
+                            candidate_linkage_sha256: str,
+                            determinism: api.DeterminismReport,
+                            device_state: Any = None) -> api.EvaluationRequest:
         """The request T0 is evaluated against. Digests MEASURED, not copied.
 
         `chain.measure_artifact_identity` re-walks the source tree and re-hashes
@@ -2687,27 +3033,31 @@ class HostOps:
         binary = os.path.join(plan.build_dir.path, "bin", "llama-cli")
         artifact = chain.measure_artifact_identity(          # seam 2
             source_root=tree.path.path, binary=binary,
-            linkage_sha256=anchor.capture.linkage_sha256)
+            linkage_sha256=candidate_linkage_sha256)
         command = self._construct(spec, arm="candidate")
+        self._recipe_receipts[("T0", anchor_identity.tool or "llama-cli")] = \
+            command.receipt
+        if spec.calibration is None or spec.calibration.evaluation_authority is None:
+            raise RuntimeError("live evaluation request requires accepted typed authority")
+        authority = spec.calibration.evaluation_authority
         return api.EvaluationRequest(
             event_id=f"ake-{spec.campaign_id}-{spec.candidate_id}-t0",
             campaign_id=spec.campaign_id, candidate_id=spec.candidate_id,
             tier="T0", backend=spec.backend, phase=command.phase,
             cell_class=command.cell_class, protocol_id="P-AK-SEARCH-1",
-            artifact=artifact, anchor=anchor.identity,
-            evaluator=api.EvaluatorIdentity(
-                evaluator_id="autokernel.campaign/v1",
-                evaluator_sha256=storage.hash_file(__file__)),
+            artifact=artifact, anchor=anchor_identity,
+            evaluator=self._evaluator_identity(authority),
             scope_denominator=command.scope_denominator,
             scope_manifest_sha256=identity.snapshot_sha256,
             co_residency="single",
-            determinism=api.DeterminismReport(determinism_class="bitwise_stable"),
+            determinism=determinism,
             metric=command.metric, metric_direction=command.metric_direction,
             reps=spec.reps,
             change_class=("parameter" if spec.proposal is None
                           else spec.proposal["change_class"]),
             anchor_tier="T0", transfer_ratio_to=(), created_at=spec.created_at,
-            campaign_controls=None, calibration=None, device_state=device_state,
+            campaign_controls=authority.campaign_controls,
+            calibration=authority.calibration, device_state=device_state,
             suite_seed=spec.suite_seed)
 
     def _construct(self, spec: CampaignSpec, *, arm: str) -> Any:
@@ -2740,6 +3090,10 @@ class HostOps:
         candidate_cmd = self._construct(spec, arm="candidate")
         anchor_cmd = self._construct(spec, arm="anchor")
         anchor_identity = self._anchor_identity_for_bench(spec)
+        self._recipe_receipts[("T1", anchor_identity.tool or "llama-bench")] = \
+            candidate_cmd.receipt
+        self._t1_request = self._t1_evaluation_request(
+            spec, command=candidate_cmd, anchor=anchor_identity)
         plan = microbench.MicrobenchPlan(
             recipe_id=spec.recipe_id, candidate_id=spec.candidate_id,
             campaign_seed=f"{spec.campaign_id}/{spec.created_at}",
@@ -2785,7 +3139,53 @@ class HostOps:
             host_state=self._read_host_state,
             run_ledger=self._completed_run_ledger(spec))
         run = runner.run(plan)
+        self._microbench_run = run
         return pairs_from_run(run)
+
+    def _t1_evaluation_request(self, spec: CampaignSpec, *, command: Any,
+                               anchor: api.AnchorIdentity) -> api.EvaluationRequest:
+        """Bind the T1 request to the benchmark binary's own linkage identity."""
+        if spec.calibration is None or spec.calibration.evaluation_authority is None:
+            raise RuntimeError("T1 evaluation requires accepted typed authority")
+        plan = self._build_state["plan"]
+        tree = self._build_state["tree"]
+        bindir = os.path.join(plan.build_dir.path, "bin")
+        capture = t0_provider.capture_anchor_identity(
+            anchor=t0_provider.AnchorBuild(
+                worktree=tree.path.path, source_commit=tree.head_commit(),
+                binary=os.path.join(bindir, "llama-bench"), library_path=bindir),
+            tools=self._t0_tools(), runner=t0_provider.SubprocessRunner(),
+            base_env=tuple(sorted(command.env.items())),
+            parameter_env=spec.t0_parameter_env_for_arm("candidate"))
+        artifact = chain.measure_artifact_identity(
+            source_root=tree.path.path, binary=os.path.join(bindir, "llama-bench"),
+            linkage_sha256=capture.linkage_sha256)
+        authority = spec.calibration.evaluation_authority
+        determinism = (
+            self._t0_request.determinism if self._t0_request is not None
+            else api.DeterminismReport(
+                determinism_class="not_measured", same_seed_repeat_runs=0)
+        )
+        return api.EvaluationRequest(
+            event_id=f"ake-{spec.campaign_id}-{spec.candidate_id}-t1",
+            campaign_id=spec.campaign_id, candidate_id=spec.candidate_id,
+            tier="T1", backend=spec.backend, phase=command.phase,
+            cell_class=command.cell_class, protocol_id="P-AK-SEARCH-1",
+            artifact=artifact, anchor=anchor,
+            evaluator=self._evaluator_identity(authority),
+            scope_denominator=command.scope_denominator,
+            scope_manifest_sha256=(
+                self._t0_request.scope_manifest_sha256
+                if self._t0_request is not None else artifact.source_sha256),
+            co_residency="single", determinism=determinism,
+            metric=command.metric, metric_direction=command.metric_direction,
+            reps=spec.reps,
+            change_class=("parameter" if spec.proposal is None
+                          else spec.proposal["change_class"]),
+            anchor_tier="T1", transfer_ratio_to=(), created_at=spec.created_at,
+            campaign_controls=authority.campaign_controls,
+            calibration=authority.calibration, device_state=None,
+            suite_seed=spec.suite_seed)
 
     @staticmethod
     def _candidate_sandbox_policy(spec: CampaignSpec) -> sandbox.SandboxPolicy:
@@ -2878,6 +3278,225 @@ class HostOps:
             f"{len(self._fingerprints)} frozen tree(s) byte-identical",))
 
     # -- 8. durability ------------------------------------------------------
+
+    def _window_attestations(self, spec: CampaignSpec, request: api.EvaluationRequest,
+                             *, raw_evidence_ref: str,
+                             rate_run: Optional[microbench.MicrobenchRun]
+                             ) -> api.WindowAttestations:
+        authority = spec.calibration.evaluation_authority
+        if authority is None:
+            raise RuntimeError("evaluation window has no typed live authority")
+        unknown = lambda reason: schemas.Check(schemas.COULD_NOT_CHECK, (reason,))
+        release_material = (self._claim_release_receipt
+                            if isinstance(self._claim_release_receipt, Mapping) else
+                            {"unavailable": "claim release receipt was not retained"})
+        claim_ref = "sha256:" + schemas.content_hash(release_material)
+        open_check = self._claim_open_check or unknown(
+            "resource claims were not freshly checked at window open")
+        close_check = self._claim_close_check or unknown(
+            "resource claims were not freshly checked at window close")
+        holder_check = self._claim_same_holder_check or unknown(
+            "resource-claim holder continuity was not checked")
+        concurrent = schemas.Check.worst_of((
+            self._preflight_check or unknown(
+                "concurrent-inference preflight was not retained at open"),
+            self._no_concurrent_close or unknown(
+                "concurrent-inference preflight was not repeated at close"),
+        ))
+        preflight_material = {
+            "open": self._preflight_open_receipt,
+            "close": self._preflight_close_receipt,
+        }
+        host_material = {
+            "open": None if self._host_open is None else self._host_open.to_dict(),
+            "close": None if self._host_close is None else self._host_close.to_dict(),
+            "raw_evidence_ref": raw_evidence_ref,
+        }
+        host_ref = "sha256:" + schemas.content_hash(host_material)
+        host_health = self._host_health_close or unknown(
+            "host health was not re-attested at window close")
+        anchor_tool = request.anchor.tool or "llama-cli"
+        anchor_identity_check = self._anchor_close_checks.get(anchor_tool) or unknown(
+            f"anchor identity for {anchor_tool} was not re-captured at window close")
+        if rate_run is not None:
+            anchor_values = [median(block.anchor_samples)
+                             for block in rate_run.paired_blocks()]
+            anchor_value = median(anchor_values)
+            low, high = authority.calibration.anchor_gate_band
+            anchor_band = schemas.Check(
+                schemas.PASS if low <= anchor_value <= high else schemas.FAIL,
+                (f"anchor median {anchor_value:.9g} vs calibrated band [{low:.9g}, "
+                 f"{high:.9g}]",))
+            anchor_gate = schemas.Check.worst_of((
+                anchor_band,
+                anchor_identity_check,
+            ))
+            order_check = rate_run.order_control
+            strata = schemas.Check(
+                schemas.PASS if all(block.stratum == api.STRATUM_SELECTION
+                                    for block in rate_run.paired_blocks())
+                else schemas.FAIL,
+                ("all completed blocks are in the selection stratum",))
+            rule = schemas.Check(
+                schemas.PASS if len(rate_run.paired_blocks()) == spec.blocks
+                and len(rate_run.paired_blocks()) <=
+                authority.campaign_controls.max_blocks_per_candidate else schemas.FAIL,
+                (f"realized {len(rate_run.paired_blocks())} of precommitted "
+                 f"{spec.blocks} blocks",))
+            order_seed = rate_run.plan.campaign_seed
+        else:
+            anchor_gate = schemas.Check.worst_of((
+                schemas.Check(
+                    schemas.PASS if self._t0_gate_results else schemas.COULD_NOT_CHECK,
+                    ("T0 anchor-bound gate set completed",)),
+                anchor_identity_check,
+            ))
+            order_check = schemas.Check(
+                schemas.COULD_NOT_CHECK, ("no rate-order schedule applies to T0",))
+            strata = schemas.Check(
+                schemas.COULD_NOT_CHECK, ("no selection stratum applies to T0",))
+            rule = schemas.Check(schemas.PASS, ("T0 precedes the speed stopping rule",))
+            order_seed = f"{spec.campaign_id}/t0"
+        recipe_receipt = self._recipe_receipts.get((request.tier, anchor_tool))
+        return api.WindowAttestations(
+            resource_claim_receipt=claim_ref,
+            resource_claim_open=open_check, resource_claim_close=close_check,
+            resource_claim_same_holder=holder_check,
+            no_concurrent_inference=concurrent,
+            preflight_attestation_ref="sha256:" + schemas.content_hash(
+                preflight_material),
+            host_receipt=host_ref, host_health=host_health,
+            anchor_at_open=request.anchor,
+            anchor_at_close=self._anchors_at_close.get(anchor_tool),
+            anchor_gate=anchor_gate,
+            evaluator_bundle=self._evaluator_close_check or unknown(
+                "evaluator bundle was not re-hashed at window close"),
+            runtime_source_label=self._runtime_close_check or unknown(
+                "runtime source label was not re-read at window close"),
+            recipe=recipe_receipt,
+            storage_open=self._storage_open or schemas.Check(
+                schemas.COULD_NOT_CHECK, ("storage headroom was not retained at open",)),
+            storage_close=self._storage_close or unknown(
+                "storage headroom was not re-read at window close"), strata=strata,
+            stopping_rule_id=authority.stopping_rule_id,
+            rule_immutability=rule, order_randomized=order_check,
+            order_seed=order_seed, aa_cadence=authority.aa_cadence,
+            controls=authority.controls, calibration=schemas.Check(
+                schemas.PASS, (authority.evidence_ref,)),
+            control_definitions_immutable=authority.control_definitions_immutable,
+            raw_evidence_ref=raw_evidence_ref)
+
+    @staticmethod
+    def _event_request(request: api.EvaluationRequest, evidence: Any,
+                       suffix: str) -> api.EvaluationRequest:
+        digest = schemas.content_hash(evidence)
+        return replace(request, event_id=(
+            f"ake-{request.campaign_id}-{request.candidate_id}-{suffix}-{digest[:16]}"))
+
+    def _evaluation_events(self, spec: CampaignSpec) -> tuple:
+        """Build T0 then T1 from retained executed evidence; never from display pairs."""
+        events = []
+        t0_request = None
+        if self._t0_request is not None and self._t0_gate_results:
+            evidence = [gate.to_dict() for gate in self._t0_gate_results]
+            t0_request = self._event_request(self._t0_request, evidence, "t0")
+            window = self._window_attestations(
+                spec, t0_request,
+                raw_evidence_ref="sha256:" + schemas.content_hash(evidence),
+                rate_run=None)
+            outcome = api.TierDispatcher(gate_runners={
+                "T0": _RecordedGateRunner(self._t0_gate_results),
+            }).dispatch(t0_request, window, effect=None)
+            if outcome.event is None or outcome.event_violations:
+                raise RuntimeError(
+                    "T0 evaluation event was not schema-valid: "
+                    f"blocked={outcome.event_blocked_reason!r} "
+                    f"violations={list(outcome.event_violations)}")
+            events.append(outcome.event)
+        if self._microbench_run is not None and self._t1_request is not None:
+            blocks = self._microbench_run.paired_blocks()
+            raw_ref = "sha256:" + schemas.content_hash(
+                [block.to_list() for block in blocks])
+            anchor = replace(
+                self._t1_request.anchor,
+                measurement_event_ids=(() if t0_request is None
+                                       else (t0_request.event_id,)))
+            request = replace(self._t1_request, anchor=anchor)
+            request = self._event_request(
+                request, [block.to_list() for block in blocks], "t1")
+            window = self._window_attestations(
+                spec, request, raw_evidence_ref=raw_ref,
+                rate_run=self._microbench_run)
+            effect = control_runner.reduce_live_blocks(
+                request, blocks, spec.calibration.evaluation_authority)
+            outcome = api.TierDispatcher(gate_runners={
+                "T1": _RecordedGateRunner(self._t0_gate_results),
+            }).dispatch(request, window, effect=effect)
+            if outcome.event is None or outcome.event_violations:
+                raise RuntimeError(
+                    "T1 evaluation event was not schema-valid: "
+                    f"blocked={outcome.event_blocked_reason!r} "
+                    f"violations={list(outcome.event_violations)}")
+            if not spec.model:
+                raise RuntimeError("prospective belief capture requires the measured model")
+            event = control_runner.attach_belief_capture(
+                outcome.event, effect_scale="relative",
+                model_id=os.path.basename(spec.model),
+                model_sha256=storage.hash_file(spec.model),
+                producer_sha256=request.evaluator.bundle_sha256)
+            violations = schemas.validate_evaluation_event(event)
+            if violations:
+                raise RuntimeError(
+                    "belief-capture event failed schema validation: "
+                    + "; ".join(violations))
+            events.append(event)
+        return tuple(events)
+
+    def journal_evaluation(self, spec: CampaignSpec, result: Any) -> tuple:
+        """Append prospective events idempotently, before terminal STOP_STATE."""
+        if not spec.journal_root:
+            raise RuntimeError("executed evaluation has no durable journal root")
+        root = storage.assert_not_scratch(spec.journal_root, what="campaign journal root")
+        book = journal_module.Journal(root, campaign_id=spec.campaign_id)
+        book.initialize()
+        appended = []
+        events = self._evaluation_events(spec)
+        if self._t0_started and not events and getattr(result, "error", None):
+            refusal = {
+                "campaign_id": spec.campaign_id,
+                "candidate_id": spec.candidate_id,
+                "stage": "run_t0.before_event_emission",
+                "error": result.error,
+                "rate_measured": False,
+            }
+            refusal_id = "akt0r-" + schemas.content_hash(refusal)[:24]
+            with book.write_lock():
+                prior = [entry for entry in book.read_all()
+                         if entry.kind == journal_module.KIND_T0_REFUSAL
+                         and entry.record_id == refusal_id]
+                if prior:
+                    if schemas.content_hash(prior[0].payload) != schemas.content_hash(refusal):
+                        raise RuntimeError(
+                            f"T0 refusal id {refusal_id!r} names different bytes")
+                    appended.append(prior[0].event_id)
+                else:
+                    appended.append(book.append(
+                        journal_module.KIND_T0_REFUSAL, refusal,
+                        record_id=refusal_id).event_id)
+        for event in events:
+            with book.write_lock():
+                prior = [entry for entry in book.read_all()
+                         if entry.kind == journal_module.KIND_EVALUATION_EVENT
+                         and entry.record_id == event["event_id"]]
+                if prior:
+                    if schemas.content_hash(prior[0].payload) != schemas.content_hash(event):
+                        raise RuntimeError(
+                            f"evaluation id {event['event_id']!r} names different bytes")
+                    appended.append(prior[0].event_id)
+                    continue
+                appended.append(book.append(
+                    journal_module.KIND_EVALUATION_EVENT, event).event_id)
+        return tuple(appended)
 
     def journal(self, spec: CampaignSpec, payload: Mapping[str, Any]) -> Any:
         """Journal the terminal state, fsynced, before the process can exit.
@@ -3151,6 +3770,18 @@ def _finish(spec: CampaignSpec, ops: Any, ledger: ResourceLedger, *, state: str,
         except BaseException as exc:  # noqa: BLE001
             error = "; ".join(x for x in (error, f"keep_or_revert: {exc}") if x)
 
+    # The last truthful time to attest a measurement window is while its claim
+    # and worktree are still held.  Release receipts are evidence that cleanup
+    # happened; they are not substitutes for re-reading the live resources.
+    close_window = getattr(ops, "close_evaluation_window", None)
+    if bool(getattr(ops, "executes", True)) and callable(close_window):
+        try:
+            close_window(spec, tree)
+        except BaseException as exc:  # noqa: BLE001 - release must still run
+            state = STATE_ERROR
+            error = "; ".join(x for x in (
+                error, f"close_evaluation_window: {type(exc).__name__}: {exc}") if x)
+
     releases = ledger.release_all()
 
     try:
@@ -3170,6 +3801,16 @@ def _finish(spec: CampaignSpec, ops: Any, ledger: ResourceLedger, *, state: str,
         executed=bool(getattr(ops, "executes", True)),
         error="\n".join(x for x in (error, traceback_text) if x) or None)
 
+    evaluation_writer = getattr(ops, "journal_evaluation", None)
+    if result.executed and callable(evaluation_writer):
+        try:
+            evaluation_writer(spec, result)
+        except BaseException as exc:  # noqa: BLE001 - durability failure is terminal
+            detail = f"evaluation_event: {type(exc).__name__}: {exc}"
+            print(f"WARNING: evaluated evidence could not be journaled: {detail}",
+                  file=sys.stderr)
+            result = replace(result, journal_error=detail)
+
     try:
         ops.journal(spec, {"state": state, "campaign_id": spec.campaign_id,
                            "result": result.to_dict()})
@@ -3182,7 +3823,9 @@ def _finish(spec: CampaignSpec, ops: Any, ledger: ResourceLedger, *, state: str,
         print(f"WARNING: the result could not be journaled: {detail}", file=sys.stderr)
         # Frozen dataclass: rebuilt rather than mutated, so the record and its
         # `ok` cannot disagree.
-        result = replace(result, journal_error=detail)
+        prior = result.journal_error
+        result = replace(result, journal_error="; ".join(
+            item for item in (prior, detail) if item))
     return result
 
 
