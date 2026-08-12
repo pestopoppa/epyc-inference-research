@@ -631,6 +631,19 @@ controller isolation test sends a request to the parent under the exact profile
 and receives the response, while the existing peer/PID and cgroup assertions
 remain in force. R9 is partial/non-rankable and requires a fresh attempt.
 
+R10 completed and banked the brokered starting-state evaluation and the first
+real `claude-opus-5/high` planner call. The model exited zero after 129.158 s;
+its per-model sandbox activation, execution, result, and teardown receipts are
+durable, the cgroup was empty/removed, and staged credentials/session state was
+scrubbed. This closes the original SIGSEGV and controller-broker compatibility
+defects. The controller then refused before Codex because Claude legitimately
+updated its staged session/config directory and the semantic workspace manifest
+counted those control-plane files as task mutations. The manifest now excludes
+only four exact parent-owned controller-state roots while continuing to inspect
+all task files and symlinks. Proposal paths into those roots are explicitly
+refused, and their lifecycle remains separately receipt-bound and scrubbed. R10
+is partial/non-rankable; no authored candidate or comparison exists yet.
+
 ## On-box substrate reproduction — 2026-08-11
 
 An isolated Python 3.12 environment at

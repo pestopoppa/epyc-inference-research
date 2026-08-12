@@ -261,6 +261,29 @@ class ActorCriticControllerTest(unittest.TestCase):
         with self.assertRaisesRegex(A.ActorCriticError, "non-symlink"):
             A.parse_proposal(json.dumps(proposal), workspace)
 
+    def test_semantic_manifest_excludes_only_reserved_controller_state(self):
+        workspace = self.workspace("reserved-state")
+        initial = A._workspace_manifest(workspace)
+        for name in A.CONTROL_PLANE_DIRNAMES:
+            root = workspace / name
+            root.mkdir(exist_ok=True)
+            (root / "session.json").write_text("one\n", encoding="utf-8")
+        self.assertEqual(A._workspace_manifest(workspace), initial)
+        (workspace / ".autokernel-controller-claude-config"
+         / "session.json").write_text("two\n", encoding="utf-8")
+        self.assertEqual(A._workspace_manifest(workspace), initial)
+        (workspace / "kernel.py").write_text("VALUE = 2\n", encoding="utf-8")
+        self.assertNotEqual(A._workspace_manifest(workspace), initial)
+
+        proposal = {
+            "schema": A.PROPOSAL_SCHEMA,
+            "proposal_id": "proposal-reserved",
+            "candidate_path": ".autokernel-controller-claude-config/session.json",
+            "actor_instruction": "Never admit control-plane state as a candidate.",
+        }
+        with self.assertRaisesRegex(A.ActorCriticError, "reserved"):
+            A.parse_proposal(json.dumps(proposal), workspace)
+
     def test_claude_result_accepts_only_an_exact_single_json_fence(self):
         workspace = self.workspace("fenced")
         proposal = {

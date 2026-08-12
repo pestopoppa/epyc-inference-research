@@ -56,6 +56,12 @@ PINNED_MODEL_IDS = (
 )
 REQUIRED_CLIS = ("claude", "codex")
 ARTIFACT_DIRNAME = ".autokernel-claude-codex"
+CONTROL_PLANE_DIRNAMES = frozenset({
+    ARTIFACT_DIRNAME,
+    ".autokernel-controller-claude-config",
+    ".autokernel-controller-codex-home",
+    ".autokernel-upstream-controller",
+})
 ENTRYPOINT_RELATIVE = (
     "scripts/kernel_rnd/autokernel/controller/claude_codex_actor_critic.py")
 EXECUTABLE_MODULE = (
@@ -279,19 +285,15 @@ def _relative_candidate(workspace: Path, value: object) -> tuple[str, Path]:
     if not candidate.is_file():
         raise ActorCriticError(
             "proposal candidate must name an existing non-symlink workspace file")
+    if relative.parts and relative.parts[0] in CONTROL_PLANE_DIRNAMES:
+        raise ActorCriticError(
+            "proposal candidate names reserved controller state")
     return relative.as_posix(), candidate
 
 
 def _workspace_manifest(workspace: Path) -> dict[str, str]:
     rows: dict[str, str] = {}
-    artifact_root = workspace / ARTIFACT_DIRNAME
     for path in sorted(workspace.rglob("*")):
-        try:
-            path.relative_to(artifact_root)
-        except ValueError:
-            pass
-        else:
-            continue
         relative = path.relative_to(workspace).as_posix()
         if path.is_symlink():
             target = path.resolve()
@@ -300,6 +302,11 @@ def _workspace_manifest(workspace: Path) -> dict[str, str]:
             except ValueError as exc:
                 raise ActorCriticError(
                     f"workspace symlink escapes isolation: {relative}") from exc
+        relative_path = PurePosixPath(relative)
+        if relative_path.parts \
+                and relative_path.parts[0] in CONTROL_PLANE_DIRNAMES:
+            continue
+        if path.is_symlink():
             rows[relative] = _sha256_bytes(os.readlink(path).encode("utf-8"))
         elif path.is_file():
             rows[relative] = _sha256_file(path)
@@ -710,7 +717,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 __all__ = [
-    "ARTIFACT_DIRNAME", "CAMPAIGN_CHECKPOINT_HOURS", "CLAUDE_EFFORT",
+    "ARTIFACT_DIRNAME", "CONTROL_PLANE_DIRNAMES", "CAMPAIGN_CHECKPOINT_HOURS", "CLAUDE_EFFORT",
     "CLAUDE_MODEL", "CODEX_EFFORT", "CODEX_MODEL", "CONTROLLER_ID",
     "CRITIQUE_SCHEMA", "ENTRYPOINT_RELATIVE", "EXECUTABLE_MODULE",
     "PINNED_MODEL_IDS", "PROPOSAL_JSON_SCHEMA", "PROPOSAL_SCHEMA",
