@@ -24,12 +24,14 @@ def canonical_sha(payload) -> str:
 class FakeRunner:
     def __init__(self, workspace: Path, *, planner_path: str = "kernel.py",
                  malformed_planner: bool = False, change_extra: bool = False,
-                 timeout_role: str | None = None):
+                 timeout_role: str | None = None,
+                 planner_extra_fields: bool = False):
         self.workspace = workspace
         self.planner_path = planner_path
         self.malformed_planner = malformed_planner
         self.change_extra = change_extra
         self.timeout_role = timeout_role
+        self.planner_extra_fields = planner_extra_fields
         self.calls = []
 
     def __call__(self, argv, cwd, env, input_text, timeout_seconds):
@@ -47,7 +49,20 @@ class FakeRunner:
                     "candidate_path": self.planner_path,
                     "actor_instruction": "Replace the fixture with the bounded candidate.",
                 }
-                stdout = json.dumps({"result": json.dumps(proposal)})
+                if self.planner_extra_fields:
+                    proposal.update({
+                        "iteration": 1,
+                        "target": {"hardware": "MI210"},
+                        "diagnosis": {"current_state": "block-pointer load"},
+                        "hypothesis": "Raw pointers may improve bandwidth.",
+                        "constraints": ["Edit one file."],
+                        "success_criteria": {"correctness": "tests pass"},
+                        "risks": ["Measurement noise."],
+                    })
+                stdout = json.dumps({
+                    "structured_output": proposal,
+                    "result": "provider-rendered structured result",
+                })
             return A.ProcessCapture(tuple(argv), 0, stdout, "")
         if A.codex_container_actor.EXECUTABLE_MODULE in argv:
             if self.timeout_role == "actor":
@@ -160,6 +175,17 @@ class ActorCriticControllerTest(unittest.TestCase):
             self.assertIn(A.CLAUDE_MODEL, argv)
             self.assertIn(A.CLAUDE_EFFORT, argv)
             self.assertIn("plan", argv)
+            self.assertIn("--json-schema", argv)
+        planner_schema = json.loads(
+            planner_argv[planner_argv.index("--json-schema") + 1])
+        critic_schema = json.loads(
+            critic_argv[critic_argv.index("--json-schema") + 1])
+        self.assertEqual(planner_schema, A.PROPOSAL_JSON_SCHEMA)
+        self.assertFalse(planner_schema["additionalProperties"])
+        self.assertFalse(critic_schema["additionalProperties"])
+        self.assertEqual(
+            critic_schema["properties"]["proposal_id"],
+            {"const": "proposal-001"})
         self.assertIn(A.CODEX_MODEL, actor_argv)
         self.assertIn(A.CODEX_EFFORT, actor_argv)
         self.assertNotIn("dangerously-bypass-approvals-and-sandbox", actor_argv)
@@ -195,6 +221,15 @@ class ActorCriticControllerTest(unittest.TestCase):
                 prompt="task", workspace=escape_workspace, config=self.config(),
                 environment=self.environment(),
                 runner=FakeRunner(escape_workspace, planner_path="../outside.py"))
+
+    def test_live_extra_field_planner_shape_still_fails_closed(self):
+        workspace = self.workspace("extra-fields")
+        with self.assertRaisesRegex(
+                A.ActorCriticError, "unknown/missing fields or schema"):
+            A.run_controller(
+                prompt="task", workspace=workspace, config=self.config(),
+                environment=self.environment(),
+                runner=FakeRunner(workspace, planner_extra_fields=True))
 
     def test_contained_absolute_candidate_is_normalized_but_escape_refuses(self):
         workspace = self.workspace("absolute")
