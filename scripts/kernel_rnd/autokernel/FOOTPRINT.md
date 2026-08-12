@@ -30,11 +30,11 @@ a module it never looked at.
 
 | | non-test lines |
 |---|---:|
-| **ON THE CAMPAIGN PATH** | **64,074** |
-| **DEFERRED** (provably unreachable) | **15,094** |
-| **TOTAL** | **79,168** |
+| **ON THE CAMPAIGN PATH** | **64,086** |
+| **DEFERRED** (provably unreachable) | **21,694** |
+| **TOTAL** | **85,780** |
 
-**There is no deferred half.** The compact modules deliberately off the
+**The deferred plane is explicit.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
 observe-only proposal diagnostic, prior-art compiler, substrate and lane
 registries, turn-productivity reducer, and operator-invoked live-control
@@ -52,7 +52,9 @@ Until 2026-08-04 this table read *roughly half of this package is not on the pat
 from "an idea for a kernel" to "a measured number"*, over a total near 101k. The
 operator acted on it: `release/`, `adapters/`, `surface/` and the AK4 strategy
 plane under `controller/` were removed — about 79,600 lines including their
-tests, recoverable from the tag `autokernel-preserve-20260804`. The rationale is
+tests, recoverable from the tag `autokernel-preserve-20260804`. On 2026-08-12,
+the selected release compiler and speech adapters were restored for AK9 while
+remaining provably unreachable from campaign #1; `surface/` remains deleted. The rationale is
 `epyc-root/artifacts/operator/autokernel-simplification-review.md`; the
 prediction this document made — that removing them could not change what campaign
 #1 does, because the walked graph reached none of them — held, and no reachability
@@ -124,7 +126,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `campaign.py` | 3,509 | yes | THE ENTRYPOINT. Before it landed, `grep -rl "__main__|argparse|def main("` over every non-test module returned nothing: 94k lines, 5,695 passing tests, and no way to start it — which is the whole reason this package has produced no result |
 | `dashboard.py` | 201 | yes | the terminal result was fsynced but the only dashboard exporter had been deleted, so active AutoKernel work remained permanently absent from the operator surface; this compact projection dates itself from the journal entry and cannot make an old campaign fresh |
 | `__init__.py` | 14 | yes | package docstring; `schemas` is declared here as the single source of record shape |
-| `schemas.py` | 3,360 | yes | one record shape — every module is written against it and none invents its own |
+| `schemas.py` | 3,372 | yes | one record shape — every module is written against it and none invents its own |
 | `journal.py` | 2,181 | yes | AutoPilot lost 232 trials and ~16 days when a restart came up empty and nothing objected |
 | `offline_least_commitment.py` | 345 | no | AP-WM-1 observe-only archive analysis; importing an offline hypothesis diagnostic into the mutation/build path would give it accidental live authority |
 | `least_commitment_archive_builder.py` | 368 | no | AK-WM-2a strict real-record projection; it reads hash-bound completed campaign evidence into an observe-only archive and cannot launch, rank, mutate, or promote |
@@ -140,6 +142,11 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `lanes.py` | 314 | no | screening declarations and rank-transfer calibration; without measured calibration campaign #1 stays on the full verified path |
 | `artifact_diff.py` | 200 | yes | AK-TR-6 must veto an unconfirmed GPU claim before the behavioral T0 provider can launch |
 | `storage.py` | 1,859 | yes | the 2026-07-04 async-prefetch win was written to `/mnt/raid0/llm/tmp/` and that directory no longer exists |
+| `adapters/__init__.py` | 21 | no | AK9 adapter namespace only; campaign #1 remains llama_cpu-only and imports no speech release surface |
+| `adapters/whisper_stt.py` | 1,843 | no | AK9 pure whisper.cpp tree, metric, linkage, protocol-prerequisite and release-binding declarations; no inference, build, mutation or freeze authority |
+| `adapters/qwentts_tts.py` | 1,981 | no | AK9 pure qwentts.cpp declarations; pins the STT intelligibility instrument and requires ggml-submodule closure traversal without inference, build, mutation or freeze authority |
+| `release/__init__.py` | 31 | no | AK9 release namespace; it binds no implementation and remains outside the campaign mutation path |
+| `release/plan.py` | 2,539 | no | AK9 read-only release-plan compiler; derives exact per-tree cells and fails closed on missing evidence or single-backend no-op candidates, but cannot run or promote one |
 | `evaluator/__init__.py` | 41 | yes | docstring only — it binds no submodule, so importing `evaluator.api` does not drag the plane in |
 | `evaluator/api.py` | 3,320 | yes | a `Verdict` is constructible only via `compute_verdict()`; `kernel_eval.sh` stamped `"status":"OK"` unconditionally |
 | `evaluator/correctness.py` | 3,838 | yes | throughput is reward-hackable: deleting the computation is the fastest kernel there is |
@@ -168,7 +175,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `execution/sandbox.py` | 606 | yes | C6 candidate boundary: Landlock write confinement, seccomp signal/network/namespace denials, non-root finite rlimits, discoverable host cgroup delegation, per-invocation membership and verified empty teardown |
 | `execution/t0_provider.py` | 3,676 | yes | the predecessor harness tested MUL_MAT only, so a kernel that broke MUL_MAT_ID — MoE dispatch, every token in production — passed it cleanly |
 | `execution/control_runner.py` | 1,550 | yes | runs the neutral / A-A controls that the measured drift makes mandatory rather than optional |
-| `execution/live_controls.py` | 1,228 | no | standalone, operator-invoked calibration producer for the fixed five controls; it prepares the instrument before campaign #1 and is deliberately not imported by the mutation/build entrypoint |
+| `execution/live_controls.py` | 1,413 | no | standalone, operator-invoked calibration producer for the fixed five controls; it prepares the instrument before campaign #1 and is deliberately not imported by the mutation/build entrypoint |
 | `execution/cpu_region_claim.py` | 2,408 | yes | 2026-08-04: two A/A runs were destroyed by a legitimate co-tenant because the loop held no claim. Before this module a claim could be READ but never acquired |
 | `execution/chain.py` | 1,928 | yes | holds the seams — four mismatches between executors and evaluator, one of them a field whose meaning INVERTS across the seam |
 | `resource/__init__.py` | 28 | yes | docstring only; names the `resource`-shadows-stdlib hazard the loop must not trip |
@@ -201,8 +208,9 @@ incident or a measured fact; "reduced rigour" is not a reason.
 
 1. **`TestCampaignFootprint.test_campaign_path_does_not_reach_the_deferred_half`**
    — the walked graph reaches nothing under `controller/`, `release/`,
-   `adapters/` or `surface/`. The last three are deleted, so for them it is a ban
-   on their ever coming back onto the path; `controller/` is the live prefix, and
+   `adapters/` or `surface/`. `release/` and `adapters/` are live deferred AK9
+   prefixes, while `surface/` remains deleted; none may come onto the campaign path.
+   `controller/` is also a live prefix, and
    it is the DEFERRED figure in the table above.
 2. **`test_the_deferred_half_is_still_on_disk`**,
    **`test_the_deferred_half_is_a_real_share_of_the_tree`** and
