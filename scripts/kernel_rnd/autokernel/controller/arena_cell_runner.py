@@ -2359,6 +2359,7 @@ def _run_worker_impl(
             "HIP_VISIBLE_DEVICES": "",
             "ROCR_VISIBLE_DEVICES": "",
             "CUDA_VISIBLE_DEVICES": "",
+            "PYTHONPATH": str(repository_root),
             "SSL_CERT_FILE": "/etc/ssl/certs/ca-certificates.crt",
             "CODEX_HOME": "/home/node/.codex",
             "CLAUDE_CONFIG_DIR": "/home/node/.claude",

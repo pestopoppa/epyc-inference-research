@@ -1421,6 +1421,8 @@ class ArenaCellRunnerTest(unittest.TestCase):
 
         def fake_launch(prepared, argv, *, timeout_seconds, command_prefix,
                         process_started):
+            self.assertEqual(
+                prepared.environment["PYTHONPATH"], str(R.REPOSITORY_ROOT))
             process_started(os.getpid())
             broker_client = object.__new__(U.ArenaWorkspaceEvaluator)
             broker_client.workspace = Path(prepared.task.workspace)
