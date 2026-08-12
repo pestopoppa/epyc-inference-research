@@ -33,6 +33,10 @@ HYPOTHESIS_FALSIFIER = (
     "The accepted paired run fails a required integrity gate or its median "
     "relative prefill gain does not exceed the predeclared 3% contribution floor."
 )
+AA_CONTROL_FALSIFIER = (
+    "The accepted A/A control exceeds the predeclared drift bound or fails "
+    "the required control-integrity gates."
+)
 
 
 class PreparationError(ValueError):
@@ -268,7 +272,8 @@ def _base_spec(
         calibration=calibration)
 
 
-def _hypothesis_store(*, proposal: Mapping[str, Any], candidate_id: str) -> dict[str, Any]:
+def _hypothesis_store(*, proposal: Mapping[str, Any], candidate_id: str,
+                      role: str) -> dict[str, Any]:
     """Build the campaign-local operator store required by ``--hypothesis``.
 
     Pair preparation owns fresh candidate identities, so the ordinal in the
@@ -276,14 +281,18 @@ def _hypothesis_store(*, proposal: Mapping[str, Any], candidate_id: str) -> dict
     The statement remains proposal-owned; preparation supplies only the durable
     falsifier and the regime used by the v9 IQK campaign.
     """
+    if role not in {"intervention", "control"}:
+        raise PreparationError(f"unsupported hypothesis binding role: {role}")
     suffix = candidate_id.rsplit("-", 1)[-1]
-    hypothesis_id = f"akh-iqk-v9-known-real-{suffix}"
+    stem = "aa-control" if role == "control" else "known-real"
+    hypothesis_id = f"akh-iqk-v9-{stem}-{suffix}"
     return {
         "schema": HYPOTHESIS_STORE_SCHEMA,
         "hypotheses": [{
             "author": "operator",
             "created_at": "2026-08-12T00:00:00+00:00",
-            "falsifier": HYPOTHESIS_FALSIFIER,
+            "falsifier": (AA_CONTROL_FALSIFIER if role == "control"
+                           else HYPOTHESIS_FALSIFIER),
             "hypothesis_id": hypothesis_id,
             "regime": {
                 "backend": "llama_cpu",
@@ -395,7 +404,7 @@ def prepare(raw: Mapping[str, Any]) -> dict[str, Any]:
                 staged[name] / HYPOTHESIS_STORE_FILENAME,
                 _hypothesis_store(
                     proposal=selected_proposal,
-                    candidate_id=str(branch["candidate_id"])))
+                    candidate_id=str(branch["candidate_id"]), role=name))
         plans = {
             "intervention": _build_plan(
                 proposal=proposal, branch=intervention, role="intervention",

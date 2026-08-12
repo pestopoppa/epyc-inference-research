@@ -124,6 +124,14 @@ class MatchedPairPreparationTest(unittest.TestCase):
             self.assertEqual(
                 hypothesis_store["hypotheses"][0]["statement"],
                 (self.intervention if name == "intervention" else self.control)["hypothesis"])
+            entry = hypothesis_store["hypotheses"][0]
+            expected_prefix = ("akh-iqk-v9-known-real-" if name == "intervention"
+                               else "akh-iqk-v9-aa-control-")
+            self.assertEqual(entry["hypothesis_id"], expected_prefix +
+                             self.manifest()[name]["candidate_id"].rsplit("-", 1)[-1])
+            expected_falsifier = (P.HYPOTHESIS_FALSIFIER if name == "intervention"
+                                  else P.AA_CONTROL_FALSIFIER)
+            self.assertEqual(entry["falsifier"], expected_falsifier)
             raw = json.loads((output / "least-commitment-capture-plan.json").read_text())
             self.assertEqual(raw["schema"], C.SCHEMA)
             frames.append(raw["factors"])
