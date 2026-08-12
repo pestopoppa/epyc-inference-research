@@ -1614,6 +1614,21 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertEqual(ops.calls, [])
 
+    def test_iqk_execute_without_capture_plan_is_refused_before_ops(self):
+        proposal_path = Path(self.tempdir.name) / "iqk-proposal.json"
+        proposal_path.write_text(
+            json.dumps(iqk_parameter_proposal()), encoding="utf-8")
+        argv = list(self.argv)
+        index = argv.index("--proposal-manifest")
+        argv[index + 1] = str(proposal_path)
+        ops = SpyOps()
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code = campaign.main(argv, out=io.StringIO(), ops=ops)
+        self.assertEqual(code, 2)
+        self.assertEqual(ops.calls, [])
+        self.assertIn("--least-commitment-capture-plan", err.getvalue())
+
     def test_malformed_prerequisite_package_is_refused_before_ops(self):
         path = Path(self.tempdir.name) / "bad-prerequisites.json"
         path.write_text("not json", encoding="utf-8")

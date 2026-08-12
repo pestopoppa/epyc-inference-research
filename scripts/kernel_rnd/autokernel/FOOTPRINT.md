@@ -30,9 +30,9 @@ a module it never looked at.
 
 | | non-test lines |
 |---|---:|
-| **ON THE CAMPAIGN PATH** | **68,040** |
-| **DEFERRED** (provably unreachable) | **46,347** |
-| **TOTAL** | **114,387** |
+| **ON THE CAMPAIGN PATH** | **68,342** |
+| **DEFERRED** (provably unreachable) | **47,083** |
+| **TOTAL** | **115,425** |
 
 **The deferred plane is explicit.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -123,15 +123,17 @@ incident or a measured fact; "reduced rigour" is not a reason.
 
 | module | lines | campaign #1 | reason |
 |---|---:|:---:|---|
-| `campaign.py` | 4,485 | yes | THE ENTRYPOINT. Before it landed, `grep -rl "__main__|argparse|def main("` over every non-test module returned nothing: 94k lines, 5,695 passing tests, and no way to start it — which is the whole reason this package has produced no result |
+| `campaign.py` | 4,565 | yes | THE ENTRYPOINT. Before it landed, `grep -rl "__main__|argparse|def main("` over every non-test module returned nothing: 94k lines, 5,695 passing tests, and no way to start it — which is the whole reason this package has produced no result |
 | `dashboard.py` | 201 | yes | the terminal result was fsynced but the only dashboard exporter had been deleted, so active AutoKernel work remained permanently absent from the operator surface; this compact projection dates itself from the journal entry and cannot make an old campaign fresh |
 | `__init__.py` | 14 | yes | package docstring; `schemas` is declared here as the single source of record shape |
 | `schemas.py` | 3,598 | yes | one record shape — every module is written against it and none invents its own |
 | `journal.py` | 2,288 | yes | AutoPilot lost 232 trials and ~16 days when a restart came up empty and nothing objected |
-| `fault_rehearsal.py` | 1,053 | no | governed process-only acceptance producer; real crash/restart, advisory revocation and tamper evidence must remain operator-invoked and cannot gain campaign mutation, inference, benchmark, kernel, stack or release authority |
+| `fault_rehearsal.py` | 1,080 | no | governed process-only acceptance producer; real crash/restart, advisory revocation and tamper evidence must remain operator-invoked and cannot gain campaign mutation, inference, benchmark, kernel, stack or release authority |
 | `offline_least_commitment.py` | 345 | no | AP-WM-1 observe-only archive analysis; importing an offline hypothesis diagnostic into the mutation/build path would give it accidental live authority |
 | `least_commitment_archive_builder.py` | 368 | no | AK-WM-2a strict real-record projection; it reads hash-bound completed campaign evidence into an observe-only archive and cannot launch, rank, mutate, or promote |
-| `least_commitment_receipts.py` | 677 | no | AK-WM-2a governed offline producer; it copies only explicitly SHA-pinned journal fields into receipts and cannot launch, rank, mutate, or promote |
+| `least_commitment_receipts.py` | 807 | no | AK-WM-2a governed offline producer; it copies only explicitly SHA-pinned journal fields into receipts and cannot launch, rank, mutate, or promote |
+| `least_commitment_capture.py` | 222 | yes | prospective hash-bound IQK diagnostic/control contract; live campaigns only reduce declared outcome functions and it exposes no selector, champion, release, process, or inference API |
+| `evidence_path_rehearsal.py` | 194 | no | architecture-only CLI proving proposal/capture/control/AP-WM/champion/readiness/T3/package producer coverage; emits no empirical evidence or live authority |
 | `turn_productivity.py` | 481 | no | AK-PT-1/AK-X-6 archive reducer; it consumes completed refine-turn records and may only withhold future search advancement, so campaign #1 must not give it live rank or mutation authority |
 | `prior_art.py` | 597 | no | deterministic proposal-input compiler; it classifies findings before a proposal exists and has no place in the mutation/build process |
 | `profile_report.py` | 587 | no | RVP-1–7 deterministic offline C4 report; it consumes completed paired traces and has no mutation, build, profiler-launch or ranking authority |
@@ -158,6 +160,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `release/t3.py` | 6,661 | no | AK5 dry-run release gate and sealed evidence receipt compiler; release mode refuses while P-KERNEL-FREEZE-1 is unratified, and the module cannot write, build, launch, signal, freeze or cut over |
 | `release/packager.py` | 4,276 | no | AK6 operator package renderer over completed T3 evidence; emits only in-memory drafts and terminal `RELEASE_PACKAGE_READY`, never freeze eligibility or an executed production transaction |
 | `release/closeout.py` | 482 | no | AK6 operator-triggered integration seam: joins the lean journaled champion to readiness, dry-run T3 and a validated package with crash/preemption/tamper terminal records, but has no build, inference, process or production-write capability |
+| `release/live_material.py` | 280 | no | actual-journal release-material compiler; hash-binds composed champion evidence to an exact externally measured full-build seal for operator-triggered dry run only, with no build, inference, process, transport, freeze, cutover or production-write authority |
 | `evaluator/__init__.py` | 41 | yes | docstring only — it binds no submodule, so importing `evaluator.api` does not drag the plane in |
 | `evaluator/api.py` | 3,320 | yes | a `Verdict` is constructible only via `compute_verdict()`; `kernel_eval.sh` stamped `"status":"OK"` unconditionally |
 | `evaluator/correctness.py` | 3,952 | yes | throughput is reward-hackable: deleting the computation is the fastest kernel there is |
@@ -198,6 +201,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `controller/__init__.py` | 89 | yes | binds every surviving controller module, so importing one reaches both — which is why `controller.do_not_repeat` is on the path whether or not the driver names it, and why `CONTROLLER_ALLOWED` lists this file rather than leaving the edge unexplained |
 | `controller/champion.py` | 1,447 | no | AK4 lean lifecycle projection and composition transaction: consumes validated journal evidence, requires a real combined rebuild/evaluation through an injected runner, and carries no source-mutation, build, benchmark, process, release, or production-write capability |
 | `controller/sequencer.py` | 468 | no | AK4 deterministic outer ordering seam: consumes supplied proposals and injected execution capabilities, journals bounded stop states, and remains unbound from `controller.__init__` so campaign #1 cannot acquire a second live loop |
+| `controller/completed_campaign_adapter.py` | 105 | no | strict live-journal-to-sequencer join; banks only event-bound dispatch/mechanism-confirmed wins above floor and MDE and launches nothing |
 | `controller/arena_adapter.py` | 518 | no | INF-03 paper-pin GEAK/AgentKernelArena integration: validates clean vendor sources and physical gfx90a identity, binds C4 into a hygienic priced prompt, and launches registered whole-agent task adapters without entering campaign mutation or scoring |
 | `controller/claude_codex_actor_critic.py` | 664 | no | INF-03 bounded Claude-planner/critic + Codex-actor controller: exact three-argument Arena launcher, explicit model/effort pins, checkpoint process-group termination, single-candidate workspace confinement, and transcript/artifact hashing; its preflight invokes neither CLI |
 | `controller/codex_container_actor.py` | 219 | no | INF-03/AK-LE-3 host-compatible Codex actor boundary: pins a read-only container image, exposes exactly one writable host bind for the copied Arena workspace, stages auth only in an automatically erased temporary directory, and admits exactly the reviewed gpt-5.6-sol/gpt-5.6-terra high-effort model cells without granting host filesystem writes |
