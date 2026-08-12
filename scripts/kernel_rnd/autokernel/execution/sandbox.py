@@ -810,7 +810,7 @@ def launch(policy: SandboxPolicy, receipt_path: Path, argv: Sequence[str]) -> No
                 ["AF_INET", "AF_INET6"]
                 if network_profile == NETWORK_OUTBOUND_CLIENT else []),
             "server_socket_operations_denied": [
-                name for name in ("listen", "accept", "accept4")
+                name for name in ("bind", "listen", "accept", "accept4")
                 if name in blocked],
             "unix_socket_creation_denied": deny_unix,
             "broker_socket_path": policy.broker_socket_path,
@@ -962,7 +962,7 @@ def verify_receipt(document: Mapping[str, Any], *, policy: SandboxPolicy,
     if document.get("outbound_socket_families") != expected_families:
         raise SandboxError("sandbox receipt's outbound families do not match")
     expected_server_denials = [
-        name for name in ("listen", "accept", "accept4")
+        name for name in ("bind", "listen", "accept", "accept4")
         if name in blocked]
     if document.get("server_socket_operations_denied") != expected_server_denials:
         raise SandboxError("sandbox receipt's server denials do not match")

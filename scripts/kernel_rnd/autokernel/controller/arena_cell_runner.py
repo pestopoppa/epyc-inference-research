@@ -1703,7 +1703,7 @@ def _validate_evaluator_execution(
                    for root in readable_roots)
             or activation.get("network_profile") != sandbox.NETWORK_DENY_ALL
             or activation.get("outbound_socket_families") != []
-            or activation.get("unix_socket_creation_denied") is not True
+            or activation.get("unix_socket_creation_denied") is not False
             or activation.get("broker_socket_path") is not None
             or activation.get("broker_fd_inherited") is not False
             or activation.get("broker_peer") is not None

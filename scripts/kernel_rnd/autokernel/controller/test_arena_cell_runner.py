@@ -63,7 +63,7 @@ def fake_evaluator_execution(
         "writable_device_paths": ["/dev/kfd", "/dev/dri/renderD128", "/dev/null"],
         "read_allowlist_enforced": True, "readable_roots": ["/usr/lib"],
         "network_profile": R.sandbox.NETWORK_DENY_ALL,
-        "outbound_socket_families": [], "unix_socket_creation_denied": True,
+        "outbound_socket_families": [], "unix_socket_creation_denied": False,
         "broker_socket_path": None, "broker_fd_inherited": False,
         "broker_peer": None, "cgroup_path": "/sys/fs/cgroup/autokernel-fixture",
         "blocked_syscalls": [
