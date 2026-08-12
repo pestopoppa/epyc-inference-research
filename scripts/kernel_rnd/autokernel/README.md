@@ -366,7 +366,8 @@ calibration exists. Source-changing campaigns additionally require their own
 | `c5_seed_corpus.py` | **C5 static seed registry.** Pins the eight intake-884 HyRA SOL-ExecBench artifacts and their NVIDIA/Hopper-only attestations, separates direct Triton references from CUDA-bound re-authoring targets, and emits non-numeric gfx90a task context. No upstream latency or SOL score is admitted as an MI210 target. |
 | `evaluator/c3_epyc_suite.py` | **INF-48 C3/C5 exit contract.** Selects hash-bound attention and MoE C5 cases plus an explicitly EPYC-native Q4_K dequant case; requires exact captured-tensor surfaces, vendor rather than eager baselines, correctness-first `fast_p`, and a matched whole-model re-bench through the case's declared integration. Missing evidence is `COULD_NOT_CHECK`, and the reducer has no release or promotion authority. |
 | `evaluator/c3_epyc_compiler.py` | **INF-48 controller/backend JSON seam.** Emits a source-hash-bound three-case plan and compiles only hash-bound vendor, candidate, correctness, integrity, capture, integration, and whole-model observations. Unavailable evidence withholds `fast_p` and whole-model speedup; the CLI and direct-call backend execute no workload. |
-| `evaluator/c3_epyc_tensor_capture.py` | **INF-48 governed EPYC tensor producer.** Its CLI compiles an exact request manifest without inference, then executes only with both `--execute` and `--authorize-inference` while the codified `184-191` CPU claim and logical `mi210_0` claim are held and revalidated. The caller-selected command must equal the source/toolchain-pinned producer; bounded process-group handling and post-run identity checks precede the exclusive identity-only receipt. |
+| `evaluator/c3_epyc_tensor_capture.py` | **INF-48 governed EPYC tensor producer.** Its CLI produces and re-probes a hash-bound live ROCm logical/BDF inventory, compiles an exact request manifest without inference, then executes only with both `--execute` and `--authorize-inference` while the codified `184-191` CPU claim and logical `mi210_0` claim are held, unexpired, and continuously revalidated. Descendant/start-tick KFD identity, overlapping numeric device samples, bounded process-group teardown, immutable acquire/release journal slices, and final claim release are required by the v2 window receipt. |
+| `evaluator/c3_epyc_capture_provider.py` | **INF-48 real-model provider adapter.** Implements the tracked `--epyc-c3-tensor-capture-v1` protocol and accepts only a clean-commit, hash-bound hook manifest for the exact case and model inventory. The hook must return ordered ROCm tensors matching the plan. Its preflight names one concrete missing external artifact when no real-model hook exists; HyRA reference kernels and synthetic tensors cannot satisfy it. |
 | `evaluator/c3_apex_runner.py` + `evaluator/c3_apex_mapping_audit.v1.json` | **INF-48 exact Apex mapping seam.** Mapping v2 requires one reviewed gfx90a k228 trace or the strict ordered, branch-aware, multi-stream eight-component k175 graph, with per-component source and architecture-review evidence. Plans bind the governed tensor receipt plus Apex/Magpie/Torch/ROCm/Triton/physical gfx90a/source/config/model identities and revalidate them before execution. The checked audit still turns absent real mappings into typed structural refusals; neither planning nor capture has correctness, timing, ranking, or promotion authority. |
 | `datatype_targets.py` | **INF-03 FP8 authoring target.** Declares FP8-weight/software-upcast-to-bf16 as an experimental gfx90a task, not a native capability; forces independent decoding, upcast-cost attribution, exact-shape baselines and whole-model confirmation, and mechanically defers NVFP4 until FP8 has a terminal result. |
 | `substrate.py` | Validates the checked-in MI210 compute/bandwidth/PCIe/NUMA facts, preserves measured and datasheet bases separately, re-derives both roofline ridges, and builds exact-quant diagnostic surfaces. Cross-vendor cells are spec-basis; a missing exact CUDA anchor is `COULD_NOT_CHECK`, never a pooled or borrowed target. |
@@ -580,6 +581,8 @@ the declared output directory:
 
 ```bash
 python3 -m scripts.kernel_rnd.autokernel.evaluator.c3_epyc_tensor_capture \
+  inventory --output /abs/c3-mi210-inventory.json
+python3 -m scripts.kernel_rnd.autokernel.evaluator.c3_epyc_tensor_capture \
   compile --manifest /abs/c3-k228-capture-request.json \
   --plan /abs/c3-k228-capture-plan.json
 python3 -m scripts.kernel_rnd.autokernel.evaluator.c3_epyc_tensor_capture \
@@ -587,6 +590,15 @@ python3 -m scripts.kernel_rnd.autokernel.evaluator.c3_epyc_tensor_capture \
   --claim-journal /abs/durable/c3-k228-claims.jsonl \
   --execute --authorize-inference
 ```
+
+The repository now contains the concrete governed provider adapter, but neither
+k228 nor k175 currently has the required external real-model hook manifest.
+Run `c3_epyc_capture_provider --preflight-case <case-id>` to obtain the typed
+`COULD_NOT_CHECK` record. The one missing artifact is a clean-source manifest
+for `capture_real_model_tensors` that maps an existing local model's real
+execution to the exact ordered tensor surface. The checked-in HyRA artifacts
+are kernel references, not model hooks, so the compiler must not invent that
+mapping.
 
 ### AK6 — the operator surface
 

@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 from scripts.kernel_rnd.autokernel.evaluator import c3_epyc_tensor_capture as T
 
@@ -105,10 +106,21 @@ print(json.dumps({"schema": "epyc.autokernel.c3_epyc_tensor_capture_completion.v
         self.recipe.write_text(json.dumps({"case": "k228", "stage": "prefill"}),
                                encoding="utf-8")
         self.inventory = self.root / "device-inventory.json"
-        self.inventory.write_text(json.dumps({
-            "schema": "epyc.autokernel.device_inventory.v1",
-            "logical_device_id": "mi210_0", "pci_bdf": "0000:41:00.0",
-            "visible_ordinal": 0, "architecture": "gfx90a"}), encoding="utf-8")
+        self.device_identity = {
+            "host": "fixture-host", "logical_device_id": "mi210_0",
+            "visible_ordinal": 0, "pci_bdf": "0000:41:00.0",
+            "architecture": "gfx90a", "sysfs_device": str(self.root / "sysfs-device"),
+            "sysfs_uevent_sha256": hashlib.sha256(b"uevent").hexdigest(),
+            "rocm_smi": str(self.python), "rocm_smi_sha256": sha(self.python),
+            "rocminfo": str(self.python), "rocminfo_sha256": sha(self.python)}
+        inventory = {"schema": T.DEVICE_INVENTORY_SCHEMA,
+                     "producer_id": T.DEVICE_INVENTORY_PRODUCER,
+                     **self.device_identity}
+        inventory["receipt_sha256"] = hashlib.sha256(canonical(inventory).encode()).hexdigest()
+        self.inventory.write_text(json.dumps(inventory), encoding="utf-8")
+        self.inventory_probe = mock.patch.object(
+            T, "_probe_device_identity", return_value=self.device_identity)
+        self.inventory_probe.start()
         self.runtime = {"LD_LIBRARY_PATH": "/usr/lib", "ROCM_PATH": "/opt/rocm"}
         self.output = self.root / "capture"
         self.lock_root = self.root / "locks"
@@ -128,6 +140,7 @@ print(json.dumps({"schema": "epyc.autokernel.c3_epyc_tensor_capture_completion.v
             runtime_environment=self.runtime)
 
     def tearDown(self) -> None:
+        self.inventory_probe.stop()
         self.tmp.cleanup()
 
     def producer(self, plan: T.TensorCapturePlan) -> None:
@@ -155,8 +168,14 @@ print(json.dumps({"schema": "epyc.autokernel.c3_epyc_tensor_capture_completion.v
     def witnessed(result):
         result.residency_witness = {
             "schema": "epyc.autokernel.kfd_process_group_witness.v1",
-            "process_group_id": 123, "samples": [{"offset_s": 0.1, "kfd_pids": [123]}],
+            "producer_pid": 123, "producer_start_ticks": 456,
+            "process_group_id": 123, "started_at": "2026-08-12T00:00:00Z",
+            "ended_at": "2026-08-12T00:00:01Z",
+            "samples": [{"offset_s": 0.1, "kfd_users": [{
+                "pid": 123, "ancestry": [{"pid": 123, "start_ticks": 456}]}]}],
             "overlap_observed": True}
+        result.residency_witness["sha256"] = hashlib.sha256(
+            canonical(result.residency_witness).encode()).hexdigest()
         return result
 
     @contextmanager
@@ -164,7 +183,8 @@ print(json.dumps({"schema": "epyc.autokernel.c3_epyc_tensor_capture_completion.v
         plan = self.plan if plan is None else plan
         common = {"purpose": "capture fixture", "campaign_id": plan.campaign_id,
                   "journal": self.claim_journal, "timeout_s": 0,
-                  "lock_root": self.lock_root}
+                  "lock_root": self.lock_root,
+                  "max_hold_s": float(plan.timeout_seconds + 300)}
         with T.cpu_region_claim.acquire_cpu_region_claim(
                 plan.cpu_list, role="autokernel", **common) as cpu_held:
             with T.device_claim.acquire_device_claim(
@@ -338,12 +358,45 @@ print(json.dumps({"schema": "epyc.autokernel.c3_epyc_tensor_capture_completion.v
             T.main(("execute", "--plan", str(self.root / "missing"),
                     "--claim-journal", str(self.root / "claims"),
                     "--lock-root", str(self.root / "private")))
+        with mock.patch.object(T, "_probe_device_identity",
+                               return_value={**self.device_identity,
+                                             "pci_bdf": "0000:42:00.0"}):
+            with self.assertRaisesRegex(T.TensorCaptureRefusal, "live host"):
+                T.load_device_inventory(self.inventory)
+        for tree in ("llama.cpp", "whisper.cpp", "qwentts.cpp"):
+            with self.assertRaisesRegex(T.TensorCaptureRefusal, "frozen"):
+                T._reject_governed_path(
+                    Path("/mnt/raid0/llm") / tree / "capture.json", "artifact")
+        real_parent = self.root / "real-parent"
+        real_parent.mkdir()
+        linked_parent = self.root / "linked-parent"
+        linked_parent.symlink_to(real_parent, target_is_directory=True)
+        with self.assertRaisesRegex(T.TensorCaptureRefusal, "symlink"):
+            T._publish_json_exclusive(linked_parent / "plan.json", {"x": 1})
+
+    def test_expiry_headroom_is_checked_after_both_claims_are_held(self):
+        class Receipt:
+            def __init__(self, value): self.value = value
+            def to_dict(self): return self.value
+        class ShortCpu:
+            def __init__(self, claim): self.claim = claim
+            def verify_held(self): return self.claim.verify_held()
+            def receipt(self):
+                value = self.claim.receipt().to_dict()
+                value["expires_at"] = "2026-08-12T00:00:00Z"
+                return Receipt(value)
+        with self.held_claims() as claims:
+            with self.assertRaisesRegex(T.TensorCaptureRefusal, "expiry headroom"):
+                T.execute_capture(
+                    self.plan, authorize_inference=True, cpu_claim=ShortCpu(claims[0]),
+                    gpu_claim=claims[1], device_lock_root=self.lock_root)
 
     def test_final_window_requires_released_claims_sampler_and_kfd(self):
         journal_path = self.root / "window-claims.jsonl"
         journal = T.cpu_region_claim.RegionClaimJournal(journal_path)
         common = {"purpose": "window fixture", "campaign_id": self.plan.campaign_id,
-                  "journal": journal, "timeout_s": 0, "lock_root": self.lock_root}
+                  "journal": journal, "timeout_s": 0, "lock_root": self.lock_root,
+                  "max_hold_s": float(self.plan.timeout_seconds + 300)}
         cpu = T.cpu_region_claim.acquire_cpu_region_claim(
             self.plan.cpu_list, role="autokernel", **common)
         gpu = T.device_claim.acquire_device_claim(self.plan.device_claim_id, **common)
@@ -363,7 +416,8 @@ print(json.dumps({"schema": "epyc.autokernel.c3_epyc_tensor_capture_completion.v
                   "under_measurement_load": True}
         sampling = {"schema": "epyc.autokernel.device_sampling_receipt.v1",
                     "sampler_id": "fixture", "device_id": "ROCm0", "source": "fixture",
-                    "started_at": "start", "ended_at": "end", "interval_s": 0.25,
+                    "started_at": "2026-08-12T00:00:00Z",
+                    "ended_at": "2026-08-12T00:00:01Z", "interval_s": 0.25,
                     "duration_s": 0.5, "command": ["fixture"], "sample_count": 1,
                     "max_gap_s": 0.0, "samples": [sample]}
         sampling["sha256"] = hashlib.sha256(canonical(sampling).encode()).hexdigest()
@@ -374,6 +428,8 @@ print(json.dumps({"schema": "epyc.autokernel.c3_epyc_tensor_capture_completion.v
             kfd_residency=evidence["kfd_residency"], claim_journal=journal_path)
         path = self.output / "window.json"
         path.write_text(json.dumps(window), encoding="utf-8")
+        self.assertEqual(T.load_capture_window_receipt(path), window)
+        journal.append("unrelated_later_event", "other-device", {"claim_id": "other"})
         self.assertEqual(T.load_capture_window_receipt(path), window)
         broken = dict(window)
         broken["device_sampling"] = {**sampling, "samples": []}
