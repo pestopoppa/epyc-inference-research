@@ -2028,8 +2028,12 @@ def validate_candidate(obj: Any) -> list:
             _need_str(build, key, out, "build.")
         _need_sha256(build, "log_sha256", out, "build.")
 
-    artifacts = _need_dict(obj, "artifacts", out, "")
-    if artifacts is not _MISSING:
+    artifacts = obj.get("artifacts", _MISSING)
+    if artifacts is _MISSING and obj.get("status") != "build_failed":
+        out.append("artifacts: required field is missing")
+    elif artifacts is not _MISSING and not isinstance(artifacts, Mapping):
+        out.append(f"artifacts: expected a mapping, got {type(artifacts).__name__}")
+    elif artifacts is not _MISSING:
         _need_sha256(artifacts, "binary_sha256", out, "artifacts.")
         # CLAUDE.md: three trees run three ggml generations, so a binary that
         # inherits another tree's ggml runs silently wrong. The linkage proof is
@@ -2079,6 +2083,19 @@ def validate_candidate(obj: Any) -> list:
         _need_str(evaluator, "id", out, "evaluator.", pattern=_VERSIONED_ID_RE,
                   pattern_hint="is a mutable evaluator id (needs a '/vN' suffix)")
         _need_sha256(evaluator, "bundle_sha256", out, "evaluator.")
+        if "runtime_source_label_ref" in evaluator:
+            _need_str(evaluator, "runtime_source_label_ref", out, "evaluator.")
+
+    composition = obj.get("composition_evidence")
+    if composition is not None:
+        _validate_candidate_composition_evidence(obj, composition, out)
+        if not isinstance(evaluator, Mapping) \
+                or not evaluator.get("runtime_source_label_ref"):
+            out.append("evaluator.runtime_source_label_ref: required with composition_evidence")
+
+    banking = obj.get("banking_verdict")
+    if banking is not None:
+        _validate_candidate_banking_verdict(obj, banking, out)
 
     receipts = _need_dict(obj, "receipts", out, "")
     if receipts is not _MISSING:
@@ -2107,6 +2124,14 @@ def validate_candidate(obj: Any) -> list:
 
     _need_str(obj, "champion_status", out, "", choices=CHAMPION_STATUSES)
     status = _need_str(obj, "status", out, "", choices=CANDIDATE_STATUSES)
+    if status == "banked" and composition is not None and banking is None:
+        out.append("banking_verdict: required for a newly composed banked candidate")
+    if status == "banked" and isinstance(banking, Mapping) \
+            and banking.get("disposition") != "banked":
+        out.append("banking_verdict.disposition: banked candidate requires 'banked'")
+    if status != "banked" and isinstance(banking, Mapping) \
+            and banking.get("disposition") == "banked":
+        out.append("banking_verdict.disposition: cannot be banked when candidate status is not")
     reason = _fetch(obj, "supersession_reason", out, "")
     if status == "superseded":
         if not isinstance(reason, str) or not reason.strip():
@@ -2119,6 +2144,207 @@ def validate_candidate(obj: Any) -> list:
     _check_narrative(obj, out, required=False)
     _need_timestamp(obj, "created_at", out, "")
     return out
+
+
+def _validate_candidate_composition_evidence(
+        candidate: Mapping[str, Any], block: Any, out: list) -> None:
+    """Validate the actual compatibility facts consumed by composition.
+
+    The block is optional for historical candidate.v1 records and mandatory on
+    the new campaign writer.  A sequencer therefore refuses an old record
+    rather than reconstructing compatibility from proposal declarations.
+    """
+    prefix = "composition_evidence."
+    if not isinstance(block, Mapping):
+        out.append("composition_evidence: expected a mapping")
+        return
+    required = {
+        "source_tree", "production_base_commit", "candidate_source_commit",
+        "patch_bundle_sha256", "actual_files", "actual_hunk_ids", "actual_symbols",
+        "derived_surface_tokens", "traced_surface_tokens",
+        "feature_flag_assignments", "dispatch_predicates", "mechanism_id",
+        "change_class", "evaluator_id", "evaluator_bundle_sha256", "protocol_ids",
+        "evaluator_runtime_source_label_ref",
+    }
+    missing = sorted(required - set(block))
+    extra = sorted(set(block) - required)
+    if missing:
+        out.append(f"composition_evidence: missing required field(s) {missing}")
+    if extra:
+        out.append(f"composition_evidence: unknown field(s) {extra}")
+    _need_str(block, "source_tree", out, prefix, choices=SOURCE_TREES)
+    _need_commit(block, "production_base_commit", out, prefix)
+    _need_commit(block, "candidate_source_commit", out, prefix)
+    _need_sha256(block, "patch_bundle_sha256", out, prefix)
+    for key in ("actual_files", "actual_hunk_ids", "actual_symbols",
+                "derived_surface_tokens", "traced_surface_tokens",
+                "dispatch_predicates", "protocol_ids"):
+        values = _need_list(block, key, out, prefix, item_type=str,
+                            item_desc="a non-empty string")
+        if values is not _MISSING:
+            if any(not value for value in values):
+                out.append(f"{prefix}{key}: entries must be non-empty")
+            if values != sorted(set(values)):
+                out.append(f"{prefix}{key}: must be sorted and duplicate-free")
+    hunk_ids = block.get("actual_hunk_ids")
+    if isinstance(hunk_ids, list):
+        for value in hunk_ids:
+            if not isinstance(value, str) or not re.match(r"^akhunk:[0-9a-f]{64}$", value):
+                out.append(f"{prefix}actual_hunk_ids: {value!r} is not a content hunk id")
+    assignments = _need_dict(block, "feature_flag_assignments", out, prefix)
+    if assignments is not _MISSING:
+        for name, value in assignments.items():
+            if not isinstance(name, str) or not name:
+                out.append(f"{prefix}feature_flag_assignments: flag names must be non-empty")
+            if value is None or not isinstance(value, (str, bool, int, float)) \
+                    or (isinstance(value, float) and not math.isfinite(value)):
+                out.append(f"{prefix}feature_flag_assignments[{name!r}]: expected a finite JSON scalar")
+    _need_str(block, "mechanism_id", out, prefix)
+    _need_str(block, "change_class", out, prefix, choices=CHANGE_CLASSES)
+    _need_str(block, "evaluator_id", out, prefix, pattern=_VERSIONED_ID_RE,
+              pattern_hint="is a mutable evaluator id (needs a '/vN' suffix)")
+    _need_sha256(block, "evaluator_bundle_sha256", out, prefix)
+    _need_str(block, "evaluator_runtime_source_label_ref", out, prefix)
+
+    change_class = block.get("change_class")
+    list_values = {key: block.get(key) for key in (
+        "actual_files", "actual_hunk_ids", "actual_symbols",
+        "derived_surface_tokens", "protocol_ids")}
+    if change_class == "parameter":
+        for key in ("actual_files", "actual_hunk_ids"):
+            if list_values[key] not in (None, []):
+                out.append(f"{prefix}{key}: parameter candidates must have no source {key}")
+        if isinstance(assignments, Mapping) and not assignments:
+            out.append(f"{prefix}feature_flag_assignments: parameter candidates require flags")
+    elif change_class in CHANGE_CLASSES:
+        for key, values in list_values.items():
+            if not isinstance(values, list) or not values:
+                out.append(f"{prefix}{key}: source candidates require non-empty evidence")
+    symbols = block.get("actual_symbols")
+    if isinstance(symbols, list):
+        for value in symbols:
+            if not isinstance(value, str) or ":" not in value \
+                    or not value.split(":", 1)[0] or not value.rsplit(":", 1)[-1]:
+                out.append(f"{prefix}actual_symbols: {value!r} is not file-qualified")
+
+    ancestry = candidate.get("ancestry")
+    snapshot = candidate.get("source_snapshot")
+    worktree = candidate.get("worktree")
+    evaluator = candidate.get("evaluator")
+    dispatch = candidate.get("dispatch")
+    redundant = (
+        ("production_base_commit", ancestry, "production_base_commit"),
+        ("patch_bundle_sha256", snapshot, "patch_bundle_sha256"),
+        ("candidate_source_commit", worktree, "source_commit"),
+        ("evaluator_id", evaluator, "id"),
+        ("evaluator_bundle_sha256", evaluator, "bundle_sha256"),
+        ("evaluator_runtime_source_label_ref", evaluator, "runtime_source_label_ref"),
+    )
+    for field, parent, parent_field in redundant:
+        if isinstance(parent, Mapping) and field in block and parent_field in parent \
+                and block[field] != parent[parent_field]:
+            out.append(
+                f"{prefix}{field}: {block[field]!r} contradicts "
+                f"{parent_field}={parent[parent_field]!r}")
+    flags = dispatch.get("feature_flags") if isinstance(dispatch, Mapping) else None
+    if isinstance(flags, list) and isinstance(assignments, Mapping) \
+            and sorted(flags) != sorted(assignments):
+        out.append(
+            f"{prefix}feature_flag_assignments: keys must equal dispatch.feature_flags")
+
+
+def _validate_candidate_banking_verdict(
+        candidate: Mapping[str, Any], block: Any, out: list) -> None:
+    """Validate write-side banking facts without re-reducing evaluation events."""
+    prefix = "banking_verdict."
+    if not isinstance(block, Mapping):
+        out.append("banking_verdict: expected a mapping")
+        return
+    required = {"disposition", "t0", "sentinels", "real_path_dispatch",
+                "mechanism", "qualifying_axis"}
+    if set(block) != required:
+        out.append(f"banking_verdict: fields must be exactly {sorted(required)}")
+    disposition = _need_str(block, "disposition", out, prefix,
+                            choices=("banked", "rejected", "diagnostic"))
+    event_ids = candidate.get("evaluation_event_ids")
+    known = set(event_ids) if isinstance(event_ids, list) else set()
+
+    def event_ref(parent: Any, key: str, label: str) -> Any:
+        value = _need_str(parent, key, out, label) if isinstance(parent, Mapping) else _MISSING
+        if value is not _MISSING and value not in known:
+            out.append(f"{label}{key}: {value!r} is absent from evaluation_event_ids")
+        return value
+
+    t0 = _need_dict(block, "t0", out, prefix)
+    if t0 is not _MISSING:
+        event_ref(t0, "all_pass_event_id", prefix + "t0.")
+    sentinels = _need_dict(block, "sentinels", out, prefix)
+    sentinel_ids = _MISSING
+    if sentinels is not _MISSING:
+        sentinel_ids = _need_list(sentinels, "required_all_pass_event_ids", out,
+                                  prefix + "sentinels.", item_type=str)
+        if sentinel_ids is not _MISSING:
+            if not sentinel_ids:
+                out.append(prefix + "sentinels.required_all_pass_event_ids: must be non-empty")
+            for event_id in sentinel_ids:
+                if event_id not in known:
+                    out.append(prefix + f"sentinels.required_all_pass_event_ids: {event_id!r} is absent from evaluation_event_ids")
+    dispatch = _need_dict(block, "real_path_dispatch", out, prefix)
+    if dispatch is not _MISSING:
+        dispatch_resolution = _need_str(dispatch, "resolution", out,
+                                        prefix + "real_path_dispatch.",
+                                        choices=("confirmed", "refuted", "unavailable"))
+        event_ref(dispatch, "event_id", prefix + "real_path_dispatch.")
+        _need_str(dispatch, "gate_id", out, prefix + "real_path_dispatch.")
+    else:
+        dispatch_resolution = _MISSING
+    mechanism = _need_dict(block, "mechanism", out, prefix)
+    if mechanism is not _MISSING:
+        mechanism_resolution = _need_str(mechanism, "resolution", out,
+                                         prefix + "mechanism.",
+                                         choices=("confirmed", "explained", "unavailable"))
+        event_ref(mechanism, "event_id", prefix + "mechanism.")
+        _need_str(mechanism, "gate_id", out, prefix + "mechanism.")
+    else:
+        mechanism_resolution = _MISSING
+    axis = _need_dict(block, "qualifying_axis", out, prefix)
+    axis_name = axis_resolution = _MISSING
+    if axis is not _MISSING:
+        axis_name = _need_str(axis, "axis", out, prefix + "qualifying_axis.", choices=(
+            "throughput", "context_capacity", "vram", "ram",
+            "model_load_time", "run_variance"))
+        event_ref(axis, "evaluation_event_id", prefix + "qualifying_axis.")
+        axis_resolution = _need_str(axis, "resolution", out,
+                                    prefix + "qualifying_axis.", choices=(
+                                        "above_floor", "below_floor", "non_dominated",
+                                        "dominated", "indeterminate"))
+        for key in ("observed_effect", "calibrated_floor", "minimum_detectable_effect"):
+            value = _fetch(axis, key, out, prefix + "qualifying_axis.")
+            if value is not _MISSING and value is not None \
+                    and (not isinstance(value, (int, float)) or isinstance(value, bool)
+                         or not math.isfinite(value)):
+                out.append(f"{prefix}qualifying_axis.{key}: expected null or finite number")
+        non_dominated = _fetch(axis, "non_dominated", out, prefix + "qualifying_axis.")
+        if non_dominated is not _MISSING and non_dominated is not None \
+                and not isinstance(non_dominated, bool):
+            out.append(prefix + "qualifying_axis.non_dominated: expected null or boolean")
+        ref = _fetch(axis, "non_dominated_check_ref", out, prefix + "qualifying_axis.")
+        if ref is not _MISSING and ref is not None and (not isinstance(ref, str) or not ref):
+            out.append(prefix + "qualifying_axis.non_dominated_check_ref: expected null or non-empty string")
+        if axis_name == "throughput":
+            for key in ("observed_effect", "calibrated_floor", "minimum_detectable_effect"):
+                if not isinstance(axis.get(key), (int, float)) or isinstance(axis.get(key), bool):
+                    out.append(f"{prefix}qualifying_axis.{key}: required for throughput")
+            if axis.get("non_dominated") is not None or axis.get("non_dominated_check_ref") is not None:
+                out.append(prefix + "qualifying_axis: throughput must not claim non-dominance")
+        elif axis_name is not _MISSING:
+            if axis.get("non_dominated") is not True or not axis.get("non_dominated_check_ref"):
+                out.append(prefix + "qualifying_axis: alternate axes require proven non-dominance")
+    if disposition == "banked":
+        if dispatch_resolution != "confirmed" or mechanism_resolution not in ("confirmed", "explained"):
+            out.append("banking_verdict: banked requires confirmed dispatch and resolved mechanism")
+        if axis_resolution not in ("above_floor", "non_dominated"):
+            out.append("banking_verdict: banked requires a qualifying axis")
 
 
 def candidate_natural_key(obj: Mapping[str, Any]) -> tuple:
