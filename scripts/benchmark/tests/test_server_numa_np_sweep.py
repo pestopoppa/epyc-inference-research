@@ -692,6 +692,89 @@ def test_execute_happy_path_outputs_and_attestation():
         assert (run_dir / "selected_prompts.jsonl").exists()
 
 
+def test_override_flag_demotes_decision_grade_on_a_clean_host():
+    """An override downgrades the claim tier even when NOTHING is wrong.
+
+    The claim tier has two independent terms (warnings, overrides) and until
+    2026-08-12 only `warnings` was guarded: deleting the overrides term from
+    the PER-CELL tier (`build_cell_row`: `and not run_overrides_active`) left
+    all 65 tests green. That is the dangerous direction — on a clean
+    post-reboot host, with no warnings at all, a run carrying
+    `--skip-clean-check` would bank itself decision-grade, the silent upgrade
+    the clean-runtime gate exists to prevent. The host here is deliberately
+    CLEAN so the `warnings` term cannot mask the assertion; only the overrides
+    term can make this False.
+
+    Scope, stated precisely: this kills the per-cell mutation. Deleting the
+    overrides term from the RUN-level `run_decision_grade` alone is NOT
+    detectable here, and that is correct rather than a gap — the rollup at the
+    end of main() (`if cell.decision_grade_intent and not row["decision_grade"]:
+    run_decision_grade = False`) re-derives the run tier from the cell rows, so
+    the run-level term is redundant defence-in-depth whenever any cell declares
+    decision_grade_intent. A run with no such cell has no decision-grade claim
+    to protect.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        pool = write_pool(tmp_path)
+        binary = tmp_path / "bin" / "llama-server"
+        binary.parent.mkdir(parents=True)
+        binary.write_text("")
+        model = tmp_path / "model.gguf"
+        model.write_text("")
+        manifest_path = write_manifest(tmp_path, make_manifest(model_path=str(model)))
+        sent: list = []
+        pids = iter([5101, 5102])
+
+        def fake_preflight(**kwargs):
+            artifact = {"live_affinity_verified": True}
+            kwargs["artifact_path"].parent.mkdir(parents=True, exist_ok=True)
+            kwargs["artifact_path"].write_text(json.dumps(artifact))
+            return 0, artifact, "all cells matched"
+
+        def fake_stop(proc, **kwargs):
+            return {"pid": proc.pid, "signal": "SIGTERM", "ps_verified_dead": True}
+
+        # NB: --skip-clean-check only skips the PRE-RUN clean check; the
+        # post-cell teardown calls ensure_clean_runtime_allowing()
+        # unconditionally, so this must be a no-op, not a never-called guard.
+        with patched_many(
+            (sns, "_manifest_interface", lambda: SCHEMA_STUB),
+            (sns, "ensure_clean_runtime_allowing", lambda *a, **k: None),
+            (sns, "collect_attestation", lambda: dict(CLEAN_ATTESTATION)),
+            (sns, "cpu_freq_static_warnings", lambda: []),
+            (sns, "cpu_freq_throttle_warnings", _idle_throttle_guard),
+            (sns, "run_capture", lambda cmd, timeout=10.0: "version: 10098 (fake)"),
+            (sns, "start_server", lambda cmd, env, log: DummyProc(pid=next(pids))),
+            (sns, "wait_for_health", lambda port, timeout, proc: None),
+            (sns, "run_affinity_preflight", fake_preflight),
+            (sns, "stop_instance", fake_stop),
+            (sns, "send_streaming_completion", make_fake_send(sent)),
+            (subprocess, "Popen", _popen_guard),
+        ):
+            rc = sns.main(
+                _execute_args(tmp_path, manifest_path, pool, binary, "override-test")
+                + ["--skip-clean-check"]
+            )
+        assert rc == 0
+        run_dir = tmp_path / "out" / "override-test"
+        rows = [
+            json.loads(line)
+            for line in (run_dir / "cells.jsonl").read_text().splitlines()
+            if line.strip()
+        ]
+        assert len(rows) == 1
+        # The host is clean, so this is the overrides term and nothing else.
+        assert rows[0]["host_health_warnings_at_cell"] == []
+        assert rows[0]["cell_error"] is None
+        assert rows[0]["decision_grade"] is False
+        manifest = json.loads((run_dir / "manifest.json").read_text())
+        assert manifest["host_health_warnings"] == []
+        assert manifest["overrides"]["skip_clean_check"] is True
+        assert manifest["overrides"]["allow_host_health_warning"] is False
+        assert manifest["decision_grade"] is False
+
+
 def test_preflight_failure_aborts_cell():
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
