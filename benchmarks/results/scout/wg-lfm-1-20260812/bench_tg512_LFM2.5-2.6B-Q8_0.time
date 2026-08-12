@@ -1,0 +1,24 @@
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=8 activation=99 ne00=2048)
+	Command being timed: "taskset -c 0-23 numactl --membind=0 -- /mnt/raid0/llm/llama.cpp/build/bin/llama-bench -t 24 -fa 1 -mmp 0 -m /mnt/raid0/llm/models/LFM2.5-2.6B-Q8_0.gguf -p 0 -n 512 -r 3 -o md"
+	User time (seconds): 2249.44
+	System time (seconds): 19.00
+	Percent of CPU this job got: 2109%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 1:47.54
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 2878796
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 725375
+	Voluntary context switches: 205
+	Involuntary context switches: 90234
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 16
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

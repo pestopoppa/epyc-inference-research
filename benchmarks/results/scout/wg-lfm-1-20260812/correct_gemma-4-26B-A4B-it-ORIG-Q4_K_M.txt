@@ -1,0 +1,226 @@
+### Q1: What is the capital city of Japan? Reply with only the city name.
+
+
+Loading model... |-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\ 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10125-0db32c06e
+model      : /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf
+ftype      : Q4_K - Medium
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> What is the capital city of Japan? Reply with only the city name.
+
+[Start thinking]
+
+The user is asking for the capital city of Japan.
+The constraint is to reply with *only* the city name.
+
+1.  Identify the capital of Japan: Tokyo.
+2.  Check constraints: "Reply with only the city name."
+3.  Final output: Tokyo.
+[End thinking]
+
+Tokyo
+
+[ Prompt: 95.7 t/s | Generation: 12.5 t/s ]
+
+
+Exiting...
+
+### Q2: Compute 17 * 23. Reply with only the number.
+
+
+Loading model... |-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\ 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10125-0db32c06e
+model      : /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf
+ftype      : Q4_K - Medium
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> Compute 17 * 23. Reply with only the number.
+
+[Start thinking]
+
+The user wants to multiply 17 and 23.
+
+    *   Method 1: Standard multiplication
+        17 * 23 = 17 * (20 + 3)
+        = (17 * 20) + (17 * 3)
+        = 340 + 51
+        = 391
+
+    *   Method 2: Difference of squares
+        
+
+[ Prompt: 93.8 t/s | Generation: 21.3 t/s ]
+
+
+Exiting...
+
+### Q3: List the first five prime numbers as a comma-separated list, nothing else.
+
+
+Loading model... |-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\ 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10125-0db32c06e
+model      : /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf
+ftype      : Q4_K - Medium
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> List the first five prime numbers as a comma-separated list, nothing else.
+
+[Start thinking]
+
+*   Task: List the first five prime numbers.
+    *   Format: Comma-separated list.
+    *   Constraint: "nothing else" (no introductory text, no explanation, no concluding text).
+
+    *   A prime number is a natural number greater than 1 that has no positive divisors other than 1 and itself.
+    *   1 is not prime.
+    *   2 is prime.
+    *   
+
+[ Prompt: 96.6 t/s | Generation: 21.6 t/s ]
+
+
+Exiting...
+
+### Q4: Return ONLY a JSON object, no prose and no code fence, with keys "name" and "age" for a person named Ada who is 36 years old.
+
+
+Loading model... |-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\ 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10125-0db32c06e
+model      : /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf
+ftype      : Q4_K - Medium
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> Return ONLY a JSON object, no prose and no code fence, with keys "name" and "age" for a person named Ada who is 36 years old.
+
+[Start thinking]
+
+*   Input: "Return ONLY a JSON object, no prose and no code fence, with keys 'name' and 'age' for a person named Ada who is 36 years old."
+    *   Constraints:
+        *   Format: JSON object.
+        *   Content: `name` (Ada), `age` (36).
+        *   Negative constraints: No prose, no code fence.
+        *   Output
+
+[ Prompt: 120.7 t/s | Generation: 19.7 t/s ]
+
+
+Exiting...
+
+### Q5: A shelf holds 3 boxes. Each box holds 4 jars. Each jar holds 6 marbles. How many marbles in total? Reply with only the number.
+
+
+Loading model... |-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\|/-\ 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10125-0db32c06e
+model      : /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf
+ftype      : Q4_K - Medium
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> A shelf holds 3 boxes. Each box holds 4 jars. Each jar holds 6 marbles. How many marbles in total? Reply with only the number.
+
+[Start thinking]
+
+*   3 boxes.
+    *   Each box has 4 jars.
+    *   Each jar has 6 marbles.
+    *   Goal: Find the total number of marbles.
+
+    *   Total jars = (Number of boxes) × (Jars per box)
+    *   Total jars = 3 × 4 = 12 jars.
+    *   Total marbles = (Total jars) × (Marbles per
+
+[ Prompt: 119.6 t/s | Generation: 19.6 t/s ]
+
+
+Exiting...
+

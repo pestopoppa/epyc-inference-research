@@ -1,0 +1,155 @@
+### Q1: What is the capital city of Japan? Reply with only the city name.
+> What is the capital city of Japan? Reply with only the city name.
+
+[Start thinking]
+
+The user is asking for the capital city of Japan.
+The constraint is to reply with *only* the city name.
+
+1.  Identify the capital of Japan: Tokyo.
+2.  Check constraints: "Reply with only the city name."
+3.  Final output: Tokyo.
+[End thinking]
+
+Tokyo
+
+[ Prompt: 91.7 t/s | Generation: 19.9 t/s ]
+
+
+Exiting...
+
+### Q2: Compute 17 * 23. Reply with only the number.
+> Compute 17 * 23. Reply with only the number.
+
+[Start thinking]
+
+The user wants to multiply 17 and 23.
+
+    *   Method 1: Standard multiplication
+        17 * 23 = 17 * (20 + 3)
+        = 17 * 20 + 17 * 3
+        = 340 + 51
+        = 391
+
+    *   Method 2: Difference of squares
+        17 * 23 = (20 - 3) * (20 + 3)
+        = 20^2 - 3^2
+        = 400 - 9
+        = 391
+
+    *   Method 3: Long multiplication
+        17
+      x 23
+      ----
+        51 (3 * 17)
+       340 (20 * 17)
+      ----
+       391
+
+The result is 391.
+
+"Reply with only the number."
+
+391.
+[End thinking]
+
+391
+
+[ Prompt: 91.3 t/s | Generation: 19.1 t/s ]
+
+
+Exiting...
+
+### Q3: List the first five prime numbers as a comma-separated list, nothing else.
+> List the first five prime numbers as a comma-separated list, nothing else.
+
+[Start thinking]
+
+*   Task: List the first five prime numbers.
+    *   Format: Comma-separated list.
+    *   Constraint: "nothing else" (no introductory text, no explanation, no concluding text).
+
+    *   A prime number is a natural number greater than 1 that has no positive divisors other than 1 and itself.
+    *   1st prime: 2
+    *   2nd prime: 3
+    *   3rd prime: 5
+    *   4th prime: 7
+    *   5th prime: 11
+
+    *   2, 3, 5, 7, 11
+
+    *   Is it a comma-separated list? Yes.
+    *   Are there exactly five? Yes.
+    *   Are they the first five primes? Yes.
+    *   Is there anything else in the response? No.
+
+    2, 3, 5, 7, 11
+[End thinking]
+
+2, 3, 5, 7, 11
+
+[ Prompt: 92.0 t/s | Generation: 19.6 t/s ]
+
+
+Exiting...
+
+### Q4: Return ONLY a JSON object, no prose and no code fence, with keys "name" and "age" for a person named Ada who is 36 years old.
+> Return ONLY a JSON object, no prose and no code fence, with keys "name" and "age" for a person named Ada who is 36 years old.
+
+[Start thinking]
+
+*   Input: "Return ONLY a JSON object, no prose and no code fence, with keys 'name' and 'age' for a person named Ada who is 36 years old."
+    *   Constraints:
+        *   Format: JSON object.
+        *   Content: `name` = "Ada", `age` = 36.
+        *   Negative constraints: No prose, no code fence (no ```json ... ```).
+        *   Output: ONLY the JSON object.
+
+    *   `{"name": "Ada", "age": 36}`
+
+    *   Is it JSON? Yes.
+    *   Are keys "name" and "age" present? Yes.
+    *   Is the value for "name" "Ada"? Yes.
+    *   Is the value for "age" 36? Yes.
+    *   Is there prose? No.
+    *   Is there a code fence? No.
+
+    `{"name": "Ada", "age": 36}`
+[End thinking]
+
+{"name": "Ada", "age": 36}
+
+[ Prompt: 125.6 t/s | Generation: 17.8 t/s ]
+
+
+Exiting...
+
+### Q5: A shelf holds 3 boxes. Each box holds 4 jars. Each jar holds 6 marbles. How many marbles in total? Reply with only the number.
+> A shelf holds 3 boxes. Each box holds 4 jars. Each jar holds 6 marbles. How many marbles in total? Reply with only the number.
+
+[Start thinking]
+
+*   3 boxes.
+    *   Each box has 4 jars.
+    *   Each jar has 6 marbles.
+    *   Goal: Find the total number of marbles.
+
+    *   Total jars = (Number of boxes) × (Jars per box)
+    *   Total jars = 3 × 4 = 12 jars.
+    *   Total marbles = (Total jars) × (Marbles per jar)
+    *   Total marbles = 12 × 6 = 72 marbles.
+
+    *   3 * 4 * 6 = 12 * 6 = 72.
+
+    *   "Reply with only the number."
+
+    *   72.
+[End thinking]
+
+72
+
+[ Prompt: 66.5 t/s | Generation: 2.9 t/s ]
+
+
+Exiting...
+

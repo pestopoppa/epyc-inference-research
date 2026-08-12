@@ -1,0 +1,245 @@
+### Q1: What is the capital city of Japan? Reply with only the city name.
+
+
+Loading model... |-\|/-\|/-\ 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10125-0db32c06e
+model      : /mnt/raid0/llm/models/LFM2.5-2.6B-Q4_K_M.gguf
+ftype      : Q4_K - Medium
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> What is the capital city of Japan? Reply with only the city name.
+
+[Start thinking]
+
+
+The user is asking for the capital city of Japan. This is a straightforward factual question. The capital of Japan is Tokyo. The instruction says to reply with only the city name. So I should output just "Tokyo" without any additional text.
+[End thinking]
+
+
+Tokyo
+
+[ Prompt: 295.8 t/s | Generation: 41.1 t/s ]
+
+
+Exiting...
+
+### Q2: Compute 17 * 23. Reply with only the number.
+
+
+Loading model... |-\|/-\|/-\ 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10125-0db32c06e
+model      : /mnt/raid0/llm/models/LFM2.5-2.6B-Q4_K_M.gguf
+ftype      : Q4_K - Medium
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> Compute 17 * 23. Reply with only the number.
+
+[Start thinking]
+
+The user wants me to compute the product of 17 and 23.
+The calculation is $17 \times 23$.
+$17 \times 20 = 340$
+$17 \times 3 = 51$
+$340 + 51 = 391$
+The user requested "Reply with only the number."
+So the output should be "391".
+[End thinking]
+
+391
+
+[ Prompt: 293.8 t/s | Generation: 42.3 t/s ]
+
+
+Exiting...
+
+### Q3: List the first five prime numbers as a comma-separated list, nothing else.
+
+
+Loading model... |-\|/-\|/-\ 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10125-0db32c06e
+model      : /mnt/raid0/llm/models/LFM2.5-2.6B-Q4_K_M.gguf
+ftype      : Q4_K - Medium
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> List the first five prime numbers as a comma-separated list, nothing else.
+
+[Start thinking]
+
+The user wants a list of the first five prime numbers.
+The format must be a comma-separated list.
+There should be nothing else in the output.
+
+First five prime numbers:
+1. 2 (prime)
+2. 3 (prime)
+3. 5 (prime)
+4. 7 (prime)
+5. 11 (prime)
+
+List: 2, 3, 5, 7, 11
+
+Check constraints:
+- First five prime numbers?
+
+[ Prompt: 309.7 t/s | Generation: 43.1 t/s ]
+
+
+Exiting...
+
+### Q4: Return ONLY a JSON object, no prose and no code fence, with keys "name" and "age" for a person named Ada who is 36 years old.
+
+
+Loading model... |-\|/-\|/-\ 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10125-0db32c06e
+model      : /mnt/raid0/llm/models/LFM2.5-2.6B-Q4_K_M.gguf
+ftype      : Q4_K - Medium
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> Return ONLY a JSON object, no prose and no code fence, with keys "name" and "age" for a person named Ada who is 36 years old.
+
+[Start thinking]
+
+The user wants a JSON object with keys "name" and "age" for a person named Ada who is 36 years old. The response must be ONLY a JSON object, no prose, no code fences. So output should be something like:
+
+{
+  "name": "Ada",
+  "age": 36
+}
+
+Make sure it's valid JSON. No extra text. No markdown fences. Just the JSON.
+[End thinking]
+
+{
+  "name": "Ada",
+
+[ Prompt: 468.5 t/s | Generation: 42.2 t/s ]
+
+
+Exiting...
+
+### Q5: A shelf holds 3 boxes. Each box holds 4 jars. Each jar holds 6 marbles. How many marbles in total? Reply with only the number.
+
+
+Loading model... |-\|/-\|/-\ 
+
+▄▄ ▄▄
+██ ██
+██ ██  ▀▀█▄ ███▄███▄  ▀▀█▄    ▄████ ████▄ ████▄
+██ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██
+██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀
+                                    ██    ██
+                                    ▀▀    ▀▀
+
+build      : b10125-0db32c06e
+model      : /mnt/raid0/llm/models/LFM2.5-2.6B-Q4_K_M.gguf
+ftype      : Q4_K - Medium
+modalities : text
+
+available commands:
+  /exit or Ctrl+C     stop or exit
+  /regen              regenerate the last response
+  /clear              clear the chat history
+  /read <file>        add a text file
+  /glob <pattern>     add text files using globbing pattern
+
+
+
+> A shelf holds 3 boxes. Each box holds 4 jars. Each jar holds 6 marbles. How many marbles in total? Reply with only the number.
+
+[Start thinking]
+
+
+The user wants me to calculate the total number of marbles based on the given information.
+
+- Shelf holds 3 boxes
+- Each box holds 4 jars
+- Each jar holds 6 marbles
+
+Calculation:
+3 boxes × 4 jars/box × 6 marbles/jar = 3 × 4 × 6 = 72 marbles
+
+The user asks to reply with only the number.
+
+So the answer is 72.
+[End thinking]
+
+
+72
+
+[ Prompt: 453.3 t/s | Generation: 42.8 t/s ]
+
+
+Exiting...
+

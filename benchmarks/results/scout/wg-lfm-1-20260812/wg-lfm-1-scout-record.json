@@ -1,0 +1,435 @@
+{
+  "task": "WG-LFM-1",
+  "grade": "SCOUT \u2014 NOT decision-grade",
+  "not_decision_grade_because": [
+    "host uptime 14.1 d exceeds the 7 d constitutional limit (host-health gate warns)",
+    "CPU scope is ONE region (q0 = cores 0-23, NUMA node 0), not the full-machine canonical 0-95 / -t 96 recipe; absolute numbers are not comparable to headline tables",
+    "incumbent arm is base decode only \u2014 llama-bench cannot exercise the production gemma4 MTP self-speculative path (draft_max=2, ~95% acceptance)",
+    "no tool-schema-compliance or repair-rate measurement (needs a llama-server arm)"
+  ],
+  "kernel": {
+    "tree": "/mnt/raid0/llm/llama.cpp",
+    "branch": "production-consolidated-v9",
+    "commit": "0db32c06e3e550065b78311a6031ef3dd2c4f27c",
+    "build": "b10125"
+  },
+  "hf_revision": "b421ad1d549afeda6a0fb2ad3a697cb5a7879adc",
+  "cpu_scope": {
+    "region": "q0",
+    "cpus": "0-23",
+    "numa": "membind=0",
+    "threads": 24
+  },
+  "env": {
+    "OMP_PROC_BIND": "spread",
+    "OMP_PLACES": "cores",
+    "OMP_WAIT_POLICY": "active",
+    "OMP_DYNAMIC": "false",
+    "GGML_IQK": "1",
+    "GGML_IQK_Q8_0": "1 (Q8_0 arms only)"
+  },
+  "models": {
+    "LFM2.5-2.6B-Q4_K_M.gguf": {
+      "path": "/mnt/raid0/llm/models/LFM2.5-2.6B-Q4_K_M.gguf",
+      "bytes": 1674454848,
+      "sha256": "79fdf00351b46cf26f020aead28d01889886be87c55fa0eb907e6f9b00bfee14"
+    },
+    "LFM2.5-2.6B-Q8_0.gguf": {
+      "path": "/mnt/raid0/llm/models/LFM2.5-2.6B-Q8_0.gguf",
+      "bytes": 2874779456,
+      "sha256": "36587fdf27bdfc69caf2637273679a0870ec155162161bde6fd16e8c70bdb757"
+    }
+  },
+  "speed_arms": [
+    {
+      "arm": "LFM2.5-2.6B-Q4_K_M",
+      "rows": [
+        {
+          "model": "lfm2 2.6B Q4_K - Medium",
+          "size": "1.55 GiB",
+          "params": "2.70 B",
+          "threads": 24,
+          "fa": "1",
+          "mmap": "0",
+          "test": "pp512",
+          "t_s": 1038.88,
+          "stddev": 16.54
+        },
+        {
+          "model": "lfm2 2.6B Q4_K - Medium",
+          "size": "1.55 GiB",
+          "params": "2.70 B",
+          "threads": 24,
+          "fa": "1",
+          "mmap": "0",
+          "test": "tg128",
+          "t_s": 24.43,
+          "stddev": 0.24
+        }
+      ],
+      "peak_rss_kb": 1787344,
+      "wall": null,
+      "iqk_active_lines": 2,
+      "md_file": "/workspace/tmp/wg-lfm-1/bench_LFM2.5-2.6B-Q4_K_M.md"
+    },
+    {
+      "arm": "LFM2.5-2.6B-Q8_0-iqkq8",
+      "rows": [
+        {
+          "model": "lfm2 2.6B Q8_0",
+          "size": "2.67 GiB",
+          "params": "2.70 B",
+          "threads": 24,
+          "fa": "1",
+          "mmap": "0",
+          "test": "pp512",
+          "t_s": 870.47,
+          "stddev": 26.3
+        },
+        {
+          "model": "lfm2 2.6B Q8_0",
+          "size": "2.67 GiB",
+          "params": "2.70 B",
+          "threads": 24,
+          "fa": "1",
+          "mmap": "0",
+          "test": "tg128",
+          "t_s": 24.97,
+          "stddev": 0.01
+        }
+      ],
+      "peak_rss_kb": 2948820,
+      "wall": null,
+      "iqk_active_lines": 1,
+      "md_file": "/workspace/tmp/wg-lfm-1/bench_LFM2.5-2.6B-Q8_0-iqkq8.md"
+    },
+    {
+      "arm": "LFM2.5-2.6B-Q8_0",
+      "rows": [
+        {
+          "model": "lfm2 2.6B Q8_0",
+          "size": "2.67 GiB",
+          "params": "2.70 B",
+          "threads": 24,
+          "fa": "1",
+          "mmap": "0",
+          "test": "pp512",
+          "t_s": 539.24,
+          "stddev": 3.38
+        },
+        {
+          "model": "lfm2 2.6B Q8_0",
+          "size": "2.67 GiB",
+          "params": "2.70 B",
+          "threads": 24,
+          "fa": "1",
+          "mmap": "0",
+          "test": "tg128",
+          "t_s": 15.75,
+          "stddev": 0.05
+        }
+      ],
+      "peak_rss_kb": 2942580,
+      "wall": null,
+      "iqk_active_lines": 0,
+      "md_file": "/workspace/tmp/wg-lfm-1/bench_LFM2.5-2.6B-Q8_0.md"
+    },
+    {
+      "arm": "gemma-4-26B-A4B-it-ORIG-Q4_K_M",
+      "rows": [
+        {
+          "model": "gemma4 26B.A4B Q4_K - Medium",
+          "size": "15.63 GiB",
+          "params": "25.23 B",
+          "threads": 24,
+          "fa": "1",
+          "mmap": "0",
+          "test": "pp512",
+          "t_s": 470.37,
+          "stddev": 4.65
+        },
+        {
+          "model": "gemma4 26B.A4B Q4_K - Medium",
+          "size": "15.63 GiB",
+          "params": "25.23 B",
+          "threads": 24,
+          "fa": "1",
+          "mmap": "0",
+          "test": "tg128",
+          "t_s": 19.76,
+          "stddev": 2.8
+        }
+      ],
+      "peak_rss_kb": 17308620,
+      "wall": null,
+      "iqk_active_lines": 5,
+      "md_file": "/workspace/tmp/wg-lfm-1/bench_gemma-4-26B-A4B-it-ORIG-Q4_K_M.md"
+    },
+    {
+      "arm": "r5_LFM2.5-2.6B-Q4_K_M",
+      "rows": [
+        {
+          "model": "lfm2 2.6B Q4_K - Medium",
+          "size": "1.55 GiB",
+          "params": "2.70 B",
+          "threads": 24,
+          "fa": "1",
+          "mmap": "0",
+          "test": "pp512",
+          "t_s": 1186.57,
+          "stddev": 10.52
+        },
+        {
+          "model": "lfm2 2.6B Q4_K - Medium",
+          "size": "1.55 GiB",
+          "params": "2.70 B",
+          "threads": 24,
+          "fa": "1",
+          "mmap": "0",
+          "test": "tg512",
+          "t_s": 72.04,
+          "stddev": 0.96
+        }
+      ],
+      "peak_rss_kb": 1784884,
+      "wall": null,
+      "iqk_active_lines": 2,
+      "md_file": "/workspace/tmp/wg-lfm-1/bench_r5_LFM2.5-2.6B-Q4_K_M.md"
+    },
+    {
+      "arm": "r5_LFM2.5-2.6B-Q8_0",
+      "rows": [
+        {
+          "model": "lfm2 2.6B Q8_0",
+          "size": "2.67 GiB",
+          "params": "2.70 B",
+          "threads": 24,
+          "fa": "1",
+          "mmap": "0",
+          "test": "pp512",
+          "t_s": 898.89,
+          "stddev": 21.93
+        },
+        {
+          "model": "lfm2 2.6B Q8_0",
+          "size": "2.67 GiB",
+          "params": "2.70 B",
+          "threads": 24,
+          "fa": "1",
+          "mmap": "0",
+          "test": "tg512",
+          "t_s": 44.95,
+          "stddev": 0.18
+        }
+      ],
+      "peak_rss_kb": 2946396,
+      "wall": null,
+      "iqk_active_lines": 1,
+      "md_file": "/workspace/tmp/wg-lfm-1/bench_r5_LFM2.5-2.6B-Q8_0.md"
+    },
+    {
+      "arm": "r5_gemma-4-26B-A4B-it-ORIG-Q4_K_M",
+      "rows": [
+        {
+          "model": "gemma4 26B.A4B Q4_K - Medium",
+          "size": "15.63 GiB",
+          "params": "25.23 B",
+          "threads": 24,
+          "fa": "1",
+          "mmap": "0",
+          "test": "pp512",
+          "t_s": 555.28,
+          "stddev": 14.61
+        },
+        {
+          "model": "gemma4 26B.A4B Q4_K - Medium",
+          "size": "15.63 GiB",
+          "params": "25.23 B",
+          "threads": 24,
+          "fa": "1",
+          "mmap": "0",
+          "test": "tg512",
+          "t_s": 28.0,
+          "stddev": 0.55
+        }
+      ],
+      "peak_rss_kb": 17308576,
+      "wall": null,
+      "iqk_active_lines": 7,
+      "md_file": "/workspace/tmp/wg-lfm-1/bench_r5_gemma-4-26B-A4B-it-ORIG-Q4_K_M.md"
+    },
+    {
+      "arm": "tg512_LFM2.5-2.6B-Q4_K_M",
+      "rows": [
+        {
+          "model": "lfm2 2.6B Q4_K - Medium",
+          "size": "1.55 GiB",
+          "params": "2.70 B",
+          "threads": 24,
+          "fa": "1",
+          "mmap": "0",
+          "test": "tg512",
+          "t_s": 40.34,
+          "stddev": 1.06
+        }
+      ],
+      "peak_rss_kb": 1706536,
+      "wall": null,
+      "iqk_active_lines": 2,
+      "md_file": "/workspace/tmp/wg-lfm-1/bench_tg512_LFM2.5-2.6B-Q4_K_M.md"
+    },
+    {
+      "arm": "tg512_LFM2.5-2.6B-Q8_0",
+      "rows": [
+        {
+          "model": "lfm2 2.6B Q8_0",
+          "size": "2.67 GiB",
+          "params": "2.70 B",
+          "threads": 24,
+          "fa": "1",
+          "mmap": "0",
+          "test": "tg512",
+          "t_s": 19.19,
+          "stddev": 9.81
+        }
+      ],
+      "peak_rss_kb": 2878796,
+      "wall": null,
+      "iqk_active_lines": 1,
+      "md_file": "/workspace/tmp/wg-lfm-1/bench_tg512_LFM2.5-2.6B-Q8_0.md"
+    },
+    {
+      "arm": "tg512_gemma-4-26B-A4B-it-ORIG-Q4_K_M",
+      "rows": [
+        {
+          "model": "gemma4 26B.A4B Q4_K - Medium",
+          "size": "15.63 GiB",
+          "params": "25.23 B",
+          "threads": 24,
+          "fa": "1",
+          "mmap": "0",
+          "test": "tg512",
+          "t_s": 12.72,
+          "stddev": 6.16
+        }
+      ],
+      "peak_rss_kb": 17208136,
+      "wall": null,
+      "iqk_active_lines": 7,
+      "md_file": "/workspace/tmp/wg-lfm-1/bench_tg512_gemma-4-26B-A4B-it-ORIG-Q4_K_M.md"
+    }
+  ],
+  "correctness": {
+    "LFM2.5-2.6B-Q4_K_M": [
+      {
+        "q": 1,
+        "answer": "Tokyo",
+        "truncated": false,
+        "cli_pp_t_s": 308.0,
+        "cli_tg_t_s": 42.2
+      },
+      {
+        "q": 2,
+        "answer": "391",
+        "truncated": false,
+        "cli_pp_t_s": 295.3,
+        "cli_tg_t_s": 42.6
+      },
+      {
+        "q": 3,
+        "answer": "2, 3, 5, 7, 11",
+        "truncated": false,
+        "cli_pp_t_s": 293.5,
+        "cli_tg_t_s": 42.9
+      },
+      {
+        "q": 4,
+        "answer": "{ \"name\": \"Ada\", \"age\": 36 }",
+        "truncated": false,
+        "cli_pp_t_s": 415.9,
+        "cli_tg_t_s": 42.5
+      },
+      {
+        "q": 5,
+        "answer": "72",
+        "truncated": false,
+        "cli_pp_t_s": 459.0,
+        "cli_tg_t_s": 43.0
+      }
+    ],
+    "LFM2.5-2.6B-Q8_0": [
+      {
+        "q": 1,
+        "answer": "Tokyo",
+        "truncated": false,
+        "cli_pp_t_s": 242.8,
+        "cli_tg_t_s": 26.2
+      },
+      {
+        "q": 2,
+        "answer": "391",
+        "truncated": false,
+        "cli_pp_t_s": 228.4,
+        "cli_tg_t_s": 25.5
+      },
+      {
+        "q": 3,
+        "answer": null,
+        "truncated": true,
+        "cli_pp_t_s": 212.8,
+        "cli_tg_t_s": 24.8
+      },
+      {
+        "q": 4,
+        "answer": "{ \"name\": \"Ada\", \"age\": 36 }",
+        "truncated": false,
+        "cli_pp_t_s": 395.8,
+        "cli_tg_t_s": 25.8
+      },
+      {
+        "q": 5,
+        "answer": "72",
+        "truncated": false,
+        "cli_pp_t_s": 391.4,
+        "cli_tg_t_s": 25.6
+      }
+    ],
+    "gemma-4-26B-A4B-it-ORIG-Q4_K_M": [
+      {
+        "q": 1,
+        "answer": "Tokyo",
+        "truncated": false,
+        "cli_pp_t_s": 91.7,
+        "cli_tg_t_s": 19.9
+      },
+      {
+        "q": 2,
+        "answer": "391",
+        "truncated": false,
+        "cli_pp_t_s": 91.3,
+        "cli_tg_t_s": 19.1
+      },
+      {
+        "q": 3,
+        "answer": "2, 3, 5, 7, 11",
+        "truncated": false,
+        "cli_pp_t_s": 92.0,
+        "cli_tg_t_s": 19.6
+      },
+      {
+        "q": 4,
+        "answer": "{\"name\": \"Ada\", \"age\": 36}",
+        "truncated": false,
+        "cli_pp_t_s": 125.6,
+        "cli_tg_t_s": 17.8
+      },
+      {
+        "q": 5,
+        "answer": "72",
+        "truncated": false,
+        "cli_pp_t_s": 66.5,
+        "cli_tg_t_s": 2.9
+      }
+    ]
+  }
+}
