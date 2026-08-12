@@ -1,0 +1,153 @@
+{
+  "architecture": "gemma4",
+  "cell_id": "gemma4_26b_a4b_q4km_mtp-C3-np1",
+  "chat_template_kwargs": {},
+  "config_id": "C3",
+  "ctx": 8192,
+  "decision_grade_intent": false,
+  "draft_model_path_present": true,
+  "env_expectation": {
+    "ggml_iqk": "1",
+    "kmp_blocktime": "10",
+    "omp_source": "scripts/lib/canonical_recipe.CANONICAL_OMP_ENV"
+  },
+  "era": {
+    "cpu_kernel": "E6-cpu-kernel",
+    "eval_instrument": "E7-eval-instrument",
+    "source": "epyc-orchestrator/orchestration/instrument_eras.yaml"
+  },
+  "instances": [
+    {
+      "cpu_list": "0-23,96-119",
+      "numactl_policy": "none",
+      "port": 19380,
+      "threads": 48
+    },
+    {
+      "cpu_list": "24-47,120-143",
+      "numactl_policy": "none",
+      "port": 19381,
+      "threads": 48
+    },
+    {
+      "cpu_list": "48-71,144-167",
+      "numactl_policy": "none",
+      "port": 19382,
+      "threads": 48
+    },
+    {
+      "cpu_list": "72-95,168-191",
+      "numactl_policy": "none",
+      "port": 19383,
+      "threads": 48
+    }
+  ],
+  "jinja": true,
+  "kv": {
+    "flash_attn": true,
+    "kv_unified": false,
+    "type_k": "q8_0",
+    "type_v": "q8_0"
+  },
+  "mlock": true,
+  "model_key": "gemma4_26b_a4b_q4km_mtp",
+  "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+  "model_path_present": true,
+  "notes": "gemma MTP: 1xfull(0-95)+interleave or 4xq ONLY \u2014 no half shape (half-pinning crashes the MTP draft path, 'tensor buffer not set'); -ub 512 MTP recipe override on every shape AMENDED 2026-07-29 (append-only provenance): added reasoning='off'. The artifact previously specified no reasoning mode, so llama-server ran gemma4 at its default --reasoning auto, which for arch=gemma4 is ON. That is NOT the production recipe this cell is required to mirror -- both model registries record reasoning: 'off' for this GGUF. Consequence measured, not hypothesised: the 2026-07-29 W2 capture smoke returned 41/43 response_capture_missing_answer_text, the entire 256-token budget consumed inside the reasoning channel with zero answer tokens; the same signature is behind W0's 430/430. The value restores the pre-registered INTENT (top optimized production recipe) rather than changing it. AMENDED 2026-08-12 (append-only provenance): spec_dec DISABLED. The gemma4 MTP draft cannot create a context on production v9 (10125 / 0db32c06e): 'Gemma4Assistant requires ctx_other to be set' -> '[spec] failed to measure draft model memory' -> server exits ~1.7s after binding, err=100%. Verified by control: identical base model + cpuset WITHOUT -md serves. THIS IS A DIFFERENT CONFIGURATION from the banked W0/W2 MTP rows and must NOT be compared as a continuation of them.",
+  "np": 1,
+  "per_stream_ctx": 2048,
+  "prompt_batch": {
+    "limit": 43,
+    "pinned_from": "data/batched_decode/e1-pbench3-clean-20260703T1912Z/selected_prompts.jsonl",
+    "qids": [
+      "debugbench_fizz-buzz_python",
+      "bcb_BigCodeBench/819",
+      "simpleqa_general_02785",
+      "simpleqa_general_01165",
+      "gsm8k_01291",
+      "mmlu_miscellaneous_07724",
+      "debugbench_final-prices-with-a-special-discount-in-a-shop_java",
+      "hellaswag_34416",
+      "debugbench_plus-one_cpp",
+      "hellaswag_45409",
+      "hellaswag_04688",
+      "bcb_BigCodeBench/1041",
+      "bcb_BigCodeBench/976",
+      "debugbench_transpose-matrix_java",
+      "gsm8k_01141",
+      "simpleqa_general_00501",
+      "hellaswag_24725",
+      "hellaswag_48346",
+      "bcb_BigCodeBench/869",
+      "hellaswag_38109",
+      "gsm8k_00492",
+      "hellaswag_34292",
+      "hellaswag_04032",
+      "gsm8k_01200",
+      "hellaswag_11520",
+      "hellaswag_45031",
+      "simpleqa_general_02940",
+      "bcb_BigCodeBench/212",
+      "ifeval_1592",
+      "hellaswag_04893",
+      "hellaswag_16769",
+      "simpleqa_general_02925",
+      "mmlu_us_foreign_policy_13684",
+      "gsm8k_01032",
+      "hellaswag_15114",
+      "debugbench_increasing-decreasing-string_java",
+      "debugbench_maximum-number-of-balloons_java",
+      "hellaswag_38184",
+      "debugbench_remove-palindromic-subsequences_java",
+      "hellaswag_27524",
+      "hellaswag_18832",
+      "hellaswag_48793",
+      "simpleqa_general_02228"
+    ],
+    "seed": 42,
+    "selection": "pinned_qids",
+    "source": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/question_pool.jsonl",
+    "tier": 1
+  },
+  "prompt_caps": {
+    "max_prompt_chars": 4096,
+    "max_total_in_flight": 43,
+    "n_predict": 256
+  },
+  "protocol_id": "P-BENCH-3",
+  "quant": "Q4_K_M",
+  "reasoning": "off",
+  "request_endpoint": "chat_completions",
+  "sampling": {
+    "min_p": 0.05,
+    "regime": "production",
+    "seed": 42,
+    "temperature": 0.3,
+    "top_k": 40,
+    "top_p": 0.95
+  },
+  "schema_version": "e5-cell-manifest/1",
+  "spec_dec": {
+    "device_draft": "none",
+    "disabled_reason": "gemma4-mtp-fails-on-v9-10125-ctx_other",
+    "draft_max": 2,
+    "draft_min": null,
+    "draft_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf",
+    "draft_p_min": 0.0,
+    "draft_p_split": 0,
+    "enabled": false,
+    "ngram_mod": null,
+    "record_accept_rate": true,
+    "spec_type": "draft-mtp",
+    "threads_draft": 16
+  },
+  "stage_b_families": [
+    "anchor_C3"
+  ],
+  "ubatch_size": 512,
+  "warmup": {
+    "n_predict": 32,
+    "prompts": 1
+  },
+  "window": "W2"
+}
