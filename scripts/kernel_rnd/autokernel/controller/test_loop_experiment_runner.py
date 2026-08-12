@@ -312,13 +312,13 @@ else:
             raw("plan-a"), provider="codex", expected_cell_id="plan-a")
         observation = R.materialize_planner_observation(
             parsed, survived_prefilter=(True,), elapsed_wall_seconds=2,
-            evidence_sha256=sha("prefilter evidence"))
+            evidence_sha256=sha("prefilter evidence"), provider="codex")
         self.assertIsInstance(observation, L.PlannerObservation)
         self.assertTrue(observation.hypotheses[0].survived_prefilter)
         with self.assertRaisesRegex(R.LoopRunnerError, "one boolean"):
             R.materialize_planner_observation(
                 parsed, survived_prefilter=(), elapsed_wall_seconds=2,
-                evidence_sha256=sha("prefilter evidence"))
+                evidence_sha256=sha("prefilter evidence"), provider="codex")
 
     def test_scaffold_execution_refuses_with_precise_design_gap(self):
         with self.assertRaisesRegex(R.LoopRunnerError, "same-model"):
