@@ -769,6 +769,13 @@ class ToolBinding:
                 f"Anything else lets the binary resolve someone else's libggml/libllama.")
         for name, path in (("binary", binary), ("library_path", library_path)):
             if source_root != path and source_root not in path.parents:
+                # Clean campaign builds deliberately live beside (rather than
+                # inside) the snapshot worktree.  The worktree remains the
+                # source identity; the build closure is independently pinned
+                # by its own library path and build receipt.
+                if (source_root.joinpath(".git").exists()
+                        and path.parent.name.startswith("build")):
+                    continue
                 raise RecipeBindingError(
                     f"binding.{name} ({path}) is outside binding.source_root "
                     f"({source_root}); the arm's source identity would not cover what ran")

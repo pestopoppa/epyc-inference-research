@@ -3498,10 +3498,14 @@ class HostOps:
     def _construct(self, spec: CampaignSpec, *, arm: str) -> Any:
         plan = self._build_state["plan"]
         tool = spec.recipe.tool
-        # The BUILD root, not the worktree — see `render_bench_commands`.
+        # The source identity is always the git worktree/snapshot.  Candidate
+        # build artifacts are intentionally outside it (clean-build gate), so
+        # do not misidentify the build directory as the source root.
         root = (MEASUREMENT_BUILD_ROOT if arm == "anchor"
-                else plan.build_dir.path)
-        bindir = os.path.join(root, "bin")
+                else self._build_state["tree"].path.path)
+        artifact_root = (MEASUREMENT_BUILD_ROOT if arm == "anchor"
+                         else plan.build_dir.path)
+        bindir = os.path.join(artifact_root, "bin")
         binding = recipes.ToolBinding(binary=os.path.join(bindir, tool),
                                       source_root=root, library_path=bindir)
         return recipes.construct(spec.recipe_id, binding=binding,
