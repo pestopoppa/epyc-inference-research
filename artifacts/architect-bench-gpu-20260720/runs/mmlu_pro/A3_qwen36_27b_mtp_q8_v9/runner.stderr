@@ -1,0 +1,21 @@
+Using CPython 3.14.6
+Creating virtual environment at: .venv
+   Building epyc-inference-research @ file:///mnt/raid0/llm/worktrees/mmlu-pro-research-20260812
+      Built epyc-inference-research @ file:///mnt/raid0/llm/worktrees/mmlu-pro-research-20260812
+warning: Failed to hardlink files; falling back to full copy. This may lead to degraded performance.
+         If the cache and target directories are on different filesystems, hardlinking may not be supported.
+         If this is intentional, set `export UV_LINK_MODE=copy` or use `--link-mode=copy` to suppress this warning.
+Installed 23 packages in 99ms
+[runner] Waiting for server at http://127.0.0.1:18072...
+[runner] Server healthy
+
+[runner] Evaluating mmlu_pro (n=150, seed=42)...
+  [runner] mmlu_pro: pass 1/1 25/150 (11/25 correct so far)
+  [runner] mmlu_pro: pass 1/1 50/150 (27/50 correct so far)
+  [runner] mmlu_pro: pass 1/1 75/150 (41/75 correct so far)
+  [runner] mmlu_pro: pass 1/1 100/150 (57/100 correct so far)
+  [runner] mmlu_pro: pass 1/1 125/150 (69/125 correct so far)
+  [runner] mmlu_pro: pass 1/1 150/150 (88/150 correct so far)
+[runner] mmlu_pro: 58.7% (88/150)
+
+[runner] Results written to /mnt/raid0/llm/worktrees/mmlu-pro-research-20260812/artifacts/architect-bench-gpu-20260720/runs/mmlu_pro/A3_qwen36_27b_mtp_q8_v9/result.json
