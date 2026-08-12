@@ -152,7 +152,7 @@ class ControllerSandboxContractTest(unittest.TestCase):
         broker_result: dict[str, object] = {}
 
         code = "\n".join((
-            "import errno,glob,json,os,socket,subprocess,sys,time",
+            "import errno,json,os,socket,subprocess,sys,time",
             "def read(path):",
             "  try:",
             "    with open(path,'rb') as h: return ['allowed',h.read().decode(errors='replace')]",
@@ -160,17 +160,24 @@ class ControllerSandboxContractTest(unittest.TestCase):
             "def execute(path):",
             "  try: return ['allowed',subprocess.run([path,'-c','pass']).returncode]",
             "  except OSError as exc: return ['denied',exc.errno]",
+            "def probe_device(path):",
+            "  result=[]",
+            "  for flags in (os.O_RDONLY,os.O_RDWR):",
+            "    try:",
+            "      descriptor=os.open(path,flags); os.close(descriptor); result.append(['allowed',None])",
+            "    except OSError as exc: result.append(['denied',exc.errno])",
+            "  return result",
             "broker=socket.socket(fileno=int(os.environ['EPYC_AUTOKERNEL_BROKER_FD']))",
             "child_pid=os.fork()",
             "if child_pid == 0:",
             "  os.close(0); os.close(1); os.close(2); time.sleep(60); os._exit(0)",
-            f"render={{p:read(p) for p in glob.glob('/dev/dri/renderD*')}}",
             "result={",
             f" 'workspace':read({str(self.workspace / 'task.py')!r}),",
             f" 'campaign_sibling':read({str(self.secret)!r}),",
             f" 'sibling_executable':execute({str(self.fake_node_sibling)!r}),",
-            " 'kfd':read('/dev/kfd') if os.path.exists('/dev/kfd') else ['absent',None],",
-            " 'render':render,'broker':broker.recv(32).decode(),",
+            " 'kfd':probe_device('/dev/kfd'),",
+            " 'renderD128':probe_device('/dev/dri/renderD128'),",
+            " 'broker':broker.recv(32).decode(),",
             " 'peer':list(broker.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,12)),",
             " 'child_pid':child_pid}",
             "print(json.dumps(result,sort_keys=True),flush=True)",
@@ -228,10 +235,8 @@ class ControllerSandboxContractTest(unittest.TestCase):
         self.assertEqual(result["workspace"], ["allowed", "VALUE = 1\n"])
         self.assertEqual(result["campaign_sibling"], ["denied", errno.EACCES])
         self.assertEqual(result["sibling_executable"], ["denied", errno.EACCES])
-        if result["kfd"][0] != "absent":
-            self.assertEqual(result["kfd"], ["denied", errno.EACCES])
-        self.assertTrue(all(row == ["denied", errno.EACCES]
-                            for row in result["render"].values()))
+        self.assertEqual(result["kfd"], [["denied", errno.EACCES]] * 2)
+        self.assertEqual(result["renderD128"], [["denied", errno.EACCES]] * 2)
         self.assertEqual(result["broker"], "broker-ok")
         teardown = invocation.verify_and_teardown(
             self.evidence / "teardown.json")

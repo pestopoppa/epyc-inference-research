@@ -18,9 +18,9 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
-import signal
 import subprocess
 import sys
+import threading
 import time
 from typing import Any, Callable, Mapping, Sequence
 
@@ -127,7 +127,7 @@ class ControllerConfig:
 @dataclass(frozen=True)
 class ProcessCapture:
     argv: tuple[str, ...]
-    returncode: int
+    returncode: int | None
     stdout: str
     stderr: str
     timed_out: bool = False
@@ -170,7 +170,7 @@ def _atomic_write(path: Path, content: bytes) -> None:
 
 def _run_process(argv: Sequence[str], cwd: Path, env: Mapping[str, str],
                  input_text: str, timeout_seconds: float) -> ProcessCapture:
-    """Run one captured process group and terminate only its captured PID group."""
+    """Run one child; launcher-side cgroup teardown owns timeout descendants."""
     if (not argv or any(not isinstance(part, str) or not part for part in argv)
             or not math.isfinite(timeout_seconds) or timeout_seconds <= 0):
         raise ActorCriticError("process argv and timeout must be bounded and non-empty")
@@ -186,25 +186,34 @@ def _run_process(argv: Sequence[str], cwd: Path, env: Mapping[str, str],
         stdout, stderr = process.communicate(input=input_text, timeout=timeout_seconds)
         return ProcessCapture(tuple(argv), process.returncode, stdout, stderr)
     except subprocess.TimeoutExpired as exc:
-        partial_out = exc.stdout if isinstance(exc.stdout, str) else ""
-        partial_err = exc.stderr if isinstance(exc.stderr, str) else ""
-        try:
-            os.killpg(process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-        try:
-            stdout, stderr = process.communicate(timeout=2)
-        except subprocess.TimeoutExpired:
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            stdout, stderr = process.communicate(timeout=2)
-        if process.poll() is None:
-            raise ActorCriticError("captured controller process survived SIGKILL")
+        partial_out = _timeout_text(exc.stdout)
+        partial_err = _timeout_text(exc.stderr)
+        _defer_timed_out_child(process)
         return ProcessCapture(
-            tuple(argv), process.returncode,
-            partial_out + (stdout or ""), partial_err + (stderr or ""), True)
+            tuple(argv), process.poll(), partial_out, partial_err, True)
+    except BaseException:
+        _defer_timed_out_child(process)
+        raise
+
+
+def _timeout_text(value: str | bytes | None) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return ""
+
+
+def _defer_timed_out_child(process: subprocess.Popen[str]) -> None:
+    """Close controller pipes; the launcher's cgroup verifier owns teardown."""
+    for stream in (process.stdin, process.stdout, process.stderr):
+        if stream is not None and not stream.closed:
+            stream.close()
+    threading.Thread(
+        target=process.wait,
+        name=f"autokernel-actor-critic-child-{process.pid}",
+        daemon=True,
+    ).start()
 
 
 def resolve_cli_identities(environment: Mapping[str, str]) -> dict[str, dict[str, str]]:
