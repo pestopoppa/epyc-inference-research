@@ -447,8 +447,11 @@ class ArenaCellRunnerTest(unittest.TestCase):
 
     def test_diagnostic_pilot_runs_one_governed_checkpoint_without_authority(self):
         runner = self.runner()
+        argv = list(self.arm("k_search").argv)
+        argv[argv.index("--max-rounds") + 1] = "1"
         request = R.DiagnosticPilotCellRequest(
-            arm=self.arm("k_search"), task=self.task, checkpoint_hours=2.0)
+            arm=self.arm("k_search"), task=self.task, checkpoint_hours=2.0,
+            controller_argv=tuple(argv))
         with mock.patch.object(
             C, "_implementation_audit",
             return_value={"executable": True, "missing_artifacts": []},
@@ -459,6 +462,8 @@ class ArenaCellRunnerTest(unittest.TestCase):
                          "compatibility_only_no_ranking_or_promotion_authority")
         self.assertEqual(receipt["checkpoint_hours"], 2.0)
         self.assertEqual(receipt["checkpoint"]["checkpoint_hours"], 2.0)
+        self.assertEqual(receipt["controller_argv"][
+            receipt["controller_argv"].index("--max-rounds") + 1], "1")
         self.assertFalse(receipt["constraints"]["matched_campaign_result_implied"])
         self.assertFalse(receipt["constraints"]["belief_update_authority"])
         self.assertEqual(
@@ -474,6 +479,12 @@ class ArenaCellRunnerTest(unittest.TestCase):
             R.DiagnosticPilotCellRequest(
                 arm=self.arm("k_search"), task=self.task,
                 checkpoint_hours=0.01)
+        argv = list(self.arm("k_search").argv)
+        argv[argv.index("--max-rounds") + 1] = "2"
+        with self.assertRaisesRegex(R.ArenaCellRunnerError, "may only set"):
+            R.DiagnosticPilotCellRequest(
+                arm=self.arm("k_search"), task=self.task,
+                controller_argv=tuple(argv))
 
     def test_identity_drift_refuses_before_claim_or_worker(self):
         acquire = mock.Mock()

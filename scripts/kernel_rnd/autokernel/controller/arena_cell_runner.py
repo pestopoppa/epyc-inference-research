@@ -627,6 +627,7 @@ class DiagnosticPilotCellRequest:
     task: arena_campaign.TaskArtifact
     checkpoint_hours: float = 2.0
     is_starting_state_baseline: bool = False
+    controller_argv: tuple[str, ...] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.arm, arena_campaign.ArmImplementation):
@@ -643,6 +644,10 @@ class DiagnosticPilotCellRequest:
                 or float(self.checkpoint_hours)
                 not in arena_campaign.MATCHED_BUDGET_HOURS):
             raise ArenaCellRunnerError("pilot checkpoint must use a matched budget")
+        override = self.controller_argv
+        if override is not None:
+            _validate_diagnostic_pilot_argv(
+                self.arm.arm_id, self.arm.argv, override)
 
 
 class GovernedArenaCellRunner:
@@ -750,7 +755,8 @@ class GovernedArenaCellRunner:
             "task_id": request.task.task_id,
             "arm_id": request.arm.arm_id,
             "checkpoint_hours": float(request.checkpoint_hours),
-            "controller_argv": list(request.arm.argv),
+            "controller_argv": list(
+                request.controller_argv or request.arm.argv),
             "checkpoint_receipt_sha256": run["receipt_sha256"],
             "checkpoint": run,
             "constraints": {
@@ -1192,7 +1198,7 @@ class GovernedArenaCellRunner:
         if not arm_audit["executable"]:
             raise ArenaCellRunnerError(
                 "cannot construct worker request from a non-executable arm audit")
-        return {
+        payload = {
             "schema": CHECKPOINT_SCHEMA,
             "campaign_id": self.config.campaign_id,
             **({"attempt_id": self.attempt_id}
@@ -1211,6 +1217,11 @@ class GovernedArenaCellRunner:
             "claim_timeout_seconds": float(self.config.claim_timeout_seconds),
             "evaluator_python": self.evaluator_python,
         }
+        if isinstance(request, DiagnosticPilotCellRequest) \
+                and request.controller_argv is not None:
+            payload["diagnostic_pilot_controller_argv"] = list(
+                request.controller_argv)
+        return payload
 
     @staticmethod
     def _run_worker_subprocess(
@@ -1274,11 +1285,17 @@ class GovernedArenaCellRunner:
 def _controller_argv(
     arm: Mapping[str, Any], checkpoint_hours: float,
     *, executable_path: str | None = None,
+    diagnostic_pilot_override: Sequence[str] | None = None,
 ) -> tuple[str, ...]:
     raw = arm.get("argv")
     if not isinstance(raw, list) or not raw or any(not isinstance(x, str) for x in raw):
         raise ArenaCellRunnerError("controller arm lacks a valid argv")
-    argv = list(raw)
+    if diagnostic_pilot_override is not None:
+        _validate_diagnostic_pilot_argv(
+            str(arm.get("arm_id")), tuple(raw), diagnostic_pilot_override)
+        argv = list(diagnostic_pilot_override)
+    else:
+        argv = list(raw)
     if executable_path is not None:
         executable = Path(executable_path)
         if (not executable.is_absolute() or executable.is_symlink()
@@ -1299,6 +1316,30 @@ def _controller_argv(
             raise ArenaCellRunnerError(f"controller argv has no value after {flag}")
         argv[index + 1] = value
     return tuple(argv)
+
+
+def _validate_diagnostic_pilot_argv(
+    arm_id: str, declared: Sequence[str], override: Sequence[str],
+) -> None:
+    """Allow exactly one bounded K-Search round in a non-authoritative pilot."""
+    if arm_id != "k_search":
+        raise ArenaCellRunnerError(
+            "diagnostic argv override is currently admitted only for k_search")
+    if (not isinstance(override, (tuple, list)) or not override
+            or any(not isinstance(value, str) for value in override)):
+        raise ArenaCellRunnerError("diagnostic pilot argv must be strings")
+    expected = list(declared)
+    try:
+        index = expected.index("--max-rounds")
+    except ValueError as exc:
+        raise ArenaCellRunnerError(
+            "k_search pilot argv lacks its exact max-rounds seam") from exc
+    if index + 1 >= len(expected):
+        raise ArenaCellRunnerError("k_search max-rounds has no declared value")
+    expected[index + 1] = "1"
+    if list(override) != expected:
+        raise ArenaCellRunnerError(
+            "diagnostic pilot argv may only set k_search --max-rounds to 1")
 
 
 def _worker_command(cell_root: Path, output: Path) -> tuple[str, ...]:
@@ -2366,7 +2407,9 @@ def _run_worker_impl(
         with broker:
             argv = _controller_argv(
                 arm, float(checkpoint),
-                executable_path=str(request["arm_audit"]["executable_path"]))
+                executable_path=str(request["arm_audit"]["executable_path"]),
+                diagnostic_pilot_override=request.get(
+                    "diagnostic_pilot_controller_argv"))
             assert controller_runtime is not None
             invocation = arena_controller_sandbox.prepare_controller_sandbox(
                 workspace=workspace,
