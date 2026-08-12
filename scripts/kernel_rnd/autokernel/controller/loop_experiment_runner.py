@@ -51,6 +51,36 @@ SCAFFOLD_GAP = (
 _SHA_RE = re.compile(r"[0-9a-f]{64}")
 _ID_RE = re.compile(r"[a-z][a-z0-9_.-]{2,95}")
 
+_RAW_OBSERVATION_JSON_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["schema", "termination", "hypotheses"],
+    "properties": {
+        "schema": {"const": RAW_OBSERVATION_SCHEMA},
+        "termination": {"enum": sorted(experiments.TERMINATIONS)},
+        "hypotheses": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [
+                    "mechanism", "target_surface", "falsifiable_counter",
+                    "predicted_direction",
+                ],
+                "properties": {
+                    name: {"type": "string", "minLength": 1}
+                    for name in (
+                        "mechanism", "target_surface", "falsifiable_counter",
+                        "predicted_direction",
+                    )
+                },
+            },
+        },
+    },
+}
+_RAW_OBSERVATION_JSON_SCHEMA_TEXT = json.dumps(
+    _RAW_OBSERVATION_JSON_SCHEMA, sort_keys=True, separators=(",", ":"))
+
 
 class LoopRunnerError(RuntimeError):
     """Execution would be unbound, unsafe, incomplete, or authority-seeking."""
@@ -180,6 +210,7 @@ def _argv_template(pin: ModelCellPin) -> tuple[str, ...]:
     if pin.provider == "claude":
         return (
             pin.executable, "--print", "--output-format", "json",
+            "--json-schema", _RAW_OBSERVATION_JSON_SCHEMA_TEXT,
             "--model", pin.model_id, "--effort", pin.effort,
             "--permission-mode", "plan", "--disallowedTools",
             "Bash,Edit,Write,NotebookEdit",
@@ -471,12 +502,16 @@ def _unwrap_result(raw: str, provider: str) -> dict[str, Any]:
         payload = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise LoopRunnerError(f"{provider} planner emitted malformed JSON") from exc
-    if provider == "claude" and isinstance(payload, dict) and isinstance(
-            payload.get("result"), str):
-        try:
-            payload = json.loads(payload["result"])
-        except json.JSONDecodeError as exc:
-            raise LoopRunnerError("Claude result wrapper contains malformed JSON") from exc
+    if provider == "claude" and isinstance(payload, dict):
+        structured = payload.get("structured_output")
+        if isinstance(structured, dict):
+            payload = structured
+        elif isinstance(payload.get("result"), str):
+            try:
+                payload = json.loads(payload["result"])
+            except json.JSONDecodeError as exc:
+                raise LoopRunnerError(
+                    "Claude result wrapper contains malformed JSON") from exc
     if not isinstance(payload, dict):
         raise LoopRunnerError("planner observation must be one JSON object")
     return payload

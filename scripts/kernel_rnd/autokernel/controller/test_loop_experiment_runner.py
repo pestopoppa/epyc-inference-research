@@ -111,6 +111,10 @@ class ManifestTest(Fixture):
         codex = next(row for row in manifest["cells"] if row["provider"] == "codex")
         self.assertIn("--permission-mode", claude["argv_template"])
         self.assertIn("Bash,Edit,Write,NotebookEdit", claude["argv_template"])
+        schema_index = claude["argv_template"].index("--json-schema")
+        self.assertEqual(
+            json.loads(claude["argv_template"][schema_index + 1]),
+            R._RAW_OBSERVATION_JSON_SCHEMA)
         effort_index = claude["argv_template"].index("--effort")
         self.assertEqual(claude["argv_template"][effort_index + 1], claude["effort"])
         self.assertIn("read-only", codex["argv_template"])
@@ -199,6 +203,18 @@ class FakeRunner:
 
 
 class RunnerTest(Fixture):
+    def test_claude_structured_output_wrapper_is_admitted_without_markdown_repair(self):
+        expected = json.loads(raw("ignored"))
+        wrapper = json.dumps({
+            "type": "result", "subtype": "success",
+            "structured_output": expected,
+            "result": "```json\\nnot admitted\\n```",
+        })
+        parsed = R.parse_raw_observation(
+            wrapper, provider="claude", expected_cell_id="plan-claude-high-control")
+        self.assertEqual(parsed["schema"], R.RAW_OBSERVATION_SCHEMA)
+        self.assertEqual(parsed["cell_id"], "plan-claude-high-control")
+
     def test_complete_panel_retains_all_hash_bound_artifacts_and_observations(self):
         fake = FakeRunner()
         output = self.root / "panel"
