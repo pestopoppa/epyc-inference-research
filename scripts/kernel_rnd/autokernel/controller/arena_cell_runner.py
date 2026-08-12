@@ -1811,7 +1811,10 @@ def _controller_runtime_allowlist(
     codex_config = Path("/home/node/.codex/config.toml")
     ca_file = Path("/etc/ssl/certs/ca-certificates.crt")
     exact_read_files = [codex_config]
-    extra_clis: list[Path] = []
+    git_raw = shutil.which("git")
+    if git_raw is None:
+        raise ArenaCellRunnerError("controller runtime lacks Git source verifier")
+    extra_clis: list[Path] = [Path(git_raw).resolve(strict=True)]
     if "claude" in cli:
         extra_clis.append(cli["claude"])
         exact_read_files.extend((
