@@ -1815,6 +1815,110 @@ class TestTheClaimIsNeverHeldWithoutAReleaser(unittest.TestCase):
                 mock.patch.object(campaign.device_claim, "acquire_device_claim", refuse):
             self.ops.acquire_claim(self.spec)
 
+    def test_the_device_claim_declares_its_hold_window(self):
+        """THE BITE. Without `max_hold_s` the device claim writes no `expires_at`.
+
+        `check_claim_expiry()` then returns COULD_NOT_CHECK forever instead of
+        FAIL — the one expiry check this fleet already owns, disarmed for exactly
+        the claim that monopolised the MI210 on the night of 2026-08-11/12. The
+        CPU claim three lines above had been declaring its window all along.
+
+        The value is asserted to be the SAME as the region claim's: both are taken
+        in one transaction, for one campaign, and released together, so two
+        different deadlines would be a defect by construction.
+        """
+        seen = []
+
+        def acquire(device_id, **kwargs):
+            seen.append(kwargs)
+            return FakeClaim(device_id)
+
+        with self._seams(schemas.PASS), \
+                mock.patch.object(campaign.device_claim, "acquire_device_claim", acquire):
+            self.ops.acquire_claim(self.gpu_spec)
+
+        self.assertEqual(len(seen), 2, "both devices should have been claimed")
+        for kwargs in seen:
+            self.assertIn("max_hold_s", kwargs,
+                          "the device claim declares no maximum hold, so expiry can "
+                          "never be evaluated on it")
+            self.assertEqual(kwargs["max_hold_s"], float(self.gpu_spec.max_hold_s))
+
+    def test_a_raised_hold_window_moves_both_claims_together(self):
+        """CONTROL: the window is a SPEC value, not a constant baked in beside it.
+
+        A guard that only checked "some number was passed" would pass against a
+        hard-coded literal, and the CPU and device claims would then drift apart
+        the first time a campaign legitimately needs longer.
+        """
+        seen, region_kwargs = [], {}
+
+        def acquire_device(device_id, **kwargs):
+            seen.append(kwargs)
+            return FakeClaim(device_id)
+
+        def acquire_region(*_a, **kwargs):
+            region_kwargs.update(kwargs)
+            return self.region
+
+        longer = spec(backend="llama_gpu", devices=("ROCm0",),
+                      device_names=("AMD Instinct MI210",), max_hold_s=9 * 3600)
+        with self._seams(schemas.PASS), \
+                mock.patch.object(campaign.device_claim, "acquire_device_claim",
+                                  acquire_device), \
+                mock.patch.object(campaign.cpu_region_claim, "acquire_cpu_region_claim",
+                                  acquire_region):
+            self.ops.acquire_claim(longer)
+
+        self.assertEqual(seen[0]["max_hold_s"], float(9 * 3600))
+        self.assertEqual(region_kwargs["max_hold_s"], seen[0]["max_hold_s"],
+                         "the two claims covering one window declared different deadlines")
+
+
+class TestEveryDeviceClaimSiteDeclaresItsWindow(unittest.TestCase):
+    """Proved from `campaign.py`'s AST, not promised in a comment.
+
+    Same one-door discipline as `audit_falsifier_required_before_claim`: a second
+    acquisition growing beside the first must not be able to reintroduce the
+    undeclared-window defect just by not passing the keyword.
+    """
+
+    SOURCE = Path(campaign.__file__)
+
+    def _call_sites(self, source: str) -> list:
+        tree = ast.parse(source)
+        sites = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = (func.attr if isinstance(func, ast.Attribute)
+                    else func.id if isinstance(func, ast.Name) else None)
+            if name == "acquire_device_claim":
+                sites.append(node)
+        return sites
+
+    def test_every_call_site_passes_max_hold_s(self):
+        sites = self._call_sites(self.SOURCE.read_text(encoding="utf-8"))
+        self.assertTrue(sites, "no acquire_device_claim call site found; the guard "
+                               "would pass vacuously")
+        for node in sites:
+            kwargs = {kw.arg for kw in node.keywords}
+            self.assertIn("max_hold_s", kwargs,
+                          f"acquire_device_claim at line {node.lineno} declares no "
+                          f"max_hold_s, so its claim can never be checked for expiry")
+
+    def test_the_guard_fails_on_a_call_site_that_omits_it(self):
+        """CONTROL: the guard must actually bite, not merely find nothing to check."""
+        doctored = (
+            "def f(journal):\n"
+            "    return device_claim.acquire_device_claim('mi210_0', purpose='p',\n"
+            "                                            campaign_id='c', journal=journal)\n"
+        )
+        sites = self._call_sites(doctored)
+        self.assertEqual(len(sites), 1)
+        self.assertNotIn("max_hold_s", {kw.arg for kw in sites[0].keywords})
+
 
 class TestTheWorktreeIsNotLeftBehind(unittest.TestCase):
     """`create_worktree` raises AFTER the worktree exists, and before it returns.
