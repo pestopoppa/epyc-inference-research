@@ -2331,7 +2331,7 @@ def render_bench_commands(spec: CampaignSpec, *,
         bindir = os.path.join(root, "bin")
         binding = recipes.ToolBinding.for_external_build(
             binary=os.path.join(bindir, tool), source_root=root,
-            build_root=artifact_root, library_path=bindir)
+            build_root=root, library_path=bindir)
         payload = recipes.dry_run(spec.recipe_id, binding=binding,
                                   params=spec.params_for_arm(arm, params=params),
                                   arm=arm,
