@@ -2724,6 +2724,9 @@ def _run_worker_impl(
                 controller_environment["AUTOKERNEL_CONTROLLER_WORKSPACE"] = \
                     str(workspace)
                 controller_environment["AUTOKERNEL_ARENA_ROOT"] = str(arena_root)
+                controller_environment[
+                    arena_upstream_common.ARENA_SOURCE_PATHS_ENV] = json.dumps(
+                        list(source_paths), separators=(",", ":"))
                 prepared = arena_adapter.prepare_task(
                     prepared.task, base_environment=controller_environment)
                 prepared = arena_adapter.PreparedArenaTask(

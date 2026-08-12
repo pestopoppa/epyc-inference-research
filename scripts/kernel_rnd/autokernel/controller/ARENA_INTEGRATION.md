@@ -607,6 +607,19 @@ evidence instead of another unusable archive. A fresh r7 campaign is required
 to establish live end-to-end compatibility and remains without ranking or
 promotion authority until its governed matrix completes.
 
+R7 then refused before any controller, model, compiler, or GPU command because
+the campaign still pinned the pre-repair actor entrypoint hash. After refreshing
+that source pin, r8 completed the governed starting-state baseline but the first
+actor cell stopped before Claude: constructing the broker-backed evaluator in
+the controller still imported PyYAML and the vendor evaluator even though those
+objects were never used there. Its controller cgroup was verified empty and
+removed, and no KFD process remained. The controller now consumes the exact
+source-path tuple already admitted by the parent worker and imports neither
+PyYAML nor vendor evaluator code; the parent remains the sole owner of YAML,
+vendor evaluation, GPU claims, and measurement receipts. R7 and r8 remain
+immutable partial engineering evidence. A fresh campaign source pin and new
+attempt directory are required for the live check.
+
 ## On-box substrate reproduction — 2026-08-11
 
 An isolated Python 3.12 environment at

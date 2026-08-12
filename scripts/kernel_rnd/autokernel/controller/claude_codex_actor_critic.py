@@ -494,8 +494,19 @@ def run_controller(
     if env.get(sandbox.BROKER_FD_ENV):
         if not arena_root:
             raise ActorCriticError("brokered controller lacks its Arena root")
+        try:
+            source_paths = json.loads(
+                env[arena_upstream_common.ARENA_SOURCE_PATHS_ENV])
+        except (KeyError, json.JSONDecodeError) as exc:
+            raise ActorCriticError(
+                "brokered controller lacks exact Arena source paths") from exc
+        if (not isinstance(source_paths, list)
+                or not all(isinstance(value, str) for value in source_paths)):
+            raise ActorCriticError(
+                "brokered controller Arena source paths are invalid")
         evaluator = arena_upstream_common.ArenaWorkspaceEvaluator(
-            workspace=root, arena_root=Path(arena_root))
+            workspace=root, arena_root=Path(arena_root),
+            source_paths=source_paths)
         # Bank the starting state through the same broker so selection remains
         # evidence-backed even when every authored candidate regresses.
         evaluator.evaluate({

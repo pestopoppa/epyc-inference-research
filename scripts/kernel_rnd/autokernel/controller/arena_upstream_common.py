@@ -38,6 +38,7 @@ ARTIFACT_DIRNAME = ".autokernel-upstream-controller"
 BROKER_SOCKET_ENV = "AUTOKERNEL_ARENA_EVALUATION_BROKER_SOCKET"
 BROKER_TOKEN_ENV = "AUTOKERNEL_ARENA_EVALUATION_BROKER_TOKEN"
 BROKER_OWNER_PID_ENV = "AUTOKERNEL_ARENA_EVALUATION_BROKER_OWNER_PID"
+ARENA_SOURCE_PATHS_ENV = "AUTOKERNEL_ARENA_SOURCE_PATHS_JSON"
 BROKER_REQUEST_SCHEMA = "epyc.autokernel.arena_controller_evaluation_request.v1"
 BROKER_RESULT_SCHEMA = "epyc.autokernel.arena_controller_evaluation.v1"
 MODEL_BROKER_REQUEST_SCHEMA = "epyc.autokernel.arena_model_request.v1"
@@ -419,9 +420,12 @@ class EvaluationRecord:
 
 
 class ArenaWorkspaceEvaluator:
-    """Evaluate candidate files only through the pinned Arena implementation."""
+    """Evaluate exact candidate files only through the parent Arena broker."""
 
-    def __init__(self, *, workspace: Path, arena_root: Path):
+    def __init__(
+        self, *, workspace: Path, arena_root: Path,
+        source_paths: Sequence[str],
+    ):
         self.workspace = workspace_root(workspace)
         _assert_gpu_devices_inaccessible()
         self.arena_root = Path(arena_root).resolve()
@@ -430,26 +434,16 @@ class ArenaWorkspaceEvaluator:
         config_path = self.workspace / "config.yaml"
         if not config_path.is_file():
             raise UpstreamControllerError("Arena workspace lacks config.yaml")
-        sys.path.insert(0, str(self.arena_root))
-        try:
-            import yaml  # type: ignore[import-not-found]
-            from src import evaluator as vendor_evaluator  # type: ignore[import-not-found]
-        except ImportError as exc:
-            raise UpstreamControllerError(
-                "cannot import pinned AgentKernelArena evaluator") from exc
-        config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-        if not isinstance(config, dict):
-            raise UpstreamControllerError("Arena task config must be an object")
-        self.config = config
-        self.vendor = vendor_evaluator
         self.log_path = self.workspace / ARTIFACT_DIRNAME / "arena-evaluator.log"
         self.log_path.parent.mkdir(exist_ok=True)
         self.logger = logging.getLogger(f"autokernel.upstream.{os.getpid()}")
+        for handler in self.logger.handlers:
+            handler.close()
         self.logger.handlers.clear()
         self.logger.setLevel(logging.INFO)
         self.logger.propagate = False
         self.logger.addHandler(logging.FileHandler(self.log_path, encoding="utf-8"))
-        self.source_paths = self._discover_source_paths()
+        self.source_paths = self._admit_source_paths(source_paths)
         self._starting = {
             path: (self.workspace / path).read_bytes() for path in self.source_paths}
         broker_socket = os.environ.get(BROKER_SOCKET_ENV)
@@ -490,28 +484,14 @@ class ArenaWorkspaceEvaluator:
         # leaving proposal generation under the upstream controller's policy.
         self._evaluation_lock = threading.Lock()
 
-    def _discover_source_paths(self) -> tuple[str, ...]:
-        declared = self.config.get("source_file_path")
-        rows: list[str] = []
-        if isinstance(declared, str) and declared.strip():
-            rows = [declared.strip()]
-        elif isinstance(declared, list):
-            rows = [str(value).strip() for value in declared if value]
-        if not rows:
-            targets = self.config.get("target_kernel_functions")
-            names = ([str(value) for value in targets]
-                     if isinstance(targets, list) else [str(targets or "")])
-            candidates = []
-            for path in sorted(self.workspace.glob("*.py")):
-                text = path.read_text(encoding="utf-8", errors="replace")
-                if names and all(re.search(
-                        rf"\bdef\s+{re.escape(name)}\s*\(", text)
-                        for name in names if name):
-                    candidates.append(path.name)
-            if len(candidates) != 1:
-                raise UpstreamControllerError(
-                    f"could not uniquely discover Arena source file: {candidates}")
-            rows = candidates
+    def _admit_source_paths(self, declared: Sequence[str]) -> tuple[str, ...]:
+        if isinstance(declared, (str, bytes)) or not declared:
+            raise UpstreamControllerError(
+                "Arena source paths must be a non-empty parent declaration")
+        rows = [value.strip() for value in declared if isinstance(value, str)]
+        if len(rows) != len(declared) or not all(rows) or len(set(rows)) != len(rows):
+            raise UpstreamControllerError(
+                "Arena source paths contain an invalid or duplicate declaration")
         clean = []
         for value in rows:
             if not _SAFE_FILE.fullmatch(value):
@@ -726,7 +706,7 @@ def build_controller_receipt(
 
 
 __all__ = [
-    "ARTIFACT_DIRNAME", "BROKER_SOCKET_ENV", "BROKER_TOKEN_ENV",
+    "ARTIFACT_DIRNAME", "ARENA_SOURCE_PATHS_ENV", "BROKER_SOCKET_ENV", "BROKER_TOKEN_ENV",
     "BROKER_OWNER_PID_ENV", "BROKER_REQUEST_SCHEMA", "BROKER_RESULT_SCHEMA",
     "MODEL_BROKER_REQUEST_SCHEMA", "MODEL_BROKER_RESULT_SCHEMA",
     "MODEL_EFFORT", "MODEL_ID", "PINNED_MODEL_IDS",

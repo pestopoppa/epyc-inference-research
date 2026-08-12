@@ -981,6 +981,40 @@ class ArenaCellRunnerTest(unittest.TestCase):
         self.assertNotIn("/proc", roots)
         self.assertIn("/usr/libexec", roots)
 
+    def test_broker_evaluator_admits_parent_sources_without_vendor_imports(self):
+        workspace = self.root / "broker-evaluator-init"
+        workspace.mkdir()
+        (workspace / "config.yaml").write_text(
+            "source_file_path: [kernel.py]\n", encoding="utf-8")
+        (workspace / "kernel.py").write_text("def kernel(): pass\n", encoding="utf-8")
+        socket_path = self.root / "evaluator-init.sock"
+        server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        server.bind(str(socket_path))
+        try:
+            environment = {
+                U.BROKER_SOCKET_ENV: str(socket_path),
+                U.BROKER_TOKEN_ENV: "a" * 64,
+                U.BROKER_OWNER_PID_ENV: str(os.getpid()),
+            }
+            with mock.patch.object(U, "_assert_gpu_devices_inaccessible"), \
+                    mock.patch.dict(os.environ, environment, clear=False):
+                evaluator = U.ArenaWorkspaceEvaluator(
+                    workspace=workspace, arena_root=self.arena,
+                    source_paths=("kernel.py",))
+            self.assertEqual(evaluator.source_paths, ("kernel.py",))
+            self.assertEqual(evaluator.best_files["kernel.py"],
+                             b"def kernel(): pass\n")
+            self.assertFalse(hasattr(evaluator, "vendor"))
+            with mock.patch.object(U, "_assert_gpu_devices_inaccessible"), \
+                    mock.patch.dict(os.environ, environment, clear=False):
+                with self.assertRaisesRegex(
+                        U.UpstreamControllerError, "duplicate"):
+                    U.ArenaWorkspaceEvaluator(
+                        workspace=workspace, arena_root=self.arena,
+                        source_paths=("kernel.py", "kernel.py"))
+        finally:
+            server.close()
+
     def test_parent_broker_is_short_private_fresh_and_hash_chained(self):
         cell = self.root / "broker-cell"
         workspace = cell / "workspace"
