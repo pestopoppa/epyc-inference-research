@@ -166,7 +166,8 @@ from . import schemas, storage
 from .controller import do_not_repeat, hypotheses
 from .evaluator import api, correctness, devices, recipes
 from .execution import (chain, cpu_region_claim, device_sampler, instrument_integrity,
-                        microbench, physical_bounds, sandbox, t0_provider, worktree)
+                        microbench, physical_bounds, powercap_broker, sandbox,
+                        t0_provider, worktree)
 from .resource import claim_witness, device_claim, preflight
 
 __all__ = [
@@ -263,6 +264,9 @@ MODULES_THE_DRIVER_USES: Mapping[str, str] = {
     "execution.physical_bounds": "RVP-C6-4 refuses a live throughput sample that exceeds "
                                  "the predeclared compute-or-memory speed of light; the "
                                  "candidate cannot author its own work denominator",
+    "execution.powercap_broker": "root-owned package counters are read by one captured, "
+                                 "networkless read-only container; candidate code remains "
+                                 "non-root and cannot reach its control plane",
     "execution.sandbox": "C6: code authored by the loop executes under Landlock, seccomp, "
                          "non-root finite rlimits and an owned cgroup whose empty teardown "
                          "is verified; an agent tool allowlist does not constrain a binary",
@@ -1008,9 +1012,9 @@ PRODUCTION_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
 #: evaluator-only llama-bench changes are present without modifying production.
 #: Kernel proposals may change kernel sources but RVP-C6-1 requires all reward
 #: translation units to remain byte-identical to this commit.
-MEASUREMENT_REPO = "/mnt/raid0/llm/llama.cpp-experimental"
-MEASUREMENT_BRANCH = "experimental-v9-autokernel-t1-hardening"
-MEASUREMENT_COMMIT = "0492c2319a79e9bcc4edaa1bfb6af5a096276ab7"
+MEASUREMENT_REPO = "/mnt/raid0/llm/llama.cpp-ak-controls-v9-final"
+MEASUREMENT_BRANCH = "experimental-v9-autokernel-t1-hardening-final"
+MEASUREMENT_COMMIT = "a4cb04ca8f92fa4d665684490f609b380f9b5e96"
 MEASUREMENT_BUILD_ROOT = os.path.join(MEASUREMENT_REPO, "build-v9-cpu")
 
 
@@ -2122,10 +2126,12 @@ class HostOps:
 
     def __init__(self, *, spawner: Optional[Any] = None,
                  t0_evidence: Optional[Callable[..., Mapping[str, Any]]] = None,
-                 nominal_khz: Optional[int] = None) -> None:
+                 nominal_khz: Optional[int] = None,
+                 host_state: Optional[Callable[..., microbench.HostState]] = None) -> None:
         self._spawner = spawner
         self._t0_evidence = t0_evidence
         self._nominal_khz = nominal_khz
+        self._read_host_state = host_state or microbench.read_host_state
         self._claim_binding: Optional[Any] = None
         self._device_claims: list = []
         self._build_state: dict = {}
@@ -2265,7 +2271,7 @@ class HostOps:
         fold(schemas.Check(result.verdict, tuple(result.reasons)), "concurrent_inference",
              hard=True)
 
-        state = microbench.read_host_state(cpu_list=spec.cpu_list)
+        state = self._read_host_state(cpu_list=spec.cpu_list)
         fold(check_host_uptime(getattr(state, "uptime_s", None)), "host_uptime")
         boosting = sum(1 for _cpu, khz in state.khz_by_cpu if khz >= BOOST_THRESHOLD_KHZ)
         boost = check_boost_under_load(boosting_cores=boosting, load1=state.load1,
@@ -2776,6 +2782,7 @@ class HostOps:
                 device_sampler=(
                     device_sampler.RocmSmiSampler(device_index=spec.device_index)
                     if spec.backend == BACKEND_GPU else None)),
+            host_state=self._read_host_state,
             run_ledger=self._completed_run_ledger(spec))
         run = runner.run(plan)
         return pairs_from_run(run)
@@ -3404,9 +3411,17 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
             )
             return 2
 
+    broker: Optional[powercap_broker.PowercapBroker] = None
     if ops is None:
-        ops = (DryRunOps(out=stream) if args.dry_run
-               else HostOps(nominal_khz=args.nominal_khz))
+        if args.dry_run:
+            ops = DryRunOps(out=stream)
+        else:
+            # Root-owned package counters are read through a networkless,
+            # read-only broker. It starts lazily on the first host snapshot, so
+            # every pre-claim refusal above remains side-effect free.
+            broker = powercap_broker.PowercapBroker()
+            ops = HostOps(nominal_khz=args.nominal_khz,
+                          host_state=broker.read_host_state)
 
     # BEFORE the claim, and before the banner: source-changing campaigns still
     # have proposal-specific seams; the IQK
@@ -3467,7 +3482,11 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
           file=stream)
     print("", file=stream)
 
-    result = run_campaign(spec, ops)
+    try:
+        result = run_campaign(spec, ops)
+    finally:
+        if broker is not None:
+            broker.close()
 
     print("", file=stream)
     print(f"state: {result.state}", file=stream)

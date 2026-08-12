@@ -632,15 +632,9 @@ def _read_int_file(path: Path) -> Optional[int]:
         return None
 
 
-def _read_package_energy(*, cpus: Sequence[int], sysfs: Path,
-                         powercap_root: Path, unreadable: list) -> tuple:
-    """Return ``(package_by_cpu, counters)`` from sysfs without a process probe.
-
-    The counter is package-wide; a partition receipt therefore names both the
-    claimed CPU list and the shared package.  It never calls the result
-    lane-exclusive power.  That distinction is what AK-LN-3's cross-lane A/A
-    can test rather than assume away.
-    """
+def _read_package_topology(*, cpus: Sequence[int], sysfs: Path,
+                           unreadable: list) -> tuple:
+    """Return CPU/package bindings and the distinct packages they name."""
     package_by_cpu: list[tuple[int, int]] = []
     packages: set[int] = set()
     for cpu in cpus:
@@ -651,6 +645,20 @@ def _read_package_energy(*, cpus: Sequence[int], sysfs: Path,
             continue
         package_by_cpu.append((cpu, package))
         packages.add(package)
+    return tuple(package_by_cpu), tuple(sorted(packages))
+
+
+def _read_package_energy(*, cpus: Sequence[int], sysfs: Path,
+                         powercap_root: Path, unreadable: list) -> tuple:
+    """Return ``(package_by_cpu, counters)`` from sysfs without a process probe.
+
+    The counter is package-wide; a partition receipt therefore names both the
+    claimed CPU list and the shared package.  It never calls the result
+    lane-exclusive power.  That distinction is what AK-LN-3's cross-lane A/A
+    can test rather than assume away.
+    """
+    package_by_cpu, packages = _read_package_topology(
+        cpus=cpus, sysfs=sysfs, unreadable=unreadable)
 
     domains: dict[int, Path] = {}
     try:
@@ -667,7 +675,7 @@ def _read_package_energy(*, cpus: Sequence[int], sysfs: Path,
             domains[int(match.group(1))] = name_path.parent
 
     counters: list[tuple[int, int, int, str]] = []
-    for package in sorted(packages):
+    for package in packages:
         domain = domains.get(package)
         if domain is None:
             unreadable.append(f"package{package}: powercap energy domain unavailable")
@@ -678,12 +686,13 @@ def _read_package_energy(*, cpus: Sequence[int], sysfs: Path,
             unreadable.append(f"package{package}: powercap energy counter unreadable")
             continue
         counters.append((package, energy, maximum, str(domain / "energy_uj")))
-    return tuple(package_by_cpu), tuple(counters)
+    return package_by_cpu, tuple(counters)
 
 
 def read_host_state(*, cpu_list: str, sysfs_root: Any = "/sys/devices/system/cpu",
                     proc_root: Any = "/proc",
                     powercap_root: Any = "/sys/devices/virtual/powercap",
+                    package_energy_reader: Optional[Callable[..., tuple]] = None,
                     now: Callable[[], str] = _utc_now,
                     monotonic: Callable[[], float] = time.monotonic) -> HostState:
     """Read per-cpu scaling frequency and 1-minute load for the claimed footprint.
@@ -691,6 +700,12 @@ def read_host_state(*, cpu_list: str, sysfs_root: Any = "/sys/devices/system/cpu
     `sysfs_root` and `proc_root` are injectable so the throttle guard can be
     tested against a synthesised sysfs — a guard that can only be exercised on a
     genuinely throttled machine is a guard that is never exercised.
+
+    ``package_energy_reader`` is the narrow privileged seam for hosts whose
+    package counters are root-readable only. It receives the exact package ids
+    derived from the claimed CPUs and returns ``(package, energy_uj,
+    max_energy_range_uj, source)`` tuples. Frequency, load and topology remain
+    direct host reads; a broker cannot replace or fabricate them.
 
     A cpu whose `scaling_cur_freq` cannot be read is recorded in `unreadable`
     rather than skipped silently, because "we could not see the throttled core"
@@ -726,9 +741,19 @@ def read_host_state(*, cpu_list: str, sysfs_root: Any = "/sys/devices/system/cpu
     except (OSError, ValueError, IndexError):
         uptime_s = None
 
-    package_by_cpu, package_energy = _read_package_energy(
-        cpus=cpus, sysfs=sysfs, powercap_root=Path(powercap_root),
-        unreadable=unreadable)
+    if package_energy_reader is None:
+        package_by_cpu, package_energy = _read_package_energy(
+            cpus=cpus, sysfs=sysfs, powercap_root=Path(powercap_root),
+            unreadable=unreadable)
+    else:
+        package_by_cpu, packages = _read_package_topology(
+            cpus=cpus, sysfs=sysfs, unreadable=unreadable)
+        try:
+            package_energy = tuple(package_energy_reader(packages=packages))
+        except Exception as exc:  # noqa: BLE001 - unreadable is evidence, not a crash
+            package_energy = ()
+            unreadable.append(
+                f"package power broker unreadable: {type(exc).__name__}: {exc}")
     monotonic_s = float(monotonic())
     if not math.isfinite(monotonic_s) or monotonic_s < 0:
         raise HostStateUnreadable("monotonic host-state timestamp is invalid")

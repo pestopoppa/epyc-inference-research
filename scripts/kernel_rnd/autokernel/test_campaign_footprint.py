@@ -160,6 +160,9 @@ CAMPAIGN_ROOTS = {
         "four runs, so candidate-then-anchor charges the second arm ~4% systematically",
     f"{ROOT_PKG}.execution.physical_bounds":
         "RVP-C6-4 refuses physically impossible throughput before it can enter a rank",
+    f"{ROOT_PKG}.execution.powercap_broker":
+        "the v9 CPU preflight could not read root-owned 0400 package counters, while "
+        "running the campaign as root correctly failed the candidate sandbox",
     f"{ROOT_PKG}.execution.t0_provider":
         "the predecessor harness tested MUL_MAT only, so a kernel that broke MUL_MAT_ID — "
         "MoE dispatch, every token in production — passed it cleanly",
