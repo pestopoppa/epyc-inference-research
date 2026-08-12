@@ -61,6 +61,44 @@ def _fake_process() -> fr.OwnedProcess:
     return fr.OwnedProcess(identity, object(), Path("stdout"), Path("stderr"))
 
 
+def _dependency_receipt() -> dict:
+    crash = _fake_process().identity.to_dict()
+    restart = {**crash, "pid": 2345, "pgid": 2345, "start_ticks": 6789}
+    holder = {**crash, "pid": 3456, "pgid": 3456, "start_ticks": 7890}
+    receipt = {
+        "schema": fr.RECEIPT_SCHEMA,
+        "capture_mode": fr.CAPTURE_MODE,
+        "campaign_id": "ak-fault-rehearsal-dependency-fixture",
+        "status": "PASS",
+        "started_at_epoch_s": 1.0,
+        "completed_at_epoch_s": 2.0,
+        "environment": {
+            "source_tree": {
+                "root": "/source", "branch": "fixture", "commit": "a" * 40,
+            },
+            "producer_path": "scripts/kernel_rnd/autokernel/fault_rehearsal.py",
+            "producer_sha256": "b" * 64,
+        },
+        "authority": fr._authority_boundary(),
+        "live_claim_root_touched": False,
+        "process_selection": "captured_children_only_no_name_pattern_scan",
+        "legs": [
+            {
+                "name": "durable_journal_crash_restart_replay", "status": "PASS",
+                "crash_process": crash, "restart_process": restart,
+            },
+            {
+                "name": "resource_revocation_non_preemption", "status": "PASS",
+                "teardown": {"identity": holder},
+            },
+            {"name": "hash_bound_artifact_tamper_refusal", "status": "PASS"},
+        ],
+    }
+    receipt["dependency_evidence"] = fr._dependency_evidence_rows(receipt)
+    receipt["receipt_sha256"] = fr._sha256_bytes(fr._canonical_bytes(receipt))
+    return receipt
+
+
 class TestInjectedProcessAdapter(unittest.TestCase):
     def test_term_then_kill_only_after_term_timeout(self):
         adapter = _ScriptedAdapter([None, -signal.SIGKILL])
@@ -90,6 +128,29 @@ class TestTamperBoundary(unittest.TestCase):
             path.write_bytes(b"after")
             with self.assertRaises(fr.TamperRefusal):
                 fr.read_hash_bound_artifact(path, expected)
+
+
+class TestDependencyEvidenceSeam(unittest.TestCase):
+    def test_three_legs_share_one_run_support_key_and_are_not_measurements_or_witnesses(self):
+        receipt = _dependency_receipt()
+        rows = receipt["dependency_evidence"]
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(len({row["support_key"] for row in rows}), 1)
+        self.assertEqual(len({row["evidence_id"] for row in rows}), 3)
+        self.assertTrue(all(row["support_scope"] == "rehearsal_run" for row in rows))
+        self.assertTrue(all(row["run_status"] == "PASS" for row in rows))
+        self.assertTrue(all(row["performance_measurement"] is False for row in rows))
+        self.assertTrue(all(row["corroborating_witness"] is False for row in rows))
+        self.assertTrue(all(row["belief_measurement_emitted"] is False for row in rows))
+        self.assertEqual([len(row["process_identities"]) for row in rows], [2, 1, 0])
+        self.assertEqual(fr.validate_receipt(receipt), [])
+
+    def test_dependency_row_tamper_fails_closed(self):
+        receipt = _dependency_receipt()
+        receipt["dependency_evidence"][0]["support_key"] = "per-leg-is-forbidden"
+        violations = fr.validate_receipt(receipt)
+        self.assertTrue(any("rehearsal-run key" in item for item in violations))
+        self.assertTrue(any("receipt_sha256" in item for item in violations))
 
 
 class TestRealProcessSmoke(unittest.TestCase):
