@@ -20,6 +20,7 @@ from . import authoring_contract
 
 CONTRACT_SCHEMA = "epyc.autokernel.loop_engineering_experiment.v1"
 RECEIPT_SCHEMA = "epyc.autokernel.loop_engineering_receipt.v1"
+PLANNER_RECEIPT_SCHEMA = "epyc.autokernel.loop_engineering_planner_receipt.v1"
 AUTHORITY = "observe_only_no_campaign_ranking_or_release_authority"
 TARGET_ABSENT = "absent"
 TARGET_RENDERED = "rendered_context_line"
@@ -591,6 +592,82 @@ def reduce_receipt(contract: ExperimentContract, *,
     return receipt
 
 
+def reduce_planner_receipt(
+    contract: ExperimentContract, *,
+    planner_observations: Iterable[PlannerObservation],
+    capture_mode: str,
+) -> dict[str, Any]:
+    """Reduce the complete AK-LE-1/2 panel without inventing AK-LE-3 evidence.
+
+    ``reduce_receipt`` intentionally requires the full predeclared planner and
+    scaffold factorial.  A planner execution bridge cannot satisfy that contract:
+    an empty scaffold sequence is missing evidence, not a measured zero.  This
+    receipt therefore has a distinct schema and explicitly partial scope.  It can
+    support observation-only AK-LE-1/2 analysis and has no campaign, ranking,
+    champion, controller-A/B, or release authority.
+    """
+    if capture_mode not in {"measured", "fixture"}:
+        raise LoopExperimentError("capture_mode must be measured or fixture")
+    planners = tuple(planner_observations)
+    planner_map = {row.cell_id: row for row in planners}
+    expected = {arm.cell_id for arm in contract.planner_arms}
+    if len(planner_map) != len(planners) or set(planner_map) != expected:
+        raise LoopExperimentError(
+            "planner observations must cover every cell exactly once")
+
+    prior = set(contract.prior_hypothesis_sha256)
+    search_rows = []
+    for arm in contract.planner_arms:
+        observation = planner_map[arm.cell_id]
+        fingerprints = [row.fingerprint for row in observation.hypotheses]
+        unique = set(fingerprints)
+        search_rows.append({
+            **arm.to_dict(),
+            "hypotheses_total": len(fingerprints),
+            "hypotheses_unique": len(unique),
+            "duplicate_count": len(fingerprints) - len(unique),
+            "novel_nonduplicate_count": len(unique - prior),
+            "already_optimized_termination_count": int(
+                observation.termination == "already_optimized"),
+            "prefilter_survival_count": sum(
+                row.survived_prefilter for row in observation.hypotheses),
+            "termination": observation.termination,
+            "elapsed_wall_seconds": observation.elapsed_wall_seconds,
+            "evidence_sha256": observation.evidence_sha256,
+        })
+
+    receipt = {
+        "schema": PLANNER_RECEIPT_SCHEMA,
+        "experiment_id": contract.experiment_id,
+        "contract_sha256": contract.to_manifest()["contract_sha256"],
+        "capture_mode": capture_mode,
+        "authority": AUTHORITY,
+        "scope": "ak-le-1-2-planner-only",
+        "search_persistence_observations": search_rows,
+        "scaffold_throughput_observations": "absent_not_fabricated",
+        "objective": {
+            "metrics": [
+                "hypotheses_unique", "novel_nonduplicate_count",
+                "prefilter_survival_count", "already_optimized_termination_count",
+                "elapsed_wall_seconds",
+            ],
+            "matched_planner_factorial": True,
+            "scaffold_factorial_measured": False,
+        },
+        "constraints": {
+            "empirical_claim": capture_mode == "measured",
+            "partial_receipt": True,
+            "campaign_1_authority": False,
+            "ranking_authority": False,
+            "champion_authority": False,
+            "release_authority": False,
+            "controller_ab_authority": False,
+        },
+    }
+    receipt["receipt_sha256"] = _digest(receipt)
+    return receipt
+
+
 __all__ = [
     "AUTHORITY", "CONTRACT_SCHEMA", "DIRECTIONS", "ExperimentContract",
     "FixedPromptFrame", "ArtifactPin", "SelectedTaskArtifact", "PlannerArm",
@@ -599,5 +676,5 @@ __all__ = [
     "RoleObservation", "ScaffoldObservation", "LoopExperimentError",
     "TARGET_ABSENT", "TARGET_RENDERED", "SCAFFOLD_DIRECT", "SCAFFOLD_SPLIT",
     "context_sha256", "render_planner_prompt", "render_scaffold_prompt",
-    "reduce_receipt",
+    "PLANNER_RECEIPT_SCHEMA", "reduce_receipt", "reduce_planner_receipt",
 ]

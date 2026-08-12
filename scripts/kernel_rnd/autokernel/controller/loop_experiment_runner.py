@@ -635,7 +635,7 @@ def run_planner_manifest(
 
 def materialize_planner_observation(
     raw: Mapping[str, Any], *, survived_prefilter: Sequence[bool],
-    elapsed_wall_seconds: float, evidence_sha256: str,
+    elapsed_wall_seconds: float, evidence_sha256: str, provider: str,
 ) -> experiments.PlannerObservation:
     """Bind separately obtained prefilter results to one captured raw observation."""
     if not isinstance(raw, Mapping):
@@ -643,7 +643,7 @@ def materialize_planner_observation(
     expected_cell_id = str(raw.get("cell_id", ""))
     model_payload = {key: value for key, value in raw.items() if key != "cell_id"}
     parsed = parse_raw_observation(
-        json.dumps(model_payload), provider="codex",
+        json.dumps(model_payload), provider=provider,
         expected_cell_id=expected_cell_id)
     survived = tuple(survived_prefilter)
     if len(survived) != len(parsed["hypotheses"]) or any(
