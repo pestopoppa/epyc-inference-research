@@ -497,6 +497,8 @@ def watch_window(**overrides) -> packager.WatchWindow:
         "bands": watch_bands(), "bands_fixed_at": NOW, "opens_at": NOW,
         "close_step": packager.WatchWindowCloseStep(owner="operator"),
         "rollback_anchor_ref": f"{ARCHIVE_ROOT} (production-consolidated-v8)",
+        "activation_manifest_ref": "data/ak-v9/t4-activation-manifest.json",
+        "activation_manifest_sha256": digest("t4-activation-manifest"),
     }
     fields.update(overrides)
     return packager.WatchWindow(**fields)
@@ -1594,6 +1596,21 @@ class TestWatchWindowDeclaration(unittest.TestCase):
         record = watch_window().to_dict()
         self.assertIn("NOT A CLAIM", record["output_class"])
         self.assertEqual(schemas.find_authority_flavoured_keys(record), [])
+
+    def test_the_activation_identity_is_fixed_by_manifest_before_cutover(self):
+        record = watch_window().to_dict()
+        self.assertEqual(record["schema"],
+                         "epyc.autokernel.post_cutover_watch_window.v2")
+        self.assertEqual(record["activation_manifest_ref"],
+                         "data/ak-v9/t4-activation-manifest.json")
+        self.assertEqual(record["activation_manifest_sha256"],
+                         digest("t4-activation-manifest"))
+
+    def test_an_absent_or_placeholder_activation_manifest_is_refused(self):
+        with self.assertRaises(packager.PackagerInputError):
+            watch_window(activation_manifest_ref="")
+        with self.assertRaises(packager.PackagerInputError):
+            watch_window(activation_manifest_sha256="0" * 64)
 
 
 class TestWatchWindowEvaluation(unittest.TestCase):

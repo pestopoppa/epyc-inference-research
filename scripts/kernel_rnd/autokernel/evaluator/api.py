@@ -2965,11 +2965,12 @@ class RecipeConstructor(Protocol):
 
 
 class ReleaseTierEvaluator(Protocol):
-    """The T3/T4 seam. NOT implemented here and never called from here.
+    """The T3/T4 seam. Implemented only in the release plane.
 
     T3 is the kernel-freeze gate and T4 the post-cutover watch; both are release
     instruments outside P-AK-SEARCH-1's scope, owned by AK5 and governed by the
-    release protocols. `admit_tier()` refuses those tiers so a release-shaped
+    release protocols. ``release.t3.T3Runner`` and ``release.t4.T4Runner`` fill
+    this seam. `admit_tier()` still refuses those tiers here so a release-shaped
     decision can never be produced under a search protocol.
     """
 

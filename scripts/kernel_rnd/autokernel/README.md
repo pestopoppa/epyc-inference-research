@@ -740,6 +740,26 @@ but only when independently supplied readiness/T3/package observations already
 bind the exact derived evidence seal; changing any journaled bytes or reusing a
 template for another seal fails before T3.
 
+`release/t4.py` is the post-cutover release-tier evaluator. It consumes captured
+receipts only: the live PID/start time, exact binary and linkage identity for every
+affected role; role canaries; transport and semantic API health; speech smoke; the
+verified rollback anchor; and the existing §11.5 watch progress. The intended live
+identity is a canonical manifest whose digest is fixed in the release package's
+watch-window artifact before cutover. A stale process, binary/linkage drift, failed
+probe, missing rollback anchor, or watch-band alarm recommends an operator decision
+package. Missing evidence stays `incomplete_evidence`; neither state performs a
+restart or rollback. The read-only CLI emits JSON on stdout:
+
+```bash
+python3 -m scripts.kernel_rnd.autokernel.release.t4 \
+  --request artifacts/operator/<version>/t4-request.json
+```
+
+Exit 0 means continue or recommend keep-and-human-close, 2 means raise a decision
+package, 3 means incomplete evidence, and 64 is a refused input. The module has no
+clock, network, process, inference, benchmark, production-write, or output-file
+capability; its AST audit and `release/test_t4.py` enforce that boundary.
+
 That rule is *proved*, not documented, in four independent ways:
 
 - each module's own AST self-audit, anchored to its own module identity so the
@@ -1485,9 +1505,10 @@ none of it is closed by the suites above.
   are still nobody's.** `release/readiness.py` now computes the advisory signal
   and `controller/composition.py` composes a champion lineage, but nothing
   recomputes the calibration block at a boundary or drives the cadence.
-- **T3 is refused HERE and implemented in AK5.** `api.admit_tier("T3")` still
-  raises by name — that is the point — and `release/t3.T3Runner` is the
-  `ReleaseTierEvaluator` that fills the seam. T4 remains unimplemented.
+- **T3/T4 are refused HERE and implemented in the release plane.**
+  `api.admit_tier("T3")` and `api.admit_tier("T4")` still raise by name — that is
+  the point — while `release.t3.T3Runner` and `release.t4.T4Runner` fill the
+  `ReleaseTierEvaluator` seam without granting the search evaluator release scope.
 
 ### Remaining in AK4
 
@@ -1713,8 +1734,8 @@ carried-forward list nobody ever *removes* from stops being read.
 
 ### Remaining in AK5/AK6 (the release plane)
 
-- **No runner, and no live release has been rehearsed.** Everything below the
-  gate is fixtures. Nothing has compiled a plan from the real
+- **No live release has been rehearsed.** T3 and the read-only T4 evaluator have
+  runners, but their release material remains fixtures. Nothing has compiled a plan from the real
   `orchestration/derived/stack_priors.yaml`, sealed a real candidate, held a real
   compute window, or produced a package an operator has read. The chain is proved
   to FIT; nothing here is evidence about a real freeze.

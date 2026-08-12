@@ -95,6 +95,9 @@ band chosen after seeing the data is not a band:
     (`MEASUREMENT.md:233`), never a remembered number;
   * bands fixed at package assembly and hashed, so an evaluation compared against
     different bands is refused rather than reported;
+  * a hash-bound activation manifest naming each affected role's intended backend,
+    binary and linkage identity, so T4 cannot choose its expected identity after
+    seeing what the cutover actually left running;
   * an owner who is whoever executed the cutover; and
   * an explicit close-with-verdict step — *"an unclosed window is an open
     question, not a pass"*.
@@ -193,7 +196,7 @@ __all__ = [
 
 #: Versioned, because a package names the packager that assembled it and a package
 #: assembled by a different one is a different artifact (schemas.py CONVENTIONS).
-MODULE_ID = "autokernel.release.packager/v1"
+MODULE_ID = "autokernel.release.packager/v2"
 
 #: The package IS `schemas.SCHEMA_RELEASE_PACKAGE`; this module does not invent a
 #: second shape for the same record. `schemas.validate_release_package()` is the
@@ -201,7 +204,7 @@ MODULE_ID = "autokernel.release.packager/v1"
 PACKAGE_SCHEMA = schemas.SCHEMA_RELEASE_PACKAGE
 
 FREEZE_REQUEST_SCHEMA = "epyc.autokernel.freeze_request.v1"
-WATCH_WINDOW_SCHEMA = "epyc.autokernel.post_cutover_watch_window.v1"
+WATCH_WINDOW_SCHEMA = "epyc.autokernel.post_cutover_watch_window.v2"
 
 #: The bus message envelope, verbatim from `coordination/session-bus/`. The cutover
 #: request is an ORDINARY bus message; inventing a private envelope for it would
@@ -2447,6 +2450,8 @@ class WatchWindow:
     opens_at: str
     close_step: WatchWindowCloseStep
     rollback_anchor_ref: str
+    activation_manifest_ref: str
+    activation_manifest_sha256: str
     comparison_method: str = "era_labelled_vs_incumbent_era_recorded_distribution"
 
     def __post_init__(self) -> None:
@@ -2510,6 +2515,8 @@ class WatchWindow:
                 "WatchWindow.close_step: required, a WatchWindowCloseStep. An unclosed "
                 "window is an open question, not a pass (§11.5).")
         _text(self.rollback_anchor_ref, "WatchWindow.rollback_anchor_ref")
+        _text(self.activation_manifest_ref, "WatchWindow.activation_manifest_ref")
+        _sha256(self.activation_manifest_sha256, "WatchWindow.activation_manifest_sha256")
         _text(self.comparison_method, "WatchWindow.comparison_method")
 
     def band_for(self, signal_id: str) -> WatchSignalBand:
@@ -2545,6 +2552,8 @@ class WatchWindow:
             "opens_at": self.opens_at,
             "close_step": self.close_step.to_dict(),
             "rollback_anchor_ref": self.rollback_anchor_ref,
+            "activation_manifest_ref": self.activation_manifest_ref,
+            "activation_manifest_sha256": self.activation_manifest_sha256,
             "rollback_anchor_rule": ("the rollback anchor stays live and verified for the "
                                      "whole window (§11.5)"),
             "computed_by": MODULE_ID,
