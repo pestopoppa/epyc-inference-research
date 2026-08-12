@@ -10,8 +10,9 @@ pretend that a path check is a sandbox:
   read/execute and grants only exact declared runtime inputs;
 * seccomp denies signalling, ptrace/process-memory writes, mount / namespace
   changes, kernel-module operations and BPF.  The default profile denies all
-  networking; the controller profile admits outbound INET clients, denies
-  server operations and AF_UNIX creation, and inherits one preconnected broker;
+  networking; the controller profile admits outbound INET clients (including
+  client-side ``bind``), denies listen/accept and AF_UNIX creation, and inherits
+  one preconnected broker;
 * the launcher refuses uid 0 and sets finite rlimits before ``execve``;
 * every invocation joins a fresh cgroup-v2 leaf.  The parent verifies that the
   leaf is empty, uses ``cgroup.kill`` on escaped descendants when necessary,
@@ -171,11 +172,13 @@ _BLOCKED_SYSCALLS: Mapping[str, int] = {
 
 _CONTROLLER_BLOCKED_SYSCALLS: Mapping[str, int] = {
     name: number for name, number in _BLOCKED_SYSCALLS.items()
-    if name not in {"socket", "connect", "sendto", "sendmsg", "sendmmsg"}
+    if name not in {"socket", "connect", "sendto", "sendmsg", "sendmmsg", "bind"}
 }
 # Unnamed socketpair IPC has no filesystem or external peer and is required by
 # Tokio's signal driver in the pinned Codex CLI.  New AF_UNIX sockets remain
-# denied by the family filter below; bind/listen/accept remain syscall-denied.
+# denied by the family filter below.  The pinned client also performs
+# client-side bind before outbound traffic; listen/accept remain syscall-denied,
+# so a bound stream cannot become a server.
 
 _SECCOMP_DATA_NR_OFFSET = 0
 _SECCOMP_DATA_ARCH_OFFSET = 4
@@ -807,7 +810,7 @@ def launch(policy: SandboxPolicy, receipt_path: Path, argv: Sequence[str]) -> No
                 ["AF_INET", "AF_INET6"]
                 if network_profile == NETWORK_OUTBOUND_CLIENT else []),
             "server_socket_operations_denied": [
-                name for name in ("bind", "listen", "accept", "accept4")
+                name for name in ("listen", "accept", "accept4")
                 if name in blocked],
             "unix_socket_creation_denied": deny_unix,
             "broker_socket_path": policy.broker_socket_path,
@@ -959,7 +962,7 @@ def verify_receipt(document: Mapping[str, Any], *, policy: SandboxPolicy,
     if document.get("outbound_socket_families") != expected_families:
         raise SandboxError("sandbox receipt's outbound families do not match")
     expected_server_denials = [
-        name for name in ("bind", "listen", "accept", "accept4")
+        name for name in ("listen", "accept", "accept4")
         if name in blocked]
     if document.get("server_socket_operations_denied") != expected_server_denials:
         raise SandboxError("sandbox receipt's server denials do not match")

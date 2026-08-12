@@ -279,7 +279,7 @@ class SandboxKernelProbeTest(unittest.TestCase):
             self.assertEqual(result["signal_parent"], ["denied", errno.EPERM])
             self.assertTrue(result["inet_socket_created"])
             self.assertEqual(result["inet_connect"], "tcp-ok")
-            self.assertEqual(result["inet_bind"], ["denied", errno.EPERM])
+            self.assertEqual(result["inet_bind"], ["allowed", None])
             self.assertEqual(result["inet_listen"], ["denied", errno.EPERM])
             self.assertEqual(result["inet_accept"], ["denied", errno.EPERM])
             self.assertEqual(result["unix_socket"], ["denied", errno.EPERM])
@@ -290,7 +290,7 @@ class SandboxKernelProbeTest(unittest.TestCase):
             self.assertEqual(receipt["outbound_socket_families"],
                              ["AF_INET", "AF_INET6"])
             self.assertEqual(receipt["server_socket_operations_denied"],
-                             ["bind", "listen", "accept", "accept4"])
+                             ["listen", "accept", "accept4"])
             self.assertTrue(receipt["unix_socket_creation_denied"])
             self.assertTrue(receipt["read_allowlist_enforced"])
             self.assertEqual(receipt["readable_files"], list(files))

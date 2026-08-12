@@ -138,7 +138,7 @@ def fake_controller_sandbox_execution(cell_root: Path) -> dict:
         "profile": R.sandbox.CONTROLLER_PROFILE,
         "network_profile": R.sandbox.NETWORK_OUTBOUND_CLIENT,
         "outbound_socket_families": ["AF_INET", "AF_INET6"],
-        "server_socket_operations_denied": ["bind", "listen", "accept", "accept4"],
+        "server_socket_operations_denied": ["listen", "accept", "accept4"],
         "unix_socket_creation_denied": True,
         "broker_socket_path": "/tmp/fake-broker.sock",
         "broker_fd_inherited": True,

@@ -148,9 +148,10 @@ environment or command prefix.
 
 The controller permits unnamed `socketpair` IPC because the pinned Codex
 binary's Tokio signal driver requires it; such a pair has no filesystem or
-external peer. Creating a new AF_UNIX socket is still denied, as are
-bind/listen/accept, while only the wrapper-created peer-bound broker stream is
-inherited.
+external peer. Creating a new AF_UNIX socket is still denied. The pinned Codex
+client also requires client-side `bind` before outbound traffic, while
+`listen`/`accept` remain denied; only the wrapper-created peer-bound broker
+stream is inherited.
 
 The wrapper preconnects its one broker stream before Landlock/seccomp and before
 the launch callback can register its exec-stable PID. A broker therefore queues
