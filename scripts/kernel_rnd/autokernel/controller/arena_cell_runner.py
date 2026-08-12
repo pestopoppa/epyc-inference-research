@@ -2017,7 +2017,7 @@ def _validate_controller_sandbox_execution(
                 or _sha256_file(path) != expected_sha256):
             raise ArenaCellRunnerError("controller runtime identity drifted")
     if (activation.get("profile") != sandbox.CONTROLLER_PROFILE
-            or activation.get("writable_device_paths") != []
+            or activation.get("writable_device_paths") != ["/dev/null"]
             or activation.get("read_allowlist_enforced") is not True
             or activation.get("broker_socket_path") is None
             or activation.get("broker_fd_inherited") is not True

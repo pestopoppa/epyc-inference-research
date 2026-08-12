@@ -130,7 +130,7 @@ def fake_controller_sandbox_execution(cell_root: Path) -> dict:
         "landlock_abi": 3, "landlock_write_rights": 0,
         "landlock_handled_rights": 0, "seccomp_sha256": "c" * 64,
         "blocked_syscalls": blocked, "writable_root": str(workspace),
-        "writable_device_paths": [], "cgroup_path": cgroup,
+        "writable_device_paths": ["/dev/null"], "cgroup_path": cgroup,
         "resource_limits": {}, "argv_sha256": "d" * 64,
         "read_allowlist_enforced": True,
         "readable_roots": readable_roots, "readable_files": [],
