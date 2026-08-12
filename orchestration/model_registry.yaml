@@ -2069,8 +2069,19 @@ roles:
     performance:
       # baseline_tps == optimized_tps is CORRECT here and is not a copy error:
       # with no draft path available, the unaccelerated figure IS the optimum.
-      baseline_tps: 10.12
-      optimized_tps: 10.12  # default-expert live policy; old MoE4 6.29 t/s row is historical only
+      #
+      # T8 (numa-placement-defect-20260730) — CONTEXT LENGTH IS A DECLARED INPUT for
+      # this role, not a detail: its 9-12 vs 15-25 t/s spread is ENTIRELY a
+      # context-length effect, so a tok/s quoted without a prompt length is not a
+      # comparable measurement. The two long-context figures below carry theirs
+      # (`@ ~12K context`, `10K context`).
+      # THESE TWO DO NOT, and the prompt length was never recorded with them.
+      # Stated as a provenance GAP rather than back-filled with a guess: inventing a
+      # context to satisfy the rule would defeat the rule. Whoever re-derives these
+      # (T10 — the bands are IQ2_M and must be re-taken on Q4_K_M) must record the
+      # prompt length at the same time.
+      baseline_tps: 10.12  # context length NOT RECORDED — see T8 note above
+      optimized_tps: 10.12  # context length NOT RECORDED; default-expert live policy; old MoE4 6.29 t/s row is historical only
       long_context_tps_range: 14.4-20.8 t/s @ ~12K context (May-4 long_context suite)
       speedup: n/a
       summarization_benchmark: "73.8s for 464 tokens on Twyne whitepaper (10K context)"
