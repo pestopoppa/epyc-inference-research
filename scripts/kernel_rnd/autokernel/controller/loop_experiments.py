@@ -90,17 +90,47 @@ class ArtifactPin:
 
 
 @dataclass(frozen=True)
+class SelectedTaskArtifact:
+    """Exact selected hypothesis/task bytes supplied to every scaffold arm."""
+
+    ref: str
+    task: str
+    task_sha256: str
+
+    def __post_init__(self) -> None:
+        _text(self.ref, "selected task ref")
+        task = _text(self.task, "selected task")
+        if task != self.task:
+            raise LoopExperimentError(
+                "selected task cannot have unbound surrounding whitespace")
+        _sha(self.task_sha256, "selected task SHA-256")
+        if hashlib.sha256(self.task.encode("utf-8")).hexdigest() != self.task_sha256:
+            raise LoopExperimentError(
+                "task_sha256 does not bind the exact selected task bytes")
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "ref": self.ref,
+            "task": self.task,
+            "task_sha256": self.task_sha256,
+        }
+
+
+@dataclass(frozen=True)
 class FixedPromptFrame:
-    """The champion, retrieval frame, and PROPOSE text held fixed in every cell."""
+    """Immutable planner and scaffold inputs, each bound independently."""
 
     champion: ArtifactPin
     retrieval_context_sha256: str
     propose_prompt: str
     propose_prompt_sha256: str
+    selected_task: SelectedTaskArtifact
 
     def __post_init__(self) -> None:
         if not isinstance(self.champion, ArtifactPin):
             raise TypeError("champion must be an ArtifactPin")
+        if not isinstance(self.selected_task, SelectedTaskArtifact):
+            raise TypeError("selected_task must be a SelectedTaskArtifact")
         _sha(self.retrieval_context_sha256, "retrieval_context_sha256")
         prompt = _text(self.propose_prompt, "propose_prompt")
         _sha(self.propose_prompt_sha256, "propose_prompt_sha256")
@@ -113,6 +143,7 @@ class FixedPromptFrame:
             "retrieval_context_sha256": self.retrieval_context_sha256,
             "propose_prompt": self.propose_prompt,
             "propose_prompt_sha256": self.propose_prompt_sha256,
+            "selected_task": self.selected_task.to_dict(),
         }
 
 
@@ -372,8 +403,13 @@ def render_scaffold_prompt(contract: ExperimentContract, cell_id: str, role: str
     if role not in stages:
         raise LoopExperimentError("role is not predeclared for this scaffold cell")
     stage = stages[role]
+    selected = contract.fixed.selected_task
     task = (
-        f"{contract.fixed.propose_prompt}\n"
+        f"SELECTED TASK ARTIFACT: {selected.ref} "
+        f"sha256={selected.task_sha256}\n"
+        "BEGIN EXACT SELECTED TASK\n"
+        f"{selected.task}\n"
+        "END EXACT SELECTED TASK\n"
         f"FIXED CHAMPION: {contract.fixed.champion.ref} "
         f"sha256={contract.fixed.champion.sha256}\n"
         f"STAGE INSTRUCTION: {stage.instruction}"
@@ -557,7 +593,8 @@ def reduce_receipt(contract: ExperimentContract, *,
 
 __all__ = [
     "AUTHORITY", "CONTRACT_SCHEMA", "DIRECTIONS", "ExperimentContract",
-    "FixedPromptFrame", "ArtifactPin", "PlannerArm", "DirectionPrediction",
+    "FixedPromptFrame", "ArtifactPin", "SelectedTaskArtifact", "PlannerArm",
+    "DirectionPrediction",
     "RoleBudget", "ScaffoldArm", "HypothesisObservation", "PlannerObservation",
     "RoleObservation", "ScaffoldObservation", "LoopExperimentError",
     "TARGET_ABSENT", "TARGET_RENDERED", "SCAFFOLD_DIRECT", "SCAFFOLD_SPLIT",
