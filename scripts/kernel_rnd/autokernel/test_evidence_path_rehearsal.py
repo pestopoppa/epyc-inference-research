@@ -63,6 +63,35 @@ class EvidencePathRehearsalTest(unittest.TestCase):
                 intervention_plan=changed,
                 control_proposal=self.control, control_plan=self.control_plan)
 
+    def test_copied_control_diagnostic_semantics_are_refused(self):
+        raw = copy.deepcopy(self.control_plan.raw)
+        source_binding = next(iter(
+            self.intervention_plan.raw["diagnostic_source_receipts"].values()))
+        source = json.loads(Path(source_binding["path"]).read_text(encoding="utf-8"))
+        source["receipt_id"] = "aklc-source-independent-name-only"
+        source["proposal_sha256"] = schemas.content_hash(self.control)
+        with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".json", delete=False) as handle:
+            json.dump(source, handle)
+            path = Path(handle.name)
+        binding = C.source_binding(path)
+        raw["diagnostic_source_receipts"] = {
+            name: dict(binding) for name in C.DIAGNOSTICS}
+        diagnostics, recodings = C.derive_diagnostics(
+            source, proposal=self.control,
+            candidate_frame_id=raw["candidate_frame_id"])
+        raw["diagnostics"] = diagnostics
+        raw["recodings"] = recodings
+        raw["plan_sha256"] = C.plan_sha256(raw)
+        copied = C.from_mapping(
+            raw, proposal=self.control, campaign_id=self.control["campaign_id"],
+            candidate_id=raw["candidate_id"])
+        with self.assertRaisesRegex(R.RehearsalError, "semantics are identical"):
+            R.producer_manifest(
+                intervention_proposal=self.intervention,
+                intervention_plan=self.intervention_plan,
+                control_proposal=self.control, control_plan=copied)
+
     def test_current_campaign_cli_contract_is_one_json_document(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
