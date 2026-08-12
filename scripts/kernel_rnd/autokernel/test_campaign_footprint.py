@@ -386,6 +386,17 @@ OPTIONAL_STOPPING_CALLS = frozenset({
     "sequential_evaluation", "next_block_request", "submit_block",
 })
 
+# The prospective writer evaluates the fixed, fully completed block vector once
+# to populate the evaluator's required e-value field.  It cannot request a
+# block, stop early, alter the campaign accept rule, or trigger an interim look.
+# Keep this exception exact by module and symbol; every other binding remains a
+# campaign-boundary defect.
+FIXED_N_EVENT_REDUCTION = {
+    f"{ROOT_PKG}.execution.control_runner": frozenset({
+        "run_e_process", "select_construction",
+    }),
+}
+
 STATISTICS_MODULE = f"{ROOT_PKG}.evaluator.statistics"
 ACCEPT_RULE_MODULE = f"{ROOT_PKG}.evaluator.api"
 
@@ -833,7 +844,8 @@ def optional_stopping_findings(graph: "ImportGraph", edges: dict) -> list:
     target = f"{graph.root}.evaluator.statistics"
     findings = []
     for module, names in sorted(graph.names_bound_from(edges, target).items()):
-        for name in sorted(names & OPTIONAL_STOPPING_NAMES):
+        allowed = FIXED_N_EVENT_REDUCTION.get(module, frozenset())
+        for name in sorted((names & OPTIONAL_STOPPING_NAMES) - allowed):
             findings.append(f"{module} binds {target}.{name}")
     for module, names in sorted(graph.attribute_uses(edges, exclude=(target,)).items()):
         for name in sorted(names & OPTIONAL_STOPPING_CALLS):
@@ -1388,7 +1400,8 @@ class TestNoOptionalStopping(unittest.TestCase):
         used = self.graph.names_bound_from(self.edges, STATISTICS_MODULE)
         findings = []
         for module, names in sorted(used.items()):
-            for name in sorted(names & OPTIONAL_STOPPING_NAMES):
+            allowed = FIXED_N_EVENT_REDUCTION.get(module, frozenset())
+            for name in sorted((names & OPTIONAL_STOPPING_NAMES) - allowed):
                 findings.append(f"{module} binds {STATISTICS_MODULE}.{name}")
         self.assertEqual(
             findings, [],

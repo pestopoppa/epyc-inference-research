@@ -217,6 +217,7 @@ KIND_VIEW_REBASED = "VIEW_REBASED"
 KIND_PROPOSAL_SKIPPED = "PROPOSAL_SKIPPED"
 KIND_STOP_STATE = "STOP_STATE"
 KIND_MICROBENCH_RUN_COMPLETED = "MICROBENCH_RUN_COMPLETED"
+KIND_T0_REFUSAL = "T0_REFUSAL"
 # §3.5 preflight attestation. `resource/preflight.py` builds the verdict and its
 # own docstring instructs the caller to journal `exc.result.to_dict()` verbatim
 # on FAIL and COULD_NOT_CHECK — "a precondition that was checked but not recorded
@@ -242,6 +243,7 @@ NATIVE_KINDS = frozenset({
     KIND_TORN_APPEND_DISCARDED, KIND_OPERATOR_CONTROL_ACK, KIND_VIEW_REBASED,
     KIND_PROPOSAL_SKIPPED, KIND_STOP_STATE, KIND_PREFLIGHT_ATTESTATION,
     KIND_MICROBENCH_RUN_COMPLETED,
+    KIND_T0_REFUSAL,
 }) | BOOTSTRAP_KNOWLEDGE_KINDS
 
 KINDS = frozenset(SCHEMA_BOUND_KINDS) | NATIVE_KINDS
@@ -1083,6 +1085,17 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
             else:
                 if run_id != raw_id:
                     out.append("run_id: must be the content hash of raw_vector")
+    elif kind == KIND_T0_REFUSAL:
+        for key, prefix in (("campaign_id", "ak-"), ("candidate_id", "akc-")):
+            value = payload.get(key)
+            if not isinstance(value, str) or not value.startswith(prefix):
+                out.append(f"{key}: required and must start with {prefix!r}")
+        for key in ("stage", "error"):
+            value = payload.get(key)
+            if not isinstance(value, str) or not value.strip():
+                out.append(f"{key}: required and non-empty")
+        if payload.get("rate_measured") is not False:
+            out.append("rate_measured: must be false on a pre-event T0 refusal")
     elif kind == KIND_PROPOSAL_SKIPPED:
         for key in ("proposal_ref", "reason"):
             value = payload.get(key)
@@ -2170,7 +2183,7 @@ __all__ = [
     "KIND_SUPERSEDED", "KIND_RETRIEVAL_SUPERSEDED", "KIND_TOMBSTONE",
     "KIND_TORN_APPEND_DISCARDED", "KIND_OPERATOR_CONTROL_ACK", "KIND_VIEW_REBASED",
     "KIND_PROPOSAL_SKIPPED", "KIND_STOP_STATE", "KIND_PREFLIGHT_ATTESTATION",
-    "KIND_MICROBENCH_RUN_COMPLETED",
+    "KIND_MICROBENCH_RUN_COMPLETED", "KIND_T0_REFUSAL",
     "tombstone_view_key",
     "Journal", "JournalEntry", "JournalDefect", "ShardRef", "TornTail",
     "ReadReport", "Cursor", "Views",
