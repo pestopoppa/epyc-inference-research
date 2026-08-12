@@ -24,7 +24,8 @@ class SandboxKernelProbeTest(unittest.TestCase):
         evaluator = Path(policy.writable_root).parent / "evaluator"
         evaluator.mkdir(exist_ok=True)
         receipt = evaluator / "receipt.json"
-        env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+        env = dict(
+            os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONHASHSEED="0")
         proc = subprocess.Popen(
             policy.wrap(command, receipt_path=str(receipt)),
             env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
@@ -159,6 +160,7 @@ class SandboxKernelProbeTest(unittest.TestCase):
             tcp_thread = threading.Thread(target=serve_tcp, daemon=True)
             tcp_thread.start()
             roots, files = self._controller_read_surface(allowed)
+            controller_python = str(Path(sys.executable).resolve())
             policy = S.SandboxPolicy(
                 str(controller), token="controller1",
                 profile=S.CONTROLLER_PROFILE,
@@ -191,6 +193,7 @@ class SandboxKernelProbeTest(unittest.TestCase):
                 " 'inet_listen': probe_call(lambda: inet.listen(1)),",
                 " 'inet_accept': probe_call(lambda: inet.accept()),",
                 " 'unix_socket': probe_call(lambda: socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)),",
+                " 'unnamed_socketpair': probe_call(lambda: socket.socketpair()),",
                 " 'netlink_socket': probe_call(lambda: socket.socket(socket.AF_NETLINK, socket.SOCK_RAW)),",
                 " 'render_nodes': render,",
                 " 'broker': broker.recv(32).decode(),",
@@ -199,7 +202,7 @@ class SandboxKernelProbeTest(unittest.TestCase):
             ))
             try:
                 rc, stdout, stderr, receipt, teardown = self._run(
-                    policy, [sys.executable, "-c", code])
+                    policy, [controller_python, "-c", code])
             finally:
                 server.close()
                 tcp_server.close()
@@ -221,6 +224,7 @@ class SandboxKernelProbeTest(unittest.TestCase):
             self.assertEqual(result["inet_listen"], ["denied", errno.EPERM])
             self.assertEqual(result["inet_accept"], ["denied", errno.EPERM])
             self.assertEqual(result["unix_socket"], ["denied", errno.EPERM])
+            self.assertEqual(result["unnamed_socketpair"], ["allowed", None])
             self.assertEqual(result["netlink_socket"], ["denied", errno.EPERM])
             self.assertEqual(result["broker"], "broker-ok")
             self.assertEqual(receipt["network_profile"], S.NETWORK_OUTBOUND_CLIENT)
@@ -235,7 +239,7 @@ class SandboxKernelProbeTest(unittest.TestCase):
             self.assertEqual(receipt["policy_sha256"], policy.policy_sha256)
             S.verify_receipt(
                 receipt, policy=policy, pid=receipt["pid"],
-                argv=[sys.executable, "-c", code])
+                argv=[controller_python, "-c", code])
             self.assertTrue(teardown["verified_empty"])
 
     def test_controller_receipt_policy_digest_detects_allowlist_drift(self):
