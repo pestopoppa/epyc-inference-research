@@ -133,6 +133,9 @@ CAMPAIGN_ROOTS = {
     f"{ROOT_PKG}.candidate_record":
         "every executed candidate must be fsynced from the exact built snapshot and "
         "evaluation event identities before terminal STOP",
+    f"{ROOT_PKG}.least_commitment_capture":
+        "a clean IQK run must journal predeclared diagnostics and mechanically reduced "
+        "outcomes or it cannot enter the observe-only AK-WM-2 archive",
     f"{ROOT_PKG}.dashboard":
         "the terminal result was fsynced but the only dashboard exporter had been deleted, "
         "so active AutoKernel work remained permanently absent from the operator surface",

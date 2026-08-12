@@ -435,6 +435,17 @@ class TestDryRunIsTheDefault(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("dry_run_composed", out.getvalue())
 
+    def test_json_mode_emits_one_parseable_document_on_the_output_stream(self):
+        out, detail = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stderr(detail):
+            code = campaign.main(["--model", MODEL, "--json"], out=out)
+        self.assertEqual(code, 0)
+        payload = json.loads(out.getvalue())
+        self.assertEqual(payload["state"], "dry_run_composed")
+        self.assertFalse(payload["executed"])
+        self.assertTrue(out.getvalue().lstrip().startswith("{"))
+        self.assertIn("DRY RUN", detail.getvalue())
+
     def test_main_refuses_a_bad_spec_before_anything_starts(self):
         with contextlib.redirect_stderr(io.StringIO()):
             code = campaign.main(["--model", MODEL, "--campaign-id", "nope"],
@@ -1602,6 +1613,21 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
         )
         self.assertEqual(code, 2)
         self.assertEqual(ops.calls, [])
+
+    def test_iqk_execute_without_capture_plan_is_refused_before_ops(self):
+        proposal_path = Path(self.tempdir.name) / "iqk-proposal.json"
+        proposal_path.write_text(
+            json.dumps(iqk_parameter_proposal()), encoding="utf-8")
+        argv = list(self.argv)
+        index = argv.index("--proposal-manifest")
+        argv[index + 1] = str(proposal_path)
+        ops = SpyOps()
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code = campaign.main(argv, out=io.StringIO(), ops=ops)
+        self.assertEqual(code, 2)
+        self.assertEqual(ops.calls, [])
+        self.assertIn("--least-commitment-capture-plan", err.getvalue())
 
     def test_malformed_prerequisite_package_is_refused_before_ops(self):
         path = Path(self.tempdir.name) / "bad-prerequisites.json"

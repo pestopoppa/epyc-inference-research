@@ -134,6 +134,10 @@ def _decode_pointer_token(token: str) -> str:
     return out
 
 
+def _encode_pointer_token(token: str) -> str:
+    return token.replace("~", "~0").replace("/", "~1")
+
+
 def _resolve_pointer(document: Any, pointer: str, label: str) -> Any:
     if not isinstance(pointer, str) or (pointer and not pointer.startswith("/")):
         raise ReceiptProjectionError(f"{label}.pointer: expected RFC 6901 pointer")
@@ -432,6 +436,93 @@ def _plan_hash(plan: Mapping[str, Any]) -> str:
                           if key != "plan_sha256"})
 
 
+def assemble_plan(*, archive_id: str, created_at: str,
+                  diagnostic_directions: Mapping[str, str],
+                  outcome_weights: Mapping[str, float],
+                  completed_rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Compile projection bindings from completed campaign journals.
+
+    A caller supplies only completed-campaign identities and an optional matched
+    control id.  Every JSON pointer and record digest is derived here from the
+    validated candidate record, eliminating the hand-authored binding gap that
+    previously made the synthetic test fixture the only working producer.
+    """
+    if len(completed_rows) < 2:
+        raise ReceiptProjectionError("completed_rows requires at least two campaigns")
+    compiled = []
+    for index, row in enumerate(completed_rows):
+        allowed = {"journal_root", "campaign_id", "proposal_id",
+                   "completion_event_id", "matched_control_id"}
+        if not isinstance(row, Mapping) or set(row) != allowed:
+            raise ReceiptProjectionError(
+                f"completed_rows[{index}] fields must be exactly {sorted(allowed)}")
+        evidence = _load_completed_evidence(row)
+        block = evidence.candidate.get("derived_verdicts", {}).get("least_commitment")
+        if not isinstance(block, Mapping) or block.get("schema") \
+                != "epyc.autokernel.least_commitment_capture.v1":
+            raise ReceiptProjectionError(
+                f"{evidence.proposal_id}: candidate has no live least-commitment capture")
+        if block.get("capture_mode") != "measured":
+            raise ReceiptProjectionError(
+                f"{evidence.proposal_id}: capture_mode is not measured")
+        candidate_sha = _content_hash(evidence.candidate)
+
+        def binding(pointer: str) -> dict[str, str]:
+            return {"record": "candidate", "pointer": pointer,
+                    "record_sha256": candidate_sha}
+
+        prefix = "/derived_verdicts/least_commitment"
+        fixture_ids = evidence.proposal["representation_contract"][
+            "semantics_preserving_recoding_fixture_ids"]
+        factor_names = sorted(block.get("factors") or {})
+        if not factor_names:
+            raise ReceiptProjectionError(
+                f"{evidence.proposal_id}: least-commitment factors are absent")
+        compiled.append({
+            "journal_root": row["journal_root"],
+            "campaign_id": row["campaign_id"],
+            "proposal_id": row["proposal_id"],
+            "completion_event_id": row["completion_event_id"],
+            "candidate_frame_id_binding": binding(f"{prefix}/candidate_frame_id"),
+            "regime_binding": binding(f"{prefix}/regime"),
+            "surface_binding": binding(f"{prefix}/surface"),
+            "intervention_id_binding": binding(f"{prefix}/intervention_id"),
+            "changed_factor_binding": binding(f"{prefix}/changed_factor"),
+            "factor_bindings": {
+                key: binding(f"{prefix}/factors/{_encode_pointer_token(key)}")
+                for key in factor_names},
+            "diagnostic_bindings": {
+                key: binding(f"{prefix}/diagnostics/{key}")
+                for key in protocol.DIAGNOSTICS},
+            "recoding_bindings": {
+                fixture_id: {
+                    key: binding(
+                        f"{prefix}/recodings/{_encode_pointer_token(fixture_id)}/{key}")
+                    for key in protocol.DIAGNOSTICS}
+                for fixture_id in fixture_ids},
+            "outcome_bindings": {
+                key: binding(f"{prefix}/outcome/{key}") for key in _OUTCOMES},
+            "matched_control_id": row["matched_control_id"],
+        })
+    plan = {
+        "schema": PLAN_SCHEMA,
+        "archive_id": _need_text(archive_id, "archive_id"),
+        "created_at": _need_text(created_at, "created_at"),
+        "candidate_frame_id_binding": dict(compiled[0]["candidate_frame_id_binding"]),
+        "diagnostic_directions": dict(diagnostic_directions),
+        "outcome_weights": dict(outcome_weights),
+        "rows": compiled,
+    }
+    plan["plan_sha256"] = _plan_hash(plan)
+    # Validate all fields and joins now, without publishing receipt files.
+    if set(plan["diagnostic_directions"]) != set(protocol.DIAGNOSTICS):
+        raise ReceiptProjectionError("diagnostic_directions are incomplete")
+    if set(plan["outcome_weights"]) != {
+            "heldout_regime_transfer", "falsifier_resolution"}:
+        raise ReceiptProjectionError("outcome_weights are incomplete")
+    return plan
+
+
 def _write_json_exclusive(path: Path, value: Mapping[str, Any]) -> None:
     body = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0)
@@ -639,7 +730,9 @@ def project(plan: Mapping[str, Any], output_dir: Path) -> dict[str, Any]:
         manifest = _published_paths(validation_manifest, staging, output_dir)
         published_archive = _published_paths(archive, staging, output_dir)
         manifest_path = staging / "archive-build-manifest.json"
+        archive_path = staging / "archive.json"
         _write_json_exclusive(manifest_path, manifest)
+        _write_json_exclusive(archive_path, published_archive)
         result = {
             "schema": PROJECTION_SCHEMA, "authority": AUTHORITY,
             "plan_sha256": expected_hash,
@@ -647,6 +740,9 @@ def project(plan: Mapping[str, Any], output_dir: Path) -> dict[str, Any]:
             "archive_build_manifest": {
                 "path": str(output_dir / manifest_path.name),
                 "sha256": _file_sha256(manifest_path)},
+            "archive": {
+                "path": str(output_dir / archive_path.name),
+                "sha256": _file_sha256(archive_path)},
             "archive_sha256": _content_hash(published_archive),
             "emitted_receipts": sorted(
                 str(_published_paths(path, staging, output_dir)) for path in emitted),
@@ -664,10 +760,44 @@ def project(plan: Mapping[str, Any], output_dir: Path) -> dict[str, Any]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("plan", type=Path)
-    parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("plan", type=Path, nargs="?")
+    parser.add_argument(
+        "--assemble-completed", type=Path,
+        help="completed-campaign identity manifest; derives every projection binding",
+    )
+    parser.add_argument(
+        "--plan-output", type=Path,
+        help="write the plan derived by --assemble-completed before projection",
+    )
+    parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args(argv)
-    raw = json.loads(args.plan.read_text(encoding="utf-8"))
+    if args.assemble_completed is not None:
+        if args.plan is not None or args.plan_output is None:
+            parser.error("--assemble-completed requires --plan-output and no positional plan")
+        source = json.loads(args.assemble_completed.read_text(encoding="utf-8"))
+        if not isinstance(source, Mapping):
+            raise ReceiptProjectionError("completed manifest must be a JSON object")
+        completed_rows = source.get("rows")
+        if not isinstance(completed_rows, list):
+            raise ReceiptProjectionError("completed manifest rows must be a list")
+        raw = assemble_plan(
+            archive_id=source.get("archive_id"), created_at=source.get("created_at"),
+            diagnostic_directions=source.get("diagnostic_directions"),
+            outcome_weights=source.get("outcome_weights"),
+            completed_rows=completed_rows,
+        )
+        args.plan_output.write_text(
+            json.dumps(raw, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        if args.output_dir is None:
+            print(json.dumps({"plan": str(args.plan_output),
+                              "plan_sha256": raw["plan_sha256"]}, sort_keys=True))
+            return 0
+    else:
+        if args.plan is None:
+            parser.error("a positional plan or --assemble-completed is required")
+        if args.output_dir is None:
+            parser.error("--output-dir is required when projecting")
+        raw = json.loads(args.plan.read_text(encoding="utf-8"))
     result = project(raw, args.output_dir)
     print(json.dumps(result, sort_keys=True))
     return 0

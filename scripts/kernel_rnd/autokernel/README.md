@@ -129,6 +129,15 @@ one-factor receipts must agree on representation, empirical-demand, candidate,
 regime, surface, and metric-direction frames. A preflight refusal or synthetic
 fixture therefore cannot be relabelled as an empirical archive row.
 
+`least_commitment_capture.py` closes the live-producer gap before those offline
+steps. Executing IQK parameter campaigns require a hash-bound
+`--least-commitment-capture-plan`; diagnostics and recoding controls are fixed
+before the claim, while held-out transfer, falsifier margin, and noise floor are
+mechanically reduced from the completed decision and accepted calibration. A
+`role=control` plan is the only capability that permits the generated production-
+setting A/A control proposal to use identical arms. Architecture fixtures are
+accepted for rehearsal but refused by `--execute`.
+
 `least_commitment_receipts.py` is the governed producer for those three receipt
 schemas. Its offline CLI accepts a projection plan whose values are JSON-pointer
 bindings into explicitly SHA-256-pinned proposal, candidate, evaluation, or
@@ -136,21 +145,49 @@ terminal-result records; the plan cannot carry an empirical literal. It requires
 at least two distinct clean completed campaigns, derives the matched pair's sole
 changed factor from the two journal-bound factor maps, rejects explicit fixture,
 synthetic, and dry-run evidence, then feeds its files through the unchanged
-archive builder before publishing the manifest. Current campaign records do not
-contain every AP-WM-1 diagnostic and outcome, so an IQK result by itself is an
-intentional missing-pointer refusal rather than a synthetic first archive.
+archive builder. `assemble_plan()` derives every JSON pointer and record hash
+from the completed candidate records, and projection publishes both
+`archive-build-manifest.json` and the validated `archive.json`; no hand-authored
+binding or synthetic scalar is needed after two clean matched campaigns exist.
 
 ```bash
 python3 -m scripts.kernel_rnd.autokernel.least_commitment_receipts \
+  --assemble-completed completed-campaigns.json \
+  --plan-output projection-plan.json
+
+python3 -m scripts.kernel_rnd.autokernel.least_commitment_receipts \
   projection-plan.json --output-dir /absolute/new/output-directory
+
+python3 -m scripts.kernel_rnd.autokernel.offline_least_commitment \
+  /absolute/new/output-directory/archive.json --output ap-wm-report.json
 ```
+
+`evidence_path_rehearsal.py` is a no-inference dress rehearsal. It derives the
+matched A/A control proposal, validates both prospective capture plans, proves
+the sole changed factor, imports every downstream producer through release
+packaging, and emits a field-level producer manifest labelled
+`architecture_regression_fixture`. It never substitutes for the two real clean
+`DECIDED` journals required by AK-WM-2. The rehearsal also executes the current
+campaign dry-run automation contract: `--json` must emit exactly one JSON
+document on stdout, with the human trace on stderr and `executed: false`.
+
+`release/live_material.py` closes the final journal-to-release-material producer
+gap. An operator-triggered dry run supplies readiness, T3, package, and overlay
+receipts; the adapter binds their hashes to the exact composed champion,
+candidate record, evaluation events, and journal event. It preserves additional
+measured backends in a full-build seal but requires the campaign backend's
+binary, linkage closure, and build directory to match the journal byte for byte.
+T3 observations or package inputs made for another seal are refused rather than
+retrofitted. The adapter has no clock, process, build, inference, transport,
+freeze, cutover, or production-write authority.
 
 For the CPU known-win diagnostic, a `change_class: "parameter"` proposal must
 declare `change.parameter_surface` with exact `candidate` and `anchor` mappings.
 The only arm-local key currently licensed by the recipe registry is
 `ggml_iqk` (`"0"` or `"1"`). `campaign.py` projects that declaration into the
 existing `MicrobenchPlan` arm overrides, and its dry run prints the two distinct
-environments; identical arms or any unregistered key are refused before a claim.
+environments. Identical arms are admitted only for the hash-bound matched A/A
+control above; any accidental no-op or unregistered key is refused before a claim.
 
 ---
 
@@ -226,6 +263,7 @@ calibration exists. Source-changing campaigns additionally require their own
 | `controller/kernelfoundry_arena.py` | **INF-03 KernelFoundry gfx90a port (off campaign path).** Runs the pinned Apache-2.0 inherited `Controller.run_single` branch/island loop with GPT-5.6 Sol/high. A scoped registrar activates all declared Triton feature patterns, and a composition database seam routes the inherited `add()` call through upstream parent-aware QD transition tracking when a measured parent exists. AgentKernelArena remains the only compile/correctness/timing authority. |
 | `controller/arena_roundtrip.py` | **EVL-47 SC20/SC21 (off campaign path).** Prospective write-side GEAK/Arena receipt producer. It emits correctness pass rate and timing-harness validity as separate repetition-based `belief_measurements`; preflight source/license/hardware/registry findings remain hash-bound dependency evidence and never become a fabricated ordinal metric. |
 | `controller/authoring_contract.py` | **AK-PL-1 / AK-LE-4 / AK-LE-5 (off campaign path).** The only reviewed fully-rendered authoring-prompt seam; sealed-evaluator leak scan with compliant control, priced never-bulk-read context, reversible compaction headers with exact git recovery, and typed external numeric priors. It calls no model and selects no work. |
+| `controller/completed_campaign_adapter.py` | **Live journal→lean sequencer join (off campaign path).** Projects one clean completed campaign into `CampaignRun`; a KEEP becomes banked only when journaled passing T0/T1 dispatch and mechanism gates exist and measured throughput clears both the accepted floor and MDE. |
 | `controller/loop_experiments.py` | **AK-LE-1/2/3 contracts (off campaign path).** Predeclares matched planner/scaffold cells and reduces either a complete panel or an explicitly planner-only AK-LE-1/2 panel; the partial receipt says scaffold evidence is absent rather than fabricating zero observations. |
 | `controller/loop_experiment_runner.py` | **AK-LE-1/2 capture and AK-LE-3 router (off campaign path).** Executes only the exact predeclared read-only planner CLI cells, seals prompts/process output/timing/parsed observations, and delegates scaffold execution to the separately governed workspace-writing seam. |
 | `controller/loop_scaffold_runner.py` | **AK-LE-3 SAME-MODEL scaffold seam (off campaign path).** Compiles exactly `gpt-5.6-sol` and `gpt-5.6-terra` at high effort crossed with direct-implement and implement-then-exploit, with exact selected task/context/champion/source/actor/Arena pins and equal wall budgets. Each cell creates fresh detached baseline/candidate worktrees; the digest-pinned `codex_container_actor` exposes only the candidate as one writable container bind. The parent captures and reaps the launcher PID/process group, audits declared relative writes, seals each role diff/checkpoint, holds an exclusive `mi210_0` claim across the separately pinned AgentKernelArena evaluator subprocess, then removes and verifies both disposable worktrees while durable artifacts remain outside them. Injected runners require explicit fixture mode. Outputs are diagnostic-only and cannot rank, choose a champion, enter campaign #1, or authorize release. This implementation session ran no model or GPU; a real observation still requires the selected run inputs, credentials, clean Arena checkout, and device claim. |
@@ -256,7 +294,10 @@ calibration exists. Source-changing campaigns additionally require their own
 | `artifact_diff.py` | The compile-only VGPR/SGPR/scratch/instruction-mix comparison that vetoes an unconfirmed GPU claim before behavioral T0 can launch. |
 | `offline_least_commitment.py` | The observe-only AK-WM-2/AP-WM-1 diagnostic over matched completed-proposal archives; it has no live selection authority. |
 | `least_commitment_archive_builder.py` | The AK-WM-2a real-record join: resolves proposal-v3 and clean terminal journal events, verifies hash-bound diagnostic/outcome/matched-one-factor receipts, and emits only protocol-valid observe-only archives. |
-| `least_commitment_receipts.py` | The AK-WM-2a governed receipt producer: projects only SHA-pinned journal fields from distinct clean completed campaigns, proves the sole matched intervention factor, rejects non-real evidence, and validates its output through the archive builder. |
+| `least_commitment_capture.py` | The prospective live IQK/control capture: binds pre-run diagnostics and recodings, reduces only declared measured outcomes, and gives no selector or release authority. |
+| `least_commitment_receipts.py` | The AK-WM-2a governed receipt producer: derives SHA-pinned journal bindings from distinct clean completed campaigns, proves the sole matched intervention factor, rejects non-real evidence, and publishes the validated archive. |
+| `evidence_path_rehearsal.py` | No-inference control/proposal/AP-WM/champion/readiness/T3/package producer inventory; architecture fixture only. |
+| `release/live_material.py` | Actual-journal release-material compiler: hash-binds the composed champion and its evidence to an exact full-build T3/package seal for operator-triggered dry run only. |
 | `turn_productivity.py` | **AK-PT-1 / AK-X-6.** Immutable per-refine-turn `(turn, task, correct?, speedup)` records, mechanically derived rescued/persistent classes, and a campaign-calibration-derived e-process rule. It may label a turn repair-only and withhold search advancement; it has no ranking, retention, promotion, or deployment authority. |
 | `dashboard.py` | **AK6.** The compact `/kernel` contract-v2 producer retained by the campaign path after the old `surface/` plane was deleted. It projects only the already-fsynced terminal `STOP_STATE`: campaign and backend standing are observed; champion, headroom and release package are explicitly `not_reported`; journal time drives freshness; and the atomic export is refused under scratch, a production tree, or any checkout. |
 
@@ -565,6 +606,12 @@ such authority here to hold, delegate, or flag. Every one of the twelve §11.2 "
 not" capabilities is a function whose entire body is a `raise`, and
 `packager.audit_refusal_doors_raise_unconditionally()` walks the list and FAILs on
 a door that grew an `if`.
+
+`live_material.JournalReleaseMaterialCompiler` is the concrete producer at that
+boundary. It can reach `RELEASE_PACKAGE_READY` from an actual validated journal,
+but only when independently supplied readiness/T3/package observations already
+bind the exact derived evidence seal; changing any journaled bytes or reusing a
+template for another seal fails before T3.
 
 That rule is *proved*, not documented, in four independent ways:
 

@@ -161,7 +161,7 @@ from pathlib import Path
 from statistics import median
 from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 
-from . import (artifact_diff, candidate_record, dashboard,
+from . import (artifact_diff, candidate_record, dashboard, least_commitment_capture,
                journal as journal_module, source_candidate,
                source_prerequisite_package, source_prerequisite_producer)
 from . import schemas, storage
@@ -228,6 +228,9 @@ MODULES_THE_DRIVER_USES: Mapping[str, str] = {
                      "a GPU claim before the behavioural T0 provider can launch",
     "candidate_record": "every executed candidate is durably recorded from the exact "
                         "built snapshot and evaluation event identities",
+    "least_commitment_capture": "a live IQK result must carry the predeclared, hash-bound "
+                                "diagnostics and measured outcome reducers needed by the "
+                                "observe-only AK-WM-2 archive",
     "source_candidate": "source-changing proposals consume one immutable embedded patch "
                         "bundle through the guarded worktree mutation boundary",
     "source_prerequisite_package": "source candidates may rank only after the archived "
@@ -1262,6 +1265,10 @@ class CampaignSpec:
     #: with an archive: fresh and resume are two modes, never two authorities.
     fresh_source_prerequisite_plan: Optional[
         source_prerequisite_producer.FreshSourcePrerequisitePlan] = None
+    #: Prospective observe-only diagnostic plan.  It is fixed before a claim and
+    #: supplies no selection authority; the campaign only journals its diagnostics
+    #: and reduces the immutable outcome functions after measurement.
+    least_commitment_plan: Optional[least_commitment_capture.CapturePlan] = None
     #: Accepted, identity-bound live calibration.  Supplied by the CLI bundle
     #: loader; absent means composition-only and carries no ranking authority.
     calibration: Optional[LeanCalibration] = None
@@ -1329,6 +1336,11 @@ class CampaignSpec:
         if self.proposal is None and (self.source_prerequisite_package is not None
                                       or self.fresh_source_prerequisite_plan is not None):
             raise ValueError("source prerequisites require a source proposal")
+        if self.least_commitment_plan is not None and not isinstance(
+                self.least_commitment_plan, least_commitment_capture.CapturePlan):
+            raise TypeError("least_commitment_plan must be a CapturePlan or None")
+        if self.least_commitment_plan is not None and self.proposal is None:
+            raise ValueError("least_commitment_plan requires a proposal")
         if self.proposal is not None:
             proposal = json.loads(schemas.canonical_json(self.proposal))
             violations = schemas.validate_proposal_v3(proposal)
@@ -1480,8 +1492,7 @@ class CampaignSpec:
                 f"{envelope.measurement_frame_sha256}, but the exact recipe, model, and "
                 f"parameters derive {derived}")
 
-    @staticmethod
-    def _validate_arm_parameter_surface(proposal: Mapping[str, Any]) -> None:
+    def _validate_arm_parameter_surface(self, proposal: Mapping[str, Any]) -> None:
         """Validate the one recipe-declared arm-local parameter comparison.
 
         ``MicrobenchPlan`` already carries candidate/anchor overrides and limits
@@ -1508,9 +1519,15 @@ class CampaignSpec:
                 raise ValueError(
                     f"parameter_surface.{arm} must declare ggml_iqk as '0' or '1'")
         if surface["candidate"] == surface["anchor"]:
+            if self.least_commitment_plan is not None \
+                    and self.least_commitment_plan.role == "control" \
+                    and surface["candidate"]["ggml_iqk"] == "0":
+                return
             raise ValueError(
                 "a parameter proposal gives candidate and anchor the same GGML_IQK "
-                "value; it declares no comparison")
+                "value; it declares no comparison. Only a hash-bound least-commitment "
+                "role=control plan may "
+                "declare the production-setting A/A control")
 
     # -- derived -----------------------------------------------------------
 
@@ -1738,6 +1755,9 @@ class CampaignSpec:
             "fresh_source_prerequisite_plan_sha256": (
                 None if self.fresh_source_prerequisite_plan is None
                 else self.fresh_source_prerequisite_plan.plan_sha256),
+            "least_commitment_capture_plan_sha256": (
+                None if self.least_commitment_plan is None
+                else self.least_commitment_plan.plan_sha256),
             "physical_envelope": (
                 None if self.physical_envelope is None
                 else self.physical_envelope.to_dict()),
@@ -3631,8 +3651,23 @@ class HostOps:
                 rate_run=self._microbench_run)
             effect = control_runner.reduce_live_blocks(
                 request, blocks, spec.calibration.evaluation_authority)
+            t1_gates = list(self._t0_gate_results)
+            if spec.proposal is not None \
+                    and spec.proposal.get("change_class") == "parameter":
+                dispatch = next((gate for gate in self._t0_gate_results
+                                 if gate.gate_id == "no_fallback_dispatch_trace"), None)
+                check = (dispatch.check if dispatch is not None else schemas.Check(
+                    schemas.COULD_NOT_CHECK,
+                    ("T0 emitted no no-fallback dispatch identity",)))
+                t1_gates.append(api.GateResult(
+                    gate_id="t1.parameter_intervention_explained",
+                    gate_class=api.GATE_MECHANISM,
+                    check=check,
+                    notes=("the registered GGML_IQK arm-local intervention and its "
+                           "no-fallback real-path trace are bound to this T1 effect",),
+                ))
             outcome = api.TierDispatcher(gate_runners={
-                "T1": _RecordedGateRunner(self._t0_gate_results),
+                "T1": _RecordedGateRunner(t1_gates),
             }).dispatch(request, window, effect=effect)
             if outcome.event is None or outcome.event_violations:
                 raise RuntimeError(
@@ -3676,6 +3711,14 @@ class HostOps:
         derived_tokens = (
             tuple(f"file:{path}" for path in self._source_application.actual_files)
             if self._source_application is not None else ("flag:GGML_IQK",))
+        derived_verdicts = {
+            "campaign_state": state,
+            "accept_decision": None if decision is None else decision.to_dict(),
+        }
+        if spec.least_commitment_plan is not None:
+            derived_verdicts["least_commitment"] = least_commitment_capture.materialize(
+                spec.least_commitment_plan, decision=decision,
+                calibration=spec.calibration)
         self._cached_candidate_record = candidate_record.build_candidate_record(
             proposal=spec.proposal, candidate_id=spec.candidate_id,
             campaign_id=spec.campaign_id, production_base_commit=PRODUCTION_COMMIT,
@@ -3699,10 +3742,7 @@ class HostOps:
             protocol_ids=tuple(sorted({event["claim_grammar"]["protocol_id"]
                                        for event in events})) or ("P-AK-SEARCH-1/v1",),
             same_seed_repeat_runs=self._t0_request.determinism.same_seed_repeat_runs,
-            derived_verdicts={
-                "campaign_state": state,
-                "accept_decision": None if decision is None else decision.to_dict(),
-            },
+            derived_verdicts=derived_verdicts,
             created_at=spec.created_at)
 
     def journal_evaluation(self, spec: CampaignSpec, result: Any) -> tuple:
@@ -4120,6 +4160,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="validated proposal.v3 JSON. Required by --execute and fsynced before host work",
     )
     parser.add_argument(
+        "--least-commitment-capture-plan", default=None, metavar="PATH",
+        help="hash-bound prospective AK-WM-2 diagnostic/control plan. Required by "
+             "executing IQK parameter campaigns so a clean result is archive-usable",
+    )
+    parser.add_argument(
         "--source-patch-manifest", default=None, metavar="PATH",
         help="immutable source-patch.v1 JSON with embedded bytes; required for "
              "source-changing --execute campaigns",
@@ -4225,6 +4270,10 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
     """
     stream = out if out is not None else sys.stdout
     args = build_parser().parse_args(list(argv) if argv is not None else None)
+    # ``--json`` is an automation contract: stdout (or the injected ``out``
+    # stream) must contain exactly one parseable result document. Keep the
+    # detailed composition trace, but move it to stderr in JSON mode.
+    detail_stream = sys.stderr if args.as_json else stream
 
     if not args.dry_run and not args.i_hold_the_host:
         print("--execute requires --i-hold-the-host. This driver spawns benchmarks on a "
@@ -4245,6 +4294,35 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
             "mutation, or build",
             file=sys.stderr,
         )
+        return 2
+
+    least_commitment_plan = None
+    if args.least_commitment_capture_plan is not None:
+        if proposal is None:
+            print("refusing to start: --least-commitment-capture-plan requires "
+                  "--proposal-manifest", file=sys.stderr)
+            return 2
+        try:
+            least_commitment_plan = least_commitment_capture.load(
+                args.least_commitment_capture_plan, proposal=proposal,
+                campaign_id=args.campaign_id, candidate_id=args.candidate_id)
+        except (OSError, json.JSONDecodeError, TypeError,
+                least_commitment_capture.CapturePlanError) as exc:
+            print(f"refusing to start: --least-commitment-capture-plan: {exc}",
+                  file=sys.stderr)
+            return 2
+    if not args.dry_run and isinstance(proposal, Mapping) \
+            and proposal.get("change_class") == "parameter" \
+            and least_commitment_plan is None:
+        print("refusing to --execute: IQK parameter campaigns require "
+              "--least-commitment-capture-plan before any claim, mutation, build, "
+              "or benchmark; otherwise a clean result cannot enter AK-WM-2",
+              file=sys.stderr)
+        return 2
+    if not args.dry_run and least_commitment_plan is not None \
+            and least_commitment_plan.raw["capture_mode"] != "measured":
+        print("refusing to --execute: architecture_regression_fixture cannot supply "
+              "least-commitment evidence", file=sys.stderr)
         return 2
 
     source_patch = None
@@ -4347,6 +4425,7 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
             source_patch=source_patch,
             source_prerequisite_package=source_prerequisites,
             fresh_source_prerequisite_plan=fresh_source_plan,
+            least_commitment_plan=least_commitment_plan,
             calibration=selected_calibration,
             physical_envelope=physical_envelope, ranked_units=ranked_units)
     except (ValueError, TypeError, storage.StorageError, recipes.RecipeError,
@@ -4390,7 +4469,7 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
     broker: Optional[powercap_broker.PowercapBroker] = None
     if ops is None:
         if args.dry_run:
-            ops = DryRunOps(out=stream)
+            ops = DryRunOps(out=detail_stream)
         else:
             # Root-owned package counters are read through a networkless,
             # read-only broker. It starts lazily on the first host snapshot, so
@@ -4438,25 +4517,25 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
 
     print(f"AutoKernel campaign {spec.campaign_id} / {spec.candidate_id} — "
           f"{'DRY RUN (nothing will be executed)' if args.dry_run else 'EXECUTING'}",
-          file=stream)
+          file=detail_stream)
     print("  question    "
           + (f"{spec.hypothesis_id} — falsifier: {spec.authorization.falsifier}"
              if spec.authorization is not None
              else "EXPLORATORY (no --hypothesis; this run resolves no question)"),
-          file=stream)
-    print(f"  cell        {spec.recipe_id}  metric={spec.metric}", file=stream)
+          file=detail_stream)
+    print(f"  cell        {spec.recipe_id}  metric={spec.metric}", file=detail_stream)
     if spec.calibration is None:
         print("  accept      UNCALIBRATED CELL — dry-run composition only; live ranking "
-              "will refuse", file=stream)
+              "will refuse", file=detail_stream)
     else:
         print(f"  accept      min(delta) > 0 over {spec.blocks} pre-committed pairs AND "
-              f"median(relative) > {spec.contribution_floor:.4%}", file=stream)
+              f"median(relative) > {spec.contribution_floor:.4%}", file=detail_stream)
         print(f"  calibration B_min={spec.calibration.b_min_blocks}, "
               f"MDE={spec.calibration.mde:.4%}: "
-              f"{spec.calibration.evidence_ref}", file=stream)
+              f"{spec.calibration.evidence_ref}", file=detail_stream)
     print(f"  anchor movement bound: {spec.drift_bound:.4%} from {AA_EVIDENCE_REF}",
-          file=stream)
-    print("", file=stream)
+          file=detail_stream)
+    print("", file=detail_stream)
 
     try:
         result = run_campaign(spec, ops)
@@ -4464,17 +4543,18 @@ def main(argv: Optional[Sequence[str]] = None, *, out: Optional[Any] = None,
         if broker is not None:
             broker.close()
 
-    print("", file=stream)
-    print(f"state: {result.state}", file=stream)
+    print("", file=detail_stream)
+    print(f"state: {result.state}", file=detail_stream)
     if result.decision is not None:
-        print(result.decision.reason, file=stream)
+        print(result.decision.reason, file=detail_stream)
     if result.error:
-        print(f"error: {result.error.splitlines()[0]}", file=stream)
+        print(f"error: {result.error.splitlines()[0]}", file=detail_stream)
     for record in result.releases:
         marker = "released" if record.released else "NOT RELEASED"
-        print(f"  {record.name}: {marker} ({record.detail})", file=stream)
+        print(f"  {record.name}: {marker} ({record.detail})", file=detail_stream)
     if result.production_unchanged is not None:
-        print(f"  production trees: {result.production_unchanged.outcome}", file=stream)
+        print(f"  production trees: {result.production_unchanged.outcome}",
+              file=detail_stream)
     if args.as_json:
         print(json.dumps(result.to_dict(), indent=2, sort_keys=True, default=str),
               file=stream)

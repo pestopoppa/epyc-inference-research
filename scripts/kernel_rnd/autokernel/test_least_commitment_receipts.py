@@ -17,6 +17,7 @@ from unittest import mock
 
 from . import journal as J
 from . import least_commitment_archive_builder as B
+from . import least_commitment_capture as C
 from . import least_commitment_receipts as P
 from . import offline_least_commitment as L
 from . import schemas as S
@@ -113,6 +114,8 @@ class ReceiptProjectionTest(unittest.TestCase):
         fixture_ids = proposal["representation_contract"][
             "semantics_preserving_recoding_fixture_ids"]
         least_commitment = {
+            "schema": C.BLOCK_SCHEMA,
+            "capture_mode": "measured",
             "candidate_frame_id": "candidate-frame-real-v1",
             "regime": "prefill",
             "surface": "mul_mat",
@@ -229,6 +232,56 @@ class ReceiptProjectionTest(unittest.TestCase):
         self.assertEqual(source["record"], "candidate")
         self.assertEqual(len(source["record_sha256"]), 64)
         self.assertEqual(len(source["value_sha256"]), 64)
+
+    def test_assembles_all_bindings_from_completed_campaigns(self):
+        completed = [{
+            key: row[key] for key in (
+                "journal_root", "campaign_id", "proposal_id",
+                "completion_event_id", "matched_control_id")
+        } for row in self.rows]
+        compiled = P.assemble_plan(
+            archive_id="ak-live-binding-dress-rehearsal",
+            created_at="2026-08-12T00:00:00+00:00",
+            diagnostic_directions=DIAGNOSTIC_DIRECTIONS,
+            outcome_weights={
+                "heldout_regime_transfer": 0.5,
+                "falsifier_resolution": 0.5,
+            },
+            completed_rows=completed,
+        )
+        output = self.root / "assembled-projection"
+        P.project(compiled, output)
+        self.assertTrue((output / "archive.json").is_file())
+        archive = json.loads((output / "archive.json").read_text(encoding="utf-8"))
+        self.assertEqual(archive["archive_id"], "ak-live-binding-dress-rehearsal")
+
+    def test_cli_derives_projection_plan_without_empirical_literals(self):
+        completed = [{
+            key: row[key] for key in (
+                "journal_root", "campaign_id", "proposal_id",
+                "completion_event_id", "matched_control_id")
+        } for row in self.rows]
+        source = self.root / "completed.json"
+        output = self.root / "projection-plan.json"
+        source.write_text(json.dumps({
+            "archive_id": "ak-cli-plan-test",
+            "created_at": "2026-08-12T00:00:00+00:00",
+            "diagnostic_directions": DIAGNOSTIC_DIRECTIONS,
+            "outcome_weights": {
+                "heldout_regime_transfer": 0.5,
+                "falsifier_resolution": 0.5,
+            },
+            "rows": completed,
+        }), encoding="utf-8")
+        self.assertEqual(P.main([
+            "--assemble-completed", str(source),
+            "--plan-output", str(output),
+        ]), 0)
+        compiled = json.loads(output.read_text(encoding="utf-8"))
+        self.assertEqual(compiled["plan_sha256"], P._plan_hash(compiled))
+        self.assertTrue(all(
+            set(row["diagnostic_bindings"]) == set(L.DIAGNOSTICS)
+            for row in compiled["rows"]))
 
     def test_missing_journaled_diagnostic_fails_closed(self):
         self.plan["rows"][1]["diagnostic_bindings"]["novelty"]["pointer"] += "-absent"
