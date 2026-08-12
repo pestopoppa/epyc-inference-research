@@ -4,21 +4,23 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
 from types import ModuleType
 import unittest
+from unittest import mock
 
 from . import arena_upstream_common as common
 from . import geak_v1_arena as G
 
 
 class FakeEvaluator:
-    def __init__(self, *, workspace: Path, arena_root: Path):
+    def __init__(self, *, workspace: Path, arena_root: Path, source_paths=("kernel.py",)):
         self.workspace = workspace
         self.arena_root = arena_root
-        self.source_paths = ("kernel.py",)
+        self.source_paths = tuple(source_paths)
         self.config = {"target_kernel_functions": ["kernel"]}
         self.seen = []
         self.materialized = False
@@ -82,6 +84,10 @@ class GeakArenaTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
+        self.source_env = mock.patch.dict(os.environ, {
+            common.ARENA_SOURCE_PATHS_ENV: json.dumps(["kernel.py"])})
+        self.source_env.start()
+        self.addCleanup(self.source_env.stop)
         self.workspace = self.root / "workspace"
         self.workspace.mkdir()
         (self.workspace / "kernel.py").write_text(

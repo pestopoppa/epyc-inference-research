@@ -196,7 +196,8 @@ def run_controller(
     source = Path(source_root).resolve()
     model = model_factory(workspace=root, budget=budget)
     evaluator = evaluator_factory(
-        workspace=root, arena_root=Path(arena_root).resolve())
+        workspace=root, arena_root=Path(arena_root).resolve(),
+        source_paths=common.declared_arena_source_paths())
     generator_type, types_module = upstream_loader(source, model)
     task = KSearchArenaTask(
         prompt=prompt, evaluator=evaluator, types_module=types_module)

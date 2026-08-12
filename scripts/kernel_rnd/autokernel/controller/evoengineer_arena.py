@@ -402,7 +402,8 @@ def run_controller(
     source_receipt = inspect_source(source)
     model = model_factory(workspace=root, budget=budget)
     evaluator = evaluator_factory(
-        workspace=root, arena_root=Path(arena_root).resolve())
+        workspace=root, arena_root=Path(arena_root).resolve(),
+        source_paths=common.declared_arena_source_paths())
     output = root / common.ARTIFACT_DIRNAME / "evoengineer-runtime"
     output.mkdir(parents=True, exist_ok=False)
     controller = build_controller(
