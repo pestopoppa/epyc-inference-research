@@ -42,6 +42,33 @@ class PriorArtGateTest(unittest.TestCase):
         self.assertEqual(result.matched_pattern, "Q8 quantized GEMV")
         self.assertNotEqual(result.matched_pattern, "RMSNorm MUL RoPE fusion")
 
+    def test_hip_top_k_limitation_wins_over_generic_sampling_port(self):
+        result = P.classify(self.finding(
+            trace_text="backend sampling top_k top_p",
+            symbols=("ggml_cuda_op_top_k",)), self.catalogue)
+        self.assertEqual(result.bucket, P.BUCKET_EXISTING_DISABLED)
+        self.assertEqual(result.matched_pattern, "HIP backend TOP_K sampling")
+        self.assertEqual(result.exit_action, "flag_support_or_regression_fix")
+
+    def test_reviewed_gfx90a_paths_are_existing_not_novel(self):
+        cases = (
+            ("topk_moe_cuda<64, false>", "gfx90a fused top-k MoE"),
+            ("flash_attn_ext_f16", "gfx90a FlashAttention"),
+            ("rocblas_gemm_ex", "ROCm MMQ versus rocBLAS dispatch"),
+        )
+        for trace_text, expected_pattern in cases:
+            with self.subTest(trace_text=trace_text):
+                result = P.classify(self.finding(
+                    trace_text=trace_text, symbols=()), self.catalogue)
+                self.assertEqual(result.bucket, P.BUCKET_EXISTING_APPLIES)
+                self.assertEqual(result.matched_pattern, expected_pattern)
+
+    def test_source_commits_are_pinned_in_recorded_scan_commands(self):
+        commands = "\n".join(self.catalogue.scan_commands)
+        for row in self.catalogue.rows:
+            with self.subTest(pattern=row.pattern):
+                self.assertIn(row.source_commit, commands)
+
     def test_cumulative_floor_groups_repeated_small_kernel_rows(self):
         rows = [self.finding(finding_id="f-1", gpu_time_share=0.006),
                 self.finding(finding_id="f-2", gpu_time_share=0.005)]
