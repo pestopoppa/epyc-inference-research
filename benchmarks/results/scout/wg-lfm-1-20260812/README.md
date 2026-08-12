@@ -53,6 +53,13 @@ default (`--jinja` on), which is the eligible one. Archived here as `chat_templa
 | LFM2.5-2.6B **Q8_0** | 898.89 ± 21.93 | **44.95 ± 0.18** | 2.81 GiB | active |
 | gemma4-26B-A4B Q4_K_M (incumbent, **no MTP**) | 555.28 ± 14.61 | **28.00 ± 0.55** | 16.51 GiB | active |
 
+**Co-residency disclosure.** All arms held `q0` exclusively via `region-lock`. Regions `q1`–`q3`
+were free for the two LFM arms (19:32:58–19:34:38). Another session acquired **`q1` at 19:35:13**,
+i.e. during ~68 s of the gemma arm's ~103 s window (`bench-cpu[memento-s2-stage1-smoke]`, a disjoint
+region). The gemma arm's stddev stayed at 0.55 t/s (2.0 %), so the effect is small — but it points
+the wrong way for the conclusion drawn here: the **incumbent** is the arm that ran with a co-tenant,
+so the LFM lead below is, if anything, marginally overstated.
+
 ### Paired deltas
 
 | pair | Δ pp512 | Δ tg512 |
