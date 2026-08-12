@@ -1,6 +1,6 @@
 {
   "schema": "epyc.autokernel.arena_controller_campaign.v1",
-  "campaign_id": "inf03-mi210-controller-ab-v1",
+  "campaign_id": "inf03-mi210-controller-ab-v2",
   "target_gpu_model": "MI210",
   "target_gfx_arch": "gfx90a",
   "budget": {
@@ -93,21 +93,39 @@
     },
     {
       "arm_id": "evoengineer",
-      "availability": "missing",
-      "adapter_kind": "evoengineer_full_arena_pending_v1",
-      "missing_artifacts": [
-        "an exact clean pgg3/evotoolkit checkout at 1649715a975b9022c84b5279c88aaef0b73b28dc under the vendor controller root",
-        "a parent-worker AF_UNIX evaluation broker behind ArenaWorkspaceEvaluator.evaluate(files)",
-        "launcher-enforced device isolation with no controller-side vendor measure/evaluate path",
-        "a hash-bound EvoEngineer-Full campaign launcher and receipt integration validated after the evaluation broker lands"
+      "availability": "ready",
+      "adapter_kind": "evoengineer_full_arena_v1",
+      "missing_artifacts": [],
+      "argv": [
+        "/mnt/raid0/llm/tools/geak-v1-rocm62-py312/bin/python",
+        "-m",
+        "scripts.kernel_rnd.autokernel.controller.evoengineer_arena",
+        "--model",
+        "gpt-5.6-sol",
+        "--effort",
+        "high",
+        "--checkpoint-hours",
+        "32",
+        "--timeout-seconds",
+        "115200",
+        "--workspace",
+        ".",
+        "--arena-root",
+        "/mnt/raid0/llm/autokernel/vendor/agent-kernel-arena",
+        "--source-root",
+        "/mnt/raid0/llm/autokernel/vendor/arena-controllers/evoengineer"
       ],
+      "source_root": "repository://.",
+      "source_commit": "f42b35403b71684d043db4ee0b4a8670e12c4727",
+      "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/evoengineer_arena.py",
+      "entrypoint_sha256": "d87a8e3ac5726daace00979da211d130c96869b55751158c165c5a1937b2bc1d",
       "model_ids": [
         "gpt-5.6-sol:high:upstream-controller"
       ],
       "required_clis": [
         "codex"
       ],
-      "upstream_source_root": "vendor://evotoolkit",
+      "upstream_source_root": "vendor://evoengineer",
       "upstream_source_commit": "1649715a975b9022c84b5279c88aaef0b73b28dc",
       "upstream_entrypoint_path": "src/evotoolkit/evo_method/evoengineer/evoengineer.py",
       "upstream_entrypoint_sha256": "28c56fbeb8663c9084734c8682dea39df4a539e1680eee782a8553046963e50d",
