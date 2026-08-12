@@ -2662,6 +2662,73 @@ roles:
   # All Qwen3.5 variants (0.8B–397B) are hybrid Delta Net (3:1 recurrent:attention).
   # "Dense-FFN" = non-MoE feed-forward, NOT pure attention. Spec decode is NOT viable.
   # =============================================================================
+  # =============================================================================
+  # LFM2.5 (Liquid AI) — worker_general candidates
+  # Hybrid conv+attention, 128K `lfm2` BPE vocab (rules it out as a spec-dec drafter).
+  # LEDGER NOTE 2026-08-12: the 2.6B rungs below were downloaded, benched CPU+GPU, and
+  # deleted the same day WITHOUT ever having been registered first. They are recorded
+  # here retroactively so the full-record registry does not silently omit a model that
+  # consumed a day of measurement. Register BEFORE benching, not after.
+  # =============================================================================
+  lfm25_26b_q4km:
+    tier: C
+    description: LFM2.5-2.6B Q4_K_M — worker_general candidate, REJECTED (reasoning variant)
+    model:
+      name: LFM2.5-2.6B
+      path: LiquidAI/LFM2.5-2.6B-GGUF/LFM2.5-2.6B-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 1.67
+      architecture: lfm2
+    artifact_status:
+      download: deleted
+      observed_date: 2026-08-12
+      deleted: 2026-08-12
+      deleted_reason: >-
+        operator-directed retirement. REJECTED as a worker_general candidate: it is a REASONING
+        variant with no `enable_thinking` kwarg in its chat template, so its reasoning cannot be
+        disabled the way the incumbent's is. Measured 2.08x faster per token but ~4.3x SLOWER to a
+        finished answer, emitting 15.2x more tokens on the same prompts; GPU widens rather than
+        closes that gap because the token-count ratio is invariant to hardware. Superseded by
+        LFM2.5-1.2B-Instruct per the vendor's own guidance to use -Instruct where reasoning traces
+        add unnecessary latency. Bench evidence retained at
+        epyc-inference-research/benchmarks/results/scout/wg-lfm-1-20260812/ and
+        wg-lfm-1-thinking-toggle-20260812/; only the weights were removed.
+    candidate_roles:
+    - worker_general
+    constraints:
+      forbid:
+      - speculative_decoding
+    notes: >-
+      Downloaded at pinned revision b421ad1d549afeda6a0fb2ad3a697cb5a7879adc, SHA-256 verified
+      against remote LFS oids. CPU tg512 72.04 (24t), GPU tg512 225.11. Not decision-grade
+      (host uptime exceeded the 7 d limit).
+  lfm25_26b_q8_0:
+    tier: C
+    description: LFM2.5-2.6B Q8_0 — worker_general candidate, REJECTED (reasoning variant)
+    model:
+      name: LFM2.5-2.6B
+      path: LiquidAI/LFM2.5-2.6B-GGUF/LFM2.5-2.6B-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 2.87
+      architecture: lfm2
+    artifact_status:
+      download: deleted
+      observed_date: 2026-08-12
+      deleted: 2026-08-12
+      deleted_reason: >-
+        Same retirement as lfm25_26b_q4km — reasoning variant, superseded by
+        LFM2.5-1.2B-Instruct. Additionally never competitive on CPU (tg512 44.95 vs the Q4_K_M
+        rung's 72.04) though within noise of it on GPU (228.34 vs 225.11), which is itself the
+        recorded finding that Q4-vs-Q8 ordering INVERTS between CPU and GPU.
+    candidate_roles:
+    - worker_general
+    constraints:
+      forbid:
+      - speculative_decoding
+    notes: >-
+      GGML_IQK_Q8_0=1 is load-bearing for this rung on CPU: without it no `[iqk] ACTIVE` line is
+      logged at all and decode drops 58%.
+
   qwen35_2b_q4km:
     tier: C
     description: Qwen3.5-2B Q4_K_M — worker candidate
