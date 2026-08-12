@@ -14,11 +14,13 @@ Importing this module performs no model, compiler, evaluator, or GPU work.
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from contextlib import contextmanager, nullcontext
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
 import hashlib
+import fcntl
 import json
 import logging
 import math
@@ -47,7 +49,8 @@ from ..resource import device_claim
 RUNNER_SCHEMA = "epyc.autokernel.arena_cell_runner.v3"
 CHECKPOINT_SCHEMA = "epyc.autokernel.arena_checkpoint.v2"
 AGGREGATE_SCHEMA = "epyc.autokernel.arena_campaign_execution.v2"
-RUN_MANIFEST_SCHEMA = "epyc.autokernel.arena_campaign_run_manifest.v2"
+RUN_MANIFEST_SCHEMA = "epyc.autokernel.arena_campaign_run_manifest.v3"
+V2_RUN_MANIFEST_SCHEMA = "epyc.autokernel.arena_campaign_run_manifest.v2"
 LEGACY_RUN_MANIFEST_SCHEMA = "epyc.autokernel.arena_campaign_run_manifest.v1"
 VALIDATION_SCHEMA = "epyc.autokernel.arena_campaign_validation.v1"
 DIAGNOSTIC_PILOT_SCHEMA = "epyc.autokernel.arena_diagnostic_pilot.v1"
@@ -61,6 +64,10 @@ REPOSITORY_ROOT = IMPLEMENTATION_MODULE.parents[4]
 DEFAULT_CLAIM_JOURNAL = "/mnt/raid0/llm/ak-claims/device.jsonl"
 DEFAULT_DEVICE_ID = "mi210_0"
 EVALUATION_RESERVE_SECONDS = 7200
+OVERLAP_AA_SCHEMA = "epyc.autokernel.arena_overlap_aa.v1"
+ATTEMPT_LEASE_NAME = "attempt.lease"
+TASKSET_EXECUTABLE = Path("/usr/bin/taskset")
+CLAIM_PREFLIGHT_SCHEMA = "epyc.autokernel.arena_claim_preflight.v1"
 CONTROLLER_ACTIVATION_RECEIPT = "controller-sandbox-activation.json"
 CONTROLLER_TEARDOWN_RECEIPT = "controller-sandbox-teardown.json"
 CONTROLLER_STAGED_INPUT_RECEIPT = "controller-staged-inputs.json"
@@ -472,6 +479,10 @@ def _run_gpu_measurement_window(
             or not isinstance(claim_timeout, (int, float))
             or not math.isfinite(claim_timeout) or claim_timeout < 0):
         raise ArenaCellRunnerError("worker claim timeout is invalid")
+    raw_evaluator_cpus = request.get("evaluator_cpu_set")
+    evaluator_cpus = (
+        tuple(raw_evaluator_cpus)
+        if isinstance(raw_evaluator_cpus, list) and raw_evaluator_cpus else None)
 
     if window_path is None:
         window_root = cell_root / "measurement-windows"
@@ -504,7 +515,9 @@ def _run_gpu_measurement_window(
         opened = claim.receipt().to_dict()
         sampler = sampler_factory(
             device_index=int(visible_device), interval_s=0.250).start()
-        with _gpu_visibility(visible_device):
+        with _gpu_visibility(visible_device), (
+                _temporary_cpu_affinity(evaluator_cpus)
+                if evaluator_cpus is not None else nullcontext()):
             result = action()
     except BaseException as exc:
         failure = exc
@@ -541,6 +554,8 @@ def _run_gpu_measurement_window(
         "device_claim_released": released,
         "device_sampling": sampling,
         "gpu_action_executed_only_while_claim_held": True,
+        **({"evaluator_cpu_set": list(evaluator_cpus)}
+           if evaluator_cpus is not None else {}),
         "failure": None if failure is None else {
             "type": type(failure).__name__, "message": str(failure)},
     })
@@ -591,15 +606,78 @@ def _live_process_group_members(process_group_id: int) -> tuple[int, ...]:
     return tuple(sorted(members))
 
 
+def _process_start_ticks(pid: int) -> int:
+    try:
+        stat_text = Path(f"/proc/{pid}/stat").read_text(encoding="ascii")
+        return int(stat_text[stat_text.rfind(")") + 2:].split()[19])
+    except (FileNotFoundError, IndexError, PermissionError, ValueError) as exc:
+        raise ArenaCellRunnerError(
+            f"cannot verify process identity for PID {pid}") from exc
+
+
+@dataclass(frozen=True)
+class ProcessGroupIdentity:
+    """One session-leading worker group, bound before it can be cancelled."""
+
+    leader_pid: int
+    leader_start_ticks: int
+    process_group_id: int
+    session_id: int
+
+    @classmethod
+    def capture(cls, pid: int) -> "ProcessGroupIdentity":
+        identity = cls(
+            leader_pid=pid,
+            leader_start_ticks=_process_start_ticks(pid),
+            process_group_id=os.getpgid(pid),
+            session_id=os.getsid(pid),
+        )
+        if (identity.leader_pid != identity.process_group_id
+                or identity.leader_pid != identity.session_id):
+            raise ArenaCellRunnerError(
+                "Arena worker lacks an exact owned process group/session")
+        return identity
+
+
 def _terminate_captured_process_group(
-    process_group_id: int, *, grace_seconds: float = 5.0,
+    process_group: int | ProcessGroupIdentity, *, grace_seconds: float = 5.0,
 ) -> None:
-    """Terminate and verify one process group captured from ``Popen.pid``."""
+    """Terminate a captured group only while its session leader still matches."""
+    if isinstance(process_group, ProcessGroupIdentity):
+        identity = process_group
+        process_group_id = identity.process_group_id
+    else:
+        # Historical direct tests supplied only a captured session-leader PID.
+        process_group_id = process_group
+        identity = ProcessGroupIdentity.capture(process_group_id)
     if process_group_id <= 1 or process_group_id == os.getpgrp():
         raise ArenaCellRunnerError("refusing an unsafe process-group target")
     members = _live_process_group_members(process_group_id)
     if not members:
         return
+    if Path(f"/proc/{identity.leader_pid}").exists():
+        if (_process_start_ticks(identity.leader_pid) != identity.leader_start_ticks
+                or os.getpgid(identity.leader_pid) != identity.process_group_id
+                or os.getsid(identity.leader_pid) != identity.session_id):
+            raise ArenaCellRunnerError(
+                "refusing to signal a reused or drifted Arena worker identity")
+    else:
+        # A session leader may exit after spawning a descendant. The live group
+        # cannot be reused while such members remain; still bind every member
+        # to the captured session and a post-leader start time before signalling.
+        for member in members:
+            try:
+                stat_text = Path(f"/proc/{member}/stat").read_text(encoding="ascii")
+                fields = stat_text[stat_text.rfind(")") + 2:].split()
+                session_id = int(fields[3])
+                start_ticks = int(fields[19])
+            except (FileNotFoundError, IndexError, PermissionError, ValueError) as exc:
+                raise ArenaCellRunnerError(
+                    "cannot bind orphan worker-group membership") from exc
+            if (session_id != identity.session_id
+                    or start_ticks < identity.leader_start_ticks):
+                raise ArenaCellRunnerError(
+                    "refusing a drifted orphan worker process group")
     for sig in (signal.SIGTERM, signal.SIGKILL):
         try:
             os.killpg(process_group_id, sig)
@@ -618,6 +696,56 @@ def _terminate_captured_process_group(
             f"{list(members)}")
 
 
+@dataclass
+class OverlapTracker:
+    """Thread-safe observation of actual checkpoint-worker overlap."""
+
+    configured_width: int
+    _live: int = 0
+    peak_live_workers: int = 0
+    started_workers: int = 0
+
+    def __post_init__(self) -> None:
+        self._lock = threading.Lock()
+
+    @contextmanager
+    def active(self):
+        with self._lock:
+            self._live += 1
+            self.started_workers += 1
+            self.peak_live_workers = max(self.peak_live_workers, self._live)
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._live -= 1
+
+    def receipt_fields(self) -> dict[str, Any]:
+        with self._lock:
+            peak = self.peak_live_workers
+            started = self.started_workers
+        return {
+            "configured_controller_width": self.configured_width,
+            "observed_peak_live_controller_workers": peak,
+            "observed_controller_worker_count": started,
+            "controller_overlap_observed": peak >= 2,
+        }
+
+
+@contextmanager
+def _temporary_cpu_affinity(cpu_set: Sequence[int]):
+    """Temporarily pin the calling worker thread/process to an exact CPU set."""
+    target = set(cpu_set)
+    if not target:
+        raise ArenaCellRunnerError("CPU affinity set must not be empty")
+    previous = os.sched_getaffinity(0)
+    try:
+        os.sched_setaffinity(0, target)
+        yield
+    finally:
+        os.sched_setaffinity(0, previous)
+
+
 @dataclass(frozen=True)
 class RunnerConfig:
     campaign_id: str
@@ -626,6 +754,7 @@ class RunnerConfig:
     output_root: str
     attempt_id: str | None = None
     claim_journal: str = DEFAULT_CLAIM_JOURNAL
+    claim_lock_path: str | None = None
     claim_timeout_seconds: float = 0.0
     device_id: str = DEFAULT_DEVICE_ID
     visible_device: str = "0"
@@ -635,6 +764,12 @@ class RunnerConfig:
     expected_campaign_module_sha256: str | None = None
     geak_root: str | None = None
     expected_vendor_sources: Mapping[str, Any] | None = None
+    schedule_index: int | None = None
+    lane_name: str | None = None
+    controller_cpu_set: tuple[int, ...] = ()
+    evaluator_cpu_set: tuple[int, ...] = ()
+    attempt_lease_fd: int | None = None
+    expected_taskset_sha256: str | None = None
 
     def __post_init__(self) -> None:
         _safe_id(self.campaign_id, "campaign_id")
@@ -687,8 +822,58 @@ class RunnerConfig:
                 or not math.isfinite(self.claim_timeout_seconds)
                 or self.claim_timeout_seconds < 0):
             raise ArenaCellRunnerError("claim_timeout_seconds must be finite and non-negative")
+        resolved_claim_lock = device_claim.device_lock_path(self.device_id).resolve()
+        if self.claim_lock_path is None:
+            object.__setattr__(self, "claim_lock_path", str(resolved_claim_lock))
+        elif Path(self.claim_lock_path).resolve() != resolved_claim_lock:
+            raise ArenaCellRunnerError("claim_lock_path differs from device claim authority")
         if self.device_id != DEFAULT_DEVICE_ID or self.visible_device != "0":
             raise ArenaCellRunnerError("the INF-03 campaign is pinned to MI210 device zero")
+        if (self.schedule_index is None) != (self.lane_name is None):
+            raise ArenaCellRunnerError(
+                "schedule_index and lane_name must be supplied together")
+        if self.schedule_index is not None:
+            if (isinstance(self.schedule_index, bool)
+                    or not isinstance(self.schedule_index, int)
+                    or self.schedule_index < 0):
+                raise ArenaCellRunnerError("schedule_index must be non-negative")
+            _safe_id(str(self.lane_name), "lane_name")
+        if not self.controller_cpu_set and not self.evaluator_cpu_set:
+            available = tuple(sorted(os.sched_getaffinity(0)))
+            if len(available) < 2:
+                raise ArenaCellRunnerError(
+                    "AutoKernel overlap requires at least two available CPUs")
+            reserve = max(1, len(available) // 4)
+            object.__setattr__(self, "controller_cpu_set", available[:-reserve])
+            object.__setattr__(self, "evaluator_cpu_set", available[-reserve:])
+        elif not self.controller_cpu_set or not self.evaluator_cpu_set:
+            raise ArenaCellRunnerError(
+                "controller and evaluator CPU sets must be supplied together")
+        for label, values in (
+                ("controller_cpu_set", self.controller_cpu_set),
+                ("evaluator_cpu_set", self.evaluator_cpu_set)):
+            if (not isinstance(values, tuple) or not values
+                    or any(isinstance(value, bool) or not isinstance(value, int)
+                           or value < 0 for value in values)
+                    or len(values) != len(set(values))):
+                raise ArenaCellRunnerError(
+                    f"{label} must be a non-empty tuple of unique CPU IDs")
+        if set(self.controller_cpu_set) & set(self.evaluator_cpu_set):
+            raise ArenaCellRunnerError(
+                "controller and evaluator CPU sets must be disjoint")
+        available_cpus = os.sched_getaffinity(0)
+        if (not set(self.controller_cpu_set).issubset(available_cpus)
+                or not set(self.evaluator_cpu_set).issubset(available_cpus)):
+            raise ArenaCellRunnerError("configured CPU affinity is unavailable")
+        if self.attempt_lease_fd is not None:
+            try:
+                os.fstat(self.attempt_lease_fd)
+            except OSError as exc:
+                raise ArenaCellRunnerError("attempt lease FD is not open") from exc
+        if (self.expected_taskset_sha256 is not None
+                and not _SHA256_RE.fullmatch(self.expected_taskset_sha256)):
+            raise ArenaCellRunnerError(
+                "expected_taskset_sha256 must be a lowercase SHA-256")
 
 
 WorkerRunner = Callable[[Mapping[str, Any], float], Mapping[str, Any]]
@@ -728,7 +913,11 @@ class DiagnosticPilotCellRequest:
 class GovernedArenaCellRunner:
     """Callable concrete implementation of ``arena_campaign.run_cell``."""
 
-    def __init__(self, config: RunnerConfig, *, worker: WorkerRunner | None = None):
+    def __init__(
+        self, config: RunnerConfig, *, worker: WorkerRunner | None = None,
+        cancel_event: threading.Event | None = None,
+        overlap_tracker: OverlapTracker | None = None,
+    ):
         if not isinstance(config, RunnerConfig):
             raise TypeError("config must be a RunnerConfig")
         self.config = config
@@ -743,6 +932,8 @@ class GovernedArenaCellRunner:
             config.expected_campaign_module_sha256
             or _sha256_file(arena_campaign.IMPLEMENTATION_MODULE))
         self._worker = worker or self._run_worker_subprocess
+        self._cancel_event = cancel_event or threading.Event()
+        self._overlap_tracker = overlap_tracker
         self._ordinal = 0
         self._cell_ordinal = 0
         self.resumed_checkpoints = 0
@@ -777,6 +968,9 @@ class GovernedArenaCellRunner:
                if self.attempt_id is not None else {}),
             "task_id": request.task.task_id,
             "arm_id": request.arm.arm_id,
+            **({"schedule_index": self.config.schedule_index,
+                "lane_name": self.config.lane_name}
+               if self.config.schedule_index is not None else {}),
             "baseline": request.is_starting_state_baseline,
             "checkpoint_hours": list(request.checkpoint_hours),
             "runs": runs,
@@ -786,6 +980,7 @@ class GovernedArenaCellRunner:
                 "controller_deliberation_holds_no_gpu_claim": True,
                 "dot_free_collision_bound_cell_paths": True,
                 "post_worker_sibling_manifest_verified": True,
+                "peer_lane_writes_landlock_denied": self.config.lane_name is not None,
                 "promotion_authority": False,
             },
         })
@@ -890,11 +1085,18 @@ class GovernedArenaCellRunner:
             request, checkpoint_hours=checkpoint_hours, cell_root=cell_root)
         _atomic_json(cell_root / "worker-request.json", worker_request)
         outside_before = _outside_cell_manifest(cell_root)
-        max_runtime = ((checkpoint_hours or 0.0) * 3600
-                       + EVALUATION_RESERVE_SECONDS)
+        max_runtime = (
+            (checkpoint_hours or 0.0) * 3600
+            + (2.0 * float(self.config.claim_timeout_seconds))
+            + EVALUATION_RESERVE_SECONDS)
         worker_result: Mapping[str, Any] | None = None
         try:
-            worker_result = self._worker(worker_request, max_runtime)
+            activity = (
+                self._overlap_tracker.active()
+                if self._overlap_tracker is not None
+                else nullcontext())
+            with activity:
+                worker_result = self._worker(worker_request, max_runtime)
         finally:
             _assert_worker_tree_contained(cell_root)
             outside_after = _outside_cell_manifest(cell_root)
@@ -917,6 +1119,20 @@ class GovernedArenaCellRunner:
                 "task or controller source identity changed during checkpoint execution")
         if worker_result.get("schema") != CHECKPOINT_SCHEMA:
             raise ArenaCellRunnerError("Arena worker returned the wrong checkpoint schema")
+        if self.config.lane_name is not None:
+            boundary = worker_result.get("lane_write_boundary")
+            if not isinstance(boundary, Mapping):
+                raise ArenaCellRunnerError(
+                    "v3 lane worker omitted its write-boundary evidence")
+            _verify_self_hash(boundary, "lane write boundary")
+            if (boundary.get("lane_name") != self.config.lane_name
+                    or boundary.get("schedule_index") != self.config.schedule_index
+                    or boundary.get("exact_cell_root") != str(cell_root.resolve())
+                    or boundary.get("shared_writable_files") != [
+                        str(Path(self.config.claim_journal).resolve()),
+                        self.config.claim_lock_path]
+                    or boundary.get("peer_lane_write_permitted") is not False):
+                raise ArenaCellRunnerError("lane write-boundary identity drifted")
         artifact_map = worker_result.get("artifacts")
         if not isinstance(artifact_map, Mapping) or not artifact_map:
             raise ArenaCellRunnerError("Arena worker returned no hash-bound artifacts")
@@ -972,6 +1188,9 @@ class GovernedArenaCellRunner:
             _atomic_json(cell_root / "belief-receipt.json", belief_receipt)
         receipt = _self_hash({
             **dict(worker_result),
+            **({"schedule_index": self.config.schedule_index,
+                "lane_name": self.config.lane_name}
+               if self.config.schedule_index is not None else {}),
             "started_at": started_at,
             "ended_at": _utc_now(),
             "preflight": {
@@ -988,6 +1207,7 @@ class GovernedArenaCellRunner:
                 "dot_free_directory_path": True,
                 "cell_tree_symlink_free": True,
                 "sibling_manifest_unchanged": True,
+                "peer_lane_writes_landlock_denied": self.config.lane_name is not None,
             },
             "belief_receipt": belief_receipt,
         })
@@ -1044,6 +1264,26 @@ class GovernedArenaCellRunner:
             if receipt.get(field) != expected:
                 raise ArenaCellRunnerError(
                     f"checkpoint receipt {field} drifted in {cell_root}")
+        if self.config.lane_name is not None:
+            boundary = receipt.get("lane_write_boundary")
+            if not isinstance(boundary, Mapping):
+                raise ArenaCellRunnerError(
+                    "completed v3 checkpoint lacks lane write boundary")
+            _verify_self_hash(boundary, "lane write boundary")
+            if (receipt.get("schedule_index") != self.config.schedule_index
+                    or receipt.get("lane_name") != self.config.lane_name
+                    or boundary.get("schedule_index") != self.config.schedule_index
+                    or boundary.get("lane_name") != self.config.lane_name
+                    or boundary.get("exact_cell_root") != str(cell_root.resolve())
+                    or boundary.get("shared_writable_files") != [
+                        str(Path(self.config.claim_journal).resolve()),
+                        self.config.claim_lock_path]
+                    or boundary.get("peer_lane_write_permitted") is not False
+                    or _load_json_object(
+                        cell_root / "lane-write-boundary.json",
+                        "persisted lane write boundary") != boundary):
+                raise ArenaCellRunnerError(
+                    "completed v3 lane write-boundary identity drifted")
         runner = receipt.get("runner")
         if (not isinstance(runner, Mapping)
                 or runner.get("path") != str(IMPLEMENTATION_MODULE)
@@ -1289,7 +1529,19 @@ class GovernedArenaCellRunner:
             "checkpoint_hours": checkpoint_hours,
             "visible_device": self.config.visible_device,
             "claim_journal": str(Path(self.config.claim_journal).resolve()),
+            "claim_lock_path": self.config.claim_lock_path,
             "claim_timeout_seconds": float(self.config.claim_timeout_seconds),
+            "controller_cpu_set": list(self.config.controller_cpu_set),
+            "evaluator_cpu_set": list(self.config.evaluator_cpu_set),
+            **({"schedule_index": self.config.schedule_index,
+                "lane_name": self.config.lane_name}
+               if self.config.schedule_index is not None else {}),
+            **({"attempt_lease_fd": self.config.attempt_lease_fd}
+               if self.config.attempt_lease_fd is not None else {}),
+            **({"taskset": {
+                    "path": str(TASKSET_EXECUTABLE),
+                    "sha256": self.config.expected_taskset_sha256}}
+               if self.config.lane_name is not None else {}),
             "evaluator_python": self.evaluator_python,
         }
         if isinstance(request, DiagnosticPilotCellRequest) \
@@ -1298,9 +1550,8 @@ class GovernedArenaCellRunner:
                 request.controller_argv)
         return payload
 
-    @staticmethod
     def _run_worker_subprocess(
-        request: Mapping[str, Any], timeout_seconds: float,
+        self, request: Mapping[str, Any], timeout_seconds: float,
     ) -> Mapping[str, Any]:
         cell_root = Path(str(request["cell_root"]))
         output = cell_root / "worker-result.json"
@@ -1311,40 +1562,77 @@ class GovernedArenaCellRunner:
             "ROCR_VISIBLE_DEVICES": str(request["visible_device"]),
             "CUDA_VISIBLE_DEVICES": str(request["visible_device"]),
             "PYTHONPATH": str(request["repository_root"]),
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "TMPDIR": str(cell_root),
+            "HOME": str(cell_root),
+            "XDG_CACHE_HOME": str(cell_root / ".cache"),
+            "TRITON_CACHE_DIR": str(cell_root / ".triton"),
+            "TORCH_EXTENSIONS_DIR": str(cell_root / ".torch-extensions"),
         })
-        process = subprocess.Popen(
-            command, cwd=str(request["repository_root"]), env=env,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-            start_new_session=True,
-        )
-        timed_out = False
-        stdout = ""
-        stderr = ""
+        controller_cpus = tuple(int(cpu) for cpu in request["controller_cpu_set"])
+        lease_fd = request.get("attempt_lease_fd")
+        pass_fds = (() if lease_fd is None else (int(lease_fd),))
+
+        if (not TASKSET_EXECUTABLE.is_file() or TASKSET_EXECUTABLE.is_symlink()
+                or not os.access(TASKSET_EXECUTABLE, os.X_OK)):
+            raise ArenaCellRunnerError("exact taskset executable is unavailable")
+        taskset = request.get("taskset")
+        if request.get("lane_name") is not None and (
+                not isinstance(taskset, Mapping)
+                or taskset.get("path") != str(TASKSET_EXECUTABLE)
+                or taskset.get("sha256") != _sha256_file(TASKSET_EXECUTABLE)):
+            raise ArenaCellRunnerError("taskset execution identity drifted")
+        command = (
+            str(TASKSET_EXECUTABLE), "--cpu-list",
+            ",".join(str(cpu) for cpu in controller_cpus), *command)
+
+        stdout_path = cell_root / "worker.stdout"
+        stderr_path = cell_root / "worker.stderr"
+        stdout_handle = stdout_path.open("w", encoding="utf-8")
+        stderr_handle = stderr_path.open("w", encoding="utf-8")
         try:
-            stdout, stderr = process.communicate(timeout=timeout_seconds)
-        except subprocess.TimeoutExpired:
-            timed_out = True
+            process = subprocess.Popen(
+                command, cwd=str(request["repository_root"]), env=env,
+                stdout=stdout_handle, stderr=stderr_handle, text=True,
+                start_new_session=True, pass_fds=pass_fds,
+            )
+        finally:
+            stdout_handle.close()
+            stderr_handle.close()
+        identity = ProcessGroupIdentity.capture(process.pid)
+        timed_out = False
+        cancelled = False
+        stderr = ""
+        deadline = time.monotonic() + timeout_seconds
+        try:
+            while process.poll() is None:
+                if self._cancel_event.wait(0.1):
+                    cancelled = True
+                    break
+                if time.monotonic() >= deadline:
+                    timed_out = True
+                    break
         finally:
             cleanup_error: Exception | None = None
+            if cancelled or timed_out or process.poll() is None:
+                try:
+                    _terminate_captured_process_group(identity)
+                except Exception as exc:  # preserve teardown after reaping
+                    cleanup_error = exc
             try:
-                _terminate_captured_process_group(process.pid)
-            except Exception as exc:  # preserve the teardown finding after reaping
-                cleanup_error = exc
-            if process.poll() is None:
-                process.kill()
-            try:
-                stdout, stderr = process.communicate(timeout=5)
+                process.wait(timeout=5)
             except subprocess.TimeoutExpired as exc:
                 cleanup_error = ArenaCellRunnerError(
                     "Arena worker remained unreapable after group teardown")
                 cleanup_error.__cause__ = exc
             if cleanup_error is not None:
                 raise cleanup_error
-        (cell_root / "worker.stdout").write_text(stdout, encoding="utf-8")
-        (cell_root / "worker.stderr").write_text(stderr, encoding="utf-8")
+        stderr = stderr_path.read_text(encoding="utf-8", errors="replace")
         if timed_out:
             raise ArenaCellRunnerError(
                 f"Arena worker exceeded its {timeout_seconds:g}s ceiling")
+        if cancelled:
+            raise ArenaCellRunnerError("Arena worker cancelled after peer failure")
         if process.returncode != 0:
             raise ArenaCellRunnerError(
                 f"Arena worker exited {process.returncode}: {stderr[-1000:]}")
@@ -2717,6 +3005,10 @@ def _run_worker_impl(
     if attempt_id is not None and claim_campaign_id != attempt_id:
         raise ArenaCellRunnerError(
             "worker claim scope does not match the campaign attempt")
+    if (request.get("lane_name") is not None
+            and Path(str(request.get("claim_lock_path"))).resolve()
+            != device_claim.device_lock_path(DEFAULT_DEVICE_ID).resolve()):
+        raise ArenaCellRunnerError("worker claim lock authority drifted")
     arena_root = Path(str(request.get("arena_root"))).resolve()
     repository_root = Path(str(request.get("repository_root"))).resolve()
     cell_root = Path(str(request.get("cell_root"))).resolve()
@@ -3103,14 +3395,212 @@ def run_worker(
                 logger.removeHandler(handler)
 
 
+def _parse_cpu_set(value: str | None, label: str) -> tuple[int, ...] | None:
+    if value is None:
+        return None
+    cpus: set[int] = set()
+    try:
+        for part in value.split(","):
+            bounds = part.strip().split("-", 1)
+            first = int(bounds[0])
+            last = int(bounds[-1])
+            if first < 0 or last < first:
+                raise ValueError
+            cpus.update(range(first, last + 1))
+    except ValueError as exc:
+        raise ArenaCellRunnerError(f"{label} is not a valid CPU list") from exc
+    if not cpus:
+        raise ArenaCellRunnerError(f"{label} must not be empty")
+    return tuple(sorted(cpus))
+
+
+def _resolved_cpu_partition(args: argparse.Namespace) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    controller = _parse_cpu_set(
+        getattr(args, "controller_cpus", None), "controller_cpus")
+    evaluator = _parse_cpu_set(
+        getattr(args, "evaluator_cpus", None), "evaluator_cpus")
+    if (controller is None) != (evaluator is None):
+        raise ArenaCellRunnerError(
+            "controller_cpus and evaluator_cpus must be supplied together")
+    available = tuple(sorted(os.sched_getaffinity(0)))
+    if controller is None:
+        if len(available) < 2:
+            raise ArenaCellRunnerError("campaign requires at least two CPUs")
+        reserve = max(1, len(available) // 4)
+        controller, evaluator = available[:-reserve], available[-reserve:]
+    assert evaluator is not None
+    if set(controller) & set(evaluator):
+        raise ArenaCellRunnerError("controller and evaluator CPU sets overlap")
+    if not set(controller).issubset(available) or not set(evaluator).issubset(available):
+        raise ArenaCellRunnerError("campaign CPU set includes unavailable CPUs")
+    return controller, evaluator
+
+
+def _campaign_schedule(
+    spec: arena_campaign.CampaignSpec, *, available_source: bool,
+) -> list[dict[str, Any]]:
+    selected = (
+        arena_campaign.AVAILABLE_SOURCE_PANEL_IDS
+        if available_source else arena_campaign.PRIMARY_PANEL_IDS)
+    arms = {arm.arm_id: arm for arm in spec.arms}
+    rows: list[dict[str, Any]] = []
+    for task in spec.tasks:
+        for arm_id in selected:
+            index = len(rows)
+            baseline = arm_id == arena_campaign.BASELINE_ARM_ID
+            lane_name = (
+                f"lane-{index:04d}-{_path_id(task.task_id, 'task_id')}-"
+                f"{_path_id(arm_id, 'arm_id')}")
+            rows.append({
+                "schedule_index": index,
+                "lane_name": lane_name,
+                "task_id": task.task_id,
+                "arm_id": arm_id,
+                "baseline": baseline,
+                "checkpoint_names": (
+                    ["baseline"] if baseline
+                    else [f"{hours:g}h" for hours in spec.budget_hours]),
+                "request": arena_campaign.CampaignCellRequest(
+                    arm=arms[arm_id], task=task,
+                    is_starting_state_baseline=baseline,
+                    checkpoint_hours=() if baseline else spec.budget_hours,
+                    maximum_wall_hours=(0.0 if baseline else spec.budget_hours[-1])),
+            })
+    return rows
+
+
+def _validate_overlap_aa_receipt(
+    receipt: Mapping[str, Any], *, width: int,
+    controller_cpus: Sequence[int], evaluator_cpus: Sequence[int],
+) -> dict[str, Any]:
+    _verify_self_hash(receipt, "overlap A/A receipt")
+    bound = receipt.get("predeclared_noise_bound_pct")
+    observed = receipt.get("observed_max_noise_pct")
+    if (receipt.get("schema") != OVERLAP_AA_SCHEMA
+            or receipt.get("status") != "pass"
+            or receipt.get("controller_width") != width
+            or receipt.get("controller_cpu_set") != list(controller_cpus)
+            or receipt.get("evaluator_cpu_set") != list(evaluator_cpus)
+            or receipt.get("observed_peak_live_controller_workers", 0) < 2
+            or isinstance(bound, bool) or not isinstance(bound, (int, float))
+            or not math.isfinite(bound) or bound < 0
+            or isinstance(observed, bool)
+            or not isinstance(observed, (int, float))
+            or not math.isfinite(observed) or observed < 0
+            or observed > bound
+            or receipt.get("within_predeclared_noise_bound") is not True):
+        raise ArenaCellRunnerError(
+            "overlap A/A receipt does not authorize this execution geometry")
+    return dict(receipt)
+
+
+def _load_overlap_aa(
+    path_value: str | None, *, width: int,
+    controller_cpus: Sequence[int], evaluator_cpus: Sequence[int],
+) -> tuple[dict[str, Any] | None, str | None]:
+    if path_value is None:
+        return None, None
+    path = Path(path_value).resolve()
+    receipt = _validate_overlap_aa_receipt(
+        _load_json_object(path, "overlap A/A receipt"), width=width,
+        controller_cpus=controller_cpus, evaluator_cpus=evaluator_cpus)
+    return receipt, str(path)
+
+
+@contextmanager
+def _attempt_lease(output_root: Path):
+    """Hold one inherited non-blocking attempt lease across all lane workers."""
+    lease_path = output_root.parent / f".{output_root.name}.{ATTEMPT_LEASE_NAME}"
+    lease_path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(
+        lease_path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
+    try:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise ArenaCellRunnerError(
+                "campaign attempt is already live or has an orphan worker") from exc
+        # Workers inherit this exact open-file description. Closing the parent
+        # descriptor does not release the lease until every captured child exits.
+        yield descriptor, str(lease_path.resolve())
+    finally:
+        os.close(descriptor)
+
+
+def _prepare_lane_claim_objects(
+    output_root: Path, manifest: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Clean stale revocation state before workers enter exact write boundaries."""
+    path = output_root / "claim-preflight.json"
+    if path.exists():
+        receipt = _load_json_object(path, "claim preflight receipt")
+        _verify_self_hash(receipt, "claim preflight receipt")
+        if (receipt.get("schema") != CLAIM_PREFLIGHT_SCHEMA
+                or receipt.get("attempt_id") != manifest.get("attempt_id")
+                or receipt.get("claim_lock_path") != manifest.get("claim_lock_path")
+                or receipt.get("claim_journal") != manifest.get("claim_journal")):
+            raise ArenaCellRunnerError("claim preflight receipt identity drifted")
+        if device_claim.revocation_path(DEFAULT_DEVICE_ID).exists():
+            raise ArenaCellRunnerError(
+                "a new device revocation appeared after claim preflight")
+        return receipt
+    claim = None
+    opened = None
+    released = None
+    try:
+        with _defer_campaign_signals():
+            claim = device_claim.acquire_device_claim(
+                DEFAULT_DEVICE_ID,
+                purpose="INF-03 v3 lane claim-object preflight",
+                campaign_id=str(manifest["claim_campaign_id"]),
+                journal=device_claim.ClaimJournal(str(manifest["claim_journal"])),
+                holder_label="arena_cell_runner.py:claim-preflight",
+                timeout_s=float(manifest["claim_timeout_seconds"]),
+                max_hold_s=120.0)
+        opened = claim.receipt().to_dict()
+    finally:
+        if claim is not None:
+            released = claim.release().to_dict()
+    if device_claim.revocation_path(DEFAULT_DEVICE_ID).exists():
+        raise ArenaCellRunnerError(
+            "claim preflight could not clear stale revocation state")
+    receipt = _self_hash({
+        "schema": CLAIM_PREFLIGHT_SCHEMA,
+        "attempt_id": manifest["attempt_id"],
+        "claim_campaign_id": manifest["claim_campaign_id"],
+        "claim_lock_path": manifest["claim_lock_path"],
+        "claim_journal": manifest["claim_journal"],
+        "device_claim_open": opened,
+        "device_claim_released": released,
+        "revocation_absent_after_release": True,
+        "gpu_action_executed": False,
+    })
+    _atomic_json(path, receipt)
+    return receipt
+
+
 def _run_manifest(
     args: argparse.Namespace, spec: arena_campaign.CampaignSpec,
     audit: Mapping[str, Any], *, available_source: bool,
 ) -> dict[str, Any]:
     preflight, preflight_file_sha256 = _load_preflight(args.preflight)
-    selected_arms = (
-        arena_campaign.AVAILABLE_SOURCE_PANEL_IDS
-        if available_source else arena_campaign.PRIMARY_PANEL_IDS)
+    width = int(getattr(args, "controller_width", 1))
+    if width < 1:
+        raise ArenaCellRunnerError("controller_width must be positive")
+    claim_timeout = float(args.claim_timeout_seconds)
+    if width > 1 and claim_timeout <= 0:
+        raise ArenaCellRunnerError(
+            "concurrent controller lanes require a positive claim timeout")
+    controller_cpus, evaluator_cpus = _resolved_cpu_partition(args)
+    calibration = bool(getattr(args, "overlap_aa_calibration", False))
+    aa_receipt, aa_path = _load_overlap_aa(
+        getattr(args, "overlap_aa_receipt", None), width=width,
+        controller_cpus=controller_cpus, evaluator_cpus=evaluator_cpus)
+    if width > 1 and aa_receipt is None and not calibration:
+        raise ArenaCellRunnerError(
+            "concurrent results require a matching overlap A/A receipt or "
+            "--overlap-aa-calibration")
+    schedule = _campaign_schedule(spec, available_source=available_source)
     output_root = Path(args.output_root).resolve()
     attempt_id = _safe_id(output_root.name, "attempt_id")
     return _self_hash({
@@ -3118,7 +3608,13 @@ def _run_manifest(
         "campaign_id": audit["campaign_id"],
         "attempt_id": attempt_id,
         "attempt_root": str(output_root),
+        "attempt_lease_path": str((
+            output_root.parent / f".{output_root.name}.{ATTEMPT_LEASE_NAME}").resolve()),
         "claim_campaign_id": attempt_id,
+        "claim_journal": str(Path(args.claim_journal).resolve()),
+        "claim_lock_path": str(
+            device_claim.device_lock_path(DEFAULT_DEVICE_ID).resolve()),
+        "claim_timeout_seconds": claim_timeout,
         "available_source": available_source,
         "authority": audit["authority"],
         "audit_receipt_sha256": audit["receipt_sha256"],
@@ -3141,12 +3637,39 @@ def _run_manifest(
         "runner": {
             "path": str(IMPLEMENTATION_MODULE),
             "sha256": _sha256_file(IMPLEMENTATION_MODULE),
+            "taskset_path": str(TASKSET_EXECUTABLE),
+            "taskset_sha256": _sha256_file(TASKSET_EXECUTABLE),
         },
         "matrix": {
             "task_ids": [task.task_id for task in spec.tasks],
-            "arm_ids": list(selected_arms),
+            "arm_ids": list(dict.fromkeys(row["arm_id"] for row in schedule)),
             "checkpoint_hours": list(spec.budget_hours),
             "ordering": "task_then_declared_arm_then_checkpoint",
+            "lanes": [{key: value for key, value in row.items() if key != "request"}
+                      for row in schedule],
+        },
+        "overlap": {
+            "controller_width": width,
+            "controller_cpu_set": list(controller_cpus),
+            "evaluator_cpu_set": list(evaluator_cpus),
+            "baseline_execution": "serial_before_controller_lanes",
+            "checkpoints_within_lane": "serial",
+            "publication_order": "immutable_schedule_index",
+            "aa_calibration": calibration,
+            "aa_receipt_path": aa_path,
+            "aa_receipt_sha256": (
+                aa_receipt["receipt_sha256"] if aa_receipt is not None else None),
+            "aa_receipt": aa_receipt,
+            "concurrent_results_rankable": width == 1 or aa_receipt is not None,
+        },
+        "worker_timeout": {
+            "formula": (
+                "checkpoint_hours*3600 + 2*claim_timeout_seconds + "
+                "evaluation_reserve_seconds"),
+            "evaluation_reserve_seconds": EVALUATION_RESERVE_SECONDS,
+            "maximum_seconds": (
+                spec.budget_hours[-1] * 3600 + 2 * claim_timeout
+                + EVALUATION_RESERVE_SECONDS),
         },
         "constraints": {
             "resume_exact_complete_checkpoints_only": True,
@@ -3158,6 +3681,9 @@ def _run_manifest(
             "mi210_claimed_only_for_vendor_measurements": True,
             "controller_deliberation_holds_no_gpu_claim": True,
             "controller_environment_gpu_blind": True,
+            "attempt_lease_inherited_by_workers": True,
+            "peer_lane_writes_landlock_denied": True,
+            "controller_evaluator_cpu_sets_disjoint": True,
             "partial_results_rankable": False,
             "aggregate_atomic_after_complete_matrix_only": True,
             "promotion_authority": False,
@@ -3381,6 +3907,142 @@ def _model_inference_receipt_paths(cell_root: Path) -> list[Path]:
         cell_root / "model-inference-windows").glob("*-result.json"))
 
 
+def _validate_v3_lane_shape(
+    root: Path, manifest: Mapping[str, Any],
+) -> tuple[list[Path], list[Path]]:
+    matrix = manifest.get("matrix")
+    overlap = manifest.get("overlap")
+    timeout = manifest.get("worker_timeout")
+    if not isinstance(matrix, Mapping) or not isinstance(overlap, Mapping) \
+            or not isinstance(timeout, Mapping):
+        raise ArenaCellRunnerError("v3 manifest lacks lane execution policy")
+    lanes = matrix.get("lanes")
+    if not isinstance(lanes, list) or not lanes:
+        raise ArenaCellRunnerError("v3 manifest has no deterministic lanes")
+    width = overlap.get("controller_width")
+    claim_timeout = manifest.get("claim_timeout_seconds")
+    if (isinstance(width, bool) or not isinstance(width, int) or width < 1
+            or isinstance(claim_timeout, bool)
+            or not isinstance(claim_timeout, (int, float))
+            or not math.isfinite(claim_timeout) or claim_timeout < 0
+            or (width > 1 and claim_timeout <= 0)):
+        raise ArenaCellRunnerError("v3 overlap/claim policy is invalid")
+    controller_cpus = overlap.get("controller_cpu_set")
+    evaluator_cpus = overlap.get("evaluator_cpu_set")
+    if (not isinstance(controller_cpus, list) or not controller_cpus
+            or not isinstance(evaluator_cpus, list) or not evaluator_cpus
+            or any(isinstance(cpu, bool) or not isinstance(cpu, int) or cpu < 0
+                   for cpu in controller_cpus + evaluator_cpus)
+            or len(controller_cpus) != len(set(controller_cpus))
+            or len(evaluator_cpus) != len(set(evaluator_cpus))
+            or set(controller_cpus) & set(evaluator_cpus)):
+        raise ArenaCellRunnerError("v3 CPU partitions are malformed or overlap")
+    rankable = overlap.get("concurrent_results_rankable")
+    calibration = overlap.get("aa_calibration")
+    aa_receipt = overlap.get("aa_receipt")
+    if width == 1:
+        if rankable is not True:
+            raise ArenaCellRunnerError("width-one v3 campaign lost ranking authority")
+    elif aa_receipt is not None:
+        validated_aa = _validate_overlap_aa_receipt(
+            aa_receipt, width=width, controller_cpus=controller_cpus,
+            evaluator_cpus=evaluator_cpus)
+        if (rankable is not True
+                or overlap.get("aa_receipt_sha256")
+                != validated_aa["receipt_sha256"]):
+            raise ArenaCellRunnerError("v3 A/A ranking authority drifted")
+    elif calibration is not True or rankable is not False:
+        raise ArenaCellRunnerError(
+            "v3 concurrent campaign lacks A/A authority or calibration label")
+    expected_formula = (
+        "checkpoint_hours*3600 + 2*claim_timeout_seconds + "
+        "evaluation_reserve_seconds")
+    checkpoint_hours = matrix.get("checkpoint_hours")
+    if (timeout.get("formula") != expected_formula
+            or timeout.get("evaluation_reserve_seconds")
+            != EVALUATION_RESERVE_SECONDS
+            or not isinstance(checkpoint_hours, list) or not checkpoint_hours
+            or timeout.get("maximum_seconds") != (
+                float(checkpoint_hours[-1]) * 3600
+                + 2 * float(claim_timeout) + EVALUATION_RESERVE_SECONDS)):
+        raise ArenaCellRunnerError("v3 worker timeout formula drifted")
+    journal = manifest.get("claim_journal")
+    if not isinstance(journal, str) or not Path(journal).is_absolute():
+        raise ArenaCellRunnerError("v3 claim journal is not resolved")
+    claim_lock = manifest.get("claim_lock_path")
+    if not isinstance(claim_lock, str) or not Path(claim_lock).is_absolute():
+        raise ArenaCellRunnerError("v3 claim lock path is not resolved")
+    runner = manifest.get("runner")
+    if (not isinstance(runner, Mapping)
+            or runner.get("taskset_path") != str(TASKSET_EXECUTABLE)
+            or not _SHA256_RE.fullmatch(str(runner.get("taskset_sha256")))):
+        raise ArenaCellRunnerError("v3 taskset execution identity drifted")
+    expected_lease = root.parent / f".{root.name}.{ATTEMPT_LEASE_NAME}"
+    if manifest.get("attempt_lease_path") != str(expected_lease.resolve()):
+        raise ArenaCellRunnerError("v3 attempt lease path drifted")
+
+    names: list[str] = []
+    checkpoint_paths: list[Path] = []
+    cell_paths: list[Path] = []
+    lanes_root = root / "execution" / "lanes"
+    if not lanes_root.is_dir() or lanes_root.is_symlink():
+        raise ArenaCellRunnerError("v3 lanes root is missing or unsafe")
+    for expected_index, lane in enumerate(lanes):
+        if not isinstance(lane, Mapping):
+            raise ArenaCellRunnerError("v3 lane declaration is malformed")
+        name = lane.get("lane_name")
+        if (lane.get("schedule_index") != expected_index
+                or not isinstance(name, str)):
+            raise ArenaCellRunnerError("v3 lane schedule index/name drifted")
+        _safe_id(name, "lane_name")
+        names.append(name)
+        lane_root = lanes_root / name
+        if not lane_root.is_dir() or lane_root.is_symlink():
+            raise ArenaCellRunnerError(f"v3 lane is missing or unsafe: {name}")
+        allowed = {"cells", "cell-receipts", "abandoned"}
+        if any(path.name not in allowed for path in lane_root.iterdir()):
+            raise ArenaCellRunnerError(f"v3 lane carries an extra object: {name}")
+        task_id = str(lane.get("task_id"))
+        arm_id = str(lane.get("arm_id"))
+        checkpoint_names = lane.get("checkpoint_names")
+        if not isinstance(checkpoint_names, list) or not checkpoint_names:
+            raise ArenaCellRunnerError("v3 lane checkpoint declaration is empty")
+        cells_root = lane_root / "cells"
+        receipts_root = lane_root / "cell-receipts"
+        expected_cells = {
+            (f"{ordinal:03d}-{_path_id(task_id, 'task_id')}-"
+             f"{_path_id(arm_id, 'arm_id')}-{checkpoint_name}")
+            for ordinal, checkpoint_name in enumerate(checkpoint_names, 1)}
+        if (not cells_root.is_dir() or cells_root.is_symlink()
+                or {path.name for path in cells_root.iterdir()} != expected_cells
+                or any(path.is_symlink() or not path.is_dir()
+                       for path in cells_root.iterdir())):
+            raise ArenaCellRunnerError(f"v3 lane cell shape drifted: {name}")
+        if any(not (cells_root / cell / "checkpoint-receipt.json").is_file()
+               or (cells_root / cell / "checkpoint-receipt.json").is_symlink()
+               for cell in expected_cells):
+            raise ArenaCellRunnerError(
+                f"v3 lane has a missing checkpoint receipt: {name}")
+        expected_cell_receipt = f"001-{task_id}-{arm_id}.json"
+        if (not receipts_root.is_dir() or receipts_root.is_symlink()
+                or {path.name for path in receipts_root.iterdir()}
+                != {expected_cell_receipt}
+                or any(path.is_symlink() or not path.is_file()
+                       for path in receipts_root.iterdir())):
+            raise ArenaCellRunnerError(
+                f"v3 lane must contain exactly one cell receipt: {name}")
+        checkpoint_paths.extend(sorted(
+            cells_root.glob("*/checkpoint-receipt.json")))
+        cell_paths.append(receipts_root / expected_cell_receipt)
+    if len(names) != len(set(names)):
+        raise ArenaCellRunnerError("v3 lane name is duplicated")
+    observed = {path.name for path in lanes_root.iterdir()}
+    if observed != set(names) or any(path.is_symlink() or not path.is_dir()
+                                     for path in lanes_root.iterdir()):
+        raise ArenaCellRunnerError("v3 lane set is missing, extra, or unsafe")
+    return checkpoint_paths, cell_paths
+
+
 def validate_campaign_receipts(output_root: str | Path) -> dict[str, Any]:
     """Validate durable campaign evidence without probing hardware or resuming work."""
     root = Path(output_root).resolve()
@@ -3391,26 +4053,70 @@ def validate_campaign_receipts(output_root: str | Path) -> dict[str, Any]:
     manifest = _load_json_object(
         root / "campaign-manifest.json", "campaign manifest")
     _verify_self_hash(manifest, "campaign manifest")
-    if manifest.get("schema") not in {
-            RUN_MANIFEST_SCHEMA, LEGACY_RUN_MANIFEST_SCHEMA}:
+    manifest_schema = manifest.get("schema")
+    if manifest_schema not in {
+            RUN_MANIFEST_SCHEMA, V2_RUN_MANIFEST_SCHEMA,
+            LEGACY_RUN_MANIFEST_SCHEMA}:
         raise ArenaCellRunnerError("campaign manifest schema is unsupported")
     campaign_id = str(manifest.get("campaign_id"))
     if audit.get("campaign_id") != campaign_id:
         raise ArenaCellRunnerError("audit and manifest campaign identities disagree")
     attempt_id = manifest.get("attempt_id")
     claim_scope = str(manifest.get("claim_campaign_id", campaign_id))
-    if manifest.get("schema") == RUN_MANIFEST_SCHEMA:
+    if manifest_schema in {RUN_MANIFEST_SCHEMA, V2_RUN_MANIFEST_SCHEMA}:
         if (attempt_id != root.name or claim_scope != attempt_id
                 or manifest.get("attempt_root") != str(root)):
             raise ArenaCellRunnerError("campaign attempt identity is invalid")
+    if manifest_schema == RUN_MANIFEST_SCHEMA:
+        checkpoint_paths, cell_receipt_paths = _validate_v3_lane_shape(root, manifest)
+        lanes_by_name = {
+            str(lane["lane_name"]): lane for lane in manifest["matrix"]["lanes"]}
+        claim_preflight = _load_json_object(
+            root / "claim-preflight.json", "claim preflight receipt")
+        _verify_self_hash(claim_preflight, "claim preflight receipt")
+        if (claim_preflight.get("schema") != CLAIM_PREFLIGHT_SCHEMA
+                or claim_preflight.get("attempt_id") != attempt_id
+                or claim_preflight.get("claim_campaign_id") != claim_scope
+                or claim_preflight.get("claim_lock_path")
+                != manifest.get("claim_lock_path")
+                or claim_preflight.get("claim_journal")
+                != manifest.get("claim_journal")
+                or claim_preflight.get("revocation_absent_after_release") is not True
+                or claim_preflight.get("gpu_action_executed") is not False):
+            raise ArenaCellRunnerError("v3 claim preflight identity drifted")
+    else:
+        cells_root = root / "execution" / "cells"
+        checkpoint_paths = sorted(cells_root.glob("*/checkpoint-receipt.json"))
+        cell_receipt_paths = sorted(
+            (root / "execution" / "cell-receipts").glob("*.json"))
     checkpoints: list[dict[str, Any]] = []
-    cells_root = root / "execution" / "cells"
-    for receipt_path in sorted(cells_root.glob("*/checkpoint-receipt.json")):
+    for receipt_path in checkpoint_paths:
         receipt = _load_json_object(receipt_path, "checkpoint receipt")
         _verify_self_hash(receipt, "checkpoint receipt")
         if (receipt.get("schema") != CHECKPOINT_SCHEMA
                 or receipt.get("campaign_id") != campaign_id):
             raise ArenaCellRunnerError("checkpoint campaign identity drifted")
+        if manifest_schema == RUN_MANIFEST_SCHEMA:
+            lane = lanes_by_name.get(str(receipt.get("lane_name")))
+            if (lane is None
+                    or receipt.get("schedule_index") != lane["schedule_index"]
+                    or receipt.get("task_id") != lane["task_id"]
+                    or receipt.get("arm_id") != lane["arm_id"]):
+                raise ArenaCellRunnerError("checkpoint lane identity drifted")
+            boundary = receipt.get("lane_write_boundary")
+            if not isinstance(boundary, Mapping):
+                raise ArenaCellRunnerError("v3 checkpoint lacks lane write boundary")
+            _verify_self_hash(boundary, "lane write boundary")
+            if (boundary.get("lane_name") != lane["lane_name"]
+                    or boundary.get("schedule_index") != lane["schedule_index"]
+                    or boundary.get("exact_cell_root") != str(receipt_path.parent)
+                    or boundary.get("shared_writable_files") != [
+                        manifest.get("claim_journal"), manifest.get("claim_lock_path")]
+                    or boundary.get("peer_lane_write_permitted") is not False
+                    or _load_json_object(
+                        receipt_path.parent / "lane-write-boundary.json",
+                        "persisted lane write boundary") != boundary):
+                raise ArenaCellRunnerError("v3 lane write boundary drifted")
         if attempt_id is not None and (
                 receipt.get("attempt_id") != attempt_id
                 or receipt.get("claim_campaign_id") != claim_scope):
@@ -3495,11 +4201,18 @@ def validate_campaign_receipts(output_root: str | Path) -> dict[str, Any]:
     checkpoint_hashes = {
         str(receipt["receipt_sha256"]): receipt for receipt in checkpoints}
     referenced_checkpoints: set[str] = set()
-    for path in sorted((root / "execution" / "cell-receipts").glob("*.json")):
+    for path in cell_receipt_paths:
         receipt = _load_json_object(path, "cell receipt")
         _verify_self_hash(receipt, "cell receipt")
         if receipt.get("campaign_id") != campaign_id:
             raise ArenaCellRunnerError("cell campaign identity drifted")
+        if manifest_schema == RUN_MANIFEST_SCHEMA:
+            lane = lanes_by_name.get(str(receipt.get("lane_name")))
+            if (lane is None
+                    or receipt.get("schedule_index") != lane["schedule_index"]
+                    or receipt.get("task_id") != lane["task_id"]
+                    or receipt.get("arm_id") != lane["arm_id"]):
+                raise ArenaCellRunnerError("cell lane identity drifted")
         if attempt_id is not None and receipt.get("attempt_id") != attempt_id:
             raise ArenaCellRunnerError("cell attempt identity drifted")
         runs = receipt.get("runs")
@@ -3528,6 +4241,21 @@ def validate_campaign_receipts(output_root: str | Path) -> dict[str, Any]:
             raise ArenaCellRunnerError("aggregate campaign attempt drifted")
         if aggregate.get("cells") != cell_receipts:
             raise ArenaCellRunnerError("aggregate and durable cell receipts disagree")
+        if manifest_schema == RUN_MANIFEST_SCHEMA:
+            overlap = aggregate.get("overlap")
+            configured_width = manifest["overlap"]["controller_width"]
+            if (not isinstance(overlap, Mapping)
+                    or overlap.get("configured_controller_width") != configured_width
+                    or not isinstance(
+                        overlap.get("observed_peak_live_controller_workers"), int)
+                    or overlap["observed_peak_live_controller_workers"] < 0
+                    or overlap["observed_peak_live_controller_workers"]
+                    > configured_width
+                    or overlap.get("controller_overlap_observed") is not (
+                        overlap["observed_peak_live_controller_workers"] >= 2)):
+                raise ArenaCellRunnerError("aggregate overlap observation is untruthful")
+            if aggregate.get("claim_preflight") != claim_preflight:
+                raise ArenaCellRunnerError("aggregate claim preflight drifted")
         if referenced_checkpoints != set(checkpoint_hashes):
             raise ArenaCellRunnerError(
                 "complete aggregate omits durable checkpoint evidence")
@@ -3541,6 +4269,102 @@ def validate_campaign_receipts(output_root: str | Path) -> dict[str, Any]:
         "aggregate_receipt_sha256": aggregate_hash,
         "hardware_or_controller_executed": False,
     })
+
+
+def _execute_v3_schedule(
+    args: argparse.Namespace, spec: arena_campaign.CampaignSpec,
+    audit: Mapping[str, Any], manifest: Mapping[str, Any], *, lease_fd: int,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Run immutable lanes and return results in schedule order, never completion order."""
+    overlap = manifest["overlap"]
+    controller_cpus = tuple(overlap["controller_cpu_set"])
+    evaluator_cpus = tuple(overlap["evaluator_cpu_set"])
+    width = int(overlap["controller_width"])
+    schedule = _campaign_schedule(
+        spec, available_source=bool(manifest["available_source"]))
+    declared_lanes = manifest["matrix"]["lanes"]
+    if ([{key: value for key, value in row.items() if key != "request"}
+         for row in schedule] != declared_lanes):
+        raise ArenaCellRunnerError("runtime schedule differs from the manifest")
+    lanes_root = Path(args.output_root).resolve() / "execution" / "lanes"
+    if lanes_root.exists() and (not lanes_root.is_dir() or lanes_root.is_symlink()):
+        raise ArenaCellRunnerError("lane root is not an exact directory")
+    lanes_root.mkdir(parents=True, exist_ok=True)
+    cancel = threading.Event()
+    tracker = OverlapTracker(width)
+    results: list[dict[str, Any] | None] = [None] * len(schedule)
+
+    def run_lane(row: Mapping[str, Any]) -> dict[str, Any]:
+        lane_root = lanes_root / str(row["lane_name"])
+        runner = GovernedArenaCellRunner(RunnerConfig(
+            campaign_id=str(audit["campaign_id"]),
+            attempt_id=str(manifest["attempt_id"]),
+            arena_root=str(Path(args.arena_root).resolve()),
+            preflight_path=str(Path(args.preflight).resolve()),
+            output_root=str(lane_root),
+            claim_journal=str(manifest["claim_journal"]),
+            claim_lock_path=str(manifest["claim_lock_path"]),
+            claim_timeout_seconds=float(manifest["claim_timeout_seconds"]),
+            expected_runner_sha256=str(manifest["runner"]["sha256"]),
+            config_path=str(Path(spec.config_path).resolve()),
+            expected_config_sha256=spec.config_sha256,
+            expected_campaign_module_sha256=str(
+                audit["execution_identity"]["implementation_module_sha256"]),
+            geak_root=str(Path(args.geak_root).resolve()),
+            expected_vendor_sources=audit["sources"],
+            schedule_index=int(row["schedule_index"]),
+            lane_name=str(row["lane_name"]),
+            controller_cpu_set=controller_cpus,
+            evaluator_cpu_set=evaluator_cpus,
+            attempt_lease_fd=lease_fd,
+            expected_taskset_sha256=str(manifest["runner"]["taskset_sha256"]),
+        ), cancel_event=cancel,
+           overlap_tracker=(None if row["baseline"] else tracker))
+        receipt = runner(row["request"])
+        if (receipt.get("task_id") != row["task_id"]
+                or receipt.get("arm_id") != row["arm_id"]):
+            raise ArenaCellRunnerError("lane receipt identity drifted")
+        return receipt
+
+    try:
+        # Every starting-state baseline is measured without peer-controller load.
+        for row in schedule:
+            if row["baseline"]:
+                results[int(row["schedule_index"])] = run_lane(row)
+        controller_rows = [row for row in schedule if not row["baseline"]]
+        first_failure: tuple[int, BaseException] | None = None
+        with ThreadPoolExecutor(
+                max_workers=width, thread_name_prefix="autokernel-arena-lane") as pool:
+            futures: dict[Future[dict[str, Any]], Mapping[str, Any]] = {
+                pool.submit(run_lane, row): row for row in controller_rows}
+            try:
+                for future in as_completed(futures):
+                    row = futures[future]
+                    index = int(row["schedule_index"])
+                    try:
+                        results[index] = future.result()
+                    except BaseException as exc:
+                        if first_failure is None:
+                            first_failure = (index, exc)
+                            cancel.set()
+                            for sibling in futures:
+                                if sibling is not future:
+                                    sibling.cancel()
+            except BaseException:
+                cancel.set()
+                for future in futures:
+                    future.cancel()
+                raise
+        if first_failure is not None:
+            first_index, first_error = first_failure
+            raise ArenaCellRunnerError(
+                f"controller lane {first_index} failed; all peers were cancelled") \
+                from first_error
+    finally:
+        cancel.set()
+    if any(result is None for result in results):
+        raise ArenaCellRunnerError("complete schedule has a missing lane result")
+    return [result for result in results if result is not None], tracker.receipt_fields()
 
 
 def _execute_from_cli(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
@@ -3557,64 +4381,105 @@ def _execute_from_cli(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     if audit["status"] == "ready":
         manifest = _run_manifest(
             args, spec, audit, available_source=available_source)
-    _prepare_campaign_root(output_root, audit=audit, manifest=manifest)
-    if audit["status"] != "ready":
-        return 3, {
+    lease_context = (
+        _attempt_lease(output_root) if audit["status"] == "ready"
+        else nullcontext((None, None)))
+    with lease_context as (lease_fd, lease_path):
+        if manifest is not None and lease_path != manifest["attempt_lease_path"]:
+            raise ArenaCellRunnerError("attempt lease path differs from manifest")
+        _prepare_campaign_root(output_root, audit=audit, manifest=manifest)
+        if audit["status"] != "ready":
+            return 3, {
+                "schema": AGGREGATE_SCHEMA,
+                "campaign_id": audit["campaign_id"],
+                "status": "refused",
+                "audit": str(output_root / "audit.json"),
+                "controller_or_gpu_command_executed": False,
+            }
+        assert lease_fd is not None and manifest is not None
+        claim_preflight = _prepare_lane_claim_objects(output_root, manifest)
+        cells, observed_overlap = _execute_v3_schedule(
+            args, spec, audit, manifest, lease_fd=lease_fd)
+        aggregate = _self_hash({
             "schema": AGGREGATE_SCHEMA,
             "campaign_id": audit["campaign_id"],
-            "status": "refused",
+            "attempt_id": manifest["attempt_id"],
+            "claim_campaign_id": manifest["claim_campaign_id"],
+            "status": "complete",
+            "authority": "whole_agent_task_only",
             "audit": str(output_root / "audit.json"),
-            "controller_or_gpu_command_executed": False,
-        }
-    # RunnerConfig requires a not-yet-existing root so cell artifacts cannot mix
-    # with the audit or any predecessor campaign.
-    cells_root = output_root / "execution"
-    runner = GovernedArenaCellRunner(RunnerConfig(
-        campaign_id=audit["campaign_id"],
-        attempt_id=manifest["attempt_id"],
-        arena_root=str(Path(args.arena_root).resolve()),
-        preflight_path=str(Path(args.preflight).resolve()),
-        output_root=str(cells_root),
-        claim_journal=args.claim_journal,
-        claim_timeout_seconds=args.claim_timeout_seconds,
-        expected_runner_sha256=manifest["runner"]["sha256"],
-        config_path=str(Path(spec.config_path).resolve()),
-        expected_config_sha256=spec.config_sha256,
-        expected_campaign_module_sha256=(
-            audit["execution_identity"]["implementation_module_sha256"]),
-        geak_root=str(Path(args.geak_root).resolve()),
-        expected_vendor_sources=audit["sources"],
-    ))
-    execute_function = (
-        arena_campaign.execute_available_source_campaign
-        if available_source else arena_campaign.execute_campaign)
-    cells = execute_function(spec, audit, run_cell=runner)
-    aggregate = _self_hash({
-        "schema": AGGREGATE_SCHEMA,
-        "campaign_id": audit["campaign_id"],
-        "attempt_id": manifest["attempt_id"],
-        "claim_campaign_id": manifest["claim_campaign_id"],
-        "status": "complete",
-        "authority": "whole_agent_task_only",
-        "audit": str(output_root / "audit.json"),
-        "audit_receipt_sha256": audit["receipt_sha256"],
-        "campaign_manifest": str(output_root / "campaign-manifest.json"),
-        "campaign_manifest_receipt_sha256": manifest["receipt_sha256"],
-        "cells": cells,
-        "constraints": {
-            "partial_results_rankable": False,
-            "availability_conditioned_only": available_source,
-            "full_eight_arm_result_implied": False,
-            "promotion_authority": False},
-    })
-    _publish_or_verify_aggregate(output_root / "execution-receipt.json", aggregate)
-    return 0, aggregate
+            "audit_receipt_sha256": audit["receipt_sha256"],
+            "campaign_manifest": str(output_root / "campaign-manifest.json"),
+            "campaign_manifest_receipt_sha256": manifest["receipt_sha256"],
+            "claim_preflight": claim_preflight,
+            "cells": cells,
+            "overlap": observed_overlap,
+            "constraints": {
+                "partial_results_rankable": False,
+                "availability_conditioned_only": available_source,
+                "full_eight_arm_result_implied": False,
+                "concurrent_results_rankable": manifest["overlap"][
+                    "concurrent_results_rankable"],
+                "configured_overlap_is_not_observed_overlap": True,
+                "promotion_authority": False},
+        })
+        _publish_or_verify_aggregate(
+            output_root / "execution-receipt.json", aggregate)
+        return 0, aggregate
 
 
 def execute_from_cli(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     """Execute a campaign with graceful TERM/INT claim cleanup."""
     with _graceful_campaign_signals():
         return _execute_from_cli(args)
+
+
+def _activate_worker_write_boundary(request: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Confine a v3 lane worker to its cell and declared shared kernel objects."""
+    lane_name = request.get("lane_name")
+    if lane_name is None:
+        return None  # v1/v2 and direct test workers predate lane confinement
+    _safe_id(str(lane_name), "lane_name")
+    if (isinstance(request.get("schedule_index"), bool)
+            or not isinstance(request.get("schedule_index"), int)):
+        raise ArenaCellRunnerError("lane worker lacks its schedule index")
+    cell_root = Path(str(request.get("cell_root"))).resolve(strict=True)
+    claim_journal = Path(str(request.get("claim_journal"))).resolve()
+    claim_lock = Path(str(request.get("claim_lock_path"))).resolve()
+    if claim_lock != device_claim.device_lock_path(DEFAULT_DEVICE_ID).resolve():
+        raise ArenaCellRunnerError("lane claim lock authority drifted")
+    if device_claim.revocation_path(DEFAULT_DEVICE_ID).exists():
+        raise ArenaCellRunnerError(
+            "lane worker refuses revocation state created after claim preflight")
+    claim_journal.parent.mkdir(parents=True, exist_ok=True)
+    journal_fd = os.open(
+        claim_journal, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_CLOEXEC,
+        0o600)
+    os.close(journal_fd)
+    lock_fd = os.open(
+        claim_lock, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
+    os.close(lock_fd)
+    cgroup_root = Path(sandbox.default_cgroup_root()).resolve(strict=True)
+    devices = tuple(path for path in (
+        "/dev/kfd", "/dev/dri/renderD128", "/dev/null") if Path(path).exists())
+    abi, rights = sandbox.install_landlock(
+        str(cell_root), devices,
+        additional_writable_roots=(str(cgroup_root),),
+        writable_files=(str(claim_journal), str(claim_lock)))
+    receipt = _self_hash({
+        "schema": "epyc.autokernel.arena_lane_write_boundary.v1",
+        "schedule_index": request["schedule_index"],
+        "lane_name": lane_name,
+        "exact_cell_root": str(cell_root),
+        "shared_writable_roots": [str(cgroup_root)],
+        "shared_writable_files": [str(claim_journal), str(claim_lock)],
+        "writable_devices": list(devices),
+        "landlock_abi": abi,
+        "landlock_write_rights": rights,
+        "peer_lane_write_permitted": False,
+    })
+    _atomic_json(cell_root / "lane-write-boundary.json", receipt)
+    return receipt
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -3630,6 +4495,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--enumerator", default="/opt/rocm/bin/rocm_agent_enumerator")
     parser.add_argument("--claim-journal", default=DEFAULT_CLAIM_JOURNAL)
     parser.add_argument("--claim-timeout-seconds", type=float, default=0.0)
+    parser.add_argument("--controller-width", type=int, default=1)
+    parser.add_argument(
+        "--controller-cpus",
+        help="CPU list/ranges reserved for controller and model deliberation")
+    parser.add_argument(
+        "--evaluator-cpus",
+        help="disjoint CPU list/ranges reserved for every measurement window")
+    parser.add_argument("--overlap-aa-receipt")
+    parser.add_argument(
+        "--overlap-aa-calibration", action="store_true",
+        help="run governed overlap A/A with no concurrent ranking authority")
     parser.add_argument(
         "--available-source", action="store_true",
         help=("run the separately labelled seven-arm available-source panel; "
@@ -3639,8 +4515,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not args.output_root:
             parser.error("--validate-only requires --output-root")
         disallowed = (args.worker_request, args.worker_output, args.config,
-                      args.arena_root, args.geak_root, args.preflight)
-        if any(value is not None for value in disallowed):
+                      args.arena_root, args.geak_root, args.preflight,
+                      args.overlap_aa_receipt, args.controller_cpus,
+                      args.evaluator_cpus)
+        if (any(value is not None for value in disallowed)
+                or args.controller_width != 1 or args.overlap_aa_calibration):
             parser.error("--validate-only cannot be combined with execution options")
         try:
             result = validate_campaign_receipts(args.output_root)
@@ -3665,8 +4544,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         if request_path.parent != declared_cell or output_path.parent != declared_cell:
             raise ArenaCellRunnerError(
                 "worker request and output must stay in the declared cell root")
+        boundary = _activate_worker_write_boundary(request)
         with _graceful_campaign_signals():
             result = run_worker(request)
+        if boundary is not None:
+            result = {**result, "lane_write_boundary": boundary}
         _atomic_json(output_path, result)
         return 0
     required = ("config", "arena_root", "geak_root", "preflight", "output_root")
@@ -3685,10 +4567,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 __all__ = [
     "AGGREGATE_SCHEMA", "CHECKPOINT_SCHEMA", "MEASUREMENT_WINDOW_SCHEMA",
     "DIAGNOSTIC_PILOT_SCHEMA", "RUNNER_SCHEMA",
-    "RUN_MANIFEST_SCHEMA",
+    "RUN_MANIFEST_SCHEMA", "V2_RUN_MANIFEST_SCHEMA", "OVERLAP_AA_SCHEMA",
     "ArenaCampaignInterrupted", "ArenaCellRunnerError",
     "DiagnosticPilotCellRequest",
-    "GovernedArenaCellRunner", "RunnerConfig",
+    "GovernedArenaCellRunner", "OverlapTracker", "ProcessGroupIdentity",
+    "RunnerConfig",
     "execute_from_cli", "run_worker", "validate_campaign_receipts",
 ]
 

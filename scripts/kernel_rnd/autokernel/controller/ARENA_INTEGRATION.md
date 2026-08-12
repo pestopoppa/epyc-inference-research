@@ -121,7 +121,7 @@ acquires ranking authority.
 
 ### Controller-overlap implementation contract
 
-The current campaign runner is intentionally sequential: it walks
+The v1/v2 campaign runner was intentionally sequential: it walked
 task → declared arm → checkpoint, and one `GovernedArenaCellRunner` owns the
 mutable cell/checkpoint ordinals and the single execution root. This leaves the
 MI210 unclaimed during remote model deliberation, but it also prevents another
@@ -138,49 +138,50 @@ intermediate, and final evaluator window continues to acquire the existing exact
 `mi210_0` device claim, so GPU execution stays serial even while GPU-blind model
 deliberation overlaps.
 
-That architecture is **not yet enabled**. A 2026-08-12 adversarial audit found
-the following implementation gates; enabling overlap before all of them close
-would make the campaign less restart-safe or its ranking evidence less
-comparable:
+That architecture is implemented by the v3 run manifest. Width one remains the
+default. Widths greater than one require a positive claim wait, disjoint
+controller/evaluator CPU sets, and either a matching governed overlap A/A
+receipt or `--overlap-aa-calibration`. Calibration runs are explicitly
+non-rankable until their predeclared noise bound passes. The implementation
+enforces the audit gates as follows:
 
-- A concurrent run cannot retain the current zero-second claim timeout. The
-  manifest must bind a positive bounded wait, and the worker ceiling must include
+- A concurrent run cannot retain a zero-second claim timeout. The v3 manifest
+  binds a positive bounded wait, and the worker ceiling includes
   both outer claim waits as well as its checkpoint and evaluation reserve.
-- The campaign attempt needs an exclusive `flock` inherited by checkpoint
+- The campaign attempt holds an exclusive `flock` inherited by checkpoint
   workers. A second launcher or restart must refuse while an orphaned worker
   still holds that lease; it must never move a live partial lane to `abandoned/`.
-- Each captured worker process group must be bound to its `/proc` start ticks.
+- Each captured worker process group is bound to its `/proc` start ticks.
   Cancellation must poll, signal only those exact identities, and escalate
   TERM → KILL within a bounded interval rather than waiting inside a multi-hour
   `communicate()`.
-- Per-lane roots narrow the old sibling-manifest proof. The checkpoint worker
-  must be OS-confined to its exact cell root (plus the already declared claim,
-  cgroup, and broker objects), or a campaign-level watcher must reject a write
-  into a peer lane. Merely checking siblings inside one lane is insufficient.
-- Manifest v3 must bind the resolved claim journal, claim timeout, controller
+- Each checkpoint worker installs a Landlock write boundary for its exact cell
+  root plus the manifest-bound claim journal, delegated cgroup root, and admitted
+  devices. Peer lane roots are not writable; the existing sibling-manifest proof
+  remains an additional check within the lane.
+- Manifest v3 binds the resolved claim journal, claim timeout, controller
   width, deterministic lane names, and timeout formula. Read-only validation
   must reject missing, extra, swapped, symlink/file, duplicate-receipt, or
   multi-cell lanes while retaining v1/v2 historical validation.
-- Receipt language must distinguish configured overlap from observed overlap.
+- Receipt language distinguishes configured overlap from observed overlap.
   Width one cannot claim concurrency; an observed peak of at least two live
   controller lanes is required to state that overlap occurred.
-- GPU exclusivity alone does not guarantee matched timing conditions. A lane's
-  baseline can run before peer controllers start, while its intermediate/final
-  evaluator can run amid their CPU and model-client load. Evaluator workers need
-  a fixed reserved CPU set and controllers disjoint CPUs, or controller lanes
-  must pause at every claim window. A governed overlap A/A must establish the
-  resulting noise bound before concurrent results become rankable.
+- GPU exclusivity alone does not guarantee matched timing conditions. Baselines
+  run serially before controller lanes, controller/model workers inherit the
+  controller CPU set, and every claimed evaluator action uses the disjoint
+  evaluator CPU set. A governed overlap A/A must still establish the resulting
+  noise bound before concurrent results become rankable.
 
-The required regression matrix is equally explicit: reverse future completion
-must retain canonical receipt order; exact restart must retain lane/checkpoint
+The regression matrix requires reverse future completion to retain canonical
+receipt order; exact restart must retain lane/checkpoint
 identities; first failure and TERM-during-claim-wait must leave no live captured
 group; a duplicate launcher and orphan-worker restart must refuse; a peer-lane
 write must be caught; claim contention must wait rather than fail; v3 lane
 validation must reject all malformed shapes above; observed overlap must be
 truthful at widths one and greater than one; and baseline/final overlap A/A must
-stay inside the predeclared noise bound. Until those checks pass, the safe way
-to use idle MI210 windows is to schedule separately claimed campaigns, not to
-alter a live INF-03 campaign's execution semantics.
+stay inside the predeclared noise bound. The structural and cancellation cases
+are local regressions. The empirical A/A remains the final authority gate: a
+calibration may exercise overlap, but it cannot make concurrent results rankable.
 
 Validation is independently read-only and does not resume a campaign:
 
@@ -189,10 +190,25 @@ python3 -m scripts.kernel_rnd.autokernel.controller.arena_cell_runner \
   --validate-only --output-root /durable/campaign-directory
 ```
 
-It accepts legacy v1 manifests as historical evidence. V2 manifests bind the
+It accepts legacy v1/v2 manifests as historical evidence. V2 manifests bind the
 logical campaign to the run-directory `attempt_id`, so device-claim journals
 cannot conflate repeated logical campaign IDs. Nested measurement-window and
 belief identities are checked semantically against their enclosing checkpoint.
+V3 additionally validates the exact lane set, CPU partition, claim policy,
+timeout formula, and configured-versus-observed overlap receipt.
+
+Concurrent calibration adds the execution geometry explicitly, for example:
+
+```bash
+... arena_cell_runner --controller-width 4 --claim-timeout-seconds 600 \
+  --controller-cpus 0-143 --evaluator-cpus 144-191 \
+  --overlap-aa-calibration ...
+```
+
+After that governed A/A is reduced into an
+`epyc.autokernel.arena_overlap_aa.v1` receipt, the same geometry is rerun with
+`--overlap-aa-receipt /durable/overlap-aa.json`. The receipt is embedded in the
+v3 manifest; changing width or either CPU set refuses the campaign.
 
 `arena_controller_sandbox.py` now provisions the reusable controller and direct
 model halves of that OS boundary. It copies one task into a new workspace, discovers a

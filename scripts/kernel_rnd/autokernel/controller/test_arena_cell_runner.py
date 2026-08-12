@@ -861,7 +861,7 @@ class ArenaCellRunnerTest(unittest.TestCase):
         audit = R._self_hash({
             "schema": "audit.fixture", "campaign_id": "fixture-campaign-v1"})
         manifest = R._self_hash({
-            "schema": R.RUN_MANIFEST_SCHEMA,
+            "schema": R.V2_RUN_MANIFEST_SCHEMA,
             "campaign_id": "fixture-campaign-v1", "attempt_id": campaign.name,
             "attempt_root": str(campaign.resolve()),
             "claim_campaign_id": campaign.name})
@@ -954,6 +954,7 @@ class ArenaCellRunnerTest(unittest.TestCase):
             claim_journal=str(self.root / "claims.jsonl"),
             claim_timeout_seconds=0.0, available_source=True)
         fake_runner = mock.Mock()
+        empty_schedule = []
         with (
             mock.patch.object(R.arena_campaign, "load_spec", return_value=spec),
             mock.patch.object(
@@ -961,7 +962,12 @@ class ArenaCellRunnerTest(unittest.TestCase):
                 return_value=audit),
             mock.patch.object(R, "GovernedArenaCellRunner", return_value=fake_runner),
             mock.patch.object(
-                R.arena_campaign, "execute_available_source_campaign",
+                R, "_prepare_lane_claim_objects",
+                return_value=R._self_hash({"schema": R.CLAIM_PREFLIGHT_SCHEMA})),
+            mock.patch.object(
+                R, "_campaign_schedule", return_value=empty_schedule),
+            mock.patch.object(
+                R, "_execute_v3_schedule",
                 side_effect=RuntimeError("planted campaign interruption")),
             self.assertRaisesRegex(RuntimeError, "planted campaign interruption"),
         ):
@@ -978,8 +984,18 @@ class ArenaCellRunnerTest(unittest.TestCase):
                 return_value=audit),
             mock.patch.object(R, "GovernedArenaCellRunner", return_value=fake_runner),
             mock.patch.object(
-                R.arena_campaign, "execute_available_source_campaign",
-                return_value=cells),
+                R, "_prepare_lane_claim_objects",
+                return_value=R._self_hash({"schema": R.CLAIM_PREFLIGHT_SCHEMA})),
+            mock.patch.object(
+                R, "_campaign_schedule", return_value=empty_schedule),
+            mock.patch.object(
+                R, "_execute_v3_schedule",
+                return_value=(cells, {
+                    "configured_controller_width": 1,
+                    "observed_peak_live_controller_workers": 1,
+                    "observed_controller_worker_count": 1,
+                    "controller_overlap_observed": False,
+                })),
         ):
             status, aggregate = R.execute_from_cli(args)
         self.assertEqual(status, 0)
@@ -1809,11 +1825,12 @@ class ArenaCellRunnerTest(unittest.TestCase):
         process = subprocess.Popen(
             [sys.executable, "-c", script], start_new_session=True,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        identity = R.ProcessGroupIdentity.capture(process.pid)
         try:
             process.wait(timeout=5)
             child_pid = int(child_pid_path.read_text(encoding="utf-8"))
             self.assertIn(child_pid, R._live_process_group_members(process.pid))
-            R._terminate_captured_process_group(process.pid, grace_seconds=1.0)
+            R._terminate_captured_process_group(identity, grace_seconds=1.0)
             self.assertNotIn(child_pid, R._live_process_group_members(process.pid))
         finally:
             try:

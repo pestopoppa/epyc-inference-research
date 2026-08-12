@@ -273,6 +273,8 @@ def _landlock_write_rights(abi: int) -> int:
 
 def install_landlock(
     writable_root: str, writable_device_paths: Sequence[str] = (), *,
+    additional_writable_roots: Sequence[str] = (),
+    writable_files: Sequence[str] = (),
     restrict_reads: bool = False, readable_roots: Sequence[str] = (),
     readable_files: Sequence[str] = (),
     executable_files: Sequence[str] = (),
@@ -298,6 +300,28 @@ def install_landlock(
         path_attr = _LandlockPathBeneathAttr(rights, root_fd, 0)
         _syscall(_SYS_LANDLOCK_ADD_RULE, ruleset_fd, _LANDLOCK_RULE_PATH_BENEATH,
                  ctypes.byref(path_attr), 0)
+        for raw_path in additional_writable_roots:
+            path = Path(raw_path).resolve(strict=True)
+            if not path.is_dir():
+                raise SandboxError(
+                    f"additional writable root is not a directory: {path}")
+            path_fd = os.open(path, os.O_PATH | os.O_CLOEXEC)
+            path_fds.append(path_fd)
+            write_attr = _LandlockPathBeneathAttr(rights, path_fd, 0)
+            _syscall(_SYS_LANDLOCK_ADD_RULE, ruleset_fd,
+                     _LANDLOCK_RULE_PATH_BENEATH, ctypes.byref(write_attr), 0)
+        for raw_path in writable_files:
+            path = Path(raw_path).resolve(strict=True)
+            if not path.is_file():
+                raise SandboxError(f"writable file is not regular: {path}")
+            path_fd = os.open(path, os.O_PATH | os.O_CLOEXEC)
+            path_fds.append(path_fd)
+            file_rights = _LANDLOCK_ACCESS_FS_WRITE_FILE
+            if abi >= 3:
+                file_rights |= _LANDLOCK_ACCESS_FS_TRUNCATE
+            file_attr = _LandlockPathBeneathAttr(file_rights, path_fd, 0)
+            _syscall(_SYS_LANDLOCK_ADD_RULE, ruleset_fd,
+                     _LANDLOCK_RULE_PATH_BENEATH, ctypes.byref(file_attr), 0)
         for raw_path in writable_device_paths:
             device_fd = os.open(raw_path, os.O_PATH | os.O_CLOEXEC)
             path_fds.append(device_fd)
