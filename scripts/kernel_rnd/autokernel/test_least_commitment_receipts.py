@@ -401,6 +401,13 @@ class ReceiptProjectionTest(unittest.TestCase):
         with self.assertRaisesRegex(P.ReceiptProjectionError, "non-real marker"):
             P.project(self.plan, self.root / "non-real")
 
+    def test_completed_journal_with_torn_tail_fails_closed(self):
+        journal_path = Path(self.plan["rows"][1]["journal_root"]) / "events.jsonl"
+        with journal_path.open("a", encoding="utf-8") as handle:
+            handle.write('{"unacknowledged":')
+        with self.assertRaisesRegex(P.ReceiptProjectionError, "torn tail"):
+            P.project(self.plan, self.root / "torn-tail")
+
     def test_plan_cannot_supply_empirical_literals(self):
         self.plan["rows"][0]["diagnostic_bindings"]["novelty"] = {
             "record": "candidate", "pointer": "/does-not-matter",

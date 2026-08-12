@@ -201,7 +201,11 @@ def _load_completed_evidence(row: Mapping[str, Any]) -> CompletedEvidence:
     # nonempty pairs, and released resources before projection begins.
     completed = builder._completed_proposal(row)
     book = journal.Journal(str(root), campaign_id=campaign_id)
-    entries = book.read_all()
+    report = book.scan()
+    if report.torn_tail is not None:
+        raise ReceiptProjectionError(
+            "completed evidence journal has an unacknowledged torn tail")
+    entries = list(report.entries)
     views = journal.rebuild_views(entries)
     consistency = journal.check_view_consistency(entries, views)
     if consistency.outcome != schemas.PASS:

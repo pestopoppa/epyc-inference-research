@@ -16,12 +16,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-from . import schemas
+from . import least_commitment_heldout, schemas
 
 SCHEMA = "epyc.autokernel.least_commitment_capture_plan.v2"
 BLOCK_SCHEMA = "epyc.autokernel.least_commitment_capture.v2"
 SOURCE_SCHEMA = "epyc.autokernel.least_commitment_diagnostic_source.v1"
-HELDOUT_SCHEMA = "epyc.autokernel.least_commitment_heldout_outcome.v1"
+HELDOUT_SCHEMA = least_commitment_heldout.SCHEMA
 FALSIFIER_SCHEMA = "epyc.autokernel.least_commitment_falsifier.v1"
 ROLES = frozenset({"control", "intervention"})
 DIAGNOSTICS = (
@@ -227,39 +227,18 @@ def _bound_json_receipt(binding: Any, *, label: str) -> Mapping[str, Any]:
 
 def _validate_heldout_outcome(
         source: Mapping[str, Any], *, proposal: Mapping[str, Any],
-        candidate_frame_id: str, target_regimes: set[str]) -> dict[str, Any]:
-    required = {
-        "schema", "authority", "receipt_id", "proposal_id", "proposal_sha256",
-        "candidate_frame_id", "regime", "surface", "metric", "metric_direction",
-        "relative_effect", "measurement_record_sha256", "capture_mode",
-    }
-    if set(source) != required:
-        raise CapturePlanError("heldout outcome fields differ from the closed schema")
-    if source.get("schema") != HELDOUT_SCHEMA \
-            or source.get("authority") != "observe_only_measurement" \
-            or source.get("capture_mode") != "measured":
-        raise CapturePlanError("heldout outcome schema/authority/capture_mode differs")
-    if source.get("proposal_id") != proposal.get("proposal_id") \
-            or source.get("proposal_sha256") != schemas.content_hash(proposal):
-        raise CapturePlanError("heldout outcome proposal binding differs")
-    if source.get("candidate_frame_id") != candidate_frame_id:
-        raise CapturePlanError("heldout outcome candidate frame differs")
-    regime = _text(source.get("regime"), "heldout outcome regime")
-    if regime in target_regimes:
-        raise CapturePlanError(
-            "heldout outcome regime must be outside the proposal target regimes")
-    for key in ("surface", "metric"):
-        _text(source.get(key), f"heldout outcome {key}")
-    if source.get("metric_direction") not in {"higher", "lower"}:
-        raise CapturePlanError("heldout outcome metric_direction must be higher or lower")
-    schemas.require.sha256(
-        source.get("measurement_record_sha256"),
-        "heldout outcome measurement_record_sha256", error=CapturePlanError)
-    return {
-        **dict(source),
-        "relative_effect": _finite(
-            source.get("relative_effect"), "heldout outcome relative_effect"),
-    }
+        candidate_frame_id: str, target_regimes: set[str],
+        factors: Mapping[str, Any]) -> dict[str, Any]:
+    del target_regimes  # The projector independently re-derives this boundary.
+    try:
+        expected_frame = least_commitment_heldout.candidate_frame_from_factors(
+            factors, proposal)
+        return least_commitment_heldout.validate(
+            source, target_proposal=proposal,
+            expected_candidate_frame_id=candidate_frame_id,
+            expected_candidate_frame=expected_frame)
+    except least_commitment_heldout.HeldoutProjectionError as exc:
+        raise CapturePlanError(f"heldout outcome: {exc}") from exc
 
 
 def from_mapping(raw: Any, *, proposal: Mapping[str, Any], campaign_id: str,
@@ -352,7 +331,7 @@ def from_mapping(raw: Any, *, proposal: Mapping[str, Any], campaign_id: str,
     heldout = _validate_heldout_outcome(
         heldout_source, proposal=proposal,
         candidate_frame_id=raw["candidate_frame_id"],
-        target_regimes=target_regimes)
+        target_regimes=target_regimes, factors=factors)
     return CapturePlan(
         json.loads(schemas.canonical_json(raw)),
         json.loads(schemas.canonical_json(heldout)),

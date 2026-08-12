@@ -156,7 +156,14 @@ steps. Executing IQK parameter campaigns require a hash-bound
 `--least-commitment-capture-plan`; diagnostics and recoding controls are fixed
 before the claim, while held-out transfer, falsifier margin, and noise floor are
 mechanically reduced from a separately hash-bound measured held-out-regime
-receipt, the role-specific falsifier, and accepted calibration. The held-out
+receipt, the role-specific falsifier, and accepted calibration.
+`least_commitment_heldout.py` creates that receipt only by joining a distinct,
+clean, hypothesis-bound completed campaign and resolving the journaled terminal
+`decision.median_relative` value. It re-derives the receipt on every capture-plan
+load, rejects torn journals and explicit non-real markers, and binds a candidate
+frame derived from model, source, backend, topology, provider and immutable
+production/measurement identities. A copied hash or hand-entered scalar cannot
+pass. The held-out
 regime must be outside the proposal target regimes; missing or target-regime
 evidence refuses live materialization. A control falsifies on KEEP or when its
 absolute measured effect exceeds the accepted noise floor. Control diagnostic
@@ -165,6 +172,38 @@ the intervention under a new receipt id. A
 `role=control` plan is the only capability that permits the generated production-
 setting A/A control proposal to use identical arms. Architecture fixtures are
 accepted for rehearsal but refused by `--execute`.
+
+`prepare_iqk_matched_pair.py` is the single regeneration entry point for the
+final v2 pair. Its manifest names the intervention proposal, independent native
+diagnostic sources, real proposal-bound held-out receipts, calibration bundle,
+physical-envelope template, shared `akm-…` identity, and two new output
+directories. The producer derives the control proposal, all shared seeds, the
+matched physical frame, and the complete factor vocabulary; it refuses unless
+`ggml_iqk` is the sole difference. Publication uses private staging, revalidates
+both durable post-rename paths, and rolls both new outputs back if either final
+campaign fails admission; it never runs a campaign. Existing output directories
+are never overwritten.
+
+First project one receipt per role from real completed held-out campaigns:
+
+```bash
+python3 -m scripts.kernel_rnd.autokernel.least_commitment_heldout \
+  /absolute/path/heldout-projection-manifest.json \
+  --output /absolute/new/least-commitment-heldout-outcome.json
+```
+
+```bash
+python3 -m scripts.kernel_rnd.autokernel.prepare_iqk_matched_pair \
+  /absolute/path/iqk-matched-pair-preparation.json \
+  --result /absolute/new/iqk-matched-pair-preparation-result.json
+```
+
+The result records every input and emitted file hash. Re-running the same command
+against the published paths must refuse; byte reproducibility is checked by
+archiving the first two generated directories, recreating the same paths with
+the unchanged manifest, and comparing the complete results. A held-out
+placeholder cannot satisfy this command: both receipts must already bind their
+exact proposal and a measured regime outside the proposal targets.
 
 `least_commitment_receipts.py` is the governed producer for those three receipt
 schemas. Its offline CLI accepts a projection plan whose values are JSON-pointer
@@ -335,7 +374,9 @@ calibration exists. Source-changing campaigns additionally require their own
 | `offline_least_commitment.py` | The observe-only AK-WM-2/AP-WM-1 diagnostic over matched completed-proposal archives; it has no live selection authority. |
 | `least_commitment_archive_builder.py` | The AK-WM-2a real-record join: resolves proposal-v3 or proposal-v4 and clean terminal journal events, verifies hash-bound diagnostic/outcome/matched-one-factor receipts, and emits only protocol-valid observe-only archives. |
 | `least_commitment_capture.py` | The prospective live IQK/control capture: binds pre-run diagnostics and recodings, reduces only declared measured outcomes, and gives no selector or release authority. |
+| `least_commitment_heldout.py` | The prospective held-out projector: derives an out-of-regime effect from a distinct clean terminal journal, binds the immutable cross-regime candidate frame, and replays the join before campaign execution. |
 | `least_commitment_receipts.py` | The AK-WM-2a governed receipt producer: derives SHA-pinned journal bindings from distinct clean completed campaigns, proves the sole matched intervention factor, rejects non-real evidence, and publishes the validated archive. |
+| `prepare_iqk_matched_pair.py` | Deterministically publishes the intervention/control proposals, shared matched frame, physical envelopes, and v2 capture plans into two new directories without executing either campaign. |
 | `evidence_path_rehearsal.py` | No-inference control/proposal/AP-WM/champion/readiness/T3/package producer inventory; architecture fixture only. |
 | `release/live_material.py` | Actual-journal release-material compiler: hash-binds the composed champion and its evidence to an exact full-build T3/package seal for operator-triggered dry run only. |
 | `turn_productivity.py` | **AK-PT-1 / AK-X-6.** Immutable per-refine-turn `(turn, task, correct?, speedup)` records, mechanically derived rescued/persistent classes, and a campaign-calibration-derived e-process rule. It may label a turn repair-only and withhold search advancement; it has no ranking, retention, promotion, or deployment authority. |

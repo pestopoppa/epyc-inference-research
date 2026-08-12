@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import copy
+import contextlib
+import io
 import json
 import tempfile
 import unittest
@@ -10,6 +12,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from . import least_commitment_capture as C
+from . import least_commitment_heldout as HOUT
+from . import journal as J
+from .controller import hypotheses as H
+from .test_journal import _candidate, _event
 from .test_schemas import _proposal
 
 
@@ -21,12 +27,13 @@ def proposal() -> dict:
         "campaign_kind": "config", "change_class": "parameter",
     })
     value["target"]["regimes"] = ["prefill"]
+    value["provider_reference"]["target_backend"] = "llama_cpu"
     value["change"]["parameter_surface"] = {
         "candidate": {"ggml_iqk": "1"}, "anchor": {"ggml_iqk": "0"}}
     return value
 
 
-def diagnostic_source(value: dict) -> dict:
+def diagnostic_source(value: dict, *, candidate_frame_id: str) -> dict:
     is_control = value["change"]["parameter_surface"]["candidate"]["ggml_iqk"] \
         == value["change"]["parameter_surface"]["anchor"]["ggml_iqk"]
     cell = {
@@ -44,37 +51,143 @@ def diagnostic_source(value: dict) -> dict:
         "proposal_sha256": C.schemas.content_hash(value),
         "representation_frame_sha256": value["representation_contract"][
             "frame_sha256"],
-        "candidate_frame_id": "iqk-cpu-prefill-v9",
+        "candidate_frame_id": candidate_frame_id,
         "do_not_repeat_match_ids": [],
         "quotients": {"canonical": [cell], **{
             fixture_id: [copy.deepcopy(cell)] for fixture_id in fixtures}},
     }
 
 
+class _NoPriorMatches:
+    def matches_for(self, regime, statement):
+        return ()
+
+
+def _frame_factors(value: dict) -> dict:
+    return {
+        "candidate_ref": "registered:ggml_iqk",
+        "backend": "llama_cpu",
+        "model_sha256": "a" * 64,
+        "cpu_list": "0-95",
+        "devices": [],
+        "device_names": [],
+        "device_index": 0,
+        "n_gpu_layers": 99,
+        "production_commit": "b" * 40,
+        "measurement_commit": "c" * 40,
+        "provider_reference": copy.deepcopy(value["provider_reference"]),
+        "ggml_iqk": value["change"]["parameter_surface"]["candidate"]["ggml_iqk"],
+        "threads": 96,
+    }
+
+
+def _heldout_receipt(value: dict, *, factors: dict, effect: float) -> dict:
+    ordinal = value["proposal_id"].split("-")[-1]
+    root = Path(tempfile.mkdtemp(prefix="ak-heldout-journal-"))
+    campaign_id = f"ak-heldout-decode-{ordinal}"
+    proposal_id = f"akp-heldout-{ordinal}"
+    candidate_id = f"akc-heldout-{ordinal}"
+    evaluation_id = f"ake-heldout-{ordinal}"
+    measured_proposal = copy.deepcopy(value)
+    measured_proposal.update({
+        "proposal_id": proposal_id,
+        "campaign_id": campaign_id,
+    })
+    measured_proposal["target"]["regimes"] = ["decode"]
+    measured_proposal["target"]["ops"] = ["mul_mat"]
+    book = J.Journal(str(root), campaign_id=campaign_id)
+    book.initialize()
+    book.append(J.KIND_PROPOSAL_RECORDED, measured_proposal)
+    hypothesis_id = f"akh-heldout-{ordinal}"
+    tracker = H.HypothesisTracker(
+        journal_=book, root=str(root), campaign_id=campaign_id)
+    tracker.open_hypothesis(H.Hypothesis(
+        hypothesis_id=hypothesis_id,
+        statement=measured_proposal["hypothesis"],
+        falsifier="The paired decode observation does not resolve the declared effect.",
+        origin=H.ORIGIN_CONTROLLER,
+        author="least-commitment-heldout-test",
+        regime={"recipe_id": "t1b.llama_cpu.llama_bench_decode.v1"},
+    ))
+    authorization = tracker.authorize_claim(
+        hypothesis_id,
+        purpose="exercise prospective held-out journal projection",
+        authorized_by="least-commitment-heldout-test",
+        ledger=_NoPriorMatches(),
+    )
+    evaluation = _event(f"heldout-{ordinal}")
+    evaluation.update({
+        "event_id": evaluation_id,
+        "campaign_id": campaign_id,
+        "candidate_id": candidate_id,
+    })
+    evaluation["device_state"]["source"] = "rocm-smi"
+    evaluation["device_state"]["receipt_ref"] = "heldout-device-state-receipt"
+    candidate = _candidate(f"heldout-{ordinal}", status="banked")
+    candidate.update({
+        "candidate_id": candidate_id,
+        "campaign_id": campaign_id,
+        "proposal_id": proposal_id,
+        "evaluation_event_ids": [evaluation_id],
+    })
+    book.append(J.KIND_EVALUATION_EVENT, evaluation)
+    book.append(J.KIND_CANDIDATE_RECORDED, candidate)
+    terminal = book.append(J.KIND_STOP_STATE, {
+        "state": "decided",
+        "result": {
+            "state": "decided", "campaign_id": campaign_id,
+            "candidate_id": candidate_id, "executed": True, "ok": True,
+            "spec": {
+                "recipe_id": "t1b.llama_cpu.llama_bench_decode.v1",
+                "hypothesis": {
+                    "bound": True, "hypothesis_id": hypothesis_id,
+                    "authorization": authorization.to_dict(),
+                },
+                "proposal": {
+                    "schema": measured_proposal["schema"],
+                    "proposal_id": proposal_id,
+                    "representation_frame_sha256": measured_proposal[
+                        "representation_contract"]["frame_sha256"],
+                },
+                **{key: factors[key] for key in (
+                    "candidate_ref", "backend", "model_sha256", "cpu_list",
+                    "devices", "device_names", "device_index", "n_gpu_layers",
+                    "production_commit", "measurement_commit")},
+            },
+            "decision": {"keep": effect > 0.03, "median_relative": effect},
+            "production_unchanged": {"outcome": C.schemas.PASS},
+            "releases": [{"claim": "cpu", "released": True}],
+            "pairs": [{"block_index": 0, "candidate": 1.0 + effect,
+                       "anchor": 1.0}],
+        },
+    })
+    return HOUT.project(
+        receipt_id=f"aklc-heldout-{value['proposal_id']}",
+        target_proposal=value,
+        measurement={
+            "journal_root": str(root), "campaign_id": campaign_id,
+            "proposal_id": proposal_id, "completion_event_id": terminal.event_id,
+        },
+    )
+
+
 def plan(value: dict, *, role: str = "intervention",
-         matched_control: str | None = "akp-20260812-1000") -> dict:
+         matched_control: str | None = "akp-20260812-1000",
+         factors_override: dict | None = None) -> dict:
+    factors = copy.deepcopy(factors_override or _frame_factors(value))
+    heldout = _heldout_receipt(
+        value, factors=factors,
+        effect=0.02 if role == "intervention" else 0.0)
+    candidate_frame_id = heldout["candidate_frame_id"]
     handle = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
     with handle:
-        json.dump(diagnostic_source(value), handle)
+        json.dump(diagnostic_source(
+            value, candidate_frame_id=candidate_frame_id), handle)
     binding = C.source_binding(Path(handle.name))
     source = json.loads(Path(handle.name).read_text(encoding="utf-8"))
     diagnostics, recodings = C.derive_diagnostics(
-        source, proposal=value, candidate_frame_id="iqk-cpu-prefill-v9")
+        source, proposal=value, candidate_frame_id=candidate_frame_id)
     receipts = {name: dict(binding) for name in C.DIAGNOSTICS}
-    heldout = {
-        "schema": C.HELDOUT_SCHEMA,
-        "authority": "observe_only_measurement",
-        "receipt_id": f"aklc-heldout-{value['proposal_id']}",
-        "proposal_id": value["proposal_id"],
-        "proposal_sha256": C.schemas.content_hash(value),
-        "candidate_frame_id": "iqk-cpu-prefill-v9",
-        "regime": "decode", "surface": "mul_mat",
-        "metric": "tokens_per_second", "metric_direction": "higher",
-        "relative_effect": 0.02 if role == "intervention" else 0.0,
-        "measurement_record_sha256": C.schemas.content_hash({
-            "proposal_id": value["proposal_id"], "regime": "decode"}),
-        "capture_mode": "measured",
-    }
     heldout_handle = tempfile.NamedTemporaryFile(
         mode="w", suffix=".json", delete=False)
     with heldout_handle:
@@ -85,11 +198,10 @@ def plan(value: dict, *, role: str = "intervention",
         "matched_experiment_id": "akm-iqk-20260812-0001",
         "proposal_id": value["proposal_id"], "role": role,
         "matched_control_proposal_id": matched_control,
-        "candidate_frame_id": "iqk-cpu-prefill-v9", "regime": "prefill",
+        "candidate_frame_id": candidate_frame_id, "regime": "prefill",
         "surface": "mul_mat", "intervention_id": "ggml-iqk-1",
         "changed_factor": "ggml_iqk",
-        "factors": {"ggml_iqk": value["change"]["parameter_surface"]["candidate"]["ggml_iqk"],
-                    "threads": 96},
+        "factors": factors,
         "diagnostics": diagnostics,
         "recodings": recodings,
         "diagnostic_source_receipts": receipts,
@@ -143,10 +255,65 @@ class CapturePlanTest(unittest.TestCase):
         path.write_text(json.dumps(source), encoding="utf-8")
         raw["heldout_outcome_receipt"] = C.source_binding(path)
         raw["plan_sha256"] = C.plan_sha256(raw)
-        with self.assertRaisesRegex(C.CapturePlanError, "outside.*target regimes"):
+        with self.assertRaisesRegex(C.CapturePlanError, "fresh projection"):
             C.from_mapping(raw, proposal=proposal_record,
                            campaign_id=proposal_record["campaign_id"],
                            candidate_id="akc-20260812-1001")
+
+    def test_hand_entered_heldout_effect_is_refused(self):
+        proposal_record = proposal()
+        raw = plan(proposal_record)
+        path = Path(raw["heldout_outcome_receipt"]["path"])
+        source = json.loads(path.read_text(encoding="utf-8"))
+        source["relative_effect"] += 0.25
+        path.write_text(json.dumps(source), encoding="utf-8")
+        raw["heldout_outcome_receipt"] = C.source_binding(path)
+        raw["plan_sha256"] = C.plan_sha256(raw)
+        with self.assertRaisesRegex(C.CapturePlanError, "fresh projection"):
+            C.from_mapping(raw, proposal=proposal_record,
+                           campaign_id=proposal_record["campaign_id"],
+                           candidate_id="akc-20260812-1001")
+
+    def test_mutated_completed_measurement_breaks_heldout_projection(self):
+        proposal_record = proposal()
+        raw = plan(proposal_record)
+        receipt_path = Path(raw["heldout_outcome_receipt"]["path"])
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        journal_path = Path(receipt["measurement_record"]["journal_root"]) / \
+            "events.jsonl"
+        with journal_path.open("a", encoding="utf-8") as handle:
+            handle.write('{"torn":')
+        with self.assertRaisesRegex(C.CapturePlanError, "completed held-out campaign"):
+            C.from_mapping(raw, proposal=proposal_record,
+                           campaign_id=proposal_record["campaign_id"],
+                           candidate_id="akc-20260812-1001")
+
+    def test_heldout_cli_projects_only_from_completed_journal(self):
+        proposal_record = proposal()
+        raw = plan(proposal_record)
+        receipt = json.loads(Path(
+            raw["heldout_outcome_receipt"]["path"]).read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            proposal_path = root / "proposal-v4.json"
+            proposal_path.write_text(json.dumps(proposal_record), encoding="utf-8")
+            manifest = root / "heldout-projection.json"
+            manifest.write_text(json.dumps({
+                "receipt_id": receipt["receipt_id"],
+                "target_proposal": str(proposal_path),
+                "measurement": {key: receipt["measurement_record"][key]
+                                for key in ("journal_root", "campaign_id",
+                                            "proposal_id", "completion_event_id")},
+            }), encoding="utf-8")
+            output = root / "heldout.json"
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(HOUT.main([
+                    str(manifest), "--output", str(output)]), 0)
+            self.assertEqual(
+                json.loads(output.read_text(encoding="utf-8")), receipt)
+            with self.assertRaisesRegex(
+                    HOUT.HeldoutProjectionError, "new absolute"):
+                HOUT.main([str(manifest), "--output", "relative-heldout.json"])
 
     def test_control_falsifier_is_keep_or_effect_above_noise(self):
         control = C.make_iqk_control_proposal(

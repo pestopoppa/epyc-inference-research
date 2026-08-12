@@ -32,7 +32,7 @@ a module it never looked at.
 |---|---:|
 | **ON THE CAMPAIGN PATH** | **69,281** |
 | **DEFERRED** (provably unreachable) | **51,947** |
-| **TOTAL** | **121,228** |
+| **TOTAL** | **122,596** |
 
 **The deferred plane is explicit.** The compact modules deliberately off the
 mutation/build path are offline analysis or pre-campaign planning surfaces: the
@@ -123,7 +123,7 @@ incident or a measured fact; "reduced rigour" is not a reason.
 
 | module | lines | campaign #1 | reason |
 |---|---:|:---:|---|
-| `campaign.py` | 4,581 | yes | THE ENTRYPOINT. Before it landed, `grep -rl "__main__|argparse|def main("` over every non-test module returned nothing: 94k lines, 5,695 passing tests, and no way to start it — which is the whole reason this package has produced no result |
+| `campaign.py` | 4,742 | yes | THE ENTRYPOINT. Before it landed, `grep -rl "__main__|argparse|def main("` over every non-test module returned nothing: 94k lines, 5,695 passing tests, and no way to start it — which is the whole reason this package has produced no result |
 | `dashboard.py` | 201 | yes | the terminal result was fsynced but the only dashboard exporter had been deleted, so active AutoKernel work remained permanently absent from the operator surface; this compact projection dates itself from the journal entry and cannot make an old campaign fresh |
 | `__init__.py` | 14 | yes | package docstring; `schemas` is declared here as the single source of record shape |
 | `schemas.py` | 3,783 | yes | one record shape — every module is written against it and none invents its own |
@@ -131,8 +131,10 @@ incident or a measured fact; "reduced rigour" is not a reason.
 | `fault_rehearsal.py` | 1,080 | no | governed process-only acceptance producer; real crash/restart, advisory revocation and tamper evidence must remain operator-invoked and cannot gain campaign mutation, inference, benchmark, kernel, stack or release authority |
 | `offline_least_commitment.py` | 465 | no | AP-WM-1 observe-only archive analysis; importing an offline hypothesis diagnostic into the mutation/build path would give it accidental live authority |
 | `least_commitment_archive_builder.py` | 429 | no | AK-WM-2a strict real-record projection; it reads hash-bound completed campaign evidence into an observe-only archive and cannot launch, rank, mutate, or promote |
-| `least_commitment_receipts.py` | 815 | no | AK-WM-2a governed offline producer; it copies only explicitly SHA-pinned journal fields into receipts and cannot launch, rank, mutate, or promote |
-| `least_commitment_capture.py` | 471 | yes | prospective hash-bound IQK diagnostic/control contract; live campaigns only reduce declared outcome functions and it exposes no selector, champion, release, process, or inference API |
+| `least_commitment_receipts.py` | 836 | no | AK-WM-2a governed offline producer; it copies only explicitly SHA-pinned journal fields into receipts, rejects torn completed journals, and cannot launch, rank, mutate, or promote |
+| `least_commitment_capture.py` | 487 | yes | prospective hash-bound IQK diagnostic/control contract; live campaigns only reduce declared outcome functions and it exposes no selector, champion, release, process, or inference API |
+| `least_commitment_heldout.py` | 488 | yes | prospective held-out trust boundary; projects the effect only from a clean distinct completed campaign journal, derives the cross-regime candidate frame, and replays that projection before a target campaign can claim resources |
+| `prepare_iqk_matched_pair.py` | 388 | no | deterministic pre-claim intervention/control publisher; derives shared seeds and the complete one-factor frame, validates both capture plans, and explicitly cannot infer, build, claim, execute, or mutate a journal |
 | `evidence_path_rehearsal.py` | 277 | no | architecture-only CLI proving proposal/capture/control/AP-WM/champion/readiness/T3/package producer coverage; emits no empirical evidence or live authority |
 | `turn_productivity.py` | 481 | no | AK-PT-1/AK-X-6 archive reducer; it consumes completed refine-turn records and may only withhold future search advancement, so campaign #1 must not give it live rank or mutation authority |
 | `prior_art.py` | 597 | no | deterministic proposal-input compiler; it classifies findings before a proposal exists and has no place in the mutation/build process |

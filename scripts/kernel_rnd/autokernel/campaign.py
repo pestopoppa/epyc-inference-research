@@ -1795,7 +1795,10 @@ class CampaignSpec:
             raise ValueError("matched factor frame requires a least-commitment plan")
         return self.matched_factor_frame_for(self.matched_experiment_id)
 
-    def matched_factor_frame_for(self, matched_experiment_id: str) -> dict:
+    def matched_factor_frame_for(
+            self, matched_experiment_id: str, *,
+            physical_envelope: Optional[physical_bounds.PhysicalEnvelope] = None,
+    ) -> dict:
         """Derive a plan-generation frame without weakening live admission."""
         if (not isinstance(matched_experiment_id, str)
                 or not matched_experiment_id.startswith("akm-")
@@ -1809,10 +1812,14 @@ class CampaignSpec:
         calibration = self.calibration
         if calibration is None:
             raise ValueError("matched factor frame requires accepted calibration")
+        selected_envelope = physical_envelope or self.physical_envelope
+        if self.ranked_units and physical_envelope is not None:
+            raise ValueError(
+                "a physical-envelope override cannot replace ranked units")
         if self.ranked_units:
             envelope: Any = [unit.to_dict() for unit in self.ranked_units]
-        elif self.physical_envelope is not None:
-            envelope = self.physical_envelope.to_dict()
+        elif selected_envelope is not None:
+            envelope = selected_envelope.to_dict()
         else:
             raise ValueError("matched factor frame requires a physical envelope")
         provider_reference = (
@@ -1820,6 +1827,7 @@ class CampaignSpec:
             if self.proposal is not None else None)
         return {
             "matched_experiment_id": matched_experiment_id,
+            "candidate_ref": self.candidate_ref,
             "backend": self.backend,
             "recipe_id": self.recipe_id,
             "metric": self.metric,
@@ -1866,6 +1874,15 @@ class CampaignSpec:
         return {
             "campaign_id": self.campaign_id, "candidate_id": self.candidate_id,
             "candidate_ref": self.candidate_ref, "backend": self.backend,
+            # These identities are required by the prospective held-out
+            # projector.  A later campaign must be able to prove that an
+            # out-of-regime observation measured the same immutable candidate
+            # frame without trusting the path or the projector's memory.
+            "model_sha256": (
+                storage.hash_file(self.model)
+                if self.model and os.path.isfile(self.model) else None),
+            "production_commit": PRODUCTION_COMMIT,
+            "measurement_commit": MEASUREMENT_COMMIT,
             "blocks_precommitted": self.blocks, "recipe_id": self.recipe_id,
             "metric": self.metric, "drift_bound": self.drift_bound,
             "drift_bound_evidence": AA_EVIDENCE_REF,
@@ -1885,6 +1902,8 @@ class CampaignSpec:
             "matched_experiment_id": self.matched_experiment_id,
             "t0_ops": list(self.t0_ops), "devices": list(self.devices),
             "device_names": list(self.device_names),
+            "device_index": self.device_index,
+            "n_gpu_layers": self.n_gpu_layers,
             "cpu_list": self.cpu_list, "worktree": self.worktree_path,
             "build_dir": self.build_dir, "journal_root": self.journal_root,
             "created_at": self.created_at,
