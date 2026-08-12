@@ -436,7 +436,7 @@ def assemble_authoring_prompt(*, role: str, task: str, context: PricedContext,
     enter only through validated typed records; context has already passed the
     per-round budget and never-bulk-read gate.
     """
-    if role not in {"planner", "actor", "critic", "exploit"}:
+    if role not in {"planner", "actor", "critic", "implement", "exploit"}:
         raise ValueError(f"unknown authoring role {role!r}")
     if not isinstance(task, str) or not task.strip():
         raise ValueError("task must be non-empty")
