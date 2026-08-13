@@ -48,8 +48,8 @@ def build_files(root: Path, label: str) -> tuple[P.BuildIdentity, E.BuildIdentit
 
 def plan(root: Path) -> E.GpuSourceEvidencePlan:
     root = root.resolve(); root.mkdir(parents=True, exist_ok=True)
-    candidate, candidate_files = build_files(root, "candidate")
-    anchor, anchor_files = build_files(root, "anchor")
+    candidate, candidate_files = build_files(root / "candidate", "candidate")
+    anchor, anchor_files = build_files(root / "anchor", "anchor")
     manifest = write_bound(root, "manifest.json", b"sealed manifest", "manifest")
     model = write_bound(root, "model.gguf", b"model bytes", "model")
     workload = write_bound(root, "workload.json", b"workload bytes", "workload")
@@ -116,8 +116,12 @@ def plan(root: Path) -> E.GpuSourceEvidencePlan:
         required_anchor_rocprof_argv_paths=(anchor_files.binary.path, model.path,
                                             workload.path, runtime.path),
         execution_cwd=root,
-        execution_environment=(("HIP_VISIBLE_DEVICES", "0"),
-                               ("LD_LIBRARY_PATH", str(candidate_files.hip_library.path.parent))))
+        correctness_environment=(("HIP_VISIBLE_DEVICES", "0"),
+                                 ("LD_LIBRARY_PATH", str(candidate_files.hip_library.path.parent))),
+        candidate_rocprof_environment=(("HIP_VISIBLE_DEVICES", "0"),
+                                       ("LD_LIBRARY_PATH", str(candidate_files.hip_library.path.parent))),
+        anchor_rocprof_environment=(("HIP_VISIBLE_DEVICES", "0"),
+                                    ("LD_LIBRARY_PATH", str(anchor_files.hip_library.path.parent))))
     policy_path = placeholder_policy.path
     policy_path.write_text(json.dumps(E._policy_payload(result), sort_keys=True))
     policy = E.BoundInputFile(
@@ -199,13 +203,15 @@ class FakeExecutors:
         self.rocprof_exit = rocprof_exit
 
     def correctness(self, invocation):
-        self.calls.append((invocation.kind, invocation.arm, invocation.argv))
+        self.calls.append((invocation.kind, invocation.arm, invocation.argv,
+                           invocation.environment))
         invocation.stdout_path.write_text(self.correctness_summary + "\n")
         invocation.stderr_path.write_text("")
         return self._capture(invocation, self.correctness_exit)
 
     def rocprof(self, invocation):
-        self.calls.append((invocation.kind, invocation.arm, invocation.argv))
+        self.calls.append((invocation.kind, invocation.arm, invocation.argv,
+                           invocation.environment))
         invocation.stdout_path.write_text(f"{invocation.arm} profile complete\n")
         invocation.stderr_path.write_text("")
         invocation.timestamp_csv_path.write_text(csv_text(
@@ -249,6 +255,13 @@ class GpuSourceEvidenceTests(unittest.TestCase):
                  ("rocprof", "anchor")])
             self.assertTrue(all(claim.released for claim in claims.claims))
             self.assertEqual(len(claims.claims), 3)
+            self.assertNotEqual(executors.calls[1][3], executors.calls[2][3])
+            self.assertEqual(
+                Path(dict(executors.calls[1][3])["LD_LIBRARY_PATH"]).name,
+                "candidate")
+            self.assertEqual(
+                Path(dict(executors.calls[2][3])["LD_LIBRARY_PATH"]).name,
+                "anchor")
             root = Path(directory) / "evidence"
             loaded = E.load_gpu_source_evidence_bundle(root / "proof-bundle.json")
             self.assertEqual(loaded, bundle)
@@ -386,7 +399,9 @@ class GpuSourceEvidenceTests(unittest.TestCase):
             current = replace(current, identity_files=replace(
                 current.identity_files, materialization=changed))
             policy = json.loads(current.policy.path.read_text())
-            policy["execution_environment"] = [list(x) for x in current.execution_environment]
+            policy["correctness_environment"] = [list(x) for x in current.correctness_environment]
+            policy["candidate_rocprof_environment"] = [list(x) for x in current.candidate_rocprof_environment]
+            policy["anchor_rocprof_environment"] = [list(x) for x in current.anchor_rocprof_environment]
             current.policy.path.write_text(json.dumps(policy, sort_keys=True))
             current = replace(current, policy=replace(
                 current.policy,
@@ -396,10 +411,10 @@ class GpuSourceEvidenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             current = plan(Path(directory) / "inputs")
             with self.assertRaisesRegex(E.EvidenceProducerError, "LD_LIBRARY_PATH"):
-                replace(current, execution_environment=(
+                replace(current, correctness_environment=(
                     ("LD_LIBRARY_PATH", "/wrong/generation"),))
             bad_cwd = Path(directory) / "missing"
-            with self.assertRaisesRegex(E.EvidenceProducerError, "cwd"):
+            with self.assertRaisesRegex(E.EvidenceProducerError, "working directory"):
                 replace(current, execution_cwd=bad_cwd)
 
     def test_shell_metacharacters_are_rejected_before_execution(self):

@@ -372,7 +372,9 @@ class GpuSourceEvidencePlan:
     required_candidate_rocprof_argv_paths: tuple[Path, ...] = ()
     required_anchor_rocprof_argv_paths: tuple[Path, ...] = ()
     execution_cwd: Path = Path("/")
-    execution_environment: tuple[tuple[str, str], ...] = ()
+    correctness_environment: tuple[tuple[str, str], ...] = ()
+    candidate_rocprof_environment: tuple[tuple[str, str], ...] = ()
+    anchor_rocprof_environment: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if (not isinstance(self.campaign_id, str) or not self.campaign_id
@@ -404,13 +406,21 @@ class GpuSourceEvidencePlan:
             raise EvidenceProducerError("plan requires a sealed adapter policy")
         if (not self.execution_cwd.is_absolute() or not self.execution_cwd.is_dir()
                 or self.execution_cwd.is_symlink()
-                or not self.execution_environment
-                or any(not isinstance(item, tuple) or len(item) != 2
-                       or not all(isinstance(part, str) for part in item)
-                       for item in self.execution_environment)
-                or len(dict(self.execution_environment)) != len(self.execution_environment)
-                or "LD_LIBRARY_PATH" not in dict(self.execution_environment)):
-            raise EvidenceProducerError("plan requires sealed cwd and LD_LIBRARY_PATH environment")
+                ):
+            raise EvidenceProducerError("plan requires a sealed working directory")
+        for label, environment in (
+            ("correctness", self.correctness_environment),
+            ("candidate rocprof", self.candidate_rocprof_environment),
+            ("anchor rocprof", self.anchor_rocprof_environment),
+        ):
+            if (not environment
+                    or any(not isinstance(item, tuple) or len(item) != 2
+                           or not all(isinstance(part, str) for part in item)
+                           for item in environment)
+                    or len(dict(environment)) != len(environment)
+                    or "LD_LIBRARY_PATH" not in dict(environment)):
+                raise EvidenceProducerError(
+                    f"plan requires sealed {label} LD_LIBRARY_PATH environment")
         for label, command, inputs in (
             ("correctness", self.correctness_argv, self.correctness_inputs),
             ("candidate rocprof", self.candidate_rocprof_argv,
@@ -452,11 +462,19 @@ class GpuSourceEvidencePlan:
                                    for path in required):
                 raise EvidenceProducerError(
                     f"{label} does not bind every required model/workload/config path")
-        library_dirs = {str(self.identity_files.candidate.hip_library.path.parent),
-                        str(self.identity_files.anchor.hip_library.path.parent)}
-        ld_paths = set(dict(self.execution_environment)["LD_LIBRARY_PATH"].split(":"))
-        if not library_dirs.issubset(ld_paths):
-            raise EvidenceProducerError("LD_LIBRARY_PATH does not bind both arm HIP libraries")
+        candidate_dir = str(self.identity_files.candidate.hip_library.path.parent)
+        anchor_dir = str(self.identity_files.anchor.hip_library.path.parent)
+        for label, environment, required, forbidden in (
+            ("correctness", self.correctness_environment, candidate_dir, anchor_dir),
+            ("candidate rocprof", self.candidate_rocprof_environment,
+             candidate_dir, anchor_dir),
+            ("anchor rocprof", self.anchor_rocprof_environment,
+             anchor_dir, candidate_dir),
+        ):
+            ld_paths = dict(environment)["LD_LIBRARY_PATH"].split(":")
+            if not ld_paths or ld_paths[0] != required or forbidden in ld_paths:
+                raise EvidenceProducerError(
+                    f"{label} LD_LIBRARY_PATH does not exclusively pin its arm")
 
 
 def _bound_reference(value: BoundInputFile) -> dict[str, Any]:
@@ -567,7 +585,9 @@ def _policy_payload(plan: GpuSourceEvidencePlan) -> dict[str, Any]:
         "required_candidate_rocprof_argv_paths": [str(x) for x in plan.required_candidate_rocprof_argv_paths],
         "required_anchor_rocprof_argv_paths": [str(x) for x in plan.required_anchor_rocprof_argv_paths],
         "execution_cwd": str(plan.execution_cwd),
-        "execution_environment": [list(item) for item in plan.execution_environment],
+        "correctness_environment": [list(item) for item in plan.correctness_environment],
+        "candidate_rocprof_environment": [list(item) for item in plan.candidate_rocprof_environment],
+        "anchor_rocprof_environment": [list(item) for item in plan.anchor_rocprof_environment],
         "dispatch": _expectations(plan),
     }
 
@@ -817,7 +837,7 @@ def _produce_correctness(
         stdout_path=(directory / "stdout.txt").resolve(),
         stderr_path=(directory / "stderr.txt").resolve(),
         working_directory=plan.execution_cwd,
-        environment=plan.execution_environment)
+        environment=plan.correctness_environment)
     capture, opened, released, residency = _run_claimed(
         invocation, plan=plan, executor=executor, claim_acquirer=claim_acquirer,
         claim_verifier=claim_verifier, claim_journal=claim_journal,
@@ -844,7 +864,7 @@ def _produce_correctness(
         "command_argv": list(plan.correctness_argv),
         "command_cwd": str(plan.execution_cwd),
         "command_environment_sha256": schemas.content_hash(
-            [list(item) for item in plan.execution_environment]),
+            [list(item) for item in plan.correctness_environment]),
         "exit_code": capture.exit_code,
         **outputs,
         "started_at": capture.started_at,
@@ -979,7 +999,8 @@ def _produce_attribution_arm(
         stderr_path=(directory / "stderr.txt").resolve(),
         timestamp_csv_path=(directory / "timestamps.csv").resolve(),
         working_directory=plan.execution_cwd,
-        environment=plan.execution_environment)
+        environment=(plan.candidate_rocprof_environment if arm == "candidate"
+                     else plan.anchor_rocprof_environment))
     capture, opened, released, residency = _run_claimed(
         invocation, plan=plan, executor=executor, claim_acquirer=claim_acquirer,
         claim_verifier=claim_verifier, claim_journal=claim_journal,
@@ -1013,7 +1034,9 @@ def _produce_attribution_arm(
         "command_argv": list(argv),
         "command_cwd": str(plan.execution_cwd),
         "command_environment_sha256": schemas.content_hash(
-            [list(item) for item in plan.execution_environment]),
+            [list(item) for item in (
+                plan.candidate_rocprof_environment if arm == "candidate"
+                else plan.anchor_rocprof_environment)]),
         "exit_code": capture.exit_code,
         **outputs,
         "timestamp_reduction_sha256": schemas.content_hash(dispatches),
@@ -1071,7 +1094,9 @@ def _produce_pair(
         "required_candidate_rocprof_argv_paths": [str(x) for x in plan.required_candidate_rocprof_argv_paths],
         "required_anchor_rocprof_argv_paths": [str(x) for x in plan.required_anchor_rocprof_argv_paths],
         "execution_cwd": str(plan.execution_cwd),
-        "execution_environment": [list(item) for item in plan.execution_environment],
+        "correctness_environment": [list(item) for item in plan.correctness_environment],
+        "candidate_rocprof_environment": [list(item) for item in plan.candidate_rocprof_environment],
+        "anchor_rocprof_environment": [list(item) for item in plan.anchor_rocprof_environment],
         "expectations": _expectations(plan),
         "candidate": _reference(candidate),
         "anchor": _reference(anchor),
@@ -1107,7 +1132,9 @@ def _validate_attribution_body(body: Mapping[str, Any], *, plan: GpuSourceEviden
         "command_argv": list(argv), "exit_code": 0,
         "command_cwd": str(plan.execution_cwd),
         "command_environment_sha256": schemas.content_hash(
-            [list(item) for item in plan.execution_environment]),
+            [list(item) for item in (
+                plan.candidate_rocprof_environment if arm == "candidate"
+                else plan.anchor_rocprof_environment)]),
         "identity_files": _identity_files_reference(plan.identity_files),
         "execution_policy": _bound_reference(plan.policy),
         "command_input_files": [_bound_reference(x) for x in (
@@ -1149,7 +1176,7 @@ def _validate_correctness_body(body: Mapping[str, Any], plan: GpuSourceEvidenceP
         "command_argv": list(plan.correctness_argv), "exit_code": 0,
         "command_cwd": str(plan.execution_cwd),
         "command_environment_sha256": schemas.content_hash(
-            [list(item) for item in plan.execution_environment]),
+            [list(item) for item in plan.correctness_environment]),
         "identity_files": _identity_files_reference(plan.identity_files),
         "execution_policy": _bound_reference(plan.policy),
         "command_input_files": [_bound_reference(x) for x in plan.correctness_inputs],
@@ -1215,7 +1242,9 @@ def _plan_from_receipts(correctness: Mapping[str, Any], pair: Mapping[str, Any])
             required_candidate_rocprof_argv_paths=tuple(Path(x) for x in pair_body["required_candidate_rocprof_argv_paths"]),
             required_anchor_rocprof_argv_paths=tuple(Path(x) for x in pair_body["required_anchor_rocprof_argv_paths"]),
             execution_cwd=Path(pair_body["execution_cwd"]),
-            execution_environment=tuple(tuple(x) for x in pair_body["execution_environment"]),
+            correctness_environment=tuple(tuple(x) for x in pair_body["correctness_environment"]),
+            candidate_rocprof_environment=tuple(tuple(x) for x in pair_body["candidate_rocprof_environment"]),
+            anchor_rocprof_environment=tuple(tuple(x) for x in pair_body["anchor_rocprof_environment"]),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise EvidenceProducerError("sealed bundle cannot reconstruct its plan") from exc
