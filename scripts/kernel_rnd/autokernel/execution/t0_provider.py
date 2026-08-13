@@ -103,7 +103,7 @@ import signal
 import subprocess
 import tempfile
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 
@@ -132,7 +132,7 @@ __all__ = [
     "parse_backend_ops_console", "parse_backend_ops_csv", "parse_backend_ops_help",
     "LinkageRow", "LinkageReport", "parse_linkage_report",
     "parse_sanitizer_findings", "parse_compiler_diagnostics", "parse_sched_trace",
-    "parse_delivered_tokens",
+    "parse_delivered_tokens", "build_generation_invocation", "build_dispatch_trace_invocation",
     # anchor
     "AnchorCapture", "capture_anchor_identity", "capture_anchor",
     # provider
@@ -2578,6 +2578,29 @@ def build_generation_invocation(*, binary: str, library_path: str, plan: Generat
         notes=(f"greedy={plan.is_greedy()} (temp=={plan.temperature}, top_k=={plan.top_k})",))
 
 
+def build_dispatch_trace_invocation(*, binary: str, library_path: str,
+                                    plan: GenerationPlan, debug_level: int,
+                                    base_env: Sequence[tuple],
+                                    parameter_env: Sequence[tuple] = (),
+                                    cpu_prefix: bool = True) -> ConstructedInvocation:
+    """One generation whose scheduler assignment log is a T0 receipt.
+
+    ``GGML_SCHED_DEBUG`` makes the scheduler *call* ``GGML_LOG_DEBUG``; it does
+    not make the CLI print debug-level records.  ``--verbose`` is therefore a
+    required part of the trace instrument, rather than an operator preference.
+    The ordinary coherence/determinism generation remains quiet and carries no
+    scheduler-only logging noise.
+    """
+    _req_int(debug_level, "dispatch.debug_level", minimum=1)
+    verbose = ("--verbose", "-v")
+    trace_plan = plan if any(flag in plan.extra_argv for flag in verbose) else replace(
+        plan, extra_argv=plan.extra_argv + ("--verbose",))
+    return build_generation_invocation(
+        binary=binary, library_path=library_path, plan=trace_plan,
+        base_env=base_env, extra_env={"GGML_SCHED_DEBUG": str(debug_level)},
+        parameter_env=parameter_env, cpu_prefix=cpu_prefix)
+
+
 # =============================================================================
 # The provider
 # =============================================================================
@@ -2942,11 +2965,11 @@ class ExecutedT0EvidenceProvider:
         if generation is None:
             return None
         require_claim(self._claim, what="the dispatch trace", cpu_list=self._pinned_cpus())
-        invocation = build_generation_invocation(
+        invocation = build_dispatch_trace_invocation(
             binary=self._plan.candidate.binary,
             library_path=self._plan.candidate.library_path,
-            plan=generation, base_env=self._plan.base_env,
-            extra_env={"GGML_SCHED_DEBUG": str(plan.debug_level)},
+            plan=generation, debug_level=plan.debug_level,
+            base_env=self._plan.base_env,
             parameter_env=self._plan.parameter_env,
             cpu_prefix=self._plan.backend == "llama_cpu")
         capture, ref = self._execute(invocation, timeout_s=plan.timeout_s, collected=collected)

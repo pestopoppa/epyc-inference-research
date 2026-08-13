@@ -763,10 +763,9 @@ class ChainLeg:
         gen = T0.build_generation_invocation(
             binary=plan.candidate.binary, library_path=plan.candidate.library_path,
             plan=plan.generation, base_env=plan.base_env, seed=plan.generation.seed)
-        trace = T0.build_generation_invocation(
+        trace = T0.build_dispatch_trace_invocation(
             binary=plan.candidate.binary, library_path=plan.candidate.library_path,
-            plan=plan.generation, base_env=plan.base_env,
-            extra_env={"GGML_SCHED_DEBUG": "2"})
+            plan=plan.generation, debug_level=2, base_env=plan.base_env)
         ops = T0.build_backend_ops_invocation(
             binary=plan.candidate.test_backend_ops,
             library_path=plan.candidate.library_path,

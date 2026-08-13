@@ -977,6 +977,18 @@ class ArgvConstruction(unittest.TestCase):
             self.assertIn(flag, inv.argv, flag)
         self.assertEqual(inv.argv[inv.argv.index("--seed") + 1], "42")
 
+    def test_dispatch_trace_invocation_enables_the_cli_debug_sink(self):
+        """The scheduler flag alone is silent: its records are LOG_DEBUG."""
+        plan = generation_plan()
+        trace = t0.build_dispatch_trace_invocation(
+            binary=f"{BIN_DIR}/llama-cli", library_path=BIN_DIR, plan=plan,
+            debug_level=2, base_env=())
+        self.assertIn("--verbose", trace.argv)
+        self.assertEqual(trace.env_dict()["GGML_SCHED_DEBUG"], "2")
+        normal = t0.build_generation_invocation(
+            binary=f"{BIN_DIR}/llama-cli", library_path=BIN_DIR, plan=plan, base_env=())
+        self.assertNotIn("--verbose", normal.argv)
+
     def test_greedy_is_derived_from_the_sampling_parameters(self):
         self.assertTrue(generation_plan().is_greedy())
         self.assertFalse(generation_plan(temperature=0.7).is_greedy())
@@ -1520,10 +1532,9 @@ class DispatchTraceCollection(unittest.TestCase):
                               dispatch=t0.DispatchTracePlan(
                                   derived_surface=("MUL_MAT",),
                                   fallback_scope=fallback_scope))
-        inv = t0.build_generation_invocation(
+        inv = t0.build_dispatch_trace_invocation(
             binary=plan.candidate.binary, library_path=plan.candidate.library_path,
-            plan=plan.generation, base_env=plan.base_env,
-            extra_env={"GGML_SCHED_DEBUG": "2"})
+            plan=plan.generation, debug_level=2, base_env=plan.base_env)
         runner = t0.RecordedProcessRunner([capture(inv.argv, stdout=trace)])
         return t0.ExecutedT0EvidenceProvider(plan=plan, runner=runner, claim=FakeClaim())
 
@@ -1728,10 +1739,9 @@ class ProducedByDiscipline(unittest.TestCase):
         gen = t0.build_generation_invocation(
             binary=plan.candidate.binary, library_path=plan.candidate.library_path,
             plan=plan.generation, base_env=plan.base_env, seed=plan.generation.seed)
-        trace = t0.build_generation_invocation(
+        trace = t0.build_dispatch_trace_invocation(
             binary=plan.candidate.binary, library_path=plan.candidate.library_path,
-            plan=plan.generation, base_env=plan.base_env,
-            extra_env={"GGML_SCHED_DEBUG": "2"})
+            plan=plan.generation, debug_level=2, base_env=plan.base_env)
         runner = t0.RecordedProcessRunner([
             _console_capture(plan, recorded("recorded_t0_backend_ops_console_ok.txt")),
             capture(trace.argv, stdout="## SPLIT #0: CPU # 0 inputs\n"),
@@ -1916,10 +1926,9 @@ class EndToEndT0Report(unittest.TestCase):
         gen = t0.build_generation_invocation(
             binary=plan.candidate.binary, library_path=plan.candidate.library_path,
             plan=plan.generation, base_env=plan.base_env, seed=plan.generation.seed)
-        trace = t0.build_generation_invocation(
+        trace = t0.build_dispatch_trace_invocation(
             binary=plan.candidate.binary, library_path=plan.candidate.library_path,
-            plan=plan.generation, base_env=plan.base_env,
-            extra_env={"GGML_SCHED_DEBUG": "2"})
+            plan=plan.generation, debug_level=2, base_env=plan.base_env)
         perf = ("llama_perf_context_print:        eval time =   1234.56 ms /    32 runs   "
                 "(   38.58 ms per token,    25.92 tokens per second)\n")
         runner = t0.RecordedProcessRunner([
