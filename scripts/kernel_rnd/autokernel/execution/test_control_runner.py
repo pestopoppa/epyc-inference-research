@@ -61,6 +61,51 @@ def sha(tag: str) -> str:
     return hashlib.sha256(tag.encode("utf-8")).hexdigest()
 
 
+class TestRuntimeSourceEraBinding(unittest.TestCase):
+
+    def source(self, *, production="production-current",
+               instrument="instrument-current"):
+        body = {
+            "schema": "epyc.autokernel.runtime_source_label.v1",
+            "production_source_commit": production,
+            "measurement_instrument_commit": instrument,
+            "measurement_binary_sha256": sha("binary"),
+            "measurement_linkage_sha256": sha("linkage"),
+        }
+        return {**body, "source_sha256": S.content_hash(body)}
+
+    def test_current_runtime_source_is_accepted(self):
+        source = self.source()
+        declaration = {"source_sha256": source["source_sha256"]}
+        self.assertEqual(CR._validate_runtime_source_identity(
+            declaration, source,
+            expected_production_commit="production-current",
+            expected_measurement_commit="instrument-current"),
+            source["source_sha256"])
+
+    def test_rehashed_stale_instrument_and_production_are_refused(self):
+        for field, value, message in (
+                ("instrument", "f744cc220", "measurement instrument is stale"),
+                ("production", "production-old", "production commit is stale")):
+            with self.subTest(field=field):
+                kwargs = {field: value}
+                source = self.source(**kwargs)
+                declaration = {"source_sha256": source["source_sha256"]}
+                with self.assertRaisesRegex(ValueError, message):
+                    CR._validate_runtime_source_identity(
+                        declaration, source,
+                        expected_production_commit="production-current",
+                        expected_measurement_commit="instrument-current")
+
+    def test_declaration_must_bind_the_exact_runtime_source(self):
+        source = self.source()
+        with self.assertRaisesRegex(ValueError, "declaration is not bound"):
+            CR._validate_runtime_source_identity(
+                {"source_sha256": sha("other")}, source,
+                expected_production_commit="production-current",
+                expected_measurement_commit="instrument-current")
+
+
 # =============================================================================
 # The campaign — solved once, exactly as a real one is
 # =============================================================================

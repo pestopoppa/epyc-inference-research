@@ -188,7 +188,26 @@ def _recorded_check(value: Any, label: str) -> schemas.Check:
     return schemas.Check(outcome, tuple(str(reason) for reason in reasons))
 
 
-def load_live_evaluation_authority(path: str | Path) -> LiveEvaluationAuthority:
+def _validate_runtime_source_identity(
+        declaration: Mapping[str, Any], source: Mapping[str, Any], *,
+        expected_production_commit: str,
+        expected_measurement_commit: str) -> str:
+    source_body = dict(source)
+    source_sha = source_body.pop("source_sha256", None)
+    if source_sha != schemas.content_hash(source_body):
+        raise ValueError("runtime source label hash does not verify")
+    if declaration.get("source_sha256") != source_sha:
+        raise ValueError("campaign declaration is not bound to its runtime source label")
+    if source.get("production_source_commit") != expected_production_commit:
+        raise ValueError("runtime source production commit is stale")
+    if source.get("measurement_instrument_commit") != expected_measurement_commit:
+        raise ValueError("runtime source measurement instrument is stale")
+    return str(source_sha)
+
+
+def load_live_evaluation_authority(
+        path: str | Path, *, expected_production_commit: str,
+        expected_measurement_commit: str) -> LiveEvaluationAuthority:
     """Read the accepted calibration/control records used by the live writer.
 
     This is deliberately stricter than a display loader: any missing control,
@@ -271,10 +290,10 @@ def load_live_evaluation_authority(path: str | Path) -> LiveEvaluationAuthority:
     # Selection is also a content check: a stale or invented id is refused by
     # the evaluator bundle here, before a candidate's samples are read.
     ak_statistics.select_construction(construction_id)
-    source_body = dict(source)
-    source_sha = source_body.pop("source_sha256", None)
-    if source_sha != schemas.content_hash(source_body):
-        raise ValueError("runtime source label hash does not verify")
+    source_sha = _validate_runtime_source_identity(
+        declaration, source,
+        expected_production_commit=expected_production_commit,
+        expected_measurement_commit=expected_measurement_commit)
     return LiveEvaluationAuthority(
         campaign_controls=campaign_controls,
         calibration=calibration,

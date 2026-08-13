@@ -1444,7 +1444,9 @@ def load_calibration_bundle(path: os.PathLike[str] | str) -> LeanCalibration:
     # prospective writer. A real executing HostOps run requires these files and
     # refuses later at the request boundary if they are absent.
     if (root / "calibration.json").is_file() or (root / "control_sweep.json").is_file():
-        authority = control_runner.load_live_evaluation_authority(root)
+        authority = control_runner.load_live_evaluation_authority(
+            root, expected_production_commit=PRODUCTION_COMMIT,
+            expected_measurement_commit=MEASUREMENT_COMMIT)
         if authority.campaign_controls.contribution_floor != float(values["contribution_floor"]) \
                 or authority.calibration.b_min_blocks != int(values["b_min_blocks"]) \
                 or authority.campaign_controls.max_blocks_per_candidate != int(values["max_blocks"]) \
@@ -3545,7 +3547,9 @@ class HostOps:
         else:
             try:
                 current = control_runner.load_live_evaluation_authority(
-                    authority.evidence_ref)
+                    authority.evidence_ref,
+                    expected_production_commit=PRODUCTION_COMMIT,
+                    expected_measurement_commit=MEASUREMENT_COMMIT)
                 same_authority = current == authority
                 self._runtime_close_check = schemas.Check(
                     schemas.PASS if same_authority else schemas.FAIL,
