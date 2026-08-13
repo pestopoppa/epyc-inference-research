@@ -1,0 +1,240 @@
+"""No-hardware process-boundary acceptance tests for autonomous discovery.
+
+These tests intentionally exercise only public controller seams with fake compute.
+They are a launch gate: a red test means the live adapter must remain disabled.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from scripts.kernel_rnd.autokernel.controller import discovery_controller as D
+
+
+H = "a" * 64
+
+
+class Manifest:
+    def __init__(self, **values):
+        defaults = {
+            "campaign_id": "ak-blackbox",
+            "proposal_id": "akp-blackbox",
+            "candidate_id": "akc-blackbox",
+            "source_tree": "llama.cpp",
+            "production_base_commit": "0" * 40,
+            "instrument_commit": "1" * 40,
+            "change_class": "source",
+            "declared_files": ("ggml/src/ggml.c",),
+            "declared_symbols": {"ggml/src/ggml.c": ("<file-scope>",)},
+            "mechanism_id": "blackbox",
+            "patch_bytes": b"diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c\n@@ -1 +1 @@\n-x\n+y\n",
+        }
+        defaults["patch_sha256"] = "0" * 64
+        defaults.update(values)
+        for key, value in defaults.items():
+            setattr(self, key, value)
+
+    @property
+    def patch_bundle_sha256(self):
+        return H
+
+
+class Planner:
+    def __init__(self):
+        self.calls = 0
+
+    def attest(self):
+        return {**D.SOL, "runtime": {"wrapper_sha256": H}}
+
+    def plan(self, *, context, workspace):
+        self.calls += 1
+        return D.PlannedCandidate(
+            "akh-blackbox",
+            "bounded source hypothesis",
+            "no throughput improvement",
+            {"backend": "gpu", "phase": "decode"},
+            {"proposal_id": "akp-blackbox"},
+            Manifest(),
+            H,
+        )
+
+
+class Critic:
+    def __init__(self):
+        self.calls = 0
+
+    def attest(self):
+        return {**D.TERRA, "runtime": {"wrapper_sha256": H}}
+
+    def review(self, candidate, *, context, workspace):
+        self.calls += 1
+        return D.Critique("accept", "bounded")
+
+
+class Lease:
+    def __init__(self, decisions=(True,)):
+        self.decisions = iter(decisions)
+
+    def admit(self, candidate):
+        admitted = next(self.decisions)
+        return {"admitted": admitted, "mode": "allowed_discovery_noise"}
+
+
+class Screen:
+    def __init__(self, effect=0.04):
+        self.calls = 0
+        self.effect = effect
+        self.items = []
+
+    def screen(self, item, authorization, lease):
+        self.calls += 1
+        self.items.append(item)
+        return D.SealedScreen(
+            "result.json", H, self.effect, "candidate", H, H, H
+        )
+
+
+class ProcessCrash(BaseException):
+    pass
+
+
+class CrashBeforeRunner(Screen):
+    def __init__(self):
+        super().__init__()
+        self.entries = 0
+
+    def screen(self, item, authorization, lease):
+        self.entries += 1
+        if self.entries == 1:
+            raise ProcessCrash("before fake runner")
+        return super().screen(item, authorization, lease)
+
+
+class CrashAfterRunner(Screen):
+    def __init__(self, durable_result: Path):
+        super().__init__()
+        self.durable_result = durable_result
+        self.compute_calls = 0
+
+    def screen(self, item, authorization, lease):
+        if self.durable_result.exists():
+            return super().screen(item, authorization, lease)
+        self.compute_calls += 1
+        self.durable_result.write_text(json.dumps({"result_sha256": H}))
+        raise ProcessCrash("after fake runner")
+
+
+class BlackBoxLaunchGate(unittest.TestCase):
+    def config(self, root: Path):
+        return D.ControllerConfig(root / "out", max_iterations=1)
+
+    def run_twice(self, root, planner, critic, screener, lease):
+        first = D.run_controller(
+            self.config(root), planner=planner, critic=critic,
+            screener=screener, lease=lease,
+        )
+        second = D.run_controller(
+            self.config(root), planner=planner, critic=critic,
+            screener=screener, lease=lease,
+        )
+        return first, second
+
+    def test_pending_resume_reuses_exact_candidate_without_replanning(self):
+        with tempfile.TemporaryDirectory() as temp, \
+                patch.object(D.source_candidate, "SourcePatchManifest", Manifest), \
+                patch.object(D, "_write_projection"):
+            root = Path(temp)
+            planner, critic, screen = Planner(), Critic(), Screen()
+            first, second = self.run_twice(
+                root, planner, critic, screen, Lease((False, True))
+            )
+            self.assertIn("pending", first)
+            self.assertTrue(second["complete"])
+            self.assertEqual(planner.calls, 1)
+            self.assertEqual(critic.calls, 1)
+            self.assertEqual(screen.calls, 1)
+            self.assertEqual(screen.items[0].source_manifest.patch_bytes,
+                             Manifest().patch_bytes)
+
+    def test_state_tamper_is_refused_before_pending_resume(self):
+        with tempfile.TemporaryDirectory() as temp, \
+                patch.object(D.source_candidate, "SourcePatchManifest", Manifest), \
+                patch.object(D, "_write_projection"):
+            root = Path(temp)
+            planner, critic = Planner(), Critic()
+            D.run_controller(
+                self.config(root), planner=planner, critic=critic,
+                screener=Screen(), lease=Lease((False,)),
+            )
+            state_path = root / "out" / "state.json"
+            state = json.loads(state_path.read_text())
+            state["pending"]["candidate"]["proposal"]["proposal_id"] = "tampered"
+            state_path.write_text(json.dumps(state))
+            with self.assertRaises(D.DiscoveryControllerError):
+                D.run_controller(
+                    self.config(root), planner=planner, critic=critic,
+                    screener=Screen(), lease=Lease((True,)),
+                )
+
+    def test_process_crash_before_runner_resumes_without_replanning(self):
+        with tempfile.TemporaryDirectory() as temp, \
+                patch.object(D.source_candidate, "SourcePatchManifest", Manifest), \
+                patch.object(D, "_write_projection"):
+            root = Path(temp)
+            planner, critic, screen = Planner(), Critic(), CrashBeforeRunner()
+            with self.assertRaises(ProcessCrash):
+                D.run_controller(
+                    self.config(root), planner=planner, critic=critic,
+                    screener=screen, lease=Lease((True,)),
+                )
+            completed = D.run_controller(
+                self.config(root), planner=planner, critic=critic,
+                screener=screen, lease=Lease((True,)),
+            )
+            self.assertTrue(completed["complete"])
+            self.assertEqual((planner.calls, critic.calls, screen.calls), (1, 1, 1))
+
+    def test_process_crash_after_runner_does_not_repeat_compute(self):
+        with tempfile.TemporaryDirectory() as temp, \
+                patch.object(D.source_candidate, "SourcePatchManifest", Manifest), \
+                patch.object(D, "_write_projection"):
+            root = Path(temp)
+            planner, critic = Planner(), Critic()
+            screen = CrashAfterRunner(root / "fake-result.json")
+            with self.assertRaises(ProcessCrash):
+                D.run_controller(
+                    self.config(root), planner=planner, critic=critic,
+                    screener=screen, lease=Lease((True,)),
+                )
+            completed = D.run_controller(
+                self.config(root), planner=planner, critic=critic,
+                screener=screen, lease=Lease((True,)),
+            )
+            self.assertTrue(completed["complete"])
+            self.assertEqual(screen.compute_calls, 1)
+            self.assertEqual(planner.calls, 1)
+            queue = root / "out" / "promotion-queue.jsonl"
+            self.assertEqual(len(queue.read_text().splitlines()), 1)
+
+    def test_pooled_classifier_handles_sign_conflict_and_subadditive_stack(self):
+        self.assertEqual(D.classify_screen_series([0.01]), "candidate")
+        self.assertEqual(
+            D.classify_screen_series([0.01, 0.02]),
+            "top_k_replicated_candidate",
+        )
+        self.assertEqual(D.classify_screen_series([0.01, -0.01]), "inconclusive")
+        self.assertEqual(
+            D.classify_screen_series(
+                [0.021687370691388094, 0.003313242012254847],
+                component_pooled_effects=[0.013465889, 0.01012618],
+            ),
+            "replicated_but_subadditive",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
