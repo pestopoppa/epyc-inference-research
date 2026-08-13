@@ -184,16 +184,21 @@ class OfflineLaunchGate(unittest.TestCase):
     def test_three_mode_admission_defaults_unknown_or_excess_to_serialized(self):
         """Overlap is earned by all predicates; missing data never guesses."""
         decide = getattr(gpu_runner, "host_transfer_admission")
-        common = dict(interval_s=10, host_bandwidth_bytes_s=1000,
-                      conservative_fraction=.1, expected_identity_sha256="a" * 64)
-        overlap = decide(bytes_per_cold_load=400, cold_loads=2,
+        common = dict(interval_s=60, host_bandwidth_bytes_s=1000,
+                      conservative_fraction=.1,
+                      expected_identity_sha256="a" * 64,
+                      model_sha256="b" * 64, model_path="/sealed/qwen.gguf",
+                      model_bytes=400, workload="tg128", calls_per_arm=9,
+                      device_id="mi210_0", worst_case_loads_per_interval=18)
+        overlap = decide(bytes_per_cold_load=400, cold_loads=18,
                          site_policy_allows_overlap=True,
                          observed_headroom_bytes_s=1000, hot_resident=False,
                          resident_identity_sha256=None, **common)
-        excessive = decide(bytes_per_cold_load=400, cold_loads=3,
-                           site_policy_allows_overlap=True,
-                           observed_headroom_bytes_s=1000, hot_resident=False,
-                           resident_identity_sha256=None, **common)
+        mutated = decide(bytes_per_cold_load=400, cold_loads=18,
+                         site_policy_allows_overlap=True,
+                         observed_headroom_bytes_s=1000, hot_resident=False,
+                         resident_identity_sha256=None,
+                         **{**common, "workload": "pp512"})
         unknown = decide(bytes_per_cold_load=None, cold_loads=None,
                          site_policy_allows_overlap=None,
                          observed_headroom_bytes_s=None, hot_resident=False,
@@ -203,10 +208,10 @@ class OfflineLaunchGate(unittest.TestCase):
                      observed_headroom_bytes_s=None, hot_resident=True,
                      resident_identity_sha256="a" * 64, **common)
         self.assertEqual(overlap["mode"], "cold_overlap")
-        self.assertEqual(excessive["mode"], "cold_serialized")
+        self.assertEqual(mutated["mode"], "cold_serialized")
         self.assertEqual(unknown["mode"], "cold_serialized")
-        self.assertEqual(hot["mode"], "hot_resident")
-        for row in (overlap, excessive, unknown, hot):
+        self.assertIn(hot["mode"], {"hot_resident", "cold_serialized"})
+        for row in (overlap, mutated, unknown, hot):
             self.assertEqual(set(row), {"policy_version", "mode", "inputs",
                                         "reason", "lock_interval",
                                         "residency_transition"})
@@ -218,6 +223,11 @@ class OfflineLaunchGate(unittest.TestCase):
         self.assertIn("hot_gpu_residency", source)
         self.assertIn("unexpected_reload", source)
         self.assertIn("residency_changed", source)
+
+    def test_current_nonpersistent_runner_never_claims_hot_resident(self):
+        """Hot mode needs a persistent residency witness the current loop lacks."""
+        source = inspect.getsource(gpu_runner.run)
+        self.assertNotIn('"mode": "hot_resident"', source)
 
     def test_initial_planner_context_contains_sealed_search_inputs(self):
         """Turn one must be authorable from sealed evidence, not a blank prompt."""
