@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from . import screening_baseline as bank
 
@@ -53,6 +54,20 @@ class ScreeningBaselineBankTest(unittest.TestCase):
         with self.assertRaisesRegex(bank.BaselineBankError, "competing model inference"):
             bank.screen(bank=value, frame={"recipe": "decode"},
                         invoke_candidate=lambda: 101., competing_inference=True)
+
+    def test_witness_only_counts_inference_and_unreadable_refuses(self):
+        class Scan:
+            unreadable_pids = {}
+            @staticmethod
+            def inference_like(): return ()
+        with mock.patch.object(bank.preflight, "read_own_scope", return_value=object()), \
+             mock.patch.object(bank.preflight, "interim_process_scan", return_value=Scan()):
+            self.assertFalse(bank.competing_inference_witness()["competing"])
+        broken = Scan(); broken.unreadable_pids = {42: "EACCES"}
+        with mock.patch.object(bank.preflight, "read_own_scope", return_value=object()), \
+             mock.patch.object(bank.preflight, "interim_process_scan", return_value=broken), \
+             self.assertRaisesRegex(bank.BaselineBankError, "unreadable"):
+            bank.competing_inference_witness()
 
 
 if __name__ == "__main__":

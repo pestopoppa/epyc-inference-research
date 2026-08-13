@@ -4151,11 +4151,13 @@ class HostOps:
                      "instrument_commit": MEASUREMENT_COMMIT,
                      "production_commit": PRODUCTION_COMMIT,
                      "reps": spec.reps, "n_prompt": spec.n_prompt, "n_gen": spec.n_gen}
+            witness = screening_baseline.competing_inference_witness()
             report = screening_baseline.screen(
                 bank=spec.screening_baseline, frame=frame,
                 invoke_candidate=lambda: screening_baseline.invoke_command(
                     command=candidate_cmd, spawner=spawner),
-                competing_inference=False)
+                competing_inference=bool(witness["competing"]))
+            report["inference_witness"] = witness
             self._screening_report = report
             center = float(report["baseline_center"])
             return tuple(Pair(index, center, value, "candidate_only")

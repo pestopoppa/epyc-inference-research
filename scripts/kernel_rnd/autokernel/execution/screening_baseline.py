@@ -13,6 +13,7 @@ from typing import Any, Mapping
 from .. import schemas
 from ..evaluator import recipes
 from . import microbench
+from ..resource import preflight
 
 SCHEMA = "epyc.autokernel.screening_baseline_bank.v1"
 
@@ -112,3 +113,17 @@ def invoke_command(*, command: recipes.ConstructedCommand, spawner: microbench.S
         raise BaselineBankError("screening command/result frame mismatch: " + "; ".join(check.reasons))
     values = rows[0].metric_samples
     return sum(values) / len(values)
+
+
+def competing_inference_witness() -> dict[str, Any]:
+    """Read only model-inference identities; ordinary CPU activity is excluded."""
+    try:
+        owned = preflight.read_own_scope()
+        scan = preflight.interim_process_scan(owned=owned)
+    except preflight.PreflightUnavailable as exc:
+        raise BaselineBankError("screening inference witness unavailable") from exc
+    if scan.unreadable_pids:
+        raise BaselineBankError("screening inference witness unreadable")
+    findings = [item.to_dict() for item in scan.inference_like()]
+    return {"basis": "interim_inference_executable_scan", "competing": bool(findings),
+            "findings": findings, "ordinary_processes_ignored": True}
