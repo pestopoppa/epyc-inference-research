@@ -79,7 +79,7 @@ except ImportError:  # top-level `python -c` import from inside the odl_bench di
 UNLIMITED_OCR_ENGINE = "unlimited_ocr"
 EXPERIMENTAL_BIN_DIR = Path("/mnt/raid0/llm/llama.cpp-experimental/build-v9-hip/bin")
 DEFAULT_BINARY = EXPERIMENTAL_BIN_DIR / "llama-server"
-DEFAULT_MODEL = Path("/mnt/raid0/llm/models/Unlimited-OCR-GGUF/Unlimited-OCR-Q5_K_M.gguf")
+DEFAULT_MODEL = Path("/mnt/raid0/llm/models/Unlimited-OCR-GGUF/Unlimited-OCR-Q5_K_M-outq8.gguf")
 DEFAULT_MMPROJ = Path("/mnt/raid0/llm/models/Unlimited-OCR-GGUF/mmproj-Unlimited-OCR-F16.gguf")
 DEFAULT_PROMPT = (
     "Extract this document page as Markdown for structural document evaluation. "
