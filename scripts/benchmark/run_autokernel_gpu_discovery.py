@@ -118,15 +118,10 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
            threads: int = 8, batch: int = 512, ubatch: int = 512,
            mmap: bool = True, no_op_offload: bool = False,
            split_mode: str = "layer", no_kv_offload: bool = False,
-           poll: int = 50, inference_window_lock: Path | None = None) -> dict:
-    """Run one model load/measurement while excluding CPU model calls only."""
-    # This is a model-call lock, not a strict-calibration lock.  Discovery may
-    # overlap ordinary CPU noise, but its model load must still use the exact
-    # configured inference window so large loads never surprise a peer.
-    window = (inference_window.InferenceCallWindow(inference_window_lock, timeout_s=600.0)
-              if inference_window_lock is not None else MODEL_CALL_WINDOW)
-    with window.hold() as configured_lease:
-      if allow_small_model_cpu_overlap:
+           poll: int = 50, inference_window_lock: Path | None = None,
+           reward_binary: Path | None = None, hip_library_dir: Path | None = None) -> dict:
+    """Run one model load/measurement with the ratified discovery overlap policy."""
+    if allow_small_model_cpu_overlap:
         model_bytes = model.stat().st_size
         if model_bytes > SMALL_MODEL_OVERLAP_MAX_BYTES:
             raise RuntimeError(
@@ -149,11 +144,12 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
             flash_attention=flash_attention, prompt_tokens=prompt_tokens,
             generation_tokens=generation_tokens, threads=threads, ubatch=ubatch,
             batch=batch, mmap=mmap, no_op_offload=no_op_offload,
-            split_mode=split_mode, no_kv_offload=no_kv_offload, poll=poll)
-        result["inference_call_window"] = {
-            "schema": "epyc.autokernel.inference_call_window.v1",
-            "lock_path": str(configured_lease.path), "waited_s": configured_lease.waited_s,
-            "scope": "model_load_and_inference_only"}
+            split_mode=split_mode, no_kv_offload=no_kv_offload, poll=poll,
+            reward_binary=reward_binary, hip_library_dir=hip_library_dir)
+        # Deliberately no shared CPU inference-window lock here.  The <=512MiB
+        # policy treats CPU activity as discovery noise; it is not a strict
+        # calibration claim and must not serialize small GPU exploration.
+        result["inference_call_window"] = None
         result["cpu_coverage"] = {
             "schema": "epyc.autokernel.discovery_cpu_overlap.v1",
             "cpu_overlap_policy": "allowed_discovery_noise",
@@ -164,7 +160,10 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
             "promotion_claim": False,
         }
         return result
-      else:
+    # Non-overlap/large mode must use the sealed configured window.
+    window = (inference_window.InferenceCallWindow(inference_window_lock, timeout_s=600.0)
+              if inference_window_lock is not None else MODEL_CALL_WINDOW)
+    with window.hold() as configured_lease:
         owned_claim = None
         try:
             try:
@@ -187,7 +186,8 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
                 flash_attention=flash_attention, prompt_tokens=prompt_tokens,
                 generation_tokens=generation_tokens, threads=threads, ubatch=ubatch,
                 batch=batch, mmap=mmap, no_op_offload=no_op_offload,
-                split_mode=split_mode, no_kv_offload=no_kv_offload, poll=poll)
+                split_mode=split_mode, no_kv_offload=no_kv_offload, poll=poll,
+                reward_binary=reward_binary, hip_library_dir=hip_library_dir)
             if getattr(coverage, "borrowed", False):
                 coverage.validate()
         finally:
@@ -209,8 +209,14 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
                    generation_tokens: int = 0, threads: int = 8, ubatch: int = 512,
                    batch: int = 512, mmap: bool = True,
                    no_op_offload: bool = False, split_mode: str = "layer",
-                   no_kv_offload: bool = False, poll: int = 50) -> dict:
-    binary = build / "bin" / "llama-bench"
+                   no_kv_offload: bool = False, poll: int = 50,
+                   reward_binary: Path | None = None, hip_library_dir: Path | None = None) -> dict:
+    binary = (reward_binary or build / "bin" / "llama-bench").resolve()
+    loader_dir = (hip_library_dir or build / "bin").resolve()
+    if not binary.is_file() or not os.access(binary, os.X_OK):
+        raise RuntimeError("sealed reward executable is not executable")
+    if not loader_dir.is_dir() or not (loader_dir / "libggml-hip.so").is_file():
+        raise RuntimeError("sealed HIP loader directory lacks libggml-hip.so")
     argv = ("taskset", "-c", CPU_LIST, "numactl", "--interleave=all", str(binary),
             "-m", str(model), "-p", str(prompt_tokens), "-n", str(generation_tokens),
             "-r", "1", "-ngl", "99",
@@ -221,7 +227,7 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
             "-nkvo", "1" if no_kv_offload else "0",
             "--poll", str(poll),
             "--autokernel-harden", str(seed), "-o", "jsonl")
-    env = {**os.environ, "LD_LIBRARY_PATH": f"{binary.parent}:/opt/rocm/lib"}
+    env = {**os.environ, "LD_LIBRARY_PATH": f"{loader_dir}:/opt/rocm/lib"}
     process = subprocess.Popen(argv, env=env, stdin=subprocess.DEVNULL,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                text=True, start_new_session=True)
@@ -258,7 +264,7 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
     if row.get("backends") != "ROCm" or row.get("gpu_info") != "AMD Instinct MI210":
         raise RuntimeError("GPU discovery invocation did not report MI210 ROCm execution")
     reported_commit = str(row.get("build_commit", ""))
-    if len(reported_commit) < 7 or not expected_source_commit.startswith(reported_commit):
+    if expected_source_commit is not None and (len(reported_commit) < 7 or not expected_source_commit.startswith(reported_commit)):
         raise RuntimeError("GPU discovery binary does not report the sealed source commit")
     expected_flash = 1 if flash_attention else 0
     if (row.get("n_prompt") != prompt_tokens or row.get("n_gen") != generation_tokens
@@ -280,6 +286,9 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
     if max(sample["vram_used_bytes"] for sample in samples) <= baseline_vram:
         raise RuntimeError("GPU discovery window has no positive VRAM residency delta")
     return {"argv": list(argv), "env": {"LD_LIBRARY_PATH": env["LD_LIBRARY_PATH"]},
+            "reward_binary": str(binary), "reward_binary_sha256": sha256_file(binary),
+            "hip_library": str(loader_dir / "libggml-hip.so"),
+            "hip_library_sha256": sha256_file(loader_dir / "libggml-hip.so"),
             "metric": float(row["avg_ts"]), "raw_row": row,
             "stderr_tail": stderr[-2000:], "residency": samples,
             "hip_residency_proved": True}
@@ -333,8 +342,6 @@ def factor_spec(*, factor: str, anchor_build: Path, candidate_build: Path,
             if anchor_identity[key] != candidate_identity[key]:
                 raise RuntimeError(
                     f"source patch arms must keep {key} compile setting identical")
-        if anchor_identity["artifacts"]["binary_sha256"] == candidate_identity["artifacts"]["binary_sha256"]:
-            raise RuntimeError("source patch arms must have distinct sealed binaries")
         if anchor_identity["source_commit"] == candidate_identity["source_commit"]:
             raise RuntimeError("source patch arms must have distinct source commits")
         return {
@@ -404,6 +411,8 @@ def preflight(args: argparse.Namespace) -> dict:
         raise RuntimeError(f"model does not exist: {model}")
     model_size_bytes = model.stat().st_size
     admitted_cap = int(getattr(args, "small_model_max_bytes", SMALL_MODEL_OVERLAP_MAX_BYTES))
+    if admitted_cap < 1 or admitted_cap > SMALL_MODEL_OVERLAP_MAX_BYTES:
+        raise RuntimeError("sealed small-model discovery cap must be within 1..512MiB")
     if (args.allow_small_model_cpu_overlap
             and model_size_bytes > admitted_cap):
         raise RuntimeError(
@@ -424,6 +433,27 @@ def preflight(args: argparse.Namespace) -> dict:
         (512, 0, "pp512-ngl99", "prefill_tokens_per_s")
         if args.workload == "prefill_pp512"
         else (0, 128, "tg128-ngl99", "decode_tokens_per_s"))
+    runtime_arms = None
+    if args.factor == "source_patch" and getattr(args, "measurement_binary", None):
+        measurement = Path(args.measurement_binary).resolve()
+        anchor_loader = Path(args.anchor_loader_dir).resolve()
+        candidate_loader = Path(args.candidate_loader_dir).resolve()
+        if (not measurement.is_file() or not os.access(measurement, os.X_OK)
+                or not all(path.is_dir() and (path / "libggml-hip.so").is_file()
+                           for path in (anchor_loader, candidate_loader))):
+            raise RuntimeError("source patch runtime closure is incomplete")
+        shared_sha = sha256_file(measurement)
+        anchor_hip = sha256_file(anchor_loader / "libggml-hip.so")
+        candidate_hip = sha256_file(candidate_loader / "libggml-hip.so")
+        if anchor_hip == candidate_hip:
+            raise RuntimeError("source patch runtime closure requires distinct HIP DSOs")
+        runtime_arms = {"measurement_binary": str(measurement),
+                        "measurement_binary_sha256": shared_sha,
+                        "anchor_loader_dir": str(anchor_loader),
+                        "candidate_loader_dir": str(candidate_loader),
+                        "anchor_hip_sha256": anchor_hip,
+                        "candidate_hip_sha256": candidate_hip,
+                        "reward_closure": "shared_anchor_binary_per_arm_hip_dso"}
     return {
         "schema": "epyc.autokernel.gpu_discovery_preflight.v1",
         "campaign_id": args.campaign_id,
@@ -468,6 +498,7 @@ def preflight(args: argparse.Namespace) -> dict:
         "metric": metric,
         "invocations": {"anchor": args.calls, "candidate": args.calls},
         "inference_executed": False,
+        "runtime_arms": runtime_arms,
     }
 
 
@@ -519,7 +550,7 @@ def run(args: argparse.Namespace) -> dict:
         sampler = device_sampler.RocmSmiSampler(device_index=0, interval_s=0.250).start()
         anchor_runs = [invoke(
             build=anchor_build, model=model, seed=args.seed + i,
-            expected_source_commit=anchor_identity["source_commit"],
+            expected_source_commit=(None if sealed["runtime_arms"] else anchor_identity["source_commit"]),
             baseline_vram=baseline_vram,
             flash_attention=sealed["anchor_flash_attention"],
             prompt_tokens=sealed["prompt_tokens"],
@@ -533,7 +564,11 @@ def run(args: argparse.Namespace) -> dict:
             poll=sealed["anchor_poll"],
             campaign_id=args.campaign_id, cpu_journal=cpu_journal,
             allow_small_model_cpu_overlap=args.allow_small_model_cpu_overlap,
-            inference_window_lock=Path(sealed["inference_window_lock"]))
+            inference_window_lock=Path(sealed["inference_window_lock"]),
+            reward_binary=(Path(sealed["runtime_arms"]["measurement_binary"])
+                           if sealed["runtime_arms"] else None),
+            hip_library_dir=(Path(sealed["runtime_arms"]["anchor_loader_dir"])
+                             if sealed["runtime_arms"] else None))
             for i in range(args.calls)]
         bank_body = {
             "schema": SCHEMA_BANK, "campaign_id": args.campaign_id,
@@ -558,7 +593,7 @@ def run(args: argparse.Namespace) -> dict:
         atomic_json(out / "baseline-bank.json", bank)
         candidate_runs = [invoke(
             build=candidate_build, model=model, seed=args.seed + args.calls + i,
-            expected_source_commit=candidate_identity["source_commit"],
+            expected_source_commit=(None if sealed["runtime_arms"] else candidate_identity["source_commit"]),
             baseline_vram=baseline_vram,
             flash_attention=sealed["candidate_flash_attention"],
             prompt_tokens=sealed["prompt_tokens"],
@@ -572,7 +607,11 @@ def run(args: argparse.Namespace) -> dict:
             poll=sealed["candidate_poll"],
             campaign_id=args.campaign_id, cpu_journal=cpu_journal,
             allow_small_model_cpu_overlap=args.allow_small_model_cpu_overlap,
-            inference_window_lock=Path(sealed["inference_window_lock"]))
+            inference_window_lock=Path(sealed["inference_window_lock"]),
+            reward_binary=(Path(sealed["runtime_arms"]["measurement_binary"])
+                           if sealed["runtime_arms"] else None),
+            hip_library_dir=(Path(sealed["runtime_arms"]["candidate_loader_dir"])
+                             if sealed["runtime_arms"] else None))
             for i in range(args.calls)]
         center = sum(bank["anchor_samples"]) / len(bank["anchor_samples"])
         values = [run["metric"] for run in candidate_runs]
@@ -594,7 +633,7 @@ def run(args: argparse.Namespace) -> dict:
                                    if args.allow_small_model_cpu_overlap
                                    else "shared_model_call_window"),
             "model_size_bytes": model.stat().st_size,
-            "small_model_overlap_max_bytes": SMALL_MODEL_OVERLAP_MAX_BYTES,
+            "small_model_overlap_max_bytes": sealed["small_model_overlap_max_bytes"],
             "promotion_claim": False,
             "frame": bank["frame"], "sole_factor": bank["sole_factor"],
             "candidate_identity": bank["candidate_identity"],
@@ -659,6 +698,9 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--small-model-max-bytes", type=int,
                         default=SMALL_MODEL_OVERLAP_MAX_BYTES)
     result.add_argument("--device-id", default=DEVICE_ID)
+    result.add_argument("--measurement-binary")
+    result.add_argument("--anchor-loader-dir")
+    result.add_argument("--candidate-loader-dir")
     result.add_argument("--cpu-claim-journal", default="/mnt/raid0/llm/ak-claims/region.jsonl")
     result.add_argument("--device-claim-journal", default="/mnt/raid0/llm/ak-claims/device.jsonl")
     return result

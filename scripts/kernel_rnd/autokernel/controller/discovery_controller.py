@@ -444,6 +444,7 @@ class ControllerConfig:
     production_base_commit: str | None = None
     instrument_commit: str | None = None
     campaign_id: str = "ak-discovery"
+    experiment_template_registry_sha256: str | None = None
     def __post_init__(self) -> None:
         if (not self.output_root.is_absolute() or not 1 <= self.max_iterations <= 1000
                 or isinstance(self.nomination_threshold, bool)
@@ -457,7 +458,8 @@ class ControllerConfig:
                     isinstance(value, str) and len(value) == 40
                     and all(ch in "0123456789abcdef" for ch in value)
                     for value in (self.production_base_commit, self.instrument_commit))
-                or not self.campaign_id.startswith("ak-")):
+                or not self.campaign_id.startswith("ak-")
+                or self.experiment_template_registry_sha256 is not None and not HASH.fullmatch(self.experiment_template_registry_sha256)):
             raise DiscoveryControllerError("invalid controller config")
 
 
@@ -699,6 +701,11 @@ def _run_controller_locked(config: ControllerConfig, *, planner: Planner, critic
         raise DiscoveryControllerError("sealed planner context changed; durable discovery cannot resume")
     if existing_context is None and config.planner_context_sha256 is not None:
         state["planner_context_sha256"] = config.planner_context_sha256
+    existing_templates = state.get("experiment_template_registry_sha256")
+    if existing_templates is not None and existing_templates != config.experiment_template_registry_sha256:
+        raise DiscoveryControllerError("sealed experiment-template registry changed; durable discovery cannot resume")
+    if existing_templates is None and config.experiment_template_registry_sha256 is not None:
+        state["experiment_template_registry_sha256"] = config.experiment_template_registry_sha256
     # A completed state is an acknowledged terminal checkpoint.  Re-entering it
     # must be a read, not another executor opportunity or a timestamp rewrite.
     if state["complete"]: return state

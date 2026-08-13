@@ -41,7 +41,8 @@ class DeploymentFactoryTests(unittest.TestCase):
         config = mock.Mock(state_root=Path("/state"), evidence_root=Path("/evidence"),
                            max_iterations=2, nomination_threshold=.03,
                            planner_context=mock.Mock(value=context), production_head="b" * 40,
-                           config_sha256="c" * 64)
+                           config_sha256="c" * 64,
+                           experiment_template_registry_sha256="d" * 64)
         config.revalidate = mock.Mock()
         result = F.controller_config(config, dry_run=True)
         self.assertEqual((result.output_root, result.evidence_root,

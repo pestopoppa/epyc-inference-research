@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import argparse
+import hashlib
+import json
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -81,13 +83,23 @@ class ExperimentTemplateRegistry:
     templates: Mapping[str, ExperimentTemplate]
 
     def __post_init__(self) -> None:
-        if (not self.version or not isinstance(self.registry_sha256, str)
-                or len(self.registry_sha256) != 64
-                or any(ch not in "0123456789abcdef" for ch in self.registry_sha256)
-                or not self.templates or set(self.templates) != {
+        if (not self.version or not self.templates or set(self.templates) != {
                     template.template_id for template in self.templates.values()
                     if isinstance(template, ExperimentTemplate)}):
             raise DeploymentFactoryError("experiment template registry version/hash is invalid")
+        body = {"version": self.version, "templates": {
+            key: {"template_id": value.template_id, "target_surface": value.target_surface,
+                  "target_symbol": value.target_symbol, "correctness_id": value.correctness_id,
+                  "dispatch_id": value.dispatch_id,
+                  "allowed_files": sorted(value.allowed_files),
+                  "allowed_symbols": {path: sorted(symbols) for path, symbols in value.allowed_symbols.items()},
+                  "semantics": dict(value.semantics),
+                  "dispatch": repr(value.dispatch)}
+            for key, value in sorted(self.templates.items())}}
+        expected = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":"),
+                                            ensure_ascii=False, allow_nan=False).encode()).hexdigest()
+        if self.registry_sha256 != expected:
+            raise DeploymentFactoryError("experiment template registry content hash mismatch")
 
     def resolve(self, intent: controller.GpuSourceExperimentIntent | None) -> ExperimentTemplate:
         if intent is None:
@@ -251,6 +263,7 @@ def controller_config(config: deployment.DiscoveryDeployment, *, dry_run: bool =
         planner_context_sha256=config.planner_context.value["context_sha256"],
         production_base_commit=config.production_head,
         instrument_commit=config.production_head,
+        experiment_template_registry_sha256=config.experiment_template_registry_sha256,
         # The sealed deployment digest, not a caller argument, namespaces all
         # controller/worktree/receipt identities across concurrent deployments.
         campaign_id=f"ak-discovery-{config.config_sha256[:16]}")
