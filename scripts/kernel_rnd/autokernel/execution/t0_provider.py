@@ -2879,19 +2879,24 @@ class ExecutedT0EvidenceProvider:
         with identical binaries that resolve different libraries have different
         linkage, which is the whole point of the field.
         """
-        # T0 binds ``llama-cli``, T1 binds ``llama-bench``, and source-integrity
-        # binds ``libggml.so``.  Their non-ggml DT_NEEDED sets legitimately
-        # differ (for example only the executables load libllama), while the
-        # authority this field names is the resolved ggml generation.  Hashing
-        # libllama made two tools from one build look like two anchor builds.
-        ggml_rows = [row for row in report.rows if row.soname.startswith("libggml")]
-        if not ggml_rows:
+        # A linkage report is tool-shaped, not build-shaped.  ``llama-cli``
+        # normally reports libggml.so, libggml-base and libggml-cpu; asking
+        # ldd about libggml.so itself reports only its direct base/cpu edges.
+        # Those are one build, but the *sets* differ.  The shared ABI root is
+        # libggml-base: fold its resolved path together with the verifier's
+        # expected root.  This proves the common ggml generation while neither
+        # treating a CLI-only dependency nor a direct-child-only dependency as
+        # a second build.  Backend/tool-specific rows stay in the full receipt
+        # and are still checked for confinement by the verifier.
+        base_rows = [row for row in report.rows
+                     if row.soname in {"libggml-base.so", "libggml-base.so.0"}]
+        if len(base_rows) != 1:
             raise OutputParseError(
-                "the linkage verifier reported no libggml rows; the resolved ggml "
-                "generation cannot be identified")
+                "the linkage verifier must report exactly one libggml-base row; "
+                "the common resolved ggml generation cannot be identified")
         return schemas.content_hash({
             "expected_root": report.expected_root,
-            "resolved": sorted([row.soname, row.path] for row in ggml_rows),
+            "resolved_ggml_base": [base_rows[0].soname, base_rows[0].path],
         })
 
     def collect_linkage(self, collected: _Collected):

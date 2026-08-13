@@ -613,16 +613,28 @@ class LinkageParsing(unittest.TestCase):
                             t0.ExecutedT0EvidenceProvider.linkage_digest(bad))
 
     def test_linkage_digest_names_the_ggml_generation_not_tool_specific_libs(self):
-        rows = (
+        # The live linker table is deliberately asymmetric: llama-cli has a
+        # direct libggml.so edge while inspecting libggml.so does not.  Both
+        # share the measured ABI root and therefore identify one build.
+        cli = t0.LinkageReport("llama-cli", "/anchor", (
             t0.LinkageRow("libggml.so.0", "/anchor/libggml.so.0", True),
             t0.LinkageRow("libggml-base.so.0", "/anchor/libggml-base.so.0", True),
-        )
-        cli = t0.LinkageReport("llama-cli", "/anchor", rows + (
+            t0.LinkageRow("libggml-cpu.so.0", "/anchor/libggml-cpu.so.0", True),
             t0.LinkageRow("libllama.so.0", "/anchor/libllama.so.0", True),
         ), schemas.PASS, ())
-        bench = t0.LinkageReport("llama-bench", "/anchor", rows, schemas.PASS, ())
+        direct_child = t0.LinkageReport("libggml.so.0", "/anchor", (
+            t0.LinkageRow("libggml-base.so.0", "/anchor/libggml-base.so.0", True),
+            t0.LinkageRow("libggml-cpu.so.0", "/anchor/libggml-cpu.so.0", True),
+        ), schemas.PASS, ())
         self.assertEqual(t0.ExecutedT0EvidenceProvider.linkage_digest(cli),
-                         t0.ExecutedT0EvidenceProvider.linkage_digest(bench))
+                         t0.ExecutedT0EvidenceProvider.linkage_digest(direct_child))
+
+    def test_linkage_digest_refuses_ambiguous_common_generation(self):
+        report = t0.LinkageReport("bad", "/anchor", (
+            t0.LinkageRow("libggml.so.0", "/anchor/libggml.so.0", True),
+        ), schemas.PASS, ())
+        with self.assertRaisesRegex(t0.OutputParseError, "exactly one libggml-base"):
+            t0.ExecutedT0EvidenceProvider.linkage_digest(report)
 
 
 # =============================================================================
