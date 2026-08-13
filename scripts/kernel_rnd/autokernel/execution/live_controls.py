@@ -101,6 +101,9 @@ ANCHOR_MOTION_SETTLING = {
 }
 RESUME_AMENDMENT_SCHEMA = "epyc.autokernel.live_control_resume_amendment.v1"
 RESUME_RECEIPT_SCHEMA = "epyc.autokernel.live_control_resume_receipt.v1"
+BLOCK_CHECKPOINT_SCHEMA = "epyc.autokernel.live_control_block_checkpoint.v1"
+BLOCK_CHECKPOINT_MANIFEST_SCHEMA = (
+    "epyc.autokernel.live_control_block_checkpoint_manifest.v1")
 CONTROL_EXTENSION_ROUNDS = 1
 CONTROL_EXTENSION_BLOCKS = 5
 CONTRIBUTION_FLOOR = 0.03
@@ -947,6 +950,147 @@ def _append_observation(output_root: Path, record: Mapping[str, Any]) -> None:
         os.close(descriptor)
 
 
+def _checkpoint_plan_identity(plan: microbench.MicrobenchPlan) -> dict[str, Any]:
+    """Closed identity for a prefix whose blocks may suppress future inference."""
+    schedule = plan.schedule()
+    body = {
+        "recipe_id": plan.recipe_id,
+        "candidate_id": plan.candidate_id,
+        "campaign_seed_sha256": hashlib.sha256(
+            plan.campaign_seed.encode("utf-8")).hexdigest(),
+        "matched_experiment_id": plan.matched_experiment_id,
+        "plan": plan.to_dict(),
+        "order_schedule": dict(
+            schedule.to_dict(), first_block_index=plan.block_index_offset,
+            orders=[schedule.order_for(plan.block_index_offset + index)
+                    for index in range(plan.blocks_to_run)]),
+    }
+    return {**body, "plan_sha256": schemas.content_hash(body)}
+
+
+class _BlockCheckpoint:
+    """Append-only, hash-chained completed-block journal for one measured leg."""
+
+    def __init__(self, output_root: Path, *, identity: LiveCampaignIdentity,
+                 label: str, plan: microbench.MicrobenchPlan) -> None:
+        self.directory = output_root / "checkpoints" / label
+        self.manifest_path = self.directory / "manifest.json"
+        self.blocks_path = self.directory / "blocks.jsonl"
+        self.plan = plan
+        self.plan_identity = _checkpoint_plan_identity(plan)
+        if self.directory.exists() and self.directory.is_symlink():
+            raise ValueError(f"checkpoint directory is a symlink: {self.directory}")
+        self.directory.mkdir(parents=True, exist_ok=True)
+        manifest_body = {
+            "schema": BLOCK_CHECKPOINT_MANIFEST_SCHEMA,
+            "campaign_id": identity.campaign_id,
+            "label": label,
+            "evidence_ref": identity.evidence_ref,
+            "plan_identity": self.plan_identity,
+            "started_at": _utc_now(),
+        }
+        expected = {**manifest_body,
+                    "manifest_sha256": schemas.content_hash(manifest_body)}
+        if self.manifest_path.exists():
+            manifest = _load_json(self.manifest_path)
+            stable = dict(manifest)
+            started_at = stable.pop("started_at", None)
+            stored_hash = stable.pop("manifest_sha256", None)
+            expected_stable = dict(expected)
+            expected_stable.pop("started_at")
+            expected_stable.pop("manifest_sha256")
+            hash_body = {key: value for key, value in manifest.items()
+                         if key != "manifest_sha256"}
+            if not isinstance(started_at, str) or not started_at \
+                    or stored_hash != schemas.content_hash(hash_body) \
+                    or stable != expected_stable:
+                raise ValueError(
+                    f"checkpoint manifest differs from the current campaign/frame: "
+                    f"{self.manifest_path}")
+            self.started_at = started_at
+        else:
+            _write_json(self.manifest_path, expected)
+            self.started_at = expected["started_at"]
+        self._entries, self.prefix = self._load_prefix()
+
+    def _load_prefix(self) -> tuple[list[Mapping[str, Any]], tuple]:
+        if not self.blocks_path.exists():
+            return [], ()
+        plans = microbench.plan_blocks(
+            self.plan.schedule(), count=self.plan.blocks_to_run,
+            pairs=self.plan.pairs_per_block, unit_ids=self.plan.unit_ids,
+            stratum=self.plan.stratum, segment=self.plan.segment,
+            extension_round=self.plan.extension_round)
+        entries: list[Mapping[str, Any]] = []
+        prefix: list[microbench.ReplayedBlockRecord] = []
+        previous = None
+        for sequence, line in enumerate(
+                self.blocks_path.read_text(encoding="utf-8").splitlines()):
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"checkpoint has a torn/non-JSON entry at sequence {sequence}") from exc
+            if not isinstance(entry, Mapping):
+                raise ValueError(f"checkpoint entry {sequence} is not an object")
+            body = {key: value for key, value in entry.items()
+                    if key != "entry_sha256"}
+            if entry.get("schema") != BLOCK_CHECKPOINT_SCHEMA \
+                    or entry.get("sequence") != sequence \
+                    or entry.get("previous_entry_sha256") != previous \
+                    or entry.get("plan_sha256") != self.plan_identity["plan_sha256"] \
+                    or entry.get("entry_sha256") != schemas.content_hash(body):
+                raise ValueError(
+                    f"checkpoint hash chain/plan is invalid at sequence {sequence}")
+            if sequence >= len(plans):
+                raise ValueError("checkpoint has more blocks than the declared plan")
+            block = entry.get("block")
+            if entry.get("block_sha256") != schemas.content_hash(block):
+                raise ValueError(f"checkpoint block {sequence} content hash is invalid")
+            prefix.append(microbench.replay_completed_block(
+                plans[sequence], block, plan=self.plan))
+            entries.append(entry)
+            previous = entry["entry_sha256"]
+        return entries, tuple(prefix)
+
+    @property
+    def head_sha256(self) -> str | None:
+        return None if not self._entries else str(self._entries[-1]["entry_sha256"])
+
+    def append(self, record: microbench.BlockRecord) -> None:
+        sequence = len(self._entries)
+        block = record.to_dict()
+        if record.plan.block_index != sequence:
+            raise ValueError(
+                f"checkpoint append gap: block {record.plan.block_index}, next {sequence}")
+        body = {
+            "schema": BLOCK_CHECKPOINT_SCHEMA,
+            "sequence": sequence,
+            "previous_entry_sha256": self.head_sha256,
+            "plan_sha256": self.plan_identity["plan_sha256"],
+            "block_sha256": schemas.content_hash(block),
+            "block": block,
+        }
+        entry = {**body, "entry_sha256": schemas.content_hash(body)}
+        payload = (schemas.canonical_json(entry) + "\n").encode("utf-8")
+        descriptor = os.open(
+            self.blocks_path,
+            os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_CLOEXEC", 0),
+            0o644)
+        try:
+            if os.write(descriptor, payload) != len(payload):
+                raise OSError(f"short write while appending {self.blocks_path}")
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        dirfd = os.open(self.directory, os.O_DIRECTORY)
+        try:
+            os.fsync(dirfd)
+        finally:
+            os.close(dirfd)
+        self._entries.append(entry)
+
+
 def _observe_between_legs(
         output_root: Path, *, boundary: str, claim: object) -> dict[str, Any]:
     """Record ordinary load and refuse only witnessed competing inference.
@@ -1010,7 +1154,8 @@ def _measure(*, label: str, blocks: int, claim: object,
              candidate_iqk: str, anchor_iqk: str,
              output_root: Path,
              host_state: Callable[..., microbench.HostState],
-             identity: LiveCampaignIdentity) -> LiveMaterial:
+             identity: LiveCampaignIdentity,
+             resume_existing: bool = False) -> LiveMaterial:
     # A Python default captures the object at function-definition time.  The
     # CLI selects its recipe after argument parsing, so ``= PROMPT_TOKENS``
     # here would retain pp512 even after ``configure_recipe`` selects tg128.
@@ -1043,6 +1188,31 @@ def _measure(*, label: str, blocks: int, claim: object,
         physical_envelopes={
             _unit_id(label=label, prompt=prompt): envelope},
         stratum=api.STRATUM_SELECTION, timeout_s=300.0)
+    raw_path = output_root / "raw" / f"{label}.json"
+    checkpoint_dir = output_root / "checkpoints" / label
+    if raw_path.exists() and not checkpoint_dir.exists():
+        if not resume_existing:
+            raise ValueError(f"fresh execution refuses existing raw material: {raw_path}")
+        material, _raw = _load_recorded_material(
+            output_root, identity=identity, label=label,
+            expected_blocks=blocks, prompt=prompt,
+            candidate_iqk=candidate_iqk, anchor_iqk=anchor_iqk)
+        return material
+    checkpoint = _BlockCheckpoint(
+        output_root, identity=identity, label=label, plan=plan)
+    if checkpoint.prefix and not resume_existing:
+        raise ValueError(
+            f"fresh execution refuses existing checkpoint prefix for {label}")
+    if raw_path.exists():
+        material, raw = _load_recorded_material(
+            output_root, identity=identity, label=label,
+            expected_blocks=blocks, prompt=prompt,
+            candidate_iqk=candidate_iqk, anchor_iqk=anchor_iqk)
+        if len(checkpoint.prefix) != blocks \
+                or [block.to_dict() for block in checkpoint.prefix] != raw.get("blocks"):
+            raise ValueError(
+                f"completed raw vector {raw_path} differs from its checkpoint chain")
+        return material
     sandbox_root = output_root / "candidate-sandbox"
     sandbox_root.mkdir(mode=0o700, exist_ok=True)
     sandbox_policy = sandbox.SandboxPolicy(writable_root=str(sandbox_root))
@@ -1056,8 +1226,11 @@ def _measure(*, label: str, blocks: int, claim: object,
                 workdir_root=str(sandbox_root), sandbox_policy=sandbox_policy),
             inference_window.InferenceCallWindow(timeout_s=600.0)),
         host_state=host_state)
-    run = runner.run(plan)
-    _write_json(output_root / "raw" / f"{label}.json", run.raw_vector())
+    run = runner.run(
+        plan, completed_prefix=checkpoint.prefix,
+        original_started_at=checkpoint.started_at,
+        on_block_completed=checkpoint.append)
+    _write_json(raw_path, run.raw_vector())
     if not run.complete:
         raise RuntimeError(f"{label} refused: {'; '.join(run.refusals)}")
     return LiveMaterial(label, run)
@@ -1446,19 +1619,38 @@ def _resume_amendment(
 def _validate_resume_existing(
         output_root: Path, *, identity: LiveCampaignIdentity,
 ) -> dict[str, Any]:
-    """Admit exactly one completed AA leg from a dead, interrupted claimant."""
+    """Validate an interrupted calibration before any resumed inference.
+
+    A completed raw leg and a hash-chained per-block prefix are both legal
+    boundaries.  All immutable source/frame inputs and every historical claim
+    lineage are checked here; the individual prefix is re-derived against its
+    plan by ``_BlockCheckpoint`` before ``MicrobenchRunner`` can skip a block.
+    """
     if not output_root.is_dir() or output_root.is_symlink():
         raise ValueError("--resume-existing requires an existing non-symlink directory")
     forbidden = (
         "summary.json", "control_sweep.json", "calibration.json", "host.json",
-        "claim_receipt.json", "resume_receipt.json")
+        "claim_receipt.json")
     present = [name for name in forbidden if (output_root / name).exists()]
     if present:
-        raise ValueError(f"resume refuses material beyond the AA-only boundary: {present}")
+        raise ValueError(f"resume refuses terminal/post-calibration material: {present}")
     raw_files = sorted(path.name for path in (output_root / "raw").glob("*.json"))
-    if raw_files != ["aa_calibration.json"]:
+    allowed_raw_prefixes = (
+        [], ["aa_calibration.json"],
+        ["aa_calibration.json", "neutral_calibration.json"])
+    if raw_files not in allowed_raw_prefixes:
         raise ValueError(
-            f"resume requires exactly raw/aa_calibration.json; found {raw_files}")
+            f"resume raw material is not a calibration prefix: {raw_files}")
+    checkpoint_labels = sorted(
+        path.name for path in (output_root / "checkpoints").glob("*")
+        if path.is_dir())
+    if any(label not in {"aa_calibration", "neutral_calibration"}
+           for label in checkpoint_labels):
+        raise ValueError(
+            f"resume checkpoint material extends beyond calibration: {checkpoint_labels}")
+    if "neutral_calibration" in checkpoint_labels \
+            and "aa_calibration.json" not in raw_files:
+        raise ValueError("neutral checkpoint exists before a completed AA raw vector")
 
     declaration = _load_json(output_root / "campaign_declaration.json")
     checks = {
@@ -1531,42 +1723,60 @@ def _validate_resume_existing(
 
     journal = cpu_region_claim.RegionClaimJournal(output_root / "region_claim.jsonl")
     records = journal.read_all()
-    acquired = [record for record in records if record.get("kind") == "claim_acquired"]
-    if len(acquired) != 1 or any(record.get("kind") == "claim_released"
-                                 for record in records):
-        raise ValueError("resume requires one interrupted acquisition and no release")
-    previous_payload = acquired[0].get("detail", {}).get("receipt")
-    previous = cpu_region_claim.RegionClaimReceipt.from_dict(previous_payload)
-    if previous.campaign_id != identity.campaign_id or previous.cpu_list != CPU_LIST:
-        raise ValueError("resume previous claim belongs to another campaign or footprint")
-    liveness = device_claim.assess_holder_liveness({
-        "pid": previous.holder_pid, "start_ticks": previous.holder_start_ticks,
-        "boot_id": previous.holder_boot_id, "host": previous.host,
-    })
-    if liveness.state != device_claim.DEAD:
-        raise ValueError(
-            f"resume previous claimant is not provably dead: {liveness.state}: "
-            f"{liveness.reason}")
+    acquired_rows = [record for record in records
+                     if record.get("kind") == "claim_acquired"]
+    if not acquired_rows:
+        raise ValueError("resume requires a prior durable claim acquisition")
+    previous_claims = []
+    previous_liveness = []
+    for row in acquired_rows:
+        receipt = cpu_region_claim.RegionClaimReceipt.from_dict(
+            row.get("detail", {}).get("receipt"))
+        if receipt.campaign_id != identity.campaign_id or receipt.cpu_list != CPU_LIST:
+            raise ValueError(
+                "resume claim lineage contains another campaign or footprint")
+        liveness = device_claim.assess_holder_liveness({
+            "pid": receipt.holder_pid, "start_ticks": receipt.holder_start_ticks,
+            "boot_id": receipt.holder_boot_id, "host": receipt.host,
+        })
+        if liveness.state != device_claim.DEAD:
+            raise ValueError(
+                f"resume claimant {receipt.claim_id} is not provably dead: "
+                f"{liveness.state}: {liveness.reason}")
+        previous_claims.append(receipt)
+        previous_liveness.append(liveness)
 
-    aa, aa_raw = _load_recorded_material(
-        output_root, identity=identity, label="aa_calibration",
-        expected_blocks=CALIBRATION_BLOCKS, prompt=PROMPT_TOKENS,
-        candidate_iqk=CALIBRATION_IQK, anchor_iqk=CALIBRATION_IQK)
-    attestations = aa_raw.get("claim_attestations")
-    if not isinstance(attestations, list) or not attestations \
-            or any(not isinstance(row, Mapping)
-                   or row.get("claim_id") != previous.claim_id
-                   or row.get("cpu_list") != CPU_LIST
-                   or row.get("outcome") != schemas.PASS
-                   for row in attestations):
-        raise ValueError("resume AA raw vector is not fully bound to the dead held claim")
-    expected_binding = runtime.get("aa_sealed_binding")
-    arm_receipts = (aa_raw.get("candidate_receipt"), aa_raw.get("anchor_receipt"))
-    if not isinstance(expected_binding, Mapping) \
-            or any(not isinstance(receipt, Mapping) for receipt in arm_receipts) \
-            or any({key: receipt.get(key) for key in ("binary_path", "library_path")}
-                   != expected_binding for receipt in arm_receipts):
-        raise ValueError("resume AA arms do not use the sealed A/A binding")
+    known_claims = {receipt.claim_id for receipt in previous_claims}
+    evidence_claims: set[str] = set()
+    for raw_name in raw_files:
+        raw = _load_json(output_root / "raw" / raw_name)
+        attestations = raw.get("claim_attestations")
+        if not isinstance(attestations, list):
+            raise ValueError(f"raw/{raw_name} has no claim-attestation vector")
+        for attestation in attestations:
+            if not isinstance(attestation, Mapping) \
+                    or attestation.get("cpu_list") != CPU_LIST \
+                    or attestation.get("outcome") != schemas.PASS:
+                raise ValueError(f"raw/{raw_name} contains an invalid claim attestation")
+            evidence_claims.add(str(attestation.get("claim_id")))
+    for label in checkpoint_labels:
+        path = output_root / "checkpoints" / label / "blocks.jsonl"
+        if not path.exists():
+            continue
+        for line in path.read_text(encoding="utf-8").splitlines():
+            entry = json.loads(line)
+            for invocation in entry.get("block", {}).get("invocations", []):
+                claim_row = invocation.get("claim", {})
+                if claim_row.get("cpu_list") != CPU_LIST \
+                        or claim_row.get("outcome") != schemas.PASS:
+                    raise ValueError(
+                        f"checkpoint {label} contains an invalid claim attestation")
+                evidence_claims.add(str(claim_row.get("claim_id")))
+    if not evidence_claims.issubset(known_claims):
+        raise ValueError(
+            "checkpoint/raw evidence names claims outside the durable claim lineage: "
+            f"{sorted(evidence_claims - known_claims)}")
+
     candidate_binding = recipes.ToolBinding(
         binary=str(copied_binary), source_root=str(output_root),
         library_path=str(copied_binary.parent))
@@ -1586,9 +1796,11 @@ def _validate_resume_existing(
         "anchor_binding": recipes.ToolBinding(
             binary=str(INSTRUMENT_BINARY), source_root=str(INSTRUMENT_ROOT),
             library_path=str(INSTRUMENT_BINARY.parent)),
-        "aa": aa, "aa_raw_sha256": _sha256_file(
-            output_root / "raw" / "aa_calibration.json"),
-        "previous_claim": previous, "previous_liveness": liveness,
+        "previous_claim": previous_claims[-1],
+        "previous_liveness": previous_liveness[-1],
+        "previous_claims": tuple(previous_claims),
+        "checkpoint_labels": tuple(checkpoint_labels),
+        "raw_files": tuple(raw_files),
     }
 
 
@@ -1647,24 +1859,15 @@ def execute(output_root: Path, *, campaign_id: str, resume_existing: bool = Fals
                 role=inference_window.WINDOWED_CPU_ROLE, timeout_s=60.0,
                 max_hold_s=2 * 3600),
             inference_window.InferenceCallWindow(timeout_s=600.0)) as claim:
-        if resume is None:
-            aa = _measure(
-                label="aa_calibration", blocks=CALIBRATION_BLOCKS, claim=claim,
-                candidate_binding=candidate_binding, anchor_binding=anchor_binding,
-                anchor=anchor, candidate_iqk=CONTROL_ARM_IQK["aa_calibration"][0],
-                anchor_iqk=CONTROL_ARM_IQK["aa_calibration"][1],
-                output_root=output_root, host_state=host_state,
-                identity=identity)
-            boundary = "aa_to_neutral"
-        else:
-            aa = resume["aa"]
+        if resume is not None:
             new_claim = claim.receipt().to_dict()
             body = {
                 "schema": RESUME_RECEIPT_SCHEMA,
                 "campaign_id": identity.campaign_id,
                 "resumed_at": _utc_now(),
-                "resume_point": "after_completed_aa_before_neutral",
-                "aa_raw_sha256": resume["aa_raw_sha256"],
+                "resume_point": "calibration_completed_block_prefix",
+                "completed_raw_files": list(resume["raw_files"]),
+                "checkpoint_labels": list(resume["checkpoint_labels"]),
                 "previous_claim": resume["previous_claim"].to_dict(),
                 "previous_claim_liveness": {
                     "state": resume["previous_liveness"].state,
@@ -1684,16 +1887,26 @@ def execute(output_root: Path, *, campaign_id: str, resume_existing: bool = Fals
             journal.append("campaign_resumed", claim.plan.scope_id, {
                 "resume_receipt": resume_receipt})
             _write_json(output_root / "resume_receipt.json", resume_receipt)
-            boundary = "resume_after_aa_to_neutral"
+        aa = _measure(
+            label="aa_calibration", blocks=CALIBRATION_BLOCKS, claim=claim,
+            candidate_binding=candidate_binding, anchor_binding=anchor_binding,
+            anchor=anchor, candidate_iqk=CONTROL_ARM_IQK["aa_calibration"][0],
+            anchor_iqk=CONTROL_ARM_IQK["aa_calibration"][1],
+            output_root=output_root, host_state=host_state,
+            identity=identity, resume_existing=resume is not None)
         materials.append(aa)
-        _observe_between_legs(output_root, boundary=boundary, claim=claim)
+        _observe_between_legs(
+            output_root,
+            boundary=("resume_aa_to_neutral" if resume is not None
+                      else "aa_to_neutral"),
+            claim=claim)
         neutral = _measure(
             label="neutral_calibration", blocks=NEUTRAL_BLOCKS, claim=claim,
             candidate_binding=candidate_binding, anchor_binding=anchor_binding,
             anchor=anchor, candidate_iqk=CONTROL_ARM_IQK["neutral_calibration"][0],
             anchor_iqk=CONTROL_ARM_IQK["neutral_calibration"][1],
             output_root=output_root, host_state=host_state,
-            identity=identity)
+            identity=identity, resume_existing=resume is not None)
         materials.append(neutral)
         declared, rule, construction, split, solve = _campaign_inputs(
             aa, neutral, identity)
@@ -2041,7 +2254,8 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--execute", action="store_true")
     mode.add_argument(
         "--resume-existing", action="store_true",
-        help="strictly resume one completed AA leg from a provably dead claimant")
+        help=("strictly resume a hash-chained completed calibration-block prefix "
+              "from provably dead claimant lineage"))
     mode.add_argument(
         "--evaluate-existing", action="store_true",
         help="compose already-completed receipt-bound raw vectors; runs no inference")

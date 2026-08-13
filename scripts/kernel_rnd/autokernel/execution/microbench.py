@@ -2853,6 +2853,176 @@ class BlockRecord:
         }
 
 
+@dataclass(frozen=True)
+class ReplayedBlockRecord:
+    """A completed block recovered from a durable checkpoint.
+
+    Recovery deliberately does not try to recreate ``Invocation`` or
+    ``SpawnResult`` objects: doing so would turn their constructors into a
+    second raw-vector schema.  The original canonical block mapping is retained
+    byte-for-byte for the final raw vector, while the paired block and plan are
+    reconstructed and checked for the two operations the runner needs: schedule
+    validation and reduction.
+    """
+
+    plan: BlockPlan
+    paired_block: statistics.PairedBlock
+    raw: Mapping
+
+    @property
+    def complete(self) -> bool:
+        return True
+
+    def to_dict(self) -> dict:
+        # Return a JSON-value copy so a caller cannot mutate the checkpoint
+        # mapping through the recovered run.
+        return json.loads(schemas.canonical_json(self.raw))
+
+
+def replay_completed_block(
+        expected: BlockPlan, raw: Mapping, *, plan: "MicrobenchPlan | None" = None,
+) -> ReplayedBlockRecord:
+    """Validate one checkpoint block against its exact derived schedule slot.
+
+    This is intentionally stricter than the final raw-vector reader: a prefix
+    is executable authority because accepting it causes the runner to skip
+    inference.  Any missing invocation receipt, order mismatch, gap, refusal,
+    or disagreement between invocation samples and the paired reduction fails
+    closed before the next process can be spawned.
+    """
+    if not isinstance(expected, BlockPlan):
+        raise TypeError("replay_completed_block takes an expected BlockPlan")
+    if not isinstance(raw, Mapping):
+        raise TypeError("checkpoint block must be a mapping")
+    if plan is not None and not isinstance(plan, MicrobenchPlan):
+        raise TypeError("replay_completed_block plan must be a MicrobenchPlan or None")
+    required = {
+        "plan", "invocations", "host_state_open", "host_state_close",
+        "package_power", "paired_block", "checks", "refusals", "complete",
+    }
+    if set(raw) != required:
+        raise ValueError(
+            "checkpoint block fields differ from the canonical BlockRecord schema: "
+            f"missing={sorted(required - set(raw))}, extra={sorted(set(raw) - required)}")
+    if raw.get("plan") != expected.to_dict():
+        raise ScheduleMismatch(
+            f"checkpoint block {expected.block_index} plan/order/frame does not match "
+            "the schedule derived from the current committed plan")
+    if raw.get("complete") is not True or raw.get("refusals") != []:
+        raise RunRefused(
+            f"checkpoint block {expected.block_index} is not complete and refusal-free")
+    invocations = raw.get("invocations")
+    if not isinstance(invocations, list) or len(invocations) != expected.invocations:
+        raise PairingViolation(
+            f"checkpoint block {expected.block_index} has "
+            f"{len(invocations) if isinstance(invocations, list) else 'non-list'} "
+            f"invocations; the plan requires {expected.invocations}")
+    anchor_samples: list[float] = []
+    candidate_samples: list[float] = []
+    for position, (invocation, arm) in enumerate(zip(invocations, expected.arm_sequence)):
+        if not isinstance(invocation, Mapping):
+            raise PairingViolation(
+                f"checkpoint block {expected.block_index} invocation {position} "
+                "is not a mapping")
+        if invocation.get("block_index") != expected.block_index \
+                or invocation.get("position") != position \
+                or invocation.get("arm") != arm:
+            raise PairingViolation(
+                f"checkpoint block {expected.block_index} invocation {position} "
+                "does not match the derived alternating arm sequence")
+        receipt_raw = invocation.get("receipt")
+        if not isinstance(receipt_raw, Mapping) \
+                or not isinstance(invocation.get("recipe"), str) \
+                or not invocation.get("recipe") \
+                or not isinstance(invocation.get("spawn"), Mapping):
+            raise ValueError(
+                f"checkpoint block {expected.block_index} invocation {position} "
+                "is missing its exact execution receipt, recipe, or spawn receipt")
+        try:
+            receipt = ExecutionReceipt(
+                runner_id=receipt_raw["runner_id"],
+                recipe_id=receipt_raw["recipe_id"],
+                registry_id=receipt_raw["registry_id"], arm=receipt_raw["arm"],
+                constructor_id=receipt_raw["constructor_id"],
+                constructor_sha256=receipt_raw["constructor_sha256"],
+                argv_sha256=receipt_raw["argv_sha256"],
+                argv=tuple(receipt_raw["argv"]),
+                recipe_env=dict(receipt_raw["recipe_env"]),
+                params=dict(receipt_raw["params"]), env=dict(receipt_raw["env"]),
+                env_sha256=receipt_raw["env_sha256"],
+                binary_path=receipt_raw["binary_path"],
+                binary_sha256=receipt_raw["binary_sha256"],
+                binary_size=receipt_raw["binary_size"],
+                source_root=receipt_raw["source_root"],
+                library_path=receipt_raw["library_path"],
+                resolved_at=receipt_raw["resolved_at"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(
+                f"checkpoint block {expected.block_index} invocation {position} "
+                f"has a malformed execution receipt: {exc}") from exc
+        binding = (expected.unit_id, arm)  # included in errors without hiding the slot
+        receipt_check = verify_receipt(
+            receipt, argv=receipt.argv, env=receipt.env,
+            binary_sha256=receipt.binary_sha256)
+        if receipt_check.outcome != schemas.PASS \
+                or receipt.arm != arm \
+                or invocation["recipe"] != receipt.render():
+            raise ValueError(
+                f"checkpoint block {expected.block_index} invocation {position} "
+                f"receipt does not re-derive for {binding!r}: "
+                f"{'; '.join(receipt_check.reasons)}")
+        if plan is not None:
+            arm_binding = (plan.candidate_binding if arm == ARM_CANDIDATE
+                           else plan.anchor_binding)
+            expected_params = plan.params_for(arm, expected.unit_id)
+            if receipt.recipe_id != plan.recipe_id \
+                    or any(receipt.params.get(key) != value
+                           for key, value in expected_params.items()) \
+                    or (receipt.binary_path, receipt.source_root,
+                        receipt.library_path) != (
+                            arm_binding.binary, arm_binding.source_root,
+                            arm_binding.library_path):
+                raise ValueError(
+                    f"checkpoint block {expected.block_index} invocation {position} "
+                    "execution receipt differs from the current recipe/frame/binding")
+        claim = invocation.get("claim")
+        if not isinstance(claim, Mapping) or claim.get("outcome") != schemas.PASS:
+            raise ClaimNotHeld(
+                f"checkpoint block {expected.block_index} invocation {position} "
+                "was not attested under a held claim")
+        samples = invocation.get("samples")
+        if not isinstance(samples, list) or not samples:
+            raise PairingViolation(
+                f"checkpoint block {expected.block_index} invocation {position} "
+                "has no sample vector")
+        target = anchor_samples if arm == ARM_ANCHOR else candidate_samples
+        target.extend(samples)
+
+    value = raw.get("paired_block")
+    if not isinstance(value, list) or len(value) != 9:
+        raise PairingViolation(
+            f"checkpoint block {expected.block_index} has no canonical paired block")
+    paired = statistics.PairedBlock(
+        block_index=value[0], unit_id=value[1], stratum=value[2], order=value[3],
+        segment=value[4], extension_round=value[5], measured_at=value[6],
+        anchor_samples=tuple(value[7]), candidate_samples=tuple(value[8]))
+    expected_identity = (
+        expected.block_index, expected.unit_id, expected.stratum, expected.order,
+        expected.segment, expected.extension_round)
+    observed_identity = (
+        paired.block_index, paired.unit_id, paired.stratum, paired.order,
+        paired.segment, paired.extension_round)
+    if observed_identity != expected_identity:
+        raise ScheduleMismatch(
+            f"checkpoint block identity {observed_identity!r} != {expected_identity!r}")
+    if paired.anchor_samples != tuple(anchor_samples) \
+            or paired.candidate_samples != tuple(candidate_samples):
+        raise PairingViolation(
+            f"checkpoint block {expected.block_index} paired samples differ from its "
+            "exact invocation receipts")
+    return ReplayedBlockRecord(plan=expected, paired_block=paired, raw=raw)
+
+
 # =============================================================================
 # The run
 # =============================================================================
@@ -3758,20 +3928,43 @@ class MicrobenchRunner:
 
     # -- the run -----------------------------------------------------------
 
-    def run(self, plan: MicrobenchPlan) -> MicrobenchRun:
+    def run(
+            self, plan: MicrobenchPlan, *,
+            completed_prefix: Sequence[ReplayedBlockRecord] = (),
+            original_started_at: Optional[str] = None,
+            on_block_completed: Optional[Callable[[BlockRecord], None]] = None,
+    ) -> MicrobenchRun:
+        """Execute the unmeasured suffix of a plan.
+
+        ``completed_prefix`` is admitted only through
+        :func:`replay_completed_block`; callers cannot hand the runner an
+        arbitrary partial result.  The callback runs synchronously immediately
+        after a complete block is assembled and before the next block opens,
+        which is the sole durable checkpoint boundary: invocations inside a
+        block are never reusable.
+        """
         if not isinstance(plan, MicrobenchPlan):
             raise TypeError("run() takes a MicrobenchPlan")
+        if not isinstance(completed_prefix, Sequence) \
+                or any(not isinstance(row, ReplayedBlockRecord)
+                       for row in completed_prefix):
+            raise TypeError(
+                "completed_prefix must contain only replay_completed_block results")
+        if on_block_completed is not None and not callable(on_block_completed):
+            raise TypeError("on_block_completed must be callable or None")
         if plan.segment == statistics.SEGMENT_EXTENSION and self._run_ledger is None:
             raise RunLedgerRequired(
                 "an extension round requires a durable CompletedRunLedger; otherwise the "
                 "same declared round can be re-run after its result is observed")
         if self._run_ledger is not None:
             self._run_ledger.assert_fresh(plan)
-        started_at = self._now()
+        started_at = original_started_at or self._now()
+        if not isinstance(started_at, str) or not started_at.strip():
+            raise ValueError("original_started_at must be a non-empty timestamp")
         checks: list = []
         refusals: list = []
         attestations: list = []
-        blocks: list = []
+        blocks: list = list(completed_prefix)
         # Every frequency classification this run produced, in order. `_finish`
         # refuses a run in which none of them is JUDGED: deferring the idle
         # readings is only safe if SOMETHING eventually judged the clock under
@@ -3779,6 +3972,26 @@ class MicrobenchRunner:
         # run rather than a hope about the load average.
         freq_classifications: list = []
         process_identities: set[tuple[int, int]] = set()
+        for recovered in completed_prefix:
+            for invocation in recovered.raw["invocations"]:
+                claim = invocation["claim"]
+                attestations.append(ClaimAttestation(
+                    claim_id=str(claim["claim_id"]), holder=str(claim["holder"]),
+                    cpu_list=str(claim["cpu_list"]),
+                    observed_at=str(claim["observed_at"]),
+                    check=schemas.Check(str(claim["outcome"]),
+                                        tuple(claim.get("reasons", ())))))
+                sandbox_receipt = invocation["spawn"].get("sandbox_receipt")
+                if isinstance(sandbox_receipt, Mapping) \
+                        and isinstance(sandbox_receipt.get("pid"), int) \
+                        and isinstance(sandbox_receipt.get("process_start_ticks"), int):
+                    process_identities.add((sandbox_receipt["pid"],
+                                            sandbox_receipt["process_start_ticks"]))
+            for name, check in recovered.raw["checks"]:
+                if name == "host_frequency_block_close" \
+                        and isinstance(check, Mapping) \
+                        and check.get("outcome") == schemas.PASS:
+                    freq_classifications.append(FREQUENCY_JUDGED)
 
         commands = {
             unit: {
@@ -3933,7 +4146,17 @@ class MicrobenchRunner:
                             unit_ids=plan.unit_ids, stratum=plan.stratum,
                             segment=plan.segment, extension_round=plan.extension_round)
 
-        for block_plan in plans:
+        if len(completed_prefix) > len(plans):
+            raise ScheduleMismatch(
+                f"checkpoint prefix has {len(completed_prefix)} blocks but the current "
+                f"plan declares only {len(plans)}")
+        for index, recovered in enumerate(completed_prefix):
+            if recovered.plan != plans[index]:
+                raise ScheduleMismatch(
+                    f"checkpoint prefix block {index} no longer matches the exact "
+                    "derived plan/order slot")
+
+        for block_plan in plans[len(completed_prefix):]:
             record = self._run_block(plan, block_plan, commands, envs, receipts,
                                      expectations, footprint, attestations,
                                      freq_classifications, process_identities)
@@ -3941,6 +4164,8 @@ class MicrobenchRunner:
             if not record.complete:
                 refusals.extend(record.refusals)
                 break
+            if on_block_completed is not None:
+                on_block_completed(record)
 
         return self._finish(plan, started_at, blocks, refusals, checks, scope,
                             attestations, receipts, freq_classifications)

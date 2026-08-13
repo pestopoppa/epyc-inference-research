@@ -210,6 +210,7 @@ class CalibrationFrame(unittest.TestCase):
                 return {"fixture": True}
 
         captured = {}
+        real_plan = live_controls.microbench.MicrobenchPlan
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             binding = live_controls.recipes.ToolBinding(
@@ -221,7 +222,8 @@ class CalibrationFrame(unittest.TestCase):
                 linkage_sha256="2" * 64, tool="llama-bench")
             with mock.patch.object(
                     live_controls.microbench, "MicrobenchPlan",
-                    side_effect=lambda **kwargs: captured.update(kwargs) or object()), \
+                    side_effect=lambda **kwargs: captured.update(kwargs)
+                    or real_plan(**kwargs)), \
                  mock.patch.object(
                     live_controls.microbench, "CpuRegionClaimAdapter"), \
                  mock.patch.object(
@@ -267,6 +269,7 @@ class CalibrationFrame(unittest.TestCase):
                 return {"fixture": True}
 
         captured = {}
+        real_plan = live_controls.microbench.MicrobenchPlan
         try:
             live_controls.configure_recipe(live_controls.DECODE_RECIPE_ID)
             with tempfile.TemporaryDirectory() as tmp:
@@ -279,7 +282,8 @@ class CalibrationFrame(unittest.TestCase):
                     linkage_sha256="2" * 64, tool="llama-bench")
                 with mock.patch.object(
                         live_controls.microbench, "MicrobenchPlan",
-                        side_effect=lambda **kwargs: captured.update(kwargs) or object()), \
+                        side_effect=lambda **kwargs: captured.update(kwargs)
+                        or real_plan(**kwargs)), \
                      mock.patch.object(
                         live_controls.microbench, "CpuRegionClaimAdapter"), \
                      mock.patch.object(
@@ -432,6 +436,166 @@ class RecordedCompositionMaterial(unittest.TestCase):
     def test_noncanonical_paired_block_is_refused(self):
         with self.assertRaisesRegex(ValueError, "nine-field"):
             live_controls._paired_block_from_raw([0, "too-short"])
+
+
+class CalibrationBlockCheckpoint(unittest.TestCase):
+
+    @staticmethod
+    def _plan(*, blocks=4, seed="checkpoint-seed"):
+        binding = live_controls.recipes.ToolBinding(
+            binary="/sealed/llama-bench", source_root="/sealed",
+            library_path="/sealed")
+        return live_controls.microbench.MicrobenchPlan(
+            recipe_id=live_controls.PREFILL_RECIPE_ID,
+            candidate_id="akc-control-aa_calibration", campaign_seed=seed,
+            candidate_binding=binding, anchor_binding=binding,
+            anchor=live_controls.api.AnchorIdentity(
+                source_commit="f" * 40, binary_sha256="1" * 64,
+                linkage_sha256="2" * 64, tool="llama-bench"),
+            params={"model": "/sealed/model.gguf", "n_prompt": 512,
+                    "reps": 1, "autokernel_seed": 1,
+                    "output_format": "json"},
+            base_blocks=blocks, pairs_per_block=1,
+            unit_ids=("model.gguf:pp512:aa_calibration",))
+
+    @staticmethod
+    def _record(block_plan, plan):
+        invocations = []
+        anchor_samples = []
+        candidate_samples = []
+        for position, arm in enumerate(block_plan.arm_sequence):
+            value = float(100 + block_plan.block_index * 10 + position)
+            (anchor_samples if arm == live_controls.microbench.ARM_ANCHOR
+             else candidate_samples).append(value)
+            binding = (plan.candidate_binding
+                       if arm == live_controls.microbench.ARM_CANDIDATE
+                       else plan.anchor_binding)
+            params = plan.params_for(arm, block_plan.unit_id)
+            argv = ("fixture-llama-bench", arm)
+            registry_id = "fixture-registry/v1"
+            recipe_env = {}
+            env = {}
+            receipt = live_controls.microbench.ExecutionReceipt(
+                runner_id="fixture/v1", recipe_id=plan.recipe_id,
+                registry_id=registry_id, arm=arm,
+                constructor_id="fixture-constructor/v1",
+                constructor_sha256="3" * 64,
+                argv_sha256=live_controls.microbench._argv_hash(
+                    recipe_id=plan.recipe_id, registry_id=registry_id,
+                    arm=arm, argv=argv, env=recipe_env, params=params),
+                argv=argv, recipe_env=recipe_env, params=params, env=env,
+                env_sha256=live_controls.microbench._env_hash(env),
+                binary_path=binding.binary, binary_sha256="4" * 64,
+                binary_size=1, source_root=binding.source_root,
+                library_path=binding.library_path,
+                resolved_at="2026-08-13T00:00:00+00:00")
+            invocations.append({
+                "block_index": block_plan.block_index, "position": position,
+                "arm": arm, "recipe": receipt.render(),
+                "receipt": receipt.to_dict(),
+                "spawn": {"stdout_sha256": str(position),
+                           "sandbox_receipt": None},
+                "row": {"samples_ts": [value]}, "samples": [value],
+                "claim": {
+                    "claim_id": "claim-old", "holder": "pid:1",
+                    "cpu_list": live_controls.CPU_LIST,
+                    "observed_at": "2026-08-13T00:00:00+00:00",
+                    "outcome": schemas.PASS, "reasons": [],
+                },
+                "checks": [],
+            })
+        paired = statistics.PairedBlock(
+            block_index=block_plan.block_index, unit_id=block_plan.unit_id,
+            stratum=block_plan.stratum, order=block_plan.order,
+            segment=block_plan.segment,
+            extension_round=block_plan.extension_round,
+            measured_at="2026-08-13T00:00:01+00:00",
+            anchor_samples=tuple(anchor_samples),
+            candidate_samples=tuple(candidate_samples))
+        raw = {
+            "plan": block_plan.to_dict(), "invocations": invocations,
+            "host_state_open": {}, "host_state_close": {},
+            "package_power": {}, "paired_block": paired.to_list(),
+            "checks": [], "refusals": [], "complete": True,
+        }
+
+        class Record:
+            plan = block_plan
+
+            @staticmethod
+            def to_dict():
+                return raw
+
+        return Record()
+
+    def _checkpoint(self, root, *, plan=None):
+        plan = plan or self._plan()
+        identity = live_controls.LiveCampaignIdentity(
+            "ak-controls-checkpoint", str(root))
+        return live_controls._BlockCheckpoint(
+            root, identity=identity, label="aa_calibration", plan=plan)
+
+    def test_interrupted_prefix_reopens_at_exact_next_block(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan = self._plan()
+            planned = live_controls.microbench.plan_blocks(
+                plan.schedule(), count=plan.blocks_to_run,
+                pairs=plan.pairs_per_block, unit_ids=plan.unit_ids,
+                stratum=plan.stratum)
+            checkpoint = self._checkpoint(root, plan=plan)
+            checkpoint.append(self._record(planned[0], plan))
+            checkpoint.append(self._record(planned[1], plan))
+            resumed = self._checkpoint(root, plan=plan)
+        self.assertEqual(len(resumed.prefix), 2)
+        self.assertEqual(resumed.prefix[-1].plan.block_index, 1)
+        self.assertEqual(resumed.head_sha256, checkpoint.head_sha256)
+
+    def test_tampered_block_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan = self._plan()
+            planned = live_controls.microbench.plan_blocks(
+                plan.schedule(), count=plan.blocks_to_run,
+                pairs=1, unit_ids=plan.unit_ids, stratum=plan.stratum)
+            checkpoint = self._checkpoint(root, plan=plan)
+            checkpoint.append(self._record(planned[0], plan))
+            path = checkpoint.blocks_path
+            entry = json.loads(path.read_text())
+            entry["block"]["invocations"][0]["samples"][0] += 1
+            path.write_text(json.dumps(entry) + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "hash chain"):
+                self._checkpoint(root, plan=plan)
+
+    def test_consistently_rehashed_order_mutation_still_fails_schedule(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            plan = self._plan()
+            planned = live_controls.microbench.plan_blocks(
+                plan.schedule(), count=plan.blocks_to_run,
+                pairs=1, unit_ids=plan.unit_ids, stratum=plan.stratum)
+            checkpoint = self._checkpoint(root, plan=plan)
+            checkpoint.append(self._record(planned[0], plan))
+            path = checkpoint.blocks_path
+            entry = json.loads(path.read_text())
+            entry["block"]["plan"]["order"] = (
+                statistics.ORDER_CANDIDATE_FIRST
+                if planned[0].order == statistics.ORDER_ANCHOR_FIRST
+                else statistics.ORDER_ANCHOR_FIRST)
+            entry["block_sha256"] = schemas.content_hash(entry["block"])
+            body = {key: value for key, value in entry.items()
+                    if key != "entry_sha256"}
+            entry["entry_sha256"] = schemas.content_hash(body)
+            path.write_text(schemas.canonical_json(entry) + "\n", encoding="utf-8")
+            with self.assertRaises(live_controls.microbench.ScheduleMismatch):
+                self._checkpoint(root, plan=plan)
+
+    def test_manifest_refuses_frame_change(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._checkpoint(root, plan=self._plan(seed="first"))
+            with self.assertRaisesRegex(ValueError, "campaign/frame"):
+                self._checkpoint(root, plan=self._plan(seed="second"))
 
 
 class ProspectiveBeliefReceipt(unittest.TestCase):

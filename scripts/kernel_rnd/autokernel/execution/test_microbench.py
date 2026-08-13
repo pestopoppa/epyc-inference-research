@@ -1254,6 +1254,59 @@ class TestRunnerEndToEnd(unittest.TestCase):
             self.assertEqual(len(block.anchor_samples), FIXTURE_REPS)
             self.assertEqual(len(block.candidate_samples), FIXTURE_REPS)
 
+    def test_completed_prefix_resumes_at_the_next_block_without_replay(self):
+        plan = make_plan(self.binding, blocks=4)
+        first = self._runner().run(plan)
+        planned = M.plan_blocks(
+            plan.schedule(), count=plan.blocks_to_run,
+            pairs=plan.pairs_per_block, unit_ids=plan.unit_ids,
+            stratum=plan.stratum)
+        prefix = tuple(
+            M.replay_completed_block(planned[index], first.blocks[index].to_dict())
+            for index in range(2))
+        spawner = arm_aware_spawner(
+            candidate_stdout=self.candidate_out, anchor_stdout=self.anchor_out)
+        resumed = self._runner(spawner=spawner).run(
+            plan, completed_prefix=prefix,
+            original_started_at=first.started_at)
+        self.assertTrue(resumed.complete, resumed.refusals)
+        self.assertEqual(len(spawner.calls), 4)  # two blocks, two arms; prefix not replayed
+        self.assertEqual(
+            resumed.paired_blocks()[:2], first.paired_blocks()[:2])
+
+    def test_fully_completed_prefix_is_idempotent_and_spawns_nothing(self):
+        plan = make_plan(self.binding, blocks=3)
+        first = self._runner().run(plan)
+        planned = M.plan_blocks(
+            plan.schedule(), count=plan.blocks_to_run,
+            pairs=plan.pairs_per_block, unit_ids=plan.unit_ids,
+            stratum=plan.stratum)
+        prefix = tuple(
+            M.replay_completed_block(planned[index], block.to_dict())
+            for index, block in enumerate(first.blocks))
+        spawner = arm_aware_spawner(
+            candidate_stdout=self.candidate_out, anchor_stdout=self.anchor_out)
+        resumed = self._runner(spawner=spawner).run(
+            plan, completed_prefix=prefix,
+            original_started_at=first.started_at)
+        self.assertTrue(resumed.complete, resumed.refusals)
+        self.assertEqual(spawner.calls, [])
+        self.assertEqual(resumed.paired_blocks(), first.paired_blocks())
+
+    def test_replayed_prefix_refuses_an_order_mismatch(self):
+        plan = make_plan(self.binding, blocks=1)
+        first = self._runner().run(plan)
+        planned = M.plan_blocks(
+            plan.schedule(), count=1, pairs=plan.pairs_per_block,
+            unit_ids=plan.unit_ids, stratum=plan.stratum)
+        raw = first.blocks[0].to_dict()
+        raw["plan"]["order"] = (
+            statistics.ORDER_CANDIDATE_FIRST
+            if raw["plan"]["order"] == statistics.ORDER_ANCHOR_FIRST
+            else statistics.ORDER_ANCHOR_FIRST)
+        with self.assertRaises(M.ScheduleMismatch):
+            M.replay_completed_block(planned[0], raw)
+
     def test_a_predeclared_physical_envelope_checks_every_sample(self):
         plan = make_plan(
             self.binding, blocks=2,
