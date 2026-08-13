@@ -67,6 +67,10 @@ def sealed_roster() -> dict[str, Any]:
 def _require_roster(value: Mapping[str, Any]) -> None:
     if dict(value) != sealed_roster(): raise DiscoveryControllerError("runtime roster is not exact Sol planner + Terra critic, 0 Claude")
 
+def _require_runtime(value: Mapping[str, Any]) -> None:
+    required={"kind","docker_path","docker_sha256","image_id","codex_native_sha256","code_mode_host_sha256","ca_certificate_sha256","writable_host_binds","host_network_mode"}
+    if set(value) != required or value.get("kind")!="docker_workspace_bind_only" or value.get("host_network_mode")!="docker_bridge" or value.get("writable_host_binds") != ["/workspace"] or not all(isinstance(value.get(k),str) and value[k] for k in required-{"writable_host_binds"}): raise DiscoveryControllerError("Codex runtime attestation is incomplete or unsealed")
+
 
 def _text(value: object, label: str) -> str:
     if not isinstance(value, str) or not value.strip() or "\0" in value: raise DiscoveryControllerError(f"{label} must be non-empty text")
@@ -296,6 +300,8 @@ class DurableState:
         if not self.path.exists(): return {"schema": SCHEMA, "authority": AUTHORITY, "roster": sealed_roster(), "iterations": [], "next": 1, "complete": False}
         value=_read_object(self.path, self.root); _require_roster(value.get("roster", {}))
         if value.get("schema") != SCHEMA or value.get("authority") != AUTHORITY: raise DiscoveryControllerError("wrong controller journal")
+        declared=value.get("state_sha256")
+        if not isinstance(declared,str) or declared != _sha({k:v for k,v in value.items() if k!="state_sha256"}): raise DiscoveryControllerError("durable controller state hash mismatch")
         return value
     def save(self, state: dict[str, Any], phase: str) -> None:
         state["updated_at"]=_now(); state["state_sha256"]=_sha({k:v for k,v in state.items() if k!="state_sha256"}); _atomic(self.path,state)
@@ -322,6 +328,7 @@ def _context(state: Mapping[str, Any], tracker: hypotheses.HypothesisTracker, tu
 
 def _pending_item(item: PlannedCandidate) -> dict[str, Any]:
     manifest = item.source_manifest
+    raw_manifest=json.dumps({"schema":source_candidate.SCHEMA_SOURCE_PATCH,"campaign_id":manifest.campaign_id,"proposal_id":manifest.proposal_id,"candidate_id":manifest.candidate_id,"source_tree":manifest.source_tree,"production_base_commit":manifest.production_base_commit,"instrument_commit":manifest.instrument_commit,"change_class":manifest.change_class,"declared_files":list(manifest.declared_files),"declared_symbols":{k:list(v) for k,v in manifest.declared_symbols.items()},"mechanism_id":manifest.mechanism_id,"patch_sha256":manifest.patch_sha256,"patch_encoding":"base64","patch_base64":base64.b64encode(manifest.patch_bytes).decode("ascii")},sort_keys=True,separators=(",",":")).encode()
     return {"hypothesis_id": item.hypothesis_id, "statement": item.statement,
             "falsifier": item.falsifier, "regime": dict(item.regime),
             "proposal": dict(item.proposal), "source_manifest_sha256": item.source_manifest_sha256,
@@ -331,7 +338,8 @@ def _pending_item(item: PlannedCandidate) -> dict[str, Any]:
                 "change_class":manifest.change_class,"declared_files":list(manifest.declared_files),
                 "declared_symbols":{k:list(v) for k,v in manifest.declared_symbols.items()},
                 "mechanism_id":manifest.mechanism_id,"patch_sha256":manifest.patch_sha256,
-                "patch_base64":base64.b64encode(manifest.patch_bytes).decode("ascii")}}
+                "patch_base64":base64.b64encode(manifest.patch_bytes).decode("ascii")},
+            "manifest_raw_base64":base64.b64encode(raw_manifest).decode("ascii"),"manifest_file_sha256":hashlib.sha256(raw_manifest).hexdigest(),"patch_bundle_sha256":manifest.patch_bundle_sha256}
 
 
 def _restore_pending(value: Mapping[str, Any]) -> PlannedCandidate:
@@ -341,6 +349,8 @@ def _restore_pending(value: Mapping[str, Any]) -> PlannedCandidate:
     try:
         manifest=source_candidate.SourcePatchManifest(campaign_id=m["campaign_id"],proposal_id=m["proposal_id"],candidate_id=m["candidate_id"],source_tree=m["source_tree"],production_base_commit=m["production_base_commit"],instrument_commit=m["instrument_commit"],change_class=m["change_class"],declared_files=tuple(m["declared_files"]),declared_symbols={k:tuple(v) for k,v in m["declared_symbols"].items()},mechanism_id=m["mechanism_id"],patch_sha256=m["patch_sha256"],patch_bytes=base64.b64decode(m["patch_base64"],validate=True))
     except (KeyError,TypeError,ValueError,source_candidate.SourceCandidateError) as exc: raise DiscoveryControllerError("pending candidate manifest is invalid") from exc
+    raw_bytes=base64.b64decode(raw.get("manifest_raw_base64",""),validate=True)
+    if hashlib.sha256(raw_bytes).hexdigest()!=raw.get("manifest_file_sha256") or manifest.patch_bundle_sha256!=raw.get("patch_bundle_sha256") or raw.get("source_manifest_sha256")!=manifest.patch_bundle_sha256: raise DiscoveryControllerError("pending manifest identity mismatch")
     return PlannedCandidate(hypothesis_id=raw["hypothesis_id"],statement=raw["statement"],falsifier=raw["falsifier"],regime=raw["regime"],proposal=raw["proposal"],source_manifest=manifest,source_manifest_sha256=raw["source_manifest_sha256"])
 
 
@@ -361,7 +371,7 @@ def _write_projection(root: Path) -> None:
     autokernel_progression.export_progression(root=root, output=root / "surface" / "kernel_progression.json")
 
 
-def classify_screen_series(effects: Sequence[float]) -> str:
+def classify_screen_series(effects: Sequence[float], *, component_pooled_effects: Sequence[float] = ()) -> str:
     """Discovery policy classifier; dashboard projection is not authority."""
     if not effects or any(not isinstance(v, (int, float)) for v in effects):
         raise DiscoveryControllerError("screen series must contain numeric measured effects")
@@ -369,6 +379,8 @@ def classify_screen_series(effects: Sequence[float]) -> str:
         return "screened_out" if effects[0] <= 0 else "candidate"
     if min(effects) < 0 < max(effects):
         return "inconclusive"
+    if all(v > 0 for v in effects) and component_pooled_effects and (sum(effects) / len(effects)) < max(component_pooled_effects):
+        return "replicated_but_subadditive"
     if all(v > 0 for v in effects):
         return "top_k_replicated_candidate"
     return "screened_out"
@@ -381,11 +393,17 @@ def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic
             or not isinstance(planner_attestation.get("runtime"), Mapping)
             or not isinstance(critic_attestation.get("runtime"), Mapping)):
         raise DiscoveryControllerError("actors did not attest the sealed Codex runtime identities")
+    _require_runtime(planner_attestation["runtime"]); _require_runtime(critic_attestation["runtime"])
     _require_roster({"schema":"epyc.autokernel.discovery_roster.v2","members":[SOL,TERRA],"claude_members":0,"member_count":2})
     store=DurableState(config.output_root); state=store.load()
     # A completed state is an acknowledged terminal checkpoint.  Re-entering it
     # must be a read, not another executor opportunity or a timestamp rewrite.
     if state["complete"]: return state
+    if state.get("inflight") is not None:
+        # An execution may have produced a durable receipt just before a crash.
+        # Refuse rather than issue another model call until the adapter-specific
+        # reconciler has identified that receipt by the sealed operation key.
+        raise DiscoveryControllerError("unreconciled pre-screen intent; refusing duplicate model call")
     tracker=_tracker(store)
     while not state["complete"] and state["next"] <= config.max_iterations:
         turn=state["next"]; context=_context(state,tracker,turn)
@@ -412,14 +430,17 @@ def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic
                 # iteration budget.  Planning/critique may continue elsewhere;
                 # this exact candidate is retried only after a new lease admits it.
                 row.update(status="waiting_resource",lease=dict(permit)); state["pending"]={"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict()}; store.save(state,"waiting_resource"); break
+            operation_key=_sha({"turn":turn,"manifest":item.source_manifest_sha256,"authorization":authorization.to_dict()})
+            state["inflight"]={"operation_key":operation_key,"row":row,"candidate":_pending_item(item),"authorization":authorization.to_dict(),"lease":dict(permit)}
+            store.save(state,"pre_screen_intent")
             try: result=screener.screen(item,authorization,permit)
             except Exception as exc:
-                row.update(status="screen_refused",reason=f"{type(exc).__name__}: {exc}"); state["iterations"].append(row); state["next"]+=1; store.save(state,"screen_refused"); continue
+                state.pop("inflight",None); row.update(status="screen_refused",reason=f"{type(exc).__name__}: {exc}"); state["iterations"].append(row); state["next"]+=1; store.save(state,"screen_refused"); continue
             row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction)
             # Record the measured disposition before exposing it to the next
             # planner context.  This is the only source of repeat suppression.
             tracker.note_attempt(item.hypothesis_id, proposal_id=str(item.proposal.get("proposal_id", row["proposal_sha256"])), disposition=result.classification, bears_on_falsifier=True, note=f"sealed screen {result.result_sha256}", refs=(f"sha256:{result.result_sha256}",))
-            state["iterations"].append(row); state["next"]+=1; _append_nomination(config.output_root,item,result,config.nomination_threshold); _write_projection(config.output_root); store.save(state,"screened")
+            state.pop("inflight",None); state["iterations"].append(row); state["next"]+=1; _append_nomination(config.output_root,item,result,config.nomination_threshold); _write_projection(config.output_root); store.save(state,"screened")
     state["complete"]=state["next"]>config.max_iterations
     if state["complete"]: state.pop("pending",None)
     store.save(state,"complete" if state["complete"] else "paused"); return state

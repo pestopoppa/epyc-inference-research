@@ -6,16 +6,17 @@ from unittest.mock import patch
 from . import discovery_controller as D
 
 H="a"*64
+RUNTIME={"kind":"docker_workspace_bind_only","docker_path":"/docker","docker_sha256":H,"image_id":"image","codex_native_sha256":H,"code_mode_host_sha256":H,"ca_certificate_sha256":H,"writable_host_binds":["/workspace"],"host_network_mode":"docker_bridge"}
 class Manifest:
- campaign_id="ak-test"; proposal_id="akp-test"; candidate_id="akc-test"; source_tree="llama.cpp"; production_base_commit="0"*40; instrument_commit="0"*40; change_class="source"; declared_files=("ggml/src/ggml.c",); declared_symbols={"ggml/src/ggml.c":("<file-scope>",)}; mechanism_id="test"; patch_sha256="0"*64; patch_bytes=b"diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c\n@@ -1 +1 @@\n-x\n+y\n"
+ campaign_id="ak-test"; proposal_id="akp-test"; candidate_id="akc-test"; source_tree="llama.cpp"; production_base_commit="0"*40; instrument_commit="0"*40; change_class="fusion"; declared_files=("ggml/src/ggml.c",); declared_symbols={"ggml/src/ggml.c":("<file-scope>",)}; mechanism_id="test"; patch_sha256="0"*64; patch_bundle_sha256=H; patch_bytes=b"diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c\n--- a/ggml/src/ggml.c\n+++ b/ggml/src/ggml.c\n@@ -1 +1 @@\n-x\n+y\n"
 class FakePlanner:
  def __init__(self): self.calls=[]
- def attest(self): return {**D.SOL,"runtime":{"real":"attested"}}
+ def attest(self): return {**D.SOL,"runtime":RUNTIME}
  def plan(self,*,context,workspace):
   self.calls.append(context); return D.PlannedCandidate("akh-test-"+str(len(self.calls)),"one-wave reduces cross-wave LDS","no speed improvement invalidates it",{"backend":"gpu","phase":"decode","mechanism":"one_wave"},{"id":"p"+str(len(self.calls))},Manifest(),H)
 class FakeCritic:
  def __init__(self,decisions): self.decisions=iter(decisions)
- def attest(self): return {**D.TERRA,"runtime":{"real":"attested"}}
+ def attest(self): return {**D.TERRA,"runtime":RUNTIME}
  def review(self,*args,**kw): return D.Critique(next(self.decisions),"bounded gate")
 class Lease:
  def admit(self,item): return {"admitted":True,"mode":"allowed_discovery_noise"}
@@ -70,6 +71,12 @@ class Tests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
    r=D.run_controller(self.cfg(Path(t),1),planner=FakePlanner(),critic=FakeCritic(["accept"]),screener=FakeScreen([.1]),lease=Wait())
    self.assertEqual(r["next"],1); self.assertEqual(r["pending"]["row"]["status"],"waiting_resource"); self.assertFalse(r["complete"])
+ def test_pending_roundtrip_uses_real_manifest_and_skips_planner_critic(self):
+  with tempfile.TemporaryDirectory() as t:
+   root=Path(t); patch_bytes=b"diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c\n--- a/ggml/src/ggml.c\n+++ b/ggml/src/ggml.c\n@@ -1 +1 @@\n-x\n+y\n"; manifest=D.source_candidate.SourcePatchManifest(campaign_id="ak-test",proposal_id="akp-test",candidate_id="akc-test",source_tree="llama.cpp",production_base_commit="0"*40,instrument_commit="0"*40,change_class="fusion",declared_files=("ggml/src/ggml.c",),declared_symbols={"ggml/src/ggml.c":("<file-scope>",)},mechanism_id="test",patch_sha256=hashlib.sha256(patch_bytes).hexdigest(),patch_bytes=patch_bytes)
+   item=D.PlannedCandidate("akh-real","real statement","speed does not improve",{}, {"id":"p"},manifest,manifest.patch_bundle_sha256)
+   restored=D._restore_pending({"candidate":D._pending_item(item)})
+   self.assertEqual(restored.source_manifest.patch_bytes,manifest.patch_bytes); self.assertEqual(restored.source_manifest.patch_bundle_sha256,manifest.patch_bundle_sha256)
  def test_discovery_negative_records_attempt_without_resolving_hypothesis(self):
   with tempfile.TemporaryDirectory() as t, patch.object(D.source_candidate,"SourcePatchManifest",Manifest), patch.object(D,"_write_projection"):
    root=Path(t); p=FakePlanner(); screen=FakeScreen([-.01]); screen.values=iter([-.01])
@@ -79,3 +86,4 @@ class Tests(unittest.TestCase):
   self.assertEqual(D.classify_screen_series([.01]),"candidate")
   self.assertEqual(D.classify_screen_series([.01,.02]),"top_k_replicated_candidate")
   self.assertEqual(D.classify_screen_series([.01,-.01]),"inconclusive")
+  self.assertEqual(D.classify_screen_series([.01,.006],component_pooled_effects=[.02]),"replicated_but_subadditive")
