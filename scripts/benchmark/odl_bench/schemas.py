@@ -31,6 +31,7 @@ METRIC_STRUCTURAL = "structural_fidelity"   # text_block Edit_dist
 METRIC_TABLE = "table_fidelity"             # table TEDS (+ Edit_dist)
 METRIC_READING_ORDER = "reading_order"      # reading_order Edit_dist
 METRIC_SPEED = "speed"                      # our own extraction latency_ms
+METRIC_INTRINSIC = "intrinsic_chunk_quality"  # Ekimetrics SC/ICC/DCC/BI (ODL-011)
 
 DETERMINISTIC_KIND = "deterministic"
 MODEL_GATED_KIND = "model_gated"
@@ -125,8 +126,8 @@ class MetricRow:
     """One (engine, metric-family) score row."""
 
     engine: str
-    metric_family: str       # METRIC_STRUCTURAL / _TABLE / _READING_ORDER / _SPEED
-    metric_name: str         # e.g. "Edit_dist", "TEDS", "latency_ms_median"
+    metric_family: str       # METRIC_STRUCTURAL / _TABLE / _READING_ORDER / _SPEED / _INTRINSIC
+    metric_name: str         # e.g. "Edit_dist", "TEDS", "latency_ms_median", "Ekimetrics.SC"
     value: float | None      # None => not-yet-scored / unavailable
     n: int = 0
     detail: str = ""

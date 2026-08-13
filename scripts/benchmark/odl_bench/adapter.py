@@ -28,6 +28,11 @@ from pathlib import Path
 
 from . import bootstrap, run_configs
 from .backends import DETERMINISTIC_ENGINES, resolve_backend
+from .intrinsic import (
+    DefaultChunker,
+    Embedder,
+    score_prediction_dir,
+)
 from .manifest_stubs import model_gated_manifest, model_gated_stubs
 from .paddleocr_vl import (
     DEFAULT_BINARY as PADDLEOCR_DEFAULT_BINARY,
@@ -233,6 +238,31 @@ class OdlBenchAdapter:
         ))
         return rows
 
+    # ---------------------------------------------------- intrinsic scoring
+    @staticmethod
+    def score_intrinsic(
+        prediction_dir: str | Path,
+        engine: str,
+        *,
+        embedder: Embedder | None = None,
+        chunker: DefaultChunker | None = None,
+        min_tokens: int = 100,
+        max_tokens: int = 1100,
+    ) -> list[MetricRow]:
+        """Score one engine's prediction dir with Ekimetrics intrinsic metrics.
+
+        Phase-3 contract (handoff :539-540): informational alongside
+        NID/TEDS/MHS — never a gate on its own; FMRE/RC excluded. ICC/DCC rows
+        carry ``value=None`` with the reason when ``embedder`` is None (the
+        same degrade convention as a missing extraction backend).
+        """
+        return score_prediction_dir(
+            prediction_dir,
+            engine=engine,
+            embedder=embedder,
+            chunker=chunker,
+        )
+
     # -------------------------------------------------- full deterministic set
     def build_deterministic_row_set(
         self,
@@ -399,6 +429,23 @@ def _main(argv=None):
         "compare-existing",
         help="materialize JSON/Markdown comparison from existing scored artifacts only",
     )
+
+    p_intrinsic = sub.add_parser(
+        "intrinsic",
+        help="score an existing prediction dir with Ekimetrics intrinsic metrics "
+        "(SC/BI always; ICC/DCC when an embedder is available)",
+    )
+    p_intrinsic.add_argument("--prediction-dir", required=True, help="dir of <stem>.md predictions")
+    p_intrinsic.add_argument("--engine", required=True, help="engine label for the rows")
+    p_intrinsic.add_argument(
+        "--embedder",
+        action="store_true",
+        help="resolve a sentence-transformers embedder for ICC/DCC (absent -> value=None rows)",
+    )
+    p_intrinsic.add_argument("--chunk-size", type=int, default=600)
+    p_intrinsic.add_argument("--min-tokens", type=int, default=100)
+    p_intrinsic.add_argument("--max-tokens", type=int, default=1100)
+    p_intrinsic.add_argument("--out", default=None, help="JSON path for the intrinsic row set")
     p_compare.add_argument(
         "--artifact",
         action="append",
@@ -471,6 +518,36 @@ def _main(argv=None):
         print(f"[odl_bench] wrote {json_path}")
         print(f"[odl_bench] wrote {md_path}")
         print(json.dumps(payload["comparison_rows"], indent=2))
+        return 0
+    if args.cmd == "intrinsic":
+        adapter = OdlBenchAdapter()
+        embedder = None
+        if args.embedder:
+            from .intrinsic import resolve_embedder
+
+            embedder, reason = resolve_embedder()
+            if embedder is None:
+                print(f"[odl_bench] embedder unavailable: {reason} (ICC/DCC rows will be None)")
+        rows = adapter.score_intrinsic(
+            args.prediction_dir,
+            args.engine,
+            embedder=embedder,
+            chunker=DefaultChunker(chunk_size=args.chunk_size),
+            min_tokens=args.min_tokens,
+            max_tokens=args.max_tokens,
+        )
+        payload = {
+            "schema": "odl_bench.intrinsic.v1",
+            "prediction_dir": str(args.prediction_dir),
+            "engine": args.engine,
+            "metric_rows": [r.to_dict() for r in rows],
+        }
+        if args.out:
+            out = Path(args.out)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            print(f"[odl_bench] wrote {out}")
+        print(json.dumps(payload["metric_rows"], indent=2))
         return 0
     if args.cmd == "run-model":
         if not args.allow_inference:

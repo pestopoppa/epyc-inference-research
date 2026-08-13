@@ -10,6 +10,7 @@ Public surface:
     from odl_bench.manifest_stubs import model_gated_stubs, model_gated_manifest
     from odl_bench.paddleocr_vl import PaddleOcrVlProducer
     from odl_bench.comparison import build_existing_comparison
+    from odl_bench.intrinsic import score_chunks, score_prediction_dir, DefaultChunker
 """
 
 from __future__ import annotations
@@ -23,4 +24,5 @@ __all__ = [
     "bootstrap",
     "paddleocr_vl",
     "comparison",
+    "intrinsic",
 ]

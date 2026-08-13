@@ -21,6 +21,7 @@ from typing import Any
 from . import bootstrap
 from .adapter import OdlBenchAdapter
 from .schemas import (
+    METRIC_INTRINSIC,
     METRIC_READING_ORDER,
     METRIC_SPEED,
     METRIC_STRUCTURAL,
@@ -32,18 +33,26 @@ SCHEMA = "odl_bench.existing_comparison.v1"
 JSON_NAME = "existing_comparison.json"
 MARKDOWN_NAME = "existing_comparison.md"
 
-METRIC_ORDER = (METRIC_STRUCTURAL, METRIC_TABLE, METRIC_READING_ORDER, METRIC_SPEED)
+METRIC_ORDER = (
+    METRIC_STRUCTURAL,
+    METRIC_TABLE,
+    METRIC_READING_ORDER,
+    METRIC_SPEED,
+    METRIC_INTRINSIC,
+)
 METRIC_LABELS = {
     METRIC_STRUCTURAL: "structural Edit_dist (lower)",
     METRIC_TABLE: "table TEDS (higher)",
     METRIC_READING_ORDER: "reading-order Edit_dist (lower)",
     METRIC_SPEED: "latency_ms median (lower)",
+    METRIC_INTRINSIC: "intrinsic chunk quality (informational)",
 }
 METRIC_DIRECTIONS = {
     METRIC_STRUCTURAL: "lower_better",
     METRIC_TABLE: "higher_better",
     METRIC_READING_ORDER: "lower_better",
     METRIC_SPEED: "lower_better",
+    METRIC_INTRINSIC: "higher_better",
 }
 
 
@@ -242,14 +251,35 @@ def comparison_rows(metric_rows: list[MetricRow], sources: list[dict[str, Any]])
     source_refs = _source_refs_by_engine(sources)
     table_rows: list[dict[str, Any]] = []
     for engine in engines:
-        by_family: dict[str, MetricRow] = {}
+        by_family: dict[str, list[MetricRow]] = {}
         for row in metric_rows:
             if row.engine == engine and row.metric_family in METRIC_ORDER:
-                by_family[row.metric_family] = row
+                by_family.setdefault(row.metric_family, []).append(row)
         metrics: dict[str, dict[str, Any] | None] = {}
         for family in METRIC_ORDER:
-            row = by_family.get(family)
-            metrics[family] = row.to_dict() if row else None
+            family_rows = by_family.get(family)
+            if not family_rows:
+                metrics[family] = None
+                continue
+            # A family may carry several sub-metrics (e.g. the four Ekimetrics
+            # intrinsic rows). Keep the first row as the cell and fold the rest
+            # into its detail so no sub-metric silently wins the pivot.
+            cell = family_rows[0]
+            extras = family_rows[1:]
+            if extras:
+                cell = MetricRow(
+                    engine=cell.engine,
+                    metric_family=cell.metric_family,
+                    metric_name=f"{cell.metric_name} (+{len(extras)} more)",
+                    value=cell.value,
+                    n=cell.n,
+                    detail=(
+                        "; ".join(
+                            [cell.detail] + [f"{r.metric_name}={r.value}" for r in extras]
+                        )
+                    ),
+                )
+            metrics[family] = cell.to_dict()
         table_rows.append(
             {
                 "engine": engine,

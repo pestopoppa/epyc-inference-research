@@ -42,9 +42,54 @@ strip the 4-char image extension, append `.md` → `foo.pdf_7.jpg` ⇒ `foo.pdf_
 | `table_fidelity` | `table` → `TEDS.all` (+ `TEDS_structure_only`, `Edit_dist`) | higher better | harness scoring |
 | `reading_order` | `reading_order` → `Edit_dist.ALL_page_avg` | lower better | harness scoring |
 | `speed` | per-page extraction `latency_ms` (median) | lower better | **odl_bench** (backends time themselves; the harness does not time engines) |
+| `intrinsic_chunk_quality` | Ekimetrics SC/BI (+ ICC/DCC with an embedder) | higher better | **odl_bench** (`intrinsic` scoring; informational, never a gate) |
 
 CDM/display_formula are intentionally omitted (CDM needs TeX Live / Ghostscript /
 ImageMagick; out of scope for the structural/table/order/speed set).
+
+## Intrinsic chunk-quality scoring (ODL-011)
+
+The bench scores extraction fidelity (NID/TEDS/MHS); the intrinsic rows score
+the *chunking quality* of each engine's extracted markdown using the Ekimetrics
+MIT scaffold (intake-579/580) — the instrumented harness for the Phase-2
+Ekimetrics-vs-HOPE side-by-side contract (`handoffs/active/
+opendataloader-pipeline-integration.md` :539-540).
+
+```bash
+# score an existing prediction dir (no inference, no model download)
+$RES/.venv/bin/python -m scripts.benchmark.odl_bench.adapter intrinsic \
+  --prediction-dir <pred_dir> --engine pdftotext --out /tmp/intrinsic.json
+```
+
+Four metric rows are emitted per engine, all `higher_better`:
+
+* `Ekimetrics.SC` — size compliance: fraction of chunks within token bounds.
+* `Ekimetrics.BI` — block integrity: fraction of structural blocks (headings /
+  paragraphs) not cut in half by the chunking.
+* `Ekimetrics.ICC` — intrachunk cohesion: mean sentence-vs-chunk embedding
+  cosine (requires an embedder).
+* `Ekimetrics.DCC` — contextual coherence: chunk-vs-context-window embedding
+  cosine (requires an embedder).
+
+Contract constraints, load-bearing:
+
+* **FMRE/RC excluded.** The coref-dependent "Filtered Missing Reference Error"
+  is not lifted: it requires `maverick-coref` (CC BY-NC-SA 4.0) and its
+  upstream RC=99.0 figure is unverified (reference-boundary corruption fixed
+  only on 2026-07-06). No coref code or license exposure enters this repo.
+* **Never a gate.** Intrinsic scores are informational next to NID/TEDS/MHS and
+  do not gate on their own; the Ekimetrics-vs-HOPE side-by-side is the decision
+  instrument (intake-581 falsifies the cohesion premise ICC/BI rest on).
+* **Embedder degrade.** ICC/DCC require a sentence-transformers model; when
+  none is provided the rows carry `value=None` with the reason in `detail`,
+  exactly like a missing extraction backend reports `available=False`. The
+  default token counter is a deterministic whitespace approximation of
+  upstream's tiktoken counter (pass `count_tokens_func` for exact numbers).
+
+Implementation: `intrinsic.py` (MIT-attributed lift of the four non-coref
+metrics + `DefaultChunker`, a deterministic heading/paragraph-aware splitter
+mirroring the Phase-2 chunker direction; the real Phase-2 chunker slots in by
+passing its chunks to `score_chunks` directly).
 
 ## Venv topology (three interpreters — this is load-bearing)
 
@@ -141,7 +186,8 @@ $RES/.venv/bin/python -m scripts.benchmark.odl_bench.adapter run-model \
 
 Library API: `OdlBenchAdapter.{generate_predictions, emit_config, score,
 build_deterministic_row_set, build_model_gated_row_set, parse_metric_result,
-model_gated_manifest_stubs}`.
+score_intrinsic, model_gated_manifest_stubs}` plus `intrinsic.{score_chunks,
+score_prediction_dir, DefaultChunker}`.
 
 ## B2 import contract (read-only symbols we depend on)
 
@@ -167,13 +213,19 @@ Stdlib `unittest` (research repo has no pytest), deterministic, no inference:
 ```bash
 /mnt/raid0/llm/epyc-inference-research/.venv/bin/python \
   scripts/benchmark/odl_bench/tests/test_odl_bench.py
+/mnt/raid0/llm/epyc-inference-research/.venv/bin/python \
+  scripts/benchmark/odl_bench/tests/test_intrinsic.py
 ```
 
-Covers: naming contract vs real `demo_data` fixtures, fake-backend prediction
-generation + speed rows, **real pdftotext on an in-test generated born-digital
-PDF**, config emission/loadability, metric-result parsing (known nesting +
-missing-key robustness), model-gated stub completeness/exclusion, engine
-availability report, and the scoring-command interpreter pin.
+`test_odl_bench.py` covers: naming contract vs real `demo_data` fixtures,
+fake-backend prediction generation + speed rows, **real pdftotext on an
+in-test generated born-digital PDF**, config emission/loadability, metric-result
+parsing (known nesting + missing-key robustness), model-gated stub
+completeness/exclusion, engine availability report, and the scoring-command
+interpreter pin. `test_intrinsic.py` covers the Ekimetrics metrics (SC/BI math
+with known fixtures, ICC/DCC against a deterministic fake embedder, FMRE
+exclusion, no-embedder degrade, default chunker determinism, per-dir
+aggregation).
 
 ## Files
 
@@ -184,6 +236,8 @@ availability report, and the scoring-command interpreter pin.
 | `schemas.py` | row/manifest/stub dataclasses |
 | `run_configs.py` | OmniDocBench config template + metric mapping + naming contract |
 | `adapter.py` | `OdlBenchAdapter` (generate → config → score → rows) + CLI |
+| `intrinsic.py` | Ekimetrics intrinsic chunk-quality metrics (SC/BI/ICC/DCC; FMRE excluded) + default chunker |
 | `manifest_stubs.py` | model-gated Wave-3 manifest-entry stubs |
 | `paddleocr_vl.py` | guarded PaddleOCR-VL image→markdown producer |
 | `tests/test_odl_bench.py` | stdlib-runnable deterministic tests |
+| `tests/test_intrinsic.py` | stdlib-runnable Ekimetrics intrinsic metric tests |
