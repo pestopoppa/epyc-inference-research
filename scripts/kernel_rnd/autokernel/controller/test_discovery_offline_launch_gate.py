@@ -267,6 +267,44 @@ class OfflineLaunchGate(unittest.TestCase):
                 self.assertIn(result["mode"], {"cold_serialized", "refused"})
                 self.assertNotEqual(result.get("authorized_by"), "actor")
 
+    def test_planner_can_author_distinct_literal_dispatch_expectations(self):
+        """One template supports genuine hypotheses without actor-authored regex/argv."""
+        expectation = getattr(C, "BoundedDispatchExpectation", None)
+        self.assertIsNotNone(expectation)
+        first = expectation(kernel_name="fattn_vec_f32", calls=2,
+                            grid=(128, 1, 1), workgroup=(64, 1, 1), lds_bytes=0)
+        second = expectation(kernel_name="fattn_vec_f32_v2", calls=1,
+                             grid=(64, 1, 1), workgroup=(64, 1, 1), lds_bytes=256)
+        self.assertNotEqual(first, second)
+        self.assertIn("expected_dispatch",
+                      C.GpuSourceExperimentIntent.__dataclass_fields__)
+        critic_source = inspect.getsource(C.CodexCritic.review)
+        self.assertIn("expected_dispatch", critic_source)
+        materializer_source = inspect.getsource(F.materialize)
+        self.assertIn("expected_dispatch", materializer_source)
+        self.assertNotIn("actor_dispatch_regex", materializer_source)
+
+    def test_literal_dispatch_expectation_refuses_meta_and_out_of_range(self):
+        """Kernel names and geometry are bounded literals, never patterns."""
+        expectation = getattr(C, "BoundedDispatchExpectation", None)
+        self.assertIsNotNone(expectation)
+        for kernel in ("*", ".*", "kernel[0]", "kernel;exec", "kernel $(x)"):
+            with self.subTest(kernel=kernel), self.assertRaises(Exception):
+                expectation(kernel_name=kernel, calls=1, grid=(1, 1, 1),
+                            workgroup=(1, 1, 1), lds_bytes=0)
+        for bad in (0, -1, 2**31):
+            with self.subTest(calls=bad), self.assertRaises(Exception):
+                expectation(kernel_name="kernel_v1", calls=bad, grid=(1, 1, 1),
+                            workgroup=(1, 1, 1), lds_bytes=0)
+
+    def test_planner_is_not_a_canned_finite_experiment_queue(self):
+        """Deployment templates bound authority, not a finite patch inventory."""
+        source = inspect.getsource(C.CodexPlanner.plan)
+        self.assertIn("patch", source)
+        self.assertIn("expected_dispatch", source)
+        self.assertNotIn("canned_candidates", source)
+        self.assertNotIn("finite_experiment_queue", source)
+
     def test_initial_planner_context_contains_sealed_search_inputs(self):
         """Turn one must be authorable from sealed evidence, not a blank prompt."""
         with tempfile.TemporaryDirectory() as directory:
