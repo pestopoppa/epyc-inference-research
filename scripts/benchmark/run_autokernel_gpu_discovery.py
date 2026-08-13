@@ -111,6 +111,7 @@ def _kfd_pids() -> tuple[int, ...]:
 
 def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
            flash_attention: bool, campaign_id: str,
+           expected_source_commit: str = SOURCE_COMMIT,
            prompt_tokens: int = 512, generation_tokens: int = 0,
            cpu_journal: cpu_region_claim.RegionClaimJournal,
            allow_small_model_cpu_overlap: bool = False,
@@ -138,6 +139,7 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
                 })
         result = _invoke_locked(
             build=build, model=model, seed=seed, baseline_vram=baseline_vram,
+            expected_source_commit=expected_source_commit,
             flash_attention=flash_attention, prompt_tokens=prompt_tokens,
             generation_tokens=generation_tokens, threads=threads, ubatch=ubatch,
             batch=batch, mmap=mmap, no_op_offload=no_op_offload,
@@ -172,6 +174,7 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
                 coverage_receipt = coverage.to_dict()
             result = _invoke_locked(
                 build=build, model=model, seed=seed, baseline_vram=baseline_vram,
+                expected_source_commit=expected_source_commit,
                 flash_attention=flash_attention, prompt_tokens=prompt_tokens,
                 generation_tokens=generation_tokens, threads=threads, ubatch=ubatch,
                 batch=batch, mmap=mmap, no_op_offload=no_op_offload,
@@ -193,6 +196,7 @@ def invoke(*, build: Path, model: Path, seed: int, baseline_vram: int,
 
 def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
                    flash_attention: bool, prompt_tokens: int = 512,
+                   expected_source_commit: str = SOURCE_COMMIT,
                    generation_tokens: int = 0, threads: int = 8, ubatch: int = 512,
                    batch: int = 512, mmap: bool = True,
                    no_op_offload: bool = False, split_mode: str = "layer",
@@ -245,7 +249,7 @@ def _invoke_locked(*, build: Path, model: Path, seed: int, baseline_vram: int,
     if row.get("backends") != "ROCm" or row.get("gpu_info") != "AMD Instinct MI210":
         raise RuntimeError("GPU discovery invocation did not report MI210 ROCm execution")
     reported_commit = str(row.get("build_commit", ""))
-    if len(reported_commit) < 7 or not SOURCE_COMMIT.startswith(reported_commit):
+    if len(reported_commit) < 7 or not expected_source_commit.startswith(reported_commit):
         raise RuntimeError("GPU discovery binary does not report the sealed source commit")
     expected_flash = 1 if flash_attention else 0
     if (row.get("n_prompt") != prompt_tokens or row.get("n_gen") != generation_tokens
@@ -497,6 +501,7 @@ def run(args: argparse.Namespace) -> dict:
         sampler = device_sampler.RocmSmiSampler(device_index=0, interval_s=0.250).start()
         anchor_runs = [invoke(
             build=anchor_build, model=model, seed=args.seed + i,
+            expected_source_commit=anchor_identity["source_commit"],
             baseline_vram=baseline_vram,
             flash_attention=sealed["anchor_flash_attention"],
             prompt_tokens=sealed["prompt_tokens"],
@@ -534,6 +539,7 @@ def run(args: argparse.Namespace) -> dict:
         atomic_json(out / "baseline-bank.json", bank)
         candidate_runs = [invoke(
             build=candidate_build, model=model, seed=args.seed + args.calls + i,
+            expected_source_commit=candidate_identity["source_commit"],
             baseline_vram=baseline_vram,
             flash_attention=sealed["candidate_flash_attention"],
             prompt_tokens=sealed["prompt_tokens"],
