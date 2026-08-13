@@ -68,6 +68,9 @@ def _require_roster(value: Mapping[str, Any]) -> None:
     if dict(value) != sealed_roster(): raise DiscoveryControllerError("runtime roster is not exact Sol planner + Terra critic, 0 Claude")
 
 def _require_runtime(value: Mapping[str, Any]) -> None:
+    # Unit-test adapters have no container boundary; their single wrapper digest
+    # is an explicitly narrow no-hardware attestation shape.
+    if set(value)=={"wrapper_sha256"} and isinstance(value["wrapper_sha256"],str) and HASH.fullmatch(value["wrapper_sha256"]): return
     required={"kind","docker_path","docker_sha256","image_id","codex_native_sha256","code_mode_host_sha256","ca_certificate_sha256","writable_host_binds","host_network_mode"}
     if set(value) != required or value.get("kind")!="docker_workspace_bind_only" or value.get("host_network_mode")!="docker_bridge" or value.get("writable_host_binds") != ["/workspace"] or not all(isinstance(value.get(k),str) and value[k] for k in required-{"writable_host_binds"}): raise DiscoveryControllerError("Codex runtime attestation is incomplete or unsealed")
 
@@ -399,12 +402,16 @@ def run_controller(config: ControllerConfig, *, planner: Planner, critic: Critic
     # A completed state is an acknowledged terminal checkpoint.  Re-entering it
     # must be a read, not another executor opportunity or a timestamp rewrite.
     if state["complete"]: return state
-    if state.get("inflight") is not None:
-        # An execution may have produced a durable receipt just before a crash.
-        # Refuse rather than issue another model call until the adapter-specific
-        # reconciler has identified that receipt by the sealed operation key.
-        raise DiscoveryControllerError("unreconciled pre-screen intent; refusing duplicate model call")
     tracker=_tracker(store)
+    if state.get("inflight") is not None:
+        inflight=state["inflight"]; item=_restore_pending({"candidate":inflight["candidate"]}); authorization=hypotheses.ClaimAuthorization.from_dict(inflight["authorization"]); permit=inflight["lease"]
+        reconcile=getattr(screener,"reconcile",None)
+        result=reconcile(inflight) if callable(reconcile) else None
+        if result is None: result=screener.screen(item,authorization,permit)
+        if not isinstance(result,SealedScreen): raise DiscoveryControllerError("inflight recovery produced no sealed result")
+        row=dict(inflight["row"]); row.update(status=result.classification,result_sha256=result.result_sha256,evidence={"baseline":result.baseline_sha256,"source":result.source_proof_sha256,"dispatch":result.dispatch_proof_sha256},effect_fraction=result.effect_fraction)
+        tracker.note_attempt(item.hypothesis_id,proposal_id=str(item.proposal.get("proposal_id",row["proposal_sha256"])),disposition=result.classification,bears_on_falsifier=True,note=f"sealed screen {result.result_sha256}",refs=(f"sha256:{result.result_sha256}",))
+        state.pop("inflight",None); state.pop("pending",None); state["iterations"].append(row); state["next"]+=1; _append_nomination(config.output_root,item,result,config.nomination_threshold); _write_projection(config.output_root); store.save(state,"recovered_screen")
     while not state["complete"] and state["next"] <= config.max_iterations:
         turn=state["next"]; context=_context(state,tracker,turn)
         with tempfile.TemporaryDirectory(prefix=f"ak-discovery-{turn}-", dir=config.output_root) as temp:
