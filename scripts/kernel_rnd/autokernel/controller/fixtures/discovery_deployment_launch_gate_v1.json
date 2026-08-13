@@ -34,6 +34,10 @@
     {
       "id": "runner-argv-binding",
       "accept": "typed runner args bind candidate and anchor builds, actual model, workload, runtime config, contained fresh output, small-model cap, and nonpromotable discovery mode"
+    },
+    {
+      "id": "single-config-authority",
+      "accept": "live launch derives state_root, evidence_root, operations_root, max_iterations, nomination_threshold, device, model cap, and lock from the sealed deployment; duplicate CLI values are absent or exact-compared and refused on any mismatch"
     }
   ]
 }
